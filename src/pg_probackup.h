@@ -216,8 +216,8 @@ typedef enum ShowFormat
 #define BYTES_INVALID		(-1) /* file didn`t changed since previous backup, DELTA backup do not rely on it */
 #define FILE_NOT_FOUND		(-2) /* file disappeared during backup */
 #define BLOCKNUM_INVALID	(-1)
-#define PROGRAM_VERSION	"2.2.7"
-#define AGENT_PROTOCOL_VERSION 20207
+#define PROGRAM_VERSION	"2.2.8"
+#define AGENT_PROTOCOL_VERSION 20208
 
 
 typedef struct ConnectionOptions
@@ -898,8 +898,10 @@ extern long unsigned int base36dec(const char *text);
 extern uint32 parse_server_version(const char *server_version_str);
 extern uint32 parse_program_version(const char *program_version);
 extern bool   parse_page(Page page, XLogRecPtr *lsn);
-int32  do_compress(void* dst, size_t dst_size, void const* src, size_t src_size,
-				   CompressAlg alg, int level, const char **errormsg);
+extern int32  do_compress(void* dst, size_t dst_size, void const* src, size_t src_size,
+						  CompressAlg alg, int level, const char **errormsg);
+extern int32  do_decompress(void* dst, size_t dst_size, void const* src, size_t src_size,
+							CompressAlg alg, const char **errormsg);
 
 extern void pretty_size(int64 size, char *buf, size_t len);
 extern void pretty_time_interval(int64 num_seconds, char *buf, size_t len);

@@ -89,7 +89,7 @@ do_compress(void* dst, size_t dst_size, void const* src, size_t src_size,
  * Decompresses source into dest using algorithm. Returns the number of bytes
  * decompressed in the destination buffer, or -1 if decompression fails.
  */
-static int32
+int32
 do_decompress(void* dst, size_t dst_size, void const* src, size_t src_size,
 			  CompressAlg alg, const char **errormsg)
 {
@@ -1047,9 +1047,9 @@ restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_vers
 	{
 		off_t		write_pos;
 		size_t		read_len;
-		DataPage	compressed_page; /* used as read buffer */
 		DataPage	page;
-		int32		uncompressed_size = 0;
+		int32		compressed_size = 0;
+		bool		is_compressed = false;
 
 		/* check for interrupt */
 		if (interrupted || thread_interrupted)
@@ -1090,14 +1090,16 @@ restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_vers
 		 * n_blocks attribute was available only in DELTA backups.
 		 * File truncate in PAGE and PTRACK happened on the fly when
 		 * special value PageIsTruncated is encountered.
-		 * It is inefficient.
+		 * It was inefficient.
 		 *
 		 * Nowadays every backup type has n_blocks, so instead
 		 * writing and then truncating redundant data, writing
 		 * is not happening in the first place.
 		 * TODO: remove in 3.0.0
 		 */
-		if (header.compressed_size == PageIsTruncated)
+		compressed_size = header.compressed_size;
+
+		if (compressed_size == PageIsTruncated)
 		{
 			/*
 			 * Block header contains information that this block was truncated.
@@ -1124,16 +1126,15 @@ restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_vers
 		if (nblocks > 0 && blknum >= nblocks)
 			break;
 
-		if (header.compressed_size > BLCKSZ)
+		if (compressed_size > BLCKSZ)
 			elog(ERROR, "Size of a blknum %i exceed BLCKSZ", blknum);
 
 		/* read a page from file */
-		read_len = fread(compressed_page.data, 1,
-			MAXALIGN(header.compressed_size), in);
+		read_len = fread(page.data, 1, MAXALIGN(compressed_size), in);
 
-		if (read_len != MAXALIGN(header.compressed_size))
+		if (read_len != MAXALIGN(compressed_size))
 			elog(ERROR, "Cannot read block %u of \"%s\", read %zu of %d",
-				blknum, from_fullpath, read_len, header.compressed_size);
+				blknum, from_fullpath, read_len, compressed_size);
 
 		/*
 		 * if page size is smaller than BLCKSZ, decompress the page.
@@ -1142,23 +1143,10 @@ restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_vers
 		 * page_may_be_compressed() function.
 		 */
 		if (header.compressed_size != BLCKSZ
-			|| page_may_be_compressed(compressed_page.data, file->compress_alg,
+			|| page_may_be_compressed(page.data, file->compress_alg,
 									  backup_version))
 		{
-			const char *errormsg = NULL;
-
-			uncompressed_size = do_decompress(page.data, BLCKSZ,
-											  compressed_page.data,
-											  header.compressed_size,
-											  file->compress_alg, &errormsg);
-
-			if (uncompressed_size < 0 && errormsg != NULL)
-				elog(WARNING, "An error occured during decompressing block %u of file \"%s\": %s",
-					 blknum, from_fullpath, errormsg);
-
-			if (uncompressed_size != BLCKSZ)
-				elog(ERROR, "Page of file \"%s\" uncompressed to %d bytes. != BLCKSZ",
-					 from_fullpath, uncompressed_size);
+			is_compressed = true;
 		}
 
 		write_pos = blknum * BLCKSZ;
@@ -1170,19 +1158,21 @@ restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_vers
 			elog(ERROR, "Cannot seek block %u of \"%s\": %s",
 				 blknum, to_fullpath, strerror(errno));
 
-		/* if we uncompressed the page - write page.data,
-		 * if page wasn't compressed -
-		 * write what we've read - compressed_page.data
+		/* If page is compressed and restore is in remote mode, send compressed
+		 * page to the remote side.
 		 */
-		if (uncompressed_size == BLCKSZ)
+		if (is_compressed)
 		{
-			if (fio_fwrite(out, page.data, BLCKSZ) != BLCKSZ)
-				elog(ERROR, "Cannot write block %u of \"%s\": %s",
-					 blknum, to_fullpath, strerror(errno));
+			ssize_t rc;
+			rc = fio_fwrite_compressed(out, page.data, compressed_size, file->compress_alg);
+
+			if (!fio_is_remote_file(out) && rc != BLCKSZ)
+				elog(ERROR, "Cannot write block %u of \"%s\": %s, size: %u",
+					 blknum, to_fullpath, strerror(errno), compressed_size);
 		}
 		else
 		{
-			if (fio_fwrite(out, compressed_page.data, BLCKSZ) != BLCKSZ)
+			if (fio_fwrite(out, page.data, BLCKSZ) != BLCKSZ)
 				elog(ERROR, "Cannot write block %u of \"%s\": %s",
 					 blknum, to_fullpath, strerror(errno));
 		}
