@@ -271,6 +271,10 @@ pgBackupValidateFiles(void *arg)
 				continue;
 		}
 
+		/* no point in trying to open empty or non-changed files */
+		if (file->write_size <= 0)
+			continue;
+
 		if (stat(file->path, &st) == -1)
 		{
 			if (errno == ENOENT)
