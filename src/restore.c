@@ -721,9 +721,6 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 			if (S_ISDIR(dest_file->mode))
 				continue;
 
-			if (params->skip_external_dirs && dest_file->external_dir_num > 0)
-				continue;
-
 			/* construct fullpath */
 			if (dest_file->external_dir_num == 0)
 			{
@@ -813,7 +810,7 @@ restore_files_new(void *arg)
 				create_empty_file(FIO_BACKUP_HOST,
 					  arguments->to_root, FIO_DB_HOST, dest_file);
 
-				elog(INFO, "Skip file due to partial restore: \"%s\"",
+				elog(VERBOSE, "Skip file due to partial restore: \"%s\"",
 						dest_file->rel_path);
 				continue;
 			}
@@ -887,15 +884,15 @@ restore_files_new(void *arg)
 		 */
 
 		done:
-		// chmod
-		// close
 
 		/* truncate file up to n_blocks. NOTE: no need, we just should not write
 		 * blocks that are exceeding n_blocks.
 		 * But for this to work, n_blocks should be trusted.
 		 */
 
-		/* update file permission */
+		/* update file permission
+		 * TODO: chmod must be done right after fopen()
+		 */
 		if (fio_chmod(to_fullpath, dest_file->mode, FIO_DB_HOST) == -1)
 		{
 			int errno_tmp = errno;
@@ -909,6 +906,9 @@ restore_files_new(void *arg)
 			elog(ERROR, "Cannot close file \"%s\": %s", to_fullpath,
 				 strerror(errno));
 	}
+
+	/* ssh connection to longer needed */
+	fio_disconnect();
 
 	/* Data files restoring is successful */
 	arguments->ret = 0;
