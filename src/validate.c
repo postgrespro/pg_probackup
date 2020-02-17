@@ -78,6 +78,7 @@ pgBackupValidate(pgBackup *backup, pgRestoreParams *params)
 	if (backup->status != BACKUP_STATUS_OK &&
 		backup->status != BACKUP_STATUS_DONE &&
 		backup->status != BACKUP_STATUS_ORPHAN &&
+		backup->status != BACKUP_STATUS_MERGING &&
 		backup->status != BACKUP_STATUS_CORRUPT)
 	{
 		elog(WARNING, "Backup %s has status %s. Skip validation.",
@@ -86,14 +87,18 @@ pgBackupValidate(pgBackup *backup, pgRestoreParams *params)
 		return;
 	}
 
-	if (backup->status == BACKUP_STATUS_OK || backup->status == BACKUP_STATUS_DONE)
-		elog(INFO, "Validating backup %s", base36enc(backup->start_time));
-	/* backups in MERGING status must have an option of revalidation without losing MERGING status
-	else if (backup->status == BACKUP_STATUS_MERGING)
+	/* additional sanity */
+	if (backup->backup_mode == BACKUP_MODE_FULL &&
+		backup->status == BACKUP_STATUS_MERGING)
 	{
-		some message here
+		elog(WARNING, "Full backup %s has status %s, skip validation",
+			base36enc(backup->start_time), status2str(backup->status));
+		return;
 	}
-	*/
+
+	if (backup->status == BACKUP_STATUS_OK || backup->status == BACKUP_STATUS_DONE ||
+		backup->status == BACKUP_STATUS_MERGING)
+		elog(INFO, "Validating backup %s", base36enc(backup->start_time));
 	else
 		elog(INFO, "Revalidating backup %s", base36enc(backup->start_time));
 
