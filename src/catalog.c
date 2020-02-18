@@ -127,7 +127,7 @@ lock_backup(pgBackup *backup)
 	pid_t		my_pid,
 				my_p_pid;
 
-	pgBackupGetPath(backup, lock_file, lengthof(lock_file), BACKUP_CATALOG_PID);
+	join_path_components(lock_file, backup->root_dir, BACKUP_CATALOG_PID);
 
 	/*
 	 * If the PID in the lockfile is our own PID or our parent's or
@@ -674,6 +674,7 @@ pgBackupCreateDir(pgBackup *backup)
 		elog(ERROR, "backup destination is not empty \"%s\"", path);
 
 	fio_mkdir(path, DIR_PERMISSION, FIO_BACKUP_HOST);
+	backup->root_dir = pgut_strdup(path);
 
 	/* create directories for actual backup files */
 	for (i = 0; i < parray_num(subdirs); i++)
@@ -1491,6 +1492,9 @@ pgBackupWriteControl(FILE *out, pgBackup *backup)
 		fio_fprintf(out, "expire-time = '%s'\n", timestamp);
 	}
 
+	if (backup->merge_dest_backup != 0)
+		fio_fprintf(out, "merge-dest-id = '%s'\n", base36enc(backup->merge_dest_backup));
+
 	/*
 	 * Size of PGDATA directory. The size does not include size of related
 	 * WAL segments in archive 'wal' directory.
@@ -1699,8 +1703,10 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 
 	/* use extra variable to avoid reset of previous data_bytes value in case of error */
 	backup->data_bytes = backup_size_on_disk;
-	backup->wal_bytes = wal_size_on_disk;
 	backup->uncompressed_bytes = uncompressed_size_on_disk;
+
+	if (backup->stream)
+		backup->wal_bytes = wal_size_on_disk;
 
 	free(buf);
 }
@@ -1719,6 +1725,7 @@ readBackupControlFile(const char *path)
 	char	   *stop_lsn = NULL;
 	char	   *status = NULL;
 	char	   *parent_backup = NULL;
+	char	   *merge_dest_backup = NULL;
 	char	   *program_version = NULL;
 	char	   *server_version = NULL;
 	char	   *compress_alg = NULL;
@@ -1748,6 +1755,7 @@ readBackupControlFile(const char *path)
 		{'b', 0, "stream",				&backup->stream, SOURCE_FILE_STRICT},
 		{'s', 0, "status",				&status, SOURCE_FILE_STRICT},
 		{'s', 0, "parent-backup-id",	&parent_backup, SOURCE_FILE_STRICT},
+		{'s', 0, "merge-dest-id",		&merge_dest_backup, SOURCE_FILE_STRICT},
 		{'s', 0, "compress-alg",		&compress_alg, SOURCE_FILE_STRICT},
 		{'u', 0, "compress-level",		&backup->compress_level, SOURCE_FILE_STRICT},
 		{'b', 0, "from-replica",		&backup->from_replica, SOURCE_FILE_STRICT},
@@ -1820,6 +1828,8 @@ readBackupControlFile(const char *path)
 			backup->status = BACKUP_STATUS_RUNNING;
 		else if (strcmp(status, "MERGING") == 0)
 			backup->status = BACKUP_STATUS_MERGING;
+		else if (strcmp(status, "MERGED") == 0)
+			backup->status = BACKUP_STATUS_MERGED;
 		else if (strcmp(status, "DELETING") == 0)
 			backup->status = BACKUP_STATUS_DELETING;
 		else if (strcmp(status, "DELETED") == 0)
@@ -1839,6 +1849,12 @@ readBackupControlFile(const char *path)
 	{
 		backup->parent_backup = base36dec(parent_backup);
 		free(parent_backup);
+	}
+
+	if (merge_dest_backup)
+	{
+		backup->merge_dest_backup = base36dec(merge_dest_backup);
+		free(merge_dest_backup);
 	}
 
 	if (program_version)
@@ -2003,12 +2019,14 @@ pgBackupInit(pgBackup *backup)
 	backup->stream = false;
 	backup->from_replica = false;
 	backup->parent_backup = INVALID_BACKUP_ID;
+	backup->merge_dest_backup = INVALID_BACKUP_ID;
 	backup->parent_backup_link = NULL;
 	backup->primary_conninfo = NULL;
 	backup->program_version[0] = '\0';
 	backup->server_version[0] = '\0';
 	backup->external_dir_str = NULL;
 	backup->root_dir = NULL;
+	backup->files = NULL;
 }
 
 /* free pgBackup object */

@@ -109,7 +109,7 @@ digestControlFile(ControlFileData *ControlFile, char *src, size_t size)
  * Write ControlFile to pg_control
  */
 static void
-writeControlFile(ControlFileData *ControlFile, char *path, fio_location location)
+writeControlFile(ControlFileData *ControlFile, const char *path, fio_location location)
 {
 	int			fd;
 	char       *buffer = NULL;
@@ -135,7 +135,7 @@ writeControlFile(ControlFileData *ControlFile, char *path, fio_location location
 		elog(ERROR, "Failed to overwrite file: %s", path);
 
 	if (fio_flush(fd) != 0)
-		elog(ERROR, "Failed to fsync file: %s", path);
+		elog(ERROR, "Failed to sync file: %s", path);
 
 	fio_close(fd);
 	pg_free(buffer);
@@ -383,15 +383,14 @@ set_min_recovery_point(pgFile *file, const char *backup_path,
  * Copy pg_control file to backup. We do not apply compression to this file.
  */
 void
-copy_pgcontrol_file(const char *from_root, fio_location from_location,
-					const char *to_root, fio_location to_location, pgFile *file)
+copy_pgcontrol_file(const char *from_fullpath, fio_location from_location,
+					const char *to_fullpath, fio_location to_location, pgFile *file)
 {
 	ControlFileData ControlFile;
 	char	   *buffer;
 	size_t		size;
-	char		to_path[MAXPGPATH];
 
-	buffer = slurpFile(from_root, XLOG_CONTROL_FILE, &size, false, from_location);
+	buffer = slurpFileFullPath(from_fullpath, &size, false, from_location);
 
 	digestControlFile(&ControlFile, buffer, size);
 
@@ -400,8 +399,7 @@ copy_pgcontrol_file(const char *from_root, fio_location from_location,
 	file->write_size = size;
 	file->uncompressed_size = size;
 
-	join_path_components(to_path, to_root, file->rel_path);
-	writeControlFile(&ControlFile, to_path, to_location);
+	writeControlFile(&ControlFile, to_fullpath, to_location);
 
 	pg_free(buffer);
 }
@@ -471,6 +469,7 @@ status2str(BackupStatus status)
 		"ERROR",
 		"RUNNING",
 		"MERGING",
+		"MERGED",
 		"DELETING",
 		"DELETED",
 		"DONE",

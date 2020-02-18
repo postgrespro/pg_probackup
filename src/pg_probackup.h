@@ -85,6 +85,9 @@ extern const char  *PROGRAM_EMAIL;
 #define STDOUT_FILENO 1
 #endif
 
+/* stdio buffer size */
+#define STDIO_BUFSIZE 65536 
+
 /* Check if an XLogRecPtr value is pointed to 0 offset */
 #define XRecOffIsNull(xlrp) \
 		((xlrp) % XLOG_BLCKSZ == 0)
@@ -139,6 +142,8 @@ typedef struct pgFile
 	char   *name;			/* file or directory name */
 	mode_t	mode;			/* protection (file type and permission) */
 	size_t	size;			/* size of the file */
+	time_t  mtime;			/* file st_mtime attribute, can be used only
+								during backup */
 	size_t	read_size;		/* size of the portion read (if only some pages are
 							   backed up, it's different from size) */
 	int64	write_size;		/* size of the backed-up file. BYTES_INVALID means
@@ -188,6 +193,8 @@ typedef enum BackupStatus
 	BACKUP_STATUS_ERROR,		/* aborted because of unexpected error */
 	BACKUP_STATUS_RUNNING,		/* running backup */
 	BACKUP_STATUS_MERGING,		/* merging backups */
+	BACKUP_STATUS_MERGED,		/* backup has been successfully merged and now awaits
+								 * the assignment of new start_time */
 	BACKUP_STATUS_DELETING,		/* data files are being deleted */
 	BACKUP_STATUS_DELETED,		/* data files have been deleted */
 	BACKUP_STATUS_DONE,			/* completed but not validated yet */
@@ -322,6 +329,10 @@ struct pgBackup
 	XLogRecPtr		stop_lsn;	/* backup's finishing transaction log location */
 	time_t			start_time;	/* since this moment backup has status
 								 * BACKUP_STATUS_RUNNING */
+	time_t			merge_dest_backup;	/* start_time of incremental backup,
+									 * this backup is merging with.
+									 * Only available for FULL backups
+									 * with MERGING or MERGED statuses */
 	time_t			merge_time; /* the moment when merge was started or 0 */
 	time_t			end_time;	/* the moment when backup was finished, or the moment
 								 * when we realized that backup is broken */
@@ -372,10 +383,10 @@ struct pgBackup
 										* in the format suitable for recovery.conf */
 	char			*external_dir_str;	/* List of external directories,
 										 * separated by ':' */
-	parray			*files;			/* list of files belonging to this backup
-									 * must be populated by calling backup_populate() */
 	char			*root_dir;		/* Full path for root backup directory:
 									   backup_path/instance_name/backup_id */
+	parray			*files;			/* list of files belonging to this backup
+									 * must be populated explicitly */
 };
 
 /* Recovery target for restore and validate subcommands */
@@ -513,6 +524,7 @@ typedef struct BackupPageHeader
 } BackupPageHeader;
 
 /* Special value for compressed_size field */
+#define PageIsOk		 0
 #define PageIsTruncated -2
 #define SkipCurrentPage -3
 #define PageIsCorrupted -4 /* used by checkdb */
@@ -629,7 +641,7 @@ extern const char *pgdata_exclude_dir[];
 
 /* in backup.c */
 extern int do_backup(time_t start_time, bool no_validate,
-										pgSetBackupParams *set_backup_params);
+					 pgSetBackupParams *set_backup_params, bool no_sync);
 extern void do_checkdb(bool need_amcheck, ConnectionOptions conn_opt,
 				  char *pgdata);
 extern BackupMode parse_backup_mode(const char *value);
@@ -664,6 +676,8 @@ extern parray *read_timeline_history(const char *arclog_path, TimeLineID targetT
 /* in merge.c */
 extern void do_merge(time_t backup_id);
 extern void merge_backups(pgBackup *backup, pgBackup *next_backup);
+extern void merge_chain(parray *parent_chain,
+						pgBackup *full_backup, pgBackup *dest_backup);
 
 extern parray *read_database_map(pgBackup *backup);
 
@@ -698,6 +712,9 @@ extern char *slurpFile(const char *datadir,
 					   size_t *filesize,
 					   bool safe,
 					   fio_location location);
+extern char *slurpFileFullPath(const char *from_fullpath,
+							  size_t *filesize, bool safe,
+							  fio_location location);
 extern char *fetchFile(PGconn *conn, const char *filename, size_t *filesize);
 
 /* in help.c */
@@ -809,10 +826,13 @@ extern pgFile *pgFileNew(const char *path, const char *rel_path,
 						 bool follow_symlink, int external_dir_num,
 						 fio_location location);
 extern pgFile *pgFileInit(const char *path, const char *rel_path);
-extern void pgFileDelete(pgFile *file);
+extern void pgFileDelete(pgFile *file, const char *full_path);
+
 extern void pgFileFree(void *file);
 extern pg_crc32 pgFileGetCRC(const char *file_path, bool use_crc32c,
 							 bool raise_on_deleted, size_t *bytes_read, fio_location location);
+extern pg_crc32 pgFileGetCRCnew(const char *file_path, bool missing_ok, bool use_crc32c);
+//extern pg_crc32 pgFileGetCRC_compressed(const char *file_path, bool use_crc32c, bool missing_ok);
 extern int pgFileCompareName(const void *f1, const void *f2);
 extern int pgFileComparePath(const void *f1, const void *f2);
 extern int pgFileMapComparePath(const void *f1, const void *f2);
@@ -826,21 +846,24 @@ extern int pgFileCompareSize(const void *f1, const void *f2);
 extern int pgCompareOid(const void *f1, const void *f2);
 
 /* in data.c */
-extern bool check_data_file(ConnectionArgs* arguments, pgFile* file, uint32 checksum_version);
-extern bool backup_data_file(backup_files_arg* arguments,
-							 const char *to_path, pgFile *file,
-							 XLogRecPtr prev_backup_start_lsn,
-							 BackupMode backup_mode,
-							 CompressAlg calg, int clevel,
-							 uint32 checksum_version,
-							 int ptrack_version_num,
-							 const char *ptrack_schema,
-							 bool missing_ok);
-extern void restore_data_file(const char *to_path,
-							  pgFile *file, bool allow_truncate,
-							  bool write_header,
-							  uint32 backup_version);
-extern size_t restore_data_file_new(parray *parent_chain, pgFile *dest_file,
+extern bool check_data_file(ConnectionArgs *arguments, pgFile *file,
+							const char *from_fullpath, uint32 checksum_version);
+
+extern void backup_data_file(ConnectionArgs* conn_arg, pgFile *file,
+								 const char *from_fullpath, const char *to_fullpath,
+								 XLogRecPtr prev_backup_start_lsn, BackupMode backup_mode,
+								 CompressAlg calg, int clevel, uint32 checksum_version,
+								 int ptrack_version_num, const char *ptrack_schema, bool missing_ok);
+extern void backup_non_data_file(pgFile *file, pgFile *prev_file,
+								 const char *from_fullpath, const char *to_fullpath,
+								 BackupMode backup_mode, time_t parent_backup_time,
+								 bool missing_ok);
+extern void backup_non_data_file_internal(const char *from_fullpath,
+										  fio_location from_location,
+										  const char *to_fullpath, pgFile *file,
+										  bool missing_ok);
+
+extern size_t restore_data_file(parray *parent_chain, pgFile *dest_file,
 								  FILE *out, const char *to_fullpath);
 extern size_t restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_version,
 								  const char *from_fullpath, const char *to_fullpath, int nblocks);
@@ -848,8 +871,6 @@ extern size_t restore_non_data_file(parray *parent_chain, pgBackup *dest_backup,
 								  pgFile *dest_file, FILE *out, const char *to_fullpath);
 extern void restore_non_data_file_internal(FILE *in, FILE *out, pgFile *file,
 										   const char *from_fullpath, const char *to_fullpath);
-extern bool copy_file(fio_location from_location, const char *to_root,
-					  fio_location to_location, pgFile *file, bool missing_ok);
 extern bool create_empty_file(fio_location from_location, const char *to_root,
 							  fio_location to_location, pgFile *file);
 
@@ -887,8 +908,8 @@ extern pg_crc32c get_pgcontrol_checksum(const char *pgdata_path);
 extern uint32 get_xlog_seg_size(char *pgdata_path);
 extern void set_min_recovery_point(pgFile *file, const char *backup_path,
 								   XLogRecPtr stop_backup_lsn);
-extern void copy_pgcontrol_file(const char *from_root, fio_location location, const char *to_root, fio_location to_location,
-								pgFile *file);
+extern void copy_pgcontrol_file(const char *from_fullpath, fio_location from_location,
+					const char *to_fullpath, fio_location to_location, pgFile *file);
 
 extern void time2iso(char *buf, size_t len, time_t time);
 extern const char *status2str(BackupStatus status);

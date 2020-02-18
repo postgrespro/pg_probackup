@@ -80,7 +80,7 @@ static void backup_cleanup(bool fatal, void *userdata);
 
 static void *backup_files(void *arg);
 
-static void do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo);
+static void do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync);
 
 static void pg_start_backup(const char *label, bool smooth, pgBackup *backup,
 							PGNodeInfo *nodeInfo, PGconn *backup_conn, PGconn *master_conn);
@@ -129,7 +129,7 @@ backup_stopbackup_callback(bool fatal, void *userdata)
  * Move files from 'pgdata' to a subdirectory in 'backup_path'.
  */
 static void
-do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo)
+do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync)
 {
 	int			i;
 	char		database_path[MAXPGPATH];
@@ -155,6 +155,7 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo)
 
 	/* for fancy reporting */
 	time_t		start_time, end_time;
+	char		pretty_time[20];
 	char		pretty_bytes[20];
 
 	elog(LOG, "Database backup start");
@@ -452,7 +453,7 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo)
 	parray_qsort(backup_files_list, pgFileCompareSize);
 	/* Sort the array for binary search */
 	if (prev_backup_filelist)
-		parray_qsort(prev_backup_filelist, pgFileComparePathWithExternal);
+		parray_qsort(prev_backup_filelist, pgFileCompareRelPathWithExternal);
 
 	/* write initial backup_content.control file and update backup.control  */
 	write_backup_filelist(&current, backup_files_list,
@@ -485,6 +486,7 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo)
 	/* Run threads */
 	thread_interrupted = false;
 	elog(INFO, "Start transferring data files");
+	time(&start_time);
 	for (i = 0; i < num_threads; i++)
 	{
 		backup_files_arg *arg = &(threads_args[i]);
@@ -500,10 +502,16 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo)
 		if (threads_args[i].ret == 1)
 			backup_isok = false;
 	}
+
+	time(&end_time);
+	pretty_time_interval(difftime(end_time, start_time),
+						 pretty_time, lengthof(pretty_time));
 	if (backup_isok)
-		elog(INFO, "Data files are transferred");
+		elog(INFO, "Data files are transferred, time elapsed: %s",
+			pretty_time);
 	else
-		elog(ERROR, "Data files transferring failed");
+		elog(ERROR, "Data files transferring failed, time elapsed: %s",
+			pretty_time);
 
 	/* Remove disappeared during backup files from backup_list */
 	for (i = 0; i < parray_num(backup_files_list); i++)
@@ -589,7 +597,8 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo)
 			{
 				char	   *ptr = file->path;
 
-				file->path = pstrdup(GetRelativePath(ptr, database_path));
+				file->path = pgut_strdup(GetRelativePath(ptr, database_path));
+				file->rel_path = pgut_strdup(file->path);
 				free(ptr);
 			}
 		}
@@ -612,6 +621,48 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo)
 						  external_dirs);
 	/* update backup control file to update size info */
 	write_backup(&current);
+
+	/* Sync all copied files unless '--no-sync' flag is used */
+	if (no_sync)
+		elog(WARNING, "Backup files are not synced to disk");
+	else
+	{
+		elog(INFO, "Syncing backup files to disk");
+		time(&start_time);
+
+		for (i = 0; i < parray_num(backup_files_list); i++)
+		{
+			char		to_fullpath[MAXPGPATH];
+			pgFile	   *file = (pgFile *) parray_get(backup_files_list, i);
+
+			/* TODO: sync directory ? */
+			if (S_ISDIR(file->mode))
+				continue;
+
+			if (file->write_size <= 0)
+				continue;
+
+			/* construct fullpath */
+			if (file->external_dir_num == 0)
+				join_path_components(to_fullpath, database_path, file->rel_path);
+			else
+			{
+				char 	external_dst[MAXPGPATH];
+
+				makeExternalDirPathByNum(external_dst, external_prefix,
+										 file->external_dir_num);
+				join_path_components(to_fullpath, external_dst, file->rel_path);
+			}
+
+			if (fio_sync(to_fullpath, FIO_BACKUP_HOST) != 0)
+				elog(ERROR, "Failed to sync file \"%s\": %s", to_fullpath, strerror(errno));
+		}
+
+		time(&end_time);
+		pretty_time_interval(difftime(end_time, start_time),
+							 pretty_time, lengthof(pretty_time));
+		elog(INFO, "Backup files are synced, time elapsed: %s", pretty_time);
+	}
 
 	/* clean external directories list */
 	if (external_dirs)
@@ -696,7 +747,7 @@ pgdata_basic_setup(ConnectionOptions conn_opt, PGNodeInfo *nodeInfo)
  */
 int
 do_backup(time_t start_time, bool no_validate,
-			pgSetBackupParams *set_backup_params)
+			pgSetBackupParams *set_backup_params, bool no_sync)
 {
 	PGconn		*backup_conn = NULL;
 	PGNodeInfo	nodeInfo;
@@ -795,7 +846,7 @@ do_backup(time_t start_time, bool no_validate,
 			elog(ERROR, "Options for connection to master must be provided to perform backup from replica");
 
 	/* backup data */
-	do_backup_instance(backup_conn, &nodeInfo);
+	do_backup_instance(backup_conn, &nodeInfo, no_sync);
 	pgut_atexit_pop(backup_cleanup, NULL);
 
 	/* compute size of wal files of this backup stored in the archive */
@@ -1928,18 +1979,24 @@ static void *
 backup_files(void *arg)
 {
 	int			i;
-	backup_files_arg *arguments = (backup_files_arg *) arg;
-	int			n_backup_files_list = parray_num(arguments->files_list);
+	char		from_fullpath[MAXPGPATH];
+	char		to_fullpath[MAXPGPATH];
 	static time_t prev_time;
+
+	backup_files_arg *arguments = (backup_files_arg *) arg;
+	int 		n_backup_files_list = parray_num(arguments->files_list);
 
 	prev_time = current.start_time;
 
 	/* backup a file */
 	for (i = 0; i < n_backup_files_list; i++)
 	{
-		int			ret;
-		struct stat	buf;
-		pgFile	   *file = (pgFile *) parray_get(arguments->files_list, i);
+		pgFile	*file = (pgFile *) parray_get(arguments->files_list, i);
+		pgFile	*prev_file = NULL;
+
+		/* We have already copied all directories */
+		if (S_ISDIR(file->mode))
+			continue;
 
 		if (arguments->thread_num == 1)
 		{
@@ -1957,7 +2014,6 @@ backup_files(void *arg)
 
 		if (!pg_atomic_test_set_flag(&file->lock))
 			continue;
-		elog(VERBOSE, "Copying file: \"%s\"", file->path);
 
 		/* check for interrupt */
 		if (interrupted || thread_interrupted)
@@ -1965,139 +2021,84 @@ backup_files(void *arg)
 
 		if (progress)
 			elog(INFO, "Progress: (%d/%d). Process file \"%s\"",
-				 i + 1, n_backup_files_list, file->path);
+				 i + 1, n_backup_files_list, file->rel_path);
 
-		/* stat file to check its current state */
-		ret = fio_stat(file->path, &buf, true, FIO_DB_HOST);
-		if (ret == -1)
+		/* Handle zero sized files */
+		if (file->size == 0)
 		{
-			if (errno == ENOENT)
-			{
-				/*
-				 * If file is not found, this is not en error.
-				 * It could have been deleted by concurrent postgres transaction.
-				 */
-				file->write_size = FILE_NOT_FOUND;
-				elog(LOG, "File \"%s\" is not found", file->path);
-				continue;
-			}
-			else
-			{
-				elog(ERROR,
-					"can't stat file to backup \"%s\": %s",
-					file->path, strerror(errno));
-			}
+			file->write_size = 0;
+			continue;
 		}
 
-		/* We have already copied all directories */
-		if (S_ISDIR(buf.st_mode))
-			continue;
-
-		if (S_ISREG(buf.st_mode))
+		/* construct destination filepath */
+		if (file->external_dir_num == 0)
 		{
-			pgFile	  **prev_file = NULL;
-			char	   *external_path = NULL;
-
-			if (file->external_dir_num)
-				external_path = parray_get(arguments->external_dirs,
-										file->external_dir_num - 1);
-
-			/* Check that file exist in previous backup */
-			if (current.backup_mode != BACKUP_MODE_FULL)
-			{
-				char	   *relative;
-				pgFile		key;
-
-				relative = GetRelativePath(file->path, file->external_dir_num ?
-										   external_path : arguments->from_root);
-				key.path = relative;
-				key.external_dir_num = file->external_dir_num;
-
-				prev_file = (pgFile **) parray_bsearch(arguments->prev_filelist,
-											&key, pgFileComparePathWithExternal);
-				if (prev_file)
-					/* File exists in previous backup */
-					file->exists_in_prev = true;
-			}
-
-			/* copy the file into backup */
-			if (file->is_datafile && !file->is_cfs)
-			{
-				char		to_path[MAXPGPATH];
-
-				join_path_components(to_path, arguments->to_root,
-									 file->path + strlen(arguments->from_root) + 1);
-
-				if (current.backup_mode != BACKUP_MODE_FULL)
-					file->n_blocks = file->size/BLCKSZ;
-
-				/* backup block by block if datafile AND not compressed by cfs*/
-				if (!backup_data_file(arguments, to_path, file,
-									  arguments->prev_start_lsn,
-									  current.backup_mode,
-									  instance_config.compress_alg,
-									  instance_config.compress_level,
-									  arguments->nodeInfo->checksum_version,
-									  arguments->nodeInfo->ptrack_version_num,
-									  arguments->nodeInfo->ptrack_schema,
-									  true))
-				{
-					/* disappeared file not to be confused with 'not changed' */
-					if (file->write_size != FILE_NOT_FOUND)
-						file->write_size = BYTES_INVALID;
-					elog(VERBOSE, "File \"%s\" was not copied to backup", file->path);
-					continue;
-				}
-			}
-			else if (!file->external_dir_num &&
-					 strcmp(file->name, "pg_control") == 0)
-				copy_pgcontrol_file(arguments->from_root, FIO_DB_HOST,
-									arguments->to_root, FIO_BACKUP_HOST,
-									file);
-			else
-			{
-				const char *dst;
-				bool		skip = false;
-				char		external_dst[MAXPGPATH];
-
-				/* If non-data file has not changed since last backup... */
-				if (prev_file && file->exists_in_prev &&
-					buf.st_mtime < current.parent_backup)
-				{
-					file->crc = pgFileGetCRC(file->path, true, false,
-											 &file->read_size, FIO_DB_HOST);
-					file->write_size = file->read_size;
-					/* ...and checksum is the same... */
-					if (EQ_TRADITIONAL_CRC32(file->crc, (*prev_file)->crc))
-						skip = true; /* ...skip copying file. */
-				}
-				/* Set file paths */
-				if (file->external_dir_num)
-				{
-					makeExternalDirPathByNum(external_dst,
-											 arguments->external_prefix,
-											 file->external_dir_num);
-					dst = external_dst;
-				}
-				else
-					dst = arguments->to_root;
-				if (skip ||
-					!copy_file(FIO_DB_HOST, dst, FIO_BACKUP_HOST, file, true))
-				{
-					/* disappeared file not to be confused with 'not changed' */
-					if (file->write_size != FILE_NOT_FOUND)
-						file->write_size = BYTES_INVALID;
-					elog(VERBOSE, "File \"%s\" was not copied to backup",
-						 file->path);
-					continue;
-				}
-			}
-
-			elog(VERBOSE, "File \"%s\". Copied "INT64_FORMAT " bytes",
-				 file->path, file->write_size);
+			join_path_components(from_fullpath, arguments->from_root, file->rel_path);
+			join_path_components(to_fullpath, arguments->to_root, file->rel_path);
 		}
 		else
-			elog(WARNING, "unexpected file type %d", buf.st_mode);
+		{
+			char 	external_dst[MAXPGPATH];
+			char	*external_path = parray_get(arguments->external_dirs,
+												file->external_dir_num - 1);
+
+			makeExternalDirPathByNum(external_dst,
+								 arguments->external_prefix,
+								 file->external_dir_num);
+
+			join_path_components(to_fullpath, external_dst, file->rel_path);
+			join_path_components(from_fullpath, external_path, file->rel_path);
+		}
+
+		/* Encountered some strange beast */
+		if (!S_ISREG(file->mode))
+			elog(WARNING, "Unexpected type %d of file \"%s\", skipping",
+							file->mode, from_fullpath);
+
+		/* Check that file exist in previous backup */
+		if (current.backup_mode != BACKUP_MODE_FULL)
+		{
+			pgFile	**prev_file_tmp = NULL;
+			prev_file_tmp = (pgFile **) parray_bsearch(arguments->prev_filelist,
+											file, pgFileCompareRelPathWithExternal);
+			if (prev_file_tmp)
+			{
+				/* File exists in previous backup */
+				file->exists_in_prev = true;
+				prev_file = *prev_file_tmp;
+			}
+		}
+
+		/* backup file */
+		if (file->is_datafile && !file->is_cfs)
+		{
+			backup_data_file(&(arguments->conn_arg), file, from_fullpath, to_fullpath,
+								 arguments->prev_start_lsn,
+								 current.backup_mode,
+								 instance_config.compress_alg,
+								 instance_config.compress_level,
+								 arguments->nodeInfo->checksum_version,
+								 arguments->nodeInfo->ptrack_version_num,
+								 arguments->nodeInfo->ptrack_schema,
+								 true);
+		}
+		else
+		{
+			backup_non_data_file(file, prev_file, from_fullpath, to_fullpath,
+								 current.backup_mode, current.parent_backup, true);
+		}
+
+		if (file->write_size == FILE_NOT_FOUND)
+			continue;
+
+		if (file->write_size == BYTES_INVALID)
+		{
+			elog(VERBOSE, "Skipping the unchanged file: \"%s\"", from_fullpath);
+			continue;
+		}
+
+		elog(VERBOSE, "File \"%s\". Copied "INT64_FORMAT " bytes",
+						from_fullpath, file->write_size);
 	}
 
 	/* ssh connection to longer needed */

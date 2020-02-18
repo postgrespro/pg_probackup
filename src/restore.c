@@ -19,24 +19,6 @@
 
 typedef struct
 {
-	parray	   *files;
-	pgBackup   *backup;
-	parray	   *external_dirs;
-	char	   *external_prefix;
-	parray	   *dest_external_dirs;
-	parray	   *dest_files;
-	parray	   *dbOid_exclude_list;
-	bool		skip_external_dirs;
-
-	/*
-	 * Return value from the thread.
-	 * 0 means there is no error, 1 - there is an error.
-	 */
-	int			ret;
-} restore_files_arg;
-
-typedef struct
-{
 	parray	   *dest_files;
 	pgBackup   *dest_backup;
 	parray	   *dest_external_dirs;
@@ -51,11 +33,8 @@ typedef struct
 	 * 0 means there is no error, 1 - there is an error.
 	 */
 	int			ret;
-} restore_files_arg_new;
+} restore_files_arg;
 
-static void restore_backup(pgBackup *backup, parray *dest_external_dirs,
-						   parray *dest_files, parray *dbOid_exclude_list,
-						   pgRestoreParams *params);
 static void create_recovery_conf(time_t backup_id,
 								 pgRecoveryTarget *rt,
 								 pgBackup *backup,
@@ -67,9 +46,6 @@ static void pg12_recovery_config(pgBackup *backup, bool add_include);
 static void restore_chain(pgBackup *dest_backup, parray *parent_chain,
 						  parray *dbOid_exclude_list, pgRestoreParams *params,
 						  const char *pgdata_path, bool no_sync);
-
-static void *restore_files_new(void *arg);
-
 
 /*
  * Iterate over backup list to find all ancestors of the broken parent_backup
@@ -522,7 +498,7 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 	parray		*external_dirs = NULL;
 	/* arrays with meta info for multi threaded backup */
 	pthread_t  *threads;
-	restore_files_arg_new *threads_args;
+	restore_files_arg *threads_args;
 	bool		restore_isok = true;
 
 	/* fancy reporting */
@@ -644,7 +620,7 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 	fio_disconnect();
 
 	threads = (pthread_t *) palloc(sizeof(pthread_t) * num_threads);
-	threads_args = (restore_files_arg_new *) palloc(sizeof(restore_files_arg_new) *
+	threads_args = (restore_files_arg *) palloc(sizeof(restore_files_arg) *
 												num_threads);
 
 	/* Restore files into target directory */
@@ -659,7 +635,7 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 	thread_interrupted = false;
 	for (i = 0; i < num_threads; i++)
 	{
-		restore_files_arg_new *arg = &(threads_args[i]);
+		restore_files_arg *arg = &(threads_args[i]);
 
 		arg->dest_files = dest_files;
 		arg->dest_backup = dest_backup;
@@ -675,7 +651,7 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 		/* Useless message TODO: rewrite */
 		elog(LOG, "Start thread %i", i + 1);
 
-		pthread_create(&threads[i], NULL, restore_files_new, arg);
+		pthread_create(&threads[i], NULL, restore_files, arg);
 	}
 
 	/* Wait theads */
@@ -767,14 +743,14 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
  * Restore files into $PGDATA.
  */
 static void *
-restore_files_new(void *arg)
+restore_files(void *arg)
 {
 	int			i;
 	char		to_fullpath[MAXPGPATH];
 	FILE		*out = NULL;
-	char 		buffer[65536];
+	char 		buffer[STDIO_BUFSIZE];
 
-	restore_files_arg_new *arguments = (restore_files_arg_new *) arg;
+	restore_files_arg *arguments = (restore_files_arg *) arg;
 
 	for (i = 0; i < parray_num(arguments->dest_files); i++)
 	{
@@ -870,8 +846,8 @@ restore_files_new(void *arg)
 		/* Restore destination file */
 		if (dest_file->is_datafile && !dest_file->is_cfs)
 			/* Destination file is data file */
-			arguments->restored_bytes += restore_data_file_new(arguments->parent_chain,
-																dest_file, out, to_fullpath);
+			arguments->restored_bytes += restore_data_file(arguments->parent_chain,
+															dest_file, out, to_fullpath);
 		else
 			/* Destination file is non-data file */
 			arguments->restored_bytes += restore_non_data_file(arguments->parent_chain,
@@ -885,7 +861,7 @@ restore_files_new(void *arg)
 
 		done:
 
-		/* truncate file up to n_blocks. NOTE: no need, we just should not write
+		/* Truncate file up to n_blocks. NOTE: no need, we just should not write
 		 * blocks that are exceeding n_blocks.
 		 * But for this to work, n_blocks should be trusted.
 		 */
@@ -909,306 +885,6 @@ restore_files_new(void *arg)
 
 	/* ssh connection to longer needed */
 	fio_disconnect();
-
-	/* Data files restoring is successful */
-	arguments->ret = 0;
-
-	return NULL;
-}
-
-/*
- * Restore one backup.
- */
-void
-restore_backup(pgBackup *backup, parray *dest_external_dirs,
-				parray *dest_files, parray *dbOid_exclude_list,
-				pgRestoreParams *params)
-{
-	char		timestamp[100];
-	char		database_path[MAXPGPATH];
-	char		external_prefix[MAXPGPATH];
-	char		list_path[MAXPGPATH];
-	parray	   *files;
-	parray	   *external_dirs = NULL;
-	int			i;
-	/* arrays with meta info for multi threaded backup */
-	pthread_t  *threads;
-	restore_files_arg *threads_args;
-	bool		restore_isok = true;
-
-	if (backup->status != BACKUP_STATUS_OK &&
-		backup->status != BACKUP_STATUS_DONE)
-	{
-		if (params->force)
-			elog(WARNING, "Backup %s is not valid, restore is forced",
-				 base36enc(backup->start_time));
-		else
-			elog(ERROR, "Backup %s cannot be restored because it is not valid",
-				 base36enc(backup->start_time));
-	}
-
-	/* confirm block size compatibility */
-	if (backup->block_size != BLCKSZ)
-		elog(ERROR,
-			"BLCKSZ(%d) is not compatible(%d expected)",
-			backup->block_size, BLCKSZ);
-	if (backup->wal_block_size != XLOG_BLCKSZ)
-		elog(ERROR,
-			"XLOG_BLCKSZ(%d) is not compatible(%d expected)",
-			backup->wal_block_size, XLOG_BLCKSZ);
-
-	time2iso(timestamp, lengthof(timestamp), backup->start_time);
-	elog(LOG, "Restoring database from backup %s", timestamp);
-
-	if (backup->external_dir_str)
-		external_dirs = make_external_directory_list(backup->external_dir_str,
-													 true);
-
-	/*
-	 * Get list of files which need to be restored.
-	 */
-	pgBackupGetPath(backup, database_path, lengthof(database_path), DATABASE_DIR);
-	pgBackupGetPath(backup, external_prefix, lengthof(external_prefix),
-					EXTERNAL_DIR);
-	pgBackupGetPath(backup, list_path, lengthof(list_path), DATABASE_FILE_LIST);
-	files = dir_read_file_list(database_path, external_prefix, list_path,
-							   FIO_BACKUP_HOST);
-
-	/* Restore directories in do_backup_instance way */
-	parray_qsort(files, pgFileComparePath);
-
-	/*
-	 * Make external directories before restore
-	 * and setup threads at the same time
-	 */
-	for (i = 0; i < parray_num(files); i++)
-	{
-		pgFile	   *file = (pgFile *) parray_get(files, i);
-
-		/*
-		 * If the entry was an external directory, create it in the backup.
-		 */
-		if (!params->skip_external_dirs &&
-			file->external_dir_num && S_ISDIR(file->mode) &&
-			/* Do not create unnecessary external directories */
-			parray_bsearch(dest_files, file, pgFileCompareRelPathWithExternal))
-		{
-			char	   *external_path;
-
-			if (!external_dirs ||
-				parray_num(external_dirs) < file->external_dir_num - 1)
-				elog(ERROR, "Inconsistent external directory backup metadata");
-
-			external_path = parray_get(external_dirs,
-									   file->external_dir_num - 1);
-			if (backup_contains_external(external_path, dest_external_dirs))
-			{
-				char		container_dir[MAXPGPATH];
-				char		dirpath[MAXPGPATH];
-				char	   *dir_name;
-
-				makeExternalDirPathByNum(container_dir, external_prefix,
-										file->external_dir_num);
-				dir_name = GetRelativePath(file->path, container_dir);
-				elog(VERBOSE, "Create directory \"%s\"", dir_name);
-				join_path_components(dirpath, external_path, dir_name);
-				fio_mkdir(dirpath, DIR_PERMISSION, FIO_DB_HOST);
-			}
-		}
-
-		/* setup threads */
-		pg_atomic_clear_flag(&file->lock);
-	}
-	threads = (pthread_t *) palloc(sizeof(pthread_t) * num_threads);
-	threads_args = (restore_files_arg *) palloc(sizeof(restore_files_arg) *
-												num_threads);
-
-	/* Restore files into target directory */
-	thread_interrupted = false;
-	for (i = 0; i < num_threads; i++)
-	{
-		restore_files_arg *arg = &(threads_args[i]);
-
-		arg->files = files;
-		arg->backup = backup;
-		arg->external_dirs = external_dirs;
-		arg->external_prefix = external_prefix;
-		arg->dest_external_dirs = dest_external_dirs;
-		arg->dest_files = dest_files;
-		arg->dbOid_exclude_list = dbOid_exclude_list;
-		arg->skip_external_dirs = params->skip_external_dirs;
-		/* By default there are some error */
-		threads_args[i].ret = 1;
-
-		/* Useless message TODO: rewrite */
-		elog(LOG, "Start thread for num:%zu", parray_num(files));
-
-		pthread_create(&threads[i], NULL, restore_files, arg);
-	}
-
-	/* Wait theads */
-	for (i = 0; i < num_threads; i++)
-	{
-		pthread_join(threads[i], NULL);
-		if (threads_args[i].ret == 1)
-			restore_isok = false;
-	}
-	if (!restore_isok)
-		elog(ERROR, "Data files restoring failed");
-
-	pfree(threads);
-	pfree(threads_args);
-
-	/* cleanup */
-	parray_walk(files, pgFileFree);
-	parray_free(files);
-
-	if (external_dirs != NULL)
-		free_dir_list(external_dirs);
-
-	elog(LOG, "Restore %s backup completed", base36enc(backup->start_time));
-}
-
-/*
- * Restore files into $PGDATA.
- */
-static void *
-restore_files(void *arg)
-{
-	int			i;
-	restore_files_arg *arguments = (restore_files_arg *)arg;
-
-	for (i = 0; i < parray_num(arguments->files); i++)
-	{
-		char		from_root[MAXPGPATH];
-		pgFile	   *file = (pgFile *) parray_get(arguments->files, i);
-
-		if (!pg_atomic_test_set_flag(&file->lock))
-			continue;
-
-		pgBackupGetPath(arguments->backup, from_root,
-						lengthof(from_root), DATABASE_DIR);
-
-		/* check for interrupt */
-		if (interrupted || thread_interrupted)
-			elog(ERROR, "Interrupted during restore database");
-
-		/* Directories were created before */
-		if (S_ISDIR(file->mode))
-			continue;
-
-		if (progress)
-			elog(INFO, "Progress: (%d/%lu). Process file %s ",
-				 i + 1, (unsigned long) parray_num(arguments->files),
-				 file->rel_path);
-
-		/* Only files from pgdata can be skipped by partial restore */
-		if (arguments->dbOid_exclude_list && file->external_dir_num == 0)
-		{
-			/* Check if the file belongs to the database we exclude */
-			if (parray_bsearch(arguments->dbOid_exclude_list,
-							   &file->dbOid, pgCompareOid))
-			{
-				/*
-				 * We cannot simply skip the file, because it may lead to
-				 * failure during WAL redo; hence, create empty file. 
-				 */
-				create_empty_file(FIO_BACKUP_HOST,
-					  instance_config.pgdata, FIO_DB_HOST, file);
-
-				elog(VERBOSE, "Exclude file due to partial restore: \"%s\"",
-					 file->rel_path);
-				continue;
-			}
-		}
-
-		/*
-		 * For PAGE and PTRACK backups skip datafiles which haven't changed
-		 * since previous backup and thus were not backed up.
-		 * We cannot do the same when restoring DELTA backup because we need information
-		 * about every datafile to correctly truncate them.
-		 */
-		if (file->write_size == BYTES_INVALID)
-		{
-			/* data file, only PAGE and PTRACK can skip */
-			if (((file->is_datafile && !file->is_cfs) &&
-				(arguments->backup->backup_mode == BACKUP_MODE_DIFF_PAGE ||
-				 arguments->backup->backup_mode == BACKUP_MODE_DIFF_PTRACK)) ||
-				/* non-data file can be skipped regardless of backup type */
-				!(file->is_datafile && !file->is_cfs))
-			{
-				elog(VERBOSE, "The file didn`t change. Skip restore: \"%s\"", file->path);
-				continue;
-			}
-		}
-
-		/* Do not restore tablespace_map file */
-		if (path_is_prefix_of_path(PG_TABLESPACE_MAP_FILE, file->rel_path))
-		{
-			elog(VERBOSE, "Skip tablespace_map");
-			continue;
-		}
-
-		/* Do not restore database_map file */
-		if ((file->external_dir_num == 0) &&
-			strcmp(DATABASE_MAP, file->rel_path) == 0)
-		{
-			elog(VERBOSE, "Skip database_map");
-			continue;
-		}
-
-		/* Do no restore external directory file if a user doesn't want */
-		if (arguments->skip_external_dirs && file->external_dir_num > 0)
-			continue;
-
-		/* Skip unnecessary file */
-		if (parray_bsearch(arguments->dest_files, file,
-						   pgFileCompareRelPathWithExternal) == NULL)
-			continue;
-
-		/*
-		 * restore the file.
-		 * We treat datafiles separately, cause they were backed up block by
-		 * block and have BackupPageHeader meta information, so we cannot just
-		 * copy the file from backup.
-		 */
-		elog(VERBOSE, "Restoring file \"%s\", is_datafile %i, is_cfs %i",
-			 file->path, file->is_datafile?1:0, file->is_cfs?1:0);
-
-		if (file->is_datafile && !file->is_cfs)
-		{
-			char		to_path[MAXPGPATH];
-
-			join_path_components(to_path, instance_config.pgdata,
-								 file->rel_path);
-			restore_data_file(to_path, file,
-							  arguments->backup->backup_mode == BACKUP_MODE_DIFF_DELTA,
-							  false,
-							  parse_program_version(arguments->backup->program_version));
-		}
-		else if (file->external_dir_num)
-		{
-			char	   *external_path = parray_get(arguments->external_dirs,
-												   file->external_dir_num - 1);
-			if (backup_contains_external(external_path,
-										 arguments->dest_external_dirs))
-				copy_file(FIO_BACKUP_HOST,
-						  external_path, FIO_DB_HOST, file, false);
-		}
-		else if (strcmp(file->name, "pg_control") == 0)
-			copy_pgcontrol_file(from_root, FIO_BACKUP_HOST,
-								instance_config.pgdata, FIO_DB_HOST,
-								file);
-		else
-			copy_file(FIO_BACKUP_HOST,
-					  instance_config.pgdata, FIO_DB_HOST,
-					  file, false);
-
-		/* print size of restored file */
-		if (file->write_size != BYTES_INVALID)
-			elog(VERBOSE, "Restored file %s : " INT64_FORMAT " bytes",
-				 file->path, file->write_size);
-	}
 
 	/* Data files restoring is successful */
 	arguments->ret = 0;

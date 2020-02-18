@@ -754,7 +754,7 @@ main(int argc, char *argv[])
 					elog(ERROR, "required parameter not specified: BACKUP_MODE "
 						 "(-b, --backup-mode)");
 
-				return do_backup(start_time, no_validate, set_backup_params);
+				return do_backup(start_time, no_validate, set_backup_params, no_sync);
 			}
 		case RESTORE_CMD:
 			return do_restore_or_validate(current.backup_id,
