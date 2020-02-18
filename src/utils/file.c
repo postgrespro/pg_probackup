@@ -548,7 +548,15 @@ int fio_pread(FILE* f, void* buf, off_t offs)
 		return hdr.arg;
 	}
 	else
-		return pread(fileno(f), buf, BLCKSZ, offs);
+	{
+		int rc;
+		rc = fseek(f, offs, SEEK_SET);
+
+		if (rc < 0)
+			return rc;
+
+		return fread(buf, 1, BLCKSZ, f);
+	}
 }
 
 /* Set position in stdio file */
@@ -896,6 +904,28 @@ int fio_sync(char const* path, fio_location location)
 
 		return 0;
 	}
+}
+
+/* Get crc32 of file */
+pg_crc32 fio_get_crc32(const char *file_path, fio_location location)
+{
+	if (fio_is_remote(location))
+	{
+		fio_header hdr;
+		size_t path_len = strlen(file_path) + 1;
+		pg_crc32 crc = 0;
+		hdr.cop = FIO_GET_CRC32;
+		hdr.handle = -1;
+		hdr.size = path_len;
+
+		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
+		IO_CHECK(fio_write_all(fio_stdout, file_path, path_len), path_len);
+		IO_CHECK(fio_read_all(fio_stdin, &crc, sizeof(crc)), sizeof(crc));
+
+		return crc;
+	}
+	else
+		return pgFileGetCRCnew(file_path, true, true);
 }
 
 /* Remove file */
@@ -1403,7 +1433,11 @@ static void fio_send_pages_impl(int fd, int out, fio_send_request* req)
 				return;
 			}
 		}
-		/* horizonLsn is not 0 for delta backup. As far as unsigned number are always greater or equal than zero, there is no sense to add more checks */
+		/*
+		 * horizonLsn is not 0 for delta backup.
+		 * As far as unsigned number are always greater or equal than zero,
+		 * there is no sense to add more checks.
+		 */
 		if (page_lsn >= req->horizonLsn || page_lsn == InvalidXLogRecPtr)
 		{
 			char write_buffer[BLCKSZ*2];
@@ -1450,6 +1484,7 @@ void fio_communicate(int in, int out)
 	struct stat st;
 	int rc;
 	int tmp_fd;
+	pg_crc32 crc;
 
 #ifdef WIN32
     SYS_CHECK(setmode(in, _O_BINARY));
@@ -1590,6 +1625,11 @@ void fio_communicate(int in, int out)
 			close(tmp_fd);
 
 			IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
+			break;
+		  case FIO_GET_CRC32:
+			/* calculate crc32 for a file */
+			crc = pgFileGetCRCnew(buf, true, true);
+			IO_CHECK(fio_write_all(out, &crc, sizeof(crc)), sizeof(crc));
 			break;
 		  default:
 			Assert(false);

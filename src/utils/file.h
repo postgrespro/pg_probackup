@@ -36,6 +36,7 @@ typedef enum
 	FIO_SEND_PAGES,
 	FIO_PAGE,
 	FIO_WRITE_COMPRESSED,
+	FIO_GET_CRC32
 } fio_operations;
 
 typedef enum
@@ -96,6 +97,7 @@ extern int     fio_truncate(int fd, off_t size);
 extern int     fio_close(int fd);
 extern void    fio_disconnect(void);
 extern int     fio_sync(char const* path, fio_location location);
+extern pg_crc32 fio_get_crc32(const char *file_path, fio_location location);
 
 extern int     fio_rename(char const* old_path, char const* new_path, fio_location location);
 extern int     fio_symlink(char const* target, char const* link_path, fio_location location);
