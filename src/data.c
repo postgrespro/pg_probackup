@@ -237,7 +237,7 @@ read_page_from_file(pgFile *file, BlockNumber blknum,
 	{
 		int i;
 		/* Check if the page is zeroed. */
-		for(i = 0; i < BLCKSZ && page[i] == 0; i++);
+		for (i = 0; i < BLCKSZ && page[i] == 0; i++);
 
 		/* Page is zeroed. No need to check header and checksum. */
 		if (i == BLCKSZ)
@@ -271,9 +271,10 @@ read_page_from_file(pgFile *file, BlockNumber blknum,
  * should be a pointer to allocated BLCKSZ of bytes.
  *
  * Prints appropriate warnings/errors/etc into log.
- * Returns 0 if page was successfully retrieved
- *         SkipCurrentPage(-3) if we need to skip this page
+ * Returns:
+ *                 PageIsOk(0) if page was successfully retrieved
  *         PageIsTruncated(-2) if the page was truncated
+ *         SkipCurrentPage(-3) if we need to skip this page
  *         PageIsCorrupted(-4) if the page check mismatch
  */
 static int32
@@ -312,9 +313,8 @@ prepare_page(ConnectionArgs *conn_arg,
 			switch (result)
 			{
 				case 2:
-					page_is_valid = true;
 					elog(VERBOSE, "File: \"%s\" blknum %u, empty page", from_fullpath, blknum);
-					break;
+					return PageIsOk;
 
 				case 1:
 					page_is_valid = true;
@@ -393,6 +393,12 @@ prepare_page(ConnectionArgs *conn_arg,
 		}
 	}
 
+	/* Get page via ptrack interface from PostgreSQL shared buffer.
+	 * We do this in following cases:
+	 * 1. PTRACK backup of 1.x versions
+	 * 2. During backup, regardless of backup mode, of PostgreSQL instance
+	 *    with ptrack support we encountered invalid page.
+	 */
 	if ((backup_mode == BACKUP_MODE_DIFF_PTRACK
 		&& (ptrack_version_num >= 15 && ptrack_version_num < 20))
 			|| !page_is_valid)
@@ -434,7 +440,6 @@ prepare_page(ConnectionArgs *conn_arg,
 			!parse_page(page, &page_lsn))
 				elog(ERROR, "Cannot parse page after pg_ptrack_get_block. "
 								"Possible risk of a memory corruption");
-
 	}
 
 	if (page_is_truncated)
@@ -1260,22 +1265,18 @@ create_empty_file(fio_location from_location, const char *to_root,
 	/* open file for write  */
 	join_path_components(to_path, to_root, file->rel_path);
 	out = fio_fopen(to_path, PG_BINARY_W, to_location);
+
 	if (out == NULL)
-	{
-		elog(ERROR, "cannot open destination file \"%s\": %s",
+		elog(ERROR, "Cannot open destination file \"%s\": %s",
 			 to_path, strerror(errno));
-	}
 
 	/* update file permission */
 	if (fio_chmod(to_path, file->mode, to_location) == -1)
-	{
-		fio_fclose(out);
-		elog(ERROR, "cannot change mode of \"%s\": %s", to_path,
+		elog(ERROR, "Cannot change mode of \"%s\": %s", to_path,
 			 strerror(errno));
-	}
 
 	if (fio_fclose(out))
-		elog(ERROR, "cannot close \"%s\": %s", to_path, strerror(errno));
+		elog(ERROR, "Cannot close \"%s\": %s", to_path, strerror(errno));
 
 	return true;
 }
