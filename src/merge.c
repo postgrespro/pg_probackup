@@ -483,15 +483,15 @@ merge_chain(parray *parent_chain, pgBackup *full_backup, pgBackup *dest_backup)
 
 	/* TODO: Should we keep relying on caller to provide valid parent_chain? */
 
-	/* If destination backup compression algorihtm differs from
-	 * full backup compression algorihtm, then in-place merge is
+	/* If destination backup compression algorithm differs from
+	 * full backup compression algorithm, then in-place merge is
 	 * not possible.
 	 */
 	if (full_backup->compress_alg == dest_backup->compress_alg)
 		compression_match = true;
 	else
 		elog(WARNING, "In-place merge is disabled because of compression "
-					"algorihtms mismatch");
+					"algorithms mismatch");
 
 	/*
 	 * If current program version differs from destination backup version,
@@ -823,8 +823,9 @@ merge_files(void *arg)
 {
 	int		i;
 	merge_files_arg *arguments = (merge_files_arg *) arg;
+	size_t n_files = parray_num(arguments->dest_backup->files);
 
-	for (i = 0; i < parray_num(arguments->dest_backup->files); i++)
+	for (i = 0; i < n_files; i++)
 	{
 		pgFile	   *dest_file = (pgFile *) parray_get(arguments->dest_backup->files, i);
 		pgFile	   *tmp_file;
@@ -850,7 +851,7 @@ merge_files(void *arg)
 
 		if (progress)
 			elog(INFO, "Progress: (%d/%lu). Merging file \"%s\"",
-				i + 1, (unsigned long) parray_num(arguments->dest_backup->files), dest_file->rel_path);
+				i + 1, n_files, dest_file->rel_path);
 
 		if (dest_file->is_datafile && !dest_file->is_cfs)
 			tmp_file->segno = dest_file->segno;
@@ -862,14 +863,13 @@ merge_files(void *arg)
 				tmp_file->crc = dest_file->crc;
 
 			tmp_file->write_size = 0;
-
 			goto done;
 		}
 
 		/*
 		 * If file didn`t changed over the course of all incremental chain,
 		 * then do in-place merge, unless destination backup has
-		 * different compression algorihtm.
+		 * different compression algorithm.
 		 * In-place merge is also impossible, if program version of destination
 		 * backup differs from PROGRAM_VERSION
 		 */
@@ -1072,7 +1072,7 @@ reorder_external_dirs(pgBackup *to_backup, parray *to_external,
 
 /* Merge is usually happens as usual backup/restore via temp files, unless
  * file didn`t changed since FULL backup AND full a dest backup have the
- * same compression algorihtm. In this case file can be left as it is.
+ * same compression algorithm. In this case file can be left as it is.
  */
 void
 merge_data_file(parray *parent_chain, pgBackup *full_backup,
