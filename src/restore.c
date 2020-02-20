@@ -1069,8 +1069,12 @@ create_recovery_conf(time_t backup_id,
 		fio_fprintf(fp, "standby_mode = 'on'\n");
 #endif
 
-		if (backup->primary_conninfo)
-			fio_fprintf(fp, "primary_conninfo = '%s'\n", backup->primary_conninfo);
+		if(params->primary_conninfo)
+			fio_fprintf(fp, "primary_conninfo = '%s'\n", params->primary_conninfo);
+		else{
+			if (backup->primary_conninfo)
+				fio_fprintf(fp, "primary_conninfo = '%s'\n", backup->primary_conninfo);
+		}
 	}
 
 	if (pitr_requested)
