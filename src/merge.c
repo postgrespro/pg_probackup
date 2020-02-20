@@ -849,7 +849,7 @@ merge_files(void *arg)
 			goto done;
 
 		if (progress)
-			elog(INFO, "Progress: (%d/%lu). Process file \"%s\"",
+			elog(INFO, "Progress: (%d/%lu). Merging file \"%s\"",
 				i + 1, (unsigned long) parray_num(arguments->dest_backup->files), dest_file->rel_path);
 
 		if (dest_file->is_datafile && !dest_file->is_cfs)
@@ -1111,14 +1111,28 @@ merge_data_file(parray *parent_chain, pgBackup *full_backup,
 				 dest_backup->compress_alg, dest_backup->compress_level,
 				 dest_backup->checksum_version, 0, NULL, false);
 
+	/* drop restored temp file */
+	if (unlink(to_fullpath_tmp1) == -1)
+		elog(ERROR, "Cannot remove file \"%s\": %s", to_fullpath_tmp1,
+			 strerror(errno));
+
 	/*
 	 * In old (=<2.2.7) versions of pg_probackup n_blocks attribute of files
 	 * in PAGE and PTRACK wasn`t filled.
 	 */
-//	Assert(tmp_file->n_blocks == dest_file->n_blocks);
+	//Assert(tmp_file->n_blocks == dest_file->n_blocks);
+
+	/* Backward compatibility kludge:
+	 * When merging old backups, it is possible that
+	 * to_fullpath_tmp2 size will be 0, and so it will be
+	 * truncated in backup_data_file().
+	 * TODO: remove in 3.0.0
+	 */
+	if (tmp_file->write_size == 0)
+		return;
 
 	if (fio_sync(to_fullpath_tmp2, FIO_BACKUP_HOST) != 0)
-		elog(ERROR, "Cannot fsync merge temp file \"%s\": %s",
+		elog(ERROR, "Cannot sync merge temp file \"%s\": %s",
 			to_fullpath_tmp2, strerror(errno));
 
 	/* Do atomic rename from second temp file to destination file */
@@ -1223,7 +1237,7 @@ merge_non_data_file(parray *parent_chain, pgBackup *full_backup,
 
 	/* TODO: --no-sync support */
 	if (fio_sync(to_fullpath_tmp, FIO_BACKUP_HOST) != 0)
-		elog(ERROR, "Cannot fsync merge temp file \"%s\": %s",
+		elog(ERROR, "Cannot sync merge temp file \"%s\": %s",
 			to_fullpath_tmp, strerror(errno));
 
 	/* Do atomic rename from second temp file to destination file */

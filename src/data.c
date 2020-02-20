@@ -646,6 +646,7 @@ backup_data_file(ConnectionArgs* conn_arg, pgFile *file,
 	if (file->pagemap.bitmapsize == PageBitmapIsEmpty ||
 		file->pagemap_isabsent || !file->exists_in_prev)
 	{
+		/* remote FULL and DELTA */
 		if (fio_is_remote_file(in))
 		{
 			int rc = fio_send_pages(in, out, file,
@@ -669,6 +670,7 @@ backup_data_file(ConnectionArgs* conn_arg, pgFile *file,
 		}
 		else
 		{
+			/* local FULL and DELTA */
 		  RetryUsingPtrack:
 			for (blknum = 0; blknum < nblocks; blknum++)
 			{
@@ -689,7 +691,7 @@ backup_data_file(ConnectionArgs* conn_arg, pgFile *file,
 												page_state, curr_page, calg, clevel,
 												from_fullpath, to_fullpath);
 				else
-					elog(ERROR, "Illegal page state: %i, file: %s, blknum %i",
+					elog(ERROR, "Invalid page state: %i, file: %s, blknum %i",
 						page_state, file->rel_path, blknum);
 
 				n_blocks_read++;
@@ -718,6 +720,7 @@ backup_data_file(ConnectionArgs* conn_arg, pgFile *file,
 			if (page_state == PageIsTruncated)
 				break;
 
+			/* TODO: PAGE and PTRACK should never get SkipCurrentPage */
 			else if (page_state == SkipCurrentPage)
 				n_blocks_skipped++;
 
@@ -726,7 +729,7 @@ backup_data_file(ConnectionArgs* conn_arg, pgFile *file,
 											page_state, curr_page, calg, clevel,
 											from_fullpath, to_fullpath);
 			else
-				elog(ERROR, "Illegal page state: %i, file: %s, blknum %i",
+				elog(ERROR, "Invalid page state: %i, file: %s, blknum %i",
 							page_state, file->rel_path, blknum);
 
 			n_blocks_read++;
