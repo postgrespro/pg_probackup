@@ -192,8 +192,8 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync)
 						"Create new FULL backup before an incremental one.",
 						current.tli);
 
-		pgBackupGetPath(prev_backup, prev_backup_filelist_path,
-						lengthof(prev_backup_filelist_path), DATABASE_FILE_LIST);
+		join_path_components(prev_backup_filelist_path, prev_backup->root_dir,
+															DATABASE_FILE_LIST);
 		/* Files of previous backup needed by DELTA backup */
 		prev_backup_filelist = dir_read_file_list(NULL, NULL, prev_backup_filelist_path, FIO_BACKUP_HOST);
 
