@@ -31,7 +31,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         node.slow_start()
 
         # Do full backup
-        self.backup_node(backup_dir, "node", node)
+        self.backup_node(backup_dir, "node", node, options=['--compress'])
         show_backup = self.show_pb(backup_dir, "node")[0]
 
         self.assertEqual(show_backup["status"], "OK")
@@ -45,7 +45,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
             conn.commit()
 
         # Do first page backup
-        self.backup_node(backup_dir, "node", node, backup_type="page")
+        self.backup_node(backup_dir, "node", node, backup_type="page", options=['--compress'])
         show_backup = self.show_pb(backup_dir, "node")[1]
 
         # sanity check
@@ -60,7 +60,9 @@ class MergeTest(ProbackupTest, unittest.TestCase):
             conn.commit()
 
         # Do second page backup
-        self.backup_node(backup_dir, "node", node, backup_type="page")
+        self.backup_node(
+            backup_dir, "node", node,
+            backup_type="page", options=['--compress'])
         show_backup = self.show_pb(backup_dir, "node")[2]
         page_id = show_backup["id"]
 
@@ -1047,7 +1049,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
         gdb = self.merge_backup(backup_dir, "node", backup_id, gdb=True)
 
-        gdb.set_breakpoint('copy_file')
+        gdb.set_breakpoint('backup_non_data_file_internal')
         gdb.run_until_break()
 
         gdb.continue_execution_until_break(5)
@@ -1068,7 +1070,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
-    @unittest.skip("skip")
+    # @unittest.skip("skip")
     def test_continue_failed_merge_with_corrupted_delta_backup(self):
         """
         Fail merge via gdb, corrupt DELTA backup, try to continue merge
@@ -1121,7 +1123,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
         # Failed MERGE
         gdb = self.merge_backup(backup_dir, "node", backup_id, gdb=True)
-        gdb.set_breakpoint('copy_file')
+        gdb.set_breakpoint('backup_non_data_file_internal')
         gdb.run_until_break()
 
         gdb.continue_execution_until_break(2)
@@ -1158,7 +1160,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
                     repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertTrue(
-                "ERROR: Merging of backup {0} failed".format(
+                "ERROR: Backup {0} has status CORRUPT, merge is aborted".format(
                     backup_id) in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
@@ -1217,7 +1219,11 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
         gdb.run_until_break()
 
+        gdb._execute('thread apply all bt')
+
         gdb.continue_execution_until_break(20)
+
+        gdb._execute('thread apply all bt')
 
         gdb._execute('signal SIGKILL')
 
@@ -1234,8 +1240,8 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
     def test_continue_failed_merge_3(self):
         """
-        Check that failed MERGE can`t be continued after target backup deleting
-        Create FULL and 2 PAGE backups
+        Check that failed MERGE cannot be continued if intermediate
+        backup is missing.
         """
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
@@ -1297,14 +1303,14 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
         gdb = self.merge_backup(backup_dir, "node", backup_id_merge, gdb=True)
 
-        gdb.set_breakpoint('copy_file')
+        gdb.set_breakpoint('backup_non_data_file_internal')
         gdb.run_until_break()
         gdb.continue_execution_until_break(2)
 
         gdb._execute('signal SIGKILL')
 
         print(self.show_pb(backup_dir, as_text=True, as_json=False))
-        print(os.path.join(backup_dir, "backups", "node", backup_id_delete))
+        # print(os.path.join(backup_dir, "backups", "node", backup_id_delete))
 
         # DELETE PAGE1
         shutil.rmtree(
@@ -1320,8 +1326,8 @@ class MergeTest(ProbackupTest, unittest.TestCase):
                     repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertTrue(
-                "ERROR: Parent full backup for the given backup {0} was not found".format(
-                    backup_id_merge) in e.message,
+                "ERROR: Incremental chain is broken, "
+                "merge is impossible to finish" in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
@@ -1545,7 +1551,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'backups',
             'node', full_id, 'database', fsm_path)
 
-        print(file_to_remove)
+        # print(file_to_remove)
 
         os.remove(file_to_remove)
 
@@ -1701,9 +1707,6 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         gdb.set_breakpoint('delete_backup_files')
         gdb.run_until_break()
 
-        gdb.set_breakpoint('parray_bsearch')
-        gdb.continue_execution_until_break()
-
         gdb.set_breakpoint('pgFileDelete')
         gdb.continue_execution_until_break(20)
 
@@ -1711,7 +1714,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
         # backup half-merged
         self.assertEqual(
-            'MERGING', self.show_pb(backup_dir, 'node')[0]['status'])
+            'MERGED', self.show_pb(backup_dir, 'node')[0]['status'])
 
         self.assertEqual(
             full_id, self.show_pb(backup_dir, 'node')[0]['id'])
@@ -1731,9 +1734,8 @@ class MergeTest(ProbackupTest, unittest.TestCase):
                         repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertTrue(
-                "ERROR: Parent full backup for the given "
-                "backup {0} was not found".format(
-                    page_id_2) in e.message,
+                "ERROR: Full backup {0} has unfinished merge with backup {1}".format(
+                    full_id, page_id) in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
@@ -1764,7 +1766,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         page_1 = self.backup_node(
             backup_dir, 'node', node, backup_type='page')
 
-        # Change FULL B backup status to ERROR
+        # Change PAGE1 backup status to ERROR
         self.change_backup_status(backup_dir, 'node', page_1, 'ERROR')
 
         pgdata = self.pgdata_content(node.data_dir)
@@ -1773,11 +1775,11 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         pgbench = node.pgbench(options=['-T', '10', '-c', '2', '--no-vacuum'])
         pgbench.wait()
 
-        # take PAGE backup
+        # take PAGE2 backup
         page_id = self.backup_node(
             backup_dir, 'node', node, backup_type='page')
 
-        # Change FULL B backup status to ERROR
+        # Change PAGE1 backup status to OK
         self.change_backup_status(backup_dir, 'node', page_1, 'OK')
 
         gdb = self.merge_backup(
@@ -1787,8 +1789,8 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         gdb.set_breakpoint('delete_backup_files')
         gdb.run_until_break()
 
-        gdb.set_breakpoint('parray_bsearch')
-        gdb.continue_execution_until_break()
+#        gdb.set_breakpoint('parray_bsearch')
+#        gdb.continue_execution_until_break()
 
         gdb.set_breakpoint('pgFileDelete')
         gdb.continue_execution_until_break(30)
@@ -1800,6 +1802,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         # restore
         node.cleanup()
         try:
+            #self.restore_node(backup_dir, 'node', node, backup_id=page_1)
             self.restore_node(backup_dir, 'node', node)
             self.assertEqual(
                     1, 0,
@@ -1810,6 +1813,158 @@ class MergeTest(ProbackupTest, unittest.TestCase):
             self.assertIn(
                 "ERROR: Backup {0} is orphan".format(page_1),
                 e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        self.del_test_dir(module_name, fname)
+
+    def test_failed_merge_after_delete_2(self):
+        """
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={'autovacuum': 'off'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # take FULL backup
+        full_id = self.backup_node(
+            backup_dir, 'node', node, options=['--stream'])
+
+        node.pgbench_init(scale=1)
+
+        page_1 = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        # add data
+        pgbench = node.pgbench(options=['-T', '10', '-c', '2', '--no-vacuum'])
+        pgbench.wait()
+
+        # take PAGE2 backup
+        page_2 = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        gdb = self.merge_backup(
+            backup_dir, 'node', page_2, gdb=True,
+            options=['--log-level-console=VERBOSE'])
+
+        gdb.set_breakpoint('pgFileDelete')
+        gdb.run_until_break()
+        gdb.continue_execution_until_break(2)
+        gdb._execute('signal SIGKILL')
+
+        self.delete_pb(backup_dir, 'node', backup_id=page_2)
+
+        # rerun merge
+        try:
+            #self.restore_node(backup_dir, 'node', node, backup_id=page_1)
+            self.merge_backup(backup_dir, 'node', page_1)
+            self.assertEqual(
+                    1, 0,
+                    "Expecting Error because of backup is missing.\n "
+                    "Output: {0} \n CMD: {1}".format(
+                        repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                "ERROR: Full backup {0} has unfinished merge "
+                "with backup {1}".format(full_id, page_2),
+                e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        self.del_test_dir(module_name, fname)
+
+    def test_failed_merge_after_delete_3(self):
+        """
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={'autovacuum': 'off'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # add database
+        node.safe_psql(
+            'postgres',
+            'CREATE DATABASE testdb')
+
+        dboid = node.safe_psql(
+            "postgres",
+            "select oid from pg_database where datname = 'testdb'").rstrip()
+
+        # take FULL backup
+        full_id = self.backup_node(
+            backup_dir, 'node', node, options=['--stream'])
+
+        # drop database
+        node.safe_psql(
+            'postgres',
+            'DROP DATABASE testdb')
+
+        # take PAGE backup
+        page_id = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        # create database
+        node.safe_psql(
+            'postgres',
+            'create DATABASE testdb')
+
+        page_id_2 = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        gdb = self.merge_backup(
+            backup_dir, 'node', page_id,
+            gdb=True, options=['--log-level-console=verbose'])
+
+        gdb.set_breakpoint('delete_backup_files')
+        gdb.run_until_break()
+
+        gdb.set_breakpoint('pgFileDelete')
+        gdb.continue_execution_until_break(20)
+
+        gdb._execute('signal SIGKILL')
+
+        # backup half-merged
+        self.assertEqual(
+            'MERGED', self.show_pb(backup_dir, 'node')[0]['status'])
+
+        self.assertEqual(
+            full_id, self.show_pb(backup_dir, 'node')[0]['id'])
+
+        db_path = os.path.join(
+            backup_dir, 'backups', 'node', full_id)
+
+        # FULL backup is missing now
+        shutil.rmtree(db_path)
+
+        try:
+            self.merge_backup(
+                backup_dir, 'node', page_id_2,
+                options=['--log-level-console=verbose'])
+            self.assertEqual(
+                    1, 0,
+                    "Expecting Error because of missing parent.\n "
+                    "Output: {0} \n CMD: {1}".format(
+                        repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertTrue(
+                "ERROR: Failed to find parent full backup for {0}".format(
+                    page_id_2) in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
@@ -2085,8 +2240,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
                     repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertTrue(
-                "ERROR: Parent full backup for the given "
-                    "backup {0} was not found".format(
+                "ERROR: Failed to find parent full backup for {0}".format(
                     page_id_a3) in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))

@@ -928,7 +928,8 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             pg_options={
                 'autovacuum': 'off',
                 'checkpoint_timeout': '1h',
-                'wal_level': 'replica'})
+                'wal_level': 'replica',
+                'shared_buffers': '128MB'})
 
         if self.get_version(master) < self.version_to_num('9.6.0'):
             self.del_test_dir(module_name, fname)
@@ -966,13 +967,13 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         self.switch_wal_segment(master)
         self.switch_wal_segment(master)
 
-        self.wait_until_replica_catch_with_master(master, replica)
-
         master.safe_psql(
             'postgres',
             'CREATE TABLE t1 AS '
             'SELECT i, repeat(md5(i::text),5006056) AS fat_attr '
             'FROM generate_series(0,10) i')
+
+        self.wait_until_replica_catch_with_master(master, replica)
 
         output = self.backup_node(
             backup_dir, 'replica', replica,
