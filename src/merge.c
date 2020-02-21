@@ -403,6 +403,9 @@ do_merge(time_t backup_id)
  * full backup directory.
  * Remove unnecessary directories and files from full backup directory.
  * Update metadata of full backup to represent destination backup.
+ *
+ * TODO: stop relying on caller to provide valid parent_chain, make sure
+ * that chain is ok.
  */
 void
 merge_chain(parray *parent_chain, pgBackup *full_backup, pgBackup *dest_backup)
@@ -481,8 +484,6 @@ merge_chain(parray *parent_chain, pgBackup *full_backup, pgBackup *dest_backup)
 		}
 	}
 
-	/* TODO: Should we keep relying on caller to provide valid parent_chain? */
-
 	/* If destination backup compression algorithm differs from
 	 * full backup compression algorithm, then in-place merge is
 	 * not possible.
@@ -502,12 +503,18 @@ merge_chain(parray *parent_chain, pgBackup *full_backup, pgBackup *dest_backup)
 		program_version_match = true;
 	else
 		elog(WARNING, "In-place merge is disabled because of program "
-					"versions mismatch");
+					"versions mismatch: backup %s was produced by version %s, "
+					"but current program version is %s",
+					base36enc(dest_backup->start_time),
+					dest_backup->program_version, PROGRAM_VERSION);
 
 	/* Construct path to database dir: /backup_dir/instance_name/FULL/database */
 	join_path_components(full_database_dir, full_backup->root_dir, DATABASE_DIR);
 	/* Construct path to external dir: /backup_dir/instance_name/FULL/external */
 	join_path_components(full_external_prefix, full_backup->root_dir, EXTERNAL_DIR);
+
+	elog(INFO, "Validate parent chain for backup %s",
+					base36enc(dest_backup->start_time));
 
 	/*
 	 * Validate or revalidate all members of parent chain
