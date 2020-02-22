@@ -495,3 +495,166 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_checkdb_with_least_privileges(self):
+        """"""
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.slow_start()
+
+        node.safe_psql(
+            'postgres',
+            'CREATE DATABASE backupdb')
+
+        try:
+            node.safe_psql(
+               "backupdb",
+               "create extension amcheck")
+        except QueryException as e:
+            node.safe_psql(
+                "backupdb",
+                "create extension amcheck_next")
+
+        node.safe_psql(
+            'backupdb',
+            "REVOKE ALL ON DATABASE backupdb from PUBLIC; "
+            "REVOKE ALL ON SCHEMA public from PUBLIC; "
+            "REVOKE ALL ON ALL TABLES IN SCHEMA public FROM PUBLIC; "
+            "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA public FROM PUBLIC; "
+            "REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM PUBLIC; "
+            "REVOKE ALL ON SCHEMA pg_catalog from PUBLIC; "
+            "REVOKE ALL ON ALL TABLES IN SCHEMA pg_catalog FROM PUBLIC; "
+            "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA pg_catalog FROM PUBLIC; "
+            "REVOKE ALL ON ALL SEQUENCES IN SCHEMA pg_catalog FROM PUBLIC; "
+            "REVOKE ALL ON SCHEMA information_schema from PUBLIC; "
+            "REVOKE ALL ON ALL TABLES IN SCHEMA information_schema FROM PUBLIC; "
+            "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA information_schema FROM PUBLIC; "
+            "REVOKE ALL ON ALL SEQUENCES IN SCHEMA information_schema FROM PUBLIC;")
+
+        # PG 9.5
+        if self.get_version(node) < 90600:
+            node.safe_psql(
+                'backupdb',
+                'CREATE ROLE backup WITH LOGIN; '
+                'GRANT CONNECT ON DATABASE backupdb to backup; '
+                'GRANT USAGE ON SCHEMA pg_catalog TO backup; '
+                'GRANT USAGE ON SCHEMA public TO backup; '
+                'GRANT SELECT ON TABLE pg_catalog.pg_proc TO backup; '
+                'GRANT SELECT ON TABLE pg_catalog.pg_extension TO backup; '
+                'GRANT SELECT ON TABLE pg_catalog.pg_database TO backup; '
+                'GRANT SELECT ON TABLE pg_catalog.pg_am TO backup; '
+                'GRANT SELECT ON TABLE pg_catalog.pg_class TO backup; '
+                'GRANT SELECT ON TABLE pg_catalog.pg_index TO backup; '
+                'GRANT SELECT ON TABLE pg_catalog.pg_namespace TO backup; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.nameeq(name, name) TO backup; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.namene(name, name) TO backup; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.int8(integer) TO backup; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.oideq(oid, oid) TO backup; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.charne("char", "char") TO backup; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_system() TO backup; '
+                'GRANT EXECUTE ON FUNCTION bt_index_check(regclass) TO backup; '
+                'GRANT EXECUTE ON FUNCTION bt_index_check(regclass, bool) TO backup;'
+            )
+        # PG 9.6
+        elif self.get_version(node) > 90600 and self.get_version(node) < 100000:
+            node.safe_psql(
+                'backupdb',
+                'CREATE ROLE backup WITH LOGIN; '
+                'GRANT CONNECT ON DATABASE backupdb to backup; '
+                'GRANT USAGE ON SCHEMA pg_catalog TO backup; '
+                'GRANT USAGE ON SCHEMA public TO backup; '
+                'GRANT SELECT ON TABLE pg_catalog.pg_proc TO backup; '
+                'GRANT SELECT ON TABLE pg_catalog.pg_extension TO backup; '
+                'GRANT SELECT ON TABLE pg_catalog.pg_database TO backup; '
+                'GRANT SELECT ON TABLE pg_catalog.pg_am TO backup; '
+                'GRANT SELECT ON TABLE pg_catalog.pg_class TO backup; '
+                'GRANT SELECT ON TABLE pg_catalog.pg_index TO backup; '
+                'GRANT SELECT ON TABLE pg_catalog.pg_namespace TO backup; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.nameeq(name, name) TO backup; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.namene(name, name) TO backup; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.int8(integer) TO backup; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.oideq(oid, oid) TO backup; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.charne("char", "char") TO backup; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_system() TO backup; '
+                'GRANT EXECUTE ON FUNCTION bt_index_check(regclass) TO backup; '
+                'GRANT EXECUTE ON FUNCTION bt_index_check(regclass, bool) TO backup;'
+            )
+        # >= 10
+        else:
+            node.safe_psql(
+                'backupdb',
+                'CREATE ROLE backup WITH LOGIN; '
+                'GRANT CONNECT ON DATABASE backupdb to backup; '
+                'GRANT USAGE ON SCHEMA pg_catalog TO backup; '
+                'GRANT USAGE ON SCHEMA public TO backup; '
+                'GRANT SELECT ON TABLE pg_catalog.pg_proc TO backup; '
+                'GRANT SELECT ON TABLE pg_catalog.pg_extension TO backup; '
+                'GRANT SELECT ON TABLE pg_catalog.pg_database TO backup; '
+                'GRANT SELECT ON TABLE pg_catalog.pg_am TO backup; '
+                'GRANT SELECT ON TABLE pg_catalog.pg_class TO backup; '
+                'GRANT SELECT ON TABLE pg_catalog.pg_index TO backup; '
+                'GRANT SELECT ON TABLE pg_catalog.pg_namespace TO backup; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.nameeq(name, name) TO backup; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.namene(name, name) TO backup; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.int8(integer) TO backup; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.oideq(oid, oid) TO backup; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.charne("char", "char") TO backup; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_system() TO backup; '
+                'GRANT EXECUTE ON FUNCTION bt_index_check(regclass) TO backup; '
+                'GRANT EXECUTE ON FUNCTION bt_index_check(regclass, bool) TO backup;'
+            )
+
+#        if ProbackupTest.enterprise:
+#            node.safe_psql(
+#                "backupdb",
+#                "GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_edition() TO backup")
+#
+#            node.safe_psql(
+#                "backupdb",
+#                "GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_version() TO backup")
+
+        # checkdb
+        try:
+            self.checkdb_node(
+                backup_dir, 'node',
+                options=[
+                    '--amcheck', '-U', 'backup',
+                    '-d', 'backupdb', '-p', str(node.port)])
+            # we should die here because exception is what we expect to happen
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because permissions are missing\n"
+                " Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                "INFO: Amcheck succeeded for database 'backupdb'",
+                e.message,
+                "\n Unexpected Error Message: {0}\n CMD: {1}".format(
+                    repr(e.message), self.cmd))
+
+            self.assertIn(
+                "WARNING: Extension 'amcheck' or 'amcheck_next' are "
+                "not installed in database postgres",
+                e.message,
+                "\n Unexpected Error Message: {0}\n CMD: {1}".format(
+                    repr(e.message), self.cmd))
+
+            self.assertIn(
+                "ERROR: Some databases were not amchecked",
+                e.message,
+                "\n Unexpected Error Message: {0}\n CMD: {1}".format(
+                    repr(e.message), self.cmd))
