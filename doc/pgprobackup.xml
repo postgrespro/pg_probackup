@@ -951,8 +951,8 @@ GRANT SELECT ON TABLE pg_catalog.pg_class TO backup;
 GRANT SELECT ON TABLE pg_catalog.pg_database TO backup;
 GRANT SELECT ON TABLE pg_catalog.pg_namespace TO backup;
 GRANT SELECT ON TABLE pg_catalog.pg_extension TO backup;
-GRANT EXECUTE ON FUNCTION bt_index_check(oid) TO backup;
-GRANT EXECUTE ON FUNCTION bt_index_check(oid, bool) TO backup;
+GRANT EXECUTE ON FUNCTION bt_index_check(regclass) TO backup;
+GRANT EXECUTE ON FUNCTION bt_index_check(regclass, bool) TO backup;
 </programlisting>
   </refsect2>
   <refsect2 id="pbk-setting-up-partial-restore">
