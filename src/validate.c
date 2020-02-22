@@ -255,7 +255,7 @@ pgBackupValidateFiles(void *arg)
 			continue;
 
 		if (progress)
-			elog(INFO, "Progress: (%d/%d). Process file \"%s\"",
+			elog(INFO, "Progress: (%d/%d). Validate file \"%s\"",
 				 i + 1, num_files, file->path);
 
 		/*

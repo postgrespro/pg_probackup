@@ -864,7 +864,8 @@ compress_init(void)
 	{
 		if (instance_config.compress_level != COMPRESS_LEVEL_DEFAULT
 			&& instance_config.compress_alg == NOT_DEFINED_COMPRESS)
-			elog(ERROR, "Cannot specify compress-level option without compress-alg option");
+			elog(ERROR, "Cannot specify compress-level option alone without "
+												"compress-algorithm option");
 	}
 
 	if (instance_config.compress_level < 0 || instance_config.compress_level > 9)

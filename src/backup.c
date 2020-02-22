@@ -192,8 +192,8 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync)
 						"Create new FULL backup before an incremental one.",
 						current.tli);
 
-		pgBackupGetPath(prev_backup, prev_backup_filelist_path,
-						lengthof(prev_backup_filelist_path), DATABASE_FILE_LIST);
+		join_path_components(prev_backup_filelist_path, prev_backup->root_dir,
+															DATABASE_FILE_LIST);
 		/* Files of previous backup needed by DELTA backup */
 		prev_backup_filelist = dir_read_file_list(NULL, NULL, prev_backup_filelist_path, FIO_BACKUP_HOST);
 
@@ -1450,8 +1450,8 @@ wait_wal_lsn(XLogRecPtr target_lsn, bool is_start_lsn, TimeLineID tli,
 
 		if (!stream_wal && is_start_lsn && try_count == 30)
 			elog(WARNING, "By default pg_probackup assume WAL delivery method to be ARCHIVE. "
-				 "If continius archiving is not set up, use '--stream' option to make autonomous backup. "
-				 "Otherwise check that continius archiving works correctly.");
+				 "If continuous archiving is not set up, use '--stream' option to make autonomous backup. "
+				 "Otherwise check that continuous archiving works correctly.");
 
 		if (timeout > 0 && try_count > timeout)
 		{

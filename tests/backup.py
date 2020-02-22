@@ -1023,6 +1023,11 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         # FULL backup
         self.backup_node(backup_dir, 'node', node, options=['--stream'])
 
+        node.safe_psql(
+            "postgres",
+            "insert into t_heap select i"
+            " as id from generate_series(101,102) i")
+
         # PAGE backup
         gdb = self.backup_node(
             backup_dir, 'node', node, backup_type='page',
@@ -1039,11 +1044,10 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 
         pgdata = self.pgdata_content(node.data_dir)
 
-        with open(os.path.join(backup_dir, 'log', 'pg_probackup.log')) as f:
-            log_content = f.read()
-            self.assertTrue(
-                'LOG: File "{0}" is not found'.format(absolute_path) in log_content,
-                'File "{0}" should be deleted but it`s not'.format(absolute_path))
+        backup_id = self.show_pb(backup_dir, 'node')[1]['id']
+
+        filelist = self.get_backup_filelist(backup_dir, 'node', backup_id)
+        self.assertNotIn(relative_path, filelist)
 
         node.cleanup()
         self.restore_node(backup_dir, 'node', node, options=["-j", "4"])
@@ -1347,7 +1351,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node', node, gdb=True,
             options=['--stream', '--log-level-file=LOG'])
 
-        gdb.set_breakpoint('copy_file')
+        gdb.set_breakpoint('backup_non_data_file')
         gdb.run_until_break()
 
         gdb.continue_execution_until_break(20)
@@ -1385,7 +1389,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node', node, gdb=True,
             options=['--stream', '--log-level-file=LOG'])
 
-        gdb.set_breakpoint('copy_file')
+        gdb.set_breakpoint('backup_non_data_file')
         gdb.run_until_break()
 
         gdb.continue_execution_until_break(20)
@@ -1422,7 +1426,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         gdb = self.backup_node(
             backup_dir, 'node', node, gdb=True, options=['--stream'])
 
-        gdb.set_breakpoint('copy_file')
+        gdb.set_breakpoint('backup_non_data_file')
         gdb.run_until_break()
 
         gdb.continue_execution_until_break(20)
@@ -1513,7 +1517,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                     repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertIn(
-                'ERROR: cannot open file',
+                'ERROR: Cannot open file',
                 e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))

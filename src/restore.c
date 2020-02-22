@@ -697,6 +697,11 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 			if (S_ISDIR(dest_file->mode))
 				continue;
 
+			/* skip external files if ordered to do so */
+			if (dest_file->external_dir_num > 0 &&
+				params->skip_external_dirs)
+				continue;
+
 			/* construct fullpath */
 			if (dest_file->external_dir_num == 0)
 			{
@@ -708,7 +713,7 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 			}
 			else
 			{
-				char	*external_path = parray_get(external_dirs, dest_file->external_dir_num - 1);
+				char *external_path = parray_get(external_dirs, dest_file->external_dir_num - 1);
 				join_path_components(to_fullpath, external_path, dest_file->rel_path);
 			}
 
@@ -831,8 +836,10 @@ restore_files(void *arg)
 				 to_fullpath, strerror(errno_tmp));
 		}
 
-		if (!fio_is_remote_file(out))
-			setbuf(out, buffer);
+		/* update file permission */
+		if (fio_chmod(to_fullpath, dest_file->mode, FIO_DB_HOST) == -1)
+			elog(ERROR, "Cannot change mode of \"%s\": %s", to_fullpath,
+				 strerror(errno));
 
 		if (!dest_file->is_datafile || dest_file->is_cfs)
 			elog(VERBOSE, "Restoring non-data file: \"%s\"", to_fullpath);
@@ -842,6 +849,9 @@ restore_files(void *arg)
 		// If destination file is 0 sized, then just close it and go for the next
 		if (dest_file->write_size == 0)
 			goto done;
+
+		if (!fio_is_remote_file(out))
+			setbuf(out, buffer);
 
 		/* Restore destination file */
 		if (dest_file->is_datafile && !dest_file->is_cfs)
@@ -853,30 +863,7 @@ restore_files(void *arg)
 			arguments->restored_bytes += restore_non_data_file(arguments->parent_chain,
 										arguments->dest_backup, dest_file, out, to_fullpath);
 
-		/*
-		 * Destination file is data file.
-		 * Iterate over incremental chain and lookup given destination file.
-		 * Apply changed blocks to destination file from every backup in parent chain.
-		 */
-
-		done:
-
-		/* Truncate file up to n_blocks. NOTE: no need, we just should not write
-		 * blocks that are exceeding n_blocks.
-		 * But for this to work, n_blocks should be trusted.
-		 */
-
-		/* update file permission
-		 * TODO: chmod must be done right after fopen()
-		 */
-		if (fio_chmod(to_fullpath, dest_file->mode, FIO_DB_HOST) == -1)
-		{
-			int errno_tmp = errno;
-			fio_fclose(out);
-			elog(ERROR, "Cannot change mode of \"%s\": %s", to_fullpath,
-				 strerror(errno_tmp));
-		}
-
+done:
 		/* close file */
 		if (fio_fclose(out) != 0)
 			elog(ERROR, "Cannot close file \"%s\": %s", to_fullpath,

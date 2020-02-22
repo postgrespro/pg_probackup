@@ -33,7 +33,7 @@ class LockingTest(ProbackupTest, unittest.TestCase):
         gdb = self.backup_node(
             backup_dir, 'node', node, gdb=True)
 
-        gdb.set_breakpoint('copy_file')
+        gdb.set_breakpoint('backup_non_data_file')
         gdb.run_until_break()
 
         gdb.continue_execution_until_break(20)
@@ -87,7 +87,7 @@ class LockingTest(ProbackupTest, unittest.TestCase):
         gdb = self.backup_node(
             backup_dir, 'node', node, gdb=True)
 
-        gdb.set_breakpoint('copy_file')
+        gdb.set_breakpoint('backup_non_data_file')
         gdb.run_until_break()
 
         gdb.continue_execution_until_break(20)
@@ -156,7 +156,7 @@ class LockingTest(ProbackupTest, unittest.TestCase):
         gdb = self.backup_node(
             backup_dir, 'node', node, gdb=True)
 
-        gdb.set_breakpoint('copy_file')
+        gdb.set_breakpoint('backup_non_data_file')
         gdb.run_until_break()
 
         gdb.continue_execution_until_break(20)
@@ -253,7 +253,7 @@ class LockingTest(ProbackupTest, unittest.TestCase):
         gdb = self.backup_node(
             backup_dir, 'node', node, gdb=True)
 
-        gdb.set_breakpoint('copy_file')
+        gdb.set_breakpoint('backup_non_data_file')
         gdb.run_until_break()
 
         gdb.continue_execution_until_break(20)
@@ -399,7 +399,7 @@ class LockingTest(ProbackupTest, unittest.TestCase):
                     restore_id) in e.message and
                 'is using backup {0} and still is running'.format(
                     backup_id) in e.message and
-                'ERROR: Cannot lock backup directory' in e.message,
+                'ERROR: Cannot lock backup' in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 

@@ -833,6 +833,9 @@ class ProbackupTest(object):
         if backup_type:
             cmd_list += ['-b', backup_type]
 
+        if not old_binary:
+            cmd_list += ['--no-sync']
+
         return self.run_pb(cmd_list + options, asynchronous, gdb, old_binary, return_id)
 
     def checkdb_node(
@@ -888,6 +891,9 @@ class ProbackupTest(object):
 
         if backup_id:
             cmd_list += ['-i', backup_id]
+
+        if not old_binary:
+            cmd_list += ['--no-sync']
 
         return self.run_pb(cmd_list + options, old_binary=old_binary)
 

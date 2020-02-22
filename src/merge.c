@@ -403,6 +403,9 @@ do_merge(time_t backup_id)
  * full backup directory.
  * Remove unnecessary directories and files from full backup directory.
  * Update metadata of full backup to represent destination backup.
+ *
+ * TODO: stop relying on caller to provide valid parent_chain, make sure
+ * that chain is ok.
  */
 void
 merge_chain(parray *parent_chain, pgBackup *full_backup, pgBackup *dest_backup)
@@ -481,17 +484,15 @@ merge_chain(parray *parent_chain, pgBackup *full_backup, pgBackup *dest_backup)
 		}
 	}
 
-	/* TODO: Should we keep relying on caller to provide valid parent_chain? */
-
-	/* If destination backup compression algorihtm differs from
-	 * full backup compression algorihtm, then in-place merge is
+	/* If destination backup compression algorithm differs from
+	 * full backup compression algorithm, then in-place merge is
 	 * not possible.
 	 */
 	if (full_backup->compress_alg == dest_backup->compress_alg)
 		compression_match = true;
 	else
 		elog(WARNING, "In-place merge is disabled because of compression "
-					"algorihtms mismatch");
+					"algorithms mismatch");
 
 	/*
 	 * If current program version differs from destination backup version,
@@ -502,12 +503,18 @@ merge_chain(parray *parent_chain, pgBackup *full_backup, pgBackup *dest_backup)
 		program_version_match = true;
 	else
 		elog(WARNING, "In-place merge is disabled because of program "
-					"versions mismatch");
+					"versions mismatch: backup %s was produced by version %s, "
+					"but current program version is %s",
+					base36enc(dest_backup->start_time),
+					dest_backup->program_version, PROGRAM_VERSION);
 
 	/* Construct path to database dir: /backup_dir/instance_name/FULL/database */
 	join_path_components(full_database_dir, full_backup->root_dir, DATABASE_DIR);
 	/* Construct path to external dir: /backup_dir/instance_name/FULL/external */
 	join_path_components(full_external_prefix, full_backup->root_dir, EXTERNAL_DIR);
+
+	elog(INFO, "Validate parent chain for backup %s",
+					base36enc(dest_backup->start_time));
 
 	/*
 	 * Validate or revalidate all members of parent chain
@@ -823,8 +830,9 @@ merge_files(void *arg)
 {
 	int		i;
 	merge_files_arg *arguments = (merge_files_arg *) arg;
+	size_t n_files = parray_num(arguments->dest_backup->files);
 
-	for (i = 0; i < parray_num(arguments->dest_backup->files); i++)
+	for (i = 0; i < n_files; i++)
 	{
 		pgFile	   *dest_file = (pgFile *) parray_get(arguments->dest_backup->files, i);
 		pgFile	   *tmp_file;
@@ -849,8 +857,8 @@ merge_files(void *arg)
 			goto done;
 
 		if (progress)
-			elog(INFO, "Progress: (%d/%lu). Process file \"%s\"",
-				i + 1, (unsigned long) parray_num(arguments->dest_backup->files), dest_file->rel_path);
+			elog(INFO, "Progress: (%d/%lu). Merging file \"%s\"",
+				i + 1, n_files, dest_file->rel_path);
 
 		if (dest_file->is_datafile && !dest_file->is_cfs)
 			tmp_file->segno = dest_file->segno;
@@ -862,14 +870,13 @@ merge_files(void *arg)
 				tmp_file->crc = dest_file->crc;
 
 			tmp_file->write_size = 0;
-
 			goto done;
 		}
 
 		/*
 		 * If file didn`t changed over the course of all incremental chain,
 		 * then do in-place merge, unless destination backup has
-		 * different compression algorihtm.
+		 * different compression algorithm.
 		 * In-place merge is also impossible, if program version of destination
 		 * backup differs from PROGRAM_VERSION
 		 */
@@ -1072,7 +1079,7 @@ reorder_external_dirs(pgBackup *to_backup, parray *to_external,
 
 /* Merge is usually happens as usual backup/restore via temp files, unless
  * file didn`t changed since FULL backup AND full a dest backup have the
- * same compression algorihtm. In this case file can be left as it is.
+ * same compression algorithm. In this case file can be left as it is.
  */
 void
 merge_data_file(parray *parent_chain, pgBackup *full_backup,
@@ -1111,14 +1118,28 @@ merge_data_file(parray *parent_chain, pgBackup *full_backup,
 				 dest_backup->compress_alg, dest_backup->compress_level,
 				 dest_backup->checksum_version, 0, NULL, false);
 
+	/* drop restored temp file */
+	if (unlink(to_fullpath_tmp1) == -1)
+		elog(ERROR, "Cannot remove file \"%s\": %s", to_fullpath_tmp1,
+			 strerror(errno));
+
 	/*
 	 * In old (=<2.2.7) versions of pg_probackup n_blocks attribute of files
 	 * in PAGE and PTRACK wasn`t filled.
 	 */
-//	Assert(tmp_file->n_blocks == dest_file->n_blocks);
+	//Assert(tmp_file->n_blocks == dest_file->n_blocks);
+
+	/* Backward compatibility kludge:
+	 * When merging old backups, it is possible that
+	 * to_fullpath_tmp2 size will be 0, and so it will be
+	 * truncated in backup_data_file().
+	 * TODO: remove in 3.0.0
+	 */
+	if (tmp_file->write_size == 0)
+		return;
 
 	if (fio_sync(to_fullpath_tmp2, FIO_BACKUP_HOST) != 0)
-		elog(ERROR, "Cannot fsync merge temp file \"%s\": %s",
+		elog(ERROR, "Cannot sync merge temp file \"%s\": %s",
 			to_fullpath_tmp2, strerror(errno));
 
 	/* Do atomic rename from second temp file to destination file */
@@ -1223,7 +1244,7 @@ merge_non_data_file(parray *parent_chain, pgBackup *full_backup,
 
 	/* TODO: --no-sync support */
 	if (fio_sync(to_fullpath_tmp, FIO_BACKUP_HOST) != 0)
-		elog(ERROR, "Cannot fsync merge temp file \"%s\": %s",
+		elog(ERROR, "Cannot sync merge temp file \"%s\": %s",
 			to_fullpath_tmp, strerror(errno));
 
 	/* Do atomic rename from second temp file to destination file */
