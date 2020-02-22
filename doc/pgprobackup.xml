@@ -951,8 +951,8 @@ GRANT SELECT ON TABLE pg_catalog.pg_class TO backup;
 GRANT SELECT ON TABLE pg_catalog.pg_database TO backup;
 GRANT SELECT ON TABLE pg_catalog.pg_namespace TO backup;
 GRANT SELECT ON TABLE pg_catalog.pg_extension TO backup;
-GRANT EXECUTE ON FUNCTION bt_index_check(oid) TO backup;
-GRANT EXECUTE ON FUNCTION bt_index_check(oid, bool) TO backup;
+GRANT EXECUTE ON FUNCTION bt_index_check(regclass) TO backup;
+GRANT EXECUTE ON FUNCTION bt_index_check(regclass, bool) TO backup;
 </programlisting>
   </refsect2>
   <refsect2 id="pbk-setting-up-partial-restore">
@@ -1645,10 +1645,8 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
      recovery settings are written into the <filename>recovery.conf</filename>
      file. Starting from <productname>PostgreSQL</productname> 12,
      <application>pg_probackup</application> writes these settings into
-     the <filename>probackup_recovery.conf</filename> file in the data
-     directory, and then includes them into the
-     <filename>postgresql.auto.conf</filename> when the cluster is
-     is started.
+     the <filename>probackup_recovery.conf</filename> file and then includes
+     it into <filename>postgresql.auto.conf</filename>.
     </para>
 
     <para>
