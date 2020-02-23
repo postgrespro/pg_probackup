@@ -3377,3 +3377,53 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_restore_primary_conninfo(self):
+        """
+        """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.slow_start()
+
+        # Take FULL
+        self.backup_node(backup_dir, 'node', node, options=['--stream'])
+
+        node.pgbench_init(scale=1)
+
+        #primary_conninfo = 'host=192.168.1.50 port=5432 user=foo password=foopass'
+
+        replica = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'replica'))
+        replica.cleanup()
+        str_conninfo='host=192.168.1.50 port=5432 user=foo password=foopass'
+
+        self.restore_node(
+            backup_dir, 'node', replica,
+            options=['-R', '--primary-conninfo={0}'.format(str_conninfo)])
+
+        if self.get_version(node) >= self.version_to_num('12.0'):
+            standby_signal = os.path.join(replica.data_dir, 'standby.signal')
+            self.assertTrue(
+                os.path.isfile(standby_signal),
+                "File '{0}' do not exists".format(standby_signal))
+
+        if self.get_version(node) >= self.version_to_num('12.0'):
+            recovery_conf = os.path.join(replica.data_dir, 'probackup_recovery.conf')
+        else:
+            recovery_conf = os.path.join(replica.data_dir, 'recovery.conf')
+
+        with open(os.path.join(replica.data_dir, recovery_conf), 'r') as f:
+            recovery_conf_content = f.read()
+
+        self.assertIn(str_conninfo, recovery_conf_content)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
