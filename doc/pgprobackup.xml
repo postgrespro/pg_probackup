@@ -1634,13 +1634,14 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
     <para>
      If you restore <link linkend="pbk-archive-mode">ARCHIVE</link> backups,
      perform <link linkend="pbk-performing-point-in-time-pitr-recovery">PITR</link>,
-     or specify the <literal>--restore-as-replica</literal> option with the
+     or specify the <literal>--restore-as-replica</literal> flag with the
      <literal>restore</literal> command to set up a standby server,
      <application>pg_probackup</application> creates a recovery configuration
      file once all data files are copied into the target directory. This file
      includes the minimal settings required for recovery, except for the password in the
      <ulink url="https://postgrespro.com/docs/postgresql/current/runtime-config-replication.html#GUC-PRIMARY-CONNINFO">primary_conninfo</ulink>
-     parameter; you have to add the password manually, if required.
+     parameter; you have to add the password manually or use
+     the <literal>--primary-conninfo</literal> option, if required.
      For <productname>PostgreSQL</productname> 11 or lower,
      recovery settings are written into the <filename>recovery.conf</filename>
      file. Starting from <productname>PostgreSQL</productname> 12,
@@ -3584,6 +3585,7 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
 [-T <replaceable>OLDDIR</replaceable>=<replaceable>NEWDIR</replaceable>] [--external-mapping=<replaceable>OLDDIR</replaceable>=<replaceable>NEWDIR</replaceable>] [--skip-external-dirs]
 [-R | --restore-as-replica] [--no-validate] [--skip-block-validation] [--force]
 [--restore-command=<replaceable>cmdline</replaceable>]
+[--primary-conninfo=<replaceable>primary_conninfo</replaceable>]
 [<replaceable>recovery_target_options</replaceable>] [<replaceable>logging_options</replaceable>] [<replaceable>remote_options</replaceable>]
 [<replaceable>partial_restore_options</replaceable>] [<replaceable>remote_wal_archive_options</replaceable>]
 </programlisting>
@@ -3617,6 +3619,21 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
         directory, and then includes them into the
         <filename>postgresql.auto.conf</filename> when the cluster is
         is started.
+      </para>
+      </listitem>
+      </varlistentry>
+
+      <varlistentry>
+<term><option>--primary-conninfo=<replaceable>primary_conninfo</replaceable></option></term>
+      <listitem>
+      <para>
+        Sets the
+        <ulink url="https://postgrespro.com/docs/postgresql/current/runtime-config-replication.html#GUC-PRIMARY-CONNINFO">primary_conninfo</ulink>
+        parameter to the specified value.
+        This option will be ignored if used without the <option>-R</option> flag.
+      </para>
+      <para>
+        Example: <literal>--primary-conninfo='host=192.168.1.50 port=5432 user=foo password=foopass'</literal>
       </para>
       </listitem>
       </varlistentry>
