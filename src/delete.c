@@ -1023,3 +1023,36 @@ do_delete_instance(void)
 	elog(INFO, "Instance '%s' successfully deleted", instance_name);
 	return 0;
 }
+
+/* Delete all error backup files of given instance. */
+int
+do_delete_error(void)
+{
+	parray		*backup_list;
+	parray		*xlog_files_list;
+	int 		i;
+	int 		rc;
+	char		instance_config_path[MAXPGPATH];
+
+
+	/* Delete all error backups. */
+	backup_list = catalog_get_backup_list(instance_name, INVALID_BACKUP_ID);
+
+	for (i = 0; i < parray_num(backup_list); i++)
+	{
+		pgBackup   *backup = (pgBackup *) parray_get(backup_list, i);
+		if (backup->status == BACKUP_STATUS_ERROR){
+			/* elog(INFO, "Delete error backup '%s' ", base36enc(backup->backup_id)); */
+			catalog_lock_backup_list(backup_list, i, i);
+			delete_backup_files(backup);
+		}
+	}
+
+	/* Cleanup */
+	parray_walk(backup_list, pgBackupFree);
+	parray_free(backup_list);
+
+
+	elog(INFO, "Error backups from instance '%s' successfully deleted", instance_name);
+	return 0;
+}

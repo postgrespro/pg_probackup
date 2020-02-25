@@ -706,6 +706,7 @@ extern void do_delete(time_t backup_id);
 extern void delete_backup_files(pgBackup *backup);
 extern int do_retention(void);
 extern int do_delete_instance(void);
+extern int do_delete_error(void);
 
 /* in fetch.c */
 extern char *slurpFile(const char *datadir,
