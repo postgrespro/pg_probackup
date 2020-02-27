@@ -3228,6 +3228,13 @@ pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replace
       all the available backups according to the current retention
       policy, without performing any irreversible actions.
     </para>
+    <para>
+      To delete backups with the ERROR status, use the <option>--error-state</option> flag:
+    </para>
+    <programlisting>
+pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> --error-state
+</programlisting>
+
 </refsect2>
 </refsect1>
 
@@ -3862,7 +3869,7 @@ pg_probackup merge -B <replaceable>backup_dir</replaceable> --instance <replacea
 pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable>
 [--help] [-j <replaceable>num_threads</replaceable>] [--progress]
 [--retention-redundancy=<replaceable>redundancy</replaceable>][--retention-window=<replaceable>window</replaceable>][--wal-depth=<replaceable>wal_depth</replaceable>]
-[--delete-wal] {-i <replaceable>backup_id</replaceable> | --delete-expired [--merge-expired] | --merge-expired}
+[--delete-wal] {-i <replaceable>backup_id</replaceable> | --delete-expired [--merge-expired] | --merge-expired | --error-state}
 [--dry-run]
 [<replaceable>logging_options</replaceable>]
 </programlisting>
