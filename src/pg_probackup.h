@@ -567,6 +567,9 @@ typedef struct BackupPageHeader
 
 #define GetXLogSegNoFromScrath(logSegNo, log, seg, wal_segsz_bytes)	\
 		logSegNo = (uint64) log * XLogSegmentsPerXLogId(wal_segsz_bytes) + seg
+
+#define GetXLogFromFileName(fname, tli, logSegNo, wal_segsz_bytes) \
+		XLogFromFileName(fname, tli, logSegNo, wal_segsz_bytes)
 #else
 #define GetXLogSegNo(xlrp, logSegNo, wal_segsz_bytes) \
 	XLByteToSeg(xlrp, logSegNo)
@@ -583,6 +586,9 @@ typedef struct BackupPageHeader
 
 #define GetXLogSegNoFromScrath(logSegNo, log, seg, wal_segsz_bytes)	\
 		logSegNo = (uint64) log * XLogSegmentsPerXLogId + seg
+
+#define GetXLogFromFileName(fname, tli, logSegNo, wal_segsz_bytes) \
+		XLogFromFileName(fname, tli, logSegNo)
 #endif
 
 #define IsSshProtocol() (instance_config.remote.host && strcmp(instance_config.remote.proto, "ssh") == 0)
@@ -688,6 +694,8 @@ extern int do_add_instance(InstanceConfig *instance);
 /* in archive.c */
 extern int do_archive_push(InstanceConfig *instance, char *wal_file_path,
 						   char *wal_file_name, bool overwrite);
+extern int do_archive_push_new(InstanceConfig *instance,
+						   char *wal_file_path, char *wal_file_name, bool overwrite);
 extern int do_archive_get(InstanceConfig *instance, char *wal_file_path,
 						  char *wal_file_name);
 
@@ -832,7 +840,8 @@ extern void pgFileFree(void *file);
 extern pg_crc32 pgFileGetCRC(const char *file_path, bool use_crc32c,
 							 bool raise_on_deleted, size_t *bytes_read, fio_location location);
 extern pg_crc32 pgFileGetCRCnew(const char *file_path, bool missing_ok, bool use_crc32c);
-//extern pg_crc32 pgFileGetCRC_compressed(const char *file_path, bool use_crc32c, bool missing_ok);
+extern pg_crc32 pgFileGetCRCgz(const char *file_path, bool use_crc32c, bool missing_ok);
+
 extern int pgFileCompareName(const void *f1, const void *f2);
 extern int pgFileComparePath(const void *f1, const void *f2);
 extern int pgFileMapComparePath(const void *f1, const void *f2);

@@ -792,7 +792,7 @@ backup_non_data_file(pgFile *file, pgFile *prev_file,
 		file->mtime <= parent_backup_time)
 	{
 
-		file->crc = fio_get_crc32(from_fullpath, FIO_DB_HOST);
+		file->crc = fio_get_crc32(from_fullpath, FIO_DB_HOST, false);
 
 		/* ...and checksum is the same... */
 		if (EQ_TRADITIONAL_CRC32(file->crc, prev_file->crc))

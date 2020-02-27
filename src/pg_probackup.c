@@ -732,7 +732,7 @@ main(int argc, char *argv[])
 	switch (backup_subcmd)
 	{
 		case ARCHIVE_PUSH_CMD:
-			return do_archive_push(&instance_config, wal_file_path,
+			return do_archive_push_new(&instance_config, wal_file_path,
 								   wal_file_name, file_overwrite);
 		case ARCHIVE_GET_CMD:
 			return do_archive_get(&instance_config,
