@@ -801,3 +801,50 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
+
+    def test_delete_error_backups(self):
+        """delete increment and all after him"""
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'])
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # full backup mode
+        self.backup_node(backup_dir, 'node', node)
+        # page backup mode
+        self.backup_node(backup_dir, 'node', node, backup_type="page")
+
+        # Take FULL BACKUP
+        backup_id_a = self.backup_node(backup_dir, 'node', node)
+        # Take PAGE BACKUP
+        backup_id_b = self.backup_node(backup_dir, 'node', node, backup_type="page")
+
+        # Change status to ERROR
+        self.change_backup_status(backup_dir, 'node', backup_id_a, 'ERROR')
+        self.change_backup_status(backup_dir, 'node', backup_id_b, 'ERROR')
+
+	print(self.show_pb(backup_dir, as_text=True, as_json=False))
+
+        show_backups = self.show_pb(backup_dir, 'node')
+        self.assertEqual(len(show_backups), 4)
+
+        # delete error backups
+        self.delete_pb(backup_dir, 'node', options=['--error-state'])
+
+	print(self.show_pb(backup_dir, as_text=True, as_json=False))
+
+        show_backups = self.show_pb(backup_dir, 'node')
+        self.assertEqual(len(show_backups), 2)
+
+	self.assertEqual(show_backups[0]['status'], "OK")
+	self.assertEqual(show_backups[1]['status'], "OK")
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
