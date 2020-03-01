@@ -860,6 +860,8 @@ int fio_rename(char const* old_path, char const* new_path, fio_location location
 		IO_CHECK(fio_write_all(fio_stdout, old_path, old_path_len), old_path_len);
 		IO_CHECK(fio_write_all(fio_stdout, new_path, new_path_len), new_path_len);
 
+		//TODO: wait for confirmation.
+
 		return 0;
 	}
 	else

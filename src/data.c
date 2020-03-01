@@ -1054,7 +1054,7 @@ restore_non_data_file_internal(FILE *in, FILE *out, pgFile *file,
 			break;
 
 		if (read_len < 0)
-			elog(ERROR, "Cannot read backup mode file \"%s\": %s",
+			elog(ERROR, "Cannot read backup file \"%s\": %s",
 				 from_fullpath, strerror(errno));
 
 		if (fio_fwrite(out, buf, read_len) != read_len)
