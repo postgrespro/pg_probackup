@@ -398,15 +398,11 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             log_content)
 
         self.assertIn(
-            'INFO: pg_probackup archive-push from',
+            'pg_probackup push file',
             log_content)
 
         self.assertIn(
-            'ERROR: WAL segment ',
-            log_content)
-
-        self.assertIn(
-            'already exists.',
+            'WAL file already exists in archive with different checksum',
             log_content)
 
         self.assertNotIn(
@@ -448,8 +444,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
-            pg_options={
-                'checkpoint_timeout': '30s'})
+            pg_options={'checkpoint_timeout': '30s'})
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -487,9 +482,13 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         self.assertIn(
             'DETAIL:  The failed archive command was:', log_content)
         self.assertIn(
-            'INFO: pg_probackup archive-push from', log_content)
+            'pg_probackup push file', log_content)
+        self.assertNotIn(
+            'WAL file already exists in archive with '
+            'different checksum, overwriting', log_content)
         self.assertIn(
-            '{0}" already exists.'.format(filename), log_content)
+            'WAL file already exists in archive with '
+            'different checksum', log_content)
 
         self.assertNotIn(
             'pg_probackup archive-push completed successfully', log_content)
@@ -497,13 +496,17 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         self.set_archiving(backup_dir, 'node', node, overwrite=True)
         node.reload()
         self.switch_wal_segment(node)
-        sleep(2)
+        sleep(5)
 
         with open(log_file, 'r') as f:
             log_content = f.read()
             self.assertTrue(
                 'pg_probackup archive-push completed successfully' in log_content,
                 'Expecting messages about successfull execution archive_command')
+
+        self.assertIn(
+            'WAL file already exists in archive with '
+            'different checksum, overwriting', log_content)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -520,7 +523,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
-        self.set_archiving(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node, log_level='verbose')
 
         node.slow_start()
 
@@ -579,12 +582,9 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         log_file = os.path.join(node.logs_dir, 'postgresql.log')
         with open(log_file, 'r') as f:
             log_content = f.read()
-            self.assertIn(
-                'Cannot open destination temporary WAL file',
-                log_content)
 
             self.assertIn(
-                'Reusing stale destination temporary WAL file',
+                'Reusing stale temp WAL file',
                 log_content)
 
         # Clean after yourself
@@ -905,8 +905,8 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             initdb_params=['--data-checksums'],
             pg_options={
                 'checkpoint_timeout': '30s',
-                'archive_timeout': '10s'}
-            )
+                'archive_timeout': '10s'})
+
         replica = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'replica'))
         replica.cleanup()
@@ -922,6 +922,8 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             "create table t_heap as select i as id, md5(i::text) as text, "
             "md5(repeat(i::text,10))::tsvector as tsvector "
             "from generate_series(0,10000) i")
+
+        master.pgbench_init(scale=5)
 
         # TAKE FULL ARCHIVE BACKUP FROM MASTER
         self.backup_node(backup_dir, 'master', master)
@@ -1718,7 +1720,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
-        self.set_archiving(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node, log_level='verbose')
         node.slow_start()
 
         backup_id = self.backup_node(backup_dir, 'node', node)
@@ -1733,6 +1735,8 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
                 options=['--recovery-target-timeline={0}'.format(i)])
             node.slow_start()
             node.pgbench_init(scale=2)
+
+        sleep(5)
 
         show = self.show_archive(backup_dir)
 

@@ -1131,7 +1131,8 @@ class ProbackupTest(object):
 
     def set_archiving(
             self, backup_dir, instance, node, replica=False,
-            overwrite=False, compress=False, old_binary=False):
+            overwrite=False, compress=False, old_binary=False,
+            log_level=False):
 
         # parse postgresql.auto.conf
         options = {}
@@ -1161,11 +1162,20 @@ class ProbackupTest(object):
         if overwrite:
             options['archive_command'] += '--overwrite '
 
+        options['archive_command'] += '--log-level-console=verbose '
+        options['archive_command'] += '-j 10 '
+        options['archive_command'] += '--no-sync '
+
         if os.name == 'posix':
             options['archive_command'] += '--wal-file-path=%p --wal-file-name=%f'
 
         elif os.name == 'nt':
             options['archive_command'] += '--wal-file-path="%p" --wal-file-name="%f"'
+
+        if log_level:
+            options['archive_command'] += ' --log-level-console={0}'.format(log_level)
+            options['archive_command'] += ' --log-level-file={0} '.format(log_level)
+
 
         self.set_auto_conf(node, options)
 
