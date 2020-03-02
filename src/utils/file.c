@@ -549,6 +549,7 @@ int fio_pread(FILE* f, void* buf, off_t offs)
 	}
 	else
 	{
+		/* For local file, opened by fopen, we should use stdio operations */
 		int rc;
 		rc = fseek(f, offs, SEEK_SET);
 

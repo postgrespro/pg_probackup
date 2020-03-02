@@ -152,28 +152,29 @@ static void opt_datname_include_list(ConfigOption *opt, const char *arg);
 
 /*
  * Short name should be non-printable ASCII character.
+ * Use values between 128 and 255.
  */
 static ConfigOption cmd_options[] =
 {
 	/* directory options */
-	{ 'b',  120, "help",			&help_opt,			SOURCE_CMD_STRICT },
+	{ 'b', 130, "help",			&help_opt,			SOURCE_CMD_STRICT },
 	{ 's', 'B', "backup-path",		&backup_path,		SOURCE_CMD_STRICT },
 	/* common options */
 	{ 'u', 'j', "threads",			&num_threads,		SOURCE_CMD_STRICT },
-	{ 'b', 121, "stream",			&stream_wal,		SOURCE_CMD_STRICT },
-	{ 'b', 122, "progress",			&progress,			SOURCE_CMD_STRICT },
+	{ 'b', 131, "stream",			&stream_wal,		SOURCE_CMD_STRICT },
+	{ 'b', 132, "progress",			&progress,			SOURCE_CMD_STRICT },
 	{ 's', 'i', "backup-id",		&backup_id_string,	SOURCE_CMD_STRICT },
-	{ 'b', 123, "no-sync",			&no_sync,			SOURCE_CMD_STRICT },
+	{ 'b', 133, "no-sync",			&no_sync,			SOURCE_CMD_STRICT },
 	/* backup options */
-	{ 'b', 133, "backup-pg-log",	&backup_logs,		SOURCE_CMD_STRICT },
+	{ 'b', 180, "backup-pg-log",	&backup_logs,		SOURCE_CMD_STRICT },
 	{ 'f', 'b', "backup-mode",		opt_backup_mode,	SOURCE_CMD_STRICT },
 	{ 'b', 'C', "smooth-checkpoint", &smooth_checkpoint,	SOURCE_CMD_STRICT },
 	{ 's', 'S', "slot",				&replication_slot,	SOURCE_CMD_STRICT },
-	{ 'b', 234, "temp-slot",		&temp_slot,			SOURCE_CMD_STRICT },
-	{ 'b', 134, "delete-wal",		&delete_wal,		SOURCE_CMD_STRICT },
-	{ 'b', 135, "delete-expired",	&delete_expired,	SOURCE_CMD_STRICT },
-	{ 'b', 235, "merge-expired",	&merge_expired,		SOURCE_CMD_STRICT },
-	{ 'b', 237, "dry-run",			&dry_run,			SOURCE_CMD_STRICT },
+	{ 'b', 181, "temp-slot",		&temp_slot,			SOURCE_CMD_STRICT },
+	{ 'b', 182, "delete-wal",		&delete_wal,		SOURCE_CMD_STRICT },
+	{ 'b', 183, "delete-expired",	&delete_expired,	SOURCE_CMD_STRICT },
+	{ 'b', 184, "merge-expired",	&merge_expired,		SOURCE_CMD_STRICT },
+	{ 'b', 185, "dry-run",			&dry_run,			SOURCE_CMD_STRICT },
 	/* restore options */
 	{ 's', 136, "recovery-target-time",	&target_time,	SOURCE_CMD_STRICT },
 	{ 's', 137, "recovery-target-xid",	&target_xid,	SOURCE_CMD_STRICT },
@@ -218,7 +219,9 @@ static ConfigOption cmd_options[] =
 	{ 'I', 170, "ttl", &ttl, SOURCE_CMD_STRICT, SOURCE_DEFAULT, 0, OPTION_UNIT_S, option_get_value},
 	{ 's', 171, "expire-time",		&expire_time_string,	SOURCE_CMD_STRICT },
 
-	/* options for backward compatibility */
+	/* options for backward compatibility
+	 * TODO: remove in 3.0.0
+	 */
 	{ 's', 136, "time",				&target_time,		SOURCE_CMD_STRICT },
 	{ 's', 137, "xid",				&target_xid,		SOURCE_CMD_STRICT },
 	{ 's', 138, "inclusive",		&target_inclusive,	SOURCE_CMD_STRICT },

@@ -264,6 +264,7 @@ pgBackupValidateFiles(void *arg)
 		 */
 		if (file->write_size == BYTES_INVALID)
 		{
+			/* TODO: lookup corresponding merge bug */
 			if (arguments->backup_mode == BACKUP_MODE_FULL)
 			{
 				/* It is illegal for file in FULL backup to have BYTES_INVALID */
@@ -276,10 +277,11 @@ pgBackupValidateFiles(void *arg)
 				continue;
 		}
 
-		/* no point in trying to open empty or non-changed files */
-		if (file->write_size <= 0)
+		/* no point in trying to open empty file */
+		if (file->write_size == 0)
 			continue;
 
+		/* TODO: it is redundant to check file existence using stat */
 		if (stat(file->path, &st) == -1)
 		{
 			if (errno == ENOENT)
