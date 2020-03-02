@@ -125,7 +125,8 @@ char	   *instance_name;
 /* archive push options */
 static char *wal_file_path;
 static char *wal_file_name;
-static bool	file_overwrite = false;
+static bool file_overwrite = false;
+static bool no_ready_rename = false;
 
 /* show options */
 ShowFormat show_format = SHOW_PLAIN;
@@ -211,8 +212,9 @@ static ConfigOption cmd_options[] =
 	{ 's', 150, "wal-file-path",	&wal_file_path,		SOURCE_CMD_STRICT },
 	{ 's', 151, "wal-file-name",	&wal_file_name,		SOURCE_CMD_STRICT },
 	{ 'b', 152, "overwrite",		&file_overwrite,	SOURCE_CMD_STRICT },
+	{ 'b', 153, "no-ready-rename",	&no_ready_rename,	SOURCE_CMD_STRICT },
 	/* show options */
-	{ 'f', 153, "format",			opt_show_format,	SOURCE_CMD_STRICT },
+	{ 'f', 160, "format",			opt_show_format,	SOURCE_CMD_STRICT },
 	{ 'b', 161, "archive",			&show_archive,		SOURCE_CMD_STRICT },
 	/* set-backup options */
 	{ 'I', 170, "ttl", &ttl, SOURCE_CMD_STRICT, SOURCE_DEFAULT, 0, OPTION_UNIT_S, option_get_value},
@@ -732,8 +734,8 @@ main(int argc, char *argv[])
 	switch (backup_subcmd)
 	{
 		case ARCHIVE_PUSH_CMD:
-			return do_archive_push_new(&instance_config, wal_file_path,
-								   wal_file_name, file_overwrite);
+			return do_archive_push(&instance_config, wal_file_path, wal_file_name,
+								   file_overwrite, no_sync, no_ready_rename);
 		case ARCHIVE_GET_CMD:
 			return do_archive_get(&instance_config,
 								  wal_file_path, wal_file_name);

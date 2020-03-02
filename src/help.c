@@ -210,8 +210,9 @@ help_pg_probackup(void)
 	printf(_("                 [--help]\n"));
 
 	printf(_("\n  %s archive-push -B backup-path --instance=instance_name\n"), PROGRAM_NAME);
-	printf(_("                 --wal-file-path=wal-file-path\n"));
 	printf(_("                 --wal-file-name=wal-file-name\n"));
+	printf(_("                 [-j num-threads]\n"));
+	printf(_("                 [--no-ready-rename] [--no-sync]\n"));
 	printf(_("                 [--overwrite]\n"));
 	printf(_("                 [--compress]\n"));
 	printf(_("                 [--compress-algorithm=compress-algorithm]\n"));
@@ -853,8 +854,9 @@ static void
 help_archive_push(void)
 {
 	printf(_("\n%s archive-push -B backup-path --instance=instance_name\n"), PROGRAM_NAME);
-	printf(_("                 --wal-file-path=wal-file-path\n"));
 	printf(_("                 --wal-file-name=wal-file-name\n"));
+	printf(_("                 [-j num-threads]\n"));
+	printf(_("                 [--no-ready-rename] [--no-sync]\n"));
 	printf(_("                 [--overwrite]\n"));
 	printf(_("                 [--compress]\n"));
 	printf(_("                 [--compress-algorithm=compress-algorithm]\n"));
@@ -865,10 +867,11 @@ help_archive_push(void)
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
 	printf(_("      --instance=instance_name     name of the instance to delete\n"));
-	printf(_("      --wal-file-path=wal-file-path\n"));
-	printf(_("                                   relative path name of the WAL file on the server\n"));
 	printf(_("      --wal-file-name=wal-file-name\n"));
 	printf(_("                                   name of the WAL file to retrieve from the server\n"));
+	printf(_("  -j, --threads=NUM                number of parallel threads\n"));
+	printf(_("      --no-ready-rename            do not rename '.ready' file in 'archive_status' directory\n"));
+	printf(_("      --no-sync                    do not sync WAL file to disk\n"));
 	printf(_("      --overwrite                  overwrite archived WAL file\n"));
 
 	printf(_("\n  Compression options:\n"));

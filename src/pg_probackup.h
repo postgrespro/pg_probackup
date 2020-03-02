@@ -693,9 +693,7 @@ extern int do_add_instance(InstanceConfig *instance);
 
 /* in archive.c */
 extern int do_archive_push(InstanceConfig *instance, char *wal_file_path,
-						   char *wal_file_name, bool overwrite);
-extern int do_archive_push_new(InstanceConfig *instance,
-						   char *wal_file_path, char *wal_file_name, bool overwrite);
+						   char *wal_file_name, bool overwrite, bool no_sync, bool no_ready_rename);
 extern int do_archive_get(InstanceConfig *instance, char *wal_file_path,
 						  char *wal_file_name);
 
