@@ -712,9 +712,6 @@ extern char *slurpFile(const char *datadir,
 					   size_t *filesize,
 					   bool safe,
 					   fio_location location);
-extern char *slurpFileFullPath(const char *from_fullpath,
-							  size_t *filesize, bool safe,
-							  fio_location location);
 extern char *fetchFile(PGconn *conn, const char *filename, size_t *filesize);
 
 /* in help.c */

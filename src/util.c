@@ -390,7 +390,7 @@ copy_pgcontrol_file(const char *from_fullpath, fio_location from_location,
 	char	   *buffer;
 	size_t		size;
 
-	buffer = slurpFileFullPath(from_fullpath, &size, false, from_location);
+	buffer = slurpFile(from_fullpath, "", &size, false, from_location);
 
 	digestControlFile(&ControlFile, buffer, size);
 
