@@ -381,65 +381,6 @@ pgFileGetCRCgz(const char *file_path, bool use_crc32c, bool missing_ok)
 	return crc;
 }
 
-/*
- * Read the file to compute its CRC.
- * As a handy side effect, we return filesize via bytes_read parameter.
- */
-pg_crc32
-pgFileGetCRC(const char *file_path, bool use_crc32c, bool raise_on_deleted,
-			 size_t *bytes_read, fio_location location)
-{
-	FILE	   *fp;
-	pg_crc32	crc = 0;
-	char		buf[STDIO_BUFSIZE];
-	size_t		len = 0;
-	size_t		total = 0;
-	int			errno_tmp;
-
-	INIT_FILE_CRC32(use_crc32c, crc);
-
-	/* open file in binary read mode */
-	fp = fio_fopen(file_path, PG_BINARY_R, location);
-	if (fp == NULL)
-	{
-		if (!raise_on_deleted && errno == ENOENT)
-		{
-			FIN_FILE_CRC32(use_crc32c, crc);
-			return crc;
-		}
-		else
-			elog(ERROR, "cannot open file \"%s\": %s",
-				file_path, strerror(errno));
-	}
-
-	/* calc CRC of file */
-	for (;;)
-	{
-		if (interrupted)
-			elog(ERROR, "interrupted during CRC calculation");
-
-		len = fio_fread(fp, buf, sizeof(buf));
-		if (len == 0)
-			break;
-		/* update CRC */
-		COMP_FILE_CRC32(use_crc32c, crc, buf, len);
-		total += len;
-	}
-
-	if (bytes_read)
-		*bytes_read = total;
-
-	errno_tmp = errno;
-	if (len < 0)
-		elog(WARNING, "cannot read \"%s\": %s", file_path,
-			strerror(errno_tmp));
-
-	FIN_FILE_CRC32(use_crc32c, crc);
-	fio_fclose(fp);
-
-	return crc;
-}
-
 void
 pgFileFree(void *file)
 {
