@@ -926,7 +926,7 @@ pg_crc32 fio_get_crc32(const char *file_path, fio_location location)
 		return crc;
 	}
 	else
-		return pgFileGetCRCnew(file_path, true, true);
+		return pgFileGetCRC(file_path, true, true);
 }
 
 /* Remove file */
@@ -1629,7 +1629,7 @@ void fio_communicate(int in, int out)
 			break;
 		  case FIO_GET_CRC32:
 			/* calculate crc32 for a file */
-			crc = pgFileGetCRCnew(buf, true, true);
+			crc = pgFileGetCRC(buf, true, true);
 			IO_CHECK(fio_write_all(out, &crc, sizeof(crc)), sizeof(crc));
 			break;
 		  default:

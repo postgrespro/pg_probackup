@@ -594,11 +594,11 @@ fileEqualCRC(const char *path1, const char *path2, bool path2_is_compressed)
 	else
 #endif
 	{
-		crc2 = pgFileGetCRC(path2, true, true, NULL, FIO_BACKUP_HOST);
+		crc2 = fio_get_crc32(path2, FIO_BACKUP_HOST);
 	}
 
 	/* Get checksum of original file */
-	crc1 = pgFileGetCRC(path1, true, true, NULL, FIO_DB_HOST);
+	crc1 = fio_get_crc32(path1, FIO_DB_HOST);
 
 	return EQ_CRC32C(crc1, crc2);
 }

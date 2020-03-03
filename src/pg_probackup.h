@@ -826,10 +826,9 @@ extern pgFile *pgFileInit(const char *path, const char *rel_path);
 extern void pgFileDelete(pgFile *file, const char *full_path);
 
 extern void pgFileFree(void *file);
-extern pg_crc32 pgFileGetCRC(const char *file_path, bool use_crc32c,
-							 bool raise_on_deleted, size_t *bytes_read, fio_location location);
-extern pg_crc32 pgFileGetCRCnew(const char *file_path, bool missing_ok, bool use_crc32c);
-//extern pg_crc32 pgFileGetCRC_compressed(const char *file_path, bool use_crc32c, bool missing_ok);
+
+extern pg_crc32 pgFileGetCRC(const char *file_path, bool missing_ok, bool use_crc32c);
+
 extern int pgFileCompareName(const void *f1, const void *f2);
 extern int pgFileComparePath(const void *f1, const void *f2);
 extern int pgFileMapComparePath(const void *f1, const void *f2);
