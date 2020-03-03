@@ -538,6 +538,14 @@ main(int argc, char *argv[])
 		setMyLocation();
 	}
 
+	/* disable logging into file for archive-push and archive-get */
+	if (backup_subcmd == ARCHIVE_GET_CMD ||
+		backup_subcmd == ARCHIVE_PUSH_CMD)
+	{
+		instance_config.logger.log_level_file = LOG_OFF;
+	}
+
+
 	/* Just read environment variables */
 	if (backup_path == NULL && backup_subcmd == CHECKDB_CMD)
 		config_get_opt_env(instance_options);
