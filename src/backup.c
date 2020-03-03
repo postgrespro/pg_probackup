@@ -575,6 +575,7 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync)
 	{
 		parray     *xlog_files_list;
 		char		pg_xlog_path[MAXPGPATH];
+		char		wal_full_path[MAXPGPATH];
 
 		/* Scan backup PG_XLOG_DIR */
 		xlog_files_list = parray_new();
@@ -586,11 +587,13 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync)
 		for (i = 0; i < parray_num(xlog_files_list); i++)
 		{
 			pgFile	   *file = (pgFile *) parray_get(xlog_files_list, i);
+
+			join_path_components(wal_full_path, pg_xlog_path, file->rel_path);
+
 			if (S_ISREG(file->mode))
 			{
-				file->crc = pgFileGetCRC(file->path, true, false,
-										 &file->read_size, FIO_BACKUP_HOST);
-				file->write_size = file->read_size;
+				file->crc = pgFileGetCRC(wal_full_path, true, false);
+				file->write_size = file->size;
 			}
 			/* Remove file path root prefix*/
 			if (strstr(file->path, database_path) == file->path)
@@ -1805,10 +1808,11 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn,
 			{
 				file = pgFileNew(backup_label, PG_BACKUP_LABEL_FILE, true, 0,
 								 FIO_BACKUP_HOST);
-				file->crc = pgFileGetCRC(file->path, true, false,
-										 &file->read_size, FIO_BACKUP_HOST);
-				file->write_size = file->read_size;
-				file->uncompressed_size = file->read_size;
+
+				file->crc = pgFileGetCRC(backup_label, true, false);
+
+				file->write_size = file->size;
+				file->uncompressed_size = file->size;
 				free(file->path);
 				file->path = strdup(PG_BACKUP_LABEL_FILE);
 				parray_append(backup_files_list, file);
@@ -1854,9 +1858,8 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn,
 								 FIO_BACKUP_HOST);
 				if (S_ISREG(file->mode))
 				{
-					file->crc = pgFileGetCRC(file->path, true, false,
-											 &file->read_size, FIO_BACKUP_HOST);
-					file->write_size = file->read_size;
+					file->crc = pgFileGetCRC(tablespace_map, true, false);
+					file->write_size = file->size;
 				}
 				free(file->path);
 				file->path = strdup(PG_TABLESPACE_MAP_FILE);

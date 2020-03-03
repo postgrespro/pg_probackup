@@ -259,10 +259,9 @@ delete_file:
  * We cannot make decision about file decompression because
  * user may ask to backup already compressed files and we should be
  * obvious about it.
- * TODO: add decompression option.
  */
 pg_crc32
-pgFileGetCRCnew(const char *file_path, bool use_crc32c, bool missing_ok)
+pgFileGetCRC(const char *file_path, bool use_crc32c, bool missing_ok)
 {
 	FILE	   *fp;
 	pg_crc32	crc = 0;
@@ -321,7 +320,6 @@ pgFileGetCRCnew(const char *file_path, bool use_crc32c, bool missing_ok)
  * We cannot make decision about file decompression because
  * user may ask to backup already compressed files and we should be
  * obvious about it.
- * TODO: add decompression option.
  */
 pg_crc32
 pgFileGetCRCgz(const char *file_path, bool use_crc32c, bool missing_ok)
@@ -1842,7 +1840,7 @@ write_database_map(pgBackup *backup, parray *database_map, parray *backup_files_
 								 FIO_BACKUP_HOST);
 	pfree(file->path);
 	file->path = pgut_strdup(DATABASE_MAP);
-	file->crc = pgFileGetCRCnew(database_map_path, true, false);
+	file->crc = pgFileGetCRC(database_map_path, true, false);
 
 	file->write_size = file->read_size;
 	file->uncompressed_size = file->read_size;

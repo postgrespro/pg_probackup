@@ -553,6 +553,7 @@ int fio_pread(FILE* f, void* buf, off_t offs)
 	}
 	else
 	{
+		/* For local file, opened by fopen, we should use stdio operations */
 		int rc;
 		rc = fseek(f, offs, SEEK_SET);
 
@@ -939,7 +940,7 @@ pg_crc32 fio_get_crc32(const char *file_path, fio_location location, bool decomp
 		if (decompress)
 			return pgFileGetCRCgz(file_path, true, true);
 		else
-			return pgFileGetCRCnew(file_path, true, true);
+			return pgFileGetCRC(file_path, true, true);
 	}
 }
 
@@ -1653,7 +1654,7 @@ void fio_communicate(int in, int out)
 			if (hdr.arg == 1)
 				crc = pgFileGetCRCgz(buf, true, true);
 			else
-				crc = pgFileGetCRCnew(buf, true, true);
+				crc = pgFileGetCRC(buf, true, true);
 			IO_CHECK(fio_write_all(out, &crc, sizeof(crc)), sizeof(crc));
 			break;
 		  default:
