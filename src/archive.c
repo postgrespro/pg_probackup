@@ -32,20 +32,23 @@ static void copy_file_attributes(const char *from_path,
 
 typedef struct
 {
-	TimeLineID	tli;
-	XLogSegNo	segno;
-	uint32		xlog_seg_size;
+	TimeLineID  tli;
+	uint32      xlog_seg_size;
 
 	const char *pg_xlog_dir;
 	const char *archive_dir;
-	bool		overwrite;
-	bool		compress;
-	bool		no_sync;
-	bool		no_ready_rename;
+	bool        overwrite;
+	bool        compress;
+	bool        no_sync;
+	bool        no_ready_rename;
 
 	CompressAlg compress_alg;
-	int			compress_level;
-	int			thread_num;
+	int         compress_level;
+	int         thread_num;
+
+	parray     *files;
+
+	int         n_pushed_files;
 
 	/*
 	 * Return value from the thread.
@@ -53,24 +56,32 @@ typedef struct
 	 * 1 - there is an error.
 	 * 2 - no error, but nothing to push
 	 */
-	int			ret;
+	int         ret;
 } archive_push_arg;
+
+typedef struct WALSegno
+{
+	XLogSegNo   segno;
+	volatile    pg_atomic_flag lock;
+} WALSegno;
 
 /*
  * At this point, we already done one roundtrip to archive server
  * to get instance config.
  *
  * pg_probackup specific archive command for archive backups
- * set archive_command = 'pg_probackup archive-push -B /home/anastasia/backup
- * --wal-file-path %p --wal-file-name %f', to move backups into arclog_path.
+ * set archive_command to
+ * 'pg_probackup archive-push -B /home/anastasia/backup --wal-file-name %f',
+ * to move backups into arclog_path.
  * Where archlog_path is $BACKUP_PATH/wal/system_id.
  * Currently it just copies wal files to the new location.
  */
 int
 do_archive_push(InstanceConfig *instance, char *wal_file_path,
-				char *wal_file_name, bool overwrite, bool no_sync, bool no_ready_rename)
+				char *wal_file_name, int batch_size, bool overwrite,
+				bool no_sync, bool no_ready_rename)
 {
-	int			i;
+	uint64		i;
 	char		current_dir[MAXPGPATH];
 	char		pg_xlog_dir[MAXPGPATH];
 	uint64		system_id;
@@ -86,8 +97,10 @@ do_archive_push(InstanceConfig *instance, char *wal_file_path,
 	bool		push_isok = true;
 
 	/* reporting */
-	int 		n_pushed_files = 0;
+	int 		total_pushed_files = 0;
 	pid_t		my_pid;
+
+	parray		*files = NULL;
 
 	my_pid = getpid();
 
@@ -123,20 +136,27 @@ do_archive_push(InstanceConfig *instance, char *wal_file_path,
 
 	/* Single-thread push
 	 * There are two cases, when we don`t want to start multi-thread push:
-	 *  - number of threads is equal to 1, multithreading isn`t cheap to start,
-	 *    so creating, running and terminating one thread using generic
-	 *    multithread approach can take almost as much time as copying itself.
+	 *  - batch size is equal to 1; multithreading isn`t cheap to start,
+	 *    so creating, running and terminating threads using generic
+	 *    multithread approach to copy just one file can take almost as much
+	 *    time as copying itself.
 	 *  - file to push is not WAL file, but .history, .backup or .partial file.
 	 *    we do not apply compression to such files.
 	 */
-	if (num_threads == 1 || !IsXLogFileName(wal_file_name))
+
+	if (num_threads > batch_size)
+		num_threads = batch_size;
+
+	elog(INFO, "PID [%d]: pg_probackup push file %s into archive, "
+					"threads: %i, batch size: %i, compression: %s",
+						my_pid, wal_file_name, num_threads,
+						batch_size, is_compress ? "zlib" : "none");
+
+	if (!IsXLogFileName(wal_file_name) || batch_size == 1)
 	{
 		/* do not apply compression to .backup, .history and .partial files */
 		if (!IsXLogFileName(wal_file_name))
 			is_compress = false;
-
-		elog(INFO, "PID [%d]: pg_probackup push file %s into archive, threads: 1, compression: %s",
-						my_pid, wal_file_name, is_compress ? "zlib" : "none");
 
 		if (is_compress)
 			gz_push_wal_file_internal(wal_file_name, pg_xlog_dir,
@@ -147,7 +167,7 @@ do_archive_push(InstanceConfig *instance, char *wal_file_path,
 								   instance->arclog_path, overwrite, no_sync, 1);
 
 		push_isok = true;
-		n_pushed_files++;
+		total_pushed_files++;
 		goto push_done;
 	}
 
@@ -155,8 +175,17 @@ do_archive_push(InstanceConfig *instance, char *wal_file_path,
 	if (IsXLogFileName(wal_file_name))
 		GetXLogFromFileName(wal_file_name, &tli, &first_segno, instance->xlog_seg_size);
 
-	elog(INFO, "PID [%d]: pg_probackup push file %s into archive, threads: %i, compression: %s",
-					my_pid, wal_file_name, num_threads, is_compress ? "zlib" : "none");
+	files = parray_new();
+	/* setup locks */
+	for (i = first_segno; i < first_segno + batch_size; i++)
+	{
+		WALSegno *xlogfile = palloc(sizeof(WALSegno));
+
+		xlogfile->segno = i;
+		pg_atomic_init_flag(&xlogfile->lock);
+
+		parray_append(files, xlogfile);
+	}
 
 	/* TODO: report actual executed command */
 
@@ -169,7 +198,6 @@ do_archive_push(InstanceConfig *instance, char *wal_file_path,
 		archive_push_arg *arg = &(threads_args[i]);
 
 		arg->tli = tli;
-		arg->segno = first_segno + i;
 		arg->xlog_seg_size = instance->xlog_seg_size;
 		arg->archive_dir = instance->arclog_path;
 		arg->pg_xlog_dir = pg_xlog_dir;
@@ -180,6 +208,9 @@ do_archive_push(InstanceConfig *instance, char *wal_file_path,
 
 		arg->compress_alg = instance->compress_alg;
 		arg->compress_level = instance->compress_level;
+
+		arg->files = files;
+		arg->n_pushed_files = 0;
 
 		arg->thread_num = i+1;
 		/* By default there are some error */
@@ -199,8 +230,8 @@ do_archive_push(InstanceConfig *instance, char *wal_file_path,
 		pthread_join(threads[i], NULL);
 		if (threads_args[i].ret == 1)
 			push_isok = false;
-		else if (threads_args[i].ret == 0)
-			n_pushed_files++;
+
+		total_pushed_files += threads_args[i].n_pushed_files;
 	}
 
 	/* Note, that we don`t do garbage collection here,
@@ -213,7 +244,7 @@ push_done:
 		/* report number of files pushed into archive */
 		elog(INFO, "PID [%d]: pg_probackup archive-push completed successfully, "
 									"number of pushed files: %i",
-					my_pid, n_pushed_files);
+					my_pid, total_pushed_files);
 		return 0;
 	}
 
@@ -228,56 +259,66 @@ push_done:
 static void *
 push_wal_segno(void *arg)
 {
+	int		i;
 	int		rc;
-	char 	wal_filename[MAXPGPATH];
+	char	wal_filename[MAXPGPATH];
+
+	char	archive_status_dir[MAXPGPATH];
+	char	wal_file_dummy[MAXPGPATH];
+	char	wal_file_ready[MAXPGPATH];
+	char	wal_file_done[MAXPGPATH];
 	archive_push_arg *args = (archive_push_arg *) arg;
 
-	char 	archive_status_dir[MAXPGPATH];
-	char 	wal_file_dummy[MAXPGPATH];
-	char 	wal_file_ready[MAXPGPATH];
-	char 	wal_file_done[MAXPGPATH];
-
-	/* At first we must construct WAL filename from segno, tli and xlog_seg_size */
-	GetXLogFileName(wal_filename, args->tli, args->segno, args->xlog_seg_size);
-
 	join_path_components(archive_status_dir, args->pg_xlog_dir, "archive_status");
-	join_path_components(wal_file_dummy, archive_status_dir, wal_filename);
-	snprintf(wal_file_ready, MAXPGPATH, "%s.%s", wal_file_dummy, "ready");
-	snprintf(wal_file_done, MAXPGPATH, "%s.%s", wal_file_dummy, "done");
 
-	/* For additional threads we must check the existence of .ready file */
-	if (args->thread_num != 1)
+	for (i = 0; i < parray_num(args->files); i++)
 	{
+		WALSegno *xlogfile = (WALSegno *) parray_get(args->files, i);
+
+		if (!pg_atomic_test_set_flag(&xlogfile->lock))
+			continue;
+
+		/* At first we must construct WAL filename from segno, tli and xlog_seg_size */
+		GetXLogFileName(wal_filename, args->tli, xlogfile->segno, args->xlog_seg_size);
+
+		join_path_components(wal_file_dummy, archive_status_dir, wal_filename);
+		snprintf(wal_file_ready, MAXPGPATH, "%s.%s", wal_file_dummy, "ready");
+		snprintf(wal_file_done, MAXPGPATH, "%s.%s", wal_file_dummy, "done");
+
+		/* Check the existence of .ready file */
 		if (!fileExists(wal_file_ready, FIO_DB_HOST))
 		{
 			/* no ready file, nothing to do here */
-			args->ret = 2;
-			return NULL;
+			continue;
 		}
-	}
-	elog(LOG, "Thread [%d]: pushing file \"%s\"", args->thread_num, wal_filename);
 
-	/* If compression is not required, then just copy it as is */
-	if (!args->compress)
-		rc = push_wal_file_internal(wal_filename, args->pg_xlog_dir,
-									args->archive_dir, args->overwrite,
-									args->no_sync, args->thread_num);
+		elog(LOG, "Thread [%d]: pushing file \"%s\"", args->thread_num, wal_filename);
+
+		/* If compression is not required, then just copy it as is */
+		if (!args->compress)
+			rc = push_wal_file_internal(wal_filename, args->pg_xlog_dir,
+										args->archive_dir, args->overwrite,
+										args->no_sync, args->thread_num);
 #ifdef HAVE_LIBZ
-	else
-		rc = gz_push_wal_file_internal(wal_filename, args->pg_xlog_dir,
+		else
+			rc = gz_push_wal_file_internal(wal_filename, args->pg_xlog_dir,
 									   args->archive_dir, args->overwrite, args->no_sync,
 									   args->compress_level, args->thread_num);
 #endif
 
-	/* take '--no-ready-rename' flag into account */
-	if (!args->no_ready_rename && rc == 0 && args->thread_num != 1)
-	{
-		/* It is ok to rename status file in archive_status directory */
-		elog(VERBOSE, "Thread [%d]: Rename \"%s\" to \"%s\"", args->thread_num,
-										wal_file_ready, wal_file_done);
-		if (fio_rename(wal_file_ready, wal_file_done, FIO_DB_HOST) < 0)
-			elog(ERROR, "Thread [%d]: Cannot rename file \"%s\" to \"%s\": %s",
-				args->thread_num, wal_file_ready, wal_file_done, strerror(errno));
+		/* take '--no-ready-rename' flag into account */
+		if (!args->no_ready_rename && rc == 0)
+		{
+			/* It is ok to rename status file in archive_status directory */
+			elog(VERBOSE, "Thread [%d]: Rename \"%s\" to \"%s\"", args->thread_num,
+											wal_file_ready, wal_file_done);
+			if (fio_rename(wal_file_ready, wal_file_done, FIO_DB_HOST) < 0)
+				elog(ERROR, "Thread [%d]: Cannot rename file \"%s\" to \"%s\": %s",
+					args->thread_num, wal_file_ready, wal_file_done, strerror(errno));
+		}
+
+		args->n_pushed_files++;
+
 	}
 
 	args->ret = 0;

@@ -123,6 +123,7 @@ bool 		compress_shortcut = false;
 char	   *instance_name;
 
 /* archive push options */
+int		batch_size = 1;
 static char *wal_file_path;
 static char *wal_file_name;
 static bool file_overwrite = false;
@@ -214,6 +215,7 @@ static ConfigOption cmd_options[] =
 	{ 's', 151, "wal-file-name",	&wal_file_name,		SOURCE_CMD_STRICT },
 	{ 'b', 152, "overwrite",		&file_overwrite,	SOURCE_CMD_STRICT },
 	{ 'b', 153, "no-ready-rename",	&no_ready_rename,	SOURCE_CMD_STRICT },
+	{ 'i', 162, "batch-size",		&batch_size,		SOURCE_CMD_STRICT },
 	/* show options */
 	{ 'f', 160, "format",			opt_show_format,	SOURCE_CMD_STRICT },
 	{ 'b', 161, "archive",			&show_archive,		SOURCE_CMD_STRICT },
@@ -739,6 +741,9 @@ main(int argc, char *argv[])
 	if (num_threads < 1)
 		num_threads = 1;
 
+	if (batch_size < 1)
+		batch_size = 1;
+
 	compress_init();
 
 	/* do actual operation */
@@ -746,7 +751,7 @@ main(int argc, char *argv[])
 	{
 		case ARCHIVE_PUSH_CMD:
 			return do_archive_push(&instance_config, wal_file_path, wal_file_name,
-								   file_overwrite, no_sync, no_ready_rename);
+								   batch_size, file_overwrite, no_sync, no_ready_rename);
 		case ARCHIVE_GET_CMD:
 			return do_archive_get(&instance_config,
 								  wal_file_path, wal_file_name);
