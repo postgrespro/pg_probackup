@@ -281,7 +281,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
     # @unittest.skip("skip")
     def test_pgpro434_4(self):
         """
-        Check pg_stop_backup_timeout, needed backup_timeout
+        Check pg_stop_backup_timeout, libpq-timeout requested.
         Fixed in commit d84d79668b0c139 and assert fixed by ptrack 1.7
         """
         fname = self.id().split('.')[3]
@@ -523,7 +523,9 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
-        self.set_archiving(backup_dir, 'node', node, log_level='verbose')
+        self.set_archiving(
+            backup_dir, 'node', node,
+            log_level='verbose', archive_timeout=60)
 
         node.slow_start()
 
@@ -602,7 +604,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
-        self.set_archiving(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node, archive_timeout=60)
 
         node.slow_start()
 
@@ -1764,6 +1766,73 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    # @unittest.expectedFailure
+    def test_archiving_and_slots(self):
+        """
+        Check that archiving don`t break slot
+        guarantee.
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'autovacuum': 'off',
+                'checkpoint_timeout': '30s',
+                'max_wal_size': '64MB'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node, log_level='verbose')
+        node.slow_start()
+
+        if self.get_version(node) < 100000:
+            pg_receivexlog_path = self.get_bin_path('pg_receivexlog')
+        else:
+            pg_receivexlog_path = self.get_bin_path('pg_receivewal')
+
+        # "pg_receivewal --create-slot --slot archive_slot --if-not-exists "
+        # "&& pg_receivewal --synchronous -Z 1 /tmp/wal --slot archive_slot --no-loop"
+
+        self.run_binary(
+            [
+                pg_receivexlog_path, '-p', str(node.port), '--synchronous',
+                '--create-slot', '--slot', 'archive_slot', '--if-not-exists'
+            ])
+
+        node.pgbench_init(scale=10)
+
+        pg_receivexlog = self.run_binary(
+            [
+                pg_receivexlog_path, '-p', str(node.port), '--synchronous',
+                '-D', os.path.join(backup_dir, 'wal', 'node'),
+                '--no-loop', '--slot', 'archive_slot',
+                '-Z', '1'
+            ], asynchronous=True)
+
+        if pg_receivexlog.returncode:
+            self.assertFalse(
+                True,
+                'Failed to start pg_receivexlog: {0}'.format(
+                    pg_receivexlog.communicate()[1]))
+
+        sleep(2)
+
+        pg_receivexlog.kill()
+
+        backup_id = self.backup_node(backup_dir, 'node', node)
+        node.pgbench_init(scale=20)
+
+        exit(1)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+# TODO test with multiple not archived segments.
 
 # important - switchpoint may be NullOffset LSN and not actually existing in archive to boot.
 # so write WAL validation code accordingly
