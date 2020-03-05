@@ -985,7 +985,7 @@ get_wal_file(const char *from_path, const char *to_path)
 		}
 	}
 
-	if (fio_flush(out) != 0 || fio_close(out) != 0)
+	if (fio_close(out) != 0)
 	{
 		errno_temp = errno;
 		fio_unlink(to_path_temp, FIO_DB_HOST);
