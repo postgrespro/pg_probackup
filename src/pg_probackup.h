@@ -422,6 +422,7 @@ typedef struct pgRestoreParams
 	/* options for partial restore */
 	PartialRestoreType partial_restore_type;
 	parray *partial_db_list;
+	const char *primary_conninfo;
 } pgRestoreParams;
 
 /* Options needed for set-backup command */

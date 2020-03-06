@@ -106,6 +106,27 @@ do_merge(time_t backup_id)
 		}
 	}
 
+	/*
+	 * Handle the case of crash right after deletion of the target
+	 * incremental backup. We still can recover from this.
+	 * Iterate over backups and look for the FULL backup with
+	 * MERGED status, that has merge-target-id eqial to backup_id.
+	 */
+	if (dest_backup == NULL)
+	{
+		for (i = 0; i < parray_num(backups); i++)
+		{
+			pgBackup   *backup = (pgBackup *) parray_get(backups, i);
+
+			if (backup->status == BACKUP_STATUS_MERGED &&
+				backup->merge_dest_backup == backup_id)
+			{
+				dest_backup = backup;
+				break;
+			}
+		}
+	}
+
 	if (dest_backup == NULL)
 		elog(ERROR, "Target backup %s was not found", base36enc(backup_id));
 
@@ -775,6 +796,11 @@ merge_rename:
 			elog(ERROR, "Could not rename directory \"%s\" to \"%s\": %s",
 				 full_backup->root_dir, destination_path, strerror(errno));
 	}
+
+	/* If we crash here, it will produce full backup in MERGED
+	 * status, located in directory with wrong backup id.
+	 * It should not be a problem.
+	 */
 
 	/*
 	 * Merging finished, now we can safely update ID of the FULL backup
