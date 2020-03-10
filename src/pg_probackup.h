@@ -170,7 +170,8 @@ typedef struct pgFile
 	bool	exists_in_prev;		/* Mark files, both data and regular, that exists in previous backup */
 	CompressAlg		compress_alg;		/* compression algorithm applied to the file */
 	volatile 		pg_atomic_flag lock;/* lock for synchronization of parallel threads  */
-	datapagemap_t	pagemap;			/* bitmap of pages updated since previous backup */
+	datapagemap_t	pagemap;			/* bitmap of pages updated since previous backup
+										   may take up to 16kB per file */
 	bool			pagemap_isabsent;	/* Used to mark files with unknown state of pagemap,
 										 * i.e. datafiles without _ptrack */
 } pgFile;
@@ -722,6 +723,14 @@ extern void help_command(char *command);
 /* in validate.c */
 extern void pgBackupValidate(pgBackup* backup, pgRestoreParams *params);
 extern int do_validate_all(void);
+extern int validate_one_page_new(Page page, BlockNumber absolute_blkno,
+								 XLogRecPtr stop_lsn, uint32 checksum_version);
+
+/* return codes for validate_one_page_new() */
+/* TODO: return enum */
+#define PAGE_IS_NOT_FOUND 0
+#define PAGE_IS_FOUND_AND_VALID 1
+#define PAGE_IS_FOUND_AND_NOT_VALID -1
 
 /* in catalog.c */
 extern pgBackup *read_backup(const char *instance_name, time_t timestamp);
@@ -944,5 +953,13 @@ extern char *pg_ptrack_get_and_clear(Oid tablespace_oid,
 									 PGconn *backup_conn);
 extern XLogRecPtr get_last_ptrack_lsn(PGconn *backup_conn, PGNodeInfo *nodeInfo);
 extern parray * pg_ptrack_get_pagemapset(PGconn *backup_conn, const char *ptrack_schema, XLogRecPtr lsn);
+
+/* FIO */
+extern int fio_send_pages(FILE* in, FILE* out, struct pgFile *file, XLogRecPtr horizonLsn, 
+							  BlockNumber* nBlocksSkipped, int calg, int clevel);
+
+extern int fio_send_pages_pagemap(FILE* in, FILE* out, pgFile *file,
+						   int calg, int clevel, uint32 checksum_version,
+						   datapagemap_t *pagemap, BlockNumber* err_blknum);
 
 #endif /* PG_PROBACKUP_H */
