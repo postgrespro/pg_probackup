@@ -40,8 +40,8 @@ typedef enum
 	 /* used in send_pages_* */
 	FIO_SEND_PAGES_PAGEMAP,
 	FIO_ERROR,
-	FIO_FILE_EOF,
-	FIO_FILE_CORRUPTION
+	FIO_SEND_FILE_EOF,
+	FIO_SEND_FILE_CORRUPTION
 } fio_operations;
 
 typedef enum
@@ -56,7 +56,8 @@ typedef enum
 #define FIO_PIPE_MARKER 0x40000000
 #define WRITE_FAILED (-1)
 #define REMOTE_ERROR (-2)
-#define PAGE_CHECKSUM_MISMATCH (-3)
+#define PAGE_CORRUPTION (-3)
+#define SEND_OK (-4)
 
 #define SYS_CHECK(cmd) do if ((cmd) < 0) { fprintf(stderr, "%s:%d: (%s) %s\n", __FILE__, __LINE__, #cmd, strerror(errno)); exit(EXIT_FAILURE); } while (0)
 #define IO_CHECK(cmd, size) do { int _rc = (cmd); if (_rc != (size)) fio_error(_rc, size, __FILE__, __LINE__); } while (0)
