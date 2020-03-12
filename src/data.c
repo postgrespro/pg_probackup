@@ -259,7 +259,7 @@ prepare_page(ConnectionArgs *conn_arg,
 						from_fullpath, blknum, read_len);
 			else
 			{
-				/* We have 8kB of raw data, validate it */
+				/* We have BLKSIZE of raw data, validate it */
 				int rc = validate_one_page(page, absolute_blknum,
 										   InvalidXLogRecPtr, &page_lsn,
 										   checksum_version);
@@ -304,7 +304,8 @@ prepare_page(ConnectionArgs *conn_arg,
 		}
 
 		/*
-		 * If page is not valid after 100 attempts to read it - throw an error.
+		 * If page is not valid after 100 attempts to read it
+		 * throw an error.
 		 */
 		if (!page_is_valid)
 		{
@@ -563,16 +564,6 @@ backup_data_file(ConnectionArgs* conn_arg, pgFile *file,
 		elog(ERROR, "Cannot change mode of \"%s\": %s", to_fullpath,
 			 strerror(errno));
 
-	/* We have:
-	 *	read_size - amount of readed 
-	 *	write_size - amount of written bytes
-	 *  uncompressed_size - amount of written bytes before compression
-	 *						and adding header
-	 *
-	 * We are missing the amount of skipped blocks:
-	 * n_blocks_skipped
-	 */
-
 	/*
 	 * Read each page, verify checksum and write it to backup.
 	 * If page map is empty or file is not present in previous backup
@@ -642,10 +633,8 @@ backup_data_file(ConnectionArgs* conn_arg, pgFile *file,
 												from_fullpath, to_fullpath);
 				else
 					Assert(false);
-//					elog(ERROR, "Invalid page state: %i, file: %s, blknum %i",
-//						page_state, file->rel_path, blknum);
 
-				/* TODO: handle PageIsCorrupted, currently it is handled in prepare_page */
+				/* TODO: handle PageIsCorrupted, currently it is done in prepare_page */
 
 				file->read_size += BLCKSZ;
 			}
@@ -696,13 +685,14 @@ RetryPerPage:
 												  true, checksum_version,
 												  ptrack_version_num, ptrack_schema,
 												  from_fullpath);
-	
+
 				if (page_state == PageIsTruncated)
 					break;
 
+				/* PAGE and PTRACK should never get SkipCurrentPage */
 				else if (page_state == SkipCurrentPage)
 					Assert(false);
-	
+
 				else if (page_state == PageIsOk)
 					compress_and_backup_page(file, blknum, in, out, &(file->crc),
 												page_state, curr_page, calg, clevel,
@@ -710,8 +700,8 @@ RetryPerPage:
 				else
 					Assert(false);
 
-				/* TODO: handle PageIsCorrupted, currently it is handled in prepare_page */
-	
+				/* TODO: handle PageIsCorrupted, currently it is done in prepare_page */
+
 				file->read_size += BLCKSZ;
 			}
 		}
@@ -1268,7 +1258,7 @@ create_empty_file(fio_location from_location, const char *to_root,
 }
 
 /*
- * Check given page.
+ * Validate given page.
  * This function is expected to be executed multiple times,
  * so avoid using elog within it.
  * lsn from page is assigned to page_lsn pointer.
@@ -1282,25 +1272,19 @@ validate_one_page(Page page, BlockNumber absolute_blkno,
 	/* new level of paranoia */
 	if (page == NULL)
 		return PAGE_IS_NOT_FOUND;
-	/*
-	 * If we found page with invalid header, at first check if it is zeroed,
-	 * which is a valid state for page. If it is not, read it and check header
-	 * again, because it's possible that we've read a partly flushed page.
-	 * If after several attempts page header is still invalid, throw an error.
-	 * The same idea is applied to checksum verification.
-	 */
+
+	/* check that page header is ok */
 	if (!parse_page(page, page_lsn))
 	{
-		int i;
+		int		i;
 		/* Check if the page is zeroed. */
 		for (i = 0; i < BLCKSZ && page[i] == 0; i++);
 
-		/* Page is zeroed. No need to check header and checksum. */
+		/* Page is zeroed. No need to verify checksums */
 		if (i == BLCKSZ)
 			return PAGE_IS_ZEROED;
 
 		/* Page does not looking good */
-		/* TODO: We should give more information about what exactly is looking "wrong" */
 		return PAGE_HEADER_IS_INVALID;
 	}
 
@@ -1314,6 +1298,7 @@ validate_one_page(Page page, BlockNumber absolute_blkno,
 
 	/* At this point page header is sane, if checksums are enabled - the`re ok.
 	 * Check that page is not from future.
+	 * Note, this check should be used only by validate command.
 	 */
 	if (stop_lsn > 0)
 	{
@@ -1389,19 +1374,6 @@ check_data_file(ConnectionArgs *arguments, pgFile *file,
 			is_valid = false;
 			continue;
 		}
-
-		/* At this point page is found and its checksum is ok, if any
-		 * but could be 'insane'
-		 * TODO: between prepare_page and validate_one_page we
-		 * compute and compare checksum twice, it`s ineffective
-		 */
-//		if (validate_one_page_new(curr_page, file, blknum,
-//								  InvalidXLogRecPtr,
-//								  0) == PAGE_IS_FOUND_AND_NOT_VALID)
-//		{
-//			/* Page is corrupted */
-//			is_valid = false;
-//		}
 	}
 
 	fclose(in);

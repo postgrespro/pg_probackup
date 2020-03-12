@@ -54,10 +54,6 @@ typedef enum
 
 #define FIO_FDMAX 64
 #define FIO_PIPE_MARKER 0x40000000
-#define WRITE_FAILED (-1)
-#define REMOTE_ERROR (-2)
-#define PAGE_CORRUPTION (-3)
-#define SEND_OK (-4)
 
 #define SYS_CHECK(cmd) do if ((cmd) < 0) { fprintf(stderr, "%s:%d: (%s) %s\n", __FILE__, __LINE__, #cmd, strerror(errno)); exit(EXIT_FAILURE); } while (0)
 #define IO_CHECK(cmd, size) do { int _rc = (cmd); if (_rc != (size)) fio_error(_rc, size, __FILE__, __LINE__); } while (0)
@@ -90,14 +86,6 @@ extern int     fio_ftruncate(FILE* f, off_t size);
 extern int     fio_fclose(FILE* f);
 extern int     fio_ffstat(FILE* f, struct stat* st);
 extern void    fio_error(int rc, int size, char const* file, int line);
-
-//struct pgFile;
-//extern int    fio_send_pages(FILE* in, FILE* out, struct pgFile *file, XLogRecPtr horizonLsn, 
-//							  BlockNumber* nBlocksSkipped, int calg, int clevel);
-//
-//extern int    fio_send_pages_pagemap(FILE* in, FILE* out, pgFile *file,
-//						   int calg, int clevel, uint32 checksum_version,
-//						   datapagemap_t pagemap, BlockNumber* err_blknum);
 
 extern int     fio_open(char const* name, int mode, fio_location location);
 extern ssize_t fio_write(int fd, void const* buf, size_t size);

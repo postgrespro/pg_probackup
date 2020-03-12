@@ -23,16 +23,6 @@ static __thread int fio_stderr = 0;
 
 fio_location MyLocation;
 
-//typedef struct
-//{
-//	BlockNumber nblocks;
-//	BlockNumber segBlockNum;
-//	XLogRecPtr  horizonLsn;
-//	uint32      checksumVersion;
-//	int         calg;
-//	int         clevel;
-//} fio_send_request;
-
 typedef struct
 {
 	BlockNumber nblocks;
@@ -41,7 +31,7 @@ typedef struct
 	uint32      checksumVersion;
 	int         calg;
 	int         clevel;
-	int			bitmapsize; /* */
+	int         bitmapsize;
 } fio_send_request;
 
 
@@ -1313,79 +1303,6 @@ static void fio_send_file(int out, char const* path)
 	}
 }
 
-///* TODO: get rid of nBlocksSkipped */
-//int fio_send_pages(FILE* in, FILE* out, pgFile *file,
-//				   XLogRecPtr horizonLsn, int calg, int clevel,
-//				   BlockNumber* err_blknum)
-//{
-//	struct {
-//		fio_header hdr;
-//		fio_send_request arg;
-//	} req;
-//
-//	BlockNumber blknum = 0;
-//	BlockNumber	n_blocks_read = 0;
-//
-//	Assert(fio_is_remote_file(in));
-//
-//	req.hdr.cop = FIO_SEND_PAGES;
-//	req.hdr.size = sizeof(fio_send_request);
-//	req.hdr.handle = fio_fileno(in) & ~FIO_PIPE_MARKER;
-//
-//	req.arg.nblocks = file->size/BLCKSZ;
-//	req.arg.segBlockNum = file->segno * RELSEG_SIZE;
-//	req.arg.horizonLsn = horizonLsn;
-//	req.arg.checksumVersion = current.checksum_version;
-//	req.arg.calg = calg;
-//	req.arg.clevel = clevel;
-//
-//	file->compress_alg = calg;
-//
-//	IO_CHECK(fio_write_all(fio_stdout, &req, sizeof(req)), sizeof(req));
-//
-//	while (true)
-//	{
-//		fio_header hdr;
-//		char buf[BLCKSZ + sizeof(BackupPageHeader)];
-//		IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
-//
-//		if (hdr.cop == FIO_ERROR)
-//		{
-//			errno = hdr.arg;
-//			*err_blknum = hdr.size;
-//			return REMOTE_ERROR;
-//		}
-//		else if (hdr.cop == FIO_SEND_FILE_CORRUPTION)
-//		{
-//			*err_blknum = hdr.arg;
-//			return PAGE_CHECKSUM_MISMATCH;
-//		}
-//		else if (hdr.cop == FIO_SEND_FILE_EOF)
-//			break;
-//		else if (hdr.cop == FIO_PAGE)
-//		{
-//			blknum = hdr.arg;
-//
-//			Assert(hdr.size <= sizeof(buf));
-//			IO_CHECK(fio_read_all(fio_stdin, buf, hdr.size), hdr.size);
-//
-//			COMP_FILE_CRC32(true, file->crc, buf, hdr.size);
-//
-//			if (fio_fwrite(out, buf, hdr.size) != hdr.size)
-//			{
-//				fio_fclose(out);
-//				*err_blknum = blknum;
-//				return WRITE_FAILED;
-//			}
-//			file->write_size += hdr.size;
-//		}
-//		else
-//			elog(ERROR, "Remote agent returned message of unknown type");
-//	}
-//
-//	return n_blocks_read;
-//}
-
 /*
  * Return number of actually(!) readed blocks, attempts or
  * half-readed block are not counted.
@@ -1395,7 +1312,7 @@ static void fio_send_file(int out, char const* path)
  *	WRITE_FAILED
  *
  * In case of DELTA mode horizonLsn must be a valid lsn,
- * otherwise it should be equal to InvalidXLogRecPtr. 
+ * otherwise it should be set to InvalidXLogRecPtr.
  */
 int fio_send_pages(FILE* in, FILE* out, pgFile *file, XLogRecPtr horizonLsn,
 						   int calg, int clevel, uint32 checksum_version,
@@ -1539,8 +1456,6 @@ static void fio_send_pages_impl(int fd, int out, char* buf, bool with_pagemap)
 	hdr.cop = FIO_PAGE;
 	read_buffer[BLCKSZ] = 1; /* barrier */
 
-//	for (blknum = 0; blknum < req->nblocks; blknum++)
-//	while (datapagemap_next(iter, &blknum))
 	while (blknum < req->nblocks)
 	{
 		int retry_attempts = PAGE_READ_ATTEMPTS;
@@ -1590,7 +1505,7 @@ static void fio_send_pages_impl(int fd, int out, char* buf, bool with_pagemap)
 		  //else /* readed less than BLKSZ bytes, retry */
 
 			/* File is either has insane header or invalid checksum,
-			 * retry, or, if attempts are exhausted, report corruption.
+			 * retry. If retry attempts are exhausted, report corruption.
 			 * TODO: report correct error message.
 			 */
 			if (--retry_attempts == 0)
@@ -1806,12 +1721,11 @@ void fio_communicate(int in, int out)
 			fio_send_pages_impl(fd[hdr.handle], out, buf, false);
 			break;
 		  case FIO_SEND_PAGES_PAGEMAP:
-//			Assert(hdr.size == sizeof(fio_send_pagemap_request));
-		  	// at this point in buffer layes fio_send_pagemap_request header and bitmap.
+			// at this point in buffer layes fio_send_pagemap_request header and bitmap.
 			fio_send_pages_impl(fd[hdr.handle], out, buf, true);
 			break;
 		  case FIO_SYNC:
-		  	/* open file and fsync it */
+			/* open file and fsync it */
 			tmp_fd = open(buf, O_WRONLY | PG_BINARY, FILE_PERMISSIONS);
 			if (tmp_fd < 0)
 				hdr.arg = errno;

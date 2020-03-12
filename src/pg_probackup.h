@@ -966,4 +966,10 @@ extern int fio_send_pages(FILE* in, FILE* out, pgFile *file, XLogRecPtr horizonL
 						   int calg, int clevel, uint32 checksum_version,
 						   datapagemap_t *pagemap, BlockNumber* err_blknum);
 
+/* return codes for fio_send_pages */
+#define WRITE_FAILED (-1)
+#define REMOTE_ERROR (-2)
+#define PAGE_CORRUPTION (-3)
+#define SEND_OK (-4)
+
 #endif /* PG_PROBACKUP_H */
