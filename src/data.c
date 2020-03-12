@@ -192,6 +192,71 @@ parse_page(Page page, XLogRecPtr *lsn)
 	return false;
 }
 
+/* We know that header is invalid, store specific
+ * details in errormsg.
+ */
+void
+get_header_errormsg(Page page, char **errormsg)
+{
+	PageHeader	phdr = (PageHeader) page;
+
+	*errormsg = pgut_malloc(MAXPGPATH);
+
+	if (PageGetPageSize(phdr) != BLCKSZ)
+		snprintf(*errormsg, MAXPGPATH, "page header invalid, "
+				"page size %lu is not equal to block size %u",
+				PageGetPageSize(phdr), BLCKSZ);
+
+	else if (phdr->pd_lower < SizeOfPageHeaderData)
+		snprintf(*errormsg, MAXPGPATH, "page header invalid, "
+				"pd_lower %i is less than page header size %lu",
+				phdr->pd_lower, SizeOfPageHeaderData);
+
+	else if (phdr->pd_lower > phdr->pd_upper)
+		snprintf(*errormsg, MAXPGPATH, "page header invalid, "
+				"pd_lower %u is greater than pd_upper %u",
+				phdr->pd_lower, phdr->pd_upper);
+
+	else if (phdr->pd_upper > phdr->pd_special)
+		snprintf(*errormsg, MAXPGPATH, "page header invalid, "
+				"pd_upper %u is greater than pd_special %u",
+				phdr->pd_upper, phdr->pd_special);
+
+	else if (phdr->pd_special > BLCKSZ)
+		snprintf(*errormsg, MAXPGPATH, "page header invalid, "
+				"pd_special %u is greater than block size %u",
+				phdr->pd_special, BLCKSZ);
+
+	else if (phdr->pd_special != MAXALIGN(phdr->pd_special))
+		snprintf(*errormsg, MAXPGPATH, "page header invalid, "
+				"pd_special %i is misaligned, expected %lu",
+				phdr->pd_special, MAXALIGN(phdr->pd_special));
+
+	else if (phdr->pd_flags & ~PD_VALID_FLAG_BITS)
+		snprintf(*errormsg, MAXPGPATH, "page header invalid, "
+				"pd_flags mask contain illegal bits");
+
+	else
+		snprintf(*errormsg, MAXPGPATH, "page header invalid");
+}
+
+/* We know that checksumms are mismatched, store specific
+ * details in errormsg.
+ */
+void
+get_checksum_errormsg(Page page, char **errormsg, BlockNumber absolute_blkno)
+{
+	PageHeader	phdr = (PageHeader) page;
+
+	*errormsg = pgut_malloc(MAXPGPATH);
+
+	snprintf(*errormsg, MAXPGPATH,
+			 "page verification failed, "
+			 "calculated checksum %u but expected %u",
+			 phdr->pd_checksum,
+			 pg_checksum_page(page, absolute_blkno));
+}
+
 /*
  * Retrieves a page taking the backup mode into account
  * and writes it into argument "page". Argument "page"
@@ -224,7 +289,6 @@ prepare_page(ConnectionArgs *conn_arg,
 	int			try_again = PAGE_READ_ATTEMPTS;
 	bool		page_is_valid = false;
 	BlockNumber absolute_blknum = file->segno * RELSEG_SIZE + blknum;
-	off_t		offset = blknum * BLCKSZ;
 
 	/* check for interrupt */
 	if (interrupted || thread_interrupted)
@@ -237,30 +301,32 @@ prepare_page(ConnectionArgs *conn_arg,
 	 */
 	if (backup_mode != BACKUP_MODE_DIFF_PTRACK || ptrack_version_num >= 20)
 	{
+		int rc = 0;
 		while (!page_is_valid && try_again--)
 		{
-			int rc = 0;
 			/* read the block */
-			ssize_t read_len = fio_pread(in, page, offset);
+			int read_len = fio_pread(in, page, blknum * BLCKSZ);
 			page_lsn = 0;
 
 			/* The block could have been truncated. It is fine. */
 			if (read_len == 0)
 			{
-				elog(VERBOSE, "File \"%s\", block %u, file was truncated",
-						from_fullpath, blknum);
+				elog(VERBOSE, "Failed to read blknum %u from file \"%s\": "
+							"block truncated",
+						blknum, from_fullpath);
 				return PageIsTruncated;
 			}
-			else if (rc < 0)
+			else if (read_len < 0)
 				elog(ERROR, "Failed to read blknum %u from file \"%s\": %s",
 						blknum, from_fullpath, strerror(errno));
 			else if (read_len != BLCKSZ)
-				elog(WARNING, "File: \"%s\", blknum %u, partial read: %li bytes, try again",
-						from_fullpath, blknum, read_len);
+				elog(WARNING, "Failed to read blknum %u from file \"%s\", "
+								"partial read %i bytes, try again",
+						blknum, from_fullpath, read_len);
 			else
 			{
-				/* We have BLKSIZE of raw data, validate it */
-				int rc = validate_one_page(page, absolute_blknum,
+				/* We have BLCKSZ of raw data, validate it */
+				rc = validate_one_page(page, absolute_blknum,
 										   InvalidXLogRecPtr, &page_lsn,
 										   checksum_version);
 				switch (rc)
@@ -287,7 +353,7 @@ prepare_page(ConnectionArgs *conn_arg,
 								from_fullpath, blknum);
 						break;
 					default:
-						elog(WARNING, "Result: %i", rc);
+						Assert(false);
 				}
 			}
 
@@ -310,17 +376,29 @@ prepare_page(ConnectionArgs *conn_arg,
 		if (!page_is_valid)
 		{
 			int elevel = ERROR;
+			char *errormsg = NULL;
 
-			/* TODO: report the details of corruption */
+			/* Get the details of corruption */
+			if (rc == PAGE_HEADER_IS_INVALID)
+				get_header_errormsg(page, &errormsg);
+			else if (rc == PAGE_CHECKSUM_MISMATCH)
+				get_checksum_errormsg(page, &errormsg,
+									  file->segno * RELSEG_SIZE + blknum);
 
-			/* error out in case of merge or backup without ptrack support;
+			/* Error out in case of merge or backup without ptrack support;
 			 * issue warning in case of checkdb or backup with ptrack support
 			 */
 			if (!strict || (strict && ptrack_version_num > 0))
 				elevel = WARNING;
 
-			elog(elevel, "Corruption detected in file \"%s\", block %u",
-							from_fullpath, blknum);
+			if (errormsg)
+				elog(elevel, "Corruption detected in file \"%s\", block %u: %s",
+								from_fullpath, blknum, errormsg);
+			else
+				elog(elevel, "Corruption detected in file \"%s\", block %u",
+								from_fullpath, blknum);
+
+			pg_free(errormsg);
 		}
 
 		/* Checkdb not going futher */
@@ -586,22 +664,39 @@ backup_data_file(ConnectionArgs* conn_arg, pgFile *file,
 		if (fio_is_remote_file(in))
 		{
 			BlockNumber	err_blknum = 0;
+			char *errmsg = NULL;
 			int rc = fio_send_pages(in, out, file,
 									backup_mode == BACKUP_MODE_DIFF_DELTA &&
 									file->exists_in_prev ? prev_backup_start_lsn : InvalidXLogRecPtr,
-									calg, clevel, checksum_version, NULL, &err_blknum);
+									calg, clevel, checksum_version, NULL, &err_blknum, &errmsg);
 
 			if (rc == PAGE_CORRUPTION && ptrack_version_num >= 15)
+			{
 				 /* only ptrack versions 1.5, 1.6, 1.7 and 2.x support this functionality */
+				if (errmsg)
+					elog(WARNING, "Corruption detected in file \"%s\", block %u: %s. Retry via ptrack",
+						from_fullpath, err_blknum, errmsg);
+				else
+					elog(WARNING, "Corruption detected in file \"%s\", block %u. Retry via ptrack",
+						from_fullpath, err_blknum);
+
+				pg_free(errmsg);
 				goto RetryUsingPtrack;
+			}
 
 			if (rc == REMOTE_ERROR)
 				elog(ERROR, "Failed to read from file \"%s\": %s",
 						from_fullpath, strerror(errno));
 
 			else if (rc == PAGE_CORRUPTION)
-				elog(ERROR, "Corruption detected in file \"%s\", block %u",
-						from_fullpath, err_blknum);
+			{
+				if (errmsg)
+					elog(ERROR, "Corruption detected in file \"%s\", block %u: %s",
+							from_fullpath, err_blknum, errmsg);
+				else
+					elog(ERROR, "Corruption detected in file \"%s\", block %u:",
+							from_fullpath, err_blknum);
+			}
 
 			else if (rc == WRITE_FAILED)
 				elog(ERROR, "Cannot write block %u to backup file \"%s\": %s",
@@ -610,9 +705,11 @@ backup_data_file(ConnectionArgs* conn_arg, pgFile *file,
 			file->read_size = rc * BLCKSZ;
 		}
 		else
-		{
 			/* local FULL and DELTA */
-		  RetryUsingPtrack:
+RetryUsingPtrack:
+		{
+			/* reset size summary */
+			file->read_size = file->write_size = file->uncompressed_size = 0;
 			for (blknum = 0; blknum < nblocks; blknum++)
 			{
 				page_state = prepare_page(conn_arg, file, prev_backup_start_lsn,
@@ -651,33 +748,50 @@ backup_data_file(ConnectionArgs* conn_arg, pgFile *file,
 		if (fio_is_remote_file(in))
 		{
 			BlockNumber	err_blknum = 0;
+			char *errmsg = NULL;
 			int rc = fio_send_pages(in, out, file, InvalidXLogRecPtr,
 									calg, clevel, checksum_version,
-									&file->pagemap, &err_blknum);
+									&file->pagemap, &err_blknum, &errmsg);
 
 			if (rc == PAGE_CORRUPTION && ptrack_version_num >= 15)
+			{
 				 /* only ptrack versions 1.5, 1.6, 1.7 and 2.x support this functionality */
+				if (errmsg)
+					elog(WARNING, "Corruption detected in file \"%s\", block %u: %s",
+						from_fullpath, err_blknum, errmsg);
+				pg_free(errmsg);
 				goto RetryPerPage;
+			}
 
 			if (rc == REMOTE_ERROR)
 				elog(ERROR, "Failed to read from file \"%s\": %s",
 						from_fullpath, strerror(errno));
 
 			else if (rc == PAGE_CORRUPTION)
-				elog(ERROR, "Corruption detected in file \"%s\", block %u",
-						from_fullpath, err_blknum);
+			{
+				if (errmsg)
+					elog(ERROR, "Corruption detected in file \"%s\", block %u: %s",
+							from_fullpath, err_blknum, errmsg);
+				else
+					elog(ERROR, "Corruption detected in file \"%s\", block %u:",
+							from_fullpath, err_blknum);
+			}
 
 			else if (rc == WRITE_FAILED)
 				elog(ERROR, "Cannot write block %u to backup file \"%s\": %s",
 						err_blknum, to_fullpath, strerror(errno));
 
 			file->read_size = rc * BLCKSZ;
+			pg_free(errmsg);
 		}
 		else
 RetryPerPage:
 		{
 			/* local PAGE and PTRACK */
 			iter = datapagemap_iterate(&file->pagemap);
+
+			/* reset size summary */
+			file->read_size = file->write_size = file->uncompressed_size = 0;
 			while (datapagemap_next(iter, &blknum))
 			{
 				page_state = prepare_page(conn_arg, file, prev_backup_start_lsn,

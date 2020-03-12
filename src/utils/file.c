@@ -1316,7 +1316,8 @@ static void fio_send_file(int out, char const* path)
  */
 int fio_send_pages(FILE* in, FILE* out, pgFile *file, XLogRecPtr horizonLsn,
 						   int calg, int clevel, uint32 checksum_version,
-						   datapagemap_t *pagemap, BlockNumber* err_blknum)
+						   datapagemap_t *pagemap, BlockNumber* err_blknum,
+						   char **errormsg)
 {
 	struct {
 		fio_header hdr;
@@ -1391,11 +1392,19 @@ int fio_send_pages(FILE* in, FILE* out, pgFile *file, XLogRecPtr horizonLsn,
 			errno = hdr.arg;
 			*err_blknum = hdr.size;
 			return REMOTE_ERROR;
+			/* TODO: report correct error message */
 //			elog(WARNING, "remote blkno %u", *err_blknum);
 		}
 		else if (hdr.cop == FIO_SEND_FILE_CORRUPTION)
 		{
 			*err_blknum = hdr.arg;
+
+			if (hdr.size > 0)
+			{
+				IO_CHECK(fio_read_all(fio_stdin, buf, hdr.size), hdr.size);
+				*errormsg = pgut_malloc(hdr.size);
+				strncpy(*errormsg, buf, hdr.size);
+			}
 			return PAGE_CORRUPTION;
 		}
 		else if (hdr.cop == FIO_SEND_FILE_EOF)
@@ -1458,22 +1467,23 @@ static void fio_send_pages_impl(int fd, int out, char* buf, bool with_pagemap)
 
 	while (blknum < req->nblocks)
 	{
+		int rc = 0;
 		int retry_attempts = PAGE_READ_ATTEMPTS;
 
 		/* read page, check header and validate checksumms */
 		/* TODO: libpq connection on the agent, so we can do ptrack
-		 * magic here.
+		 * magic right here.
 		 */
 		for (;;)
 		{
-			ssize_t rc = pread(fd, read_buffer, BLCKSZ, blknum*BLCKSZ);
+			ssize_t read_len = pread(fd, read_buffer, BLCKSZ, blknum*BLCKSZ);
 			page_lsn = InvalidXLogRecPtr;
 
 			/* report eof */
-			if (rc == 0)
+			if (read_len == 0)
 				goto eof;
 			/* report error */
-			else if (rc < 0)
+			else if (read_len < 0)
 			{
 				/* TODO: better to report exact error message, not errno */
 				hdr.cop = FIO_ERROR;
@@ -1482,9 +1492,9 @@ static void fio_send_pages_impl(int fd, int out, char* buf, bool with_pagemap)
 				IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 				goto cleanup;
 			}
-			else if (rc == BLCKSZ)
+			else if (read_len == BLCKSZ)
 			{
-				int rc = validate_one_page(read_buffer, req->segmentno + blknum,
+				rc = validate_one_page(read_buffer, req->segmentno + blknum,
 										   InvalidXLogRecPtr, &page_lsn, req->checksumVersion);
 
 				/* TODO: optimize copy of zeroed page */
@@ -1492,28 +1502,36 @@ static void fio_send_pages_impl(int fd, int out, char* buf, bool with_pagemap)
 					break;
 				else if (rc == PAGE_IS_VALID)
 					break;
-
-//				else if (rc == PAGE_HEADER_IS_INVALID)
-//
-//				else if (rc == PAGE_CHECKSUM_MISMATCH)
-//
-//				else if (rc == PAGE_IS_NOT_FOUND)
-
-//				else
-//					Assert(false);
 			}
-		  //else /* readed less than BLKSZ bytes, retry */
+//		  	else /* readed less than BLKSZ bytes, retry */
 
 			/* File is either has insane header or invalid checksum,
 			 * retry. If retry attempts are exhausted, report corruption.
-			 * TODO: report correct error message.
 			 */
 			if (--retry_attempts == 0)
 			{
+				char *errormsg = NULL;
 				hdr.cop = FIO_SEND_FILE_CORRUPTION;
 				hdr.arg = blknum;
-				hdr.size = 0;
+
+				/* Construct the error message */
+				if (rc == PAGE_HEADER_IS_INVALID)
+					get_header_errormsg(read_buffer, &errormsg);
+				else if (rc == PAGE_CHECKSUM_MISMATCH)
+					get_checksum_errormsg(read_buffer, &errormsg,
+										  req->segmentno + blknum);
+
+				/* if error message is not empty, set payload size to its length */
+				hdr.size = errormsg ? strlen(errormsg) + 1 : 0;
+
+				/* send header */
 				IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
+
+				/* send error message if any */
+				if (errormsg)
+					IO_CHECK(fio_write_all(out, errormsg, hdr.size), hdr.size);
+
+				pg_free(errormsg);
 				goto cleanup;
 			}
 		}
