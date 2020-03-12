@@ -1524,6 +1524,10 @@ pgBackupWriteControl(FILE *out, pgBackup *backup)
 	/* print external directories list */
 	if (backup->external_dir_str)
 		fio_fprintf(out, "external-dirs = '%s'\n", backup->external_dir_str);
+
+	if (backup->note)
+		fio_fprintf(out, "note = %s\n", backup->note);
+
 }
 
 /*
@@ -1761,6 +1765,7 @@ readBackupControlFile(const char *path)
 		{'b', 0, "from-replica",		&backup->from_replica, SOURCE_FILE_STRICT},
 		{'s', 0, "primary-conninfo",	&backup->primary_conninfo, SOURCE_FILE_STRICT},
 		{'s', 0, "external-dirs",		&backup->external_dir_str, SOURCE_FILE_STRICT},
+		{'s', 0, "note",				&backup->note, SOURCE_FILE_STRICT},
 		{0}
 	};
 
@@ -2027,6 +2032,8 @@ pgBackupInit(pgBackup *backup)
 	backup->external_dir_str = NULL;
 	backup->root_dir = NULL;
 	backup->files = NULL;
+	backup->note = NULL;
+
 }
 
 /* free pgBackup object */

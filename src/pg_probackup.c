@@ -78,7 +78,7 @@ bool		temp_slot = false;
 bool		backup_logs = false;
 bool		smooth_checkpoint;
 char       *remote_agent;
-
+static char	   *backup_note = NULL;
 /* restore options */
 static char		   *target_time = NULL;
 static char		   *target_xid = NULL;
@@ -177,6 +177,7 @@ static ConfigOption cmd_options[] =
 	{ 'b', 183, "delete-expired",	&delete_expired,	SOURCE_CMD_STRICT },
 	{ 'b', 184, "merge-expired",	&merge_expired,		SOURCE_CMD_STRICT },
 	{ 'b', 185, "dry-run",			&dry_run,			SOURCE_CMD_STRICT },
+	{ 's', 238, "note",			&backup_note,		SOURCE_CMD_STRICT },
 	/* restore options */
 	{ 's', 136, "recovery-target-time",	&target_time,	SOURCE_CMD_STRICT },
 	{ 's', 137, "recovery-target-xid",	&target_xid,	SOURCE_CMD_STRICT },
@@ -769,7 +770,7 @@ main(int argc, char *argv[])
 					elog(ERROR, "required parameter not specified: BACKUP_MODE "
 						 "(-b, --backup-mode)");
 
-				return do_backup(start_time, no_validate, set_backup_params, no_sync);
+				return do_backup(start_time, no_validate, set_backup_params, no_sync, backup_note);
 			}
 		case RESTORE_CMD:
 			return do_restore_or_validate(current.backup_id,

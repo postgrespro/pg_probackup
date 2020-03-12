@@ -387,6 +387,8 @@ struct pgBackup
 									   backup_path/instance_name/backup_id */
 	parray			*files;			/* list of files belonging to this backup
 									 * must be populated explicitly */
+	char			*note;
+									
 };
 
 /* Recovery target for restore and validate subcommands */
@@ -642,7 +644,7 @@ extern const char *pgdata_exclude_dir[];
 
 /* in backup.c */
 extern int do_backup(time_t start_time, bool no_validate,
-					 pgSetBackupParams *set_backup_params, bool no_sync);
+					 pgSetBackupParams *set_backup_params, bool no_sync, char *note);
 extern void do_checkdb(bool need_amcheck, ConnectionOptions conn_opt,
 				  char *pgdata);
 extern BackupMode parse_backup_mode(const char *value);
