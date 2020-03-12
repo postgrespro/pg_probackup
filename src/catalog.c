@@ -2045,6 +2045,7 @@ pgBackupFree(void *backup)
 	pfree(b->primary_conninfo);
 	pfree(b->external_dir_str);
 	pfree(b->root_dir);
+	pfree(b->note);
 	pfree(backup);
 }
 
