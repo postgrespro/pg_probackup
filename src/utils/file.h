@@ -36,7 +36,9 @@ typedef enum
 	FIO_SEND_PAGES,
 	FIO_PAGE,
 	FIO_WRITE_COMPRESSED,
-	FIO_GET_CRC32
+	FIO_GET_CRC32,
+	FIO_DISCONNECT,
+	FIO_DISCONNECTED,
 } fio_operations;
 
 typedef enum

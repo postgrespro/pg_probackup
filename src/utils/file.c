@@ -368,6 +368,12 @@ fio_disconnect(void)
 {
 	if (fio_stdin)
 	{
+		fio_header hdr;
+		hdr.cop = FIO_DISCONNECT;
+		hdr.size = 0;
+		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
+		IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
+		Assert(hdr.cop == FIO_DISCONNECTED);
 		SYS_CHECK(close(fio_stdin));
 		SYS_CHECK(close(fio_stdout));
 		fio_stdin = 0;
@@ -1492,7 +1498,7 @@ void fio_communicate(int in, int out)
     SYS_CHECK(setmode(out, _O_BINARY));
 #endif
 
-    /* Main loop until command of processing master command */
+    /* Main loop until end of processing all master commands */
 	while ((rc = fio_read_all(in, &hdr, sizeof hdr)) == sizeof(hdr)) {
 		if (hdr.size != 0) {
 			if (hdr.size > buf_size) {
@@ -1631,6 +1637,10 @@ void fio_communicate(int in, int out)
 			/* calculate crc32 for a file */
 			crc = pgFileGetCRC(buf, true, true);
 			IO_CHECK(fio_write_all(out, &crc, sizeof(crc)), sizeof(crc));
+			break;
+		  case FIO_DISCONNECT:
+			hdr.cop = FIO_DISCONNECTED;
+			IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 			break;
 		  default:
 			Assert(false);
