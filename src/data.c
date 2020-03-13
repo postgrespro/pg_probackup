@@ -657,171 +657,102 @@ backup_data_file(ConnectionArgs* conn_arg, pgFile *file,
 	 * of data files with missing _ptrack map.
 	 * Such files should be fully copied.
 	 */
-	if (file->pagemap.bitmapsize == PageBitmapIsEmpty ||
-		file->pagemap_isabsent || !file->exists_in_prev)
+
+	/* Remote mode */
+	if (fio_is_remote_file(in))
 	{
-		/* remote FULL and DELTA */
-		if (fio_is_remote_file(in))
-		{
-			BlockNumber	err_blknum = 0;
-			char *errmsg = NULL;
-			int rc = fio_send_pages(in, out, file,
-									backup_mode == BACKUP_MODE_DIFF_DELTA &&
-									file->exists_in_prev ? prev_backup_start_lsn : InvalidXLogRecPtr,
-									calg, clevel, checksum_version, NULL, &err_blknum, &errmsg);
+		BlockNumber	err_blknum = 0;
+		char *errmsg = NULL;
 
-			if (rc == PAGE_CORRUPTION && ptrack_version_num >= 15)
-			{
-				 /* only ptrack versions 1.5, 1.6, 1.7 and 2.x support this functionality */
-				if (errmsg)
-					elog(WARNING, "Corruption detected in file \"%s\", block %u: %s. Retry via ptrack",
+		/* TODO: retrying via ptrack should be implemented on the agent */
+		int rc = fio_send_pages(in, out, file,
+								/* send prev backup START_LSN */
+								backup_mode == BACKUP_MODE_DIFF_DELTA &&
+								file->exists_in_prev ? prev_backup_start_lsn : InvalidXLogRecPtr,
+								calg, clevel, checksum_version,
+								/* send pagemap if any */
+								file->pagemap.bitmapsize == PageBitmapIsEmpty ||
+								file->pagemap_isabsent || !file->exists_in_prev ||
+								!file->pagemap.bitmap ?
+								NULL : &file->pagemap,
+								/* variables for error reporting */
+								&err_blknum, &errmsg);
+
+		/* check for errors */
+		if (rc == REMOTE_ERROR)
+			elog(ERROR, "Failed to read from file \"%s\": %s",
+					from_fullpath, strerror(errno));
+
+		else if (rc == PAGE_CORRUPTION)
+		{
+			if (errmsg)
+				elog(ERROR, "Corruption detected in file \"%s\", block %u: %s",
 						from_fullpath, err_blknum, errmsg);
-				else
-					elog(WARNING, "Corruption detected in file \"%s\", block %u. Retry via ptrack",
+			else
+				elog(ERROR, "Corruption detected in file \"%s\", block %u:",
 						from_fullpath, err_blknum);
-
-				pg_free(errmsg);
-				goto RetryUsingPtrack;
-			}
-
-			if (rc == REMOTE_ERROR)
-				elog(ERROR, "Failed to read from file \"%s\": %s",
-						from_fullpath, strerror(errno));
-
-			else if (rc == PAGE_CORRUPTION)
-			{
-				if (errmsg)
-					elog(ERROR, "Corruption detected in file \"%s\", block %u: %s",
-							from_fullpath, err_blknum, errmsg);
-				else
-					elog(ERROR, "Corruption detected in file \"%s\", block %u:",
-							from_fullpath, err_blknum);
-			}
-
-			else if (rc == WRITE_FAILED)
-				elog(ERROR, "Cannot write block %u to backup file \"%s\": %s",
-						err_blknum, to_fullpath, strerror(errno));
-
-			file->read_size = rc * BLCKSZ;
 		}
-		else
-			/* local FULL and DELTA */
-RetryUsingPtrack:
-		{
-			/* reset size summary */
-			file->read_size = file->write_size = file->uncompressed_size = 0;
-			for (blknum = 0; blknum < nblocks; blknum++)
-			{
-				page_state = prepare_page(conn_arg, file, prev_backup_start_lsn,
-											  blknum, in, backup_mode, curr_page,
-											  true, checksum_version,
-											  ptrack_version_num, ptrack_schema,
-											  from_fullpath);
 
-				if (page_state == PageIsTruncated)
-					break;
+		else if (rc == WRITE_FAILED)
+			elog(ERROR, "Cannot write block %u to backup file \"%s\": %s",
+					err_blknum, to_fullpath, strerror(errno));
 
-				else if (page_state == SkipCurrentPage)
-					n_blocks_skipped++;
+		file->read_size = rc * BLCKSZ;
 
-				else if (page_state == PageIsOk)
-					compress_and_backup_page(file, blknum, in, out, &(file->crc),
-												page_state, curr_page, calg, clevel,
-												from_fullpath, to_fullpath);
-				else
-					Assert(false);
-
-				/* TODO: handle PageIsCorrupted, currently it is done in prepare_page */
-
-				file->read_size += BLCKSZ;
-			}
-		}
-		file->n_blocks = file->read_size / BLCKSZ;
 	}
-	/*
-	 * If page map is not empty we scan only changed blocks.
-	 * We will enter here if backup_mode is PAGE or PTRACK.
-	 */
+	/* Local mode */
 	else
 	{
-		/* remote PAGE and PTRACK */
-		if (fio_is_remote_file(in))
+		if (file->pagemap.bitmap)
 		{
-			BlockNumber	err_blknum = 0;
-			char *errmsg = NULL;
-			int rc = fio_send_pages(in, out, file, InvalidXLogRecPtr,
-									calg, clevel, checksum_version,
-									&file->pagemap, &err_blknum, &errmsg);
-
-			if (rc == PAGE_CORRUPTION && ptrack_version_num >= 15)
-			{
-				 /* only ptrack versions 1.5, 1.6, 1.7 and 2.x support this functionality */
-				if (errmsg)
-					elog(WARNING, "Corruption detected in file \"%s\", block %u: %s",
-						from_fullpath, err_blknum, errmsg);
-				pg_free(errmsg);
-				goto RetryPerPage;
-			}
-
-			if (rc == REMOTE_ERROR)
-				elog(ERROR, "Failed to read from file \"%s\": %s",
-						from_fullpath, strerror(errno));
-
-			else if (rc == PAGE_CORRUPTION)
-			{
-				if (errmsg)
-					elog(ERROR, "Corruption detected in file \"%s\", block %u: %s",
-							from_fullpath, err_blknum, errmsg);
-				else
-					elog(ERROR, "Corruption detected in file \"%s\", block %u:",
-							from_fullpath, err_blknum);
-			}
-
-			else if (rc == WRITE_FAILED)
-				elog(ERROR, "Cannot write block %u to backup file \"%s\": %s",
-						err_blknum, to_fullpath, strerror(errno));
-
-			file->read_size = rc * BLCKSZ;
-			pg_free(errmsg);
-		}
-		else
-RetryPerPage:
-		{
-			/* local PAGE and PTRACK */
 			iter = datapagemap_iterate(&file->pagemap);
-
-			/* reset size summary */
-			file->read_size = file->write_size = file->uncompressed_size = 0;
-			while (datapagemap_next(iter, &blknum))
-			{
-				page_state = prepare_page(conn_arg, file, prev_backup_start_lsn,
-												  blknum, in, backup_mode, curr_page,
-												  true, checksum_version,
-												  ptrack_version_num, ptrack_schema,
-												  from_fullpath);
-
-				if (page_state == PageIsTruncated)
-					break;
-
-				/* PAGE and PTRACK should never get SkipCurrentPage */
-				else if (page_state == SkipCurrentPage)
-					Assert(false);
-
-				else if (page_state == PageIsOk)
-					compress_and_backup_page(file, blknum, in, out, &(file->crc),
-												page_state, curr_page, calg, clevel,
-												from_fullpath, to_fullpath);
-				else
-					Assert(false);
-
-				/* TODO: handle PageIsCorrupted, currently it is done in prepare_page */
-
-				file->read_size += BLCKSZ;
-			}
+			datapagemap_next(iter, &blknum); /* set first block */
 		}
-		pg_free(iter);
-		pg_free(file->pagemap.bitmap);
+
+		while (blknum < nblocks)
+		{
+			page_state = prepare_page(conn_arg, file, prev_backup_start_lsn,
+										  blknum, in, backup_mode, curr_page,
+										  true, checksum_version,
+										  ptrack_version_num, ptrack_schema,
+										  from_fullpath);
+
+			if (page_state == PageIsTruncated)
+				break;
+
+			else if (page_state == SkipCurrentPage)
+				n_blocks_skipped++;
+
+			else if (page_state == PageIsOk)
+				compress_and_backup_page(file, blknum, in, out, &(file->crc),
+													page_state, curr_page, calg, clevel,
+													from_fullpath, to_fullpath);
+			else
+				Assert(false);
+
+			/* TODO: handle PageIsCorrupted, currently it is done in prepare_page */
+
+			file->read_size += BLCKSZ;
+
+			/* next block */
+			if (file->pagemap.bitmap)
+			{
+				/* exit if pagemap is exhausted */
+				if (!datapagemap_next(iter, &blknum))
+					break;
+			}
+			else
+				blknum++;
+		}
 	}
+
+	pg_free(file->pagemap.bitmap);
+	pg_free(iter);
+
+	/* refresh n_blocks for FULL and DELTA */
+	if (backup_mode == BACKUP_MODE_FULL ||
+	    backup_mode == BACKUP_MODE_DIFF_DELTA)
+		file->n_blocks = file->read_size / BLCKSZ;
 
 	if (fclose(out))
 		elog(ERROR, "Cannot close the backup file \"%s\": %s",
