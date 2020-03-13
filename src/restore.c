@@ -472,6 +472,9 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 		create_recovery_conf(target_backup_id, rt, dest_backup, params);
 	}
 
+	/* ssh connection to longer needed */
+	fio_disconnect();
+
 	/* cleanup */
 	parray_walk(backups, pgBackupFree);
 	parray_free(backups);
