@@ -33,15 +33,18 @@ typedef enum
 	FIO_OPENDIR,
 	FIO_READDIR,
 	FIO_CLOSEDIR,
-	FIO_SEND_PAGES,
 	FIO_PAGE,
 	FIO_WRITE_COMPRESSED,
 	FIO_GET_CRC32,
-	 /* used in send_pages_* */
+	 /* used in fio_send_pages */
+	FIO_SEND_PAGES,
 	FIO_SEND_PAGES_PAGEMAP,
 	FIO_ERROR,
 	FIO_SEND_FILE_EOF,
-	FIO_SEND_FILE_CORRUPTION
+	FIO_SEND_FILE_CORRUPTION,
+	/* messages for closing connection */
+	FIO_DISCONNECT,
+	FIO_DISCONNECTED,
 } fio_operations;
 
 typedef enum
