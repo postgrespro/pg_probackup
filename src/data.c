@@ -198,8 +198,7 @@ parse_page(Page page, XLogRecPtr *lsn)
 void
 get_header_errormsg(Page page, char **errormsg)
 {
-	PageHeader	phdr = (PageHeader) page;
-
+	PageHeader  phdr = (PageHeader) page;
 	*errormsg = pgut_malloc(MAXPGPATH);
 
 	if (PageGetPageSize(phdr) != BLCKSZ)
@@ -247,7 +246,6 @@ void
 get_checksum_errormsg(Page page, char **errormsg, BlockNumber absolute_blkno)
 {
 	PageHeader	phdr = (PageHeader) page;
-
 	*errormsg = pgut_malloc(MAXPGPATH);
 
 	snprintf(*errormsg, MAXPGPATH,
@@ -548,13 +546,14 @@ backup_data_file(ConnectionArgs* conn_arg, pgFile *file,
 				 CompressAlg calg, int clevel, uint32 checksum_version,
 				 int ptrack_version_num, const char *ptrack_schema, bool missing_ok)
 {
-	FILE		*in;
-	FILE		*out;
-	BlockNumber	blknum = 0;
-	BlockNumber	nblocks = 0;		/* number of blocks in file */
-	BlockNumber	n_blocks_skipped = 0;
-	int			page_state;
-	char		curr_page[BLCKSZ];
+	FILE       *in;
+	FILE       *out;
+	BlockNumber blknum = 0;
+	BlockNumber nblocks = 0;		/* number of blocks in source file */
+	BlockNumber n_blocks_skipped = 0;
+	int         page_state;
+	char        curr_page[BLCKSZ];
+	bool        use_pagemap;
 	datapagemap_iterator_t *iter = NULL;
 
 	/* stdio buffers */
@@ -658,11 +657,19 @@ backup_data_file(ConnectionArgs* conn_arg, pgFile *file,
 	 * Such files should be fully copied.
 	 */
 
+	if 	(file->pagemap.bitmapsize == PageBitmapIsEmpty ||
+		 file->pagemap_isabsent || !file->exists_in_prev ||
+		 !file->pagemap.bitmap)
+		use_pagemap = false;
+	else
+		use_pagemap = true;
+
+
 	/* Remote mode */
 	if (fio_is_remote_file(in))
 	{
-		BlockNumber	err_blknum = 0;
 		char *errmsg = NULL;
+		BlockNumber	err_blknum = 0;
 
 		/* TODO: retrying via ptrack should be implemented on the agent */
 		int rc = fio_send_pages(in, out, file,
@@ -671,10 +678,7 @@ backup_data_file(ConnectionArgs* conn_arg, pgFile *file,
 								file->exists_in_prev ? prev_backup_start_lsn : InvalidXLogRecPtr,
 								calg, clevel, checksum_version,
 								/* send pagemap if any */
-								file->pagemap.bitmapsize == PageBitmapIsEmpty ||
-								file->pagemap_isabsent || !file->exists_in_prev ||
-								!file->pagemap.bitmap ?
-								NULL : &file->pagemap,
+								use_pagemap ? &file->pagemap : NULL,
 								/* variables for error reporting */
 								&err_blknum, &errmsg);
 
@@ -698,12 +702,13 @@ backup_data_file(ConnectionArgs* conn_arg, pgFile *file,
 					err_blknum, to_fullpath, strerror(errno));
 
 		file->read_size = rc * BLCKSZ;
+		pg_free(errmsg);
 
 	}
 	/* Local mode */
 	else
 	{
-		if (file->pagemap.bitmap)
+		if (use_pagemap)
 		{
 			iter = datapagemap_iterate(&file->pagemap);
 			datapagemap_next(iter, &blknum); /* set first block */
@@ -720,6 +725,7 @@ backup_data_file(ConnectionArgs* conn_arg, pgFile *file,
 			if (page_state == PageIsTruncated)
 				break;
 
+			/* TODO: remove */
 			else if (page_state == SkipCurrentPage)
 				n_blocks_skipped++;
 
@@ -727,15 +733,15 @@ backup_data_file(ConnectionArgs* conn_arg, pgFile *file,
 				compress_and_backup_page(file, blknum, in, out, &(file->crc),
 													page_state, curr_page, calg, clevel,
 													from_fullpath, to_fullpath);
+			/* TODO: handle PageIsCorrupted, currently it is done in prepare_page */
 			else
 				Assert(false);
 
-			/* TODO: handle PageIsCorrupted, currently it is done in prepare_page */
 
 			file->read_size += BLCKSZ;
 
 			/* next block */
-			if (file->pagemap.bitmap)
+			if (use_pagemap)
 			{
 				/* exit if pagemap is exhausted */
 				if (!datapagemap_next(iter, &blknum))
