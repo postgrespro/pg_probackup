@@ -1387,6 +1387,9 @@ int fio_send_pages(FILE* in, FILE* out, pgFile *file, XLogRecPtr horizonLsn,
 		char buf[BLCKSZ + sizeof(BackupPageHeader)];
 		IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
 
+		if (interrupted)
+			elog(ERROR, "Interrupted during page reading");
+
 		if (hdr.cop == FIO_ERROR)
 		{
 			errno = hdr.arg;
@@ -1469,6 +1472,10 @@ static void fio_send_pages_impl(int fd, int out, char* buf, bool with_pagemap)
 	{
 		int rc = 0;
 		int retry_attempts = PAGE_READ_ATTEMPTS;
+
+		/* TODO: handle signals on the agent */
+		if (interrupted)
+			elog(ERROR, "Interrupted during page reading");
 
 		/* read page, check header and validate checksumms */
 		/* TODO: libpq connection on the agent, so we can do ptrack

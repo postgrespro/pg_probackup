@@ -309,18 +309,17 @@ prepare_page(ConnectionArgs *conn_arg,
 			/* The block could have been truncated. It is fine. */
 			if (read_len == 0)
 			{
-				elog(VERBOSE, "Failed to read blknum %u from file \"%s\": "
-							"block truncated",
-						blknum, from_fullpath);
+				elog(VERBOSE, "Cannot read block %u of \"%s\": "
+							"block truncated", blknum, from_fullpath);
 				return PageIsTruncated;
 			}
 			else if (read_len < 0)
-				elog(ERROR, "Failed to read blknum %u from file \"%s\": %s",
+				elog(ERROR, "Cannot read block %u of \"%s\": %s",
 						blknum, from_fullpath, strerror(errno));
 			else if (read_len != BLCKSZ)
-				elog(WARNING, "Failed to read blknum %u from file \"%s\", "
-								"partial read %i bytes, try again",
-						blknum, from_fullpath, read_len);
+				elog(WARNING, "Cannot read block %u of \"%s\": "
+								"read %i of %d, try again",
+						blknum, from_fullpath, read_len, BLCKSZ);
 			else
 			{
 				/* We have BLCKSZ of raw data, validate it */
@@ -646,12 +645,6 @@ backup_data_file(ConnectionArgs* conn_arg, pgFile *file,
 	 * If page map is empty or file is not present in previous backup
 	 * backup all pages of the relation.
 	 *
-	 * Usually enter here if backup_mode is FULL or DELTA.
-	 * Also in some cases even PAGE backup is going here,
-	 * becase not all data files are logged into WAL,
-	 * for example CREATE DATABASE.
-	 * Such files should be fully copied.
-
 	 * In PTRACK 1.x there was a problem
 	 * of data files with missing _ptrack map.
 	 * Such files should be fully copied.
@@ -684,8 +677,8 @@ backup_data_file(ConnectionArgs* conn_arg, pgFile *file,
 
 		/* check for errors */
 		if (rc == REMOTE_ERROR)
-			elog(ERROR, "Failed to read from file \"%s\": %s",
-					from_fullpath, strerror(errno));
+			elog(ERROR, "Cannot read block %u of \"%s\": %s",
+					err_blknum, from_fullpath, strerror(errno));
 
 		else if (rc == PAGE_CORRUPTION)
 		{
@@ -693,12 +686,12 @@ backup_data_file(ConnectionArgs* conn_arg, pgFile *file,
 				elog(ERROR, "Corruption detected in file \"%s\", block %u: %s",
 						from_fullpath, err_blknum, errmsg);
 			else
-				elog(ERROR, "Corruption detected in file \"%s\", block %u:",
+				elog(ERROR, "Corruption detected in file \"%s\", block %u",
 						from_fullpath, err_blknum);
 		}
 
 		else if (rc == WRITE_FAILED)
-			elog(ERROR, "Cannot write block %u to backup file \"%s\": %s",
+			elog(ERROR, "Cannot write block %u of \"%s\": %s",
 					err_blknum, to_fullpath, strerror(errno));
 
 		file->read_size = rc * BLCKSZ;
