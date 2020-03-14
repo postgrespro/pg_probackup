@@ -1924,8 +1924,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         # restore
         node.cleanup()
-        self.restore_node(
-            backup_dir, 'node', node)
+        self.restore_node(backup_dir, 'node', node)
 
         # hash_1 = hashlib.md5(
         #     open(recovery_conf, 'rb').read()).hexdigest()
@@ -1935,6 +1934,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         # restore
         node.cleanup()
+
         self.restore_node(backup_dir, 'node', node, options=['--recovery-target=latest'])
 
         # hash_2 = hashlib.md5(
@@ -1945,7 +1945,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         self.assertEqual(content_1, content_2)
 
-#        self.assertEqual(hash_1, hash_2)
+        # self.assertEqual(hash_1, hash_2)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
