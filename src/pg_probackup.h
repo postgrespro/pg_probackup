@@ -530,8 +530,8 @@ typedef struct BackupPageHeader
 
 /* Special value for compressed_size field */
 #define PageIsOk		 0
-#define PageIsTruncated -1
-#define SkipCurrentPage -2
+#define SkipCurrentPage -1
+#define PageIsTruncated -2
 #define PageIsCorrupted -3 /* used by checkdb */
 
 
