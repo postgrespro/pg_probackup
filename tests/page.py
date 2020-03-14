@@ -391,13 +391,12 @@ class PageTest(ProbackupTest, unittest.TestCase):
         # PGBENCH STUFF
         pgbench = node.pgbench(options=['-T', '50', '-c', '1', '--no-vacuum'])
         pgbench.wait()
-        node.safe_psql("postgres", "checkpoint")
 
         # GET LOGICAL CONTENT FROM NODE
         result = node.safe_psql("postgres", "select * from pgbench_accounts")
         # PAGE BACKUP
-        self.backup_node(
-            backup_dir, 'node', node, backup_type='page')
+        self.backup_node(backup_dir, 'node', node, backup_type='page')
+
         # GET PHYSICAL CONTENT FROM NODE
         pgdata = self.pgdata_content(node.data_dir)
 
@@ -464,18 +463,15 @@ class PageTest(ProbackupTest, unittest.TestCase):
             "postgres",
             "create table t_heap tablespace somedata as select i as id,"
             " md5(i::text) as text, md5(i::text)::tsvector as tsvector"
-            " from generate_series(0,100) i"
-        )
+            " from generate_series(0,100) i")
 
         node.safe_psql(
             "postgres",
-            "delete from t_heap"
-        )
+            "delete from t_heap")
 
         node.safe_psql(
             "postgres",
-            "vacuum t_heap"
-        )
+            "vacuum t_heap")
 
         # PAGE BACKUP
         self.backup_node(
@@ -485,8 +481,7 @@ class PageTest(ProbackupTest, unittest.TestCase):
 
         # RESTORE
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored')
-        )
+            base_dir=os.path.join(module_name, fname, 'node_restored'))
         node_restored.cleanup()
 
         self.restore_node(
@@ -1122,8 +1117,7 @@ class PageTest(ProbackupTest, unittest.TestCase):
 
         # RESTORE
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored')
-        )
+            base_dir=os.path.join(module_name, fname, 'node_restored'))
 
         node_restored.cleanup()
         self.restore_node(

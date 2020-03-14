@@ -1915,8 +1915,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         node.slow_start()
 
         # Take FULL
-        self.backup_node(
-            backup_dir, 'node', node)
+        self.backup_node(backup_dir, 'node', node)
 
         if self.get_version(node) >= self.version_to_num('12.0'):
             recovery_conf = os.path.join(node.data_dir, 'probackup_recovery.conf')
@@ -1925,27 +1924,28 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         # restore
         node.cleanup()
-        self.restore_node(
-            backup_dir, 'node', node)
+        self.restore_node(backup_dir, 'node', node)
 
-        # with open(recovery_conf, 'r') as f:
-        #    print(f.read())
+        # hash_1 = hashlib.md5(
+        #     open(recovery_conf, 'rb').read()).hexdigest()
 
-        hash_1 = hashlib.md5(
-            open(recovery_conf, 'rb').read()).hexdigest()
+        with open(recovery_conf, 'r') as f:
+            content_1 = f.read()
 
         # restore
         node.cleanup()
-        self.restore_node(
-            backup_dir, 'node', node, options=['--recovery-target=latest'])
 
-        # with open(recovery_conf, 'r') as f:
-        #     print(f.read())
+        self.restore_node(backup_dir, 'node', node, options=['--recovery-target=latest'])
 
-        hash_2 = hashlib.md5(
-            open(recovery_conf, 'rb').read()).hexdigest()
+        # hash_2 = hashlib.md5(
+        #     open(recovery_conf, 'rb').read()).hexdigest()
 
-        self.assertEqual(hash_1, hash_2)
+        with open(recovery_conf, 'r') as f:
+            content_2 = f.read()
+
+        self.assertEqual(content_1, content_2)
+
+        # self.assertEqual(hash_1, hash_2)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -2227,55 +2227,6 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         # compare pgdata permissions
         pgdata_restored = self.pgdata_content(node_restored.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
-
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
-    # @unittest.skip("skip")
-    def test_pg_10_waldir(self):
-        """
-        test group access for PG >= 11
-        """
-        if self.pg_config_version < self.version_to_num('10.0'):
-            return unittest.skip('You need PostgreSQL >= 10 for this test')
-
-        fname = self.id().split('.')[3]
-        wal_dir = os.path.join(
-            os.path.join(self.tmp_path, module_name, fname), 'wal_dir')
-        shutil.rmtree(wal_dir, ignore_errors=True)
-        node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
-            set_replication=True,
-            initdb_params=[
-                '--data-checksums',
-                '--waldir={0}'.format(wal_dir)])
-
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
-        node.slow_start()
-
-        # take FULL backup
-        self.backup_node(
-            backup_dir, 'node', node, options=['--stream'])
-
-        pgdata = self.pgdata_content(node.data_dir)
-
-        # restore backup
-        node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored'))
-        node_restored.cleanup()
-
-        self.restore_node(
-            backup_dir, 'node', node_restored)
-
-        # compare pgdata permissions
-        pgdata_restored = self.pgdata_content(node_restored.data_dir)
-        self.compare_pgdata(pgdata, pgdata_restored)
-
-        self.assertTrue(
-            os.path.islink(os.path.join(node_restored.data_dir, 'pg_wal')),
-            'pg_wal should be symlink')
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
