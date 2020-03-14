@@ -3611,6 +3611,7 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
 [--restore-command=<replaceable>cmdline</replaceable>]
 [--restore-command=<replaceable>cmdline</replaceable>]
 [--primary-conninfo=<replaceable>primary_conninfo</replaceable>]
+[-S | --primary-slot-name=<replaceable>slotname</replaceable>]
 [<replaceable>recovery_target_options</replaceable>] [<replaceable>logging_options</replaceable>] [<replaceable>remote_options</replaceable>]
 [<replaceable>partial_restore_options</replaceable>] [<replaceable>remote_wal_archive_options</replaceable>]
 </programlisting>
@@ -3659,6 +3660,19 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
       </para>
       <para>
         Example: <literal>--primary-conninfo='host=192.168.1.50 port=5432 user=foo password=foopass'</literal>
+      </para>
+      </listitem>
+      </varlistentry>
+
+      <varlistentry>
+<term><option>-S</option></term>
+<term><option>--primary-slot-name=<replaceable>slot_name</replaceable></option></term>
+      <listitem>
+      <para>
+        Sets the
+        <ulink url="https://postgrespro.com/docs/postgresql/current/runtime-config-replication#GUC-PRIMARY-SLOT-NAME">primary_slot_name</ulink>
+        parameter to the specified value.
+        This option will be ignored unless the <option>-R</option> flag if specified.
       </para>
       </listitem>
       </varlistentry>
