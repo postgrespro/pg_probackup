@@ -1312,10 +1312,13 @@ static void fio_send_file(int out, char const* path)
 /*
  * Return number of actually(!) readed blocks, attempts or
  * half-readed block are not counted.
- * Return values:
+ * Return values in case of error:
  *	REMOTE_ERROR
  *	PAGE_CORRUPTION
  *	WRITE_FAILED
+ *
+ * If none of the above, this function return number of blocks
+ * readed by remote agent.
  *
  * In case of DELTA mode horizonLsn must be a valid lsn,
  * otherwise it should be set to InvalidXLogRecPtr.
@@ -1378,8 +1381,6 @@ int fio_send_pages(FILE* in, FILE* out, pgFile *file, XLogRecPtr horizonLsn,
 //		elog(INFO, "block %u", blkno);
 //	pg_free(iter);
 //<-----
-//	elog(INFO, "Num 1: %li", sizeof(fio_send_pagemap_request));
-//	elog(INFO, "bitmapsize: %i", pagemap->bitmapsize);
 
 	IO_CHECK(fio_write_all(fio_stdout, &req, sizeof(req)), sizeof(req));
 
@@ -1401,8 +1402,6 @@ int fio_send_pages(FILE* in, FILE* out, pgFile *file, XLogRecPtr horizonLsn,
 			errno = hdr.arg;
 			*err_blknum = hdr.size;
 			return REMOTE_ERROR;
-			/* TODO: report correct error message */
-//			elog(WARNING, "remote blkno %u", *err_blknum);
 		}
 		else if (hdr.cop == FIO_SEND_FILE_CORRUPTION)
 		{
