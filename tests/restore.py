@@ -3378,3 +3378,48 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_restore_primary_slot_info(self):
+        """
+        """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.slow_start()
+
+        # Take FULL
+        self.backup_node(backup_dir, 'node', node, options=['--stream'])
+
+        node.pgbench_init(scale=1)
+
+        replica = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'replica'))
+        replica.cleanup()
+
+        node.safe_psql(
+            "SELECT pg_create_physical_replication_slot('master_slot')")
+
+        self.restore_node(
+            backup_dir, 'node', replica,
+            options=['-R', '--primary-slot-name=master_slot'])
+
+        self.set_auto_conf(replica, {'port': replica.port})
+        self.set_auto_conf(replica, {'hot_standby': 'on'})
+
+        if self.get_version(node) >= self.version_to_num('12.0'):
+            standby_signal = os.path.join(replica.data_dir, 'standby.signal')
+            self.assertTrue(
+                os.path.isfile(standby_signal),
+                "File '{0}' do not exists".format(standby_signal))
+
+        replica.slow_start(replica=True)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
