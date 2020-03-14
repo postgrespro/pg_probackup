@@ -25,14 +25,6 @@
 #include "utils/thread.h"
 #include "utils/file.h"
 
-
-/*
- * Macro needed to parse ptrack.
- * NOTE Keep those values synchronized with definitions in ptrack.h
- */
-#define PTRACK_BITS_PER_HEAPBLOCK 1
-#define HEAPBLOCKS_PER_BYTE (BITS_PER_BYTE / PTRACK_BITS_PER_HEAPBLOCK)
-
 static int	standby_message_timeout = 10 * 1000;	/* 10 sec = default */
 static XLogRecPtr stop_backup_lsn = InvalidXLogRecPtr;
 static XLogRecPtr stop_stream_lsn = InvalidXLogRecPtr;
@@ -74,8 +66,6 @@ typedef struct
 static pthread_t stream_thread;
 static StreamThreadArg stream_thread_arg = {"", NULL, 1};
 
-static int is_ptrack_enable = false;
-bool is_ptrack_support = false;
 bool exclusive_backup = false;
 
 /* Is pg_start_backup() was executed */
@@ -90,7 +80,7 @@ static void backup_cleanup(bool fatal, void *userdata);
 
 static void *backup_files(void *arg);
 
-static void do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo);
+static void do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync);
 
 static void pg_start_backup(const char *label, bool smooth, pgBackup *backup,
 							PGNodeInfo *nodeInfo, PGconn *backup_conn, PGconn *master_conn);
@@ -102,7 +92,6 @@ static XLogRecPtr wait_wal_lsn(XLogRecPtr lsn, bool is_start_lsn, TimeLineID tli
 								bool in_prev_segment, bool segment_only,
 								int timeout_elevel, bool in_stream_dir);
 
-static void make_pagemap_from_ptrack(parray* files, PGconn* backup_conn);
 static void *StreamLog(void *arg);
 static void IdentifySystem(StreamThreadArg *stream_thread_arg);
 
@@ -112,19 +101,6 @@ static parray *get_database_map(PGconn *pg_startbackup_conn);
 
 /* pgpro specific functions */
 static bool pgpro_support(PGconn *conn);
-
-/* Ptrack functions */
-static void pg_ptrack_clear(PGconn *backup_conn);
-static bool pg_ptrack_support(PGconn *backup_conn);
-static bool pg_ptrack_enable(PGconn *backup_conn);
-static bool pg_ptrack_get_and_clear_db(Oid dbOid, Oid tblspcOid,
-									   PGconn *backup_conn);
-static char *pg_ptrack_get_and_clear(Oid tablespace_oid,
-									 Oid db_oid,
-									 Oid rel_oid,
-									 size_t *result_size,
-									 PGconn *backup_conn);
-static XLogRecPtr get_last_ptrack_lsn(PGconn *backup_conn);
 
 /* Check functions */
 static bool pg_checksum_enable(PGconn *conn);
@@ -153,7 +129,7 @@ backup_stopbackup_callback(bool fatal, void *userdata)
  * Move files from 'pgdata' to a subdirectory in 'backup_path'.
  */
 static void
-do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo)
+do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync)
 {
 	int			i;
 	char		database_path[MAXPGPATH];
@@ -176,6 +152,11 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo)
 	pgFile	   *pg_control = NULL;
 	PGconn	   *master_conn = NULL;
 	PGconn	   *pg_startbackup_conn = NULL;
+
+	/* for fancy reporting */
+	time_t		start_time, end_time;
+	char		pretty_time[20];
+	char		pretty_bytes[20];
 
 	elog(LOG, "Database backup start");
 	if(current.external_dir_str)
@@ -211,8 +192,8 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo)
 						"Create new FULL backup before an incremental one.",
 						current.tli);
 
-		pgBackupGetPath(prev_backup, prev_backup_filelist_path,
-						lengthof(prev_backup_filelist_path), DATABASE_FILE_LIST);
+		join_path_components(prev_backup_filelist_path, prev_backup->root_dir,
+															DATABASE_FILE_LIST);
 		/* Files of previous backup needed by DELTA backup */
 		prev_backup_filelist = dir_read_file_list(NULL, NULL, prev_backup_filelist_path, FIO_BACKUP_HOST);
 
@@ -229,7 +210,7 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo)
 	 */
 	if (current.backup_mode == BACKUP_MODE_DIFF_PTRACK)
 	{
-		XLogRecPtr	ptrack_lsn = get_last_ptrack_lsn(backup_conn);
+		XLogRecPtr	ptrack_lsn = get_last_ptrack_lsn(backup_conn, nodeInfo);
 
 		if (ptrack_lsn > prev_backup->stop_lsn || ptrack_lsn == InvalidXLogRecPtr)
 		{
@@ -242,8 +223,8 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo)
 	}
 
 	/* Clear ptrack files for FULL and PAGE backup */
-	if (current.backup_mode != BACKUP_MODE_DIFF_PTRACK && is_ptrack_enable)
-		pg_ptrack_clear(backup_conn);
+	if (current.backup_mode != BACKUP_MODE_DIFF_PTRACK && nodeInfo->is_ptrack_enable)
+		pg_ptrack_clear(backup_conn, nodeInfo->ptrack_version_num);
 
 	/* notify start of backup to PostgreSQL server */
 	time2iso(label, lengthof(label), current.start_time);
@@ -351,6 +332,20 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo)
 		elog(ERROR, "PGDATA is almost empty. Either it was concurrently deleted or "
 			"pg_probackup do not possess sufficient permissions to list PGDATA content");
 
+	/* Calculate pgdata_bytes */
+	for (i = 0; i < parray_num(backup_files_list); i++)
+	{
+		pgFile	   *file = (pgFile *) parray_get(backup_files_list, i);
+
+		if (file->external_dir_num != 0)
+			continue;
+
+		current.pgdata_bytes += file->size;
+	}
+
+	pretty_size(current.pgdata_bytes, pretty_bytes, lengthof(pretty_bytes));
+	elog(INFO, "PGDATA size: %s", pretty_bytes);
+
 	/*
 	 * Sort pathname ascending. It is necessary to create intermediate
 	 * directories sequentially.
@@ -379,22 +374,41 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo)
 	/*
 	 * Build page mapping in incremental mode.
 	 */
-	if (current.backup_mode == BACKUP_MODE_DIFF_PAGE)
+
+	if (current.backup_mode == BACKUP_MODE_DIFF_PAGE ||
+		current.backup_mode == BACKUP_MODE_DIFF_PTRACK)
 	{
-		/*
-		 * Build the page map. Obtain information about changed pages
-		 * reading WAL segments present in archives up to the point
-		 * where this backup has started.
-		 */
-		extractPageMap(arclog_path, current.tli, instance_config.xlog_seg_size,
-					   prev_backup->start_lsn, current.start_lsn);
-	}
-	else if (current.backup_mode == BACKUP_MODE_DIFF_PTRACK)
-	{
-		/*
-		 * Build the page map from ptrack information.
-		 */
-		make_pagemap_from_ptrack(backup_files_list, backup_conn);
+		elog(INFO, "Compiling pagemap of changed blocks");
+		time(&start_time);
+
+		if (current.backup_mode == BACKUP_MODE_DIFF_PAGE)
+		{
+			/*
+			 * Build the page map. Obtain information about changed pages
+			 * reading WAL segments present in archives up to the point
+			 * where this backup has started.
+			 */
+			extractPageMap(arclog_path, current.tli, instance_config.xlog_seg_size,
+						   prev_backup->start_lsn, current.start_lsn);
+		}
+		else if (current.backup_mode == BACKUP_MODE_DIFF_PTRACK)
+		{
+			/*
+			 * Build the page map from ptrack information.
+			 */
+			if (nodeInfo->ptrack_version_num == 20)
+				make_pagemap_from_ptrack_2(backup_files_list, backup_conn,
+											nodeInfo->ptrack_schema,
+											prev_backup_start_lsn);
+			else if (nodeInfo->ptrack_version_num == 15 ||
+					 nodeInfo->ptrack_version_num == 16 ||
+					 nodeInfo->ptrack_version_num == 17)
+				make_pagemap_from_ptrack_1(backup_files_list, backup_conn);
+		}
+
+		time(&end_time);
+		elog(INFO, "Pagemap compiled, time elapsed %.0f sec",
+			 difftime(end_time, start_time));
 	}
 
 	/*
@@ -439,7 +453,7 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo)
 	parray_qsort(backup_files_list, pgFileCompareSize);
 	/* Sort the array for binary search */
 	if (prev_backup_filelist)
-		parray_qsort(prev_backup_filelist, pgFileComparePathWithExternal);
+		parray_qsort(prev_backup_filelist, pgFileCompareRelPathWithExternal);
 
 	/* write initial backup_content.control file and update backup.control  */
 	write_backup_filelist(&current, backup_files_list,
@@ -454,6 +468,7 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo)
 	{
 		backup_files_arg *arg = &(threads_args[i]);
 
+		arg->nodeInfo = nodeInfo;
 		arg->from_root = instance_config.pgdata;
 		arg->to_root = database_path;
 		arg->external_prefix = external_prefix;
@@ -471,6 +486,7 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo)
 	/* Run threads */
 	thread_interrupted = false;
 	elog(INFO, "Start transferring data files");
+	time(&start_time);
 	for (i = 0; i < num_threads; i++)
 	{
 		backup_files_arg *arg = &(threads_args[i]);
@@ -486,10 +502,16 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo)
 		if (threads_args[i].ret == 1)
 			backup_isok = false;
 	}
+
+	time(&end_time);
+	pretty_time_interval(difftime(end_time, start_time),
+						 pretty_time, lengthof(pretty_time));
 	if (backup_isok)
-		elog(INFO, "Data files are transferred");
+		elog(INFO, "Data files are transferred, time elapsed: %s",
+			pretty_time);
 	else
-		elog(ERROR, "Data files transferring failed");
+		elog(ERROR, "Data files transferring failed, time elapsed: %s",
+			pretty_time);
 
 	/* Remove disappeared during backup files from backup_list */
 	for (i = 0; i < parray_num(backup_files_list); i++)
@@ -548,27 +570,12 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo)
 	/* close ssh session in main thread */
 	fio_disconnect();
 
-	/* Calculate pgdata_bytes */
-	for (i = 0; i < parray_num(backup_files_list); i++)
-	{
-		pgFile	   *file = (pgFile *) parray_get(backup_files_list, i);
-
-		/* In case of FULL or DELTA backup we can trust read_size.
-		 * In case of PAGE or PTRACK we are forced to trust datafile size,
-		 * taken at the start of backup.
-		 */
-		if (current.backup_mode == BACKUP_MODE_FULL ||
-			current.backup_mode == BACKUP_MODE_DIFF_DELTA)
-			current.pgdata_bytes += file->read_size;
-		else
-			current.pgdata_bytes += file->size;
-	}
-
 	/* Add archived xlog files into the list of files of this backup */
 	if (stream_wal)
 	{
 		parray     *xlog_files_list;
 		char		pg_xlog_path[MAXPGPATH];
+		char		wal_full_path[MAXPGPATH];
 
 		/* Scan backup PG_XLOG_DIR */
 		xlog_files_list = parray_new();
@@ -580,18 +587,21 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo)
 		for (i = 0; i < parray_num(xlog_files_list); i++)
 		{
 			pgFile	   *file = (pgFile *) parray_get(xlog_files_list, i);
+
+			join_path_components(wal_full_path, pg_xlog_path, file->rel_path);
+
 			if (S_ISREG(file->mode))
 			{
-				file->crc = pgFileGetCRC(file->path, true, false,
-										 &file->read_size, FIO_BACKUP_HOST);
-				file->write_size = file->read_size;
+				file->crc = pgFileGetCRC(wal_full_path, true, false);
+				file->write_size = file->size;
 			}
 			/* Remove file path root prefix*/
 			if (strstr(file->path, database_path) == file->path)
 			{
 				char	   *ptr = file->path;
 
-				file->path = pstrdup(GetRelativePath(ptr, database_path));
+				file->path = pgut_strdup(GetRelativePath(ptr, database_path));
+				file->rel_path = pgut_strdup(file->path);
 				free(ptr);
 			}
 		}
@@ -614,6 +624,48 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo)
 						  external_dirs);
 	/* update backup control file to update size info */
 	write_backup(&current);
+
+	/* Sync all copied files unless '--no-sync' flag is used */
+	if (no_sync)
+		elog(WARNING, "Backup files are not synced to disk");
+	else
+	{
+		elog(INFO, "Syncing backup files to disk");
+		time(&start_time);
+
+		for (i = 0; i < parray_num(backup_files_list); i++)
+		{
+			char		to_fullpath[MAXPGPATH];
+			pgFile	   *file = (pgFile *) parray_get(backup_files_list, i);
+
+			/* TODO: sync directory ? */
+			if (S_ISDIR(file->mode))
+				continue;
+
+			if (file->write_size <= 0)
+				continue;
+
+			/* construct fullpath */
+			if (file->external_dir_num == 0)
+				join_path_components(to_fullpath, database_path, file->rel_path);
+			else
+			{
+				char 	external_dst[MAXPGPATH];
+
+				makeExternalDirPathByNum(external_dst, external_prefix,
+										 file->external_dir_num);
+				join_path_components(to_fullpath, external_dst, file->rel_path);
+			}
+
+			if (fio_sync(to_fullpath, FIO_BACKUP_HOST) != 0)
+				elog(ERROR, "Failed to sync file \"%s\": %s", to_fullpath, strerror(errno));
+		}
+
+		time(&end_time);
+		pretty_time_interval(difftime(end_time, start_time),
+							 pretty_time, lengthof(pretty_time));
+		elog(INFO, "Backup files are synced, time elapsed: %s", pretty_time);
+	}
 
 	/* clean external directories list */
 	if (external_dirs)
@@ -698,11 +750,11 @@ pgdata_basic_setup(ConnectionOptions conn_opt, PGNodeInfo *nodeInfo)
  */
 int
 do_backup(time_t start_time, bool no_validate,
-			pgSetBackupParams *set_backup_params)
+			pgSetBackupParams *set_backup_params, bool no_sync)
 {
-	PGconn *backup_conn = NULL;
-	PGNodeInfo nodeInfo;
-	char  pretty_data_bytes[20];
+	PGconn		*backup_conn = NULL;
+	PGNodeInfo	nodeInfo;
+	char		pretty_bytes[20];
 
 	/* Initialize PGInfonode */
 	pgNodeInit(&nodeInfo);
@@ -769,19 +821,24 @@ do_backup(time_t start_time, bool no_validate,
 		elog(ERROR, "Failed to retrieve wal_segment_size");
 #endif
 
-	is_ptrack_support = pg_ptrack_support(backup_conn);
-	if (is_ptrack_support)
+	get_ptrack_version(backup_conn, &nodeInfo);
+//	elog(WARNING, "ptrack_version_num %d", ptrack_version_num);
+
+	if (nodeInfo.ptrack_version_num > 0)
 	{
-		is_ptrack_enable = pg_ptrack_enable(backup_conn);
+		if (nodeInfo.ptrack_version_num >= 20)
+			nodeInfo.is_ptrack_enable = pg_ptrack_enable2(backup_conn);
+		else
+			nodeInfo.is_ptrack_enable = pg_ptrack_enable(backup_conn);
 	}
 
 	if (current.backup_mode == BACKUP_MODE_DIFF_PTRACK)
 	{
-		if (!is_ptrack_support)
+		if (nodeInfo.ptrack_version_num == 0)
 			elog(ERROR, "This PostgreSQL instance does not support ptrack");
 		else
 		{
-			if(!is_ptrack_enable)
+			if (!nodeInfo.is_ptrack_enable)
 				elog(ERROR, "Ptrack is disabled");
 		}
 	}
@@ -792,7 +849,7 @@ do_backup(time_t start_time, bool no_validate,
 			elog(ERROR, "Options for connection to master must be provided to perform backup from replica");
 
 	/* backup data */
-	do_backup_instance(backup_conn, &nodeInfo);
+	do_backup_instance(backup_conn, &nodeInfo, no_sync);
 	pgut_atexit_pop(backup_cleanup, NULL);
 
 	/* compute size of wal files of this backup stored in the archive */
@@ -832,10 +889,10 @@ do_backup(time_t start_time, bool no_validate,
 
 	/* Notify user about backup size */
 	if (current.stream)
-		pretty_size(current.data_bytes + current.wal_bytes, pretty_data_bytes, lengthof(pretty_data_bytes));
+		pretty_size(current.data_bytes + current.wal_bytes, pretty_bytes, lengthof(pretty_bytes));
 	else
-		pretty_size(current.data_bytes, pretty_data_bytes, lengthof(pretty_data_bytes));
-	elog(INFO, "Backup %s resident size: %s", base36enc(current.start_time), pretty_data_bytes);
+		pretty_size(current.data_bytes, pretty_bytes, lengthof(pretty_bytes));
+	elog(INFO, "Backup %s resident size: %s", base36enc(current.start_time), pretty_bytes);
 
 	if (current.status == BACKUP_STATUS_OK ||
 		current.status == BACKUP_STATUS_DONE)
@@ -926,8 +983,7 @@ check_server_version(PGconn *conn, PGNodeInfo *nodeInfo)
 		PQclear(res);
 
 	/* Do exclusive backup only for PostgreSQL 9.5 */
-	exclusive_backup = nodeInfo->server_version < 90600 ||
-		current.backup_mode == BACKUP_MODE_DIFF_PTRACK;
+	exclusive_backup = nodeInfo->server_version < 90600;
 }
 
 /*
@@ -1085,48 +1141,6 @@ pg_switch_wal(PGconn *conn)
 }
 
 /*
- * Check if the instance supports ptrack
- * TODO Maybe we should rather check ptrack_version()?
- */
-static bool
-pg_ptrack_support(PGconn *backup_conn)
-{
-	PGresult   *res_db;
-
-	res_db = pgut_execute(backup_conn,
-						  "SELECT proname FROM pg_proc WHERE proname='ptrack_version'",
-						  0, NULL);
-	if (PQntuples(res_db) == 0)
-	{
-		PQclear(res_db);
-		return false;
-	}
-	PQclear(res_db);
-
-	res_db = pgut_execute(backup_conn,
-						  "SELECT pg_catalog.ptrack_version()",
-						  0, NULL);
-	if (PQntuples(res_db) == 0)
-	{
-		PQclear(res_db);
-		return false;
-	}
-
-	/* Now we support only ptrack versions upper than 1.5 */
-	if (strcmp(PQgetvalue(res_db, 0, 0), "1.5") != 0 &&
-		strcmp(PQgetvalue(res_db, 0, 0), "1.6") != 0 &&
-		strcmp(PQgetvalue(res_db, 0, 0), "1.7") != 0)
-	{
-		elog(WARNING, "Update your ptrack to the version 1.5 or upper. Current version is %s", PQgetvalue(res_db, 0, 0));
-		PQclear(res_db);
-		return false;
-	}
-
-	PQclear(res_db);
-	return true;
-}
-
-/*
  * Check if the instance is PostgresPro fork.
  */
 static bool
@@ -1212,23 +1226,6 @@ get_database_map(PGconn *conn)
 
 /* Check if ptrack is enabled in target instance */
 static bool
-pg_ptrack_enable(PGconn *backup_conn)
-{
-	PGresult   *res_db;
-
-	res_db = pgut_execute(backup_conn, "SHOW ptrack_enable", 0, NULL);
-
-	if (strcmp(PQgetvalue(res_db, 0, 0), "on") != 0)
-	{
-		PQclear(res_db);
-		return false;
-	}
-	PQclear(res_db);
-	return true;
-}
-
-/* Check if ptrack is enabled in target instance */
-static bool
 pg_checksum_enable(PGconn *conn)
 {
 	PGresult   *res_db;
@@ -1277,204 +1274,6 @@ pg_is_superuser(PGconn *conn)
 	}
 	PQclear(res);
 	return false;
-}
-
-/* Clear ptrack files in all databases of the instance we connected to */
-static void
-pg_ptrack_clear(PGconn *backup_conn)
-{
-	PGresult   *res_db,
-			   *res;
-	const char *dbname;
-	int			i;
-	Oid dbOid, tblspcOid;
-	char *params[2];
-
-	params[0] = palloc(64);
-	params[1] = palloc(64);
-	res_db = pgut_execute(backup_conn, "SELECT datname, oid, dattablespace FROM pg_database",
-						  0, NULL);
-
-	for(i = 0; i < PQntuples(res_db); i++)
-	{
-		PGconn	   *tmp_conn;
-
-		dbname = PQgetvalue(res_db, i, 0);
-		if (strcmp(dbname, "template0") == 0)
-			continue;
-
-		dbOid = atoi(PQgetvalue(res_db, i, 1));
-		tblspcOid = atoi(PQgetvalue(res_db, i, 2));
-
-		tmp_conn = pgut_connect(instance_config.conn_opt.pghost, instance_config.conn_opt.pgport,
-								dbname,
-								instance_config.conn_opt.pguser);
-
-		res = pgut_execute(tmp_conn, "SELECT pg_catalog.pg_ptrack_clear()",
-						   0, NULL);
-		PQclear(res);
-
-		sprintf(params[0], "%i", dbOid);
-		sprintf(params[1], "%i", tblspcOid);
-		res = pgut_execute(tmp_conn, "SELECT pg_catalog.pg_ptrack_get_and_clear_db($1, $2)",
-						   2, (const char **)params);
-		PQclear(res);
-
-		pgut_disconnect(tmp_conn);
-	}
-
-	pfree(params[0]);
-	pfree(params[1]);
-	PQclear(res_db);
-}
-
-static bool
-pg_ptrack_get_and_clear_db(Oid dbOid, Oid tblspcOid, PGconn *backup_conn)
-{
-	char	   *params[2];
-	char	   *dbname;
-	PGresult   *res_db;
-	PGresult   *res;
-	bool		result;
-
-	params[0] = palloc(64);
-	params[1] = palloc(64);
-
-	sprintf(params[0], "%i", dbOid);
-	res_db = pgut_execute(backup_conn,
-							"SELECT datname FROM pg_database WHERE oid=$1",
-							1, (const char **) params);
-	/*
-	 * If database is not found, it's not an error.
-	 * It could have been deleted since previous backup.
-	 */
-	if (PQntuples(res_db) != 1 || PQnfields(res_db) != 1)
-		return false;
-
-	dbname = PQgetvalue(res_db, 0, 0);
-
-	/* Always backup all files from template0 database */
-	if (strcmp(dbname, "template0") == 0)
-	{
-		PQclear(res_db);
-		return true;
-	}
-	PQclear(res_db);
-
-	sprintf(params[0], "%i", dbOid);
-	sprintf(params[1], "%i", tblspcOid);
-	res = pgut_execute(backup_conn, "SELECT pg_catalog.pg_ptrack_get_and_clear_db($1, $2)",
-						2, (const char **)params);
-
-	if (PQnfields(res) != 1)
-		elog(ERROR, "cannot perform pg_ptrack_get_and_clear_db()");
-
-	if (!parse_bool(PQgetvalue(res, 0, 0), &result))
-		elog(ERROR,
-			 "result of pg_ptrack_get_and_clear_db() is invalid: %s",
-			 PQgetvalue(res, 0, 0));
-
-	PQclear(res);
-	pfree(params[0]);
-	pfree(params[1]);
-
-	return result;
-}
-
-/* Read and clear ptrack files of the target relation.
- * Result is a bytea ptrack map of all segments of the target relation.
- * case 1: we know a tablespace_oid, db_oid, and rel_filenode
- * case 2: we know db_oid and rel_filenode (no tablespace_oid, because file in pg_default)
- * case 3: we know only rel_filenode (because file in pg_global)
- */
-static char *
-pg_ptrack_get_and_clear(Oid tablespace_oid, Oid db_oid, Oid rel_filenode,
-						size_t *result_size, PGconn *backup_conn)
-{
-	PGconn	   *tmp_conn;
-	PGresult   *res_db,
-			   *res;
-	char	   *params[2];
-	char	   *result;
-	char	   *val;
-
-	params[0] = palloc(64);
-	params[1] = palloc(64);
-
-	/* regular file (not in directory 'global') */
-	if (db_oid != 0)
-	{
-		char	   *dbname;
-
-		sprintf(params[0], "%i", db_oid);
-		res_db = pgut_execute(backup_conn,
-							  "SELECT datname FROM pg_database WHERE oid=$1",
-							  1, (const char **) params);
-		/*
-		 * If database is not found, it's not an error.
-		 * It could have been deleted since previous backup.
-		 */
-		if (PQntuples(res_db) != 1 || PQnfields(res_db) != 1)
-			return NULL;
-
-		dbname = PQgetvalue(res_db, 0, 0);
-
-		if (strcmp(dbname, "template0") == 0)
-		{
-			PQclear(res_db);
-			return NULL;
-		}
-
-		tmp_conn = pgut_connect(instance_config.conn_opt.pghost, instance_config.conn_opt.pgport,
-								dbname,
-								instance_config.conn_opt.pguser);
-		sprintf(params[0], "%i", tablespace_oid);
-		sprintf(params[1], "%i", rel_filenode);
-		res = pgut_execute(tmp_conn, "SELECT pg_catalog.pg_ptrack_get_and_clear($1, $2)",
-						   2, (const char **)params);
-
-		if (PQnfields(res) != 1)
-			elog(ERROR, "cannot get ptrack file from database \"%s\" by tablespace oid %u and relation oid %u",
-				 dbname, tablespace_oid, rel_filenode);
-		PQclear(res_db);
-		pgut_disconnect(tmp_conn);
-	}
-	/* file in directory 'global' */
-	else
-	{
-		/*
-		 * execute ptrack_get_and_clear for relation in pg_global
-		 * Use backup_conn, cause we can do it from any database.
-		 */
-		sprintf(params[0], "%i", tablespace_oid);
-		sprintf(params[1], "%i", rel_filenode);
-		res = pgut_execute(backup_conn, "SELECT pg_catalog.pg_ptrack_get_and_clear($1, $2)",
-						   2, (const char **)params);
-
-		if (PQnfields(res) != 1)
-			elog(ERROR, "cannot get ptrack file from pg_global tablespace and relation oid %u",
-			 rel_filenode);
-	}
-
-	val = PQgetvalue(res, 0, 0);
-
-	/* TODO Now pg_ptrack_get_and_clear() returns bytea ending with \x.
-	 * It should be fixed in future ptrack releases, but till then we
-	 * can parse it.
-	 */
-	if (strcmp("x", val+1) == 0)
-	{
-		/* Ptrack file is missing */
-		return NULL;
-	}
-
-	result = (char *) PQunescapeBytea((unsigned char *) PQgetvalue(res, 0, 0),
-									  result_size);
-	PQclear(res);
-	pfree(params[0]);
-	pfree(params[1]);
-
-	return result;
 }
 
 /*
@@ -1654,8 +1453,8 @@ wait_wal_lsn(XLogRecPtr target_lsn, bool is_start_lsn, TimeLineID tli,
 
 		if (!stream_wal && is_start_lsn && try_count == 30)
 			elog(WARNING, "By default pg_probackup assume WAL delivery method to be ARCHIVE. "
-				 "If continius archiving is not set up, use '--stream' option to make autonomous backup. "
-				 "Otherwise check that continius archiving works correctly.");
+				 "If continuous archiving is not set up, use '--stream' option to make autonomous backup. "
+				 "Otherwise check that continuous archiving works correctly.");
 
 		if (timeout > 0 && try_count > timeout)
 		{
@@ -2009,10 +1808,11 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn,
 			{
 				file = pgFileNew(backup_label, PG_BACKUP_LABEL_FILE, true, 0,
 								 FIO_BACKUP_HOST);
-				file->crc = pgFileGetCRC(file->path, true, false,
-										 &file->read_size, FIO_BACKUP_HOST);
-				file->write_size = file->read_size;
-				file->uncompressed_size = file->read_size;
+
+				file->crc = pgFileGetCRC(backup_label, true, false);
+
+				file->write_size = file->size;
+				file->uncompressed_size = file->size;
 				free(file->path);
 				file->path = strdup(PG_BACKUP_LABEL_FILE);
 				parray_append(backup_files_list, file);
@@ -2058,9 +1858,8 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn,
 								 FIO_BACKUP_HOST);
 				if (S_ISREG(file->mode))
 				{
-					file->crc = pgFileGetCRC(file->path, true, false,
-											 &file->read_size, FIO_BACKUP_HOST);
-					file->write_size = file->read_size;
+					file->crc = pgFileGetCRC(tablespace_map, true, false);
+					file->write_size = file->size;
 				}
 				free(file->path);
 				file->path = strdup(PG_TABLESPACE_MAP_FILE);
@@ -2183,18 +1982,24 @@ static void *
 backup_files(void *arg)
 {
 	int			i;
-	backup_files_arg *arguments = (backup_files_arg *) arg;
-	int			n_backup_files_list = parray_num(arguments->files_list);
+	char		from_fullpath[MAXPGPATH];
+	char		to_fullpath[MAXPGPATH];
 	static time_t prev_time;
+
+	backup_files_arg *arguments = (backup_files_arg *) arg;
+	int 		n_backup_files_list = parray_num(arguments->files_list);
 
 	prev_time = current.start_time;
 
 	/* backup a file */
 	for (i = 0; i < n_backup_files_list; i++)
 	{
-		int			ret;
-		struct stat	buf;
-		pgFile	   *file = (pgFile *) parray_get(arguments->files_list, i);
+		pgFile	*file = (pgFile *) parray_get(arguments->files_list, i);
+		pgFile	*prev_file = NULL;
+
+		/* We have already copied all directories */
+		if (S_ISDIR(file->mode))
+			continue;
 
 		if (arguments->thread_num == 1)
 		{
@@ -2212,7 +2017,6 @@ backup_files(void *arg)
 
 		if (!pg_atomic_test_set_flag(&file->lock))
 			continue;
-		elog(VERBOSE, "Copying file:  \"%s\" ", file->path);
 
 		/* check for interrupt */
 		if (interrupted || thread_interrupted)
@@ -2220,133 +2024,84 @@ backup_files(void *arg)
 
 		if (progress)
 			elog(INFO, "Progress: (%d/%d). Process file \"%s\"",
-				 i + 1, n_backup_files_list, file->path);
+				 i + 1, n_backup_files_list, file->rel_path);
 
-		/* stat file to check its current state */
-		ret = fio_stat(file->path, &buf, true, FIO_DB_HOST);
-		if (ret == -1)
+		/* Handle zero sized files */
+		if (file->size == 0)
 		{
-			if (errno == ENOENT)
-			{
-				/*
-				 * If file is not found, this is not en error.
-				 * It could have been deleted by concurrent postgres transaction.
-				 */
-				file->write_size = FILE_NOT_FOUND;
-				elog(LOG, "File \"%s\" is not found", file->path);
-				continue;
-			}
-			else
-			{
-				elog(ERROR,
-					"can't stat file to backup \"%s\": %s",
-					file->path, strerror(errno));
-			}
+			file->write_size = 0;
+			continue;
 		}
 
-		/* We have already copied all directories */
-		if (S_ISDIR(buf.st_mode))
-			continue;
-
-		if (S_ISREG(buf.st_mode))
+		/* construct destination filepath */
+		if (file->external_dir_num == 0)
 		{
-			pgFile	  **prev_file = NULL;
-			char	   *external_path = NULL;
-
-			if (file->external_dir_num)
-				external_path = parray_get(arguments->external_dirs,
-										file->external_dir_num - 1);
-
-			/* Check that file exist in previous backup */
-			if (current.backup_mode != BACKUP_MODE_FULL)
-			{
-				char	   *relative;
-				pgFile		key;
-
-				relative = GetRelativePath(file->path, file->external_dir_num ?
-										   external_path : arguments->from_root);
-				key.path = relative;
-				key.external_dir_num = file->external_dir_num;
-
-				prev_file = (pgFile **) parray_bsearch(arguments->prev_filelist,
-											&key, pgFileComparePathWithExternal);
-				if (prev_file)
-					/* File exists in previous backup */
-					file->exists_in_prev = true;
-			}
-
-			/* copy the file into backup */
-			if (file->is_datafile && !file->is_cfs)
-			{
-				char		to_path[MAXPGPATH];
-
-				join_path_components(to_path, arguments->to_root,
-									 file->path + strlen(arguments->from_root) + 1);
-
-				/* backup block by block if datafile AND not compressed by cfs*/
-				if (!backup_data_file(arguments, to_path, file,
-									  arguments->prev_start_lsn,
-									  current.backup_mode,
-									  instance_config.compress_alg,
-									  instance_config.compress_level,
-									  true))
-				{
-					/* disappeared file not to be confused with 'not changed' */
-					if (file->write_size != FILE_NOT_FOUND)
-						file->write_size = BYTES_INVALID;
-					elog(VERBOSE, "File \"%s\" was not copied to backup", file->path);
-					continue;
-				}
-			}
-			else if (!file->external_dir_num &&
-					 strcmp(file->name, "pg_control") == 0)
-				copy_pgcontrol_file(arguments->from_root, FIO_DB_HOST,
-									arguments->to_root, FIO_BACKUP_HOST,
-									file);
-			else
-			{
-				const char *dst;
-				bool		skip = false;
-				char		external_dst[MAXPGPATH];
-
-				/* If non-data file has not changed since last backup... */
-				if (prev_file && file->exists_in_prev &&
-					buf.st_mtime < current.parent_backup)
-				{
-					file->crc = pgFileGetCRC(file->path, true, false,
-											 &file->read_size, FIO_DB_HOST);
-					file->write_size = file->read_size;
-					/* ...and checksum is the same... */
-					if (EQ_TRADITIONAL_CRC32(file->crc, (*prev_file)->crc))
-						skip = true; /* ...skip copying file. */
-				}
-				/* Set file paths */
-				if (file->external_dir_num)
-				{
-					makeExternalDirPathByNum(external_dst,
-											 arguments->external_prefix,
-											 file->external_dir_num);
-					dst = external_dst;
-				}
-				else
-					dst = arguments->to_root;
-				if (skip ||
-					!copy_file(FIO_DB_HOST, dst, FIO_BACKUP_HOST, file, true))
-				{
-					/* disappeared file not to be confused with 'not changed' */
-					if (file->write_size != FILE_NOT_FOUND)
-						file->write_size = BYTES_INVALID;
-					elog(VERBOSE, "File \"%s\" was not copied to backup",
-						 file->path);
-					continue;
-				}
-			}
-
-			elog(VERBOSE, "File \"%s\". Copied "INT64_FORMAT " bytes",
-				 file->path, file->write_size);
+			join_path_components(from_fullpath, arguments->from_root, file->rel_path);
+			join_path_components(to_fullpath, arguments->to_root, file->rel_path);
 		}
 		else
-			elog(WARNING, "unexpected file type %d", buf.st_mode);
+		{
+			char 	external_dst[MAXPGPATH];
+			char	*external_path = parray_get(arguments->external_dirs,
+												file->external_dir_num - 1);
+
+			makeExternalDirPathByNum(external_dst,
+								 arguments->external_prefix,
+								 file->external_dir_num);
+
+			join_path_components(to_fullpath, external_dst, file->rel_path);
+			join_path_components(from_fullpath, external_path, file->rel_path);
+		}
+
+		/* Encountered some strange beast */
+		if (!S_ISREG(file->mode))
+			elog(WARNING, "Unexpected type %d of file \"%s\", skipping",
+							file->mode, from_fullpath);
+
+		/* Check that file exist in previous backup */
+		if (current.backup_mode != BACKUP_MODE_FULL)
+		{
+			pgFile	**prev_file_tmp = NULL;
+			prev_file_tmp = (pgFile **) parray_bsearch(arguments->prev_filelist,
+											file, pgFileCompareRelPathWithExternal);
+			if (prev_file_tmp)
+			{
+				/* File exists in previous backup */
+				file->exists_in_prev = true;
+				prev_file = *prev_file_tmp;
+			}
+		}
+
+		/* backup file */
+		if (file->is_datafile && !file->is_cfs)
+		{
+			backup_data_file(&(arguments->conn_arg), file, from_fullpath, to_fullpath,
+								 arguments->prev_start_lsn,
+								 current.backup_mode,
+								 instance_config.compress_alg,
+								 instance_config.compress_level,
+								 arguments->nodeInfo->checksum_version,
+								 arguments->nodeInfo->ptrack_version_num,
+								 arguments->nodeInfo->ptrack_schema,
+								 true);
+		}
+		else
+		{
+			backup_non_data_file(file, prev_file, from_fullpath, to_fullpath,
+								 current.backup_mode, current.parent_backup, true);
+		}
+
+		if (file->write_size == FILE_NOT_FOUND)
+			continue;
+
+		if (file->write_size == BYTES_INVALID)
+		{
+			elog(VERBOSE, "Skipping the unchanged file: \"%s\"", from_fullpath);
+			continue;
+		}
+
+		elog(VERBOSE, "File \"%s\". Copied "INT64_FORMAT " bytes",
+						from_fullpath, file->write_size);
 	}
 
 	/* ssh connection to longer needed */
@@ -2550,132 +2305,6 @@ process_block_change(ForkNumber forknum, RelFileNode rnode, BlockNumber blkno)
 }
 
 /*
- * Given a list of files in the instance to backup, build a pagemap for each
- * data file that has ptrack. Result is saved in the pagemap field of pgFile.
- * NOTE we rely on the fact that provided parray is sorted by file->path.
- */
-static void
-make_pagemap_from_ptrack(parray *files, PGconn *backup_conn)
-{
-	size_t		i;
-	Oid dbOid_with_ptrack_init = 0;
-	Oid tblspcOid_with_ptrack_init = 0;
-	char	   *ptrack_nonparsed = NULL;
-	size_t		ptrack_nonparsed_size = 0;
-
-	elog(LOG, "Compiling pagemap");
-	for (i = 0; i < parray_num(files); i++)
-	{
-		pgFile	   *file = (pgFile *) parray_get(files, i);
-		size_t		start_addr;
-
-		/*
-		 * If there is a ptrack_init file in the database,
-		 * we must backup all its files, ignoring ptrack files for relations.
-		 */
-		if (file->is_database)
-		{
-			char *filename = strrchr(file->path, '/');
-
-			Assert(filename != NULL);
-			filename++;
-
-			/*
-			 * The function pg_ptrack_get_and_clear_db returns true
-			 * if there was a ptrack_init file.
-			 * Also ignore ptrack files for global tablespace,
-			 * to avoid any possible specific errors.
-			 */
-			if ((file->tblspcOid == GLOBALTABLESPACE_OID) ||
-				pg_ptrack_get_and_clear_db(file->dbOid, file->tblspcOid, backup_conn))
-			{
-				dbOid_with_ptrack_init = file->dbOid;
-				tblspcOid_with_ptrack_init = file->tblspcOid;
-			}
-		}
-
-		if (file->is_datafile)
-		{
-			if (file->tblspcOid == tblspcOid_with_ptrack_init &&
-				file->dbOid == dbOid_with_ptrack_init)
-			{
-				/* ignore ptrack if ptrack_init exists */
-				elog(VERBOSE, "Ignoring ptrack because of ptrack_init for file: %s", file->path);
-				file->pagemap_isabsent = true;
-				continue;
-			}
-
-			/* get ptrack bitmap once for all segments of the file */
-			if (file->segno == 0)
-			{
-				/* release previous value */
-				pg_free(ptrack_nonparsed);
-				ptrack_nonparsed_size = 0;
-
-				ptrack_nonparsed = pg_ptrack_get_and_clear(file->tblspcOid, file->dbOid,
-											   file->relOid, &ptrack_nonparsed_size, backup_conn);
-			}
-
-			if (ptrack_nonparsed != NULL)
-			{
-				/*
-				 * pg_ptrack_get_and_clear() returns ptrack with VARHDR cut out.
-				 * Compute the beginning of the ptrack map related to this segment
-				 *
-				 * HEAPBLOCKS_PER_BYTE. Number of heap pages one ptrack byte can track: 8
-				 * RELSEG_SIZE. Number of Pages per segment: 131072
-				 * RELSEG_SIZE/HEAPBLOCKS_PER_BYTE. number of bytes in ptrack file needed
-				 * to keep track on one relsegment: 16384
-				 */
-				start_addr = (RELSEG_SIZE/HEAPBLOCKS_PER_BYTE)*file->segno;
-
-				/*
-				 * If file segment was created after we have read ptrack,
-				 * we won't have a bitmap for this segment.
-				 */
-				if (start_addr > ptrack_nonparsed_size)
-				{
-					elog(VERBOSE, "Ptrack is missing for file: %s", file->path);
-					file->pagemap_isabsent = true;
-				}
-				else
-				{
-
-					if (start_addr + RELSEG_SIZE/HEAPBLOCKS_PER_BYTE > ptrack_nonparsed_size)
-					{
-						file->pagemap.bitmapsize = ptrack_nonparsed_size - start_addr;
-						elog(VERBOSE, "pagemap size: %i", file->pagemap.bitmapsize);
-					}
-					else
-					{
-						file->pagemap.bitmapsize = RELSEG_SIZE/HEAPBLOCKS_PER_BYTE;
-						elog(VERBOSE, "pagemap size: %i", file->pagemap.bitmapsize);
-					}
-
-					file->pagemap.bitmap = pg_malloc(file->pagemap.bitmapsize);
-					memcpy(file->pagemap.bitmap, ptrack_nonparsed+start_addr, file->pagemap.bitmapsize);
-				}
-			}
-			else
-			{
-				/*
-				 * If ptrack file is missing, try to copy the entire file.
-				 * It can happen in two cases:
-				 * - files were created by commands that bypass buffer manager
-				 * and, correspondingly, ptrack mechanism.
-				 * i.e. CREATE DATABASE
-				 * - target relation was deleted.
-				 */
-				elog(VERBOSE, "Ptrack is missing for file: %s", file->path);
-				file->pagemap_isabsent = true;
-			}
-		}
-	}
-	elog(LOG, "Pagemap compiled");
-}
-
-
-/*
  * Stop WAL streaming if current 'xlogpos' exceeds 'stop_backup_lsn', which is
  * set by pg_stop_backup().
  */
@@ -2687,7 +2316,7 @@ stop_streaming(XLogRecPtr xlogpos, uint32 timeline, bool segment_finished)
 
 	/* check for interrupt */
 	if (interrupted || thread_interrupted)
-		elog(ERROR, "Interrupted during backup stop_streaming");
+		elog(ERROR, "Interrupted during WAL streaming");
 
 	/* we assume that we get called once at the end of each segment */
 	if (segment_finished)
@@ -2823,100 +2452,6 @@ StreamLog(void *arg)
 	stream_arg->conn = NULL;
 
 	return NULL;
-}
-
-/*
- * Get lsn of the moment when ptrack was enabled the last time.
- */
-static XLogRecPtr
-get_last_ptrack_lsn(PGconn *backup_conn)
-
-{
-	PGresult   *res;
-	uint32		lsn_hi;
-	uint32		lsn_lo;
-	XLogRecPtr	lsn;
-
-	res = pgut_execute(backup_conn, "select pg_catalog.pg_ptrack_control_lsn()",
-					   0, NULL);
-
-	/* Extract timeline and LSN from results of pg_start_backup() */
-	XLogDataFromLSN(PQgetvalue(res, 0, 0), &lsn_hi, &lsn_lo);
-	/* Calculate LSN */
-	lsn = ((uint64) lsn_hi) << 32 | lsn_lo;
-
-	PQclear(res);
-	return lsn;
-}
-
-char *
-pg_ptrack_get_block(ConnectionArgs *arguments,
-					Oid dbOid,
-					Oid tblsOid,
-					Oid relOid,
-					BlockNumber blknum,
-					size_t *result_size)
-{
-	PGresult   *res;
-	char	   *params[4];
-	char	   *result;
-
-	params[0] = palloc(64);
-	params[1] = palloc(64);
-	params[2] = palloc(64);
-	params[3] = palloc(64);
-
-	/*
-	 * Use tmp_conn, since we may work in parallel threads.
-	 * We can connect to any database.
-	 */
-	sprintf(params[0], "%i", tblsOid);
-	sprintf(params[1], "%i", dbOid);
-	sprintf(params[2], "%i", relOid);
-	sprintf(params[3], "%u", blknum);
-
-	if (arguments->conn == NULL)
-	{
-		arguments->conn = pgut_connect(instance_config.conn_opt.pghost,
-											  instance_config.conn_opt.pgport,
-											  instance_config.conn_opt.pgdatabase,
-											  instance_config.conn_opt.pguser);
-	}
-
-	if (arguments->cancel_conn == NULL)
-		arguments->cancel_conn = PQgetCancel(arguments->conn);
-
-	//elog(LOG, "db %i pg_ptrack_get_block(%i, %i, %u)",dbOid, tblsOid, relOid, blknum);
-	res = pgut_execute_parallel(arguments->conn,
-								arguments->cancel_conn,
-					"SELECT pg_catalog.pg_ptrack_get_block_2($1, $2, $3, $4)",
-					4, (const char **)params, true, false, false);
-
-	if (PQnfields(res) != 1)
-	{
-		elog(VERBOSE, "cannot get file block for relation oid %u",
-					   relOid);
-		return NULL;
-	}
-
-	if (PQgetisnull(res, 0, 0))
-	{
-		elog(VERBOSE, "cannot get file block for relation oid %u",
-				   relOid);
-		return NULL;
-	}
-
-	result = (char *) PQunescapeBytea((unsigned char *) PQgetvalue(res, 0, 0),
-									  result_size);
-
-	PQclear(res);
-
-	pfree(params[0]);
-	pfree(params[1]);
-	pfree(params[2]);
-	pfree(params[3]);
-
-	return result;
 }
 
 static void

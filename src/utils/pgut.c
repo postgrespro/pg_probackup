@@ -834,9 +834,11 @@ static void
 call_atexit_callbacks(bool fatal)
 {
 	pgut_atexit_item  *item;
-
-	for (item = pgut_atexit_stack; item; item = item->next)
+	pgut_atexit_item  *next;
+	for (item = pgut_atexit_stack; item; item = next){
+		next = item->next;
 		item->callback(fatal, item->userdata);
+	}
 }
 
 static void

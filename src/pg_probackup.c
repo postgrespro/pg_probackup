@@ -68,6 +68,7 @@ static char *backup_id_string = NULL;
 int			num_threads = 1;
 bool		stream_wal = false;
 bool		progress = false;
+bool		no_sync = false;
 #if PG_VERSION_NUM >= 100000
 char	   *replication_slot = NULL;
 #endif
@@ -89,9 +90,12 @@ static bool			target_immediate;
 static char		   *target_name = NULL;
 static char		   *target_action = NULL;
 
+static char *primary_conninfo = NULL;
+
 static pgRecoveryTarget *recovery_target_options = NULL;
 static pgRestoreParams *restore_params = NULL;
 
+time_t current_time = 0;
 bool restore_as_replica = false;
 bool no_validate = false;
 
@@ -150,27 +154,29 @@ static void opt_datname_include_list(ConfigOption *opt, const char *arg);
 
 /*
  * Short name should be non-printable ASCII character.
+ * Use values between 128 and 255.
  */
 static ConfigOption cmd_options[] =
 {
 	/* directory options */
-	{ 'b',  130, "help",			&help_opt,			SOURCE_CMD_STRICT },
+	{ 'b', 130, "help",			&help_opt,			SOURCE_CMD_STRICT },
 	{ 's', 'B', "backup-path",		&backup_path,		SOURCE_CMD_STRICT },
 	/* common options */
 	{ 'u', 'j', "threads",			&num_threads,		SOURCE_CMD_STRICT },
 	{ 'b', 131, "stream",			&stream_wal,		SOURCE_CMD_STRICT },
 	{ 'b', 132, "progress",			&progress,			SOURCE_CMD_STRICT },
 	{ 's', 'i', "backup-id",		&backup_id_string,	SOURCE_CMD_STRICT },
+	{ 'b', 133, "no-sync",			&no_sync,			SOURCE_CMD_STRICT },
 	/* backup options */
-	{ 'b', 133, "backup-pg-log",	&backup_logs,		SOURCE_CMD_STRICT },
+	{ 'b', 180, "backup-pg-log",	&backup_logs,		SOURCE_CMD_STRICT },
 	{ 'f', 'b', "backup-mode",		opt_backup_mode,	SOURCE_CMD_STRICT },
 	{ 'b', 'C', "smooth-checkpoint", &smooth_checkpoint,	SOURCE_CMD_STRICT },
 	{ 's', 'S', "slot",				&replication_slot,	SOURCE_CMD_STRICT },
-	{ 'b', 234, "temp-slot",		&temp_slot,			SOURCE_CMD_STRICT },
-	{ 'b', 134, "delete-wal",		&delete_wal,		SOURCE_CMD_STRICT },
-	{ 'b', 135, "delete-expired",	&delete_expired,	SOURCE_CMD_STRICT },
-	{ 'b', 235, "merge-expired",	&merge_expired,		SOURCE_CMD_STRICT },
-	{ 'b', 237, "dry-run",			&dry_run,			SOURCE_CMD_STRICT },
+	{ 'b', 181, "temp-slot",		&temp_slot,			SOURCE_CMD_STRICT },
+	{ 'b', 182, "delete-wal",		&delete_wal,		SOURCE_CMD_STRICT },
+	{ 'b', 183, "delete-expired",	&delete_expired,	SOURCE_CMD_STRICT },
+	{ 'b', 184, "merge-expired",	&merge_expired,		SOURCE_CMD_STRICT },
+	{ 'b', 185, "dry-run",			&dry_run,			SOURCE_CMD_STRICT },
 	/* restore options */
 	{ 's', 136, "recovery-target-time",	&target_time,	SOURCE_CMD_STRICT },
 	{ 's', 137, "recovery-target-xid",	&target_xid,	SOURCE_CMD_STRICT },
@@ -188,6 +194,7 @@ static ConfigOption cmd_options[] =
 	{ 'b', 156, "skip-external-dirs", &skip_external_dirs,	SOURCE_CMD_STRICT },
 	{ 'f', 158, "db-include", 		opt_datname_include_list, SOURCE_CMD_STRICT },
 	{ 'f', 159, "db-exclude", 		opt_datname_exclude_list, SOURCE_CMD_STRICT },
+	{ 's', 160, "primary-conninfo",	&primary_conninfo,	SOURCE_CMD_STRICT },
 	/* checkdb options */
 	{ 'b', 195, "amcheck",			&need_amcheck,		SOURCE_CMD_STRICT },
 	{ 'b', 196, "heapallindexed",	&heapallindexed,	SOURCE_CMD_STRICT },
@@ -215,7 +222,9 @@ static ConfigOption cmd_options[] =
 	{ 'I', 170, "ttl", &ttl, SOURCE_CMD_STRICT, SOURCE_DEFAULT, 0, OPTION_UNIT_S, option_get_value},
 	{ 's', 171, "expire-time",		&expire_time_string,	SOURCE_CMD_STRICT },
 
-	/* options for backward compatibility */
+	/* options for backward compatibility
+	 * TODO: remove in 3.0.0
+	 */
 	{ 's', 136, "time",				&target_time,		SOURCE_CMD_STRICT },
 	{ 's', 137, "xid",				&target_xid,		SOURCE_CMD_STRICT },
 	{ 's', 138, "inclusive",		&target_inclusive,	SOURCE_CMD_STRICT },
@@ -266,6 +275,9 @@ main(int argc, char *argv[])
 
 	PROGRAM_NAME = get_progname(argv[0]);
 	PROGRAM_FULL_PATH = palloc0(MAXPGPATH);
+
+	/* Get current time */
+	current_time = time(NULL);
 
 	//set_pglocale_pgservice(argv[0], "pgscripts");
 
@@ -493,8 +505,14 @@ main(int argc, char *argv[])
 		if (backup_subcmd != INIT_CMD && backup_subcmd != ADD_INSTANCE_CMD)
 		{
 			if (fio_access(backup_instance_path, F_OK, FIO_BACKUP_HOST) != 0)
+			{
+				elog(WARNING, "Failed to access directory \"%s\": %s",
+					backup_instance_path, strerror(errno));
+
+				// TODO: redundant message, should we get rid of it?
 				elog(ERROR, "Instance '%s' does not exist in this backup catalog",
 							instance_name);
+			}
 		}
 	}
 
@@ -522,6 +540,14 @@ main(int argc, char *argv[])
 		}
 		setMyLocation();
 	}
+
+	/* disable logging into file for archive-push and archive-get */
+	if (backup_subcmd == ARCHIVE_GET_CMD ||
+		backup_subcmd == ARCHIVE_PUSH_CMD)
+	{
+		instance_config.logger.log_level_file = LOG_OFF;
+	}
+
 
 	/* Just read environment variables */
 	if (backup_path == NULL && backup_subcmd == CHECKDB_CMD)
@@ -667,6 +693,7 @@ main(int argc, char *argv[])
 		restore_params->skip_external_dirs = skip_external_dirs;
 		restore_params->partial_db_list = NULL;
 		restore_params->partial_restore_type = NONE;
+		restore_params->primary_conninfo = primary_conninfo;
 
 		/* handle partial restore parameters */
 		if (datname_exclude_list && datname_include_list)
@@ -746,12 +773,12 @@ main(int argc, char *argv[])
 					elog(ERROR, "required parameter not specified: BACKUP_MODE "
 						 "(-b, --backup-mode)");
 
-				return do_backup(start_time, no_validate, set_backup_params);
+				return do_backup(start_time, no_validate, set_backup_params, no_sync);
 			}
 		case RESTORE_CMD:
 			return do_restore_or_validate(current.backup_id,
-							  recovery_target_options,
-							 restore_params);
+							recovery_target_options,
+							restore_params, no_sync);
 		case VALIDATE_CMD:
 			if (current.backup_id == 0 && target_time == 0 && target_xid == 0 && !target_lsn)
 			{
@@ -765,7 +792,8 @@ main(int argc, char *argv[])
 				/* PITR validation and, optionally, partial validation */
 				return do_restore_or_validate(current.backup_id,
 						  recovery_target_options,
-						  restore_params);
+						  restore_params,
+						  no_sync);
 		case SHOW_CMD:
 			return do_show(instance_name, current.backup_id, show_archive);
 		case DELETE_CMD:
@@ -851,7 +879,8 @@ compress_init(void)
 	{
 		if (instance_config.compress_level != COMPRESS_LEVEL_DEFAULT
 			&& instance_config.compress_alg == NOT_DEFINED_COMPRESS)
-			elog(ERROR, "Cannot specify compress-level option without compress-alg option");
+			elog(ERROR, "Cannot specify compress-level option alone without "
+												"compress-algorithm option");
 	}
 
 	if (instance_config.compress_level < 0 || instance_config.compress_level > 9)

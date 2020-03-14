@@ -209,7 +209,6 @@ static void
 do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purge_list)
 {
 	int			i;
-	time_t 		current_time;
 
 	parray *redundancy_full_backup_list = NULL;
 
@@ -220,9 +219,6 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 
 	/* For fancy reporting */
 	uint32		actual_window = 0;
-
-	/* Get current time */
-	current_time = time(NULL);
 
 	/* Calculate n_full_backups and days_threshold */
 	if (instance_config.retention_redundancy > 0)
@@ -486,14 +482,14 @@ do_retention_merge(parray *backup_list, parray *to_keep_list, parray *to_purge_l
 		 */
 
 		keep_backup_id = base36enc_dup(keep_backup->start_time);
-		elog(INFO, "Merge incremental chain between FULL backup %s and backup %s",
+		elog(INFO, "Merge incremental chain between full backup %s and backup %s",
 					base36enc(full_backup->start_time), keep_backup_id);
 		pg_free(keep_backup_id);
 
 		merge_list = parray_new();
 
 		/* Form up a merge list */
-		while(keep_backup->parent_backup_link)
+		while (keep_backup->parent_backup_link)
 		{
 			parray_append(merge_list, keep_backup);
 			keep_backup = keep_backup->parent_backup_link;
@@ -519,6 +515,19 @@ do_retention_merge(parray *backup_list, parray *to_keep_list, parray *to_purge_l
 		/* Lock merge chain */
 		catalog_lock_backup_list(merge_list, parray_num(merge_list) - 1, 0);
 
+		/* Consider this extreme case */
+		//  PAGEa1    PAGEb1   both valid
+		//      \     /
+		//        FULL
+
+		/* Check that FULL backup do not has multiple descendants
+		 * full_backup always point to current full_backup after merge
+		 */
+//		if (is_prolific(backup_list, full_backup))
+//		{
+//			elog(WARNING, "Backup %s has multiple valid descendants. "
+//					"Automatic merge is not possible.", base36enc(full_backup->start_time));
+//		}
 
 		/* Merge list example:
 		 * 0 PAGE3
@@ -526,37 +535,25 @@ do_retention_merge(parray *backup_list, parray *to_keep_list, parray *to_purge_l
 		 * 2 PAGE1
 		 * 3 FULL
 		 *
-		 * Consequentially merge incremental backups from PAGE1 to PAGE3
-		 * into FULL.
+		 * Merge incremental chain from PAGE3 into FULL.
 		 */
+
+		keep_backup = parray_get(merge_list, 0);
+		merge_chain(merge_list, full_backup, keep_backup);
+		backup_merged = true;
 
 		for (j = parray_num(merge_list) - 2; j >= 0; j--)
 		{
-			pgBackup   *from_backup = (pgBackup *) parray_get(merge_list, j);
-
-
-			/* Consider this extreme case */
-			//  PAGEa1    PAGEb1   both valid
-			//      \     /
-			//        FULL
-
-			/* Check that FULL backup do not has multiple descendants
-			 * full_backup always point to current full_backup after merge
-			 */
-			if (is_prolific(backup_list, full_backup))
-			{
-				elog(WARNING, "Backup %s has multiple valid descendants. "
-						"Automatic merge is not possible.", base36enc(full_backup->start_time));
-				break;
-			}
-
-			merge_backups(full_backup, from_backup);
-			backup_merged = true;
+			pgBackup   *tmp_backup = (pgBackup *) parray_get(merge_list, j);
 
 			/* Try to remove merged incremental backup from both keep and purge lists */
-			parray_rm(to_purge_list, from_backup, pgBackupCompareId);
+			parray_rm(to_purge_list, tmp_backup, pgBackupCompareId);
 			parray_set(to_keep_list, i, NULL);
 		}
+
+		pgBackupValidate(full_backup, NULL);
+		if (full_backup->status == BACKUP_STATUS_CORRUPT)
+			elog(ERROR, "Merging of backup %s failed", base36enc(full_backup->start_time));
 
 		/* Cleanup */
 		parray_free(merge_list);
@@ -728,10 +725,10 @@ void
 delete_backup_files(pgBackup *backup)
 {
 	size_t		i;
-	char		path[MAXPGPATH];
 	char		timestamp[100];
-	parray	   *files;
+	parray		*files;
 	size_t		num_files;
+	char		full_path[MAXPGPATH];
 
 	/*
 	 * If the backup was deleted already, there is nothing to do.
@@ -756,8 +753,7 @@ delete_backup_files(pgBackup *backup)
 
 	/* list files to be deleted */
 	files = parray_new();
-	pgBackupGetPath(backup, path, lengthof(path), NULL);
-	dir_list_file(files, path, false, true, true, 0, FIO_BACKUP_HOST);
+	dir_list_file(files, backup->root_dir, false, true, true, 0, FIO_BACKUP_HOST);
 
 	/* delete leaf node first */
 	parray_qsort(files, pgFileComparePathDesc);
@@ -766,14 +762,16 @@ delete_backup_files(pgBackup *backup)
 	{
 		pgFile	   *file = (pgFile *) parray_get(files, i);
 
-		if (progress)
-			elog(INFO, "Progress: (%zd/%zd). Process file \"%s\"",
-				 i + 1, num_files, file->path);
+		join_path_components(full_path, backup->root_dir, file->rel_path);
 
 		if (interrupted)
 			elog(ERROR, "interrupted during delete backup");
 
-		pgFileDelete(file);
+		if (progress)
+			elog(INFO, "Progress: (%zd/%zd). Delete file \"%s\"",
+				 i + 1, num_files, full_path);
+
+		pgFileDelete(file, full_path);
 	}
 
 	parray_walk(files, pgFileFree);
@@ -810,9 +808,8 @@ delete_walfiles_in_tli(XLogRecPtr keep_lsn, timelineInfo *tlinfo,
 {
 	XLogSegNo   FirstToDeleteSegNo;
 	XLogSegNo   OldestToKeepSegNo = 0;
-	char 		first_to_del_str[20];
-	char 		oldest_to_keep_str[20];
-	int			rc;
+	char 		first_to_del_str[MAXFNAMELEN];
+	char 		oldest_to_keep_str[MAXFNAMELEN];
 	int			i;
 	size_t		wal_size_logical = 0;
 	size_t		wal_size_actual = 0;
@@ -846,8 +843,8 @@ delete_walfiles_in_tli(XLogRecPtr keep_lsn, timelineInfo *tlinfo,
 	if (OldestToKeepSegNo > 0 && OldestToKeepSegNo > FirstToDeleteSegNo)
 	{
 		/* translate segno number into human readable format */
-		GetXLogSegName(first_to_del_str, FirstToDeleteSegNo, xlog_seg_size);
-		GetXLogSegName(oldest_to_keep_str, OldestToKeepSegNo, xlog_seg_size);
+		GetXLogFileName(first_to_del_str, tlinfo->tli, FirstToDeleteSegNo, xlog_seg_size);
+		GetXLogFileName(oldest_to_keep_str, tlinfo->tli, OldestToKeepSegNo, xlog_seg_size);
 
 		elog(INFO, "On timeline %i WAL segments between %s and %s %s be removed",
 					 tlinfo->tli, first_to_del_str,
@@ -874,8 +871,8 @@ delete_walfiles_in_tli(XLogRecPtr keep_lsn, timelineInfo *tlinfo,
 
 		if (FirstToDeleteSegNo > 0 && OldestToKeepSegNo > 0)
 		{
-			GetXLogSegName(first_to_del_str, FirstToDeleteSegNo, xlog_seg_size);
-			GetXLogSegName(oldest_to_keep_str, OldestToKeepSegNo, xlog_seg_size);
+			GetXLogFileName(first_to_del_str, tlinfo->tli, FirstToDeleteSegNo, xlog_seg_size);
+			GetXLogFileName(oldest_to_keep_str, tlinfo->tli, OldestToKeepSegNo, xlog_seg_size);
 
 			elog(LOG, "On timeline %i first segment %s is greater than oldest segment to keep %s",
 					tlinfo->tli, first_to_del_str, oldest_to_keep_str);
@@ -937,8 +934,7 @@ delete_walfiles_in_tli(XLogRecPtr keep_lsn, timelineInfo *tlinfo,
 			}
 
 			/* unlink segment */
-			rc = unlink(wal_file->file.path);
-			if (rc < 0)
+			if (fio_unlink(wal_file->file.path, FIO_BACKUP_HOST) < 0)
 			{
 				/* Missing file is not considered as error condition */
 				if (errno != ENOENT)

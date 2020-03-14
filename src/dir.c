@@ -181,6 +181,7 @@ pgFileNew(const char *path, const char *rel_path, bool follow_symlink,
 	file = pgFileInit(path, rel_path);
 	file->size = st.st_size;
 	file->mode = st.st_mode;
+	file->mtime = st.st_mtime;
 	file->external_dir_num = external_dir_num;
 
 	return file;
@@ -226,62 +227,64 @@ pgFileInit(const char *path, const char *rel_path)
  * If the pgFile points directory, the directory must be empty.
  */
 void
-pgFileDelete(pgFile *file)
+pgFileDelete(pgFile *file, const char *full_path)
 {
 	if (S_ISDIR(file->mode))
 	{
-		if (rmdir(file->path) == -1)
+		if (rmdir(full_path) == -1)
 		{
 			if (errno == ENOENT)
 				return;
 			else if (errno == ENOTDIR)	/* could be symbolic link */
 				goto delete_file;
 
-			elog(ERROR, "cannot remove directory \"%s\": %s",
-				file->path, strerror(errno));
+			elog(ERROR, "Cannot remove directory \"%s\": %s",
+				full_path, strerror(errno));
 		}
 		return;
 	}
 
 delete_file:
-	if (remove(file->path) == -1)
+	if (remove(full_path) == -1)
 	{
 		if (errno == ENOENT)
 			return;
-		elog(ERROR, "cannot remove file \"%s\": %s", file->path,
+		elog(ERROR, "Cannot remove file \"%s\": %s", full_path,
 			strerror(errno));
 	}
 }
 
 /*
- * Read the file to compute its CRC.
- * As a handy side effect, we return filesize via bytes_read parameter.
+ * Read the local file to compute its CRC.
+ * We cannot make decision about file decompression because
+ * user may ask to backup already compressed files and we should be
+ * obvious about it.
  */
 pg_crc32
-pgFileGetCRC(const char *file_path, bool use_crc32c, bool raise_on_deleted,
-			 size_t *bytes_read, fio_location location)
+pgFileGetCRC(const char *file_path, bool use_crc32c, bool missing_ok)
 {
 	FILE	   *fp;
 	pg_crc32	crc = 0;
-	char		buf[1024];
+	char		buf[STDIO_BUFSIZE];
 	size_t		len = 0;
-	size_t		total = 0;
-	int			errno_tmp;
 
 	INIT_FILE_CRC32(use_crc32c, crc);
 
 	/* open file in binary read mode */
-	fp = fio_fopen(file_path, PG_BINARY_R, location);
+	fp = fopen(file_path, PG_BINARY_R);
 	if (fp == NULL)
 	{
-		if (!raise_on_deleted && errno == ENOENT)
+		if (errno == ENOENT)
 		{
-			FIN_FILE_CRC32(use_crc32c, crc);
-			return crc;
+			if (missing_ok)
+			{
+				FIN_FILE_CRC32(use_crc32c, crc);
+				return crc;
+			}
 		}
-		else
-			elog(ERROR, "cannot open file \"%s\": %s",
-				file_path, strerror(errno));
+
+		elog(ERROR, "Cannot open file \"%s\": %s",
+			file_path, strerror(errno));
 	}
 
 	/* calc CRC of file */
@@ -290,24 +293,24 @@ pgFileGetCRC(const char *file_path, bool use_crc32c, bool raise_on_deleted,
 		if (interrupted)
 			elog(ERROR, "interrupted during CRC calculation");
 
-		len = fio_fread(fp, buf, sizeof(buf));
-		if(len == 0)
-			break;
+		len = fread(&buf, 1, sizeof(buf), fp);
+
+		if (len == 0)
+		{
+			/* we either run into eof or error */
+			if (feof(fp))
+				break;
+
+			if (ferror(fp))
+				elog(ERROR, "Cannot read \"%s\": %s", file_path, strerror(errno));
+		}
+
 		/* update CRC */
 		COMP_FILE_CRC32(use_crc32c, crc, buf, len);
-		total += len;
 	}
 
-	if (bytes_read)
-		*bytes_read = total;
-
-	errno_tmp = errno;
-	if (len < 0)
-		elog(WARNING, "cannot read \"%s\": %s", file_path,
-			strerror(errno_tmp));
-
 	FIN_FILE_CRC32(use_crc32c, crc);
-	fio_fclose(fp);
+	fclose(fp);
 
 	return crc;
 }
@@ -339,6 +342,16 @@ pgFileComparePath(const void *f1, const void *f2)
 {
 	pgFile *f1p = *(pgFile **)f1;
 	pgFile *f2p = *(pgFile **)f2;
+
+	return strcmp(f1p->path, f2p->path);
+}
+
+/* Compare two pgFile with their path in ascending order of ASCII code. */
+int
+pgFileMapComparePath(const void *f1, const void *f2)
+{
+	page_map_entry *f1p = *(page_map_entry **)f1;
+	page_map_entry *f2p = *(page_map_entry **)f2;
 
 	return strcmp(f1p->path, f2p->path);
 }
@@ -677,6 +690,13 @@ dir_check_file(pgFile *file)
 	{
 		if (strcmp(file->name, "pg_internal.init") == 0)
 			return CHECK_FALSE;
+		/* Do not backup ptrack2.x map files */
+		else if (strcmp(file->name, "ptrack.map") == 0)
+			return CHECK_FALSE;
+		else if (strcmp(file->name, "ptrack.map.mmap") == 0)
+			return CHECK_FALSE;
+		else if (strcmp(file->name, "ptrack.map.tmp") == 0)
+			return CHECK_FALSE;
 		/* Do not backup temp files */
 		else if (file->name[0] == 't' && isdigit(file->name[1]))
 			return CHECK_FALSE;
@@ -734,7 +754,7 @@ dir_list_file_internal(parray *files, pgFile *parent, bool exclude,
 					   bool follow_symlink,
 					   int external_dir_num, fio_location location)
 {
-	DIR		    *dir;
+	DIR			  *dir;
 	struct dirent *dent;
 
 	if (!S_ISDIR(parent->mode))
@@ -1133,7 +1153,7 @@ read_tablespace_map(parray *files, const char *backup_dir)
 void
 check_tablespace_mapping(pgBackup *backup)
 {
-	char		this_backup_path[MAXPGPATH];
+//	char		this_backup_path[MAXPGPATH];
 	parray	   *links;
 	size_t		i;
 	TablespaceListCell *cell;
@@ -1141,8 +1161,8 @@ check_tablespace_mapping(pgBackup *backup)
 
 	links = parray_new();
 
-	pgBackupGetPath(backup, this_backup_path, lengthof(this_backup_path), NULL);
-	read_tablespace_map(links, this_backup_path);
+//	pgBackupGetPath(backup, this_backup_path, lengthof(this_backup_path), NULL);
+	read_tablespace_map(links, backup->root_dir);
 	/* Sort links by the path of a linked file*/
 	parray_qsort(links, pgFileCompareLinked);
 
@@ -1626,8 +1646,7 @@ free_dir_list(parray *list)
 
 /* Append to string "path_prefix" int "dir_num" */
 void
-makeExternalDirPathByNum(char *ret_path, const char *path_prefix,
-						 const int dir_num)
+makeExternalDirPathByNum(char *ret_path, const char *path_prefix, const int dir_num)
 {
 	sprintf(ret_path, "%s%d", path_prefix, dir_num);
 }
@@ -1671,15 +1690,15 @@ write_database_map(pgBackup *backup, parray *database_map, parray *backup_files_
 {
 	FILE		*fp;
 	pgFile		*file;
-	char		path[MAXPGPATH];
+	char		database_dir[MAXPGPATH];
 	char		database_map_path[MAXPGPATH];
 
-	pgBackupGetPath(backup, path, lengthof(path), DATABASE_DIR);
-	join_path_components(database_map_path, path, DATABASE_MAP);
+	join_path_components(database_dir, backup->root_dir, DATABASE_DIR);
+	join_path_components(database_map_path, database_dir, DATABASE_MAP);
 
 	fp = fio_fopen(database_map_path, PG_BINARY_W, FIO_BACKUP_HOST);
 	if (fp == NULL)
-		elog(ERROR, "Cannot open database map \"%s\": %s", path,
+		elog(ERROR, "Cannot open database map \"%s\": %s", database_map_path,
 			 strerror(errno));
 
 	print_database_map(fp, database_map);
@@ -1694,10 +1713,10 @@ write_database_map(pgBackup *backup, parray *database_map, parray *backup_files_
 	file = pgFileNew(database_map_path, DATABASE_MAP, true, 0,
 								 FIO_BACKUP_HOST);
 	pfree(file->path);
-	file->path = strdup(DATABASE_MAP);
-	file->crc = pgFileGetCRC(database_map_path, true, false,
-							 &file->read_size, FIO_BACKUP_HOST);
-	file->write_size = file->read_size;
+	file->path = pgut_strdup(DATABASE_MAP);
+	file->crc = pgFileGetCRC(database_map_path, true, false);
+
+	file->write_size = file->size;
 	file->uncompressed_size = file->read_size;
 	parray_append(backup_files_list, file);
 }
@@ -1714,7 +1733,8 @@ read_database_map(pgBackup *backup)
 	char		path[MAXPGPATH];
 	char		database_map_path[MAXPGPATH];
 
-	pgBackupGetPath(backup, path, lengthof(path), DATABASE_DIR);
+//	pgBackupGetPath(backup, path, lengthof(path), DATABASE_DIR);
+	join_path_components(path, backup->root_dir, DATABASE_DIR);
 	join_path_components(database_map_path, path, DATABASE_MAP);
 
 	fp = fio_open_stream(database_map_path, FIO_BACKUP_HOST);

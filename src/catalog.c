@@ -127,7 +127,7 @@ lock_backup(pgBackup *backup)
 	pid_t		my_pid,
 				my_p_pid;
 
-	pgBackupGetPath(backup, lock_file, lengthof(lock_file), BACKUP_CATALOG_PID);
+	join_path_components(lock_file, backup->root_dir, BACKUP_CATALOG_PID);
 
 	/*
 	 * If the PID in the lockfile is our own PID or our parent's or
@@ -444,6 +444,9 @@ catalog_get_backup_list(const char *instance_name, time_t requested_backup_id)
 				 base36enc(backup->start_time), backup_conf_path);
 		}
 
+		backup->root_dir = pgut_strdup(data_path);
+
+		/* TODO: save encoded backup id */
 		backup->backup_id = backup->start_time;
 		if (requested_backup_id != INVALID_BACKUP_ID
 			&& requested_backup_id != backup->start_time)
@@ -671,6 +674,7 @@ pgBackupCreateDir(pgBackup *backup)
 		elog(ERROR, "backup destination is not empty \"%s\"", path);
 
 	fio_mkdir(path, DIR_PERMISSION, FIO_BACKUP_HOST);
+	backup->root_dir = pgut_strdup(path);
 
 	/* create directories for actual backup files */
 	for (i = 0; i < parray_num(subdirs); i++)
@@ -697,8 +701,8 @@ catalog_get_timelines(InstanceConfig *instance)
 	char		arclog_path[MAXPGPATH];
 
 	/* for fancy reporting */
-	char begin_segno_str[20];
-	char end_segno_str[20];
+	char begin_segno_str[MAXFNAMELEN];
+	char end_segno_str[MAXFNAMELEN];
 
 	/* read all xlog files that belong to this archive */
 	sprintf(arclog_path, "%s/%s/%s", backup_path, "wal", instance->name);
@@ -716,7 +720,10 @@ catalog_get_timelines(InstanceConfig *instance)
 		parray *timelines;
 		xlogFile *wal_file = NULL;
 
-		/* regular WAL file */
+		/*
+		 * Regular WAL file.
+		 * IsXLogFileName() cannot be used here
+		 */
 		if (strspn(file->name, "0123456789ABCDEF") == XLOG_FNAME_LEN)
 		{
 			int result = 0;
@@ -988,15 +995,28 @@ catalog_get_timelines(InstanceConfig *instance)
 			{
 				pgBackup *backup = parray_get(tlinfo->backups, j);
 
+				/* sanity */
+				if (XLogRecPtrIsInvalid(backup->start_lsn) ||
+					backup->tli <= 0)
+					continue;
+
 				/* skip invalid backups */
 				if (backup->status != BACKUP_STATUS_OK &&
 					backup->status != BACKUP_STATUS_DONE)
 					continue;
 
-				/* sanity */
-				if (XLogRecPtrIsInvalid(backup->start_lsn) ||
-					backup->tli <= 0)
+				/*
+				 * Pinned backups should be ignored for the
+				 * purpose of retention fulfillment, so skip them.
+				 */
+				if (backup->expire_time > 0 &&
+					backup->expire_time > current_time)
+				{
+					elog(LOG, "Pinned backup %s is ignored for the "
+							"purpose of WAL retention",
+						base36enc(backup->start_time));
 					continue;
+				}
 
 				count++;
 
@@ -1119,8 +1139,8 @@ catalog_get_timelines(InstanceConfig *instance)
 				 * covered by other larger interval.
 				 */
 
-				GetXLogSegName(begin_segno_str, interval->begin_segno, instance->xlog_seg_size);
-				GetXLogSegName(end_segno_str, interval->end_segno, instance->xlog_seg_size);
+				GetXLogFileName(begin_segno_str, tlinfo->tli, interval->begin_segno, instance->xlog_seg_size);
+				GetXLogFileName(end_segno_str, tlinfo->tli, interval->end_segno, instance->xlog_seg_size);
 
 				elog(LOG, "Timeline %i to stay reachable from timeline %i "
 								"protect from purge WAL interval between "
@@ -1174,8 +1194,8 @@ catalog_get_timelines(InstanceConfig *instance)
 			else
 				interval->end_segno = segno;
 
-			GetXLogSegName(begin_segno_str, interval->begin_segno, instance->xlog_seg_size);
-			GetXLogSegName(end_segno_str, interval->end_segno, instance->xlog_seg_size);
+			GetXLogFileName(begin_segno_str, tlinfo->tli, interval->begin_segno, instance->xlog_seg_size);
+			GetXLogFileName(end_segno_str, tlinfo->tli, interval->end_segno, instance->xlog_seg_size);
 
 			elog(LOG, "Archive backup %s to stay consistent "
 							"protect from purge WAL interval "
@@ -1472,6 +1492,9 @@ pgBackupWriteControl(FILE *out, pgBackup *backup)
 		fio_fprintf(out, "expire-time = '%s'\n", timestamp);
 	}
 
+	if (backup->merge_dest_backup != 0)
+		fio_fprintf(out, "merge-dest-id = '%s'\n", base36enc(backup->merge_dest_backup));
+
 	/*
 	 * Size of PGDATA directory. The size does not include size of related
 	 * WAL segments in archive 'wal' directory.
@@ -1553,8 +1576,8 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 	char		path_temp[MAXPGPATH];
 	int			errno_temp;
 	size_t		i = 0;
-	#define BUFFERSZ BLCKSZ*500
-	char		buf[BUFFERSZ];
+	#define BUFFERSZ 1024*1024
+	char		*buf;
 	size_t		write_len = 0;
 	int64 		backup_size_on_disk = 0;
 	int64 		uncompressed_size_on_disk = 0;
@@ -1567,6 +1590,8 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 	if (out == NULL)
 		elog(ERROR, "Cannot open file list \"%s\": %s", path_temp,
 			 strerror(errno));
+
+	buf = pgut_malloc(BUFFERSZ);
 
 	/* print each file in the list */
 	while(i < parray_num(files))
@@ -1678,8 +1703,12 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 
 	/* use extra variable to avoid reset of previous data_bytes value in case of error */
 	backup->data_bytes = backup_size_on_disk;
-	backup->wal_bytes = wal_size_on_disk;
 	backup->uncompressed_bytes = uncompressed_size_on_disk;
+
+	if (backup->stream)
+		backup->wal_bytes = wal_size_on_disk;
+
+	free(buf);
 }
 
 /*
@@ -1696,6 +1725,7 @@ readBackupControlFile(const char *path)
 	char	   *stop_lsn = NULL;
 	char	   *status = NULL;
 	char	   *parent_backup = NULL;
+	char	   *merge_dest_backup = NULL;
 	char	   *program_version = NULL;
 	char	   *server_version = NULL;
 	char	   *compress_alg = NULL;
@@ -1725,6 +1755,7 @@ readBackupControlFile(const char *path)
 		{'b', 0, "stream",				&backup->stream, SOURCE_FILE_STRICT},
 		{'s', 0, "status",				&status, SOURCE_FILE_STRICT},
 		{'s', 0, "parent-backup-id",	&parent_backup, SOURCE_FILE_STRICT},
+		{'s', 0, "merge-dest-id",		&merge_dest_backup, SOURCE_FILE_STRICT},
 		{'s', 0, "compress-alg",		&compress_alg, SOURCE_FILE_STRICT},
 		{'u', 0, "compress-level",		&backup->compress_level, SOURCE_FILE_STRICT},
 		{'b', 0, "from-replica",		&backup->from_replica, SOURCE_FILE_STRICT},
@@ -1797,6 +1828,8 @@ readBackupControlFile(const char *path)
 			backup->status = BACKUP_STATUS_RUNNING;
 		else if (strcmp(status, "MERGING") == 0)
 			backup->status = BACKUP_STATUS_MERGING;
+		else if (strcmp(status, "MERGED") == 0)
+			backup->status = BACKUP_STATUS_MERGED;
 		else if (strcmp(status, "DELETING") == 0)
 			backup->status = BACKUP_STATUS_DELETING;
 		else if (strcmp(status, "DELETED") == 0)
@@ -1816,6 +1849,12 @@ readBackupControlFile(const char *path)
 	{
 		backup->parent_backup = base36dec(parent_backup);
 		free(parent_backup);
+	}
+
+	if (merge_dest_backup)
+	{
+		backup->merge_dest_backup = base36dec(merge_dest_backup);
+		free(merge_dest_backup);
 	}
 
 	if (program_version)
@@ -1940,6 +1979,10 @@ pgNodeInit(PGNodeInfo *node)
 
 	node->server_version = 0;
 	node->server_version_str[0] = '\0';
+
+	node->ptrack_version_num = 0;
+	node->is_ptrack_enable = false;
+	node->ptrack_schema = NULL;
 }
 
 /*
@@ -1976,11 +2019,14 @@ pgBackupInit(pgBackup *backup)
 	backup->stream = false;
 	backup->from_replica = false;
 	backup->parent_backup = INVALID_BACKUP_ID;
+	backup->merge_dest_backup = INVALID_BACKUP_ID;
 	backup->parent_backup_link = NULL;
 	backup->primary_conninfo = NULL;
 	backup->program_version[0] = '\0';
 	backup->server_version[0] = '\0';
 	backup->external_dir_str = NULL;
+	backup->root_dir = NULL;
+	backup->files = NULL;
 }
 
 /* free pgBackup object */
@@ -1991,6 +2037,7 @@ pgBackupFree(void *backup)
 
 	pfree(b->primary_conninfo);
 	pfree(b->external_dir_str);
+	pfree(b->root_dir);
 	pfree(backup);
 }
 

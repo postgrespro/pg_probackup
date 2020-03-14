@@ -10,7 +10,7 @@ import shutil
 module_name = 'page'
 
 
-class PageBackupTest(ProbackupTest, unittest.TestCase):
+class PageTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     def test_basic_page_vacuum_truncate(self):
@@ -54,6 +54,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
 
         self.backup_node(backup_dir, 'node', node)
 
+        # TODO: make it dynamic
         node.safe_psql(
             "postgres",
             "delete from t_heap where ctid >= '(11,0)'")
@@ -97,6 +98,80 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
             "select * from t_heap")
 
         self.assertEqual(result1, result2)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_page_vacuum_truncate_1(self):
+        """
+        make node, create table, take full backup,
+        delete all data, vacuum relation,
+        take page backup, insert some data,
+        take second page backup and check data correctness
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={'autovacuum': 'off'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        node.safe_psql(
+            "postgres",
+            "create sequence t_seq; "
+            "create table t_heap as select i as id, "
+            "md5(i::text) as text, "
+            "md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(0,1024) i")
+
+        node.safe_psql(
+            "postgres",
+            "vacuum t_heap")
+
+        self.backup_node(backup_dir, 'node', node)
+
+        node.safe_psql(
+            "postgres",
+            "delete from t_heap")
+
+        node.safe_psql(
+            "postgres",
+            "vacuum t_heap")
+
+        self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        node.safe_psql(
+            "postgres",
+            "insert into t_heap select i as id, "
+            "md5(i::text) as text, "
+            "md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(0,1) i")
+
+        self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        pgdata = self.pgdata_content(node.data_dir)
+
+        node_restored = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node_restored'))
+        node_restored.cleanup()
+
+        self.restore_node(backup_dir, 'node', node_restored)
+
+        # Physical comparison
+        pgdata_restored = self.pgdata_content(node_restored.data_dir)
+        self.compare_pgdata(pgdata, pgdata_restored)
+
+        self.set_auto_conf(node_restored, {'port': node_restored.port})
+        node_restored.slow_start()
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -316,13 +391,12 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
         # PGBENCH STUFF
         pgbench = node.pgbench(options=['-T', '50', '-c', '1', '--no-vacuum'])
         pgbench.wait()
-        node.safe_psql("postgres", "checkpoint")
 
         # GET LOGICAL CONTENT FROM NODE
         result = node.safe_psql("postgres", "select * from pgbench_accounts")
         # PAGE BACKUP
-        self.backup_node(
-            backup_dir, 'node', node, backup_type='page')
+        self.backup_node(backup_dir, 'node', node, backup_type='page')
+
         # GET PHYSICAL CONTENT FROM NODE
         pgdata = self.pgdata_content(node.data_dir)
 
@@ -389,18 +463,15 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
             "postgres",
             "create table t_heap tablespace somedata as select i as id,"
             " md5(i::text) as text, md5(i::text)::tsvector as tsvector"
-            " from generate_series(0,100) i"
-        )
+            " from generate_series(0,100) i")
 
         node.safe_psql(
             "postgres",
-            "delete from t_heap"
-        )
+            "delete from t_heap")
 
         node.safe_psql(
             "postgres",
-            "vacuum t_heap"
-        )
+            "vacuum t_heap")
 
         # PAGE BACKUP
         self.backup_node(
@@ -410,8 +481,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
 
         # RESTORE
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored')
-        )
+            base_dir=os.path.join(module_name, fname, 'node_restored'))
         node_restored.cleanup()
 
         self.restore_node(
@@ -1047,8 +1117,7 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
 
         # RESTORE
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored')
-        )
+            base_dir=os.path.join(module_name, fname, 'node_restored'))
 
         node_restored.cleanup()
         self.restore_node(
@@ -1108,6 +1177,110 @@ class PageBackupTest(ProbackupTest, unittest.TestCase):
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd)
             )
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    @unittest.skip("skip")
+    # @unittest.expectedFailure
+    def test_page_pg_resetxlog(self):
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'autovacuum': 'off',
+                'shared_buffers': '512MB',
+                'max_wal_size': '3GB'})
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # Create table
+        node.safe_psql(
+            "postgres",
+            "create extension bloom; create sequence t_seq; "
+            "create table t_heap "
+            "as select nextval('t_seq')::int as id, md5(i::text) as text, "
+            "md5(repeat(i::text,10))::tsvector as tsvector "
+#            "from generate_series(0,25600) i")
+            "from generate_series(0,2560) i")
+
+        self.backup_node(backup_dir, 'node', node)
+
+        node.safe_psql(
+            'postgres',
+            "update t_heap set id = nextval('t_seq'), text = md5(text), "
+            "tsvector = md5(repeat(tsvector::text, 10))::tsvector")
+
+        self.switch_wal_segment(node)
+
+        # kill the bastard
+        if self.verbose:
+            print('Killing postmaster. Losing Ptrack changes')
+        node.stop(['-m', 'immediate', '-D', node.data_dir])
+
+        # now smack it with sledgehammer
+        if node.major_version >= 10:
+            pg_resetxlog_path = self.get_bin_path('pg_resetwal')
+            wal_dir = 'pg_wal'
+        else:
+            pg_resetxlog_path = self.get_bin_path('pg_resetxlog')
+            wal_dir = 'pg_xlog'
+
+        self.run_binary(
+            [
+                pg_resetxlog_path,
+                '-D',
+                node.data_dir,
+                '-o 42',
+                '-f'
+            ],
+            asynchronous=False)
+
+        if not node.status():
+            node.slow_start()
+        else:
+            print("Die! Die! Why won't you die?... Why won't you die?")
+            exit(1)
+
+        # take ptrack backup
+#        self.backup_node(
+#                backup_dir, 'node', node,
+#                backup_type='page', options=['--stream'])
+
+        try:
+            self.backup_node(
+                backup_dir, 'node', node, backup_type='page')
+            # we should die here because exception is what we expect to happen
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because instance was brutalized by pg_resetxlog"
+                "\n Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd)
+            )
+        except ProbackupException as e:
+            self.assertIn(
+                'Insert error message',
+                e.message,
+                '\n Unexpected Error Message: {0}\n'
+                ' CMD: {1}'.format(repr(e.message), self.cmd))
+
+#        pgdata = self.pgdata_content(node.data_dir)
+#
+#        node_restored = self.make_simple_node(
+#            base_dir=os.path.join(module_name, fname, 'node_restored'))
+#        node_restored.cleanup()
+#
+#        self.restore_node(
+#            backup_dir, 'node', node_restored)
+#
+#        pgdata_restored = self.pgdata_content(node_restored.data_dir)
+#        self.compare_pgdata(pgdata, pgdata_restored)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)

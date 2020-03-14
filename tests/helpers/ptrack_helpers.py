@@ -311,6 +311,7 @@ class ProbackupTest(object):
             self,
             base_dir=None,
             set_replication=False,
+            ptrack_enable=False,
             initdb_params=[],
             pg_options={}):
 
@@ -324,6 +325,10 @@ class ProbackupTest(object):
         node.should_rm_dirs = True
         node.init(
            initdb_params=initdb_params, allow_streaming=set_replication)
+
+        # set major version
+        with open(os.path.join(node.data_dir, 'PG_VERSION')) as f:
+            node.major_version = str(f.read().rstrip())
 
         # Sane default parameters
         options = {}
@@ -345,15 +350,17 @@ class ProbackupTest(object):
         if set_replication:
             options['max_wal_senders'] = 10
 
+        if ptrack_enable:
+            if node.major_version > 11:
+                options['ptrack_map_size'] = '128MB'
+            else:
+                options['ptrack_enable'] = 'on'
+
         # set default values
         self.set_auto_conf(node, options)
 
         # Apply given parameters
         self.set_auto_conf(node, pg_options)
-
-        # set major version
-        with open(os.path.join(node.data_dir, 'PG_VERSION')) as f:
-            node.major_version = f.read().rstrip()
 
         return node
 
@@ -481,6 +488,31 @@ class ProbackupTest(object):
 
         os.close(file)
         return ptrack_bits_for_fork
+
+    def check_ptrack_map_sanity(self, node, idx_ptrack):
+        if node.major_version >= 12:
+            return
+
+        success = True
+        for i in idx_ptrack:
+            # get new size of heap and indexes. size calculated in pages
+            idx_ptrack[i]['new_size'] = self.get_fork_size(node, i)
+            # update path to heap and index files in case they`ve changed
+            idx_ptrack[i]['path'] = self.get_fork_path(node, i)
+            # calculate new md5sums for pages
+            idx_ptrack[i]['new_pages'] = self.get_md5_per_page_for_fork(
+                idx_ptrack[i]['path'], idx_ptrack[i]['new_size'])
+            # get ptrack for every idx
+            idx_ptrack[i]['ptrack'] = self.get_ptrack_bits_per_page_for_fork(
+                node, idx_ptrack[i]['path'],
+                [idx_ptrack[i]['old_size'], idx_ptrack[i]['new_size']])
+
+            # compare pages and check ptrack sanity
+            if not self.check_ptrack_sanity(idx_ptrack[i]):
+                success = False
+
+        self.assertTrue(
+            success, 'Ptrack has failed to register changes in data files')
 
     def check_ptrack_sanity(self, idx_dict):
         success = True
@@ -801,6 +833,9 @@ class ProbackupTest(object):
         if backup_type:
             cmd_list += ['-b', backup_type]
 
+        if not old_binary:
+            cmd_list += ['--no-sync']
+
         return self.run_pb(cmd_list + options, asynchronous, gdb, old_binary, return_id)
 
     def checkdb_node(
@@ -856,6 +891,9 @@ class ProbackupTest(object):
 
         if backup_id:
             cmd_list += ['-i', backup_id]
+
+        if not old_binary:
+            cmd_list += ['--no-sync']
 
         return self.run_pb(cmd_list + options, old_binary=old_binary)
 
@@ -1157,10 +1195,10 @@ class ProbackupTest(object):
 
         return restore_command
 
-    def set_auto_conf(self, node, options):
+    def set_auto_conf(self, node, options, config='postgresql.auto.conf'):
 
         # parse postgresql.auto.conf
-        path = os.path.join(node.data_dir, 'postgresql.auto.conf')
+        path = os.path.join(node.data_dir, config)
 
         with open(path, 'r') as f:
             raw_content = f.read()
@@ -1220,11 +1258,18 @@ class ProbackupTest(object):
                 f.flush()
                 f.close()
 
+            config = 'postgresql.auto.conf'
+            probackup_recovery_path = os.path.join(replica.data_dir, 'probackup_recovery.conf')
+            if os.path.exists(probackup_recovery_path):
+                if os.stat(probackup_recovery_path).st_size > 0:
+                    config = 'probackup_recovery.conf'
+
             self.set_auto_conf(
                 replica,
                 {'primary_conninfo': 'user={0} port={1} application_name={2} '
                 ' sslmode=prefer sslcompression=1'.format(
-                    self.user, master.port, replica_name)})
+                    self.user, master.port, replica_name)},
+                config)
         else:
             replica.append_conf('recovery.conf', 'standby_mode = on')
             replica.append_conf(
@@ -1401,7 +1446,7 @@ class ProbackupTest(object):
             'backup_label', 'tablespace_map', 'recovery.conf',
             'ptrack_control', 'ptrack_init', 'pg_control',
             'probackup_recovery.conf', 'recovery.signal',
-            'standby.signal'
+            'standby.signal', 'ptrack.map', 'ptrack.map.mmap'
         ]
 
         if exclude_dirs:

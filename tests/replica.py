@@ -23,23 +23,27 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         if not self.ptrack:
             return unittest.skip('Skipped because ptrack support is disabled')
 
+        if self.pg_config_version > self.version_to_num('9.6.0'):
+            return unittest.skip(
+                'Skipped because backup from replica is not supported in PG 9.5')
+
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         master = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'master'),
             set_replication=True,
-            initdb_params=['--data-checksums'],
-            pg_options={
-                'ptrack_enable': 'on'})
+            ptrack_enable=True,
+            initdb_params=['--data-checksums'])
 
-        if self.get_version(master) < self.version_to_num('9.6.0'):
-            self.del_test_dir(module_name, fname)
-            return unittest.skip(
-                'Skipped because backup from replica is not supported in PG 9.5')
-
-        master.slow_start()
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'master', master)
+
+        master.slow_start()
+
+        if master.major_version >= 12:
+            master.safe_psql(
+                "postgres",
+                "CREATE EXTENSION ptrack")
 
         # CREATE TABLE
         master.psql(
@@ -407,7 +411,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
                 replica, {'recovery_min_apply_delay': '300s'})
         else:
             replica.append_conf(
-                'postgresql.auto.conf',
+                'recovery.conf',
                 'recovery_min_apply_delay = 300s')
 
         replica.stop()
@@ -426,6 +430,8 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'replica', replica,
             data_dir=replica.data_dir,
             backup_type='page', options=['--archive-timeout=60s'])
+
+        sleep(1)
 
         self.backup_node(
             backup_dir, 'replica', replica,
@@ -499,8 +505,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'replica', replica)
         self.set_archiving(backup_dir, 'replica', replica, replica=True)
         self.set_replica(
-            master, replica,
-            replica_name='replica', synchronous=True)
+            master, replica, replica_name='replica', synchronous=True)
 
         replica.slow_start(replica=True)
 
@@ -923,7 +928,8 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             pg_options={
                 'autovacuum': 'off',
                 'checkpoint_timeout': '1h',
-                'wal_level': 'replica'})
+                'wal_level': 'replica',
+                'shared_buffers': '128MB'})
 
         if self.get_version(master) < self.version_to_num('9.6.0'):
             self.del_test_dir(module_name, fname)
@@ -961,13 +967,13 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         self.switch_wal_segment(master)
         self.switch_wal_segment(master)
 
-        self.wait_until_replica_catch_with_master(master, replica)
-
         master.safe_psql(
             'postgres',
             'CREATE TABLE t1 AS '
             'SELECT i, repeat(md5(i::text),5006056) AS fat_attr '
             'FROM generate_series(0,10) i')
+
+        self.wait_until_replica_catch_with_master(master, replica)
 
         output = self.backup_node(
             backup_dir, 'replica', replica,

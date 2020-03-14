@@ -39,6 +39,8 @@ typedef struct
 	ConnectionArgs conn_arg;
 	/* number of thread for debugging */
 	int			thread_num;
+	/* pgdata path */
+	const char	*from_root;
 	/*
 	 * Return value from the thread:
 	 * 0 everything is ok
@@ -130,6 +132,7 @@ check_files(void *arg)
 	int			i;
 	check_files_arg *arguments = (check_files_arg *) arg;
 	int			n_files_list = 0;
+	char		from_fullpath[MAXPGPATH];
 
 	if (arguments->files_list)
 		n_files_list = parray_num(arguments->files_list);
@@ -137,49 +140,28 @@ check_files(void *arg)
 	/* check a file */
 	for (i = 0; i < n_files_list; i++)
 	{
-		int			ret;
-		struct stat	buf;
 		pgFile	   *file = (pgFile *) parray_get(arguments->files_list, i);
-
-		if (!pg_atomic_test_set_flag(&file->lock))
-			continue;
-
-		elog(VERBOSE, "Checking file:  \"%s\" ", file->path);
 
 		/* check for interrupt */
 		if (interrupted || thread_interrupted)
 			elog(ERROR, "interrupted during checkdb");
 
-		if (progress)
-			elog(INFO, "Progress: (%d/%d). Process file \"%s\"",
-				 i + 1, n_files_list, file->path);
-
-		/* stat file to check its current state */
-		ret = stat(file->path, &buf);
-		if (ret == -1)
-		{
-			if (errno == ENOENT)
-			{
-				/*
-				 * If file is not found, this is not en error.
-				 * It could have been deleted by concurrent postgres transaction.
-				 */
-				elog(LOG, "File \"%s\" is not found", file->path);
-				continue;
-			}
-			else
-			{
-				elog(ERROR,
-					"can't stat file to check \"%s\": %s",
-					file->path, strerror(errno));
-			}
-		}
-
 		/* No need to check directories */
-		if (S_ISDIR(buf.st_mode))
+		if (S_ISDIR(file->mode))
 			continue;
 
-		if (S_ISREG(buf.st_mode))
+		if (!pg_atomic_test_set_flag(&file->lock))
+			continue;
+
+		join_path_components(from_fullpath, arguments->from_root, file->rel_path);
+
+		elog(VERBOSE, "Checking file:  \"%s\" ", from_fullpath);
+
+		if (progress)
+			elog(INFO, "Progress: (%d/%d). Process file \"%s\"",
+				 i + 1, n_files_list, from_fullpath);
+
+		if (S_ISREG(file->mode))
 		{
 			/* check only uncompressed by cfs datafiles */
 			if (file->is_datafile && !file->is_cfs)
@@ -189,13 +171,14 @@ check_files(void *arg)
 				 * uses global variables to set connections.
 				 * Need refactoring.
 				 */
-				if (!check_data_file(&(arguments->conn_arg), file,
+				if (!check_data_file(&(arguments->conn_arg),
+									 file, from_fullpath,
 									 arguments->checksum_version))
 					arguments->ret = 2; /* corruption found */
 			}
 		}
 		else
-			elog(WARNING, "unexpected file type %d", buf.st_mode);
+			elog(WARNING, "unexpected file type %d", file->mode);
 	}
 
 	/* Ret values:
@@ -258,6 +241,7 @@ do_block_validation(char *pgdata, uint32 checksum_version)
 
 		arg->files_list = files_list;
 		arg->checksum_version = checksum_version;
+		arg->from_root = pgdata;
 
 		arg->conn_arg.conn = NULL;
 		arg->conn_arg.cancel_conn = NULL;

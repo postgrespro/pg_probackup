@@ -169,7 +169,8 @@ sub build_pgprobackup
 		'show.c',
 		'util.c',
 		'validate.c',
-		'checkdb.c'
+		'checkdb.c',
+		'ptrack.c'
 		);
 	$probackup->AddFiles(
 		"$currpath/src/utils",

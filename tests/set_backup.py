@@ -239,3 +239,149 @@ class SetBackupTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_wal_retention_and_pinning(self):
+        """
+        B1---B2---P---B3--->
+        wal-depth=2
+        P - pinned backup
+
+        expected result after WAL purge:
+        B1   B2---P---B3--->
+
+        """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # take FULL BACKUP
+        self.backup_node(
+            backup_dir, 'node', node, options=['--stream'])
+
+        node.pgbench_init(scale=1)
+
+        # Take PAGE BACKUP
+        self.backup_node(
+            backup_dir, 'node', node,
+            backup_type='page', options=['--stream'])
+        
+        node.pgbench_init(scale=1)
+
+        # Take DELTA BACKUP and pin it
+        expire_time = "{:%Y-%m-%d %H:%M:%S}".format(
+            datetime.now() + timedelta(days=6))
+        backup_id_pinned = self.backup_node(
+            backup_dir, 'node', node,
+            backup_type='delta',
+            options=[
+                '--stream',
+                '--expire-time={0}'.format(expire_time)])
+        
+        node.pgbench_init(scale=1)
+
+        # Take second PAGE BACKUP
+        self.backup_node(
+            backup_dir, 'node', node, backup_type='delta', options=['--stream'])
+
+        node.pgbench_init(scale=1)
+
+        # Purge backups
+        out = self.delete_expired(
+            backup_dir, 'node',
+            options=[
+                '--log-level-console=LOG',
+                '--delete-wal', '--wal-depth=2'])
+
+        # print(out)
+        self.assertIn(
+            'Pinned backup {0} is ignored for the '
+            'purpose of WAL retention'.format(backup_id_pinned),
+            out)
+
+        for instance in self.show_archive(backup_dir):
+            timelines = instance['timelines']
+
+        # sanity
+        for timeline in timelines:
+            self.assertEqual(
+                timeline['min-segno'],
+                '000000010000000000000004')
+            self.assertEqual(timeline['status'], 'OK')
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_wal_retention_and_pinning_1(self):
+        """
+        P---B1--->
+        wal-depth=2
+        P - pinned backup
+
+        expected result after WAL purge:
+        P---B1--->
+
+        """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'])
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        expire_time = "{:%Y-%m-%d %H:%M:%S}".format(
+            datetime.now() + timedelta(days=6))
+
+        # take FULL BACKUP
+        backup_id_pinned = self.backup_node(
+            backup_dir, 'node', node,
+            options=['--expire-time={0}'.format(expire_time)])
+
+        node.pgbench_init(scale=2)
+
+        # Take second PAGE BACKUP
+        self.backup_node(
+            backup_dir, 'node', node, backup_type='delta')
+
+        node.pgbench_init(scale=2)
+
+        # Purge backups
+        out = self.delete_expired(
+            backup_dir, 'node',
+            options=[
+                '--log-level-console=verbose',
+                '--delete-wal', '--wal-depth=2'])
+
+        print(out)
+        self.assertIn(
+            'Pinned backup {0} is ignored for the '
+            'purpose of WAL retention'.format(backup_id_pinned),
+            out)
+
+        for instance in self.show_archive(backup_dir):
+            timelines = instance['timelines']
+
+        # sanity
+        for timeline in timelines:
+            self.assertEqual(
+                timeline['min-segno'],
+                '000000010000000000000002')
+            self.assertEqual(timeline['status'], 'OK')
+
+        self.validate_pb(backup_dir)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)

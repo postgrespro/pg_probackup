@@ -500,13 +500,18 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'],
-            pg_options={'ptrack_enable': 'on'})
+            ptrack_enable=True)
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
         node.slow_start()
+
+        if node.major_version >= 12:
+            node.safe_psql(
+                "postgres",
+                "CREATE EXTENSION ptrack")
 
         node.pgbench_init(scale=2)
 
@@ -529,8 +534,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             "INFO: Restore of backup {0} completed.".format(backup_id),
             self.restore_node(
                 backup_dir, 'node', node,
-                options=[
-                    "-j", "4", "--recovery-target-action=promote"]),
+                options=["-j", "4"]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
 
@@ -551,13 +555,18 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'],
-            pg_options={'ptrack_enable': 'on'})
+            ptrack_enable=True)
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
         node.slow_start()
+
+        if node.major_version >= 12:
+            node.safe_psql(
+                "postgres",
+                "CREATE EXTENSION ptrack")
 
         node.pgbench_init(scale=2)
 
@@ -587,8 +596,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             "INFO: Restore of backup {0} completed.".format(backup_id),
             self.restore_node(
                 backup_dir, 'node', node,
-                options=[
-                    "-j", "4", "--recovery-target-action=promote"]),
+                options=["-j", "4"]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
 
@@ -609,14 +617,19 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
-            initdb_params=['--data-checksums'],
-            pg_options={'ptrack_enable': 'on'})
+            ptrack_enable=True,
+            initdb_params=['--data-checksums'])
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
         node.slow_start()
+
+        if node.major_version >= 12:
+            node.safe_psql(
+                "postgres",
+                "CREATE EXTENSION ptrack")
 
         node.pgbench_init(scale=2)
 
@@ -639,8 +652,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.assertIn(
             "INFO: Restore of backup {0} completed.".format(backup_id),
             self.restore_node(
-                backup_dir, 'node', node,
-                options=["-j", "4", "--recovery-target-action=promote"]),
+                backup_dir, 'node', node, options=["-j", "4"]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
 
@@ -664,15 +676,19 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
-            initdb_params=['--data-checksums'],
-            pg_options={
-                'ptrack_enable': 'on'})
+            ptrack_enable=True,
+            initdb_params=['--data-checksums'])
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
         node.slow_start()
+
+        if node.major_version >= 12:
+            node.safe_psql(
+                "postgres",
+                "CREATE EXTENSION ptrack")
 
         node.pgbench_init(scale=2)
 
@@ -703,8 +719,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.assertIn(
             "INFO: Restore of backup {0} completed.".format(backup_id),
             self.restore_node(
-                backup_dir, 'node', node,
-                options=["-j", "4", "--recovery-target-action=promote"]),
+                backup_dir, 'node', node, options=["-j", "4"]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
 
@@ -731,15 +746,19 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
-            initdb_params=['--data-checksums'],
-            pg_options={
-                'ptrack_enable': 'on'})
+            ptrack_enable=True,
+            initdb_params=['--data-checksums'])
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
         node.slow_start()
+
+        if node.major_version >= 12:
+            node.safe_psql(
+                "postgres",
+                "CREATE EXTENSION ptrack")
 
         # wal_segment_size = self.guc_wal_segment_size(node)
         node.pgbench_init(scale=2)
@@ -773,8 +792,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.assertIn(
             "INFO: Restore of backup {0} completed.".format(backup_id),
             self.restore_node(
-                backup_dir, 'node', node,
-                options=["-j", "4", "--recovery-target-action=promote"]),
+                backup_dir, 'node', node, options=["-j", "4"]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
         node.slow_start()
@@ -1897,8 +1915,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         node.slow_start()
 
         # Take FULL
-        self.backup_node(
-            backup_dir, 'node', node)
+        self.backup_node(backup_dir, 'node', node)
 
         if self.get_version(node) >= self.version_to_num('12.0'):
             recovery_conf = os.path.join(node.data_dir, 'probackup_recovery.conf')
@@ -1907,27 +1924,28 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         # restore
         node.cleanup()
-        self.restore_node(
-            backup_dir, 'node', node)
+        self.restore_node(backup_dir, 'node', node)
 
-        # with open(recovery_conf, 'r') as f:
-        #    print(f.read())
+        # hash_1 = hashlib.md5(
+        #     open(recovery_conf, 'rb').read()).hexdigest()
 
-        hash_1 = hashlib.md5(
-            open(recovery_conf, 'rb').read()).hexdigest()
+        with open(recovery_conf, 'r') as f:
+            content_1 = f.read()
 
         # restore
         node.cleanup()
-        self.restore_node(
-            backup_dir, 'node', node, options=['--recovery-target=latest'])
 
-        # with open(recovery_conf, 'r') as f:
-        #     print(f.read())
+        self.restore_node(backup_dir, 'node', node, options=['--recovery-target=latest'])
 
-        hash_2 = hashlib.md5(
-            open(recovery_conf, 'rb').read()).hexdigest()
+        # hash_2 = hashlib.md5(
+        #     open(recovery_conf, 'rb').read()).hexdigest()
 
-        self.assertEqual(hash_1, hash_2)
+        with open(recovery_conf, 'r') as f:
+            content_2 = f.read()
+
+        self.assertEqual(content_1, content_2)
+
+        # self.assertEqual(hash_1, hash_2)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -2214,55 +2232,6 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
-    def test_pg_10_waldir(self):
-        """
-        test group access for PG >= 11
-        """
-        if self.pg_config_version < self.version_to_num('10.0'):
-            return unittest.skip('You need PostgreSQL >= 10 for this test')
-
-        fname = self.id().split('.')[3]
-        wal_dir = os.path.join(
-            os.path.join(self.tmp_path, module_name, fname), 'wal_dir')
-        shutil.rmtree(wal_dir, ignore_errors=True)
-        node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
-            set_replication=True,
-            initdb_params=[
-                '--data-checksums',
-                '--waldir={0}'.format(wal_dir)])
-
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
-        node.slow_start()
-
-        # take FULL backup
-        self.backup_node(
-            backup_dir, 'node', node, options=['--stream'])
-
-        pgdata = self.pgdata_content(node.data_dir)
-
-        # restore backup
-        node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored'))
-        node_restored.cleanup()
-
-        self.restore_node(
-            backup_dir, 'node', node_restored)
-
-        # compare pgdata permissions
-        pgdata_restored = self.pgdata_content(node_restored.data_dir)
-        self.compare_pgdata(pgdata, pgdata_restored)
-
-        self.assertTrue(
-            os.path.islink(os.path.join(node_restored.data_dir, 'pg_wal')),
-            'pg_wal should be symlink')
-
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
-    # @unittest.skip("skip")
     def test_restore_concurrent_drop_table(self):
         """"""
         fname = self.id().split('.')[3]
@@ -2353,11 +2322,11 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
                     self.output, self.cmd))
         except ProbackupException as e:
             self.assertIn(
-                'is not found', e.message,
+                'No such file or directory', e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
             self.assertIn(
-                'ERROR: Data files restoring failed', e.message,
+                'ERROR: Backup files restoring failed', e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
@@ -2493,7 +2462,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         node.slow_start()
 
         cat_version = node.get_control_data()["Catalog version number"]
-        version_specific_dir = 'PG_' + node.major_version + '_' + cat_version
+        version_specific_dir = 'PG_' + str(node.major_version) + '_' + cat_version
 
         # PG_10_201707211
         # pg_tblspc/33172/PG_9.5_201510051/16386/
@@ -2730,6 +2699,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
     def test_partial_restore_backward_compatibility_1(self):
         """
+        old binary should be of version < 2.2.0
         """
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
@@ -2832,6 +2802,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
     def test_partial_restore_backward_compatibility_merge(self):
         """
+        old binary should be of version < 2.2.0
         """
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
@@ -3094,6 +3065,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
                 "GRANT CONNECT ON DATABASE backupdb to backup; "
                 "GRANT USAGE ON SCHEMA pg_catalog TO backup; "
                 "GRANT SELECT ON TABLE pg_catalog.pg_proc TO backup; "
+                "GRANT SELECT ON TABLE pg_catalog.pg_extension TO backup; "
                 "GRANT SELECT ON TABLE pg_catalog.pg_database TO backup; " # for partial restore, checkdb and ptrack
                 "GRANT EXECUTE ON FUNCTION pg_catalog.nameeq(name, name) TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.textout(text) TO backup; "
@@ -3162,6 +3134,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
                 "GRANT CONNECT ON DATABASE backupdb to backup; "
                 "GRANT USAGE ON SCHEMA pg_catalog TO backup; "
                 "GRANT SELECT ON TABLE pg_catalog.pg_proc TO backup; "
+                "GRANT SELECT ON TABLE pg_catalog.pg_extension TO backup; "
                 "GRANT SELECT ON TABLE pg_catalog.pg_database TO backup; " # for partial restore, checkdb and ptrack
                 "GRANT EXECUTE ON FUNCTION pg_catalog.nameeq(name, name) TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup; "
@@ -3177,20 +3150,41 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             )
 
         if self.ptrack:
-            for fname in [
+            fnames = []
+            if node.major_version < 12:
+                fnames += [
                     'pg_catalog.oideq(oid, oid)',
                     'pg_catalog.ptrack_version()',
                     'pg_catalog.pg_ptrack_clear()',
                     'pg_catalog.pg_ptrack_control_lsn()',
                     'pg_catalog.pg_ptrack_get_and_clear_db(oid, oid)',
                     'pg_catalog.pg_ptrack_get_and_clear(oid, oid)',
-                    'pg_catalog.pg_ptrack_get_block_2(oid, oid, oid, bigint)',
-                    'pg_catalog.pg_stop_backup()']:
-
+                    'pg_catalog.pg_ptrack_get_block_2(oid, oid, oid, bigint)'
+                    ]
+            else:
+                # TODO why backup works without these grants ?
+#                fnames += [
+#                    'pg_ptrack_get_pagemapset(pg_lsn)',
+#                    'pg_ptrack_control_lsn()',
+#                    'pg_ptrack_get_block(oid, oid, oid, bigint)'
+#                    ]
                 node.safe_psql(
                     "backupdb",
-                    "GRANT EXECUTE ON FUNCTION {0} "
-                    "TO backup".format(fname))
+                    "CREATE EXTENSION ptrack WITH SCHEMA pg_catalog")
+
+            for fname in fnames:
+                node.safe_psql(
+                    "backupdb",
+                    "GRANT EXECUTE ON FUNCTION {0} TO backup".format(fname))
+
+        if ProbackupTest.enterprise:
+            node.safe_psql(
+                "backupdb",
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_edition() TO backup")
+
+            node.safe_psql(
+                "backupdb",
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_version() TO backup")
 
         # FULL backup without database_map
         backup_id = self.backup_node(
@@ -3331,6 +3325,56 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             'select timeline_id from pg_control_checkpoint()').rstrip()
 
         self.assertEqual('2', timeline_id)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_restore_primary_conninfo(self):
+        """
+        """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.slow_start()
+
+        # Take FULL
+        self.backup_node(backup_dir, 'node', node, options=['--stream'])
+
+        node.pgbench_init(scale=1)
+
+        #primary_conninfo = 'host=192.168.1.50 port=5432 user=foo password=foopass'
+
+        replica = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'replica'))
+        replica.cleanup()
+        str_conninfo='host=192.168.1.50 port=5432 user=foo password=foopass'
+
+        self.restore_node(
+            backup_dir, 'node', replica,
+            options=['-R', '--primary-conninfo={0}'.format(str_conninfo)])
+
+        if self.get_version(node) >= self.version_to_num('12.0'):
+            standby_signal = os.path.join(replica.data_dir, 'standby.signal')
+            self.assertTrue(
+                os.path.isfile(standby_signal),
+                "File '{0}' do not exists".format(standby_signal))
+
+        if self.get_version(node) >= self.version_to_num('12.0'):
+            recovery_conf = os.path.join(replica.data_dir, 'probackup_recovery.conf')
+        else:
+            recovery_conf = os.path.join(replica.data_dir, 'recovery.conf')
+
+        with open(os.path.join(replica.data_dir, recovery_conf), 'r') as f:
+            recovery_conf_content = f.read()
+
+        self.assertIn(str_conninfo, recovery_conf_content)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)

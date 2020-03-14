@@ -194,14 +194,19 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
-            initdb_params=['--data-checksums'],
-            pg_options={'ptrack_enable': 'on'})
+            ptrack_enable=self.ptrack,
+            initdb_params=['--data-checksums'])
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
         node.slow_start()
+
+        if node.major_version >= 12:
+            node.safe_psql(
+                'postgres',
+                'CREATE EXTENSION ptrack')
 
         # full backup mode
         self.backup_node(backup_dir, 'node', node)
@@ -761,8 +766,8 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
             output)
 
         self.assertIn(
-            'On timeline 1 WAL segments between 0000000000000001 '
-            'and 0000000000000003 can be removed',
+            'On timeline 1 WAL segments between 000000010000000000000001 '
+            'and 000000010000000000000003 can be removed',
             output)
 
         self.assertEqual(len(self.show_pb(backup_dir, 'node')), 4)
@@ -786,8 +791,8 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
             output)
 
         self.assertIn(
-            'On timeline 1 WAL segments between 0000000000000001 '
-            'and 0000000000000003 will be removed',
+            'On timeline 1 WAL segments between 000000010000000000000001 '
+            'and 000000010000000000000003 will be removed',
             output)
 
         self.assertEqual(len(self.show_pb(backup_dir, 'node')), 1)
