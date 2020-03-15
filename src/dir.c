@@ -1759,7 +1759,6 @@ write_database_map(pgBackup *backup, parray *database_map, parray *backup_files_
 	char		database_dir[MAXPGPATH];
 	char		database_map_path[MAXPGPATH];
 
-//	pgBackupGetPath(backup, path, lengthof(path), DATABASE_DIR);
 	join_path_components(database_dir, backup->root_dir, DATABASE_DIR);
 	join_path_components(database_map_path, database_dir, DATABASE_MAP);
 
@@ -1783,7 +1782,7 @@ write_database_map(pgBackup *backup, parray *database_map, parray *backup_files_
 	file->path = pgut_strdup(DATABASE_MAP);
 	file->crc = pgFileGetCRC(database_map_path, true, false);
 
-	file->write_size = file->read_size;
+	file->write_size = file->size;
 	file->uncompressed_size = file->read_size;
 	parray_append(backup_files_list, file);
 }

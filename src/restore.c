@@ -472,6 +472,9 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 		create_recovery_conf(target_backup_id, rt, dest_backup, params);
 	}
 
+	/* ssh connection to longer needed */
+	fio_disconnect();
+
 	/* cleanup */
 	parray_walk(backups, pgBackupFree);
 	parray_free(backups);
@@ -977,6 +980,7 @@ create_recovery_conf(time_t backup_id,
 	/* construct restore_command */
 	if (pitr_requested)
 	{
+		fio_fprintf(fp, "\n## recovery settings\n");
 		/* If restore_command is provided, use it. Otherwise construct it from scratch. */
 		if (restore_command_provided)
 			sprintf(restore_command_guc, "%s", instance_config.restore_command);
@@ -1052,8 +1056,15 @@ create_recovery_conf(time_t backup_id,
 			fio_fprintf(fp, "recovery_target_action = '%s'\n", "pause");
 	}
 
+	if (pitr_requested)
+	{
+		elog(LOG, "Setting restore_command to '%s'", restore_command_guc);
+		fio_fprintf(fp, "restore_command = '%s'\n", restore_command_guc);
+	}
+
 	if (params->restore_as_replica)
 	{
+		fio_fprintf(fp, "\n## standby settings\n");
 	/* standby_mode was removed in PG12 */
 #if PG_VERSION_NUM < 120000
 		fio_fprintf(fp, "standby_mode = 'on'\n");
@@ -1063,12 +1074,9 @@ create_recovery_conf(time_t backup_id,
 			fio_fprintf(fp, "primary_conninfo = '%s'\n", params->primary_conninfo);
 		else if (backup->primary_conninfo)
 			fio_fprintf(fp, "primary_conninfo = '%s'\n", backup->primary_conninfo);
-	}
 
-	if (pitr_requested)
-	{
-		elog(LOG, "Setting restore_command to '%s'", restore_command_guc);
-		fio_fprintf(fp, "restore_command = '%s'\n", restore_command_guc);
+		if (params->primary_slot_name != NULL)
+			fio_fprintf(fp, "primary_slot_name = '%s'\n", params->primary_slot_name);
 	}
 
 	if (fio_fflush(fp) != 0 ||

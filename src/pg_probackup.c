@@ -174,6 +174,7 @@ static ConfigOption cmd_options[] =
 	{ 'f', 'b', "backup-mode",		opt_backup_mode,	SOURCE_CMD_STRICT },
 	{ 'b', 'C', "smooth-checkpoint", &smooth_checkpoint,	SOURCE_CMD_STRICT },
 	{ 's', 'S', "slot",				&replication_slot,	SOURCE_CMD_STRICT },
+	{ 's', 'S', "primary-slot-name",&replication_slot,	SOURCE_CMD_STRICT },
 	{ 'b', 181, "temp-slot",		&temp_slot,			SOURCE_CMD_STRICT },
 	{ 'b', 182, "delete-wal",		&delete_wal,		SOURCE_CMD_STRICT },
 	{ 'b', 183, "delete-expired",	&delete_expired,	SOURCE_CMD_STRICT },
@@ -683,12 +684,16 @@ main(int argc, char *argv[])
 		if (force)
 			no_validate = true;
 
+		if (replication_slot != NULL)
+			restore_as_replica = true;
+
 		/* keep all params in one structure */
 		restore_params = pgut_new(pgRestoreParams);
 		restore_params->is_restore = (backup_subcmd == RESTORE_CMD);
 		restore_params->force = force;
 		restore_params->no_validate = no_validate;
 		restore_params->restore_as_replica = restore_as_replica;
+		restore_params->primary_slot_name = replication_slot;
 		restore_params->skip_block_validation = skip_block_validation;
 		restore_params->skip_external_dirs = skip_external_dirs;
 		restore_params->partial_db_list = NULL;

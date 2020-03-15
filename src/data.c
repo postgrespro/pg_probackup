@@ -192,77 +192,67 @@ parse_page(Page page, XLogRecPtr *lsn)
 	return false;
 }
 
-/* Read one page from file directly accessing disk
- * return value:
- * 2  - if the page is found but zeroed
- * 1  - if the page is found and valid
- * 0  - if the page is not found, probably truncated
- * -1 - if the page is found but read size is not multiple of BLKSIZE
- * -2 - if the page is found but page header is "insane"
- * -3 - if the page is found but page checksumm is wrong
- * -4 - something went wrong, check errno
- *
+/* We know that header is invalid, store specific
+ * details in errormsg.
  */
-static int
-read_page_from_file(pgFile *file, BlockNumber blknum,
-					FILE *in, Page page, XLogRecPtr *page_lsn,
-					uint32 checksum_version)
+void
+get_header_errormsg(Page page, char **errormsg)
 {
-	off_t		offset = blknum * BLCKSZ;
-	ssize_t		read_len = 0;
+	PageHeader  phdr = (PageHeader) page;
+	*errormsg = pgut_malloc(MAXPGPATH);
 
-	/* read the block */
-	read_len = fio_pread(in, page, offset);
+	if (PageGetPageSize(phdr) != BLCKSZ)
+		snprintf(*errormsg, MAXPGPATH, "page header invalid, "
+				"page size %lu is not equal to block size %u",
+				PageGetPageSize(phdr), BLCKSZ);
 
-	if (read_len != BLCKSZ)
-	{
+	else if (phdr->pd_lower < SizeOfPageHeaderData)
+		snprintf(*errormsg, MAXPGPATH, "page header invalid, "
+				"pd_lower %i is less than page header size %lu",
+				phdr->pd_lower, SizeOfPageHeaderData);
 
-		/* The block could have been truncated. It is fine. */
-		if (read_len == 0)
-			return 0;
-		else if (read_len > 0)
-			return -1;
-		else
-			return -4;
-	}
+	else if (phdr->pd_lower > phdr->pd_upper)
+		snprintf(*errormsg, MAXPGPATH, "page header invalid, "
+				"pd_lower %u is greater than pd_upper %u",
+				phdr->pd_lower, phdr->pd_upper);
 
-	/*
-	 * If we found page with invalid header, at first check if it is zeroed,
-	 * which is a valid state for page. If it is not, read it and check header
-	 * again, because it's possible that we've read a partly flushed page.
-	 * If after several attempts page header is still invalid, throw an error.
-	 * The same idea is applied to checksum verification.
-	 */
-	if (!parse_page(page, page_lsn))
-	{
-		int i;
-		/* Check if the page is zeroed. */
-		for (i = 0; i < BLCKSZ && page[i] == 0; i++);
+	else if (phdr->pd_upper > phdr->pd_special)
+		snprintf(*errormsg, MAXPGPATH, "page header invalid, "
+				"pd_upper %u is greater than pd_special %u",
+				phdr->pd_upper, phdr->pd_special);
 
-		/* Page is zeroed. No need to check header and checksum. */
-		if (i == BLCKSZ)
-			return 2;
+	else if (phdr->pd_special > BLCKSZ)
+		snprintf(*errormsg, MAXPGPATH, "page header invalid, "
+				"pd_special %u is greater than block size %u",
+				phdr->pd_special, BLCKSZ);
 
-		return -2;
-	}
+	else if (phdr->pd_special != MAXALIGN(phdr->pd_special))
+		snprintf(*errormsg, MAXPGPATH, "page header invalid, "
+				"pd_special %i is misaligned, expected %lu",
+				phdr->pd_special, MAXALIGN(phdr->pd_special));
 
-	/* Verify checksum */
-	if (checksum_version)
-	{
-		BlockNumber blkno = file->segno * RELSEG_SIZE + blknum;
-		/*
-		 * If checksum is wrong, sleep a bit and then try again
-		 * several times. If it didn't help, throw error
-		 */
-		if (pg_checksum_page(page, blkno) != ((PageHeader) page)->pd_checksum)
-			return -3;
-		else
-			/* page header and checksum are correct */
-			return 1;
-	}
+	else if (phdr->pd_flags & ~PD_VALID_FLAG_BITS)
+		snprintf(*errormsg, MAXPGPATH, "page header invalid, "
+				"pd_flags mask contain illegal bits");
+
 	else
-		/* page header is correct and checksum check is disabled */
-		return 1;
+		snprintf(*errormsg, MAXPGPATH, "page header invalid");
+}
+
+/* We know that checksumms are mismatched, store specific
+ * details in errormsg.
+ */
+void
+get_checksum_errormsg(Page page, char **errormsg, BlockNumber absolute_blkno)
+{
+	PageHeader	phdr = (PageHeader) page;
+	*errormsg = pgut_malloc(MAXPGPATH);
+
+	snprintf(*errormsg, MAXPGPATH,
+			 "page verification failed, "
+			 "calculated checksum %u but expected %u",
+			 phdr->pd_checksum,
+			 pg_checksum_page(page, absolute_blkno));
 }
 
 /*
@@ -273,15 +263,20 @@ read_page_from_file(pgFile *file, BlockNumber blknum,
  * Prints appropriate warnings/errors/etc into log.
  * Returns:
  *                 PageIsOk(0) if page was successfully retrieved
- *         PageIsTruncated(-2) if the page was truncated
- *         SkipCurrentPage(-3) if we need to skip this page
- *         PageIsCorrupted(-4) if the page check mismatch
+ *         PageIsTruncated(-1) if the page was truncated
+ *         SkipCurrentPage(-2) if we need to skip this page,
+ *                                only used for DELTA backup
+ *         PageIsCorrupted(-3) if the page checksum mismatch
+ *                                or header corruption,
+ *                                only used for checkdb
+ *                                TODO: probably we should always
+ *                                      return it to the caller
  */
 static int32
 prepare_page(ConnectionArgs *conn_arg,
 			 pgFile *file, XLogRecPtr prev_backup_start_lsn,
-			 BlockNumber blknum, BlockNumber nblocks,
-			 FILE *in, BackupMode backup_mode,
+			 BlockNumber blknum, FILE *in,
+			 BackupMode backup_mode,
 			 Page page, bool strict,
 			 uint32 checksum_version,
 			 int ptrack_version_num,
@@ -289,9 +284,8 @@ prepare_page(ConnectionArgs *conn_arg,
 			 const char *from_fullpath)
 {
 	XLogRecPtr	page_lsn = 0;
-	int			try_again = 100;
+	int			try_again = PAGE_READ_ATTEMPTS;
 	bool		page_is_valid = false;
-	bool		page_is_truncated = false;
 	BlockNumber absolute_blknum = file->segno * RELSEG_SIZE + blknum;
 
 	/* check for interrupt */
@@ -305,83 +299,104 @@ prepare_page(ConnectionArgs *conn_arg,
 	 */
 	if (backup_mode != BACKUP_MODE_DIFF_PTRACK || ptrack_version_num >= 20)
 	{
-		while (!page_is_valid && try_again)
+		int rc = 0;
+		while (!page_is_valid && try_again--)
 		{
-			int result = read_page_from_file(file, blknum, in, page,
-											 &page_lsn, checksum_version);
+			/* read the block */
+			int read_len = fio_pread(in, page, blknum * BLCKSZ);
+			page_lsn = 0;
 
-			switch (result)
+			/* The block could have been truncated. It is fine. */
+			if (read_len == 0)
 			{
-				case 2:
-					elog(VERBOSE, "File: \"%s\" blknum %u, empty page", from_fullpath, blknum);
-					return PageIsOk;
+				elog(VERBOSE, "Cannot read block %u of \"%s\": "
+							"block truncated", blknum, from_fullpath);
+				return PageIsTruncated;
+			}
+			else if (read_len < 0)
+				elog(ERROR, "Cannot read block %u of \"%s\": %s",
+						blknum, from_fullpath, strerror(errno));
+			else if (read_len != BLCKSZ)
+				elog(WARNING, "Cannot read block %u of \"%s\": "
+								"read %i of %d, try again",
+						blknum, from_fullpath, read_len, BLCKSZ);
+			else
+			{
+				/* We have BLCKSZ of raw data, validate it */
+				rc = validate_one_page(page, absolute_blknum,
+										   InvalidXLogRecPtr, &page_lsn,
+										   checksum_version);
+				switch (rc)
+				{
+					case PAGE_IS_ZEROED:
+						elog(VERBOSE, "File: \"%s\" blknum %u, empty page", from_fullpath, blknum);
+						return PageIsOk;
 
-				case 1:
-					page_is_valid = true;
-					break;
+					case PAGE_IS_VALID:
+						/* in DELTA mode we must compare lsn */
+						if (backup_mode == BACKUP_MODE_DIFF_DELTA)
+							page_is_valid = true;
+						else
+							return PageIsOk;
+						break;
 
-				case 0:
-					/* This block was truncated.*/
-					page_is_truncated = true;
-					/* Page is not actually valid, but it is absent
-					 * and we're not going to reread it or validate */
-					page_is_valid = true;
+					case PAGE_HEADER_IS_INVALID:
+						elog(VERBOSE, "File: \"%s\" blknum %u have wrong page header, try again",
+								from_fullpath, blknum);
+						break;
 
-					elog(VERBOSE, "File \"%s\", block %u, file was truncated",
-						from_fullpath, blknum);
-					break;
-
-				case -1:
-					elog(WARNING, "File: \"%s\", block %u, partial read, try again",
-							from_fullpath, blknum);
-					break;
-
-				case -2:
-					elog(LOG, "File: \"%s\" blknum %u have wrong page header, try again",
-							from_fullpath, blknum);
-					break;
-
-				case -3:
-					elog(LOG, "File: \"%s\" blknum %u have wrong checksum, try again",
-							from_fullpath, blknum);
-					break;
-
-				case -4:
-					elog(LOG, "File: \"%s\" access error: %s",
-							from_fullpath, strerror(errno));
-					break;
+					case PAGE_CHECKSUM_MISMATCH:
+						elog(VERBOSE, "File: \"%s\" blknum %u have wrong checksum, try again",
+								from_fullpath, blknum);
+						break;
+					default:
+						Assert(false);
+				}
 			}
 
 			/*
-			 * If ptrack support is available use it to get invalid block
+			 * If ptrack support is available, use it to get invalid block
 			 * instead of rereading it 99 times
 			 */
-
-			if (result < 0 && strict && ptrack_version_num > 0)
+			if (!page_is_valid && strict && ptrack_version_num > 0)
 			{
 				elog(WARNING, "File \"%s\", block %u, try to fetch via shared buffer",
 					from_fullpath, blknum);
 				break;
 			}
-
-			try_again--;
 		}
+
 		/*
 		 * If page is not valid after 100 attempts to read it
 		 * throw an error.
 		 */
-
-		if (!page_is_valid &&
-			((strict && ptrack_version_num == 0) || !strict))
+		if (!page_is_valid)
 		{
-			/* show this message for checkdb, merge or backup without ptrack support */
-			elog(WARNING, "Corruption detected in file \"%s\", block %u",
-						from_fullpath, blknum);
-		}
+			int elevel = ERROR;
+			char *errormsg = NULL;
 
-		/* Backup with invalid block and without ptrack support must throw error */
-		if (!page_is_valid && strict && ptrack_version_num == 0)
-				elog(ERROR, "Data file corruption, canceling backup");
+			/* Get the details of corruption */
+			if (rc == PAGE_HEADER_IS_INVALID)
+				get_header_errormsg(page, &errormsg);
+			else if (rc == PAGE_CHECKSUM_MISMATCH)
+				get_checksum_errormsg(page, &errormsg,
+									  file->segno * RELSEG_SIZE + blknum);
+
+			/* Error out in case of merge or backup without ptrack support;
+			 * issue warning in case of checkdb or backup with ptrack support
+			 */
+			if (!strict || (strict && ptrack_version_num > 0))
+				elevel = WARNING;
+
+			if (errormsg)
+				elog(elevel, "Corruption detected in file \"%s\", block %u: %s",
+								from_fullpath, blknum, errormsg);
+			else
+				elog(elevel, "Corruption detected in file \"%s\", block %u",
+								from_fullpath, blknum);
+
+			pg_free(errormsg);
+		}
 
 		/* Checkdb not going futher */
 		if (!strict)
@@ -412,7 +427,7 @@ prepare_page(ConnectionArgs *conn_arg,
 		if (ptrack_page == NULL)
 		{
 			/* This block was truncated.*/
-			page_is_truncated = true;
+			return PageIsTruncated;
 		}
 		else if (page_size != BLCKSZ)
 		{
@@ -433,17 +448,14 @@ prepare_page(ConnectionArgs *conn_arg,
 			if (checksum_version)
 				((PageHeader) page)->pd_checksum = pg_checksum_page(page, absolute_blknum);
 		}
+
 		/* get lsn from page, provided by pg_ptrack_get_block() */
 		if (backup_mode == BACKUP_MODE_DIFF_DELTA &&
 			file->exists_in_prev &&
-			!page_is_truncated &&
 			!parse_page(page, &page_lsn))
 				elog(ERROR, "Cannot parse page after pg_ptrack_get_block. "
 								"Possible risk of a memory corruption");
 	}
-
-	if (page_is_truncated)
-		return PageIsTruncated;
 
 	/*
 	 * Skip page if page lsn is less than START_LSN of parent backup.
@@ -475,10 +487,8 @@ compress_and_backup_page(pgFile *file, BlockNumber blknum,
 	const char *errormsg = NULL;
 
 	header.block = blknum;
-	header.compressed_size = page_state;
 
-
-	/* The page was not truncated, so we need to compress it */
+	/* Compress the page */
 	header.compressed_size = do_compress(compressed_page, sizeof(compressed_page),
 										 page, BLCKSZ, calg, clevel,
 										 &errormsg);
@@ -487,7 +497,7 @@ compress_and_backup_page(pgFile *file, BlockNumber blknum,
 		elog(WARNING, "An error occured during compressing block %u of file \"%s\": %s",
 			 blknum, from_fullpath, errormsg);
 
-	file->compress_alg = calg;
+	file->compress_alg = calg; /* TODO: wtf? why here? */
 
 	/* The page was successfully compressed. */
 	if (header.compressed_size > 0 && header.compressed_size < BLCKSZ)
@@ -533,15 +543,15 @@ backup_data_file(ConnectionArgs* conn_arg, pgFile *file,
 				 CompressAlg calg, int clevel, uint32 checksum_version,
 				 int ptrack_version_num, const char *ptrack_schema, bool missing_ok)
 {
-	FILE		*in;
-	FILE		*out;
-	BlockNumber	blknum = 0;
-	BlockNumber	nblocks = 0;		/* number of blocks in file */
-	BlockNumber	n_blocks_skipped = 0;
-	BlockNumber	n_blocks_read = 0;  /* number of blocks actually readed
-									 * TODO: we should report them */
-	int			page_state;
-	char		curr_page[BLCKSZ];
+	FILE       *in;
+	FILE       *out;
+	BlockNumber blknum = 0;
+	BlockNumber nblocks = 0;		/* number of blocks in source file */
+	BlockNumber n_blocks_skipped = 0;
+	int         page_state;
+	char        curr_page[BLCKSZ];
+	bool        use_pagemap;
+	datapagemap_iterator_t *iter = NULL;
 
 	/* stdio buffers */
 	char 		in_buffer[STDIO_BUFSIZE];
@@ -633,112 +643,113 @@ backup_data_file(ConnectionArgs* conn_arg, pgFile *file,
 	 * If page map is empty or file is not present in previous backup
 	 * backup all pages of the relation.
 	 *
-	 * Usually enter here if backup_mode is FULL or DELTA.
-	 * Also in some cases even PAGE backup is going here,
-	 * becase not all data files are logged into WAL,
-	 * for example CREATE DATABASE.
-	 * Such files should be fully copied.
-
 	 * In PTRACK 1.x there was a problem
 	 * of data files with missing _ptrack map.
 	 * Such files should be fully copied.
 	 */
-	if (file->pagemap.bitmapsize == PageBitmapIsEmpty ||
-		file->pagemap_isabsent || !file->exists_in_prev)
+
+	if 	(file->pagemap.bitmapsize == PageBitmapIsEmpty ||
+		 file->pagemap_isabsent || !file->exists_in_prev ||
+		 !file->pagemap.bitmap)
+		use_pagemap = false;
+	else
+		use_pagemap = true;
+
+
+	/* Remote mode */
+	if (fio_is_remote_file(in))
 	{
-		/* remote FULL and DELTA */
-		if (fio_is_remote_file(in))
+		char *errmsg = NULL;
+		BlockNumber	err_blknum = 0;
+
+		/* TODO: retrying via ptrack should be implemented on the agent */
+		int rc = fio_send_pages(in, out, file,
+								/* send prev backup START_LSN */
+								backup_mode == BACKUP_MODE_DIFF_DELTA &&
+								file->exists_in_prev ? prev_backup_start_lsn : InvalidXLogRecPtr,
+								calg, clevel, checksum_version,
+								/* send pagemap if any */
+								use_pagemap ? &file->pagemap : NULL,
+								/* variables for error reporting */
+								&err_blknum, &errmsg);
+
+		/* check for errors */
+		if (rc == REMOTE_ERROR)
+			elog(ERROR, "Cannot read block %u of \"%s\": %s",
+					err_blknum, from_fullpath, strerror(errno));
+
+		else if (rc == PAGE_CORRUPTION)
 		{
-			int rc = fio_send_pages(in, out, file,
-									backup_mode == BACKUP_MODE_DIFF_DELTA &&
-									file->exists_in_prev ? prev_backup_start_lsn : InvalidXLogRecPtr,
-									&n_blocks_skipped, calg, clevel);
-
-			if (rc == PAGE_CHECKSUM_MISMATCH && ptrack_version_num >= 15)
-				 /* only ptrack versions 1.5, 1.6, 1.7 and 2.x support this functionality */
-				goto RetryUsingPtrack;
-			if (rc < 0)
-				elog(ERROR, "Failed to read file \"%s\": %s",
-					 from_fullpath,
-					 rc == PAGE_CHECKSUM_MISMATCH ? "data file checksum mismatch" : strerror(-rc));
-
-			/* TODO: check that fio_send_pages ain`t lying about number of readed blocks */
-			n_blocks_read = rc;
-
-			file->read_size = n_blocks_read * BLCKSZ;
-			file->uncompressed_size = (n_blocks_read - n_blocks_skipped)*BLCKSZ;
+			if (errmsg)
+				elog(ERROR, "Corruption detected in file \"%s\", block %u: %s",
+						from_fullpath, err_blknum, errmsg);
+			else
+				elog(ERROR, "Corruption detected in file \"%s\", block %u",
+						from_fullpath, err_blknum);
 		}
-		else
-		{
-			/* local FULL and DELTA */
-		  RetryUsingPtrack:
-			for (blknum = 0; blknum < nblocks; blknum++)
-			{
-				page_state = prepare_page(conn_arg, file, prev_backup_start_lsn,
-											  blknum, nblocks, in, backup_mode,
-											  curr_page, true, checksum_version,
-											  ptrack_version_num, ptrack_schema,
-											  from_fullpath);
 
-				if (page_state == PageIsTruncated)
-					break;
+		else if (rc == WRITE_FAILED)
+			elog(ERROR, "Cannot write block %u of \"%s\": %s",
+					err_blknum, to_fullpath, strerror(errno));
 
-				else if (page_state == SkipCurrentPage)
-					n_blocks_skipped++;
+		file->read_size = rc * BLCKSZ;
+		pg_free(errmsg);
 
-				else if (page_state == PageIsOk)
-					compress_and_backup_page(file, blknum, in, out, &(file->crc),
-												page_state, curr_page, calg, clevel,
-												from_fullpath, to_fullpath);
-				else
-					elog(ERROR, "Invalid page state: %i, file: %s, blknum %i",
-						page_state, file->rel_path, blknum);
-
-				n_blocks_read++;
-				file->read_size += BLCKSZ;
-			}
-		}
-		file->n_blocks = n_blocks_read;
 	}
-	/*
-	 * If page map is not empty we scan only changed blocks.
-	 *
-	 * We will enter here if backup_mode is PAGE or PTRACK.
-	 */
+	/* Local mode */
 	else
 	{
-		datapagemap_iterator_t *iter;
-		iter = datapagemap_iterate(&file->pagemap);
-		while (datapagemap_next(iter, &blknum))
+		if (use_pagemap)
+		{
+			iter = datapagemap_iterate(&file->pagemap);
+			datapagemap_next(iter, &blknum); /* set first block */
+		}
+
+		while (blknum < nblocks)
 		{
 			page_state = prepare_page(conn_arg, file, prev_backup_start_lsn,
-											  blknum, nblocks, in, backup_mode,
-											  curr_page, true, checksum_version,
-											  ptrack_version_num, ptrack_schema,
-											  from_fullpath);
+										  blknum, in, backup_mode, curr_page,
+										  true, checksum_version,
+										  ptrack_version_num, ptrack_schema,
+										  from_fullpath);
 
 			if (page_state == PageIsTruncated)
 				break;
 
-			/* TODO: PAGE and PTRACK should never get SkipCurrentPage */
+			/* TODO: remove */
 			else if (page_state == SkipCurrentPage)
 				n_blocks_skipped++;
 
 			else if (page_state == PageIsOk)
 				compress_and_backup_page(file, blknum, in, out, &(file->crc),
-											page_state, curr_page, calg, clevel,
-											from_fullpath, to_fullpath);
+													page_state, curr_page, calg, clevel,
+													from_fullpath, to_fullpath);
+			/* TODO: handle PageIsCorrupted, currently it is done in prepare_page */
 			else
-				elog(ERROR, "Invalid page state: %i, file: %s, blknum %i",
-							page_state, file->rel_path, blknum);
+				Assert(false);
 
-			n_blocks_read++;
+
 			file->read_size += BLCKSZ;
-		}
 
-		pg_free(file->pagemap.bitmap);
-		pg_free(iter);
+			/* next block */
+			if (use_pagemap)
+			{
+				/* exit if pagemap is exhausted */
+				if (!datapagemap_next(iter, &blknum))
+					break;
+			}
+			else
+				blknum++;
+		}
 	}
+
+	pg_free(file->pagemap.bitmap);
+	pg_free(iter);
+
+	/* refresh n_blocks for FULL and DELTA */
+	if (backup_mode == BACKUP_MODE_FULL ||
+	    backup_mode == BACKUP_MODE_DIFF_DELTA)
+		file->n_blocks = file->read_size / BLCKSZ;
 
 	if (fclose(out))
 		elog(ERROR, "Cannot close the backup file \"%s\": %s",
@@ -1290,106 +1301,55 @@ create_empty_file(fio_location from_location, const char *to_root,
 
 /*
  * Validate given page.
- *
- * Returns value:
- * 0  - if the page is not found
- * 1  - if the page is found and valid
- * -1 - if the page is found but invalid
+ * This function is expected to be executed multiple times,
+ * so avoid using elog within it.
+ * lsn from page is assigned to page_lsn pointer.
+ * TODO: switch to enum for return codes.
  */
-#define PAGE_IS_NOT_FOUND 0
-#define PAGE_IS_FOUND_AND_VALID 1
-#define PAGE_IS_FOUND_AND_NOT_VALID -1
-static int
-validate_one_page(Page page, pgFile *file,
-				  BlockNumber blknum, XLogRecPtr stop_lsn,
-				  uint32 checksum_version)
+int
+validate_one_page(Page page, BlockNumber absolute_blkno,
+					XLogRecPtr stop_lsn, XLogRecPtr *page_lsn,
+					uint32 checksum_version)
 {
-	PageHeader	phdr;
-	XLogRecPtr	lsn;
-
 	/* new level of paranoia */
 	if (page == NULL)
-	{
-		elog(LOG, "File \"%s\", block %u, page is NULL", file->path, blknum);
 		return PAGE_IS_NOT_FOUND;
-	}
 
-	phdr = (PageHeader) page;
-
-	if (PageIsNew(page))
+	/* check that page header is ok */
+	if (!parse_page(page, page_lsn))
 	{
-		int			i;
-
+		int		i;
 		/* Check if the page is zeroed. */
-		for(i = 0; i < BLCKSZ && page[i] == 0; i++);
+		for (i = 0; i < BLCKSZ && page[i] == 0; i++);
 
+		/* Page is zeroed. No need to verify checksums */
 		if (i == BLCKSZ)
-		{
-			elog(LOG, "File: %s blknum %u, page is New, empty zeroed page",
-				 file->path, blknum);
-			return PAGE_IS_FOUND_AND_VALID;
-		}
-		else
-		{
-			elog(WARNING, "File: %s blknum %u, page is New, but not zeroed",
-				 file->path, blknum);
-		}
+			return PAGE_IS_ZEROED;
 
-		/* Page is zeroed. No sense in checking header and checksum. */
-		return PAGE_IS_FOUND_AND_VALID;
+		/* Page does not looking good */
+		return PAGE_HEADER_IS_INVALID;
 	}
 
 	/* Verify checksum */
 	if (checksum_version)
 	{
 		/* Checksums are enabled, so check them. */
-		if (!(pg_checksum_page(page, file->segno * RELSEG_SIZE + blknum)
-			== ((PageHeader) page)->pd_checksum))
-		{
-			elog(WARNING, "File: %s blknum %u have wrong checksum",
-				 file->path, blknum);
-			return PAGE_IS_FOUND_AND_NOT_VALID;
-		}
-	}
-
-	/* Check page for the sights of insanity.
-	 * TODO: We should give more information about what exactly is looking "wrong"
-	 */
-	if (!(PageGetPageSize(phdr) == BLCKSZ &&
-	//	PageGetPageLayoutVersion(phdr) == PG_PAGE_LAYOUT_VERSION &&
-		(phdr->pd_flags & ~PD_VALID_FLAG_BITS) == 0 &&
-		phdr->pd_lower >= SizeOfPageHeaderData &&
-		phdr->pd_lower <= phdr->pd_upper &&
-		phdr->pd_upper <= phdr->pd_special &&
-		phdr->pd_special <= BLCKSZ &&
-		phdr->pd_special == MAXALIGN(phdr->pd_special)))
-	{
-		/* Page does not looking good */
-		elog(WARNING, "Page header is looking insane: %s, block %i",
-			file->path, blknum);
-		return PAGE_IS_FOUND_AND_NOT_VALID;
+		if (pg_checksum_page(page, absolute_blkno) != ((PageHeader) page)->pd_checksum)
+			return PAGE_CHECKSUM_MISMATCH;
 	}
 
 	/* At this point page header is sane, if checksums are enabled - the`re ok.
 	 * Check that page is not from future.
+	 * Note, this check should be used only by validate command.
 	 */
 	if (stop_lsn > 0)
 	{
 		/* Get lsn from page header. Ensure that page is from our time. */
-		lsn = PageXLogRecPtrGet(phdr->pd_lsn);
-
-		if (lsn > stop_lsn)
-		{
-			elog(WARNING, "File: %s, block %u, checksum is %s. "
-						  "Page is from future: pageLSN %X/%X stopLSN %X/%X",
-				file->path, blknum, checksum_version ? "correct" : "not enabled",
-				(uint32) (lsn >> 32), (uint32) lsn,
-				(uint32) (stop_lsn >> 32), (uint32) stop_lsn);
-			return PAGE_IS_FOUND_AND_NOT_VALID;
-		}
+		if (*page_lsn > stop_lsn)
+			return PAGE_LSN_FROM_FUTURE;
 	}
 
-	return PAGE_IS_FOUND_AND_VALID;
+	return PAGE_IS_VALID;
 }
 
 /*
@@ -1441,7 +1401,7 @@ check_data_file(ConnectionArgs *arguments, pgFile *file,
 	{
 
 		page_state = prepare_page(NULL, file, InvalidXLogRecPtr,
-									blknum, nblocks, in, BACKUP_MODE_FULL,
+									blknum, in, BACKUP_MODE_FULL,
 									curr_page, false, checksum_version,
 									0, NULL, from_fullpath);
 
@@ -1455,19 +1415,6 @@ check_data_file(ConnectionArgs *arguments, pgFile *file,
 			 */
 			is_valid = false;
 			continue;
-		}
-
-		/* At this point page is found and its checksum is ok, if any
-		 * but could be 'insane'
-		 * TODO: between prepare_page and validate_one_page we
-		 * compute and compare checksum twice, it`s ineffective
-		 */
-		if (validate_one_page(curr_page, file, blknum,
-								  InvalidXLogRecPtr,
-								  0) == PAGE_IS_FOUND_AND_NOT_VALID)
-		{
-			/* Page is corrupted */
-			is_valid = false;
 		}
 	}
 
@@ -1507,10 +1454,12 @@ check_file_pages(pgFile *file, XLogRecPtr stop_lsn, uint32 checksum_version,
 	/* read and validate pages one by one */
 	while (true)
 	{
+		int		rc = 0;
 		DataPage	compressed_page; /* used as read buffer */
 		DataPage	page;
 		BackupPageHeader header;
 		BlockNumber blknum = 0;
+		XLogRecPtr	page_lsn = 0;
 
 		if (interrupted || thread_interrupted)
 			elog(ERROR, "Interrupted during data file validation");
@@ -1597,15 +1546,39 @@ check_file_pages(pgFile *file, XLogRecPtr stop_lsn, uint32 checksum_version,
 				return false;
 			}
 
-			if (validate_one_page(page.data, file, blknum,
-								  stop_lsn, checksum_version) == PAGE_IS_FOUND_AND_NOT_VALID)
-				is_valid = false;
+			rc = validate_one_page(page.data,
+				                       file->segno * RELSEG_SIZE + blknum,
+									   stop_lsn, &page_lsn, checksum_version);
 		}
 		else
+			rc = validate_one_page(compressed_page.data,
+									   file->segno * RELSEG_SIZE + blknum,
+									   stop_lsn, &page_lsn, checksum_version);
+
+		switch (rc)
 		{
-			if (validate_one_page(compressed_page.data, file, blknum,
-				stop_lsn, checksum_version) == PAGE_IS_FOUND_AND_NOT_VALID)
+			case PAGE_IS_NOT_FOUND:
+				elog(LOG, "File \"%s\", block %u, page is NULL", file->rel_path, blknum);
+				break;
+			case PAGE_IS_ZEROED:
+				elog(LOG, "File: %s blknum %u, empty zeroed page", file->rel_path, blknum);
+				break;
+			case PAGE_HEADER_IS_INVALID:
+				elog(WARNING, "Page header is looking insane: %s, block %i", file->rel_path, blknum);
 				is_valid = false;
+				break;
+			case PAGE_CHECKSUM_MISMATCH:
+				elog(WARNING, "File: %s blknum %u have wrong checksum", file->rel_path, blknum);
+				is_valid = false;
+				break;
+			case PAGE_LSN_FROM_FUTURE:
+				elog(WARNING, "File: %s, block %u, checksum is %s. "
+								"Page is from future: pageLSN %X/%X stopLSN %X/%X",
+							file->rel_path, blknum,
+							checksum_version ? "correct" : "not enabled",
+							(uint32) (page_lsn >> 32), (uint32) page_lsn,
+							(uint32) (stop_lsn >> 32), (uint32) stop_lsn);
+				break;
 		}
 	}
 

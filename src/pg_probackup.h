@@ -85,7 +85,10 @@ extern const char  *PROGRAM_EMAIL;
 #endif
 
 /* stdio buffer size */
-#define STDIO_BUFSIZE 65536 
+#define STDIO_BUFSIZE 65536
+
+/* retry attempts */
+#define PAGE_READ_ATTEMPTS 100
 
 /* Check if an XLogRecPtr value is pointed to 0 offset */
 #define XRecOffIsNull(xlrp) \
@@ -169,7 +172,8 @@ typedef struct pgFile
 	bool	exists_in_prev;		/* Mark files, both data and regular, that exists in previous backup */
 	CompressAlg		compress_alg;		/* compression algorithm applied to the file */
 	volatile 		pg_atomic_flag lock;/* lock for synchronization of parallel threads  */
-	datapagemap_t	pagemap;			/* bitmap of pages updated since previous backup */
+	datapagemap_t	pagemap;			/* bitmap of pages updated since previous backup
+										   may take up to 16kB per file */
 	bool			pagemap_isabsent;	/* Used to mark files with unknown state of pagemap,
 										 * i.e. datafiles without _ptrack */
 } pgFile;
@@ -418,6 +422,7 @@ typedef struct pgRestoreParams
 	bool	skip_external_dirs;
 	bool	skip_block_validation; //Start using it
 	const char *restore_command;
+	const char *primary_slot_name;
 
 	/* options for partial restore */
 	PartialRestoreType partial_restore_type;
@@ -525,9 +530,9 @@ typedef struct BackupPageHeader
 
 /* Special value for compressed_size field */
 #define PageIsOk		 0
+#define SkipCurrentPage -1
 #define PageIsTruncated -2
-#define SkipCurrentPage -3
-#define PageIsCorrupted -4 /* used by checkdb */
+#define PageIsCorrupted -3 /* used by checkdb */
 
 
 /*
@@ -728,6 +733,18 @@ extern void help_command(char *command);
 /* in validate.c */
 extern void pgBackupValidate(pgBackup* backup, pgRestoreParams *params);
 extern int do_validate_all(void);
+extern int validate_one_page(Page page, BlockNumber absolute_blkno,
+							 XLogRecPtr stop_lsn, XLogRecPtr *page_lsn,
+							 uint32 checksum_version);
+
+/* return codes for validate_one_page */
+/* TODO: use enum */
+#define PAGE_IS_VALID (-1)
+#define PAGE_IS_NOT_FOUND (-2)
+#define PAGE_IS_ZEROED (-3)
+#define PAGE_HEADER_IS_INVALID (-4)
+#define PAGE_CHECKSUM_MISMATCH (-5)
+#define PAGE_LSN_FROM_FUTURE (-6)
 
 /* in catalog.c */
 extern pgBackup *read_backup(const char *instance_name, time_t timestamp);
@@ -951,5 +968,20 @@ extern char *pg_ptrack_get_and_clear(Oid tablespace_oid,
 									 PGconn *backup_conn);
 extern XLogRecPtr get_last_ptrack_lsn(PGconn *backup_conn, PGNodeInfo *nodeInfo);
 extern parray * pg_ptrack_get_pagemapset(PGconn *backup_conn, const char *ptrack_schema, XLogRecPtr lsn);
+
+/* FIO */
+extern int fio_send_pages(FILE* in, FILE* out, pgFile *file, XLogRecPtr horizonLsn,
+						   int calg, int clevel, uint32 checksum_version,
+						   datapagemap_t *pagemap, BlockNumber* err_blknum, char **errormsg);
+
+/* return codes for fio_send_pages */
+#define WRITE_FAILED (-1)
+#define REMOTE_ERROR (-2)
+#define PAGE_CORRUPTION (-3)
+#define SEND_OK (-4)
+
+extern void get_header_errormsg(Page page, char **errormsg);
+extern void get_checksum_errormsg(Page page, char **errormsg,
+								  BlockNumber absolute_blkno);
 
 #endif /* PG_PROBACKUP_H */
