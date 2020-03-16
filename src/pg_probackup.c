@@ -174,7 +174,6 @@ static ConfigOption cmd_options[] =
 	{ 'f', 'b', "backup-mode",		opt_backup_mode,	SOURCE_CMD_STRICT },
 	{ 'b', 'C', "smooth-checkpoint", &smooth_checkpoint,	SOURCE_CMD_STRICT },
 	{ 's', 'S', "slot",				&replication_slot,	SOURCE_CMD_STRICT },
-	{ 's', 'S', "primary-slot-name",&replication_slot,	SOURCE_CMD_STRICT },
 	{ 'b', 181, "temp-slot",		&temp_slot,			SOURCE_CMD_STRICT },
 	{ 'b', 182, "delete-wal",		&delete_wal,		SOURCE_CMD_STRICT },
 	{ 'b', 183, "delete-expired",	&delete_expired,	SOURCE_CMD_STRICT },
@@ -191,13 +190,14 @@ static ConfigOption cmd_options[] =
 	{ 'f', 155, "external-mapping",	opt_externaldir_map,	SOURCE_CMD_STRICT },
 	{ 's', 141, "recovery-target-name",	&target_name,		SOURCE_CMD_STRICT },
 	{ 's', 142, "recovery-target-action", &target_action,	SOURCE_CMD_STRICT },
-	{ 'b', 'R', "restore-as-replica", &restore_as_replica,	SOURCE_CMD_STRICT },
 	{ 'b', 143, "no-validate",		&no_validate,		SOURCE_CMD_STRICT },
 	{ 'b', 154, "skip-block-validation", &skip_block_validation,	SOURCE_CMD_STRICT },
 	{ 'b', 156, "skip-external-dirs", &skip_external_dirs,	SOURCE_CMD_STRICT },
 	{ 'f', 158, "db-include", 		opt_datname_include_list, SOURCE_CMD_STRICT },
 	{ 'f', 159, "db-exclude", 		opt_datname_exclude_list, SOURCE_CMD_STRICT },
+	{ 'b', 'R', "restore-as-replica", &restore_as_replica,	SOURCE_CMD_STRICT },
 	{ 's', 160, "primary-conninfo",	&primary_conninfo,	SOURCE_CMD_STRICT },
+	{ 's', 'S', "primary-slot-name",&replication_slot,	SOURCE_CMD_STRICT },
 	/* checkdb options */
 	{ 'b', 195, "amcheck",			&need_amcheck,		SOURCE_CMD_STRICT },
 	{ 'b', 196, "heapallindexed",	&heapallindexed,	SOURCE_CMD_STRICT },
@@ -221,8 +221,8 @@ static ConfigOption cmd_options[] =
 	{ 'b', 153, "no-ready-rename",	&no_ready_rename,	SOURCE_CMD_STRICT },
 	{ 'i', 162, "batch-size",		&batch_size,		SOURCE_CMD_STRICT },
 	/* show options */
-	{ 'f', 160, "format",			opt_show_format,	SOURCE_CMD_STRICT },
-	{ 'b', 161, "archive",			&show_archive,		SOURCE_CMD_STRICT },
+	{ 'f', 163, "format",			opt_show_format,	SOURCE_CMD_STRICT },
+	{ 'b', 164, "archive",			&show_archive,		SOURCE_CMD_STRICT },
 	/* set-backup options */
 	{ 'I', 170, "ttl", &ttl, SOURCE_CMD_STRICT, SOURCE_DEFAULT, 0, OPTION_UNIT_S, option_get_value},
 	{ 's', 171, "expire-time",		&expire_time_string,	SOURCE_CMD_STRICT },
@@ -759,8 +759,9 @@ main(int argc, char *argv[])
 	switch (backup_subcmd)
 	{
 		case ARCHIVE_PUSH_CMD:
-			return do_archive_push(&instance_config, wal_file_path, wal_file_name,
-								   batch_size, file_overwrite, no_sync, no_ready_rename);
+			do_archive_push(&instance_config, wal_file_path, wal_file_name,
+							batch_size, file_overwrite, no_sync, no_ready_rename);
+			break;
 		case ARCHIVE_GET_CMD:
 			return do_archive_get(&instance_config,
 								  wal_file_path, wal_file_name);

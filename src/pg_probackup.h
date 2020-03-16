@@ -697,7 +697,7 @@ extern int do_init(void);
 extern int do_add_instance(InstanceConfig *instance);
 
 /* in archive.c */
-extern int do_archive_push(InstanceConfig *instance, char *wal_file_path,
+extern void do_archive_push(InstanceConfig *instance, char *wal_file_path,
 						   char *wal_file_name, int batch_size, bool overwrite,
 						   bool no_sync, bool no_ready_rename);
 extern int do_archive_get(InstanceConfig *instance, char *wal_file_path,
@@ -946,7 +946,7 @@ extern int32  do_decompress(void* dst, size_t dst_size, void const* src, size_t 
 							CompressAlg alg, const char **errormsg);
 
 extern void pretty_size(int64 size, char *buf, size_t len);
-extern void pretty_time_interval(int64 num_seconds, char *buf, size_t len);
+extern void pretty_time_interval(double time, char *buf, size_t len);
 
 extern PGconn *pgdata_basic_setup(ConnectionOptions conn_opt, PGNodeInfo *nodeInfo);
 extern void check_system_identifiers(PGconn *conn, char *pgdata);
