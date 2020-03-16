@@ -458,11 +458,37 @@ parse_program_version(const char *program_version)
 
 	return result;
 }
+static const char *statusName[] =
+{
+	"UNKNOWN",
+	"OK",
+	"ERROR",
+	"RUNNING",
+	"MERGING",
+	"MERGED",
+	"DELETING",
+	"DELETED",
+	"DONE",
+	"ORPHAN",
+	"CORRUPT"
+};
 
 const char *
 status2str(BackupStatus status)
 {
-	static const char *statusName[] =
+	if (status < BACKUP_STATUS_INVALID || BACKUP_STATUS_CORRUPT < status)
+		return "UNKNOWN";
+
+	return statusName[status];
+}
+
+
+
+BackupStatus
+str2status(const char *status)
+{
+
+/*	static const char *statusName[] =
 	{
 		"UNKNOWN",
 		"OK",
@@ -475,9 +501,13 @@ status2str(BackupStatus status)
 		"DONE",
 		"ORPHAN",
 		"CORRUPT"
-	};
-	if (status < BACKUP_STATUS_INVALID || BACKUP_STATUS_CORRUPT < status)
-		return "UNKNOWN";
+	};*/
 
-	return statusName[status];
+
+	for (int i = 0; i <= BACKUP_STATUS_CORRUPT; i++)
+	{
+		if (pg_strcasecmp(status, statusName[i]) == 0) return i;
+	}
+
+	return 0;
 }

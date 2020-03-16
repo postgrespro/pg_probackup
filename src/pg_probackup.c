@@ -117,7 +117,7 @@ bool		delete_expired = false;
 bool		merge_expired = false;
 bool		force = false;
 bool		dry_run = false;
-bool		delete_error = false;
+static char *delete_status = NULL;
 /* compression options */
 bool 		compress_shortcut = false;
 
@@ -201,7 +201,8 @@ static ConfigOption cmd_options[] =
 	/* delete options */
 	{ 'b', 145, "wal",				&delete_wal,		SOURCE_CMD_STRICT },
 	{ 'b', 146, "expired",			&delete_expired,	SOURCE_CMD_STRICT },
-	{ 'b', 172, "error-state",		&delete_error,		SOURCE_CMD_STRICT },
+	{ 's', 172, "status",			&delete_status,		SOURCE_CMD_STRICT },
+
 	/* TODO not implemented yet */
 	{ 'b', 147, "force",			&force,				SOURCE_CMD_STRICT },
 	/* compression options */
@@ -787,14 +788,14 @@ main(int argc, char *argv[])
 				elog(ERROR, "You cannot specify --delete-expired and (-i, --backup-id) options together");
 			if (merge_expired && backup_id_string)
 				elog(ERROR, "You cannot specify --merge-expired and (-i, --backup-id) options together");
-			if (delete_error && backup_id_string)
-				elog(ERROR, "You cannot specify --error-state and (-i, --backup-id) options together");
-			if (!delete_expired && !merge_expired && !delete_wal && !delete_error && !backup_id_string)
+			if (delete_status && backup_id_string)
+				elog(ERROR, "You cannot specify --status and (-i, --backup-id) options together");
+			if (!delete_expired && !merge_expired && !delete_wal && delete_status==NULL && !backup_id_string)
 				elog(ERROR, "You must specify at least one of the delete options: "
-								"--delete-expired |--delete-wal |--merge-expired |--error-state |(-i, --backup-id)");
+								"--delete-expired |--delete-wal |--merge-expired |--status |(-i, --backup-id)");
 			if (!backup_id_string)
-				if(delete_error) 
-					do_delete_error();
+				if (delete_status) 
+					do_delete_status(delete_status);
 				else
 					return do_retention();
 			else

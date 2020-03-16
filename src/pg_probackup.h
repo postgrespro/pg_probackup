@@ -706,7 +706,7 @@ extern void do_delete(time_t backup_id);
 extern void delete_backup_files(pgBackup *backup);
 extern int do_retention(void);
 extern int do_delete_instance(void);
-extern int do_delete_error(void);
+extern int do_delete_status(char *status);
 
 /* in fetch.c */
 extern char *slurpFile(const char *datadir,
@@ -915,6 +915,7 @@ extern void copy_pgcontrol_file(const char *from_fullpath, fio_location from_loc
 
 extern void time2iso(char *buf, size_t len, time_t time);
 extern const char *status2str(BackupStatus status);
+extern BackupStatus str2status(const char *status);
 extern const char *base36enc(long unsigned int value);
 extern char *base36enc_dup(long unsigned int value);
 extern long unsigned int base36dec(const char *text);

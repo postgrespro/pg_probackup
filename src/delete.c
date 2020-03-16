@@ -1026,13 +1026,20 @@ do_delete_instance(void)
 
 /* Delete all error backup files of given instance. */
 int
-do_delete_error(void)
+do_delete_status(char* status)
 {
 	parray		*backup_list;
 	parray		*xlog_files_list;
 	int 		i;
 	int 		rc;
 	char		instance_config_path[MAXPGPATH];
+	
+	BackupStatus status_for_delete;
+
+	status_for_delete = str2status(status);
+
+	if (status_for_delete == BACKUP_STATUS_INVALID)
+		elog(ERROR, "Unknown '%s' value for --status option", status);
 
 
 	/* Delete all error backups. */
@@ -1041,7 +1048,7 @@ do_delete_error(void)
 	for (i = 0; i < parray_num(backup_list); i++)
 	{
 		pgBackup   *backup = (pgBackup *) parray_get(backup_list, i);
-		if (backup->status == BACKUP_STATUS_ERROR){
+		if (backup->status == status_for_delete){
 			/* elog(INFO, "Delete error backup '%s' ", base36enc(backup->backup_id)); */
 			catalog_lock_backup_list(backup_list, i, i);
 			delete_backup_files(backup);
@@ -1053,6 +1060,6 @@ do_delete_error(void)
 	parray_free(backup_list);
 
 
-	elog(INFO, "Error backups from instance '%s' successfully deleted", instance_name);
+	elog(INFO, "Backups with status '%s' from instance '%s' successfully deleted", status, instance_name);
 	return 0;
 }
