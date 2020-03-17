@@ -344,8 +344,6 @@ push_file(WALSegno *xlogfile, const char *archive_status_dir,
 
 	/* take '--no-ready-rename' flag into account */
 	if (!no_ready_rename)
-		/* don`t rename ready file for the first segment,
-		 * postgres will complain via WARNING if we do that */
 	{
 		char	wal_file_ready[MAXPGPATH];
 		char	wal_file_done[MAXPGPATH];
