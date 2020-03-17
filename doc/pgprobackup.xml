@@ -3229,10 +3229,10 @@ pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replace
       policy, without performing any irreversible actions.
     </para>
     <para>
-      To delete backups with the ERROR status, use the <option>--error-state</option> flag:
+      To delete all backups with some status, use the <option>--status</option>:
     </para>
     <programlisting>
-pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> --error-state
+pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> --status=ERROR
 </programlisting>
 
 </refsect2>
@@ -3869,7 +3869,7 @@ pg_probackup merge -B <replaceable>backup_dir</replaceable> --instance <replacea
 pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable>
 [--help] [-j <replaceable>num_threads</replaceable>] [--progress]
 [--retention-redundancy=<replaceable>redundancy</replaceable>][--retention-window=<replaceable>window</replaceable>][--wal-depth=<replaceable>wal_depth</replaceable>]
-[--delete-wal] {-i <replaceable>backup_id</replaceable> | --delete-expired [--merge-expired] | --merge-expired | --error-state}
+[--delete-wal] {-i <replaceable>backup_id</replaceable> | --delete-expired [--merge-expired] | --merge-expired | --status= }
 [--dry-run]
 [<replaceable>logging_options</replaceable>]
 </programlisting>

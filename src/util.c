@@ -488,22 +488,6 @@ BackupStatus
 str2status(const char *status)
 {
 
-/*	static const char *statusName[] =
-	{
-		"UNKNOWN",
-		"OK",
-		"ERROR",
-		"RUNNING",
-		"MERGING",
-		"MERGED",
-		"DELETING",
-		"DELETED",
-		"DONE",
-		"ORPHAN",
-		"CORRUPT"
-	};*/
-
-
 	for (int i = 0; i <= BACKUP_STATUS_CORRUPT; i++)
 	{
 		if (pg_strcasecmp(status, statusName[i]) == 0) return i;

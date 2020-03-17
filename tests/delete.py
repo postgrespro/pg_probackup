@@ -835,7 +835,7 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(len(show_backups), 4)
 
         # delete error backups
-        self.delete_pb(backup_dir, 'node', options=['--error-state'])
+        self.delete_pb(backup_dir, 'node', options=['--status=ERROR'])
 
 	print(self.show_pb(backup_dir, as_text=True, as_json=False))
 
