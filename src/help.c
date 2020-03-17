@@ -215,10 +215,10 @@ help_pg_probackup(void)
 
 	printf(_("\n  %s archive-push -B backup-path --instance=instance_name\n"), PROGRAM_NAME);
 	printf(_("                 --wal-file-name=wal-file-name\n"));
-	printf(_("                 [-j num-threads]\n"));
+	printf(_("                 [-j num-threads] [--batch-size batch_size]\n"));
+	printf(_("                 [--archive-timeout=timeout]\n"));
 	printf(_("                 [--no-ready-rename] [--no-sync]\n"));
-	printf(_("                 [--overwrite]\n"));
-	printf(_("                 [--compress]\n"));
+	printf(_("                 [--overwrite] [--compress]\n"));
 	printf(_("                 [--compress-algorithm=compress-algorithm]\n"));
 	printf(_("                 [--compress-level=compress-level]\n"));
 	printf(_("                 [--remote-proto] [--remote-host]\n"));
@@ -870,10 +870,10 @@ help_archive_push(void)
 {
 	printf(_("\n%s archive-push -B backup-path --instance=instance_name\n"), PROGRAM_NAME);
 	printf(_("                 --wal-file-name=wal-file-name\n"));
-	printf(_("                 [-j num-threads]\n"));
+	printf(_("                 [-j num-threads] [--batch-size batch_size]\n"));
+	printf(_("                 [--archive-timeout=timeout]\n"));
 	printf(_("                 [--no-ready-rename] [--no-sync]\n"));
-	printf(_("                 [--overwrite]\n"));
-	printf(_("                 [--compress]\n"));
+	printf(_("                 [--overwrite] [--compress]\n"));
 	printf(_("                 [--compress-algorithm=compress-algorithm]\n"));
 	printf(_("                 [--compress-level=compress-level]\n"));
 	printf(_("                 [--remote-proto] [--remote-host]\n"));
@@ -883,9 +883,11 @@ help_archive_push(void)
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
 	printf(_("      --instance=instance_name     name of the instance to delete\n"));
 	printf(_("      --wal-file-name=wal-file-name\n"));
-	printf(_("                                   name of the WAL file to retrieve from the server\n"));
+	printf(_("                                   name of the file to copy into WAL archive\n"));
 	printf(_("  -j, --threads=NUM                number of parallel threads\n"));
-	printf(_("      --no-ready-rename            do not rename '.ready' file in 'archive_status' directory\n"));
+	printf(_("      --batch-size=NUM             number of files to be copied\n"));
+	printf(_("      --archive-timeout=timeout    wait timeout before discarding stale temp file(default: 5min)\n"));
+	printf(_("      --no-ready-rename            do not rename '.ready' files in 'archive_status' directory\n"));
 	printf(_("      --no-sync                    do not sync WAL file to disk\n"));
 	printf(_("      --overwrite                  overwrite archived WAL file\n"));
 
