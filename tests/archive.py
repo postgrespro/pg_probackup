@@ -1832,6 +1832,79 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
+    def test_archive_push_sanity(self):
+        """"""
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'archive_mode': 'on',
+                'archive_command': 'exit 1'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+
+        node.slow_start()
+
+        node.pgbench_init(scale=50)
+        node.stop()
+
+        self.set_archiving(backup_dir, 'node', node)
+        os.remove(os.path.join(node.logs_dir, 'postgresql.log'))
+        node.slow_start()
+
+        self.backup_node(backup_dir, 'node', node)
+
+        with open(os.path.join(node.logs_dir, 'postgresql.log'), 'r') as f:
+            postgres_log_content = f.read()
+
+        # print(postgres_log_content)
+        # make sure that .backup file is not compressed
+        self.assertNotIn('.backup.gz', postgres_log_content)
+        self.assertNotIn('WARNING', postgres_log_content)
+
+        replica = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'replica'))
+        replica.cleanup()
+
+        self.restore_node(
+            backup_dir, 'node', replica,
+            data_dir=replica.data_dir, options=['-R'])
+
+        #self.set_archiving(backup_dir, 'replica', replica, replica=True)
+        self.set_auto_conf(replica, {'port': replica.port})
+        self.set_auto_conf(replica, {'archive_mode': 'always'})
+        self.set_auto_conf(replica, {'hot_standby': 'on'})
+        replica.slow_start(replica=True)
+
+        self.wait_until_replica_catch_with_master(node, replica)
+
+        node.pgbench_init(scale=5)
+
+        replica.promote()
+        replica.pgbench_init(scale=10)
+
+        with open(os.path.join(replica.logs_dir, 'postgresql.log'), 'r') as f:
+            replica_log_content = f.read()
+
+        # make sure that .partial file is not compressed
+        self.assertNotIn('.partial.gz', replica_log_content)
+        # make sure that .history file is not compressed
+        self.assertNotIn('.history.gz', replica_log_content)
+        self.assertNotIn('WARNING', replica_log_content)
+
+        output = self.show_archive(
+            backup_dir, 'node', as_json=False, as_text=True,
+            options=['--log-level-console=VERBOSE'])
+
+        self.assertNotIn('WARNING', output)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
 # TODO test with multiple not archived segments.
 
 # important - switchpoint may be NullOffset LSN and not actually existing in archive to boot.
