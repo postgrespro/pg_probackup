@@ -113,7 +113,8 @@ do_archive_push(InstanceConfig *instance, char *wal_file_path,
 	char        pretty_time_str[20];
 
 	/* files to push in multi-thread mode */
-	parray	   *batch_files = NULL;
+	parray     *batch_files = NULL;
+	int         n_threads;
 
 	my_pid = getpid();
 
@@ -148,25 +149,32 @@ do_archive_push(InstanceConfig *instance, char *wal_file_path,
 		is_compress = true;
 #endif
 
-	if (num_threads > batch_size)
-		num_threads = batch_size;
-
 	/*  Setup filelist and locks */
 	batch_files = setup_push_filelist(archive_status_dir, wal_file_name, batch_size);
 
+	n_threads = num_threads;
+	if (num_threads > parray_num(batch_files))
+		n_threads = parray_num(batch_files);
+
 	elog(INFO, "PID [%d]: pg_probackup push file %s into archive, "
-					"threads: %i, batch size: %i, compression: %s",
-						my_pid, wal_file_name, num_threads,
-						batch_size, is_compress ? "zlib" : "none");
+					"threads: %i/%i, batch: %lu/%i, compression: %s",
+						my_pid, wal_file_name, n_threads, num_threads,
+						parray_num(batch_files), batch_size,
+						is_compress ? "zlib" : "none");
+
+	num_threads = n_threads;
 
 	/* Single-thread push
-	 * We don`t want to start multi-thread push, if number of threads in equal to 1.
+	 * We don`t want to start multi-thread push, if number of threads in equal to 1,
+	 * or the number of files ready to push is small.
 	 * Multithreading in remote mode isn`t cheap,
 	 * establishing ssh connection can take 100-200ms, so running and terminating
 	 * one thread using generic multithread approach can take
 	 * almost as much time as copying itself.
+	 * TODO: maybe we should be more conservative and force single thread
+	 * push if batch_files array is small.
 	 */
-	if (num_threads == 1)
+	if (num_threads == 1 || (parray_num(batch_files) == 1))
 	{
 		INSTR_TIME_SET_CURRENT(start_time);
 		for (i = 0; i < parray_num(batch_files); i++)
@@ -297,8 +305,7 @@ push_files(void *arg)
 		rc = push_file(xlogfile, args->archive_status_dir,
 					   args->pg_xlog_dir, args->archive_dir,
 					   args->overwrite, args->no_sync,
-					   args->archive_timeout,
-					   no_ready_rename,
+					   args->archive_timeout, no_ready_rename,
 					   /* do not compress .backup, .partial and .history files */
 					   args->compress && IsXLogFileName(xlogfile->name) ? true : false,
 					   args->compress_level, args->thread_num);
@@ -459,7 +466,7 @@ push_file_internal_uncompressed(const char *wal_file_name, const char *pg_xlog_d
 		/* first round */
 		if (!partial_try_count)
 		{
-			elog(VERBOSE, "Thread [%d]: Temp WAL file already exists, "
+			elog(LOG, "Thread [%d]: Temp WAL file already exists, "
 							"waiting on it %u seconds: \"%s\"",
 							thread_num, archive_timeout, to_fullpath_part);
 			partial_file_size = st.st_size;
@@ -704,7 +711,7 @@ push_file_internal_gz(const char *wal_file_name, const char *pg_xlog_dir,
 		/* first round */
 		if (!partial_try_count)
 		{
-			elog(VERBOSE, "Thread [%d]: Temp WAL file already exists, "
+			elog(LOG, "Thread [%d]: Temp WAL file already exists, "
 							"waiting on it %u seconds: \"%s\"",
 							thread_num, archive_timeout, to_fullpath_gz_part);
 			partial_file_size = st.st_size;
@@ -1143,16 +1150,16 @@ setup_push_filelist(const char *archive_status_dir, const char *first_file,
 		char suffix[MAXFNAMELEN];
 		pgFile *file = (pgFile *) parray_get(status_files, i);
 
-		/* first filename already in batch list */
-		if (strcmp(file->name, first_file) == 0)
-			continue;
-
 		result = sscanf(file->name, "%[^.]%s", (char *) &filename, (char *) &suffix);
 
 		if (result != 2)
 			continue;
 
 		if (strcmp(suffix, ".ready") != 0)
+			continue;
+
+		/* first filename already in batch list */
+		if (strcmp(filename, first_file) == 0)
 			continue;
 
 		xlogfile = palloc(sizeof(WALSegno));
