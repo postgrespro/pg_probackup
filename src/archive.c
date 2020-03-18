@@ -267,7 +267,7 @@ push_done:
 	if (push_isok)
 		/* report number of files pushed into archive */
 		elog(INFO, "PID [%d]: pg_probackup archive-push completed successfully, "
-					"pushed files: %u, skipped files %u, time elapsed: %s",
+					"pushed: %u, skipped: %u, time elapsed: %s",
 					my_pid, n_total_pushed, n_total_skipped, pretty_time_str);
 	else
 		elog(ERROR, "PID [%d]: pg_probackup archive-push failed, "
