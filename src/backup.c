@@ -1093,7 +1093,7 @@ pg_start_backup(const char *label, bool smooth, pgBackup *backup,
 
 	PQclear(res);
 
-	if (current.backup_mode == BACKUP_MODE_DIFF_PAGE &&
+	if ((!stream_wal || current.backup_mode == BACKUP_MODE_DIFF_PAGE) &&
 		!backup->from_replica &&
 		!(nodeInfo->server_version < 90600 &&
 		  !nodeInfo->is_superuser))
@@ -1105,17 +1105,14 @@ pg_start_backup(const char *label, bool smooth, pgBackup *backup,
 		 */
 		pg_switch_wal(conn);
 
-	if (current.backup_mode == BACKUP_MODE_DIFF_PAGE)
-		/* In PAGE mode wait for current segment... */
+	/* In PAGE mode or in ARCHIVE wal-mode wait for current segment */
+	if (current.backup_mode == BACKUP_MODE_DIFF_PAGE ||!stream_wal)
+		/*
+		 * Do not wait start_lsn for stream backup.
+		 * Because WAL streaming will start after pg_start_backup() in stream
+		 * mode.
+		 */
 		wait_wal_lsn(backup->start_lsn, true, backup->tli, false, true, ERROR, false);
-	/*
-	 * Do not wait start_lsn for stream backup.
-	 * Because WAL streaming will start after pg_start_backup() in stream
-	 * mode.
-	 */
-	else if (!stream_wal)
-		/* ...for others wait for previous segment */
-		wait_wal_lsn(backup->start_lsn, true, backup->tli, true, true, ERROR, false);
 }
 
 /*
