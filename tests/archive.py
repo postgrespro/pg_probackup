@@ -263,7 +263,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
                 log_content)
         else:
             self.assertIn(
-                "ERROR: WAL segment 000000010000000000000002 could not be archived in 60 seconds",
+                "ERROR: WAL segment 000000010000000000000003 could not be archived in 60 seconds",
                 log_content)
 
         log_file = os.path.join(node.logs_dir, 'postgresql.log')
