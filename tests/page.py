@@ -940,8 +940,10 @@ class PageTest(ProbackupTest, unittest.TestCase):
         self.set_archiving(backup_dir, 'alien_node', alien_node)
         alien_node.slow_start()
 
-        self.backup_node(backup_dir, 'node', node)
-        self.backup_node(backup_dir, 'alien_node', alien_node)
+        self.backup_node(
+            backup_dir, 'node', node, options=['--stream'])
+        self.backup_node(
+            backup_dir, 'alien_node', alien_node, options=['--stream'])
 
         # make some wals
         node.safe_psql(
