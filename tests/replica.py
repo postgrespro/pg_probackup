@@ -714,19 +714,19 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             log_content = f.read()
 
         self.assertIn(
-            'LOG: Null offset in stop_backup_lsn value 0/3000000',
+            'LOG: Null offset in stop_backup_lsn value 0/4000000',
             log_content)
 
         self.assertIn(
-            'LOG: Looking for segment: 000000010000000000000003',
+            'LOG: Looking for segment: 000000010000000000000004',
             log_content)
 
         self.assertIn(
-            'LOG: First record in WAL segment "000000010000000000000003": 0/3000028',
+            'LOG: First record in WAL segment "000000010000000000000004": 0/4000028',
             log_content)
 
         self.assertIn(
-            'LOG: current.stop_lsn: 0/3000028',
+            'LOG: current.stop_lsn: 0/4000028',
             log_content)
 
         # Clean after yourself
@@ -1219,7 +1219,8 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
                     repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertTrue(
-                'WARNING: Cannot find valid backup, WAL archive is not available' in e.message and
+                'WARNING: Cannot find valid backup on previous timelines, '
+                'WAL archive is not available' in e.message and
                 'ERROR: Create new full backup before an incremental one' in e.message,
                 "\n Unexpected Error Message: {0}\n CMD: {1}".format(
                     repr(e.message), self.cmd))
@@ -1542,7 +1543,8 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
                     repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertTrue(
-                'WARNING: Cannot find valid backup, WAL archive is not available' in e.message and
+                'WARNING: Cannot find valid backup on previous timelines, '
+                'WAL archive is not available' in e.message and
                 'ERROR: Create new full backup before an incremental one' in e.message,
                 "\n Unexpected Error Message: {0}\n CMD: {1}".format(
                     repr(e.message), self.cmd))
