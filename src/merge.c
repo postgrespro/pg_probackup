@@ -1132,7 +1132,7 @@ merge_data_file(parray *parent_chain, pgBackup *full_backup,
 	if (out == NULL)
 		elog(ERROR, "Cannot open merge target file \"%s\": %s",
 			 to_fullpath_tmp1, strerror(errno));
-	setbuffer(out, buffer, STDIO_BUFSIZE);
+	setvbuf(out, buffer, _IOFBF, STDIO_BUFSIZE);
 
 	/* restore file into temp file */
 	tmp_file->size = restore_data_file(parent_chain, dest_file, out, to_fullpath_tmp1);

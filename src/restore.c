@@ -857,7 +857,7 @@ restore_files(void *arg)
 			goto done;
 
 		if (!fio_is_remote_file(out))
-			setbuffer(out, buffer, STDIO_BUFSIZE);
+			setvbuf(out, buffer, _IOFBF, STDIO_BUFSIZE);
 
 		/* Restore destination file */
 		if (dest_file->is_datafile && !dest_file->is_cfs)

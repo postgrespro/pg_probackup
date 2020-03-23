@@ -623,7 +623,7 @@ backup_data_file(ConnectionArgs* conn_arg, pgFile *file,
 	}
 
 	if (!fio_is_remote_file(in))
-		setbuffer(in, in_buffer, STDIO_BUFSIZE);
+		setvbuf(in, in_buffer, _IOFBF, STDIO_BUFSIZE);
 
 	/* open backup file for write  */
 	out = fopen(to_fullpath, PG_BINARY_W);
@@ -631,7 +631,7 @@ backup_data_file(ConnectionArgs* conn_arg, pgFile *file,
 		elog(ERROR, "Cannot open backup file \"%s\": %s",
 			 to_fullpath, strerror(errno));
 
-	setbuffer(out, out_buffer, STDIO_BUFSIZE);
+	setvbuf(out, out_buffer, _IOFBF, STDIO_BUFSIZE);
 
 	/* update file permission */
 	if (chmod(to_fullpath, FILE_PERMISSION) == -1)
@@ -874,7 +874,7 @@ restore_data_file(parray *parent_chain, pgFile *dest_file, FILE *out, const char
 			elog(ERROR, "Cannot open backup file \"%s\": %s", from_fullpath,
 				 strerror(errno));
 
-		setbuffer(in, buffer, STDIO_BUFSIZE);
+		setvbuf(in, buffer, _IOFBF, STDIO_BUFSIZE);
 
 		/*
 		 * Restore the file.
@@ -1164,7 +1164,7 @@ restore_non_data_file(parray *parent_chain, pgBackup *dest_backup,
 		elog(ERROR, "Cannot open backup file \"%s\": %s", from_fullpath,
 			 strerror(errno));
 
-	setbuffer(in, buffer, STDIO_BUFSIZE);
+	setvbuf(in, buffer, _IOFBF, STDIO_BUFSIZE);
 
 	/* do actual work */
 	restore_non_data_file_internal(in, out, tmp_file, from_fullpath, to_fullpath);
