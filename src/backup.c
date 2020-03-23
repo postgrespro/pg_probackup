@@ -750,7 +750,7 @@ pgdata_basic_setup(ConnectionOptions conn_opt, PGNodeInfo *nodeInfo)
  */
 int
 do_backup(time_t start_time, bool no_validate,
-			pgSetBackupParams *set_backup_params, bool no_sync, char *note)
+			pgSetBackupParams *set_backup_params, bool no_sync)
 {
 	PGconn		*backup_conn = NULL;
 	PGNodeInfo	nodeInfo;
@@ -767,7 +767,7 @@ do_backup(time_t start_time, bool no_validate,
 	current.status = BACKUP_STATUS_RUNNING;
 	current.start_time = start_time;
 	
-	current.note = note;
+	current.note = set_backup_params ? set_backup_params->note : NULL;
 	
 	StrNCpy(current.program_version, PROGRAM_VERSION,
 			sizeof(current.program_version));

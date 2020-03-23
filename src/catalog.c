@@ -1412,8 +1412,10 @@ pin_backup(pgBackup	*target_backup, pgSetBackupParams *set_backup_params)
 	/* Pin comes from expire-time */
 	else if (set_backup_params->expire_time > 0)
 		target_backup->expire_time = set_backup_params->expire_time;
-	else
+	else if (!set_backup_params->note)
 		return false;
+
+	if (set_backup_params->note) target_backup->note = set_backup_params->note;
 
 	/* Update backup.control */
 	write_backup(target_backup);
@@ -1426,9 +1428,11 @@ pin_backup(pgBackup	*target_backup, pgSetBackupParams *set_backup_params)
 		elog(INFO, "Backup %s is pinned until '%s'", base36enc(target_backup->start_time),
 														expire_timestamp);
 	}
-	else
+	else if (set_backup_params->ttl == 0)
 		elog(INFO, "Backup %s is unpinned", base36enc(target_backup->start_time));
 
+	if (set_backup_params->note)
+		elog(INFO, "Saved note for backup %s", base36enc(target_backup->start_time));
 	return true;
 }
 

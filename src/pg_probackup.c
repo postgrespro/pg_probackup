@@ -726,11 +726,12 @@ main(int argc, char *argv[])
 					 expire_time_string);
 		}
 
-		if (expire_time > 0 || ttl >= 0)
+		if (expire_time > 0 || ttl >= 0 || backup_note)
 		{
 			set_backup_params = pgut_new(pgSetBackupParams);
 			set_backup_params->ttl = ttl;
 			set_backup_params->expire_time = expire_time;
+			set_backup_params->note = backup_note;
 		}
 	}
 
@@ -770,7 +771,7 @@ main(int argc, char *argv[])
 					elog(ERROR, "required parameter not specified: BACKUP_MODE "
 						 "(-b, --backup-mode)");
 
-				return do_backup(start_time, no_validate, set_backup_params, no_sync, backup_note);
+				return do_backup(start_time, no_validate, set_backup_params, no_sync);
 			}
 		case RESTORE_CMD:
 			return do_restore_or_validate(current.backup_id,

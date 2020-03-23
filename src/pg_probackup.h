@@ -438,6 +438,7 @@ typedef struct pgSetBackupParams
 	time_t	expire_time; /* Point in time before which backup
 						  * must be pinned.
 						  */
+	char *note;
 } pgSetBackupParams;
 
 typedef struct
@@ -644,7 +645,7 @@ extern const char *pgdata_exclude_dir[];
 
 /* in backup.c */
 extern int do_backup(time_t start_time, bool no_validate,
-					 pgSetBackupParams *set_backup_params, bool no_sync, char *note);
+					 pgSetBackupParams *set_backup_params, bool no_sync);
 extern void do_checkdb(bool need_amcheck, ConnectionOptions conn_opt,
 				  char *pgdata);
 extern BackupMode parse_backup_mode(const char *value);
@@ -946,5 +947,9 @@ extern char *pg_ptrack_get_and_clear(Oid tablespace_oid,
 									 PGconn *backup_conn);
 extern XLogRecPtr get_last_ptrack_lsn(PGconn *backup_conn, PGNodeInfo *nodeInfo);
 extern parray * pg_ptrack_get_pagemapset(PGconn *backup_conn, const char *ptrack_schema, XLogRecPtr lsn);
+
+#ifdef WIN32
+#define setbuffer(stream, buf, size) setvbuf(stream, buf, buf ? _IOFBF : _IONBF, size);
+#endif
 
 #endif /* PG_PROBACKUP_H */
