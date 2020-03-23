@@ -874,7 +874,6 @@ class PageTest(ProbackupTest, unittest.TestCase):
                 'INFO: Wait for WAL segment' in e.message and
                 'to be archived' in e.message and
                 'Could not read WAL record at' in e.message and
-                'incorrect resource manager data checksum in record at' in e.message and
                 'Possible WAL corruption. Error has occured during reading WAL segment' in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
@@ -899,7 +898,6 @@ class PageTest(ProbackupTest, unittest.TestCase):
                 'INFO: Wait for WAL segment' in e.message and
                 'to be archived' in e.message and
                 'Could not read WAL record at' in e.message and
-                'incorrect resource manager data checksum in record at' in e.message and
                 'Possible WAL corruption. Error has occured during reading WAL segment "{0}"'.format(
                     file) in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
@@ -996,8 +994,6 @@ class PageTest(ProbackupTest, unittest.TestCase):
                 'INFO: Wait for WAL segment' in e.message and
                 'to be archived' in e.message and
                 'Could not read WAL record at' in e.message and
-                'WAL file is from different database system: WAL file database system identifier is' in e.message and
-                'pg_control database system identifier is' in e.message and
                 'Possible WAL corruption. Error has occured during reading WAL segment' in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
@@ -1177,6 +1173,85 @@ class PageTest(ProbackupTest, unittest.TestCase):
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd)
             )
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    # @unittest.expectedFailure
+    def test_multi_timeline_page(self):
+        """
+        Check that backup in PAGE mode choose
+        parent backup correctly:
+        t12        /---P-->
+        ...
+        t3      /---->
+        t2   /---->
+        t1 -F-----D->
+
+        P must have F as parent
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={'autovacuum': 'off'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        node.pgbench_init(scale=50)
+        full_id = self.backup_node(backup_dir, 'node', node)
+
+        pgbench = node.pgbench(options=['-T', '20', '-c', '1', '--no-vacuum'])
+        pgbench.wait()
+
+        self.backup_node(backup_dir, 'node', node, backup_type='delta')
+
+        node.cleanup()
+        self.restore_node(
+            backup_dir, 'node', node, backup_id=full_id,
+            options=[
+                '--recovery-target=immediate',
+                '--recovery-target-action=promote'])
+
+        node.slow_start()
+
+        pgbench = node.pgbench(options=['-T', '20', '-c', '1', '--no-vacuum'])
+        pgbench.wait()
+
+        # create timelines
+        for i in range(2, 12):
+            node.cleanup()
+            self.restore_node(
+                backup_dir, 'node', node, backup_id=full_id,
+                options=['--recovery-target-timeline={0}'.format(i)])
+            node.slow_start()
+            pgbench = node.pgbench(options=['-T', '3', '-c', '1', '--no-vacuum'])
+            pgbench.wait()
+
+        page_id = self.backup_node(
+            backup_dir, 'node', node, backup_type='page',
+            options=['--log-level-file=VERBOSE'])
+
+        pgdata = self.pgdata_content(node.data_dir)
+        node.cleanup()
+        self.restore_node(backup_dir, 'node', node)
+        pgdata_restored = self.pgdata_content(node.data_dir)
+        self.compare_pgdata(pgdata, pgdata_restored)
+
+        show = self.show_archive(backup_dir)
+
+        timelines = show[0]['timelines']
+
+        # self.assertEqual()
+        self.assertEqual(
+            self.show_pb(backup_dir, 'node', page_id)['parent-backup-id'],
+            full_id)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)

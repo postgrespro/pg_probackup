@@ -1734,6 +1734,8 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             node.slow_start()
             node.pgbench_init(scale=2)
 
+        sleep(5)
+
         show = self.show_archive(backup_dir)
 
         timelines = show[0]['timelines']
@@ -1755,7 +1757,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             tli13['closest-backup-id'])
 
         self.assertEqual(
-            '0000000D000000000000001B',
+            '0000000D000000000000001C',
             tli13['max-segno'])
 
         # Clean after yourself
