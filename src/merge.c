@@ -106,6 +106,27 @@ do_merge(time_t backup_id)
 		}
 	}
 
+	/*
+	 * Handle the case of crash right after deletion of the target
+	 * incremental backup. We still can recover from this.
+	 * Iterate over backups and look for the FULL backup with
+	 * MERGED status, that has merge-target-id eqial to backup_id.
+	 */
+	if (dest_backup == NULL)
+	{
+		for (i = 0; i < parray_num(backups); i++)
+		{
+			pgBackup   *backup = (pgBackup *) parray_get(backups, i);
+
+			if (backup->status == BACKUP_STATUS_MERGED &&
+				backup->merge_dest_backup == backup_id)
+			{
+				dest_backup = backup;
+				break;
+			}
+		}
+	}
+
 	if (dest_backup == NULL)
 		elog(ERROR, "Target backup %s was not found", base36enc(backup_id));
 
@@ -427,13 +448,13 @@ merge_chain(parray *parent_chain, pgBackup *full_backup, pgBackup *dest_backup)
 	/* for fancy reporting */
 	time_t		end_time;
 	char		pretty_time[20];
-	/* in-place flags */
+	/* in-place merge flags */
 	bool		compression_match = false;
 	bool		program_version_match = false;
 	/* It's redundant to check block checksumms during merge */
 	skip_block_validation = true;
 
-	/* Handle corner cases missing destination backup */
+	/* Handle corner cases of missing destination backup */
 	if (dest_backup == NULL &&
 		full_backup->status == BACKUP_STATUS_MERGED)
 		goto merge_rename;
@@ -740,12 +761,11 @@ merge_delete:
 	}
 
 	/*
-	 * If we crash now, automatic rerun of failed merge will be impossible.
-	 * The user must have to manually change start_time of FULL backup
-	 * to start_time of destination backup:
 	 * PAGE2 DELETED
 	 * PAGE1 DELETED
 	 * FULL  MERGED
+	 * If we crash now, automatic rerun of failed merge is still possible:
+	 * The user should start merge with full backup ID as an argument to option '-i'.
 	 */
 
 merge_rename:
@@ -776,6 +796,11 @@ merge_rename:
 			elog(ERROR, "Could not rename directory \"%s\" to \"%s\": %s",
 				 full_backup->root_dir, destination_path, strerror(errno));
 	}
+
+	/* If we crash here, it will produce full backup in MERGED
+	 * status, located in directory with wrong backup id.
+	 * It should not be a problem.
+	 */
 
 	/*
 	 * Merging finished, now we can safely update ID of the FULL backup
@@ -891,7 +916,7 @@ merge_files(void *arg)
 			 *
 			 * Case 2:
 			 * in this case in place merge is possible:
-			 * 0 PAGE; file, size BYTES_INVALID (should not be possible)
+			 * 0 PAGE; file, size 0
 			 * 1 PAGE; file, size 0
 			 * 2 FULL; file, size 100500
 			 *
@@ -901,11 +926,11 @@ merge_files(void *arg)
 			 * 1 PAGE; file, size 100501
 			 * 2 FULL; file, size 100500
 			 *
-			 * Case 4:
+			 * Case 4 (good candidate for future optimization):
 			 * in this case in place merge is impossible:
 			 * 0 PAGE; file, size BYTES_INVALID
 			 * 1 PAGE; file, size 100501
-			 * 2 FULL; file, missing
+			 * 2 FULL; file, not exists yet
 			 */
 
 			in_place = true;
@@ -1107,7 +1132,7 @@ merge_data_file(parray *parent_chain, pgBackup *full_backup,
 	if (out == NULL)
 		elog(ERROR, "Cannot open merge target file \"%s\": %s",
 			 to_fullpath_tmp1, strerror(errno));
-	setbuf(out, buffer);
+	setvbuf(out, buffer, _IOFBF, STDIO_BUFSIZE);
 
 	/* restore file into temp file */
 	tmp_file->size = restore_data_file(parent_chain, dest_file, out, to_fullpath_tmp1);
@@ -1138,6 +1163,7 @@ merge_data_file(parray *parent_chain, pgBackup *full_backup,
 	if (tmp_file->write_size == 0)
 		return;
 
+	/* sync second temp file to disk */
 	if (fio_sync(to_fullpath_tmp2, FIO_BACKUP_HOST) != 0)
 		elog(ERROR, "Cannot sync merge temp file \"%s\": %s",
 			to_fullpath_tmp2, strerror(errno));
@@ -1242,7 +1268,7 @@ merge_non_data_file(parray *parent_chain, pgBackup *full_backup,
 	backup_non_data_file(tmp_file, NULL, from_fullpath,
 						 to_fullpath_tmp, BACKUP_MODE_FULL, 0, false);
 
-	/* TODO: --no-sync support */
+	/* sync temp file to disk */
 	if (fio_sync(to_fullpath_tmp, FIO_BACKUP_HOST) != 0)
 		elog(ERROR, "Cannot sync merge temp file \"%s\": %s",
 			to_fullpath_tmp, strerror(errno));

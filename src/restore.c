@@ -441,7 +441,6 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 				base36enc(dest_backup->start_time), status2str(dest_backup->status));
 
 	/* We ensured that all backups are valid, now restore if required
-	 * TODO: before restore - lock entire parent chain
 	 */
 	if (params->is_restore)
 	{
@@ -472,6 +471,9 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 		/* Create recovery.conf with given recovery target parameters */
 		create_recovery_conf(target_backup_id, rt, dest_backup, params);
 	}
+
+	/* ssh connection to longer needed */
+	fio_disconnect();
 
 	/* cleanup */
 	parray_walk(backups, pgBackupFree);
@@ -555,7 +557,11 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 		else
 			backup->files = dest_files;
 
-		/* this sorting is important */
+		/*
+		 * this sorting is important, because we rely on it to find
+		 * destination file in intermediate backups file lists
+		 * using bsearch.
+		 */
 		parray_qsort(backup->files, pgFileCompareRelPathWithExternal);
 	}
 
@@ -622,8 +628,6 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 	threads = (pthread_t *) palloc(sizeof(pthread_t) * num_threads);
 	threads_args = (restore_files_arg *) palloc(sizeof(restore_files_arg) *
 												num_threads);
-
-	/* Restore files into target directory */
 	if (dest_backup->stream)
 		dest_bytes = dest_backup->pgdata_bytes + dest_backup->wal_bytes;
 	else
@@ -633,6 +637,8 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 	elog(INFO, "Start restoring backup files. PGDATA size: %s", pretty_dest_bytes);
 	time(&start_time);
 	thread_interrupted = false;
+
+	/* Restore files into target directory */
 	for (i = 0; i < num_threads; i++)
 	{
 		restore_files_arg *arg = &(threads_args[i]);
@@ -851,7 +857,7 @@ restore_files(void *arg)
 			goto done;
 
 		if (!fio_is_remote_file(out))
-			setbuf(out, buffer);
+			setvbuf(out, buffer, _IOFBF, STDIO_BUFSIZE);
 
 		/* Restore destination file */
 		if (dest_file->is_datafile && !dest_file->is_cfs)
@@ -974,6 +980,7 @@ create_recovery_conf(time_t backup_id,
 	/* construct restore_command */
 	if (pitr_requested)
 	{
+		fio_fprintf(fp, "\n## recovery settings\n");
 		/* If restore_command is provided, use it. Otherwise construct it from scratch. */
 		if (restore_command_provided)
 			sprintf(restore_command_guc, "%s", instance_config.restore_command);
@@ -1049,8 +1056,15 @@ create_recovery_conf(time_t backup_id,
 			fio_fprintf(fp, "recovery_target_action = '%s'\n", "pause");
 	}
 
+	if (pitr_requested)
+	{
+		elog(LOG, "Setting restore_command to '%s'", restore_command_guc);
+		fio_fprintf(fp, "restore_command = '%s'\n", restore_command_guc);
+	}
+
 	if (params->restore_as_replica)
 	{
+		fio_fprintf(fp, "\n## standby settings\n");
 	/* standby_mode was removed in PG12 */
 #if PG_VERSION_NUM < 120000
 		fio_fprintf(fp, "standby_mode = 'on'\n");
@@ -1060,12 +1074,9 @@ create_recovery_conf(time_t backup_id,
 			fio_fprintf(fp, "primary_conninfo = '%s'\n", params->primary_conninfo);
 		else if (backup->primary_conninfo)
 			fio_fprintf(fp, "primary_conninfo = '%s'\n", backup->primary_conninfo);
-	}
 
-	if (pitr_requested)
-	{
-		elog(LOG, "Setting restore_command to '%s'", restore_command_guc);
-		fio_fprintf(fp, "restore_command = '%s'\n", restore_command_guc);
+		if (params->primary_slot_name != NULL)
+			fio_fprintf(fp, "primary_slot_name = '%s'\n", params->primary_slot_name);
 	}
 
 	if (fio_fflush(fp) != 0 ||

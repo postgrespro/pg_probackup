@@ -259,10 +259,9 @@ delete_file:
  * We cannot make decision about file decompression because
  * user may ask to backup already compressed files and we should be
  * obvious about it.
- * TODO: add decompression option.
  */
 pg_crc32
-pgFileGetCRCnew(const char *file_path, bool use_crc32c, bool missing_ok)
+pgFileGetCRC(const char *file_path, bool use_crc32c, bool missing_ok)
 {
 	FILE	   *fp;
 	pg_crc32	crc = 0;
@@ -312,65 +311,6 @@ pgFileGetCRCnew(const char *file_path, bool use_crc32c, bool missing_ok)
 
 	FIN_FILE_CRC32(use_crc32c, crc);
 	fclose(fp);
-
-	return crc;
-}
-
-/*
- * Read the file to compute its CRC.
- * As a handy side effect, we return filesize via bytes_read parameter.
- */
-pg_crc32
-pgFileGetCRC(const char *file_path, bool use_crc32c, bool raise_on_deleted,
-			 size_t *bytes_read, fio_location location)
-{
-	FILE	   *fp;
-	pg_crc32	crc = 0;
-	char		buf[STDIO_BUFSIZE];
-	size_t		len = 0;
-	size_t		total = 0;
-	int			errno_tmp;
-
-	INIT_FILE_CRC32(use_crc32c, crc);
-
-	/* open file in binary read mode */
-	fp = fio_fopen(file_path, PG_BINARY_R, location);
-	if (fp == NULL)
-	{
-		if (!raise_on_deleted && errno == ENOENT)
-		{
-			FIN_FILE_CRC32(use_crc32c, crc);
-			return crc;
-		}
-		else
-			elog(ERROR, "cannot open file \"%s\": %s",
-				file_path, strerror(errno));
-	}
-
-	/* calc CRC of file */
-	for (;;)
-	{
-		if (interrupted)
-			elog(ERROR, "interrupted during CRC calculation");
-
-		len = fio_fread(fp, buf, sizeof(buf));
-		if (len == 0)
-			break;
-		/* update CRC */
-		COMP_FILE_CRC32(use_crc32c, crc, buf, len);
-		total += len;
-	}
-
-	if (bytes_read)
-		*bytes_read = total;
-
-	errno_tmp = errno;
-	if (len < 0)
-		elog(WARNING, "cannot read \"%s\": %s", file_path,
-			strerror(errno_tmp));
-
-	FIN_FILE_CRC32(use_crc32c, crc);
-	fio_fclose(fp);
 
 	return crc;
 }
@@ -1753,7 +1693,6 @@ write_database_map(pgBackup *backup, parray *database_map, parray *backup_files_
 	char		database_dir[MAXPGPATH];
 	char		database_map_path[MAXPGPATH];
 
-//	pgBackupGetPath(backup, path, lengthof(path), DATABASE_DIR);
 	join_path_components(database_dir, backup->root_dir, DATABASE_DIR);
 	join_path_components(database_map_path, database_dir, DATABASE_MAP);
 
@@ -1775,9 +1714,9 @@ write_database_map(pgBackup *backup, parray *database_map, parray *backup_files_
 								 FIO_BACKUP_HOST);
 	pfree(file->path);
 	file->path = pgut_strdup(DATABASE_MAP);
-	file->crc = pgFileGetCRCnew(database_map_path, true, false);
+	file->crc = pgFileGetCRC(database_map_path, true, false);
 
-	file->write_size = file->read_size;
+	file->write_size = file->size;
 	file->uncompressed_size = file->read_size;
 	parray_append(backup_files_list, file);
 }

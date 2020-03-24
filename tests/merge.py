@@ -2308,17 +2308,81 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
+    def test_idempotent_merge(self):
+        """
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={'autovacuum': 'off'})
 
-# 1. always use parent link when merging (intermediates may be from different chain)
-# 2. page backup we are merging with may disappear after failed merge,
-# it should not be possible to continue merge after that
-#   PAGE_A  MERGING (disappear)
-#   FULL    MERGING
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
 
-#   FULL    MERGING
+        # add database
+        node.safe_psql(
+            'postgres',
+            'CREATE DATABASE testdb')
 
-#   PAGE_B  OK      (new backup)
-#   FULL    MERGING
+        # take FULL backup
+        full_id = self.backup_node(
+            backup_dir, 'node', node, options=['--stream'])
 
-# 3. Need new test with corrupted FULL backup
-# 4. different compression levels
+        # create database
+        node.safe_psql(
+            'postgres',
+            'create DATABASE testdb1')
+
+        # take PAGE backup
+        page_id = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        # create database
+        node.safe_psql(
+            'postgres',
+            'create DATABASE testdb2')
+
+        page_id_2 = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        gdb = self.merge_backup(
+            backup_dir, 'node', page_id_2,
+            gdb=True, options=['--log-level-console=verbose'])
+
+        gdb.set_breakpoint('delete_backup_files')
+        gdb.run_until_break()
+        gdb.remove_all_breakpoints()
+
+        gdb.set_breakpoint('rename')
+        gdb.continue_execution_until_break()
+        gdb.continue_execution_until_break(2)
+
+        gdb._execute('signal SIGKILL')
+
+        show_backups = self.show_pb(backup_dir, "node")
+        self.assertEqual(len(show_backups), 1)
+
+        self.assertEqual(
+            'MERGED', self.show_pb(backup_dir, 'node')[0]['status'])
+
+        self.assertEqual(
+            full_id, self.show_pb(backup_dir, 'node')[0]['id'])
+
+        self.merge_backup(backup_dir, 'node', page_id_2)
+
+        self.assertEqual(
+            'OK', self.show_pb(backup_dir, 'node')[0]['status'])
+
+        self.assertEqual(
+            page_id_2, self.show_pb(backup_dir, 'node')[0]['id'])
+
+
+        self.del_test_dir(module_name, fname)
+
+# 1. Need new test with corrupted FULL backup
+# 2. different compression levels

@@ -54,6 +54,7 @@ class PageTest(ProbackupTest, unittest.TestCase):
 
         self.backup_node(backup_dir, 'node', node)
 
+        # TODO: make it dynamic
         node.safe_psql(
             "postgres",
             "delete from t_heap where ctid >= '(11,0)'")
@@ -97,6 +98,80 @@ class PageTest(ProbackupTest, unittest.TestCase):
             "select * from t_heap")
 
         self.assertEqual(result1, result2)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_page_vacuum_truncate_1(self):
+        """
+        make node, create table, take full backup,
+        delete all data, vacuum relation,
+        take page backup, insert some data,
+        take second page backup and check data correctness
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={'autovacuum': 'off'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        node.safe_psql(
+            "postgres",
+            "create sequence t_seq; "
+            "create table t_heap as select i as id, "
+            "md5(i::text) as text, "
+            "md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(0,1024) i")
+
+        node.safe_psql(
+            "postgres",
+            "vacuum t_heap")
+
+        self.backup_node(backup_dir, 'node', node)
+
+        node.safe_psql(
+            "postgres",
+            "delete from t_heap")
+
+        node.safe_psql(
+            "postgres",
+            "vacuum t_heap")
+
+        self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        node.safe_psql(
+            "postgres",
+            "insert into t_heap select i as id, "
+            "md5(i::text) as text, "
+            "md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(0,1) i")
+
+        self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        pgdata = self.pgdata_content(node.data_dir)
+
+        node_restored = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node_restored'))
+        node_restored.cleanup()
+
+        self.restore_node(backup_dir, 'node', node_restored)
+
+        # Physical comparison
+        pgdata_restored = self.pgdata_content(node_restored.data_dir)
+        self.compare_pgdata(pgdata, pgdata_restored)
+
+        self.set_auto_conf(node_restored, {'port': node_restored.port})
+        node_restored.slow_start()
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -316,13 +391,12 @@ class PageTest(ProbackupTest, unittest.TestCase):
         # PGBENCH STUFF
         pgbench = node.pgbench(options=['-T', '50', '-c', '1', '--no-vacuum'])
         pgbench.wait()
-        node.safe_psql("postgres", "checkpoint")
 
         # GET LOGICAL CONTENT FROM NODE
         result = node.safe_psql("postgres", "select * from pgbench_accounts")
         # PAGE BACKUP
-        self.backup_node(
-            backup_dir, 'node', node, backup_type='page')
+        self.backup_node(backup_dir, 'node', node, backup_type='page')
+
         # GET PHYSICAL CONTENT FROM NODE
         pgdata = self.pgdata_content(node.data_dir)
 
@@ -389,18 +463,15 @@ class PageTest(ProbackupTest, unittest.TestCase):
             "postgres",
             "create table t_heap tablespace somedata as select i as id,"
             " md5(i::text) as text, md5(i::text)::tsvector as tsvector"
-            " from generate_series(0,100) i"
-        )
+            " from generate_series(0,100) i")
 
         node.safe_psql(
             "postgres",
-            "delete from t_heap"
-        )
+            "delete from t_heap")
 
         node.safe_psql(
             "postgres",
-            "vacuum t_heap"
-        )
+            "vacuum t_heap")
 
         # PAGE BACKUP
         self.backup_node(
@@ -410,8 +481,7 @@ class PageTest(ProbackupTest, unittest.TestCase):
 
         # RESTORE
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored')
-        )
+            base_dir=os.path.join(module_name, fname, 'node_restored'))
         node_restored.cleanup()
 
         self.restore_node(
@@ -1047,8 +1117,7 @@ class PageTest(ProbackupTest, unittest.TestCase):
 
         # RESTORE
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored')
-        )
+            base_dir=os.path.join(module_name, fname, 'node_restored'))
 
         node_restored.cleanup()
         self.restore_node(
