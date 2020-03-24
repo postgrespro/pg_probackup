@@ -67,7 +67,6 @@ extern const char  *PROGRAM_EMAIL;
 #define DATABASE_MAP			"database_map"
 
 /* Timeout defaults */
-#define PARTIAL_WAL_TIMER			60
 #define ARCHIVE_TIMEOUT_DEFAULT		300
 #define REPLICA_TIMEOUT_DEFAULT		300
 
@@ -573,6 +572,9 @@ typedef struct BackupPageHeader
 
 #define GetXLogSegNoFromScrath(logSegNo, log, seg, wal_segsz_bytes)	\
 		logSegNo = (uint64) log * XLogSegmentsPerXLogId(wal_segsz_bytes) + seg
+
+#define GetXLogFromFileName(fname, tli, logSegNo, wal_segsz_bytes) \
+		XLogFromFileName(fname, tli, logSegNo, wal_segsz_bytes)
 #else
 #define GetXLogSegNo(xlrp, logSegNo, wal_segsz_bytes) \
 	XLByteToSeg(xlrp, logSegNo)
@@ -589,6 +591,9 @@ typedef struct BackupPageHeader
 
 #define GetXLogSegNoFromScrath(logSegNo, log, seg, wal_segsz_bytes)	\
 		logSegNo = (uint64) log * XLogSegmentsPerXLogId + seg
+
+#define GetXLogFromFileName(fname, tli, logSegNo, wal_segsz_bytes) \
+		XLogFromFileName(fname, tli, logSegNo)
 #endif
 
 #define IsSshProtocol() (instance_config.remote.host && strcmp(instance_config.remote.proto, "ssh") == 0)
@@ -692,8 +697,9 @@ extern int do_init(void);
 extern int do_add_instance(InstanceConfig *instance);
 
 /* in archive.c */
-extern int do_archive_push(InstanceConfig *instance, char *wal_file_path,
-						   char *wal_file_name, bool overwrite);
+extern void do_archive_push(InstanceConfig *instance, char *wal_file_path,
+						   char *wal_file_name, int batch_size, bool overwrite,
+						   bool no_sync, bool no_ready_rename);
 extern int do_archive_get(InstanceConfig *instance, char *wal_file_path,
 						  char *wal_file_name);
 
@@ -846,6 +852,7 @@ extern void pgFileDelete(pgFile *file, const char *full_path);
 extern void pgFileFree(void *file);
 
 extern pg_crc32 pgFileGetCRC(const char *file_path, bool missing_ok, bool use_crc32c);
+extern pg_crc32 pgFileGetCRCgz(const char *file_path, bool missing_ok, bool use_crc32c);
 
 extern int pgFileCompareName(const void *f1, const void *f2);
 extern int pgFileComparePath(const void *f1, const void *f2);
@@ -939,7 +946,7 @@ extern int32  do_decompress(void* dst, size_t dst_size, void const* src, size_t 
 							CompressAlg alg, const char **errormsg);
 
 extern void pretty_size(int64 size, char *buf, size_t len);
-extern void pretty_time_interval(int64 num_seconds, char *buf, size_t len);
+extern void pretty_time_interval(double time, char *buf, size_t len);
 
 extern PGconn *pgdata_basic_setup(ConnectionOptions conn_opt, PGNodeInfo *nodeInfo);
 extern void check_system_identifiers(PGconn *conn, char *pgdata);

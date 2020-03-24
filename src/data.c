@@ -803,7 +803,7 @@ backup_non_data_file(pgFile *file, pgFile *prev_file,
 		file->mtime <= parent_backup_time)
 	{
 
-		file->crc = fio_get_crc32(from_fullpath, FIO_DB_HOST);
+		file->crc = fio_get_crc32(from_fullpath, FIO_DB_HOST, false);
 
 		/* ...and checksum is the same... */
 		if (EQ_TRADITIONAL_CRC32(file->crc, prev_file->crc))
@@ -1069,7 +1069,7 @@ restore_non_data_file_internal(FILE *in, FILE *out, pgFile *file,
 			break;
 
 		if (read_len < 0)
-			elog(ERROR, "Cannot read backup mode file \"%s\": %s",
+			elog(ERROR, "Cannot read backup file \"%s\": %s",
 				 from_fullpath, strerror(errno));
 
 		if (fio_fwrite(out, buf, read_len) != read_len)

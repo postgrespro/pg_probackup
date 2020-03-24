@@ -281,7 +281,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
     # @unittest.skip("skip")
     def test_pgpro434_4(self):
         """
-        Check pg_stop_backup_timeout, needed backup_timeout
+        Check pg_stop_backup_timeout, libpq-timeout requested.
         Fixed in commit d84d79668b0c139 and assert fixed by ptrack 1.7
         """
         fname = self.id().split('.')[3]
@@ -398,15 +398,11 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             log_content)
 
         self.assertIn(
-            'INFO: pg_probackup archive-push from',
+            'pg_probackup push file',
             log_content)
 
         self.assertIn(
-            'ERROR: WAL segment ',
-            log_content)
-
-        self.assertIn(
-            'already exists.',
+            'WAL file already exists in archive with different checksum',
             log_content)
 
         self.assertNotIn(
@@ -448,8 +444,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
-            pg_options={
-                'checkpoint_timeout': '30s'})
+            pg_options={'checkpoint_timeout': '30s'})
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -487,9 +482,13 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         self.assertIn(
             'DETAIL:  The failed archive command was:', log_content)
         self.assertIn(
-            'INFO: pg_probackup archive-push from', log_content)
+            'pg_probackup push file', log_content)
+        self.assertNotIn(
+            'WAL file already exists in archive with '
+            'different checksum, overwriting', log_content)
         self.assertIn(
-            '{0}" already exists.'.format(filename), log_content)
+            'WAL file already exists in archive with '
+            'different checksum', log_content)
 
         self.assertNotIn(
             'pg_probackup archive-push completed successfully', log_content)
@@ -497,13 +496,17 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         self.set_archiving(backup_dir, 'node', node, overwrite=True)
         node.reload()
         self.switch_wal_segment(node)
-        sleep(2)
+        sleep(5)
 
         with open(log_file, 'r') as f:
             log_content = f.read()
             self.assertTrue(
                 'pg_probackup archive-push completed successfully' in log_content,
                 'Expecting messages about successfull execution archive_command')
+
+        self.assertIn(
+            'WAL file already exists in archive with '
+            'different checksum, overwriting', log_content)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -520,7 +523,9 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
-        self.set_archiving(backup_dir, 'node', node)
+        self.set_archiving(
+            backup_dir, 'node', node,
+            log_level='verbose', archive_timeout=60)
 
         node.slow_start()
 
@@ -579,12 +584,9 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         log_file = os.path.join(node.logs_dir, 'postgresql.log')
         with open(log_file, 'r') as f:
             log_content = f.read()
-            self.assertIn(
-                'Cannot open destination temporary WAL file',
-                log_content)
 
             self.assertIn(
-                'Reusing stale destination temporary WAL file',
+                'Reusing stale temp WAL file',
                 log_content)
 
         # Clean after yourself
@@ -602,7 +604,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
-        self.set_archiving(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node, archive_timeout=60)
 
         node.slow_start()
 
@@ -905,8 +907,8 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             initdb_params=['--data-checksums'],
             pg_options={
                 'checkpoint_timeout': '30s',
-                'archive_timeout': '10s'}
-            )
+                'archive_timeout': '10s'})
+
         replica = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'replica'))
         replica.cleanup()
@@ -922,6 +924,8 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             "create table t_heap as select i as id, md5(i::text) as text, "
             "md5(repeat(i::text,10))::tsvector as tsvector "
             "from generate_series(0,10000) i")
+
+        master.pgbench_init(scale=5)
 
         # TAKE FULL ARCHIVE BACKUP FROM MASTER
         self.backup_node(backup_dir, 'master', master)
@@ -1718,7 +1722,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
-        self.set_archiving(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node, log_level='verbose')
         node.slow_start()
 
         backup_id = self.backup_node(backup_dir, 'node', node)
@@ -1733,6 +1737,8 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
                 options=['--recovery-target-timeline={0}'.format(i)])
             node.slow_start()
             node.pgbench_init(scale=2)
+
+        sleep(5)
 
         show = self.show_archive(backup_dir)
 
@@ -1760,6 +1766,146 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    # @unittest.expectedFailure
+    def test_archiving_and_slots(self):
+        """
+        Check that archiving don`t break slot
+        guarantee.
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'autovacuum': 'off',
+                'checkpoint_timeout': '30s',
+                'max_wal_size': '64MB'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node, log_level='verbose')
+        node.slow_start()
+
+        if self.get_version(node) < 100000:
+            pg_receivexlog_path = self.get_bin_path('pg_receivexlog')
+        else:
+            pg_receivexlog_path = self.get_bin_path('pg_receivewal')
+
+        # "pg_receivewal --create-slot --slot archive_slot --if-not-exists "
+        # "&& pg_receivewal --synchronous -Z 1 /tmp/wal --slot archive_slot --no-loop"
+
+        self.run_binary(
+            [
+                pg_receivexlog_path, '-p', str(node.port), '--synchronous',
+                '--create-slot', '--slot', 'archive_slot', '--if-not-exists'
+            ])
+
+        node.pgbench_init(scale=10)
+
+        pg_receivexlog = self.run_binary(
+            [
+                pg_receivexlog_path, '-p', str(node.port), '--synchronous',
+                '-D', os.path.join(backup_dir, 'wal', 'node'),
+                '--no-loop', '--slot', 'archive_slot',
+                '-Z', '1'
+            ], asynchronous=True)
+
+        if pg_receivexlog.returncode:
+            self.assertFalse(
+                True,
+                'Failed to start pg_receivexlog: {0}'.format(
+                    pg_receivexlog.communicate()[1]))
+
+        sleep(2)
+
+        pg_receivexlog.kill()
+
+        backup_id = self.backup_node(backup_dir, 'node', node)
+        node.pgbench_init(scale=20)
+
+        exit(1)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    def test_archive_push_sanity(self):
+        """"""
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'archive_mode': 'on',
+                'archive_command': 'exit 1'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+
+        node.slow_start()
+
+        node.pgbench_init(scale=50)
+        node.stop()
+
+        self.set_archiving(backup_dir, 'node', node)
+        os.remove(os.path.join(node.logs_dir, 'postgresql.log'))
+        node.slow_start()
+
+        self.backup_node(backup_dir, 'node', node)
+
+        with open(os.path.join(node.logs_dir, 'postgresql.log'), 'r') as f:
+            postgres_log_content = f.read()
+
+        # print(postgres_log_content)
+        # make sure that .backup file is not compressed
+        self.assertNotIn('.backup.gz', postgres_log_content)
+        self.assertNotIn('WARNING', postgres_log_content)
+
+        replica = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'replica'))
+        replica.cleanup()
+
+        self.restore_node(
+            backup_dir, 'node', replica,
+            data_dir=replica.data_dir, options=['-R'])
+
+        #self.set_archiving(backup_dir, 'replica', replica, replica=True)
+        self.set_auto_conf(replica, {'port': replica.port})
+        self.set_auto_conf(replica, {'archive_mode': 'always'})
+        self.set_auto_conf(replica, {'hot_standby': 'on'})
+        replica.slow_start(replica=True)
+
+        self.wait_until_replica_catch_with_master(node, replica)
+
+        node.pgbench_init(scale=5)
+
+        replica.promote()
+        replica.pgbench_init(scale=10)
+
+        with open(os.path.join(replica.logs_dir, 'postgresql.log'), 'r') as f:
+            replica_log_content = f.read()
+
+        # make sure that .partial file is not compressed
+        self.assertNotIn('.partial.gz', replica_log_content)
+        # make sure that .history file is not compressed
+        self.assertNotIn('.history.gz', replica_log_content)
+        self.assertNotIn('WARNING', replica_log_content)
+
+        output = self.show_archive(
+            backup_dir, 'node', as_json=False, as_text=True,
+            options=['--log-level-console=VERBOSE'])
+
+        self.assertNotIn('WARNING', output)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+# TODO test with multiple not archived segments.
 
 # important - switchpoint may be NullOffset LSN and not actually existing in archive to boot.
 # so write WAL validation code accordingly

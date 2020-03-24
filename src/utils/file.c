@@ -340,7 +340,10 @@ int fio_open(char const* path, int mode, fio_location location)
 		hdr.cop = FIO_OPEN;
 		hdr.handle = i;
 		hdr.size = strlen(path) + 1;
-		hdr.arg = mode & ~O_EXCL;
+		hdr.arg = mode;
+//		hdr.arg = mode & ~O_EXCL;
+//		elog(INFO, "PATH: %s MODE: %i, %i", path, mode, O_EXCL);
+//		elog(INFO, "MODE: %i", hdr.arg);
 		fio_fdset |= 1 << i;
 
 		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
@@ -490,6 +493,7 @@ int fio_close(int fd)
 		fio_fdset &= ~(1 << hdr.handle);
 
 		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
+		/* Note, that file is closed without waiting for confirmation */
 
 		return 0;
 	}
@@ -865,6 +869,8 @@ int fio_rename(char const* old_path, char const* new_path, fio_location location
 		IO_CHECK(fio_write_all(fio_stdout, old_path, old_path_len), old_path_len);
 		IO_CHECK(fio_write_all(fio_stdout, new_path, new_path_len), new_path_len);
 
+		//TODO: wait for confirmation.
+
 		return 0;
 	}
 	else
@@ -916,7 +922,7 @@ int fio_sync(char const* path, fio_location location)
 }
 
 /* Get crc32 of file */
-pg_crc32 fio_get_crc32(const char *file_path, fio_location location)
+pg_crc32 fio_get_crc32(const char *file_path, fio_location location, bool decompress)
 {
 	if (fio_is_remote(location))
 	{
@@ -926,6 +932,10 @@ pg_crc32 fio_get_crc32(const char *file_path, fio_location location)
 		hdr.cop = FIO_GET_CRC32;
 		hdr.handle = -1;
 		hdr.size = path_len;
+		hdr.arg = 0;
+
+		if (decompress)
+			hdr.arg = 1;
 
 		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
 		IO_CHECK(fio_write_all(fio_stdout, file_path, path_len), path_len);
@@ -934,7 +944,12 @@ pg_crc32 fio_get_crc32(const char *file_path, fio_location location)
 		return crc;
 	}
 	else
-		return pgFileGetCRC(file_path, true, true);
+	{
+		if (decompress)
+			return pgFileGetCRCgz(file_path, true, true);
+		else
+			return pgFileGetCRC(file_path, true, true);
+	}
 }
 
 /* Remove file */
@@ -1027,6 +1042,7 @@ typedef struct fioGZFile
 	Bytef    buf[ZLIB_BUFFER_SIZE];
 } fioGZFile;
 
+/* On error returns NULL and errno should be checked */
 gzFile
 fio_gzopen(char const* path, char const* mode, int level, fio_location location)
 {
@@ -1037,6 +1053,7 @@ fio_gzopen(char const* path, char const* mode, int level, fio_location location)
 		memset(&gz->strm, 0, sizeof(gz->strm));
 		gz->eof = 0;
 		gz->errnum = Z_OK;
+		/* check if file opened for writing */
 		if (strcmp(mode, PG_BINARY_W) == 0) /* compress */
 		{
 			gz->strm.next_out = gz->buf;
@@ -1049,14 +1066,12 @@ fio_gzopen(char const* path, char const* mode, int level, fio_location location)
 			if (rc == Z_OK)
 			{
 				gz->compress = 1;
-				if (fio_access(path, F_OK, location) == 0)
+				gz->fd = fio_open(path, O_WRONLY | O_CREAT | O_EXCL | PG_BINARY, location);
+				if (gz->fd < 0)
 				{
-					elog(LOG, "File %s exists", path);
 					free(gz);
-					errno = EEXIST;
 					return NULL;
 				}
-				gz->fd = fio_open(path, O_WRONLY | O_CREAT | O_EXCL | PG_BINARY, location);
 			}
 		}
 		else
@@ -1069,21 +1084,27 @@ fio_gzopen(char const* path, char const* mode, int level, fio_location location)
 			{
 				gz->compress = 0;
 				gz->fd = fio_open(path, O_RDONLY | PG_BINARY, location);
+				if (gz->fd < 0)
+				{
+					free(gz);
+					return NULL;
+				}
 			}
 		}
 		if (rc != Z_OK)
 		{
-			free(gz);
-			return NULL;
+			elog(ERROR, "zlib internal error when opening file %s: %s",
+				path, gz->strm.msg);
 		}
 		return (gzFile)((size_t)gz + FIO_GZ_REMOTE_MARKER);
 	}
 	else
 	{
 		gzFile file;
+		/* check if file opened for writing */
 		if (strcmp(mode, PG_BINARY_W) == 0)
 		{
-			int fd = open(path, O_RDWR | O_CREAT | O_EXCL | PG_BINARY, FILE_PERMISSIONS);
+			int fd = open(path, O_WRONLY | O_CREAT | O_EXCL | PG_BINARY, FILE_PERMISSIONS);
 			if (fd < 0)
 				return NULL;
 			file = gzdopen(fd, mode);
@@ -1143,7 +1164,8 @@ fio_gzread(gzFile f, void *buf, unsigned size)
 			{
 				gz->strm.next_in = gz->buf;
 			}
-			rc = fio_read(gz->fd, gz->strm.next_in + gz->strm.avail_in, gz->buf + ZLIB_BUFFER_SIZE - gz->strm.next_in - gz->strm.avail_in);
+			rc = fio_read(gz->fd, gz->strm.next_in + gz->strm.avail_in,
+						  gz->buf + ZLIB_BUFFER_SIZE - gz->strm.next_in - gz->strm.avail_in);
 			if (rc > 0)
 			{
 				gz->strm.avail_in += rc;
@@ -1772,7 +1794,10 @@ void fio_communicate(int in, int out)
 			break;
 		  case FIO_GET_CRC32:
 			/* calculate crc32 for a file */
-			crc = pgFileGetCRC(buf, true, true);
+			if (hdr.arg == 1)
+				crc = pgFileGetCRCgz(buf, true, true);
+			else
+				crc = pgFileGetCRC(buf, true, true);
 			IO_CHECK(fio_write_all(out, &crc, sizeof(crc)), sizeof(crc));
 			break;
 		  case FIO_DISCONNECT:
