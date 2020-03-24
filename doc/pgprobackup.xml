@@ -3347,7 +3347,7 @@ pg_probackup set-config -B <replaceable>backup_dir</replaceable> --instance <rep
       <title>set-backup</title>
       <programlisting>
 pg_probackup set-backup -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> -i <replaceable>backup_id</replaceable>
-{--ttl=<replaceable>ttl</replaceable> | --expire-time=<replaceable>time</replaceable>} [--help]
+{--ttl=<replaceable>ttl</replaceable> | --expire-time=<replaceable>time</replaceable>} [--note=<replaceable>note</replaceable>] [--help]
 </programlisting>
       <para>
         Sets the provided backup-specific settings into the
@@ -3415,7 +3415,7 @@ pg_probackup backup -B <replaceable>backup_dir</replaceable> -b <replaceable>bac
 [--no-validate] [--skip-block-validation]
 [-w --no-password] [-W --password]
 [--archive-timeout=<replaceable>timeout</replaceable>] [--external-dirs=<replaceable>external_directory_path</replaceable>]
-[--no-sync]
+[--no-sync] [--note=<replaceable>note</replaceable>]
 [<replaceable>connection_options</replaceable>] [<replaceable>compression_options</replaceable>] [<replaceable>remote_options</replaceable>]
 [<replaceable>retention_options</replaceable>] [<replaceable>pinning_options</replaceable>] [<replaceable>logging_options</replaceable>]
 </programlisting>
@@ -3580,6 +3580,15 @@ pg_probackup backup -B <replaceable>backup_dir</replaceable> -b <replaceable>bac
       </para>
       </listitem>
       </varlistentry>
+      <varlistentry>
+<term><option>--note=<replaceable>note</replaceable></option></term>
+      <listitem>
+      <para>
+        Sets the text note for backup copy.
+      </para>
+      </listitem>
+      </varlistentry>
+
       </variablelist>
       </para>
 
