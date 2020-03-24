@@ -1066,7 +1066,8 @@ do_delete_status(InstanceConfig *instance_config, const char *status)
 	}
 
 	if (n_deleted > 0)
-		elog(INFO, "Successfully deleted all backups with status '%s' from instance '%s'",
+		elog(INFO, "Successfully deleted %i %s with status '%s' from instance '%s'",
+			n_deleted, n_deleted == 1 ? "backup" : "backups",
 			pretty_status, instance_config->name);
 	else
 		elog(WARNING, "Instance '%s' has no backups with status '%s'",
