@@ -3239,7 +3239,7 @@ pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replace
       policy, without performing any irreversible actions.
     </para>
     <para>
-      To delete all backups with some status, use the <option>--status</option>:
+      To delete all backups with specific status, use the <option>--status</option>:
     </para>
     <programlisting>
 pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> --status=ERROR

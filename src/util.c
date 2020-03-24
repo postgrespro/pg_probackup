@@ -18,6 +18,21 @@
 
 #include <sys/stat.h>
 
+static const char *statusName[] =
+{
+	"UNKNOWN",
+	"OK",
+	"ERROR",
+	"RUNNING",
+	"MERGING",
+	"MERGED",
+	"DELETING",
+	"DELETED",
+	"DONE",
+	"ORPHAN",
+	"CORRUPT"
+};
+
 const char *
 base36enc(long unsigned int value)
 {
@@ -458,20 +473,6 @@ parse_program_version(const char *program_version)
 
 	return result;
 }
-static const char *statusName[] =
-{
-	"UNKNOWN",
-	"OK",
-	"ERROR",
-	"RUNNING",
-	"MERGING",
-	"MERGED",
-	"DELETING",
-	"DELETED",
-	"DONE",
-	"ORPHAN",
-	"CORRUPT"
-};
 
 const char *
 status2str(BackupStatus status)
@@ -482,16 +483,15 @@ status2str(BackupStatus status)
 	return statusName[status];
 }
 
-
-
 BackupStatus
 str2status(const char *status)
 {
+	BackupStatus i;
 
-	for (int i = 0; i <= BACKUP_STATUS_CORRUPT; i++)
+	for (i = BACKUP_STATUS_INVALID; i <= BACKUP_STATUS_CORRUPT; i++)
 	{
 		if (pg_strcasecmp(status, statusName[i]) == 0) return i;
 	}
 
-	return 0;
+	return BACKUP_STATUS_INVALID;
 }

@@ -806,14 +806,16 @@ main(int argc, char *argv[])
 				elog(ERROR, "You cannot specify --merge-expired and (-i, --backup-id) options together");
 			if (delete_status && backup_id_string)
 				elog(ERROR, "You cannot specify --status and (-i, --backup-id) options together");
-			if (!delete_expired && !merge_expired && !delete_wal && delete_status==NULL && !backup_id_string)
+			if (!delete_expired && !merge_expired && !delete_wal && delete_status == NULL && !backup_id_string)
 				elog(ERROR, "You must specify at least one of the delete options: "
 								"--delete-expired |--delete-wal |--merge-expired |--status |(-i, --backup-id)");
 			if (!backup_id_string)
-				if (delete_status) 
-					do_delete_status(delete_status);
+			{
+				if (delete_status)
+					do_delete_status(&instance_config, delete_status);
 				else
-					return do_retention();
+					do_retention();
+			}
 			else
 					do_delete(current.backup_id);
 			break;

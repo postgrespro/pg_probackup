@@ -123,7 +123,7 @@ do_delete(time_t backup_id)
  * which FULL backup should be keeped for redundancy obligation(only valid do),
  * but if invalid backup is not guarded by retention - it is removed
  */
-int do_retention(void)
+void do_retention(void)
 {
 	parray	   *backup_list = NULL;
 	parray	   *to_keep_list = parray_new();
@@ -154,7 +154,7 @@ int do_retention(void)
 			/* Retention is disabled but we still can cleanup wal */
 			elog(WARNING, "Retention policy is not set");
 			if (!delete_wal)
-				return 0;
+				return;
 		}
 		else
 			/* At least one retention policy is active */
@@ -196,9 +196,6 @@ int do_retention(void)
 	parray_free(backup_list);
 	parray_free(to_keep_list);
 	parray_free(to_purge_list);
-
-	return 0;
-
 }
 
 /* Evaluate every backup by retention policies and populate purge and keep lists.
@@ -1024,42 +1021,58 @@ do_delete_instance(void)
 	return 0;
 }
 
-/* Delete all error backup files of given instance. */
-int
-do_delete_status(char* status)
+/* Delete all backups of given status in instance */
+void
+do_delete_status(InstanceConfig *instance_config, const char *status)
 {
 	parray		*backup_list;
-	parray		*xlog_files_list;
 	int 		i;
-	int 		rc;
-	char		instance_config_path[MAXPGPATH];
-	
-	BackupStatus status_for_delete;
+	const char  *pretty_status;
+	int 		n_deleted = 0;
 
-	status_for_delete = str2status(status);
+	BackupStatus status_for_delete = str2status(status);
 
 	if (status_for_delete == BACKUP_STATUS_INVALID)
-		elog(ERROR, "Unknown '%s' value for --status option", status);
+		elog(ERROR, "Unknown value for '--status' option: '%s'", status);
 
+	/*
+	 * User may have provided status string in lower case, but
+	 * we should print backup statuses consistently with show command,
+	 * so convert it.
+	 */
+	pretty_status = status2str(status_for_delete);
 
-	/* Delete all error backups. */
-	backup_list = catalog_get_backup_list(instance_name, INVALID_BACKUP_ID);
+	backup_list = catalog_get_backup_list(instance_config->name, INVALID_BACKUP_ID);
 
+	if (parray_num(backup_list) == 0)
+	{
+		elog(WARNING, "Instance '%s' has no backups", instance_config->name);
+		return;
+	}
+
+	elog(INFO, "Deleting all backups with status '%s'", pretty_status);
+
+	/* Delete all backups with specified status */
 	for (i = 0; i < parray_num(backup_list); i++)
 	{
 		pgBackup   *backup = (pgBackup *) parray_get(backup_list, i);
-		if (backup->status == status_for_delete){
-			/* elog(INFO, "Delete error backup '%s' ", base36enc(backup->backup_id)); */
-			catalog_lock_backup_list(backup_list, i, i);
+
+		if (backup->status == status_for_delete)
+		{
+			lock_backup(backup);
 			delete_backup_files(backup);
+			n_deleted++;
 		}
 	}
+
+	if (n_deleted > 0)
+		elog(INFO, "Successfully deleted all backups with status '%s' from instance '%s'",
+			pretty_status, instance_config->name);
+	else
+		elog(WARNING, "Instance '%s' has no backups with status '%s'",
+			instance_config->name, pretty_status);
 
 	/* Cleanup */
 	parray_walk(backup_list, pgBackupFree);
 	parray_free(backup_list);
-
-
-	elog(INFO, "Backups with status '%s' from instance '%s' successfully deleted", status, instance_name);
-	return 0;
 }

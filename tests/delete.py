@@ -845,6 +845,5 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
 	self.assertEqual(show_backups[0]['status'], "OK")
 	self.assertEqual(show_backups[1]['status'], "OK")
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
+    # Clean after yourself
+    self.del_test_dir(module_name, fname)

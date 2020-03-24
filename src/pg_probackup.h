@@ -709,9 +709,9 @@ extern int do_show(const char *instance_name, time_t requested_backup_id, bool s
 /* in delete.c */
 extern void do_delete(time_t backup_id);
 extern void delete_backup_files(pgBackup *backup);
-extern int do_retention(void);
+extern void do_retention(void);
 extern int do_delete_instance(void);
-extern int do_delete_status(char *status);
+extern void do_delete_status(InstanceConfig *instance_config, const char *status);
 
 /* in fetch.c */
 extern char *slurpFile(const char *datadir,
