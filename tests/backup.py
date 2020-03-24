@@ -2404,3 +2404,43 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
+
+
+    def test_note(self):
+
+        fname = self.id().split('.')[3]
+
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'])
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # FULL backup
+	self.backup_node(backup_dir, 'node', node, options=['--stream', '--log-level-file=LOG', '--note=test_note'])
+
+ 	show_backups = self.show_pb(backup_dir, 'node')
+        # self.assertEqual(len(show_backups), 1)
+	# print(self.show_pb(backup_dir, as_text=True, as_json=True))
+
+	self.assertEqual(show_backups[0]['note'], "test_note")
+
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+
+
+
+
+
+
+
+
+
+
+
