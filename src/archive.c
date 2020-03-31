@@ -1311,7 +1311,7 @@ get_wal_file(const char *get_wal_file, const char *from_fullpath,
 	if (fclose(out) != 0)
 		elog(ERROR, "Cannot close file '%s': %s", to_fullpath, strerror(errno));
 
-	elog(INFO, "WAL file successfully %s: %s", prefetch_mode ? "prefetched" : "copied", get_wal_file);
+	elog(LOG, "WAL file successfully %s: %s", prefetch_mode ? "prefetched" : "copied", get_wal_file);
 }
 
 /*
