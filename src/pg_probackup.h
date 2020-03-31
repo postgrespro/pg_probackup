@@ -700,8 +700,8 @@ extern int do_add_instance(InstanceConfig *instance);
 extern void do_archive_push(InstanceConfig *instance, char *wal_file_path,
 						   char *wal_file_name, int batch_size, bool overwrite,
 						   bool no_sync, bool no_ready_rename);
-extern int do_archive_get(InstanceConfig *instance, char *wal_file_path,
-						  char *wal_file_name);
+extern void do_archive_get(InstanceConfig *instance, const char *prefetch_dir_arg,
+						   char *wal_file_path, char *wal_file_name, int batch_size);
 
 /* in configure.c */
 extern void do_show_config(void);
@@ -905,6 +905,9 @@ extern void validate_wal(pgBackup *backup, const char *archivedir,
 						 time_t target_time, TransactionId target_xid,
 						 XLogRecPtr target_lsn, TimeLineID tli,
 						 uint32 seg_size);
+extern bool validate_wal_segment(const char *wal_file_name,
+								 const char *prefetch_dir,
+								 uint32 wal_seg_size);
 extern bool read_recovery_info(const char *archivedir, TimeLineID tli,
 							   uint32 seg_size,
 							   XLogRecPtr start_lsn, XLogRecPtr stop_lsn,
@@ -973,6 +976,9 @@ extern parray * pg_ptrack_get_pagemapset(PGconn *backup_conn, const char *ptrack
 extern int fio_send_pages(FILE* in, FILE* out, pgFile *file, XLogRecPtr horizonLsn,
 						   int calg, int clevel, uint32 checksum_version,
 						   datapagemap_t *pagemap, BlockNumber* err_blknum, char **errormsg);
+extern void fio_send_file_gz(const char *from_fullpath, FILE* out, char **errormsg, int elevel);
+
+extern void fio_send_file(const char *from_fullpath, FILE* out, char **errormsg, int elevel);
 
 /* return codes for fio_send_pages */
 #define WRITE_FAILED (-1)

@@ -131,6 +131,9 @@ static char *wal_file_name;
 static bool file_overwrite = false;
 static bool no_ready_rename = false;
 
+/* archive get options */
+static char *prefetch_dir;
+
 /* show options */
 ShowFormat show_format = SHOW_PLAIN;
 bool show_archive = false;
@@ -220,9 +223,11 @@ static ConfigOption cmd_options[] =
 	{ 'b', 152, "overwrite",		&file_overwrite,	SOURCE_CMD_STRICT },
 	{ 'b', 153, "no-ready-rename",	&no_ready_rename,	SOURCE_CMD_STRICT },
 	{ 'i', 162, "batch-size",		&batch_size,		SOURCE_CMD_STRICT },
+	/* archive-get options */
+	{ 's', 163, "prefetch_dir",		&prefetch_dir,		SOURCE_CMD_STRICT },
 	/* show options */
-	{ 'f', 163, "format",			opt_show_format,	SOURCE_CMD_STRICT },
-	{ 'b', 164, "archive",			&show_archive,		SOURCE_CMD_STRICT },
+	{ 'f', 164, "format",			opt_show_format,	SOURCE_CMD_STRICT },
+	{ 'b', 165, "archive",			&show_archive,		SOURCE_CMD_STRICT },
 	/* set-backup options */
 	{ 'I', 170, "ttl", &ttl, SOURCE_CMD_STRICT, SOURCE_DEFAULT, 0, OPTION_UNIT_S, option_get_value},
 	{ 's', 171, "expire-time",		&expire_time_string,	SOURCE_CMD_STRICT },
@@ -448,11 +453,6 @@ main(int argc, char *argv[])
 		/* Ensure that backup_path is an absolute path */
 		if (!is_absolute_path(backup_path))
 			elog(ERROR, "-B, --backup-path must be an absolute path");
-
-		/* Ensure that backup_path is a path to a directory */
-		rc = stat(backup_path, &stat_buf);
-		if (rc != -1 && !S_ISDIR(stat_buf.st_mode))
-			elog(ERROR, "-B, --backup-path must be a path to directory");
 	}
 
 	/* Ensure that backup_path is an absolute path */
@@ -504,12 +504,16 @@ main(int argc, char *argv[])
 
 		/*
 		 * Ensure that requested backup instance exists.
-		 * for all commands except init, which doesn't take this parameter
-		 * and add-instance which creates new instance.
+		 * for all commands except init, which doesn't take this parameter,
+		 * add-instance which creates new instance
+		 * and archive-get, which just do not require it at this point
 		 */
-		if (backup_subcmd != INIT_CMD && backup_subcmd != ADD_INSTANCE_CMD)
+		if (backup_subcmd != INIT_CMD && backup_subcmd != ADD_INSTANCE_CMD &&
+			backup_subcmd != ARCHIVE_GET_CMD)
 		{
-			if (fio_access(backup_instance_path, F_OK, FIO_BACKUP_HOST) != 0)
+			struct stat st;
+
+			if (fio_stat(backup_instance_path, &st, true, FIO_BACKUP_HOST) != 0)
 			{
 				elog(WARNING, "Failed to access directory \"%s\": %s",
 					backup_instance_path, strerror(errno));
@@ -517,6 +521,12 @@ main(int argc, char *argv[])
 				// TODO: redundant message, should we get rid of it?
 				elog(ERROR, "Instance '%s' does not exist in this backup catalog",
 							instance_name);
+			}
+			else
+			{
+				/* Ensure that backup_path is a path to a directory */
+				if (!S_ISDIR(st.st_mode))
+					elog(ERROR, "-B, --backup-path must be a path to directory");
 			}
 		}
 	}
@@ -533,7 +543,8 @@ main(int argc, char *argv[])
 		config_get_opt_env(instance_options);
 
 		/* Read options from configuration file */
-		if (backup_subcmd != ADD_INSTANCE_CMD)
+		if (backup_subcmd != ADD_INSTANCE_CMD &&
+			backup_subcmd != ARCHIVE_GET_CMD)
 		{
 			join_path_components(path, backup_instance_path,
 								 BACKUP_CATALOG_CONF_FILE);
@@ -763,8 +774,9 @@ main(int argc, char *argv[])
 							batch_size, file_overwrite, no_sync, no_ready_rename);
 			break;
 		case ARCHIVE_GET_CMD:
-			return do_archive_get(&instance_config,
-								  wal_file_path, wal_file_name);
+			do_archive_get(&instance_config, prefetch_dir,
+							wal_file_path, wal_file_name, batch_size);
+			break;
 		case ADD_INSTANCE_CMD:
 			return do_add_instance(&instance_config);
 		case DELETE_INSTANCE_CMD:

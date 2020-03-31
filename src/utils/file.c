@@ -1304,8 +1304,10 @@ z_off_t fio_gzseek(gzFile f, z_off_t offset, int whence)
 
 #endif
 
-/* Send file content */
-static void fio_send_file(int out, char const* path)
+/* Send file content
+ * Note: it should not be used for large files.
+ */
+static void fio_load_file(int out, char const* path)
 {
 	int fd = open(path, O_RDONLY);
 	fio_header hdr;
@@ -1629,6 +1631,216 @@ cleanup:
 	return;
 }
 
+/* Receive chunks of compressed data, decompress them and write to
+ * destination file.
+ * TODO: retry mechanism
+ */
+void fio_send_file_gz(const char *from_fullpath, FILE* out, char **errormsg, int elevel)
+{
+	fio_header hdr;
+	size_t path_len = strlen(from_fullpath) + 1;
+	/* decompressor */
+	z_stream *strm = NULL;
+
+	hdr.cop = FIO_SEND_FILE;
+	hdr.size = path_len;
+
+	IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
+	IO_CHECK(fio_write_all(fio_stdout, from_fullpath, path_len), path_len);
+
+	for (;;)
+	{
+		fio_header hdr;
+		char buf[STDIO_BUFSIZE + 200];
+		#define OUTPUT_BUFFER_SIZE 1024 * 1024
+		char unzip_buf[OUTPUT_BUFFER_SIZE];
+
+		IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
+
+		if (interrupted)
+			elog(ERROR, "Interrupted during receiving WAL");
+
+		if (hdr.cop == FIO_SEND_FILE_EOF)
+		{
+			break;
+		}
+		else if (hdr.cop == FIO_ERROR)
+		{
+			/* handle error, reported by the agent */
+			elog(ERROR, "ERROR");
+			break;
+		}
+		else if (hdr.cop == FIO_PAGE)
+		{
+			int rc;
+			Assert(hdr.size <= sizeof(buf));
+			IO_CHECK(fio_read_all(fio_stdin, buf, hdr.size), hdr.size);
+
+			/* We have received a chunk of compressed data, lets decompress it */
+			if (strm == NULL)
+			{
+				/* Initialize decompressor */
+				strm = pgut_malloc(sizeof(z_stream));
+				memset(strm, 0, sizeof(z_stream));
+
+				/* The fields next_in, avail_in initialized before init */
+				strm->next_in = (Bytef *)buf;
+				strm->avail_in = hdr.size;
+
+				rc = inflateInit2(strm, 15 + 16);
+
+				if (rc != Z_OK)
+					elog(ERROR, "Failed to Initialize decompression stream");
+			}
+			else
+			{
+				strm->next_in = (Bytef *)buf;
+				strm->avail_in = hdr.size;
+			}
+
+			strm->next_out = (Bytef *)unzip_buf; /* output buffer */
+			strm->avail_out = sizeof(unzip_buf); /* free space in output buffer */
+
+			/*
+			 * From zlib documentation:
+			 * The application must update next_in and avail_in when avail_in
+			 * has dropped to zero. It must update next_out and avail_out when
+			 * avail_out has dropped to zero.
+			 */
+			while (strm->avail_in != 0) /* while there is data in input buffer, decompress it */
+			{
+				/* decompress until there is no data to decompress,
+				 * or buffer with uncompressed data is full
+				 */
+				rc = inflate(strm, Z_NO_FLUSH);
+				if (rc == Z_STREAM_END)
+					/* end of stream */
+					break;
+				else if (rc != Z_OK)
+					/* got an error */
+					elog(ERROR, "Decompression error: %i: %s", rc, strm->msg);
+
+				if (strm->avail_out == 0)
+				{
+					/* Output buffer is full, write it out */
+					if (fwrite(unzip_buf, 1, OUTPUT_BUFFER_SIZE, out) != OUTPUT_BUFFER_SIZE)
+						elog(ERROR, "Cannot write to destination file: %s", strerror(errno));
+
+					strm->next_out = (Bytef *)unzip_buf; /* output buffer */
+					strm->avail_out = OUTPUT_BUFFER_SIZE;
+				}
+			}
+
+			/* write leftovers out if any */
+			if (strm->avail_out != OUTPUT_BUFFER_SIZE)
+			{
+				int len = OUTPUT_BUFFER_SIZE - strm->avail_out;
+
+				if (fwrite(unzip_buf, 1, len, out) != len)
+					elog(ERROR, "Cannot write to destination file: %s",
+						strerror(errno));
+			}
+		}
+		else
+			elog(ERROR, "Remote agent returned message of unknown type");
+	}
+
+	inflateEnd(strm);
+	pg_free(strm);
+}
+
+/* Receive chunks of data and write them to destination file.
+ * TODO: retry mechanism
+ */
+void fio_send_file(const char *from_fullpath, FILE* out, char **errormsg, int elevel)
+{
+	fio_header hdr;
+	size_t path_len = strlen(from_fullpath) + 1;
+	char buf[STDIO_BUFSIZE*2];
+
+	hdr.cop = FIO_SEND_FILE;
+	hdr.size = path_len;
+
+	IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
+	IO_CHECK(fio_write_all(fio_stdout, from_fullpath, path_len), path_len);
+
+	for (;;)
+	{
+		/* receive data */
+		IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
+
+		if (interrupted)
+			elog(ERROR, "Interrupted during receiving WAL");
+
+		if (hdr.cop == FIO_SEND_FILE_EOF)
+		{
+			break;
+		}
+		else if (hdr.cop == FIO_ERROR)
+		{
+			/* handle error, reported by the agent */
+			elog(ERROR, "ERROR");
+			break;
+		}
+		else if (hdr.cop == FIO_PAGE)
+		{
+			Assert(hdr.size <= sizeof(buf));
+			IO_CHECK(fio_read_all(fio_stdin, buf, hdr.size), hdr.size);
+
+			/* We have received a chunk of data data, lets write it out */
+			if (fwrite(buf, 1, hdr.size, out) != hdr.size)
+				elog(ERROR, "Cannot write to destination file: %s", strerror(errno));
+		}
+		else
+			elog(ERROR, "Remote agent returned message of unknown type");
+	}
+}
+
+/* Send file content
+ * TODO: SEND errormsg instead of elog(ERROR)
+ */
+static void fio_send_file_impl(int out, char const* path)
+{
+	FILE      *fp;
+	fio_header hdr;
+	char       buf[STDIO_BUFSIZE];
+	ssize_t	   read_len = 0;
+	char      *errormsg = NULL;
+
+	/* open source file for read */
+	fp = fopen(path, PG_BINARY_R);
+	if (!fp)
+		elog(ERROR, "Cannot open source file \"%s\": %s",
+			 path, strerror(errno));
+
+	/* copy content */
+	for (;;)
+	{
+		read_len = fread(buf, 1, sizeof(buf), fp);
+
+		/* TODO: report error as message */
+		if (read_len < 0)
+			elog(ERROR, "Cannot read source file \"%s\": %s",
+				 path, strerror(errno));
+
+		else if (read_len == 0) /*TODO: handle error if !feof() */
+			break;
+		else
+		{
+			/* send chunk */
+			hdr.cop = FIO_PAGE;
+			hdr.size = read_len;
+			IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
+			IO_CHECK(fio_write_all(out, buf, read_len), read_len);
+		}
+	}
+
+	/* we are done, send eof */
+	fclose(fp);
+	hdr.cop = FIO_SEND_FILE_EOF;
+	IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
+}
+
 /* Execute commands at remote host */
 void fio_communicate(int in, int out)
 {
@@ -1665,7 +1877,7 @@ void fio_communicate(int in, int out)
 		}
 		switch (hdr.cop) {
 		  case FIO_LOAD: /* Send file content */
-			fio_send_file(out, buf);
+			fio_load_file(out, buf);
 			break;
 		  case FIO_OPENDIR: /* Open directory for traversal */
 			dir[hdr.handle] = opendir(buf);
@@ -1775,6 +1987,9 @@ void fio_communicate(int in, int out)
 		  case FIO_SEND_PAGES_PAGEMAP:
 			// buf contain fio_send_request header and bitmap.
 			fio_send_pages_impl(fd[hdr.handle], out, buf, true);
+			break;
+		  case FIO_SEND_FILE:
+			fio_send_file_impl(out, buf);
 			break;
 		  case FIO_SYNC:
 			/* open file and fsync it */

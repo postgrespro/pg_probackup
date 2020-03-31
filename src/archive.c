@@ -22,7 +22,10 @@ static int push_file_internal_gz(const char *wal_file_name, const char *pg_xlog_
 									 int compress_level, int thread_num, uint32 archive_timeout);
 #endif
 static void *push_files(void *arg);
-static void get_wal_file(const char *from_path, const char *to_path);
+static void *get_files(void *arg);
+static void get_wal_file(const char *wal_file_name, const char *from_path, const char *to_path,
+																			bool prefetch_mode);
+static void get_wal_file_internal(const char *from_path, FILE *out, bool is_decompress);
 #ifdef HAVE_LIBZ
 static const char *get_gz_error(gzFile gzf, int errnum);
 #endif
@@ -30,6 +33,12 @@ static void copy_file_attributes(const char *from_path,
 								 fio_location from_location,
 								 const char *to_path, fio_location to_location,
 								 bool unlink_on_error);
+
+static bool next_wal_segment_exists(const char *prefetch_dir, const char *wal_file_name, uint32 wal_seg_size);
+static void run_wal_prefetch(const char *prefetch_dir, const char *archive_dir, const char *first_file,
+							 int num_threads, bool inclusive, int batch_size, uint32 wal_seg_size);
+static bool wal_satisfy_from_prefetch(const char *wal_file_name, const char *prefetch_dir,
+									  const char *absolute_wal_file_path, uint32 wal_seg_size);
 
 typedef struct
 {
@@ -60,6 +69,24 @@ typedef struct
 	 */
 	int         ret;
 } archive_push_arg;
+
+typedef struct
+{
+	const char *first_filename;
+	const char *prefetch_dir;
+	const char *archive_dir;
+	int         thread_num;
+	parray     *files;
+	uint32      n_prefetched;
+
+	/*
+	 * Return value from the thread.
+	 * 0 means there is no error,
+	 * 1 - there is an error.
+	 * 2 - no error, but nothing to push
+	 */
+	int         ret;
+} archive_get_arg;
 
 typedef struct WALSegno
 {
@@ -865,215 +892,6 @@ part_opened:
 }
 #endif
 
-/*
- * pg_probackup specific restore command.
- * Move files from arclog_path to pgdata/wal_file_path.
- */
-int
-do_archive_get(InstanceConfig *instance,
-			   char *wal_file_path, char *wal_file_name)
-{
-	char		backup_wal_file_path[MAXPGPATH];
-	char		absolute_wal_file_path[MAXPGPATH];
-	char		current_dir[MAXPGPATH];
-
-	if (wal_file_name == NULL && wal_file_path == NULL)
-		elog(ERROR, "required parameters are not specified: --wal-file-name %%f --wal-file-path %%p");
-
-	if (wal_file_name == NULL)
-		elog(ERROR, "required parameter not specified: --wal-file-name %%f");
-
-	if (wal_file_path == NULL)
-		elog(ERROR, "required parameter not specified: --wal-file-path %%p");
-
-	canonicalize_path(wal_file_path);
-
-	if (!getcwd(current_dir, sizeof(current_dir)))
-		elog(ERROR, "getcwd() error");
-
-	join_path_components(absolute_wal_file_path, current_dir, wal_file_path);
-	join_path_components(backup_wal_file_path, instance->arclog_path, wal_file_name);
-
-	elog(INFO, "pg_probackup archive-get from %s to %s",
-		 backup_wal_file_path, absolute_wal_file_path);
-	get_wal_file(backup_wal_file_path, absolute_wal_file_path);
-	elog(INFO, "pg_probackup archive-get completed successfully");
-
-	return 0;
-}
-
-/*
- * Copy WAL segment from archive catalog to pgdata with possible decompression.
- */
-void
-get_wal_file(const char *from_path, const char *to_path)
-{
-	FILE	   *in = NULL;
-	int			out;
-	char		buf[XLOG_BLCKSZ];
-	const char *from_path_p = from_path;
-	char		to_path_temp[MAXPGPATH];
-	int			errno_temp;
-	bool		is_decompress = false;
-
-#ifdef HAVE_LIBZ
-	char		gz_from_path[MAXPGPATH];
-	gzFile		gz_in = NULL;
-#endif
-
-	/* First check source file for existance */
-	if (fio_access(from_path, F_OK, FIO_BACKUP_HOST) != 0)
-	{
-#ifdef HAVE_LIBZ
-		/*
-		 * Maybe we need to decompress the file. Check it with .gz
-		 * extension.
-		 */
-		snprintf(gz_from_path, sizeof(gz_from_path), "%s.gz", from_path);
-		if (fio_access(gz_from_path, F_OK, FIO_BACKUP_HOST) == 0)
-		{
-			/* Found compressed file */
-			is_decompress = true;
-			from_path_p = gz_from_path;
-		}
-#endif
-		/* Didn't find compressed file */
-		if (!is_decompress)
-			elog(ERROR, "Source WAL file \"%s\" doesn't exist",
-				 from_path);
-	}
-
-	/* open file for read */
-	if (!is_decompress)
-	{
-		in = fio_fopen(from_path, PG_BINARY_R, FIO_BACKUP_HOST);
-		if (in == NULL)
-			elog(ERROR, "Cannot open source WAL file \"%s\": %s",
-					from_path, strerror(errno));
-	}
-#ifdef HAVE_LIBZ
-	else
-	{
-		gz_in = fio_gzopen(gz_from_path, PG_BINARY_R, Z_DEFAULT_COMPRESSION,
-						   FIO_BACKUP_HOST);
-		if (gz_in == NULL)
-			elog(ERROR, "Cannot open compressed WAL file \"%s\": %s",
-					 gz_from_path, strerror(errno));
-	}
-#endif
-
-	/* open backup file for write  */
-	snprintf(to_path_temp, sizeof(to_path_temp), "%s.part", to_path);
-
-	out = fio_open(to_path_temp, O_RDWR | O_CREAT | O_EXCL | PG_BINARY, FIO_DB_HOST);
-	if (out < 0)
-		elog(ERROR, "Cannot open destination temporary WAL file \"%s\": %s",
-				to_path_temp, strerror(errno));
-
-	/* copy content */
-	for (;;)
-	{
-		int read_len = 0;
-
-#ifdef HAVE_LIBZ
-		if (is_decompress)
-		{
-			read_len = fio_gzread(gz_in, buf, sizeof(buf));
-			if (read_len <= 0 && !fio_gzeof(gz_in))
-			{
-				errno_temp = errno;
-				fio_unlink(to_path_temp, FIO_DB_HOST);
-				elog(ERROR, "Cannot read compressed WAL file \"%s\": %s",
-					 gz_from_path, get_gz_error(gz_in, errno_temp));
-			}
-		}
-		else
-#endif
-		{
-			read_len = fio_fread(in, buf, sizeof(buf));
-			if (read_len < 0)
-			{
-				errno_temp = errno;
-				fio_unlink(to_path_temp, FIO_DB_HOST);
-				elog(ERROR, "Cannot read source WAL file \"%s\": %s",
-					 from_path, strerror(errno_temp));
-			}
-		}
-
-		if (read_len > 0)
-		{
-			if (fio_write(out, buf, read_len) != read_len)
-			{
-				errno_temp = errno;
-				fio_unlink(to_path_temp, FIO_DB_HOST);
-				elog(ERROR, "Cannot write to WAL file \"%s\": %s", to_path_temp,
-					 strerror(errno_temp));
-			}
-		}
-
-		/* Check for EOF */
-#ifdef HAVE_LIBZ
-		if (is_decompress)
-		{
-			if (fio_gzeof(gz_in) || read_len == 0)
-				break;
-		}
-		else
-#endif
-		{
-			if (/* feof(in) || */ read_len == 0)
-				break;
-		}
-	}
-
-	if (fio_close(out) != 0)
-	{
-		errno_temp = errno;
-		fio_unlink(to_path_temp, FIO_DB_HOST);
-		elog(ERROR, "Cannot write WAL file \"%s\": %s",
-			 to_path_temp, strerror(errno_temp));
-	}
-
-#ifdef HAVE_LIBZ
-	if (is_decompress)
-	{
-		if (fio_gzclose(gz_in) != 0)
-		{
-			errno_temp = errno;
-			fio_unlink(to_path_temp, FIO_DB_HOST);
-			elog(ERROR, "Cannot close compressed WAL file \"%s\": %s",
-				 gz_from_path, get_gz_error(gz_in, errno_temp));
-		}
-	}
-	else
-#endif
-	{
-		if (fio_fclose(in))
-		{
-			errno_temp = errno;
-			fio_unlink(to_path_temp, FIO_DB_HOST);
-			elog(ERROR, "Cannot close source WAL file \"%s\": %s",
-				 from_path, strerror(errno_temp));
-		}
-	}
-
-	/* update file permission. */
-	copy_file_attributes(from_path_p, FIO_BACKUP_HOST, to_path_temp, FIO_DB_HOST, true);
-
-	if (fio_rename(to_path_temp, to_path, FIO_DB_HOST) < 0)
-	{
-		errno_temp = errno;
-		fio_unlink(to_path_temp, FIO_DB_HOST);
-		elog(ERROR, "Cannot rename WAL file \"%s\" to \"%s\": %s",
-			 to_path_temp, to_path, strerror(errno_temp));
-	}
-
-#ifdef HAVE_LIBZ
-	if (is_decompress)
-		elog(INFO, "WAL file decompressed from \"%s\"", gz_from_path);
-#endif
-}
-
 #ifdef HAVE_LIBZ
 /*
  * Show error during work with compressed file
@@ -1177,4 +995,468 @@ setup_push_filelist(const char *archive_status_dir, const char *first_file,
 	parray_free(status_files);
 
 	return batch_files;
+}
+
+/*
+ * pg_probackup specific restore command.
+ * Move files from arclog_path to pgdata/wal_file_path.
+ */
+void
+do_archive_get(InstanceConfig *instance, const char *prefetch_dir_arg,
+			   char *wal_file_path, char *wal_file_name, int batch_size)
+{
+	char		backup_wal_file_path[MAXPGPATH];
+	char		absolute_wal_file_path[MAXPGPATH];
+	char		current_dir[MAXPGPATH];
+	char		prefetch_dir[MAXPGPATH];
+	char		pg_xlog_dir[MAXPGPATH];
+	char		prefetched_file[MAXPGPATH];
+
+	/* time reporting */
+	instr_time  start_time, end_time;
+	double      get_time;
+	char        pretty_time_str[20];
+
+	if (wal_file_name == NULL)
+		elog(ERROR, "required parameter not specified: --wal-file-name %%f");
+
+	if (wal_file_path == NULL)
+		elog(ERROR, "required parameter not specified: --wal_file_path %%p");
+
+	if (!getcwd(current_dir, sizeof(current_dir)))
+		elog(ERROR, "getcwd() error");
+
+	/* path to PGDATA/pg_wal directory */
+	join_path_components(pg_xlog_dir, current_dir, XLOGDIR);
+
+	/* destination full filepath, usually it is PGDATA/pg_wal/RECOVERYXLOG */
+	join_path_components(absolute_wal_file_path, current_dir, wal_file_path);
+
+	/* full filepath to WAL file in archive directory.
+	 * backup_path/wal/instance_name/000000010000000000000001 */
+	join_path_components(backup_wal_file_path, instance->arclog_path, wal_file_name);
+
+	INSTR_TIME_SET_CURRENT(start_time);
+	elog(INFO, "pg_probackup archive-get: WAL file %s requested", wal_file_name);
+
+	/* prefetch optimization works only for simple XLOG segments and
+	 * only if batching is enabled
+	 */
+	if (IsXLogFileName(wal_file_name) && batch_size > 1)
+	{
+		elog(VERBOSE, "Obtaining XLOG_SEG_SIZE from pg_control file for prefetch calculations");
+		instance->xlog_seg_size = get_xlog_seg_size(current_dir);
+
+		if (prefetch_dir_arg)
+			/* use provided prefetch directory */
+			snprintf(prefetch_dir, sizeof(prefetch_dir), "%s", prefetch_dir_arg);
+		else
+			/* use default path */
+			join_path_components(prefetch_dir, pg_xlog_dir, "pbk_prefetch");
+
+		/* Construct path to WAL file in prefetch directory.
+		 * current_dir/pg_wal/pbk_prefech/000000010000000000000001
+		 */
+		join_path_components(prefetched_file, prefetch_dir, wal_file_name);
+
+		/* check if file is available in prefetch directory */
+		if (access(prefetched_file, F_OK) == 0)
+		{
+			/* Parse WAL file and make sure that it is consistent */
+
+			/* Prefetched WAL segment is available, before using it, we must validate it
+			 * But for validation to work properly(because of contrecord), we must be sure
+			 * that next WAL segment is also available in prefetch directory.
+			 * If next segment do not exists in prefetch directory, we must provide it from
+			 * archive. If it is NOT available in the archive, then file in prefetch directory
+			 * cannot be trusted. In this case we discard prefetched file and
+			 * copy requested file from archive directly.
+			 */
+			if (!next_wal_segment_exists(prefetch_dir, wal_file_name, instance->xlog_seg_size))
+				run_wal_prefetch(prefetch_dir, instance->arclog_path, wal_file_name,
+								 num_threads, false, batch_size, instance->xlog_seg_size);
+
+			if (wal_satisfy_from_prefetch(wal_file_name, prefetch_dir,
+										  absolute_wal_file_path, instance->xlog_seg_size))
+				goto get_done;
+			else
+				rmtree(prefetch_dir, false);
+		}
+		else
+		{
+			/* do prefetch maintenance here:
+			 *  - check for redundant files.
+			 *  - prefetch files.
+			 */
+			mkdir(prefetch_dir, DIR_PERMISSION);
+
+			/* Currently requested WAL segment is not available in prefetch directory,
+			 * so it is safe to assume, that prefetch directory do not contain anything
+			 * of value, so it is safe to delete its content.
+			 */
+			run_wal_prefetch(prefetch_dir, instance->arclog_path,
+				             wal_file_name, num_threads, true, batch_size,
+				             instance->xlog_seg_size);
+
+			if (wal_satisfy_from_prefetch(wal_file_name, prefetch_dir,
+										 absolute_wal_file_path, instance->xlog_seg_size))
+				goto get_done;
+			else
+				rmtree(prefetch_dir, false);
+		}
+	}
+
+	/* Either prefetch didn`t cut it, or batch mode is disabled or
+	 * the requested file is not WAL segment.
+	 * Copy file from the archive directly.
+	 */
+	get_wal_file(wal_file_name, backup_wal_file_path, absolute_wal_file_path, false);
+
+get_done:
+
+	INSTR_TIME_SET_CURRENT(end_time);
+	INSTR_TIME_SUBTRACT(end_time, start_time);
+	get_time = INSTR_TIME_GET_DOUBLE(end_time);
+	pretty_time_interval(get_time, pretty_time_str, 20);
+
+	/* TODO: count prefetched files */
+	elog(INFO, "pg_probackup archive-get completed successfully, time elapsed: %s",
+			pretty_time_str);
+}
+
+/*
+ * inclusive - should we start prefetch with current segment, or next */
+void run_wal_prefetch(const char *prefetch_dir, const char *archive_dir,
+					  const char *first_file, int num_threads, bool inclusive,
+					  int batch_size, uint32 wal_seg_size)
+{
+	int         i;
+	TimeLineID  tli;
+	XLogSegNo   segno;
+	XLogSegNo   first_segno;
+	parray     *batch_files = parray_new();
+	int 		n_total_prefetched = 0;
+	bool        get_isok = true;
+
+	GetXLogFromFileName(first_file, &tli, &first_segno, wal_seg_size);
+
+	if (!inclusive)
+		first_segno++;
+
+	for (segno = first_segno; segno < (first_segno + batch_size); segno++)
+	{
+		WALSegno *xlogfile = palloc(sizeof(WALSegno));
+		pg_atomic_init_flag(&xlogfile->lock);
+
+		/* construct filename for WAL segment */
+		GetXLogFileName(xlogfile->name, tli, segno, wal_seg_size);
+
+		parray_append(batch_files, xlogfile);
+
+	}
+
+	/* copy segments */
+	if (num_threads == 1)
+	{
+		for (i = 0; i < parray_num(batch_files); i++)
+		{
+//			int rc;
+			char to_fullpath[MAXPGPATH];
+			char from_fullpath[MAXPGPATH];
+			WALSegno *xlogfile = (WALSegno *) parray_get(batch_files, i);
+
+			join_path_components(to_fullpath, prefetch_dir, xlogfile->name);
+			join_path_components(from_fullpath, archive_dir, xlogfile->name);
+
+			get_wal_file(xlogfile->name, from_fullpath, to_fullpath, true);
+		}
+	}
+	else
+	{
+		/* arrays with meta info for multi threaded archive-get */
+		pthread_t        *threads;
+		archive_get_arg  *threads_args;
+
+		/* init thread args */
+		threads = (pthread_t *) palloc(sizeof(pthread_t) * num_threads);
+		threads_args = (archive_get_arg *) palloc(sizeof(archive_get_arg) * num_threads);
+
+		for (i = 0; i < num_threads; i++)
+		{
+			archive_get_arg *arg = &(threads_args[i]);
+
+			arg->first_filename = first_file;
+			arg->prefetch_dir = prefetch_dir;
+			arg->archive_dir = archive_dir;
+
+			arg->thread_num = i+1;
+			arg->files = batch_files;
+
+			/* By default there are some error */
+			arg->ret = 1;
+		}
+
+		/* Run threads */
+		for (i = 0; i < num_threads; i++)
+		{
+			archive_get_arg *arg = &(threads_args[i]);
+			pthread_create(&threads[i], NULL, get_files, arg);
+		}
+
+		/* Wait threads */
+		for (i = 0; i < num_threads; i++)
+		{
+			pthread_join(threads[i], NULL);
+			if (threads_args[i].ret == 1)
+			{
+				get_isok = false;
+//				n_total_failed++;
+			}
+
+			n_total_prefetched += threads_args[i].n_prefetched;
+		}
+	}
+}
+
+/*
+ * Copy files from archive catalog to pg_wal.
+ */
+static void *
+get_files(void *arg)
+{
+	int		i;
+	char    to_fullpath[MAXPGPATH];
+	char    from_fullpath[MAXPGPATH];
+	archive_get_arg *args = (archive_get_arg *) arg;
+
+	for (i = 0; i < parray_num(args->files); i++)
+	{
+		WALSegno *xlogfile = (WALSegno *) parray_get(args->files, i);
+
+		if (!pg_atomic_test_set_flag(&xlogfile->lock))
+			continue;
+
+		join_path_components(from_fullpath, args->archive_dir, xlogfile->name);
+		join_path_components(to_fullpath, args->prefetch_dir, xlogfile->name);
+
+		get_wal_file(xlogfile->name, from_fullpath, to_fullpath, true);
+	}
+
+	/* close ssh connection */
+	fio_disconnect();
+
+	args->ret = 0;
+	return NULL;
+}
+
+/*
+ * Copy WAL segment from archive catalog to pgdata with possible decompression.
+ * When running in prefetch mode, we should not error out.
+ */
+void
+get_wal_file(const char *get_wal_file, const char *from_fullpath,
+			 const char *to_fullpath, bool prefetch_mode)
+{
+	FILE   *out;
+	bool    source_compressed = false;
+	char    from_fullpath_gz[MAXPGPATH];
+	char    out_buffer[STDIO_BUFSIZE*2];
+
+	snprintf(from_fullpath_gz, sizeof(from_fullpath_gz), "%s.gz", from_fullpath);
+
+#ifdef HAVE_LIBZ
+	if (fio_access(from_fullpath_gz, F_OK, FIO_BACKUP_HOST) == 0)
+		source_compressed = true;
+#endif
+
+	/* In prefetch mode, we do look only for full WAL segments
+	 * In non-prefetch mode, do look up '.partial' and '.gz.partial'
+	 * segments.
+	 */
+
+	/* TODO: handle ".partial" and ".gz.partial"  */
+	if (!source_compressed &&
+		(fio_access(from_fullpath, F_OK, FIO_BACKUP_HOST) != 0))
+	{
+		elog(ERROR, "Source WAL file \"%s\" doesn't exist", from_fullpath);
+	}
+
+	/* open destination file */
+	out = fopen(to_fullpath, PG_BINARY_W);
+	if (!out)
+		elog(ERROR, "Failed to open file %s: %s", to_fullpath, strerror(errno));
+
+	if (chmod(to_fullpath, FILE_PERMISSION) == -1)
+		elog(ERROR, "Cannot change mode of file \"%s\": %s",
+			 to_fullpath, strerror(errno));
+
+	setvbuf(out, out_buffer, _IONBF, STDIO_BUFSIZE);
+
+	/* copy content */
+	if (IsSshProtocol())
+	{
+		if (source_compressed)
+			fio_send_file_gz(from_fullpath_gz, out, NULL, 1);
+		else
+			fio_send_file(from_fullpath, out, NULL, 1);
+	}
+	else
+	{
+		if (source_compressed)
+			get_wal_file_internal(from_fullpath_gz, out, source_compressed);
+		else
+			get_wal_file_internal(from_fullpath, out, source_compressed);
+	}
+
+	if (fclose(out) != 0)
+		elog(ERROR, "Cannot close file '%s': %s", to_fullpath, strerror(errno));
+
+	elog(INFO, "WAL file successfully %s: %s", prefetch_mode ? "prefetched" : "copied", get_wal_file);
+}
+
+/*
+ * Copy local WAL segment with possible decompression.
+ */
+void
+get_wal_file_internal(const char *from_path, FILE *out, bool is_decompress)
+{
+	FILE	   *in = NULL;
+	char		buf[STDIO_BUFSIZE*2];
+
+#ifdef HAVE_LIBZ
+	gzFile		gz_in = NULL;
+#endif
+
+	/* open source file for read */
+	if (!is_decompress)
+	{
+		in = fopen(from_path, PG_BINARY_R);
+		if (in == NULL)
+			elog(ERROR, "Cannot open source WAL file \"%s\": %s",
+					from_path, strerror(errno));
+	}
+#ifdef HAVE_LIBZ
+	else
+	{
+		gz_in = gzopen(from_path, PG_BINARY_R);
+		if (gz_in == NULL)
+			elog(ERROR, "Cannot open compressed WAL file \"%s\": %s",
+					from_path, strerror(errno));
+	}
+#endif
+
+	/* copy content */
+	for (;;)
+	{
+		int read_len = 0;
+
+#ifdef HAVE_LIBZ
+		if (is_decompress)
+		{
+			read_len = gzread(gz_in, buf, sizeof(buf));
+			if (read_len <= 0)
+			{
+				if (gzeof(gz_in))
+					break;
+				else
+					elog(ERROR, "Cannot read compressed WAL file \"%s\": %s",
+							from_path, get_gz_error(gz_in, errno));
+			}
+		}
+		else
+#endif
+		{
+			read_len = fread(buf, 1, sizeof(buf), in);
+			if (read_len < 0)
+				elog(ERROR, "Cannot read source WAL file \"%s\": %s",
+						from_path, strerror(errno));
+
+			else if (read_len == 0)
+			{
+				if (feof(in))
+					break;
+
+				if (ferror(in))
+					elog(ERROR, "Cannot read source WAL file \"%s\": %s",
+							from_path, strerror(errno));
+			}
+		}
+
+		if (read_len > 0)
+		{
+			if (fwrite(buf, 1, read_len, out) != read_len)
+				elog(ERROR, "Cannot write to WAL file : %s", strerror(errno));
+			//	unlink(to_path_temp);
+			//	elog(ERROR, "Cannot write to WAL file \"%s\": %s", to_path_temp,
+			//		 strerror(errno_temp));
+		}
+	}
+
+#ifdef HAVE_LIBZ
+	if (is_decompress)
+		gzclose(gz_in);
+	else
+#endif
+		fclose(in);
+}
+
+bool next_wal_segment_exists(const char *prefetch_dir, const char *wal_file_name, uint32 wal_seg_size)
+{
+	TimeLineID  tli;
+	XLogSegNo   segno;
+	char        next_wal_filename[MAXFNAMELEN];
+	char        next_wal_fullpath[MAXPGPATH];
+
+	GetXLogFromFileName(wal_file_name, &tli, &segno, wal_seg_size);
+
+	segno++;
+
+	GetXLogFileName(next_wal_filename, tli, segno, wal_seg_size);
+
+	join_path_components(next_wal_fullpath, prefetch_dir, next_wal_filename);
+
+	if (access(next_wal_fullpath, F_OK) == 0)
+		return true;
+
+	return false;
+}
+
+/* Try to use content of prefetch directory to satisfy request for WAL file
+ * If file is found, then validate it and rename.
+ * If requested file do not exists or validation has failed, then
+ * caller must copy WAL file directly from archive.
+ */
+bool wal_satisfy_from_prefetch(const char *wal_file_name, const char *prefetch_dir,
+							   const char *absolute_wal_file_path, uint32 wal_seg_size)
+{
+	char prefetched_file[MAXPGPATH];
+
+	join_path_components(prefetched_file, prefetch_dir, wal_file_name);
+
+	/* If the next WAL segment do not exists in prefetch directory,
+	 * then current segment cannot be validated, therefore cannot be used
+	 * to satisfy recovery request.
+	 */
+	if (!next_wal_segment_exists(prefetch_dir, wal_file_name, wal_seg_size))
+		return false;
+
+	if (validate_wal_segment(wal_file_name, prefetch_dir, wal_seg_size))
+	{
+		/* file is available in prefetch directory */
+		if (rename(prefetched_file, absolute_wal_file_path) == 0)
+		{
+			elog(INFO, "pg_probackup archive-get: use prefetched WAL segment %s", wal_file_name);
+			return true;
+		}
+		else
+			unlink(prefetched_file);
+	}
+	else
+	{
+		/* prefetched WAL segment is not looking good */
+		elog(LOG, "Prefetched WAL segment %s is invalid, cannot use it", wal_file_name);
+		unlink(prefetched_file);
+	}
+
+	return false;
 }

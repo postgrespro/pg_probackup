@@ -349,7 +349,7 @@ validate_wal(pgBackup *backup, const char *archivedir,
 	 * If recovery target is provided, ensure that archive files exist in
 	 * archive directory.
 	 */
-	if (dir_is_empty(archivedir, FIO_BACKUP_HOST))
+	if (dir_is_empty(archivedir, FIO_LOCAL_HOST))
 		elog(ERROR, "WAL archive is empty. You cannot restore backup to a recovery target without WAL archive.");
 
 	/*
@@ -759,14 +759,14 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 		snprintf(reader_data->xlogpath, MAXPGPATH, "%s/%s", wal_archivedir,
 				 xlogfname);
 
-		if (fileExists(reader_data->xlogpath, FIO_BACKUP_HOST))
+		if (fileExists(reader_data->xlogpath, FIO_LOCAL_HOST))
 		{
 			elog(LOG, "Thread [%d]: Opening WAL segment \"%s\"",
 				 reader_data->thread_num, reader_data->xlogpath);
 
 			reader_data->xlogexists = true;
 			reader_data->xlogfile = fio_open(reader_data->xlogpath,
-											 O_RDONLY | PG_BINARY, FIO_BACKUP_HOST);
+											 O_RDONLY | PG_BINARY, FIO_LOCAL_HOST);
 
 			if (reader_data->xlogfile < 0)
 			{
@@ -782,14 +782,14 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 		{
 			snprintf(reader_data->gz_xlogpath, sizeof(reader_data->gz_xlogpath),
 					 "%s.gz", reader_data->xlogpath);
-			if (fileExists(reader_data->gz_xlogpath, FIO_BACKUP_HOST))
+			if (fileExists(reader_data->gz_xlogpath, FIO_LOCAL_HOST))
 			{
 				elog(LOG, "Thread [%d]: Opening compressed WAL segment \"%s\"",
 					 reader_data->thread_num, reader_data->gz_xlogpath);
 
 				reader_data->xlogexists = true;
 				reader_data->gz_xlogfile = fio_gzopen(reader_data->gz_xlogpath,
-													  "rb", -1, FIO_BACKUP_HOST);
+													  "rb", -1, FIO_LOCAL_HOST);
 				if (reader_data->gz_xlogfile == NULL)
 				{
 					elog(WARNING, "Thread [%d]: Could not open compressed WAL segment \"%s\": %s",
@@ -932,13 +932,13 @@ RunXLogThreads(const char *archivedir, time_t target_time,
 	XLogSegNo	endSegNo = 0;
 	bool		result = true;
 
-	if (!XRecOffIsValid(startpoint))
+	if (!XRecOffIsValid(startpoint) && !XRecOffIsNull(startpoint))
 		elog(ERROR, "Invalid startpoint value %X/%X",
 			 (uint32) (startpoint >> 32), (uint32) (startpoint));
 
 	if (!XLogRecPtrIsInvalid(endpoint))
 	{
-		if (!XRecOffIsValid(endpoint))
+		if (!XRecOffIsValid(endpoint) && !XRecOffIsNull(endpoint))
 			elog(ERROR, "Invalid endpoint value %X/%X",
 				(uint32) (endpoint >> 32), (uint32) (endpoint));
 
@@ -1581,5 +1581,35 @@ getRecordTimestamp(XLogReaderState *record, TimestampTz *recordXtime)
 	}
 
 	return false;
+}
+
+bool validate_wal_segment(const char *wal_file_name, const char *prefetch_dir, uint32 wal_seg_size)
+{
+	TimeLineID  tli;
+	XLogSegNo   segno;
+
+	XLogRecPtr startpoint;
+	XLogRecPtr endpoint;
+
+	bool rc;
+	int tmp_num_threads = num_threads;
+	num_threads = 1;
+
+	GetXLogFromFileName(wal_file_name, &tli, &segno, wal_seg_size);
+
+	/* calculate startpoint and endpoint */
+	GetXLogRecPtr(segno, 0, wal_seg_size, startpoint);
+	GetXLogRecPtr(segno+1, 0, wal_seg_size, endpoint);
+
+	/* disable multi-threading */
+	num_threads = 1;
+
+	rc = RunXLogThreads(prefetch_dir, 0, InvalidTransactionId,
+						InvalidXLogRecPtr, tli, wal_seg_size,
+						startpoint, endpoint, false, NULL, NULL);
+
+	num_threads = tmp_num_threads;
+
+	return rc;
 }
 
