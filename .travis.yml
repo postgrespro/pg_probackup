@@ -1,7 +1,46 @@
-sudo: required
+os: linux
+
+dist: bionic
+
+language: c
 
 services:
-- docker
+    - docker
+
+before_install:
+    - cp travis/* .
+
+install:
+    - ./make_dockerfile.sh
+    - docker-compose build
 
 script:
-- docker run -v $(pwd):/tests --rm centos:7 /tests/travis/backup_restore.sh
+    - docker-compose run tests
+    # - docker-compose run $(bash <(curl -s https://codecov.io/env)) tests
+    # - docker run -v $(pwd):/tests --rm centos:7 /tests/travis/backup_restore.sh
+
+notifications:
+    email:
+        on_success: change
+        on_failure: always
+
+# Default MODE is basic, i.e. all tests with PG_PROBACKUP_TEST_BASIC=ON
+env:
+    - PG_VERSION=12 PG_BRANCH=REL_12_STABLE
+    - PG_VERSION=12 PG_BRANCH=REL_12_STABLE MODE=archive
+    - PG_VERSION=12 PG_BRANCH=REL_12_STABLE MODE=backup
+    - PG_VERSION=12 PG_BRANCH=REL_12_STABLE MODE=compression
+    - PG_VERSION=12 PG_BRANCH=REL_12_STABLE MODE=delta
+    - PG_VERSION=12 PG_BRANCH=REL_12_STABLE MODE=locking
+    - PG_VERSION=12 PG_BRANCH=REL_12_STABLE MODE=merge
+    - PG_VERSION=12 PG_BRANCH=REL_12_STABLE MODE=page
+    - PG_VERSION=12 PG_BRANCH=REL_12_STABLE MODE=replica
+    - PG_VERSION=12 PG_BRANCH=REL_12_STABLE MODE=retention
+    - PG_VERSION=12 PG_BRANCH=REL_12_STABLE MODE=restore
+    - PG_VERSION=11 PG_BRANCH=REL_11_STABLE
+    - PG_VERSION=10 PG_BRANCH=REL_10_STABLE
+    - PG_VERSION=9.6 PG_BRANCH=REL9_6_STABLE
+
+jobs:
+    allow_failures:
+        - if: env(MODE) IN (archive, backup, delta, locking, merge, page, replica, retention, restore)

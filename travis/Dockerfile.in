@@ -1,0 +1,24 @@
+FROM ololobus/postgres-dev:stretch
+
+USER root
+RUN apt-get update
+RUN apt-get -yq install python python-pip python-virtualenv
+
+# Environment
+ENV PG_MAJOR=${PG_VERSION} PG_BRANCH=${PG_BRANCH}
+ENV LANG=C.UTF-8 PGHOME=/pg/testdir/pgbin
+
+# Make directories
+RUN	mkdir -p /pg/testdir
+
+COPY run_tests.sh /run.sh
+RUN chmod 755 /run.sh
+
+COPY . /pg/testdir
+WORKDIR /pg/testdir
+
+# Grant privileges
+RUN	chown -R postgres:postgres /pg/testdir
+
+USER postgres
+ENTRYPOINT MODE=${MODE} /run.sh
