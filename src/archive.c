@@ -187,7 +187,7 @@ do_archive_push(InstanceConfig *instance, char *wal_file_path,
 	if (num_threads > parray_num(batch_files))
 		n_threads = parray_num(batch_files);
 
-	elog(INFO, "PID [%d]: pg_probackup push WAL file %s into archive, "
+	elog(INFO, "PID [%d]: pg_probackup archive-push WAL file: %s, "
 					"threads: %i/%i, batch: %lu/%i, compression: %s",
 						my_pid, wal_file_name, n_threads, num_threads,
 						parray_num(batch_files), batch_size,
@@ -1059,7 +1059,7 @@ do_archive_get(InstanceConfig *instance, const char *prefetch_dir_arg,
 	INSTR_TIME_SET_CURRENT(start_time);
 	if (num_threads > batch_size)
 		n_actual_threads = batch_size;
-	elog(INFO, "PID [%d]: pg_probackup get WAL file from archive: %s, remote: %s, threads: %i/%i, batch: %i",
+	elog(INFO, "PID [%d]: pg_probackup archive-get WAL file: %s, remote: %s, threads: %i/%i, batch: %i",
 		my_pid, wal_file_name, IsSshProtocol() ? "ssh" : "none", n_actual_threads, num_threads, batch_size);
 
 	num_threads = n_actual_threads;
@@ -1163,7 +1163,7 @@ do_archive_get(InstanceConfig *instance, const char *prefetch_dir_arg,
 		else
 			fail_count++;
 
-		elog(WARNING, "PID [%d]: Failed to get WAL file %s, retry %i/3",
+		elog(LOG, "PID [%d]: Failed to get WAL file %s, retry %i/3",
 					0, wal_file_name, fail_count);
 	}
 
@@ -1343,7 +1343,7 @@ bool
 get_wal_file(const char *filename, const char *from_fullpath,
 			 const char *to_fullpath, bool prefetch_mode, int thread_num)
 {
-	int     rc;
+	int     rc = FILE_MISSING;
 	FILE   *out;
 	bool    source_compressed = false;
 	char    from_fullpath_gz[MAXPGPATH];
@@ -1382,7 +1382,8 @@ get_wal_file(const char *filename, const char *from_fullpath,
 		/* get file via ssh */
 #ifdef HAVE_LIBZ
 		/* first try to use compressed segment ... */
-		rc = fio_send_file_gz(from_fullpath_gz, to_fullpath, out, thread_num);
+		if (IsXLogFileName(filename))
+			rc = fio_send_file_gz(from_fullpath_gz, to_fullpath, out, thread_num);
 		if (rc == FILE_MISSING)
 #endif
 			/* ... failing that, use uncompressed */
@@ -1413,8 +1414,9 @@ get_wal_file(const char *filename, const char *from_fullpath,
 		/* get file locally */
 #ifdef HAVE_LIBZ
 		/* first try to use compressed segment ... */
-		rc = get_wal_file_internal(from_fullpath_gz, to_fullpath,
-								   out, true, thread_num);
+		if (IsXLogFileName(filename))
+			rc = get_wal_file_internal(from_fullpath_gz, to_fullpath,
+									   out, true, thread_num);
 		if (rc == FILE_MISSING)
 #endif
 			/* ... failing that, use uncompressed */
@@ -1445,7 +1447,7 @@ get_wal_file(const char *filename, const char *from_fullpath,
 	}
 
 	if (!prefetch_mode && (rc == FILE_MISSING))
-		elog(WARNING, "Thread [%d]: Requested WAL file doesn't exists: '%s'",
+		elog(LOG, "Thread [%d]: Requested WAL file doesn't exists: '%s'",
 				thread_num, from_fullpath);
 
 	if (rc < 0)
