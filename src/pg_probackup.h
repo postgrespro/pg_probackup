@@ -976,15 +976,23 @@ extern parray * pg_ptrack_get_pagemapset(PGconn *backup_conn, const char *ptrack
 extern int fio_send_pages(FILE* in, FILE* out, pgFile *file, XLogRecPtr horizonLsn,
 						   int calg, int clevel, uint32 checksum_version,
 						   datapagemap_t *pagemap, BlockNumber* err_blknum, char **errormsg);
-extern void fio_send_file_gz(const char *from_fullpath, FILE* out, char **errormsg, int elevel);
-
-extern void fio_send_file(const char *from_fullpath, FILE* out, char **errormsg, int elevel);
-
 /* return codes for fio_send_pages */
-#define WRITE_FAILED (-1)
-#define REMOTE_ERROR (-2)
-#define PAGE_CORRUPTION (-3)
-#define SEND_OK (-4)
+
+extern int fio_send_file_gz(const char *from_fullpath, const char *to_fullpath, FILE* out, int thread_num);
+extern int fio_send_file(const char *from_fullpath, const char *to_fullpath, FILE* out, int thread_num);
+
+/* return codes for fio_send_pages() and fio_send_file() */
+#define SEND_OK       (0)
+#define FILE_MISSING (-1)
+#define OPEN_FAILED  (-2)
+#define READ_FAILED  (-3)
+#define WRITE_FAILED (-4)
+#define ZLIB_ERROR   (-5)
+#define REMOTE_ERROR (-6)
+#define PAGE_CORRUPTION (-8)
+
+/* Check if specified location is local for current node */
+extern bool fio_is_remote(fio_location location);
 
 extern void get_header_errormsg(Page page, char **errormsg);
 extern void get_checksum_errormsg(Page page, char **errormsg,

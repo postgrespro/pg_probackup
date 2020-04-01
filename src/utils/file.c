@@ -136,7 +136,7 @@ static int remove_file_or_dir(char const* path)
 #endif
 
 /* Check if specified location is local for current node */
-static bool fio_is_remote(fio_location location)
+bool fio_is_remote(fio_location location)
 {
 	bool is_remote = MyLocation != FIO_LOCAL_HOST
 		&& location != FIO_LOCAL_HOST
@@ -1633,10 +1633,17 @@ cleanup:
 
 /* Receive chunks of compressed data, decompress them and write to
  * destination file.
- * TODO: retry mechanism
+ * Return codes:
+ *   FILE_MISSING (-1)
+ *   OPEN_FAILED  (-2)
+ *   READ_FAILED  (-3)
+ *   WRITE_FAILED (-4)
+ *   ZLIB_ERROR   (-5)
+ *   REMOTE_ERROR (-6)
  */
-void fio_send_file_gz(const char *from_fullpath, FILE* out, char **errormsg, int elevel)
+int fio_send_file_gz(const char *from_fullpath, const char *to_fullpath, FILE* out, int thread_num)
 {
+	int exit_code = SEND_OK;
 	fio_header hdr;
 	size_t path_len = strlen(from_fullpath) + 1;
 	/* decompressor */
@@ -1644,6 +1651,9 @@ void fio_send_file_gz(const char *from_fullpath, FILE* out, char **errormsg, int
 
 	hdr.cop = FIO_SEND_FILE;
 	hdr.size = path_len;
+
+	elog(VERBOSE, "Thread [%d]: Attempting to open remote compressed WAL file '%s'",
+			thread_num, from_fullpath);
 
 	IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
 	IO_CHECK(fio_write_all(fio_stdout, from_fullpath, path_len), path_len);
@@ -1657,9 +1667,6 @@ void fio_send_file_gz(const char *from_fullpath, FILE* out, char **errormsg, int
 
 		IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
 
-		if (interrupted)
-			elog(ERROR, "Interrupted during receiving WAL");
-
 		if (hdr.cop == FIO_SEND_FILE_EOF)
 		{
 			break;
@@ -1667,8 +1674,13 @@ void fio_send_file_gz(const char *from_fullpath, FILE* out, char **errormsg, int
 		else if (hdr.cop == FIO_ERROR)
 		{
 			/* handle error, reported by the agent */
-			elog(ERROR, "ERROR");
-			break;
+			if (hdr.size > 0)
+			{
+				IO_CHECK(fio_read_all(fio_stdin, buf, hdr.size), hdr.size);
+				elog(WARNING, "Thread [%d]: %s", thread_num, buf);
+			}
+			exit_code = hdr.arg;
+			goto cleanup;
 		}
 		else if (hdr.cop == FIO_PAGE)
 		{
@@ -1690,7 +1702,12 @@ void fio_send_file_gz(const char *from_fullpath, FILE* out, char **errormsg, int
 				rc = inflateInit2(strm, 15 + 16);
 
 				if (rc != Z_OK)
-					elog(ERROR, "Failed to Initialize decompression stream");
+				{
+					elog(WARNING, "Thread [%d]: Failed to initialize decompression stream for file '%s': %i: %s",
+							thread_num, from_fullpath, rc, strm->msg);
+					exit_code = ZLIB_ERROR;
+					goto cleanup;
+				}
 			}
 			else
 			{
@@ -1717,49 +1734,85 @@ void fio_send_file_gz(const char *from_fullpath, FILE* out, char **errormsg, int
 					/* end of stream */
 					break;
 				else if (rc != Z_OK)
+				{
 					/* got an error */
-					elog(ERROR, "Decompression error: %i: %s", rc, strm->msg);
+					elog(WARNING, "Thread [%d]: Decompression failed for file '%s': %i: %s",
+							thread_num, from_fullpath, rc, strm->msg);
+
+					exit_code = ZLIB_ERROR;
+					goto cleanup;
+				}
 
 				if (strm->avail_out == 0)
 				{
 					/* Output buffer is full, write it out */
 					if (fwrite(unzip_buf, 1, OUTPUT_BUFFER_SIZE, out) != OUTPUT_BUFFER_SIZE)
-						elog(ERROR, "Cannot write to destination file: %s", strerror(errno));
+					{
+						elog(WARNING, "Thread [%d]: Cannot write to file '%s': %s",
+								thread_num, to_fullpath, strerror(errno));
+						exit_code = WRITE_FAILED;
+						goto cleanup;
+					}
 
 					strm->next_out = (Bytef *)unzip_buf; /* output buffer */
 					strm->avail_out = OUTPUT_BUFFER_SIZE;
 				}
 			}
 
-			/* write leftovers out if any */
+			/* write out leftovers if any */
 			if (strm->avail_out != OUTPUT_BUFFER_SIZE)
 			{
 				int len = OUTPUT_BUFFER_SIZE - strm->avail_out;
 
 				if (fwrite(unzip_buf, 1, len, out) != len)
-					elog(ERROR, "Cannot write to destination file: %s",
-						strerror(errno));
+				{
+					elog(WARNING, "Thread [%d]: Cannot write to file: %s",
+							thread_num, strerror(errno));
+					exit_code = WRITE_FAILED;
+					goto cleanup;
+				}
 			}
 		}
 		else
-			elog(ERROR, "Remote agent returned message of unknown type");
+		{
+			elog(WARNING, "Thread [%d]: Remote agent returned message of unknown type", thread_num);
+			exit_code = REMOTE_ERROR;
+			break;
+		}
 	}
 
-	inflateEnd(strm);
-	pg_free(strm);
+cleanup:
+	if (exit_code < OPEN_FAILED)
+		fio_disconnect(); /* discard possible pending data in pipe */
+
+	if (strm)
+	{
+		inflateEnd(strm);
+		pg_free(strm);
+	}
+	return exit_code;
 }
 
 /* Receive chunks of data and write them to destination file.
- * TODO: retry mechanism
+ * Return codes:
+ *   SEND_OK       (0)
+ *   FILE_MISSING (-1)
+ *   OPEN_FAILED  (-2)
+ *   READ_FAIL    (-3)
+ *   WRITE_FAIL   (-4)
  */
-void fio_send_file(const char *from_fullpath, FILE* out, char **errormsg, int elevel)
+int fio_send_file(const char *from_fullpath, const char *to_fullpath, FILE* out, int thread_num)
 {
+	int exit_code = SEND_OK;
 	fio_header hdr;
 	size_t path_len = strlen(from_fullpath) + 1;
 	char buf[STDIO_BUFSIZE*2];
 
 	hdr.cop = FIO_SEND_FILE;
 	hdr.size = path_len;
+
+	elog(VERBOSE, "Thread [%d]: Attempting to open remote WAL file '%s'",
+			thread_num, from_fullpath);
 
 	IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
 	IO_CHECK(fio_write_all(fio_stdout, from_fullpath, path_len), path_len);
@@ -1769,9 +1822,6 @@ void fio_send_file(const char *from_fullpath, FILE* out, char **errormsg, int el
 		/* receive data */
 		IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
 
-		if (interrupted)
-			elog(ERROR, "Interrupted during receiving WAL");
-
 		if (hdr.cop == FIO_SEND_FILE_EOF)
 		{
 			break;
@@ -1779,7 +1829,12 @@ void fio_send_file(const char *from_fullpath, FILE* out, char **errormsg, int el
 		else if (hdr.cop == FIO_ERROR)
 		{
 			/* handle error, reported by the agent */
-			elog(ERROR, "ERROR");
+			if (hdr.size > 0)
+			{
+				IO_CHECK(fio_read_all(fio_stdin, buf, hdr.size), hdr.size);
+				elog(WARNING, "Thread [%d]: %s", thread_num, buf);
+			}
+			exit_code = hdr.arg;
 			break;
 		}
 		else if (hdr.cop == FIO_PAGE)
@@ -1789,15 +1844,33 @@ void fio_send_file(const char *from_fullpath, FILE* out, char **errormsg, int el
 
 			/* We have received a chunk of data data, lets write it out */
 			if (fwrite(buf, 1, hdr.size, out) != hdr.size)
-				elog(ERROR, "Cannot write to destination file: %s", strerror(errno));
+			{
+				elog(WARNING, "Thread [%d]: Cannot write to file '%s': %s",
+						thread_num, to_fullpath, strerror(errno));
+				exit_code = WRITE_FAILED;
+				break;
+			}
 		}
 		else
-			elog(ERROR, "Remote agent returned message of unknown type");
+		{
+			elog(WARNING, "Thread [%d]: Remote agent returned message of unknown type", thread_num);
+			exit_code = REMOTE_ERROR;
+			break;
+		}
 	}
+
+	if (exit_code < OPEN_FAILED)
+		fio_disconnect(); /* discard possible pending data in pipe */
+
+	return exit_code;
 }
 
 /* Send file content
- * TODO: SEND errormsg instead of elog(ERROR)
+ * On error we return FIO_ERROR message with following codes
+ *	FILE_MISSING (-1)
+ *  OPEN_FAILED  (-2)
+ *  READ_FAILED  (-3)
+ *
  */
 static void fio_send_file_impl(int out, char const* path)
 {
@@ -1808,22 +1881,62 @@ static void fio_send_file_impl(int out, char const* path)
 	char      *errormsg = NULL;
 
 	/* open source file for read */
+	/* TODO: check that file is regular file */
 	fp = fopen(path, PG_BINARY_R);
 	if (!fp)
-		elog(ERROR, "Cannot open source file \"%s\": %s",
-			 path, strerror(errno));
+	{
+		hdr.cop = FIO_ERROR;
+
+		/* do not send exact wording of ENOENT error message
+		 * because it is a very common error in our case, so
+		 * error code is enough.
+		 */
+		if (errno == ENOENT)
+		{
+			hdr.arg = FILE_MISSING;
+			hdr.size = 0;
+		}
+		else
+		{
+			hdr.arg = OPEN_FAILED;
+			errormsg = pgut_malloc(MAXPGPATH);
+			/* Construct the error message */
+			snprintf(errormsg, MAXPGPATH, "Cannot open source file '%s': %s", path, strerror(errno));
+			hdr.size = strlen(errormsg) + 1;
+		}
+
+		/* send header and message */
+		IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
+		if (errormsg)
+			IO_CHECK(fio_write_all(out, errormsg, hdr.size), hdr.size);
+
+		goto cleanup;
+	}
 
 	/* copy content */
 	for (;;)
 	{
 		read_len = fread(buf, 1, sizeof(buf), fp);
 
-		/* TODO: report error as message */
-		if (read_len < 0)
-			elog(ERROR, "Cannot read source file \"%s\": %s",
-				 path, strerror(errno));
+		/* report error */
+		if (read_len < 0 || (read_len == 0 && !feof(fp)))
+		{
+			errormsg = pgut_malloc(MAXPGPATH);
+			hdr.cop = FIO_ERROR;
+			hdr.arg = READ_FAILED;
+			/* Construct the error message */
+			snprintf(errormsg, MAXPGPATH, "Cannot read source file '%s': %s", path, strerror(errno));
+			hdr.size = strlen(errormsg) + 1;
+			/* send header and message */
+			IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
+			IO_CHECK(fio_write_all(out, errormsg, hdr.size), hdr.size);
 
-		else if (read_len == 0) /*TODO: handle error if !feof() */
+			pg_free(errormsg);
+			fclose(fp);
+			return;
+		}
+
+		else if (read_len == 0)
 			break;
 		else
 		{
@@ -1839,6 +1952,10 @@ static void fio_send_file_impl(int out, char const* path)
 	fclose(fp);
 	hdr.cop = FIO_SEND_FILE_EOF;
 	IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
+
+cleanup:
+	pg_free(errormsg);
+	return;
 }
 
 /* Execute commands at remote host */
