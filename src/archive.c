@@ -30,10 +30,10 @@ static int get_wal_file_internal(const char *from_path, const char *to_path, FIL
 #ifdef HAVE_LIBZ
 static const char *get_gz_error(gzFile gzf, int errnum);
 #endif
-static void copy_file_attributes(const char *from_path,
-								 fio_location from_location,
-								 const char *to_path, fio_location to_location,
-								 bool unlink_on_error);
+//static void copy_file_attributes(const char *from_path,
+//								 fio_location from_location,
+//								 const char *to_path, fio_location to_location,
+//								 bool unlink_on_error);
 
 static bool next_wal_segment_exists(const char *prefetch_dir, const char *wal_file_name, uint32 wal_seg_size);
 static int run_wal_prefetch(const char *prefetch_dir, const char *archive_dir, const char *first_file,
@@ -915,29 +915,29 @@ get_gz_error(gzFile gzf, int errnum)
 #endif
 
 /* Copy file attributes */
-static void
-copy_file_attributes(const char *from_path, fio_location from_location,
-		  const char *to_path, fio_location to_location,
-		  bool unlink_on_error)
-{
-	struct stat st;
-
-	if (fio_stat(from_path, &st, true, from_location) == -1)
-	{
-		if (unlink_on_error)
-			fio_unlink(to_path, to_location);
-		elog(ERROR, "Cannot stat file \"%s\": %s",
-			 from_path, strerror(errno));
-	}
-
-	if (fio_chmod(to_path, st.st_mode, to_location) == -1)
-	{
-		if (unlink_on_error)
-			fio_unlink(to_path, to_location);
-		elog(ERROR, "Cannot change mode of file \"%s\": %s",
-			 to_path, strerror(errno));
-	}
-}
+//static void
+//copy_file_attributes(const char *from_path, fio_location from_location,
+//		  const char *to_path, fio_location to_location,
+//		  bool unlink_on_error)
+//{
+//	struct stat st;
+//
+//	if (fio_stat(from_path, &st, true, from_location) == -1)
+//	{
+//		if (unlink_on_error)
+//			fio_unlink(to_path, to_location);
+//		elog(ERROR, "Cannot stat file \"%s\": %s",
+//			 from_path, strerror(errno));
+//	}
+//
+//	if (fio_chmod(to_path, st.st_mode, to_location) == -1)
+//	{
+//		if (unlink_on_error)
+//			fio_unlink(to_path, to_location);
+//		elog(ERROR, "Cannot change mode of file \"%s\": %s",
+//			 to_path, strerror(errno));
+//	}
+//}
 
 /* Look for files with '.ready' suffix in archive_status directory
  * and pack such files into batch sized array.
@@ -1112,7 +1112,10 @@ do_archive_get(InstanceConfig *instance, const char *prefetch_dir_arg,
 				goto get_done;
 			}
 			else
+			{
+				n_prefetched = 0;
 				rmtree(prefetch_dir, false);
+			}
 		}
 		else
 		{
@@ -1139,8 +1142,11 @@ do_archive_get(InstanceConfig *instance, const char *prefetch_dir_arg,
 										 true))
 				goto get_done;
 			else
+			{
 				/* prefetch failed again, discard it */
+				n_prefetched = 0;
 				rmtree(prefetch_dir, false);
+			}
 		}
 	}
 
@@ -1151,6 +1157,11 @@ do_archive_get(InstanceConfig *instance, const char *prefetch_dir_arg,
 	 * the requested file is not WAL segment.
 	 * Copy file from the archive directly.
 	 * Retry several times before bailing out.
+	 *
+	 * TODO:
+	 * files copied from archive directly are not validated, which is not ok.
+	 * TOTHINK:
+	 * Current WAL validation cannot be applied to partial files.
 	 */
 
 	while (fail_count < 3)
@@ -1185,7 +1196,6 @@ get_done:
 	/* TODO: if corruption or network problem encountered, kill yourself
 	 * with SIGTERN to prevent recovery from starting up database.
 	 */
-
 	if (fail_count == 0)
 		elog(INFO, "PID [%d]: pg_probackup archive-get completed successfully, prefetched: %i/%i, time elapsed: %s",
 				my_pid, n_prefetched, batch_size, pretty_time_str);
@@ -1195,10 +1205,14 @@ get_done:
 }
 
 /*
- * inclusive - should we start prefetch with current segment, or next */
+ * Copy batch_size of regular WAL segments into prefetch directory,
+ * starting with first_file.
+ *
+ * inclusive - should we copy first_file or not.
+ */
 int run_wal_prefetch(const char *prefetch_dir, const char *archive_dir,
-					  const char *first_file, int num_threads, bool inclusive,
-					  int batch_size, uint32 wal_seg_size)
+					 const char *first_file, int num_threads, bool inclusive,
+					 int batch_size, uint32 wal_seg_size)
 {
 	int         i;
 	TimeLineID  tli;
@@ -1286,7 +1300,7 @@ int run_wal_prefetch(const char *prefetch_dir, const char *archive_dir,
 			n_total_prefetched += threads_args[i].n_prefetched;
 		}
 	}
-
+	/* TODO: free batch_files */
 	return n_total_prefetched;
 }
 
@@ -1345,7 +1359,6 @@ get_wal_file(const char *filename, const char *from_fullpath,
 {
 	int     rc = FILE_MISSING;
 	FILE   *out;
-	bool    source_compressed = false;
 	char    from_fullpath_gz[MAXPGPATH];
 	bool    src_partial = false;
 
@@ -1381,7 +1394,7 @@ get_wal_file(const char *filename, const char *from_fullpath,
 	{
 		/* get file via ssh */
 #ifdef HAVE_LIBZ
-		/* first try to use compressed segment ... */
+		/* If requested file is regular WAL segment, then try to open it with '.gz' suffix... */
 		if (IsXLogFileName(filename))
 			rc = fio_send_file_gz(from_fullpath_gz, to_fullpath, out, thread_num);
 		if (rc == FILE_MISSING)
@@ -1394,7 +1407,7 @@ get_wal_file(const char *filename, const char *from_fullpath,
 			char    from_partial[MAXPGPATH];
 
 #ifdef HAVE_LIBZ
-			/* first try to use compressed segment ... */
+			/* Compressed goes first ... */
 			snprintf(from_partial, sizeof(from_partial), "%s.gz.partial", from_fullpath);
 			rc = fio_send_file_gz(from_partial, to_fullpath, out, thread_num);
 			if (rc == FILE_MISSING)
@@ -1413,28 +1426,26 @@ get_wal_file(const char *filename, const char *from_fullpath,
 	{
 		/* get file locally */
 #ifdef HAVE_LIBZ
-		/* first try to use compressed segment ... */
+		/* If requested file is regular WAL segment, then try to open it with '.gz' suffix... */
 		if (IsXLogFileName(filename))
-			rc = get_wal_file_internal(from_fullpath_gz, to_fullpath,
-									   out, true, thread_num);
+			rc = get_wal_file_internal(from_fullpath_gz, to_fullpath, out, true, thread_num);
 		if (rc == FILE_MISSING)
 #endif
 			/* ... failing that, use uncompressed */
-			rc = get_wal_file_internal(from_fullpath, to_fullpath, out,
-									   false, thread_num);
+			rc = get_wal_file_internal(from_fullpath, to_fullpath, out, false, thread_num);
 
 		if (rc == FILE_MISSING && !prefetch_mode && IsXLogFileName(filename))
 		{
 			char    from_partial[MAXPGPATH];
 
 #ifdef HAVE_LIBZ
-			/* first try to use compressed segment ... */
+			/* Compressed goes first ... */
 			snprintf(from_partial, sizeof(from_partial), "%s.gz.partial", from_fullpath);
 			rc = get_wal_file_internal(from_partial, to_fullpath,
 									   out, true, thread_num);
 			if (rc == FILE_MISSING)
-			{
 #endif
+			{
 				/* ... failing that, use uncompressed */
 				snprintf(from_partial, sizeof(from_partial), "%s.partial", from_fullpath);
 				rc = get_wal_file_internal(from_partial, to_fullpath, out,
@@ -1457,13 +1468,18 @@ get_wal_file(const char *filename, const char *from_fullpath,
 		return false;
 	}
 
-	/* is partial file was used as source, then it is likely that destination file
-	 * is not equal to XLOG_SEG_SIZE. We must extent it up to XLOG_SEG_SIZE.
+	/* If partial file was used as source, then it is very likely that destination
+	 * file is not equal to XLOG_SEG_SIZE - that is the way pg_receivexlog works.
+	 * We must manually extent it up to XLOG_SEG_SIZE.
 	 */
-	if (src_partial)
-		/* TODO: error check */
-		ftruncate(fileno(out), xlog_seg_size);
-
+	if (src_partial && (ftruncate(fileno(out), xlog_seg_size) != 0))
+	{
+		elog(WARNING, "Thread [%d]: Cannot extend file '%s': %s",
+				thread_num, to_fullpath, strerror(errno));
+		fclose(out);
+		unlink(to_fullpath);
+		return false;
+	}
 
 	if (fclose(out) != 0)
 	{
@@ -1492,10 +1508,11 @@ get_wal_file_internal(const char *from_path, const char *to_path, FILE *out,
 					  bool is_decompress, int thread_num)
 {
 #ifdef HAVE_LIBZ
-	gzFile		gz_in = NULL;
+	gzFile   gz_in = NULL;
 #endif
-	FILE	   *in = NULL;
-	char		buf[1024 * 1024];
+	FILE    *in = NULL;
+	char    *buf = pgut_malloc(OUT_BUF_SIZE); /* 1MB buffer */
+	int      exit_code = 0;
 
 	elog(VERBOSE, "Thread [%d]: Attempting to %s WAL file '%s'",
 		thread_num, is_decompress ? "open compressed" : "open", from_path);
@@ -1507,11 +1524,14 @@ get_wal_file_internal(const char *from_path, const char *to_path, FILE *out,
 		if (in == NULL)
 		{
 			if (errno == ENOENT)
-				return FILE_MISSING;
+				exit_code = FILE_MISSING;
 			else
+			{
 				elog(WARNING, "Thread [%d]: Cannot open source WAL file \"%s\": %s",
 						thread_num, from_path, strerror(errno));
-			return OPEN_FAILED;
+				exit_code = OPEN_FAILED;
+			}
+			goto cleanup;
 		}
 	}
 #ifdef HAVE_LIBZ
@@ -1521,11 +1541,15 @@ get_wal_file_internal(const char *from_path, const char *to_path, FILE *out,
 		if (gz_in == NULL)
 		{
 			if (errno == ENOENT)
-				return FILE_MISSING;
+				exit_code = FILE_MISSING;
 			else
+			{
 				elog(WARNING, "Thread [%d]: Cannot open compressed WAL file \"%s\": %s",
 						thread_num, from_path, strerror(errno));
-			return OPEN_FAILED;
+				exit_code = OPEN_FAILED;
+			}
+
+			goto cleanup;
 		}
 	}
 #endif
@@ -1538,7 +1562,7 @@ get_wal_file_internal(const char *from_path, const char *to_path, FILE *out,
 #ifdef HAVE_LIBZ
 		if (is_decompress)
 		{
-			read_len = gzread(gz_in, buf, sizeof(buf));
+			read_len = gzread(gz_in, buf, OUT_BUF_SIZE);
 
 			if (read_len <= 0)
 			{
@@ -1548,22 +1572,22 @@ get_wal_file_internal(const char *from_path, const char *to_path, FILE *out,
 				{
 					elog(WARNING, "Thread [%d]: Cannot read compressed WAL file \"%s\": %s",
 							thread_num, from_path, get_gz_error(gz_in, errno));
-					gzclose(gz_in);
-					return READ_FAILED;
+					exit_code = READ_FAILED;
+					break;
 				}
 			}
 		}
 		else
 #endif
 		{
-			read_len = fread(buf, 1, sizeof(buf), in);
+			read_len = fread(buf, 1, OUT_BUF_SIZE, in);
 
 			if (read_len < 0 || ferror(in))
 			{
 				elog(WARNING, "Thread [%d]: Cannot read source WAL file \"%s\": %s",
 						thread_num, from_path, strerror(errno));
-				fclose(in);
-				return READ_FAILED;
+				exit_code = READ_FAILED;
+				break;
 			}
 			else if (read_len == 0 && feof(in))
 				break;
@@ -1573,23 +1597,24 @@ get_wal_file_internal(const char *from_path, const char *to_path, FILE *out,
 		{
 			if (fwrite(buf, 1, read_len, out) != read_len)
 			{
-				/* error message must be reported by caller */
 				elog(WARNING, "Thread [%d]: Cannot write to WAL file '%s': %s",
 						thread_num, to_path, strerror(errno));
-				fclose(in);
-				return WRITE_FAILED;
+				exit_code = WRITE_FAILED;
+				break;
 			}
 		}
 	}
 
+cleanup:
 #ifdef HAVE_LIBZ
-	if (is_decompress)
+	if (gz_in)
 		gzclose(gz_in);
-	else
 #endif
+	if (in)
 		fclose(in);
 
-	return 0;
+	pg_free(buf);
+	return exit_code;
 }
 
 bool next_wal_segment_exists(const char *prefetch_dir, const char *wal_file_name, uint32 wal_seg_size)
@@ -1625,6 +1650,10 @@ bool wal_satisfy_from_prefetch(const char *wal_file_name, const char *prefetch_d
 	char prefetched_file[MAXPGPATH];
 
 	join_path_components(prefetched_file, prefetch_dir, wal_file_name);
+
+	/* If prefetched file do not exists, then nothing can be done */
+	if (access(prefetched_file, F_OK) != 0)
+		return false;
 
 	/* If the next WAL segment do not exists in prefetch directory,
 	 * then current segment cannot be validated, therefore cannot be used

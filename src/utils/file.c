@@ -1026,7 +1026,6 @@ int fio_chmod(char const* path, int mode, fio_location location)
 
 #ifdef HAVE_LIBZ
 
-
 #define ZLIB_BUFFER_SIZE     (64*1024)
 #define MAX_WBITS            15 /* 32K LZ77 window */
 #define DEF_MEM_LEVEL        8
@@ -1643,8 +1642,10 @@ cleanup:
  */
 int fio_send_file_gz(const char *from_fullpath, const char *to_fullpath, FILE* out, int thread_num)
 {
-	int exit_code = SEND_OK;
 	fio_header hdr;
+	int exit_code = SEND_OK;
+	char *in_buf = pgut_malloc(STDIO_BUFSIZE); /* buffer for compressed data */
+	char *out_buf = pgut_malloc(OUT_BUF_SIZE); /* 1MB buffer for decompressed data */
 	size_t path_len = strlen(from_fullpath) + 1;
 	/* decompressor */
 	z_stream *strm = NULL;
@@ -1661,10 +1662,6 @@ int fio_send_file_gz(const char *from_fullpath, const char *to_fullpath, FILE* o
 	for (;;)
 	{
 		fio_header hdr;
-		char buf[STDIO_BUFSIZE + 200];
-		#define OUTPUT_BUFFER_SIZE 1024 * 1024
-		char unzip_buf[OUTPUT_BUFFER_SIZE];
-
 		IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
 
 		if (hdr.cop == FIO_SEND_FILE_EOF)
@@ -1676,8 +1673,8 @@ int fio_send_file_gz(const char *from_fullpath, const char *to_fullpath, FILE* o
 			/* handle error, reported by the agent */
 			if (hdr.size > 0)
 			{
-				IO_CHECK(fio_read_all(fio_stdin, buf, hdr.size), hdr.size);
-				elog(WARNING, "Thread [%d]: %s", thread_num, buf);
+				IO_CHECK(fio_read_all(fio_stdin, in_buf, hdr.size), hdr.size);
+				elog(WARNING, "Thread [%d]: %s", thread_num, in_buf);
 			}
 			exit_code = hdr.arg;
 			goto cleanup;
@@ -1685,8 +1682,8 @@ int fio_send_file_gz(const char *from_fullpath, const char *to_fullpath, FILE* o
 		else if (hdr.cop == FIO_PAGE)
 		{
 			int rc;
-			Assert(hdr.size <= sizeof(buf));
-			IO_CHECK(fio_read_all(fio_stdin, buf, hdr.size), hdr.size);
+			Assert(hdr.size <= STDIO_BUFSIZE);
+			IO_CHECK(fio_read_all(fio_stdin, in_buf, hdr.size), hdr.size);
 
 			/* We have received a chunk of compressed data, lets decompress it */
 			if (strm == NULL)
@@ -1696,7 +1693,7 @@ int fio_send_file_gz(const char *from_fullpath, const char *to_fullpath, FILE* o
 				memset(strm, 0, sizeof(z_stream));
 
 				/* The fields next_in, avail_in initialized before init */
-				strm->next_in = (Bytef *)buf;
+				strm->next_in = (Bytef *)in_buf;
 				strm->avail_in = hdr.size;
 
 				rc = inflateInit2(strm, 15 + 16);
@@ -1711,12 +1708,12 @@ int fio_send_file_gz(const char *from_fullpath, const char *to_fullpath, FILE* o
 			}
 			else
 			{
-				strm->next_in = (Bytef *)buf;
+				strm->next_in = (Bytef *)in_buf;
 				strm->avail_in = hdr.size;
 			}
 
-			strm->next_out = (Bytef *)unzip_buf; /* output buffer */
-			strm->avail_out = sizeof(unzip_buf); /* free space in output buffer */
+			strm->next_out = (Bytef *)out_buf; /* output buffer */
+			strm->avail_out = OUT_BUF_SIZE; /* free space in output buffer */
 
 			/*
 			 * From zlib documentation:
@@ -1746,7 +1743,7 @@ int fio_send_file_gz(const char *from_fullpath, const char *to_fullpath, FILE* o
 				if (strm->avail_out == 0)
 				{
 					/* Output buffer is full, write it out */
-					if (fwrite(unzip_buf, 1, OUTPUT_BUFFER_SIZE, out) != OUTPUT_BUFFER_SIZE)
+					if (fwrite(out_buf, 1, OUT_BUF_SIZE, out) != OUT_BUF_SIZE)
 					{
 						elog(WARNING, "Thread [%d]: Cannot write to file '%s': %s",
 								thread_num, to_fullpath, strerror(errno));
@@ -1754,17 +1751,17 @@ int fio_send_file_gz(const char *from_fullpath, const char *to_fullpath, FILE* o
 						goto cleanup;
 					}
 
-					strm->next_out = (Bytef *)unzip_buf; /* output buffer */
-					strm->avail_out = OUTPUT_BUFFER_SIZE;
+					strm->next_out = (Bytef *)out_buf; /* output buffer */
+					strm->avail_out = OUT_BUF_SIZE;
 				}
 			}
 
 			/* write out leftovers if any */
-			if (strm->avail_out != OUTPUT_BUFFER_SIZE)
+			if (strm->avail_out != OUT_BUF_SIZE)
 			{
-				int len = OUTPUT_BUFFER_SIZE - strm->avail_out;
+				int len = OUT_BUF_SIZE - strm->avail_out;
 
-				if (fwrite(unzip_buf, 1, len, out) != len)
+				if (fwrite(out_buf, 1, len, out) != len)
 				{
 					elog(WARNING, "Thread [%d]: Cannot write to file: %s",
 							thread_num, strerror(errno));
@@ -1790,6 +1787,9 @@ cleanup:
 		inflateEnd(strm);
 		pg_free(strm);
 	}
+
+	pg_free(in_buf);
+	pg_free(out_buf);
 	return exit_code;
 }
 
@@ -1803,10 +1803,10 @@ cleanup:
  */
 int fio_send_file(const char *from_fullpath, const char *to_fullpath, FILE* out, int thread_num)
 {
-	int exit_code = SEND_OK;
 	fio_header hdr;
+	int exit_code = SEND_OK;
 	size_t path_len = strlen(from_fullpath) + 1;
-	char buf[STDIO_BUFSIZE*2];
+	char buf[STDIO_BUFSIZE];
 
 	hdr.cop = FIO_SEND_FILE;
 	hdr.size = path_len;
@@ -1931,9 +1931,7 @@ static void fio_send_file_impl(int out, char const* path)
 			IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 			IO_CHECK(fio_write_all(out, errormsg, hdr.size), hdr.size);
 
-			pg_free(errormsg);
-			fclose(fp);
-			return;
+			goto cleanup;
 		}
 
 		else if (read_len == 0)
@@ -1949,11 +1947,12 @@ static void fio_send_file_impl(int out, char const* path)
 	}
 
 	/* we are done, send eof */
-	fclose(fp);
 	hdr.cop = FIO_SEND_FILE_EOF;
 	IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 
 cleanup:
+	if (fp)
+		fclose(fp);
 	pg_free(errormsg);
 	return;
 }

@@ -271,9 +271,6 @@ main(int argc, char *argv[])
 {
 	char	   *command = NULL,
 			   *command_name;
-	/* Check if backup_path is directory. */
-	struct stat stat_buf;
-	int			rc;
 
 	PROGRAM_NAME_FULL = argv[0];
 
