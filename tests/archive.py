@@ -1761,7 +1761,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             tli13['closest-backup-id'])
 
         self.assertEqual(
-            '0000000D000000000000001B',
+            '0000000D000000000000001C',
             tli13['max-segno'])
 
         # Clean after yourself

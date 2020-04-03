@@ -1786,7 +1786,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             self.assertTrue(
                 'LOG:  archive command failed with exit code 1' in log_content and
                 'DETAIL:  The failed archive command was:' in log_content and
-                'INFO: pg_probackup archive-push from' in log_content,
+                'WAL file already exists in archive with different checksum' in log_content,
                 'Expecting error messages about failed archive_command'
             )
             self.assertFalse(
