@@ -1107,7 +1107,7 @@ do_archive_get(InstanceConfig *instance, const char *prefetch_dir_arg,
 										  absolute_wal_file_path, instance->xlog_seg_size,
 										  true))
 			{
-				elog(INFO, "PID [%d]: pg_probackup archive-get use prefetched WAL segment %s",
+				elog(INFO, "PID [%d]: pg_probackup archive-get used prefetched WAL segment %s",
 						my_pid, wal_file_name);
 				goto get_done;
 			}
@@ -1140,7 +1140,11 @@ do_archive_get(InstanceConfig *instance, const char *prefetch_dir_arg,
 			if (wal_satisfy_from_prefetch(wal_file_name, prefetch_dir,
 										 absolute_wal_file_path, instance->xlog_seg_size,
 										 true))
+			{
+				elog(INFO, "PID [%d]: pg_probackup archive-get copied WAL file %s",
+						my_pid, wal_file_name);
 				goto get_done;
+			}
 			else
 			{
 				/* prefetch failed again, discard it */
@@ -1169,6 +1173,8 @@ do_archive_get(InstanceConfig *instance, const char *prefetch_dir_arg,
 		if (get_wal_file(wal_file_name, backup_wal_file_path, absolute_wal_file_path, false, 0))
 		{
 			fail_count = 0;
+			elog(INFO, "PID [%d]: pg_probackup archive-get copied WAL file %s",
+						my_pid, wal_file_name);
 			break;
 		}
 		else
@@ -1200,8 +1206,8 @@ get_done:
 		elog(INFO, "PID [%d]: pg_probackup archive-get completed successfully, prefetched: %i/%i, time elapsed: %s",
 				my_pid, n_prefetched, batch_size, pretty_time_str);
 	else
-		elog(ERROR, "PID [%d]: pg_probackup archive-get failed, prefetched: %i/%i, time elapsed: %s",
-				my_pid, n_prefetched, batch_size, pretty_time_str);
+		elog(ERROR, "PID [%d]: pg_probackup archive-get failed to deliver WAL file %s, prefetched: %i/%i, time elapsed: %s",
+				my_pid, wal_file_name, n_prefetched, batch_size, pretty_time_str);
 }
 
 /*

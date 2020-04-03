@@ -14,6 +14,7 @@
 
 #define PRINTF_BUF_SIZE  1024
 #define FILE_PERMISSIONS 0600
+#define CHUNK_SIZE 1024 * 128
 
 static __thread unsigned long fio_fdset = 0;
 static __thread void* fio_stdin_buffer;
@@ -1463,7 +1464,7 @@ int fio_send_pages(FILE* in, FILE* out, pgFile *file, XLogRecPtr horizonLsn,
 			file->uncompressed_size += BLCKSZ;
 		}
 		else
-			elog(ERROR, "Remote agent returned message of unknown type");
+			elog(ERROR, "Remote agent returned message of unexpected type: %i", hdr.cop);
 	}
 
 	return n_blocks_read;
@@ -1644,7 +1645,7 @@ int fio_send_file_gz(const char *from_fullpath, const char *to_fullpath, FILE* o
 {
 	fio_header hdr;
 	int exit_code = SEND_OK;
-	char *in_buf = pgut_malloc(STDIO_BUFSIZE); /* buffer for compressed data */
+	char *in_buf = pgut_malloc(CHUNK_SIZE);    /* buffer for compressed data */
 	char *out_buf = pgut_malloc(OUT_BUF_SIZE); /* 1MB buffer for decompressed data */
 	size_t path_len = strlen(from_fullpath) + 1;
 	/* decompressor */
@@ -1682,7 +1683,7 @@ int fio_send_file_gz(const char *from_fullpath, const char *to_fullpath, FILE* o
 		else if (hdr.cop == FIO_PAGE)
 		{
 			int rc;
-			Assert(hdr.size <= STDIO_BUFSIZE);
+			Assert(hdr.size <= CHUNK_SIZE);
 			IO_CHECK(fio_read_all(fio_stdin, in_buf, hdr.size), hdr.size);
 
 			/* We have received a chunk of compressed data, lets decompress it */
@@ -1735,7 +1736,6 @@ int fio_send_file_gz(const char *from_fullpath, const char *to_fullpath, FILE* o
 					/* got an error */
 					elog(WARNING, "Thread [%d]: Decompression failed for file '%s': %i: %s",
 							thread_num, from_fullpath, rc, strm->msg);
-
 					exit_code = ZLIB_ERROR;
 					goto cleanup;
 				}
@@ -1772,7 +1772,8 @@ int fio_send_file_gz(const char *from_fullpath, const char *to_fullpath, FILE* o
 		}
 		else
 		{
-			elog(WARNING, "Thread [%d]: Remote agent returned message of unknown type", thread_num);
+			elog(WARNING, "Thread [%d]: Remote agent returned message of unexpected type: %i",
+					thread_num, hdr.cop);
 			exit_code = REMOTE_ERROR;
 			break;
 		}
@@ -1806,7 +1807,7 @@ int fio_send_file(const char *from_fullpath, const char *to_fullpath, FILE* out,
 	fio_header hdr;
 	int exit_code = SEND_OK;
 	size_t path_len = strlen(from_fullpath) + 1;
-	char buf[STDIO_BUFSIZE];
+	char *buf = pgut_malloc(CHUNK_SIZE);    /* buffer */
 
 	hdr.cop = FIO_SEND_FILE;
 	hdr.size = path_len;
@@ -1839,7 +1840,7 @@ int fio_send_file(const char *from_fullpath, const char *to_fullpath, FILE* out,
 		}
 		else if (hdr.cop == FIO_PAGE)
 		{
-			Assert(hdr.size <= sizeof(buf));
+			Assert(hdr.size <= CHUNK_SIZE);
 			IO_CHECK(fio_read_all(fio_stdin, buf, hdr.size), hdr.size);
 
 			/* We have received a chunk of data data, lets write it out */
@@ -1853,7 +1854,9 @@ int fio_send_file(const char *from_fullpath, const char *to_fullpath, FILE* out,
 		}
 		else
 		{
-			elog(WARNING, "Thread [%d]: Remote agent returned message of unknown type", thread_num);
+			/* TODO: fio_disconnect may get assert fail when running after this */
+			elog(WARNING, "Thread [%d]: Remote agent returned message of unexpected type: %i",
+					thread_num, hdr.cop);
 			exit_code = REMOTE_ERROR;
 			break;
 		}
@@ -1862,6 +1865,7 @@ int fio_send_file(const char *from_fullpath, const char *to_fullpath, FILE* out,
 	if (exit_code < OPEN_FAILED)
 		fio_disconnect(); /* discard possible pending data in pipe */
 
+	pg_free(buf);
 	return exit_code;
 }
 
@@ -1876,7 +1880,7 @@ static void fio_send_file_impl(int out, char const* path)
 {
 	FILE      *fp;
 	fio_header hdr;
-	char       buf[STDIO_BUFSIZE];
+	char      *buf = pgut_malloc(CHUNK_SIZE);
 	ssize_t	   read_len = 0;
 	char      *errormsg = NULL;
 
@@ -1916,13 +1920,13 @@ static void fio_send_file_impl(int out, char const* path)
 	/* copy content */
 	for (;;)
 	{
-		read_len = fread(buf, 1, sizeof(buf), fp);
+		read_len = fread(buf, 1, CHUNK_SIZE, fp);
 
 		/* report error */
 		if (read_len < 0 || (read_len == 0 && !feof(fp)))
 		{
-			errormsg = pgut_malloc(MAXPGPATH);
 			hdr.cop = FIO_ERROR;
+			errormsg = pgut_malloc(MAXPGPATH);
 			hdr.arg = READ_FAILED;
 			/* Construct the error message */
 			snprintf(errormsg, MAXPGPATH, "Cannot read source file '%s': %s", path, strerror(errno));
@@ -1953,6 +1957,7 @@ static void fio_send_file_impl(int out, char const* path)
 cleanup:
 	if (fp)
 		fclose(fp);
+	pg_free(buf);
 	pg_free(errormsg);
 	return;
 }
