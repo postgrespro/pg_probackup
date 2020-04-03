@@ -426,14 +426,6 @@ doc/src/sgml/pgprobackup.sgml
           or <application>libc</application>/<application>libicu</application> versions.
         </para>
       </listitem>
-      <listitem>
-        <para>
-          All backups in the incremental chain must belong to the same
-          timeline. For example, if you have taken incremental backups on a
-          standby server that gets promoted, you have to take another FULL
-          backup.
-        </para>
-      </listitem>
     </itemizedlist>
   </para>
  </refsect2>
@@ -753,9 +745,10 @@ ALTER ROLE backup WITH REPLICATION;
     <title>Setting up Continuous WAL Archiving</title>
     <para>
       Making backups in PAGE backup mode, performing
-      <link linkend="pbk-performing-point-in-time-pitr-recovery">PITR</link>
-      and making backups with
-      <link linkend="pbk-archive-mode">ARCHIVE</link> WAL delivery mode
+      <link linkend="pbk-performing-point-in-time-pitr-recovery">PITR</link>,
+      making backups with
+      <link linkend="pbk-archive-mode">ARCHIVE</link> WAL delivery mode and
+      running incremental backup after timeline switch
       require
       <ulink url="https://postgrespro.com/docs/postgresql/current/continuous-archiving.html">continuous
       WAL archiving</ulink> to be enabled. To set up continuous

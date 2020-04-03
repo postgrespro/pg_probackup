@@ -474,7 +474,7 @@ struct timelineInfo {
 	TimeLineID tli;			/* this timeline */
 	TimeLineID parent_tli;  /* parent timeline. 0 if none */
 	timelineInfo *parent_link; /* link to parent timeline */
-	XLogRecPtr switchpoint;	   /* if this timeline has a parent
+	XLogRecPtr switchpoint;	   /* if this timeline has a parent, then
 								* switchpoint contains switchpoint LSN,
 								* otherwise 0 */
 	XLogSegNo begin_segno;	/* first present segment in this timeline */
@@ -499,6 +499,13 @@ typedef struct xlogInterval
 	XLogSegNo begin_segno;
 	XLogSegNo end_segno;
 } xlogInterval;
+
+typedef struct lsnInterval
+{
+	TimeLineID tli;
+	XLogRecPtr begin_lsn;
+	XLogRecPtr end_lsn;
+} lsnInterval;
 
 typedef enum xlogFileType
 {
@@ -763,6 +770,10 @@ extern void catalog_lock_backup_list(parray *backup_list, int from_idx,
 extern pgBackup *catalog_get_last_data_backup(parray *backup_list,
 											  TimeLineID tli,
 											  time_t current_start_time);
+extern pgBackup *get_multi_timeline_parent(parray *backup_list, parray *tli_list,
+	                      TimeLineID current_tli, time_t current_start_time,
+						  InstanceConfig *instance);
+extern void timelineInfoFree(void *tliInfo);
 extern parray *catalog_get_timelines(InstanceConfig *instance);
 extern void do_set_backup(const char *instance_name, time_t backup_id,
 							pgSetBackupParams *set_backup_params);
@@ -898,9 +909,10 @@ extern bool create_empty_file(fio_location from_location, const char *to_root,
 extern bool check_file_pages(pgFile *file, XLogRecPtr stop_lsn,
 							 uint32 checksum_version, uint32 backup_version);
 /* parsexlog.c */
-extern void extractPageMap(const char *archivedir,
-						   TimeLineID tli, uint32 seg_size,
-						   XLogRecPtr startpoint, XLogRecPtr endpoint);
+extern bool extractPageMap(const char *archivedir, uint32 wal_seg_size,
+						   XLogRecPtr startpoint, TimeLineID start_tli,
+						   XLogRecPtr endpoint, TimeLineID end_tli,
+						   parray *tli_list);
 extern void validate_wal(pgBackup *backup, const char *archivedir,
 						 time_t target_time, TransactionId target_xid,
 						 XLogRecPtr target_lsn, TimeLineID tli,

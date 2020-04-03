@@ -138,6 +138,9 @@ typedef struct
 	 */
 	bool		got_target;
 
+	/* Should we read record, located at endpoint position */
+	bool        inclusive_endpoint;
+
 	/*
 	 * Return value from the thread.
 	 * 0 means there is no error, 1 - there is an error.
@@ -162,7 +165,8 @@ static bool RunXLogThreads(const char *archivedir,
 						   XLogRecPtr startpoint, XLogRecPtr endpoint,
 						   bool consistent_read,
 						   xlog_record_function process_record,
-						   XLogRecTarget *last_rec);
+						   XLogRecTarget *last_rec,
+						   bool inclusive_endpoint);
 //static XLogReaderState *InitXLogThreadRead(xlog_thread_arg *arg);
 static bool SwitchThreadToNextWal(XLogReaderState *xlogreader,
 								  xlog_thread_arg *arg);
@@ -231,18 +235,118 @@ static XLogRecPtr		wal_target_lsn = InvalidXLogRecPtr;
  * Pagemap extracting is processed using threads. Each thread reads single WAL
  * file.
  */
-void
-extractPageMap(const char *archivedir, TimeLineID tli, uint32 wal_seg_size,
-			   XLogRecPtr startpoint, XLogRecPtr endpoint)
+bool
+extractPageMap(const char *archivedir, uint32 wal_seg_size,
+			   XLogRecPtr startpoint, TimeLineID start_tli,
+			   XLogRecPtr endpoint, TimeLineID end_tli,
+			   parray *tli_list)
 {
-	bool		extract_isok = true;
+	bool		extract_isok = false;
 
-	extract_isok = RunXLogThreads(archivedir, 0, InvalidTransactionId,
-								  InvalidXLogRecPtr, tli, wal_seg_size,
-								  startpoint, endpoint, false, extractPageInfo,
-								  NULL);
-	if (!extract_isok)
-		elog(ERROR, "Pagemap compiling failed");
+	if (start_tli == end_tli)
+		/* easy case */
+		extract_isok = RunXLogThreads(archivedir, 0, InvalidTransactionId,
+									  InvalidXLogRecPtr, end_tli, wal_seg_size,
+									  startpoint, endpoint, false, extractPageInfo,
+									  NULL, true);
+	else
+	{
+		/* We have to process WAL located on several different xlog intervals,
+		 * located on different timelines.
+		 *
+		 * Consider this example:
+		 * t3               C-----X <!- We are here
+		 *                 /
+		 * t2         B---*-->
+		 *           /
+		 * t1 -A----*------->
+		 *
+		 * A - prev backup START_LSN
+		 * B - switchpoint for t2, available as t2->switchpoint
+		 * C - switch for t3, available as t3->switchpoint
+		 * X - current backup START_LSN
+		 *
+		 * Intervals to be parsed:
+		 *  - [A,B) on t1
+		 *  - [B,C) on t2
+		 *  - [C,X] on t3
+		 */
+		int i;
+		parray *interval_list = parray_new();
+		timelineInfo *end_tlinfo = NULL;
+		timelineInfo *tmp_tlinfo = NULL;
+		XLogRecPtr    prev_switchpoint = InvalidXLogRecPtr;
+		lsnInterval  *wal_interval = NULL;
+
+		/* We must find TLI information about final timeline (t3 in example) */
+		for (i = 0; i < parray_num(tli_list); i++)
+		{
+			tmp_tlinfo = parray_get(tli_list, i);
+
+			if (tmp_tlinfo->tli == end_tli)
+			{
+				end_tlinfo = tmp_tlinfo;
+				break;
+			}
+		}
+
+		/* Iterate over timelines backward,
+		 * starting with end_tli and ending with start_tli.
+		 * For every timeline calculate LSN-interval that must be parsed.
+		 */
+
+		tmp_tlinfo = end_tlinfo;
+		while (tmp_tlinfo)
+		{
+			wal_interval = pgut_malloc(sizeof(lsnInterval));
+			wal_interval->tli = tmp_tlinfo->tli;
+
+			if (tmp_tlinfo->tli == end_tli)
+			{
+				wal_interval->begin_lsn = tmp_tlinfo->switchpoint;
+				wal_interval->end_lsn = endpoint;
+			}
+			else if (tmp_tlinfo->tli == start_tli)
+			{
+				wal_interval->begin_lsn = startpoint;
+				wal_interval->end_lsn = prev_switchpoint;
+			}
+			else
+			{
+				wal_interval->begin_lsn = tmp_tlinfo->switchpoint;
+				wal_interval->end_lsn = prev_switchpoint;
+			}
+
+			prev_switchpoint = tmp_tlinfo->switchpoint;
+			tmp_tlinfo = tmp_tlinfo->parent_link;
+
+			parray_append(interval_list, wal_interval);
+		}
+
+		for (i = parray_num(interval_list) - 1; i >= 0; i--)
+		{
+			bool inclusive_endpoint = false;
+			wal_interval = parray_get(interval_list, i);
+
+			/* In case of replica promotion, endpoints of intermediate
+			 * timelines can be unreachable.
+			 */
+			if (wal_interval->tli == end_tli)
+				inclusive_endpoint = true;
+
+			extract_isok = RunXLogThreads(archivedir, 0, InvalidTransactionId,
+									  InvalidXLogRecPtr, wal_interval->tli, wal_seg_size,
+									  wal_interval->begin_lsn, wal_interval->end_lsn,
+									  false, extractPageInfo, NULL, inclusive_endpoint);
+			if (!extract_isok)
+				break;
+
+			pg_free(wal_interval);
+		}
+		pg_free(interval_list);
+	}
+
+	return extract_isok;
 }
 
 /*
@@ -262,7 +366,7 @@ validate_backup_wal_from_start_to_stop(pgBackup *backup,
 	got_endpoint = RunXLogThreads(archivedir, 0, InvalidTransactionId,
 								  InvalidXLogRecPtr, tli, xlog_seg_size,
 								  backup->start_lsn, backup->stop_lsn,
-								  false, NULL, NULL);
+								  false, NULL, NULL, true);
 
 	if (!got_endpoint)
 	{
@@ -373,7 +477,7 @@ validate_wal(pgBackup *backup, const char *archivedir,
 	all_wal = all_wal ||
 		RunXLogThreads(archivedir, target_time, target_xid, target_lsn,
 					   tli, wal_seg_size, backup->stop_lsn,
-					   InvalidXLogRecPtr, true, validateXLogRecord, &last_rec);
+					   InvalidXLogRecPtr, true, validateXLogRecord, &last_rec, true);
 	if (last_rec.rec_time > 0)
 		time2iso(last_timestamp, lengthof(last_timestamp),
 				 timestamptz_to_time_t(last_rec.rec_time));
@@ -753,11 +857,26 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 	if (!reader_data->xlogexists)
 	{
 		char		xlogfname[MAXFNAMELEN];
+		char		partial_file[MAXPGPATH];
 
 		GetXLogFileName(xlogfname, reader_data->tli, reader_data->xlogsegno,
 						wal_seg_size);
 		snprintf(reader_data->xlogpath, MAXPGPATH, "%s/%s", wal_archivedir,
 				 xlogfname);
+		snprintf(partial_file, MAXPGPATH, "%s/%s.partial", wal_archivedir,
+					xlogfname);
+		snprintf(reader_data->gz_xlogpath, sizeof(reader_data->gz_xlogpath),
+					 "%s.gz", reader_data->xlogpath);
+
+		/* If segment do not exists, but the same
+		 * segment with '.partial' suffix does, use it instead */
+		if (!fileExists(reader_data->xlogpath, FIO_BACKUP_HOST) &&
+			fileExists(partial_file, FIO_BACKUP_HOST))
+		{
+			snprintf(reader_data->xlogpath, MAXPGPATH, "%s/%s.partial", wal_archivedir,
+				 xlogfname);
+			strncpy(reader_data->xlogpath, partial_file, MAXPGPATH);
+		}
 
 		if (fileExists(reader_data->xlogpath, FIO_BACKUP_HOST))
 		{
@@ -778,29 +897,23 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 		}
 #ifdef HAVE_LIBZ
 		/* Try to open compressed WAL segment */
-		else
+		else if (fileExists(reader_data->gz_xlogpath, FIO_BACKUP_HOST))
 		{
-			snprintf(reader_data->gz_xlogpath, sizeof(reader_data->gz_xlogpath),
-					 "%s.gz", reader_data->xlogpath);
-			if (fileExists(reader_data->gz_xlogpath, FIO_BACKUP_HOST))
-			{
-				elog(LOG, "Thread [%d]: Opening compressed WAL segment \"%s\"",
-					 reader_data->thread_num, reader_data->gz_xlogpath);
+			elog(LOG, "Thread [%d]: Opening compressed WAL segment \"%s\"",
+				 reader_data->thread_num, reader_data->gz_xlogpath);
 
-				reader_data->xlogexists = true;
-				reader_data->gz_xlogfile = fio_gzopen(reader_data->gz_xlogpath,
+			reader_data->xlogexists = true;
+			reader_data->gz_xlogfile = fio_gzopen(reader_data->gz_xlogpath,
 													  "rb", -1, FIO_BACKUP_HOST);
-				if (reader_data->gz_xlogfile == NULL)
-				{
-					elog(WARNING, "Thread [%d]: Could not open compressed WAL segment \"%s\": %s",
-						 reader_data->thread_num, reader_data->gz_xlogpath,
-						 strerror(errno));
-					return -1;
-				}
+			if (reader_data->gz_xlogfile == NULL)
+			{
+				elog(WARNING, "Thread [%d]: Could not open compressed WAL segment \"%s\": %s",
+					 reader_data->thread_num, reader_data->gz_xlogpath,
+					 strerror(errno));
+				return -1;
 			}
 		}
 #endif
-
 		/* Exit without error if WAL segment doesn't exist */
 		if (!reader_data->xlogexists)
 			return -1;
@@ -923,7 +1036,7 @@ RunXLogThreads(const char *archivedir, time_t target_time,
 			   TransactionId target_xid, XLogRecPtr target_lsn, TimeLineID tli,
 			   uint32 segment_size, XLogRecPtr startpoint, XLogRecPtr endpoint,
 			   bool consistent_read, xlog_record_function process_record,
-			   XLogRecTarget *last_rec)
+			   XLogRecTarget *last_rec, bool inclusive_endpoint)
 {
 	pthread_t  *threads;
 	xlog_thread_arg *thread_args;
@@ -932,17 +1045,27 @@ RunXLogThreads(const char *archivedir, time_t target_time,
 	XLogSegNo	endSegNo = 0;
 	bool		result = true;
 
-	if (!XRecOffIsValid(startpoint))
+	if (!XRecOffIsValid(startpoint) &&
+		!XRecOffIsNull(startpoint))
+	{
 		elog(ERROR, "Invalid startpoint value %X/%X",
 			 (uint32) (startpoint >> 32), (uint32) (startpoint));
+	}
 
 	if (!XLogRecPtrIsInvalid(endpoint))
 	{
-		if (!XRecOffIsValid(endpoint))
+		if (XRecOffIsNull(endpoint))
+		{
+			GetXLogSegNo(endpoint, endSegNo, segment_size);
+			endSegNo--;
+		}
+		else if (!XRecOffIsValid(endpoint))
+		{
 			elog(ERROR, "Invalid endpoint value %X/%X",
 				(uint32) (endpoint >> 32), (uint32) (endpoint));
-
-		GetXLogSegNo(endpoint, endSegNo, segment_size);
+		}
+		else
+			GetXLogSegNo(endpoint, endSegNo, segment_size);
 	}
 
 	/* Initialize static variables for workers */
@@ -977,6 +1100,7 @@ RunXLogThreads(const char *archivedir, time_t target_time,
 		arg->startpoint = startpoint;
 		arg->endpoint = endpoint;
 		arg->endSegNo = endSegNo;
+		arg->inclusive_endpoint = inclusive_endpoint;
 		arg->got_target = false;
 		/* By default there is some error */
 		arg->ret = 1;
@@ -1191,6 +1315,18 @@ XLogThreadWorker(void *arg)
 				elog(WARNING, "Thread [%d]: Could not read WAL record at %X/%X",
 					 reader_data->thread_num,
 					 (uint32) (errptr >> 32), (uint32) (errptr));
+
+			/* In we failed to read record located at endpoint position,
+			 * and endpoint is not inclusive, do not consider this as an error.
+			 */
+			if (!thread_arg->inclusive_endpoint &&
+				errptr == thread_arg->endpoint)
+			{
+				elog(LOG, "Thread [%d]: Endpoint %X/%X is not inclusive, switch to the next timeline",
+					reader_data->thread_num,
+					(uint32) (thread_arg->endpoint >> 32), (uint32) (thread_arg->endpoint));
+				break;
+			}
 
 			/*
 			 * If we don't have all WAL files from prev backup start_lsn to current
