@@ -800,6 +800,11 @@ extern int pgBackupCompareIdEqual(const void *l, const void *r);
 
 extern pgBackup* find_parent_full_backup(pgBackup *current_backup);
 extern int scan_parent_chain(pgBackup *current_backup, pgBackup **result_backup);
+/* return codes for scan_parent_chain */
+#define ChainIsBroken 0
+#define ChainIsInvalid 1
+#define ChainIsOk 2
+
 extern bool is_parent(time_t parent_backup_time, pgBackup *child_backup, bool inclusive);
 extern bool is_prolific(parray *backup_list, pgBackup *target_backup);
 extern bool in_backup_list(parray *backup_list, pgBackup *target_backup);

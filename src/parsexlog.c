@@ -859,23 +859,23 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 		char		xlogfname[MAXFNAMELEN];
 		char		partial_file[MAXPGPATH];
 
-		GetXLogFileName(xlogfname, reader_data->tli, reader_data->xlogsegno,
-						wal_seg_size);
-		snprintf(reader_data->xlogpath, MAXPGPATH, "%s/%s", wal_archivedir,
-				 xlogfname);
-		snprintf(partial_file, MAXPGPATH, "%s/%s.partial", wal_archivedir,
-					xlogfname);
-		snprintf(reader_data->gz_xlogpath, sizeof(reader_data->gz_xlogpath),
-					 "%s.gz", reader_data->xlogpath);
+		GetXLogFileName(xlogfname, reader_data->tli, reader_data->xlogsegno, wal_seg_size);
+
+		snprintf(reader_data->xlogpath, MAXPGPATH, "%s/%s", wal_archivedir, xlogfname);
+		snprintf(reader_data->gz_xlogpath, MAXPGPATH, "%s.gz", reader_data->xlogpath);
+
+		/* We fall back to using .partial segment in case if we are running
+		 * multi-timeline incremental backup right after standby promotion.
+		 * TODO: it should be explicitly enabled.
+		 */
+		snprintf(partial_file, MAXPGPATH, "%s.partial", reader_data->xlogpath);
 
 		/* If segment do not exists, but the same
 		 * segment with '.partial' suffix does, use it instead */
 		if (!fileExists(reader_data->xlogpath, FIO_BACKUP_HOST) &&
 			fileExists(partial_file, FIO_BACKUP_HOST))
 		{
-			snprintf(reader_data->xlogpath, MAXPGPATH, "%s/%s.partial", wal_archivedir,
-				 xlogfname);
-			strncpy(reader_data->xlogpath, partial_file, MAXPGPATH);
+			snprintf(reader_data->xlogpath, MAXPGPATH, "%s", partial_file);
 		}
 
 		if (fileExists(reader_data->xlogpath, FIO_BACKUP_HOST))

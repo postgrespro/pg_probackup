@@ -615,7 +615,7 @@ catalog_get_last_data_backup(parray *backup_list, TimeLineID tli, time_t current
 			switch (scan_parent_chain(backup, &tmp_backup))
 			{
 				/* broken chain */
-				case 0:
+				case ChainIsBroken:
 					invalid_backup_id = base36enc_dup(tmp_backup->parent_backup);
 
 					elog(WARNING, "Backup %s has missing parent: %s. Cannot be a parent",
@@ -624,7 +624,7 @@ catalog_get_last_data_backup(parray *backup_list, TimeLineID tli, time_t current
 					continue;
 
 				/* chain is intact, but at least one parent is invalid */
-				case 1:
+				case ChainIsInvalid:
 					invalid_backup_id = base36enc_dup(tmp_backup->start_time);
 
 					elog(WARNING, "Backup %s has invalid parent: %s. Cannot be a parent",
@@ -633,7 +633,7 @@ catalog_get_last_data_backup(parray *backup_list, TimeLineID tli, time_t current
 					continue;
 
 				/* chain is ok */
-				case 2:
+				case ChainIsOk:
 					/* Yes, we could call is_parent() earlier - after choosing the ancestor,
 					 * but this way we have an opportunity to detect and report all possible
 					 * anomalies.
@@ -755,13 +755,14 @@ get_multi_timeline_parent(parray *backup_list, parray *tli_list,
 	/* Optimistically, look on current timeline for valid incremental backup, child of ancestor */
 	if (my_tlinfo->backups)
 	{
+		/* backups are sorted in descending order and we need latest valid */
 		for (i = 0; i < parray_num(my_tlinfo->backups); i++)
 		{
 			pgBackup *tmp_backup = NULL;
 			pgBackup *backup = (pgBackup *) parray_get(my_tlinfo->backups, i);
 
 			/* found suitable parent */
-			if (scan_parent_chain(backup, &tmp_backup) == 2 &&
+			if (scan_parent_chain(backup, &tmp_backup) == ChainIsOk &&
 				is_parent(ancestor_backup->start_time, backup, false))
 				return backup;
 		}
@@ -786,7 +787,7 @@ get_multi_timeline_parent(parray *backup_list, parray *tli_list,
 				if (backup->stop_lsn > tmp_tlinfo->switchpoint)
 					continue;
 
-				if (scan_parent_chain(backup, &tmp_backup) == 2 &&
+				if (scan_parent_chain(backup, &tmp_backup) == ChainIsOk &&
 					is_parent(ancestor_backup->start_time, backup, true))
 					return backup;
 			}
@@ -2382,18 +2383,18 @@ scan_parent_chain(pgBackup *current_backup, pgBackup **result_backup)
 	{
 		/* Set oldest child backup in chain */
 		*result_backup = target_backup;
-		return 0;
+		return ChainIsBroken;
 	}
 
 	/* chain is ok, but some backups are invalid */
 	if (invalid_backup)
 	{
 		*result_backup = invalid_backup;
-		return 1;
+		return ChainIsInvalid;
 	}
 
 	*result_backup = target_backup;
-	return 2;
+	return ChainIsOk;
 }
 
 /*

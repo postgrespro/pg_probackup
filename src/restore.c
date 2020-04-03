@@ -251,7 +251,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 
 		result = scan_parent_chain(dest_backup, &tmp_backup);
 
-		if (result == 0)
+		if (result == ChainIsBroken)
 		{
 			/* chain is broken, determine missing backup ID
 			 * and orphinize all his descendants
@@ -290,7 +290,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 			/* No point in doing futher */
 			elog(ERROR, "%s of backup %s failed.", action, base36enc(dest_backup->start_time));
 		}
-		else if (result == 1)
+		else if (result == ChainIsInvalid)
 		{
 			/* chain is intact, but at least one parent is invalid */
 			set_orphan_status(backups, tmp_backup);
