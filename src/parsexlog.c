@@ -325,12 +325,15 @@ extractPageMap(const char *archivedir, uint32 wal_seg_size,
 
 		for (i = parray_num(interval_list) - 1; i >= 0; i--)
 		{
-			bool inclusive_endpoint = false;
+			bool inclusive_endpoint;
 			wal_interval = parray_get(interval_list, i);
 
 			/* In case of replica promotion, endpoints of intermediate
 			 * timelines can be unreachable.
 			 */
+			inclusive_endpoint = false;
+
+			/* ... but not the end timeline */
 			if (wal_interval->tli == end_tli)
 				inclusive_endpoint = true;
 
