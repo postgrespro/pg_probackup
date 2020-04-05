@@ -1021,41 +1021,36 @@ do_delete_instance(void)
 	return 0;
 }
 
-/* checks that backup childs has status like parent */
-bool checkChilds(parray	*backup_list, time_t backup_id)
+/* checks that parray contains element */
+bool parray_contains(parray *array, void *elem)
 {
 	int i;
-	pgBackup   *target_backup = NULL;
-	pgBackup   *backup;
-	/* search target bakcup */
-	for (i = 0; i < parray_num(backup_list); i++)
+	for (i = 0; i < parray_num(array); i++)
 	{
-		backup = (pgBackup *)parray_get(backup_list, i);
-		if (backup->start_time == backup_id)
-		{
-			target_backup = backup;
-			break;
-		}
+		if (parray_get(array, i) == elem) return true;
 	}
-	if (target_backup == NULL) return false;
+	return false;
+}
 
-	/* check childs */
+
+void append_childs(parray *backup_list, pgBackup  *target_backup, parray *delete_list)
+{
+	int i;
+	pgBackup   *backup;
 	for (i = 0; i < parray_num(backup_list); i++)
 	{
 		backup = (pgBackup *)parray_get(backup_list, i);
+		if (backup == target_backup) continue;
 		/* check if backup is descendant of delete target */
 		if (is_parent(target_backup->start_time, backup, false))
 		{
-			if (backup->status != target_backup->status){
-				elog(INFO, "Skip deleting the backup %s because the backup has children with a different status",
-					base36enc(target_backup->start_time));
-				return false;
-			}
+			if (!parray_contains(delete_list, backup))
+				parray_append(delete_list, backup);
 			/* recursive call */
-			if (!checkChilds(backup_list, backup->start_time)) return false;
+			append_childs(backup_list, backup, delete_list);
 		}
 	}
-	return true;
+
 }
 
 /* Delete all backups of given status in instance */
@@ -1093,30 +1088,42 @@ do_delete_status(InstanceConfig *instance_config, const char *status)
 
 	elog(INFO, "Deleting all backups with status '%s'", pretty_status);
 
-	/* Selects backups for deleting to delete_list array.  Will delete all backups with specified status */
+	/* Selects backups for deleting to delete_list array.  Will delete all backups with specified status and childs*/
 	for (i = 0; i < parray_num(backup_list); i++)
 	{
 		backup = (pgBackup *) parray_get(backup_list, i);
 
 		if (backup->status == status_for_delete)
 		{
-
 			n_found++;
-			if (!checkChilds(backup_list, backup->start_time)) continue;
+			if (parray_contains(delete_list, backup)) continue;
+			parray_append(delete_list, backup);
+			append_childs(backup_list, backup, delete_list);
+		}
+	}
+	/* delete and calculate free size from delete_list */
+	for (i = 0; i < parray_num(delete_list); i++)
+	{
+		backup = (pgBackup *)parray_get(delete_list, i);
+		elog(dry_run ? INFO : LOG, "Backup %s with status %s %s be deleted",
+			base36enc(backup->start_time), status2str(backup->status), dry_run ? "can" : "will");
 
-			elog(dry_run ? INFO: LOG, "Backup %s %s be deleted",
-				base36enc(backup->start_time), dry_run ? "can" : "will");
-			size_to_delete += backup->data_bytes;
-			if (backup->stream)
-				size_to_delete += backup->wal_bytes;
-			if (!dry_run){
-				parray_append(delete_list, backup);
-			}
+		size_to_delete += backup->data_bytes;
+		if (backup->stream)
+			size_to_delete += backup->wal_bytes;
+
+
+		if (!dry_run && lock_backup(backup))
+		{
+			if (interrupted)
+				elog(ERROR, "interrupted during delete backup");
+
+			delete_backup_files(backup);
 			n_deleted++;
 
 		}
-	}
 
+	}
 	/* Inform about data size to free */
 	if (size_to_delete >= 0)
 	{
@@ -1127,26 +1134,18 @@ do_delete_status(InstanceConfig *instance_config, const char *status)
 
 	/* delete selected backups */
 	if (!dry_run)
-	{
-		for (i = 0; i < parray_num(delete_list); i++)
-		{
-			backup = (pgBackup *)parray_get(delete_list, i);
-			if (lock_backup(backup))
-			{
-				delete_backup_files(backup);
-			}
-			else n_deleted--;
-		}
-		elog(INFO, "Successfully deleted %i %s with status '%s' from instance '%s'",
+		elog(INFO, "Successfully deleted %i %s from instance '%s'",
 			n_deleted, n_deleted == 1 ? "backup" : "backups",
-			pretty_status, instance_config->name);
-
-	}
+			instance_config->name);
 
 
 	if (n_found == 0)
 		elog(WARNING, "Instance '%s' has no backups with status '%s'",
 			instance_config->name, pretty_status);
+
+	/* Clean WAL segments */
+	if (delete_wal)
+		do_retention_wal(dry_run);
 
 	/* Cleanup */
 	parray_free(delete_list);
