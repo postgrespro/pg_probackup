@@ -1206,8 +1206,8 @@ get_done:
 		elog(INFO, "PID [%d]: pg_probackup archive-get completed successfully, prefetched: %i/%i, time elapsed: %s",
 				my_pid, n_prefetched, batch_size, pretty_time_str);
 	else
-		elog(ERROR, "PID [%d]: pg_probackup archive-get failed to deliver WAL file %s, prefetched: %i/%i, time elapsed: %s",
-				my_pid, wal_file_name, n_prefetched, batch_size, pretty_time_str);
+		elog(ERROR, "PID [%d]: pg_probackup archive-get failed to deliver WAL file %s, time elapsed: %s",
+				my_pid, wal_file_name, pretty_time_str);
 }
 
 /*
@@ -1408,18 +1408,19 @@ get_wal_file(const char *filename, const char *from_fullpath,
 			/* ... failing that, use uncompressed */
 			rc = fio_send_file(from_fullpath, to_fullpath, out, thread_num);
 
+		/* When not in prefetch mode, try to use partial file */
 		if (rc == FILE_MISSING && !prefetch_mode && IsXLogFileName(filename))
 		{
 			char    from_partial[MAXPGPATH];
 
 #ifdef HAVE_LIBZ
-			/* Compressed goes first ... */
+			/* '.gz.partial' goes first ... */
 			snprintf(from_partial, sizeof(from_partial), "%s.gz.partial", from_fullpath);
 			rc = fio_send_file_gz(from_partial, to_fullpath, out, thread_num);
 			if (rc == FILE_MISSING)
 #endif
 			{
-				/* ... failing that, use uncompressed */
+				/* ... failing that, use '.partial' */
 				snprintf(from_partial, sizeof(from_partial), "%s.partial", from_fullpath);
 				rc = fio_send_file(from_partial, to_fullpath, out, thread_num);
 			}
@@ -1440,19 +1441,20 @@ get_wal_file(const char *filename, const char *from_fullpath,
 			/* ... failing that, use uncompressed */
 			rc = get_wal_file_internal(from_fullpath, to_fullpath, out, false, thread_num);
 
+		/* When not in prefetch mode, try to use partial file */
 		if (rc == FILE_MISSING && !prefetch_mode && IsXLogFileName(filename))
 		{
 			char    from_partial[MAXPGPATH];
 
 #ifdef HAVE_LIBZ
-			/* Compressed goes first ... */
+			/* '.gz.partial' goes first ... */
 			snprintf(from_partial, sizeof(from_partial), "%s.gz.partial", from_fullpath);
 			rc = get_wal_file_internal(from_partial, to_fullpath,
 									   out, true, thread_num);
 			if (rc == FILE_MISSING)
 #endif
 			{
-				/* ... failing that, use uncompressed */
+				/* ... failing that, use '.partial' */
 				snprintf(from_partial, sizeof(from_partial), "%s.partial", from_fullpath);
 				rc = get_wal_file_internal(from_partial, to_fullpath, out,
 									   false, thread_num);
@@ -1478,13 +1480,26 @@ get_wal_file(const char *filename, const char *from_fullpath,
 	 * file is not equal to XLOG_SEG_SIZE - that is the way pg_receivexlog works.
 	 * We must manually extent it up to XLOG_SEG_SIZE.
 	 */
-	if (src_partial && (ftruncate(fileno(out), xlog_seg_size) != 0))
+	if (src_partial)
 	{
-		elog(WARNING, "Thread [%d]: Cannot extend file '%s': %s",
-				thread_num, to_fullpath, strerror(errno));
-		fclose(out);
-		unlink(to_fullpath);
-		return false;
+
+		if (fflush(out) != 0)
+		{
+			elog(WARNING, "Thread [%d]: Cannot flush file '%s': %s",
+					thread_num, to_fullpath, strerror(errno));
+			fclose(out);
+			unlink(to_fullpath);
+			return false;
+		}
+
+		if (ftruncate(fileno(out), xlog_seg_size) != 0)
+		{
+			elog(WARNING, "Thread [%d]: Cannot extend file '%s': %s",
+					thread_num, to_fullpath, strerror(errno));
+			fclose(out);
+			unlink(to_fullpath);
+			return false;
+		}
 	}
 
 	if (fclose(out) != 0)

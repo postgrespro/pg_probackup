@@ -398,7 +398,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             log_content)
 
         self.assertIn(
-            'pg_probackup push file',
+            'pg_probackup push WAL file',
             log_content)
 
         self.assertIn(
@@ -482,7 +482,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         self.assertIn(
             'DETAIL:  The failed archive command was:', log_content)
         self.assertIn(
-            'pg_probackup push file', log_content)
+            'pg_probackup push WAL file', log_content)
         self.assertNotIn(
             'WAL file already exists in archive with '
             'different checksum, overwriting', log_content)
