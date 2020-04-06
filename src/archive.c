@@ -1029,11 +1029,13 @@ do_archive_get(InstanceConfig *instance, const char *prefetch_dir_arg,
 	pid_t       my_pid;
 	int         n_prefetched = 0;
 	int 		n_actual_threads = num_threads;
+	uint32      n_files_in_prefetch = 0;
 
 	/* time reporting */
 	instr_time  start_time, end_time;
 	double      get_time;
 	char        pretty_time_str[20];
+
 
 	my_pid = getpid();
 
@@ -1103,12 +1105,14 @@ do_archive_get(InstanceConfig *instance, const char *prefetch_dir_arg,
 				n_prefetched = run_wal_prefetch(prefetch_dir, instance->arclog_path, wal_file_name,
 								 num_threads, false, batch_size, instance->xlog_seg_size);
 
+			n_files_in_prefetch = count_files_in_dir(prefetch_dir);
+
 			if (wal_satisfy_from_prefetch(wal_file_name, prefetch_dir,
 										  absolute_wal_file_path, instance->xlog_seg_size,
 										  true))
 			{
-				elog(INFO, "PID [%d]: pg_probackup archive-get used prefetched WAL segment %s",
-						my_pid, wal_file_name);
+				elog(INFO, "PID [%d]: pg_probackup archive-get used prefetched WAL segment %s, prefetch state: %u/%u",
+						my_pid, wal_file_name, n_files_in_prefetch, batch_size);
 				goto get_done;
 			}
 			else
@@ -1136,7 +1140,8 @@ do_archive_get(InstanceConfig *instance, const char *prefetch_dir_arg,
 
 			//rmtree(prefetch_dir, false);
 			/* count the number of files in prefetch directory ... */
-			if (count_files_in_dir(prefetch_dir) > batch_size)
+			n_files_in_prefetch = count_files_in_dir(prefetch_dir);
+			if (n_files_in_prefetch > batch_size + 1)
 				/* ... if it exeeds batch size,
 				 * then we assume that prefetch directory contain garbage
 				 */
@@ -1147,12 +1152,14 @@ do_archive_get(InstanceConfig *instance, const char *prefetch_dir_arg,
 				             wal_file_name, num_threads, true, batch_size,
 				             instance->xlog_seg_size);
 
+			n_files_in_prefetch = count_files_in_dir(prefetch_dir);
+
 			if (wal_satisfy_from_prefetch(wal_file_name, prefetch_dir,
 										 absolute_wal_file_path, instance->xlog_seg_size,
 										 true))
 			{
-				elog(INFO, "PID [%d]: pg_probackup archive-get copied WAL file %s",
-						my_pid, wal_file_name);
+				elog(INFO, "PID [%d]: pg_probackup archive-get copied WAL file %s, prefetch state: %u/%u",
+						my_pid, wal_file_name, n_files_in_prefetch, batch_size);
 				goto get_done;
 			}
 			else
