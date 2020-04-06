@@ -42,6 +42,24 @@ timelineInfoNew(TimeLineID tli)
 	return tlinfo;
 }
 
+/* free timelineInfo object */
+void
+timelineInfoFree(void *tliInfo)
+{
+	timelineInfo *tli = (timelineInfo *) tliInfo;
+
+	parray_walk(tli->xlog_filelist, pgFileFree);
+	parray_free(tli->xlog_filelist);
+
+	if (tli->backups)
+	{
+		parray_walk(tli->backups, pgBackupFree);
+		parray_free(tli->backups);
+	}
+
+	pfree(tliInfo);
+}
+
 /* Iterate over locked backups and delete locks files */
 static void
 unlink_lock_atexit(void)
@@ -127,7 +145,7 @@ lock_backup(pgBackup *backup)
 	pid_t		my_pid,
 				my_p_pid;
 
-	pgBackupGetPath(backup, lock_file, lengthof(lock_file), BACKUP_CATALOG_PID);
+	join_path_components(lock_file, backup->root_dir, BACKUP_CATALOG_PID);
 
 	/*
 	 * If the PID in the lockfile is our own PID or our parent's or
@@ -444,6 +462,9 @@ catalog_get_backup_list(const char *instance_name, time_t requested_backup_id)
 				 base36enc(backup->start_time), backup_conf_path);
 		}
 
+		backup->root_dir = pgut_strdup(data_path);
+
+		/* TODO: save encoded backup id */
 		backup->backup_id = backup->start_time;
 		if (requested_backup_id != INVALID_BACKUP_ID
 			&& requested_backup_id != backup->start_time)
@@ -594,7 +615,7 @@ catalog_get_last_data_backup(parray *backup_list, TimeLineID tli, time_t current
 			switch (scan_parent_chain(backup, &tmp_backup))
 			{
 				/* broken chain */
-				case 0:
+				case ChainIsBroken:
 					invalid_backup_id = base36enc_dup(tmp_backup->parent_backup);
 
 					elog(WARNING, "Backup %s has missing parent: %s. Cannot be a parent",
@@ -603,7 +624,7 @@ catalog_get_last_data_backup(parray *backup_list, TimeLineID tli, time_t current
 					continue;
 
 				/* chain is intact, but at least one parent is invalid */
-				case 1:
+				case ChainIsInvalid:
 					invalid_backup_id = base36enc_dup(tmp_backup->start_time);
 
 					elog(WARNING, "Backup %s has invalid parent: %s. Cannot be a parent",
@@ -612,17 +633,13 @@ catalog_get_last_data_backup(parray *backup_list, TimeLineID tli, time_t current
 					continue;
 
 				/* chain is ok */
-				case 2:
+				case ChainIsOk:
 					/* Yes, we could call is_parent() earlier - after choosing the ancestor,
 					 * but this way we have an opportunity to detect and report all possible
 					 * anomalies.
 					 */
 					if (is_parent(full_backup->start_time, backup, true))
-					{
-						elog(INFO, "Parent backup: %s",
-							base36enc(backup->start_time));
 						return backup;
-					}
 			}
 		}
 		/* skip yourself */
@@ -633,6 +650,150 @@ catalog_get_last_data_backup(parray *backup_list, TimeLineID tli, time_t current
 			elog(WARNING, "Backup %s has status: %s. Cannot be a parent.",
 				base36enc(backup->start_time), status2str(backup->status));
 		}
+	}
+
+	return NULL;
+}
+
+/*
+ * For multi-timeline chain, look up suitable parent for incremental backup.
+ * Multi-timeline chain has full backup and one or more descendants located
+ * on different timelines.
+ */
+pgBackup *
+get_multi_timeline_parent(parray *backup_list, parray *tli_list,
+	                      TimeLineID current_tli, time_t current_start_time,
+						  InstanceConfig *instance)
+{
+	int           i;
+	timelineInfo *my_tlinfo = NULL;
+	timelineInfo *tmp_tlinfo = NULL;
+	pgBackup     *ancestor_backup = NULL;
+
+	/* there are no timelines in the archive */
+	if (parray_num(tli_list) == 0)
+		return NULL;
+
+	/* look for current timelineInfo */
+	for (i = 0; i < parray_num(tli_list); i++)
+	{
+		timelineInfo  *tlinfo = (timelineInfo  *) parray_get(tli_list, i);
+
+		if (tlinfo->tli == current_tli)
+		{
+			my_tlinfo = tlinfo;
+			break;
+		}
+	}
+
+	if (my_tlinfo == NULL)
+		return NULL;
+
+	/* Locate tlinfo of suitable full backup.
+	 * Consider this example:
+	 *  t3                    s2-------X <-! We are here
+	 *                        /
+	 *  t2         s1----D---*----E--->
+	 *             /
+	 *  t1--A--B--*---C------->
+	 *
+	 * A, E - full backups
+	 * B, C, D - incremental backups
+	 *
+	 * We must find A.
+	 */
+	tmp_tlinfo = my_tlinfo;
+	while (tmp_tlinfo->parent_link)
+	{
+		/* if timeline has backups, iterate over them */
+		if (tmp_tlinfo->parent_link->backups)
+		{
+			for (i = 0; i < parray_num(tmp_tlinfo->parent_link->backups); i++)
+			{
+				pgBackup *backup = (pgBackup *) parray_get(tmp_tlinfo->parent_link->backups, i);
+
+				if (backup->backup_mode == BACKUP_MODE_FULL &&
+					(backup->status == BACKUP_STATUS_OK ||
+					 backup->status == BACKUP_STATUS_DONE) &&
+					 backup->stop_lsn <= tmp_tlinfo->switchpoint)
+				{
+					ancestor_backup = backup;
+					break;
+				}
+			}
+		}
+
+		if (ancestor_backup)
+			break;
+
+		tmp_tlinfo = tmp_tlinfo->parent_link;
+	}
+
+	/* failed to find valid FULL backup on parent timelines */
+	if (!ancestor_backup)
+		return NULL;
+	else
+		elog(LOG, "Latest valid full backup: %s, tli: %i",
+			base36enc(ancestor_backup->start_time), ancestor_backup->tli);
+
+	/* At this point we found suitable full backup,
+	 * now we must find his latest child, suitable to be
+	 * parent of current incremental backup.
+	 * Consider this example:
+	 *  t3                    s2-------X <-! We are here
+	 *                        /
+	 *  t2         s1----D---*----E--->
+	 *             /
+	 *  t1--A--B--*---C------->
+	 *
+	 * A, E - full backups
+	 * B, C, D - incremental backups
+	 *
+	 * We found A, now we must find D.
+	 */
+
+	/* Optimistically, look on current timeline for valid incremental backup, child of ancestor */
+	if (my_tlinfo->backups)
+	{
+		/* backups are sorted in descending order and we need latest valid */
+		for (i = 0; i < parray_num(my_tlinfo->backups); i++)
+		{
+			pgBackup *tmp_backup = NULL;
+			pgBackup *backup = (pgBackup *) parray_get(my_tlinfo->backups, i);
+
+			/* found suitable parent */
+			if (scan_parent_chain(backup, &tmp_backup) == ChainIsOk &&
+				is_parent(ancestor_backup->start_time, backup, false))
+				return backup;
+		}
+	}
+
+	/* Iterate over parent timelines and look for a valid backup, child of ancestor */
+	tmp_tlinfo = my_tlinfo;
+	while (tmp_tlinfo->parent_link)
+	{
+
+		/* if timeline has backups, iterate over them */
+		if (tmp_tlinfo->parent_link->backups)
+		{
+			for (i = 0; i < parray_num(tmp_tlinfo->parent_link->backups); i++)
+			{
+				pgBackup *tmp_backup = NULL;
+				pgBackup *backup = (pgBackup *) parray_get(tmp_tlinfo->parent_link->backups, i);
+
+				/* We are not interested in backups
+				 * located outside of our timeline history
+				 */
+				if (backup->stop_lsn > tmp_tlinfo->switchpoint)
+					continue;
+
+				if (scan_parent_chain(backup, &tmp_backup) == ChainIsOk &&
+					is_parent(ancestor_backup->start_time, backup, true))
+					return backup;
+			}
+		}
+
+		tmp_tlinfo = tmp_tlinfo->parent_link;
 	}
 
 	return NULL;
@@ -671,6 +832,7 @@ pgBackupCreateDir(pgBackup *backup)
 		elog(ERROR, "backup destination is not empty \"%s\"", path);
 
 	fio_mkdir(path, DIR_PERMISSION, FIO_BACKUP_HOST);
+	backup->root_dir = pgut_strdup(path);
 
 	/* create directories for actual backup files */
 	for (i = 0; i < parray_num(subdirs); i++)
@@ -1488,6 +1650,9 @@ pgBackupWriteControl(FILE *out, pgBackup *backup)
 		fio_fprintf(out, "expire-time = '%s'\n", timestamp);
 	}
 
+	if (backup->merge_dest_backup != 0)
+		fio_fprintf(out, "merge-dest-id = '%s'\n", base36enc(backup->merge_dest_backup));
+
 	/*
 	 * Size of PGDATA directory. The size does not include size of related
 	 * WAL segments in archive 'wal' directory.
@@ -1696,8 +1861,10 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 
 	/* use extra variable to avoid reset of previous data_bytes value in case of error */
 	backup->data_bytes = backup_size_on_disk;
-	backup->wal_bytes = wal_size_on_disk;
 	backup->uncompressed_bytes = uncompressed_size_on_disk;
+
+	if (backup->stream)
+		backup->wal_bytes = wal_size_on_disk;
 
 	free(buf);
 }
@@ -1716,6 +1883,7 @@ readBackupControlFile(const char *path)
 	char	   *stop_lsn = NULL;
 	char	   *status = NULL;
 	char	   *parent_backup = NULL;
+	char	   *merge_dest_backup = NULL;
 	char	   *program_version = NULL;
 	char	   *server_version = NULL;
 	char	   *compress_alg = NULL;
@@ -1745,6 +1913,7 @@ readBackupControlFile(const char *path)
 		{'b', 0, "stream",				&backup->stream, SOURCE_FILE_STRICT},
 		{'s', 0, "status",				&status, SOURCE_FILE_STRICT},
 		{'s', 0, "parent-backup-id",	&parent_backup, SOURCE_FILE_STRICT},
+		{'s', 0, "merge-dest-id",		&merge_dest_backup, SOURCE_FILE_STRICT},
 		{'s', 0, "compress-alg",		&compress_alg, SOURCE_FILE_STRICT},
 		{'u', 0, "compress-level",		&backup->compress_level, SOURCE_FILE_STRICT},
 		{'b', 0, "from-replica",		&backup->from_replica, SOURCE_FILE_STRICT},
@@ -1817,6 +1986,8 @@ readBackupControlFile(const char *path)
 			backup->status = BACKUP_STATUS_RUNNING;
 		else if (strcmp(status, "MERGING") == 0)
 			backup->status = BACKUP_STATUS_MERGING;
+		else if (strcmp(status, "MERGED") == 0)
+			backup->status = BACKUP_STATUS_MERGED;
 		else if (strcmp(status, "DELETING") == 0)
 			backup->status = BACKUP_STATUS_DELETING;
 		else if (strcmp(status, "DELETED") == 0)
@@ -1836,6 +2007,12 @@ readBackupControlFile(const char *path)
 	{
 		backup->parent_backup = base36dec(parent_backup);
 		free(parent_backup);
+	}
+
+	if (merge_dest_backup)
+	{
+		backup->merge_dest_backup = base36dec(merge_dest_backup);
+		free(merge_dest_backup);
 	}
 
 	if (program_version)
@@ -2000,11 +2177,14 @@ pgBackupInit(pgBackup *backup)
 	backup->stream = false;
 	backup->from_replica = false;
 	backup->parent_backup = INVALID_BACKUP_ID;
+	backup->merge_dest_backup = INVALID_BACKUP_ID;
 	backup->parent_backup_link = NULL;
 	backup->primary_conninfo = NULL;
 	backup->program_version[0] = '\0';
 	backup->server_version[0] = '\0';
 	backup->external_dir_str = NULL;
+	backup->root_dir = NULL;
+	backup->files = NULL;
 }
 
 /* free pgBackup object */
@@ -2015,6 +2195,7 @@ pgBackupFree(void *backup)
 
 	pfree(b->primary_conninfo);
 	pfree(b->external_dir_str);
+	pfree(b->root_dir);
 	pfree(backup);
 }
 
@@ -2202,18 +2383,18 @@ scan_parent_chain(pgBackup *current_backup, pgBackup **result_backup)
 	{
 		/* Set oldest child backup in chain */
 		*result_backup = target_backup;
-		return 0;
+		return ChainIsBroken;
 	}
 
 	/* chain is ok, but some backups are invalid */
 	if (invalid_backup)
 	{
 		*result_backup = invalid_backup;
-		return 1;
+		return ChainIsInvalid;
 	}
 
 	*result_backup = target_backup;
-	return 2;
+	return ChainIsOk;
 }
 
 /*

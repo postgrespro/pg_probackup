@@ -131,7 +131,6 @@ doc/src/sgml/pgprobackup.sgml
    <arg choice="plain"><option>archive-push</option></arg>
    <arg choice="plain"><option>-B</option> <replaceable>backup_dir</replaceable></arg>
    <arg choice="plain"><option>--instance</option> <replaceable>instance_name</replaceable></arg>
-   <arg choice="plain"><option>--wal-file-path</option> <replaceable>wal_file_path</replaceable></arg>
    <arg choice="plain"><option>--wal-file-name</option> <replaceable>wal_file_name</replaceable></arg>
    <arg rep="repeat"><replaceable>option</replaceable></arg>
   </cmdsynopsis>
@@ -425,14 +424,6 @@ doc/src/sgml/pgprobackup.sgml
           Depending on cluster configuration, <productname>PostgreSQL</productname> itself may
           apply additional restrictions, such as CPU architecture
           or <application>libc</application>/<application>libicu</application> versions.
-        </para>
-      </listitem>
-      <listitem>
-        <para>
-          All backups in the incremental chain must belong to the same
-          timeline. For example, if you have taken incremental backups on a
-          standby server that gets promoted, you have to take another FULL
-          backup.
         </para>
       </listitem>
     </itemizedlist>
@@ -754,9 +745,10 @@ ALTER ROLE backup WITH REPLICATION;
     <title>Setting up Continuous WAL Archiving</title>
     <para>
       Making backups in PAGE backup mode, performing
-      <link linkend="pbk-performing-point-in-time-pitr-recovery">PITR</link>
-      and making backups with
-      <link linkend="pbk-archive-mode">ARCHIVE</link> WAL delivery mode
+      <link linkend="pbk-performing-point-in-time-pitr-recovery">PITR</link>,
+      making backups with
+      <link linkend="pbk-archive-mode">ARCHIVE</link> WAL delivery mode and
+      running incremental backup after timeline switch
       require
       <ulink url="https://postgrespro.com/docs/postgresql/current/continuous-archiving.html">continuous
       WAL archiving</ulink> to be enabled. To set up continuous
@@ -786,7 +778,7 @@ ALTER ROLE backup WITH REPLICATION;
           parameter, as follows:
         </para>
         <programlisting>
-archive_command = '<replaceable>install_dir</replaceable>/pg_probackup archive-push -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> --wal-file-path=%p --wal-file-name=%f [<replaceable>remote_options</replaceable>]'
+archive_command = '<replaceable>install_dir</replaceable>/pg_probackup archive-push -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> --wal-file-name=%f [<replaceable>remote_options</replaceable>]'
 </programlisting>
       </listitem>
     </itemizedlist>
@@ -1634,13 +1626,14 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
     <para>
      If you restore <link linkend="pbk-archive-mode">ARCHIVE</link> backups,
      perform <link linkend="pbk-performing-point-in-time-pitr-recovery">PITR</link>,
-     or specify the <literal>--restore-as-replica</literal> option with the
+     or specify the <literal>--restore-as-replica</literal> flag with the
      <literal>restore</literal> command to set up a standby server,
      <application>pg_probackup</application> creates a recovery configuration
      file once all data files are copied into the target directory. This file
      includes the minimal settings required for recovery, except for the password in the
      <ulink url="https://postgrespro.com/docs/postgresql/current/runtime-config-replication.html#GUC-PRIMARY-CONNINFO">primary_conninfo</ulink>
-     parameter; you have to add the password manually, if required.
+     parameter; you have to add the password manually or use
+     the <literal>--primary-conninfo</literal> option, if required.
      For <productname>PostgreSQL</productname> 11 or lower,
      recovery settings are written into the <filename>recovery.conf</filename>
      file. Starting from <productname>PostgreSQL</productname> 12,
@@ -2240,6 +2233,13 @@ BACKUP INSTANCE 'node'
             <listitem>
               <para>
                 <literal>MERGING</literal> — the backup is being merged.
+              </para>
+            </listitem>
+            <listitem>
+              <para>
+                <literal>MERGED</literal> — the backup data files were
+                successfully merged, but its metadata is in the process
+                of been updated. Only full backup can have this status.
               </para>
             </listitem>
             <listitem>
@@ -3146,7 +3146,9 @@ pg_probackup merge -B <replaceable>backup_dir</replaceable> --instance <replacea
     <para>
       This command merges the specified incremental backup to its
       parent full backup, together with all incremental backups
-      between them. Once the merge is complete, the incremental
+      between them. If the specified backup ID belong to the full backup,
+      then it will be merged with the closest incremental backup.
+      Once the merge is complete, the incremental
       backups are removed as redundant. Thus, the merge operation is
       virtually equivalent to retaking a full backup and removing all
       the outdated backups, but it allows to save much time,
@@ -3165,7 +3167,8 @@ pg_probackup show -B <replaceable>backup_dir</replaceable> --instance <replaceab
 </programlisting>
     <para>
       If the merge is still in progress, the backup status is
-      displayed as <literal>MERGING</literal>. The merge is idempotent, so you can
+      displayed as <literal>MERGING</literal> or, at the final stage,
+      <literal>MERGED</literal>. The merge is idempotent, so you can
       restart the merge if it was interrupted.
     </para>
   </refsect2>
@@ -3404,6 +3407,7 @@ pg_probackup backup -B <replaceable>backup_dir</replaceable> -b <replaceable>bac
 [--no-validate] [--skip-block-validation]
 [-w --no-password] [-W --password]
 [--archive-timeout=<replaceable>timeout</replaceable>] [--external-dirs=<replaceable>external_directory_path</replaceable>]
+[--no-sync]
 [<replaceable>connection_options</replaceable>] [<replaceable>compression_options</replaceable>] [<replaceable>remote_options</replaceable>]
 [<replaceable>retention_options</replaceable>] [<replaceable>pinning_options</replaceable>] [<replaceable>logging_options</replaceable>]
 </programlisting>
@@ -3556,6 +3560,18 @@ pg_probackup backup -B <replaceable>backup_dir</replaceable> -b <replaceable>bac
       </para>
       </listitem>
       </varlistentry>
+
+      <varlistentry>
+<term><option>--no-sync</option></term>
+      <listitem>
+      <para>
+        Do not sync backed up files to disk. You can use this flag to speed
+        up backup process. Using this flag can result in data
+        corruption in case of operating system or hardware crash.
+        Corruption can be detected by backup validation.
+      </para>
+      </listitem>
+      </varlistentry>
       </variablelist>
       </para>
 
@@ -3582,8 +3598,11 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
 [--help] [-D <replaceable>data_dir</replaceable>] [-i <replaceable>backup_id</replaceable>]
 [-j <replaceable>num_threads</replaceable>] [--progress]
 [-T <replaceable>OLDDIR</replaceable>=<replaceable>NEWDIR</replaceable>] [--external-mapping=<replaceable>OLDDIR</replaceable>=<replaceable>NEWDIR</replaceable>] [--skip-external-dirs]
-[-R | --restore-as-replica] [--no-validate] [--skip-block-validation] [--force]
+[-R | --restore-as-replica] [--no-validate] [--skip-block-validation]
+[--force] [--no-sync]
 [--restore-command=<replaceable>cmdline</replaceable>]
+[--primary-conninfo=<replaceable>primary_conninfo</replaceable>]
+[-S | --primary-slot-name=<replaceable>slotname</replaceable>]
 [<replaceable>recovery_target_options</replaceable>] [<replaceable>logging_options</replaceable>] [<replaceable>remote_options</replaceable>]
 [<replaceable>partial_restore_options</replaceable>] [<replaceable>remote_wal_archive_options</replaceable>]
 </programlisting>
@@ -3617,6 +3636,34 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
         directory, and then includes them into the
         <filename>postgresql.auto.conf</filename> when the cluster is
         is started.
+      </para>
+      </listitem>
+      </varlistentry>
+
+      <varlistentry>
+<term><option>--primary-conninfo=<replaceable>primary_conninfo</replaceable></option></term>
+      <listitem>
+      <para>
+        Sets the
+        <ulink url="https://postgrespro.com/docs/postgresql/current/runtime-config-replication.html#GUC-PRIMARY-CONNINFO">primary_conninfo</ulink>
+        parameter to the specified value.
+        This option will be ignored unless the <option>-R</option> flag if specified.
+      </para>
+      <para>
+        Example: <literal>--primary-conninfo='host=192.168.1.50 port=5432 user=foo password=foopass'</literal>
+      </para>
+      </listitem>
+      </varlistentry>
+
+      <varlistentry>
+<term><option>-S</option></term>
+<term><option>--primary-slot-name=<replaceable>slot_name</replaceable></option></term>
+      <listitem>
+      <para>
+        Sets the
+        <ulink url="https://postgrespro.com/docs/postgresql/current/runtime-config-replication#GUC-PRIMARY-SLOT-NAME">primary_slot_name</ulink>
+        parameter to the specified value.
+        This option will be ignored unless the <option>-R</option> flag if specified.
       </para>
       </listitem>
       </varlistentry>
@@ -3702,6 +3749,17 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
         this flag if you need to restore the
         <productname>PostgreSQL</productname> cluster from a corrupt or an invalid backup.
         Use with caution.
+      </para>
+      </listitem>
+      </varlistentry>
+
+      <varlistentry>
+<term><option>--no-sync</option></term>
+      <listitem>
+      <para>
+        Do not sync restored files to disk. You can use this flag to speed
+        up restore process. Using this flag can result in data
+        corruption in case of operating system or hardware crash.
       </para>
       </listitem>
       </varlistentry>
@@ -3831,7 +3889,9 @@ pg_probackup merge -B <replaceable>backup_dir</replaceable> --instance <replacea
       <para>
         Merges the specified incremental backup to its parent full
         backup, together with all incremental backups between them, if
-        any. As a result, the full backup takes in all the merged
+        any. If the specified backup ID belong to the full backup,
+        then it will be merged with the closest incremental backup.
+        As a result, the full backup takes in all the merged
         data, and the incremental backups are removed as redundant.
       </para>
       <para>
@@ -3866,9 +3926,12 @@ pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replace
       <title>archive-push</title>
       <programlisting>
 pg_probackup archive-push -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable>
---wal-file-path=<replaceable>wal_file_path</replaceable> --wal-file-name=<replaceable>wal_file_name</replaceable>
-[--help] [--compress] [--compress-algorithm=<replaceable>compression_algorithm</replaceable>]
-[--compress-level=<replaceable>compression_level</replaceable>] [--overwrite]
+--wal-file-name=<replaceable>wal_file_name</replaceable>
+[--help] [--no-sync] [--compress] [--no-ready-rename] [--overwrite]
+[-j <replaceable>num_threads</replaceable>] [--batch-size=<replaceable>batch_size</replaceable>]
+[--archive-timeout=<replaceable>timeout</replaceable>]
+[--compress-algorithm=<replaceable>compression_algorithm</replaceable>]
+[--compress-level=<replaceable>compression_level</replaceable>]
 [<replaceable>remote_options</replaceable>] [<replaceable>logging_options</replaceable>]
 </programlisting>
       <para>
@@ -3893,13 +3956,24 @@ pg_probackup archive-push -B <replaceable>backup_dir</replaceable> --instance <r
         with the <option>--overwrite</option> flag.
       </para>
       <para>
-        The files are copied to a temporary file with the
-        <literal>.part</literal> suffix. After the copy is
-        done, atomic rename is performed. This algorithm ensures that a
-        failed <command>archive-push</command> will not stall continuous archiving and
-        that concurrent archiving from multiple sources into a single
-        WAL archive have no risk of archive corruption. WAL segments copied to
-        the archive are synced to disk.
+        Every file is copied to a temporary file with the
+        <literal>.part</literal> suffix. If the temporary file already
+        exists, <application>pg_probackup</application> will wait
+        <option>archive_timeout</option> seconds before discarding it.
+        After the copy is done, atomic rename is performed.
+        This algorithm ensures that a failed <command>archive-push</command>
+        will not stall continuous archiving and that concurrent archiving from
+        multiple sources into a single WAL archive have no risk of archive
+        corruption.
+      </para>
+      <para>
+        To speed up archiving, especially in remote mode, <command>archive-push</command>
+        can be run on multiple threads using <option>-j num_threads</option> option.
+        Files can also be copied in batches using option <option>--batch-size</option>.
+      </para>
+      <para>
+        WAL segments copied to the archive are synced to disk unless
+        <option>--no-sync</option> flag is used.
       </para>
       <para>
         You can use <command>archive-push</command> in the
@@ -4005,7 +4079,8 @@ pg_probackup archive-get -B <replaceable>backup_dir</replaceable> --instance <re
       <para>
         Sets the number of parallel threads for <command>backup</command>,
         <command>restore</command>, <command>merge</command>,
-        <command>validate</command>, and <command>checkdb</command> processes.
+        <command>validate</command>, <command>checkdb</command> and
+        <command>archive-push</command> processes.
       </para>
       </listitem>
       </varlistentry>
@@ -4664,6 +4739,48 @@ pg_probackup archive-get -B <replaceable>backup_dir</replaceable> --instance <re
       </para>
       </listitem>
       </varlistentry>
+
+      <varlistentry>
+<term><option>--batch-size=batch_size</option></term>
+      <listitem>
+      <para>
+        Sets the maximum number of files to be copied into archive by signle
+        <command>archive-push</command> process.
+      </para>
+      </listitem>
+      </varlistentry>
+
+      <varlistentry>
+<term><option>--archive-timeout=<replaceable>wait_time</replaceable></option></term>
+      <listitem>
+      <para>
+        Sets the timeout for considering existing <literal>.part</literal> file to be stale. By default <application>pg_probackup</application> waits 300 seconds.
+      </para>
+      </listitem>
+      </varlistentry>
+
+      <varlistentry>
+<term><option>--no-ready-rename</option></term>
+      <listitem>
+      <para>
+        Do not rename status files in  <literal>archive_status</literal> directory.
+        This option should be used only if <parameter>archive_command</parameter>
+        contain multiple commands.
+      </para>
+      </listitem>
+      </varlistentry>
+
+      <varlistentry>
+<term><option>--no-sync</option></term>
+      <listitem>
+      <para>
+        Do not sync copied WAL files to disk. You can use this flag to speed
+        up archiving process. Using this flag can result in WAL archive
+        corruption in case of operating system or hardware crash.
+      </para>
+      </listitem>
+      </varlistentry>
+
       </variablelist>
       </para>
     </refsect3>

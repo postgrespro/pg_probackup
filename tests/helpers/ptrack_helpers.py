@@ -833,6 +833,9 @@ class ProbackupTest(object):
         if backup_type:
             cmd_list += ['-b', backup_type]
 
+        if not old_binary:
+            cmd_list += ['--no-sync']
+
         return self.run_pb(cmd_list + options, asynchronous, gdb, old_binary, return_id)
 
     def checkdb_node(
@@ -888,6 +891,9 @@ class ProbackupTest(object):
 
         if backup_id:
             cmd_list += ['-i', backup_id]
+
+        if not old_binary:
+            cmd_list += ['--no-sync']
 
         return self.run_pb(cmd_list + options, old_binary=old_binary)
 
@@ -1125,7 +1131,8 @@ class ProbackupTest(object):
 
     def set_archiving(
             self, backup_dir, instance, node, replica=False,
-            overwrite=False, compress=False, old_binary=False):
+            overwrite=False, compress=False, old_binary=False,
+            log_level=False, archive_timeout=False):
 
         # parse postgresql.auto.conf
         options = {}
@@ -1155,11 +1162,25 @@ class ProbackupTest(object):
         if overwrite:
             options['archive_command'] += '--overwrite '
 
+        options['archive_command'] += '--log-level-console=verbose '
+        options['archive_command'] += '-j 5 '
+        options['archive_command'] += '--batch-size 10 '
+        options['archive_command'] += '--no-sync '
+
+        if archive_timeout:
+            options['archive_command'] += '--archive-timeout={0} '.format(
+                archive_timeout)
+
         if os.name == 'posix':
             options['archive_command'] += '--wal-file-path=%p --wal-file-name=%f'
 
         elif os.name == 'nt':
             options['archive_command'] += '--wal-file-path="%p" --wal-file-name="%f"'
+
+        if log_level:
+            options['archive_command'] += ' --log-level-console={0}'.format(log_level)
+            options['archive_command'] += ' --log-level-file={0} '.format(log_level)
+
 
         self.set_auto_conf(node, options)
 

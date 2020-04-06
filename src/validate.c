@@ -78,6 +78,7 @@ pgBackupValidate(pgBackup *backup, pgRestoreParams *params)
 	if (backup->status != BACKUP_STATUS_OK &&
 		backup->status != BACKUP_STATUS_DONE &&
 		backup->status != BACKUP_STATUS_ORPHAN &&
+		backup->status != BACKUP_STATUS_MERGING &&
 		backup->status != BACKUP_STATUS_CORRUPT)
 	{
 		elog(WARNING, "Backup %s has status %s. Skip validation.",
@@ -86,14 +87,18 @@ pgBackupValidate(pgBackup *backup, pgRestoreParams *params)
 		return;
 	}
 
-	if (backup->status == BACKUP_STATUS_OK || backup->status == BACKUP_STATUS_DONE)
-		elog(INFO, "Validating backup %s", base36enc(backup->start_time));
-	/* backups in MERGING status must have an option of revalidation without losing MERGING status
-	else if (backup->status == BACKUP_STATUS_MERGING)
+	/* additional sanity */
+	if (backup->backup_mode == BACKUP_MODE_FULL &&
+		backup->status == BACKUP_STATUS_MERGING)
 	{
-		some message here
+		elog(WARNING, "Full backup %s has status %s, skip validation",
+			base36enc(backup->start_time), status2str(backup->status));
+		return;
 	}
-	*/
+
+	if (backup->status == BACKUP_STATUS_OK || backup->status == BACKUP_STATUS_DONE ||
+		backup->status == BACKUP_STATUS_MERGING)
+		elog(INFO, "Validating backup %s", base36enc(backup->start_time));
 	else
 		elog(INFO, "Revalidating backup %s", base36enc(backup->start_time));
 
@@ -250,7 +255,7 @@ pgBackupValidateFiles(void *arg)
 			continue;
 
 		if (progress)
-			elog(INFO, "Progress: (%d/%d). Process file \"%s\"",
+			elog(INFO, "Progress: (%d/%d). Validate file \"%s\"",
 				 i + 1, num_files, file->path);
 
 		/*
@@ -259,6 +264,7 @@ pgBackupValidateFiles(void *arg)
 		 */
 		if (file->write_size == BYTES_INVALID)
 		{
+			/* TODO: lookup corresponding merge bug */
 			if (arguments->backup_mode == BACKUP_MODE_FULL)
 			{
 				/* It is illegal for file in FULL backup to have BYTES_INVALID */
@@ -271,6 +277,11 @@ pgBackupValidateFiles(void *arg)
 				continue;
 		}
 
+		/* no point in trying to open empty file */
+		if (file->write_size == 0)
+			continue;
+
+		/* TODO: it is redundant to check file existence using stat */
 		if (stat(file->path, &st) == -1)
 		{
 			if (errno == ENOENT)
@@ -317,7 +328,7 @@ pgBackupValidateFiles(void *arg)
 				crc = pgFileGetCRC(file->path,
 								   arguments->backup_version <= 20021 ||
 								   arguments->backup_version >= 20025,
-								   true, NULL, FIO_LOCAL_HOST);
+								   false);
 			if (crc != file->crc)
 			{
 				elog(WARNING, "Invalid CRC of backup file \"%s\" : %X. Expected %X",
@@ -468,7 +479,7 @@ do_validate_instance(void)
 			result = scan_parent_chain(current_backup, &tmp_backup);
 
 			/* chain is broken */
-			if (result == 0)
+			if (result == ChainIsBroken)
 			{
 				char	   *parent_backup_id;
 				/* determine missing backup ID */
@@ -494,7 +505,7 @@ do_validate_instance(void)
 				continue;
 			}
 			/* chain is whole, but at least one parent is invalid */
-			else if (result == 1)
+			else if (result == ChainIsInvalid)
 			{
 				/* Oldest corrupt backup has a chance for revalidation */
 				if (current_backup->start_time != tmp_backup->start_time)
@@ -619,7 +630,7 @@ do_validate_instance(void)
 					 */
 					result = scan_parent_chain(backup, &tmp_backup);
 
-					if (result == 1)
+					if (result == ChainIsInvalid)
 					{
 						/* revalidation make sense only if oldest invalid backup is current_backup
 						 */

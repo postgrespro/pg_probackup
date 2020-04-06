@@ -32,23 +32,15 @@ slurpFile(const char *datadir, const char *path, size_t *filesize, bool safe, fi
 	struct stat statbuf;
 	char		fullpath[MAXPGPATH];
 	int		 len;
-	snprintf(fullpath, sizeof(fullpath), "%s/%s", datadir, path);
 
-	if (fio_access(fullpath, R_OK, location) != 0)
-	{
-		if (safe)
-			return NULL;
-		else
-			elog(ERROR, "could not open file \"%s\" for reading: %s",
-				fullpath, strerror(errno));
-	}
+	join_path_components(fullpath, datadir, path);
 
 	if ((fd = fio_open(fullpath, O_RDONLY | PG_BINARY, location)) == -1)
 	{
 		if (safe)
 			return NULL;
 		else
-			elog(ERROR, "could not open file \"%s\" for reading: %s",
+			elog(ERROR, "Could not open file \"%s\" for reading: %s",
 					fullpath, strerror(errno));
 	}
 
@@ -57,7 +49,7 @@ slurpFile(const char *datadir, const char *path, size_t *filesize, bool safe, fi
 		if (safe)
 			return NULL;
 		else
-			elog(ERROR, "could not open file \"%s\" for reading: %s",
+			elog(ERROR, "Could not stat file \"%s\": %s",
 				fullpath, strerror(errno));
 	}
 
@@ -69,7 +61,7 @@ slurpFile(const char *datadir, const char *path, size_t *filesize, bool safe, fi
 		if (safe)
 			return NULL;
 		else
-			elog(ERROR, "could not read file \"%s\": %s\n",
+			elog(ERROR, "Could not read file \"%s\": %s\n",
 				fullpath, strerror(errno));
 	}
 

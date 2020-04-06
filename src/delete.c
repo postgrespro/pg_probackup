@@ -482,14 +482,14 @@ do_retention_merge(parray *backup_list, parray *to_keep_list, parray *to_purge_l
 		 */
 
 		keep_backup_id = base36enc_dup(keep_backup->start_time);
-		elog(INFO, "Merge incremental chain between FULL backup %s and backup %s",
+		elog(INFO, "Merge incremental chain between full backup %s and backup %s",
 					base36enc(full_backup->start_time), keep_backup_id);
 		pg_free(keep_backup_id);
 
 		merge_list = parray_new();
 
 		/* Form up a merge list */
-		while(keep_backup->parent_backup_link)
+		while (keep_backup->parent_backup_link)
 		{
 			parray_append(merge_list, keep_backup);
 			keep_backup = keep_backup->parent_backup_link;
@@ -515,6 +515,19 @@ do_retention_merge(parray *backup_list, parray *to_keep_list, parray *to_purge_l
 		/* Lock merge chain */
 		catalog_lock_backup_list(merge_list, parray_num(merge_list) - 1, 0);
 
+		/* Consider this extreme case */
+		//  PAGEa1    PAGEb1   both valid
+		//      \     /
+		//        FULL
+
+		/* Check that FULL backup do not has multiple descendants
+		 * full_backup always point to current full_backup after merge
+		 */
+//		if (is_prolific(backup_list, full_backup))
+//		{
+//			elog(WARNING, "Backup %s has multiple valid descendants. "
+//					"Automatic merge is not possible.", base36enc(full_backup->start_time));
+//		}
 
 		/* Merge list example:
 		 * 0 PAGE3
@@ -522,37 +535,25 @@ do_retention_merge(parray *backup_list, parray *to_keep_list, parray *to_purge_l
 		 * 2 PAGE1
 		 * 3 FULL
 		 *
-		 * Consequentially merge incremental backups from PAGE1 to PAGE3
-		 * into FULL.
+		 * Merge incremental chain from PAGE3 into FULL.
 		 */
+
+		keep_backup = parray_get(merge_list, 0);
+		merge_chain(merge_list, full_backup, keep_backup);
+		backup_merged = true;
 
 		for (j = parray_num(merge_list) - 2; j >= 0; j--)
 		{
-			pgBackup   *from_backup = (pgBackup *) parray_get(merge_list, j);
-
-
-			/* Consider this extreme case */
-			//  PAGEa1    PAGEb1   both valid
-			//      \     /
-			//        FULL
-
-			/* Check that FULL backup do not has multiple descendants
-			 * full_backup always point to current full_backup after merge
-			 */
-			if (is_prolific(backup_list, full_backup))
-			{
-				elog(WARNING, "Backup %s has multiple valid descendants. "
-						"Automatic merge is not possible.", base36enc(full_backup->start_time));
-				break;
-			}
-
-			merge_backups(full_backup, from_backup);
-			backup_merged = true;
+			pgBackup   *tmp_backup = (pgBackup *) parray_get(merge_list, j);
 
 			/* Try to remove merged incremental backup from both keep and purge lists */
-			parray_rm(to_purge_list, from_backup, pgBackupCompareId);
+			parray_rm(to_purge_list, tmp_backup, pgBackupCompareId);
 			parray_set(to_keep_list, i, NULL);
 		}
+
+		pgBackupValidate(full_backup, NULL);
+		if (full_backup->status == BACKUP_STATUS_CORRUPT)
+			elog(ERROR, "Merging of backup %s failed", base36enc(full_backup->start_time));
 
 		/* Cleanup */
 		parray_free(merge_list);
@@ -724,10 +725,10 @@ void
 delete_backup_files(pgBackup *backup)
 {
 	size_t		i;
-	char		path[MAXPGPATH];
 	char		timestamp[100];
-	parray	   *files;
+	parray		*files;
 	size_t		num_files;
+	char		full_path[MAXPGPATH];
 
 	/*
 	 * If the backup was deleted already, there is nothing to do.
@@ -752,8 +753,7 @@ delete_backup_files(pgBackup *backup)
 
 	/* list files to be deleted */
 	files = parray_new();
-	pgBackupGetPath(backup, path, lengthof(path), NULL);
-	dir_list_file(files, path, false, true, true, 0, FIO_BACKUP_HOST);
+	dir_list_file(files, backup->root_dir, false, true, true, 0, FIO_BACKUP_HOST);
 
 	/* delete leaf node first */
 	parray_qsort(files, pgFileComparePathDesc);
@@ -762,14 +762,16 @@ delete_backup_files(pgBackup *backup)
 	{
 		pgFile	   *file = (pgFile *) parray_get(files, i);
 
-		if (progress)
-			elog(INFO, "Progress: (%zd/%zd). Process file \"%s\"",
-				 i + 1, num_files, file->path);
+		join_path_components(full_path, backup->root_dir, file->rel_path);
 
 		if (interrupted)
 			elog(ERROR, "interrupted during delete backup");
 
-		pgFileDelete(file);
+		if (progress)
+			elog(INFO, "Progress: (%zd/%zd). Delete file \"%s\"",
+				 i + 1, num_files, full_path);
+
+		pgFileDelete(file, full_path);
 	}
 
 	parray_walk(files, pgFileFree);

@@ -585,46 +585,22 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
             options=['--retention-window=1', '--expired', '--merge-expired'])
 
         self.assertIn(
-            "Merge incremental chain between FULL backup {0} and backup {1}".format(
+            "Merge incremental chain between full backup {0} and backup {1}".format(
                 backup_id_a, page_id_a2),
             output)
 
         self.assertIn(
-            "Merging backup {0} with backup {1}".format(
-                page_id_a1, backup_id_a), output)
+            "Rename merged full backup {0} to {1}".format(
+                backup_id_a, page_id_a2), output)
 
         self.assertIn(
-            "Rename {0} to {1}".format(
-                backup_id_a, page_id_a1), output)
-
-        self.assertIn(
-            "Merging backup {0} with backup {1}".format(
-                page_id_a2, page_id_a1), output)
-
-        self.assertIn(
-            "Rename {0} to {1}".format(
-                page_id_a1, page_id_a2), output)
-
-        self.assertIn(
-            "Merge incremental chain between FULL backup {0} and backup {1}".format(
+            "Merge incremental chain between full backup {0} and backup {1}".format(
                 backup_id_b, page_id_b2),
             output)
 
         self.assertIn(
-            "Merging backup {0} with backup {1}".format(
-                page_id_b1, backup_id_b), output)
-
-        self.assertIn(
-            "Rename {0} to {1}".format(
-                backup_id_b, page_id_b1), output)
-
-        self.assertIn(
-            "Merging backup {0} with backup {1}".format(
-                page_id_b2, page_id_b1), output)
-
-        self.assertIn(
-            "Rename {0} to {1}".format(
-                page_id_b1, page_id_b2), output)
+            "Rename merged full backup {0} to {1}".format(
+                backup_id_b, page_id_b2), output)
 
         self.assertEqual(len(self.show_pb(backup_dir, 'node')), 2)
 
@@ -979,64 +955,295 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         output = self.delete_expired(
             backup_dir, 'node',
             options=[
-                '--retention-window=1', '--expired',
+                '--retention-window=1', '--delete-expired',
+                '--merge-expired', '--log-level-console=log'])
+
+        self.assertEqual(len(self.show_pb(backup_dir, 'node')), 2)
+
+        # Merging chain A
+        self.assertIn(
+            "Merge incremental chain between full backup {0} and backup {1}".format(
+                backup_id_a, page_id_a3),
+            output)
+
+        self.assertIn(
+            "INFO: Rename merged full backup {0} to {1}".format(
+                backup_id_a, page_id_a3), output)
+
+#        self.assertIn(
+#            "WARNING: Backup {0} has multiple valid descendants. "
+#            "Automatic merge is not possible.".format(
+#                page_id_a1), output)
+
+        self.assertIn(
+            "LOG: Consider backup {0} for purge".format(
+                page_id_a2), output)
+
+        # Merge chain B
+        self.assertIn(
+            "Merge incremental chain between full backup {0} and backup {1}".format(
+                backup_id_b, page_id_b3),
+            output)
+
+        self.assertIn(
+            "INFO: Rename merged full backup {0} to {1}".format(
+                backup_id_b, page_id_b3), output)
+
+        self.assertIn(
+            "Delete: {0}".format(page_id_a2), output)
+
+        self.assertEqual(
+            self.show_pb(backup_dir, 'node')[1]['id'],
+            page_id_b3)
+
+        self.assertEqual(
+            self.show_pb(backup_dir, 'node')[0]['id'],
+            page_id_a3)
+
+        self.assertEqual(
+            self.show_pb(backup_dir, 'node')[1]['backup-mode'],
+            'FULL')
+
+        self.assertEqual(
+            self.show_pb(backup_dir, 'node')[0]['backup-mode'],
+            'FULL')
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_basic_window_merge_multiple_descendants_1(self):
+        """
+        PAGEb3
+          |                 PAGEa3
+        -----------------------------retention window
+        PAGEb2               /
+          |       PAGEa2    /
+        PAGEb1       \     /
+          |           PAGEa1
+        FULLb           |
+                      FULLa
+        """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'],
+            pg_options={'autovacuum': 'off'})
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        node.pgbench_init(scale=3)
+
+        # Take FULL BACKUPs
+        backup_id_a = self.backup_node(backup_dir, 'node', node)
+        # pgbench = node.pgbench(options=['-T', '10', '-c', '2'])
+        # pgbench.wait()
+
+        backup_id_b = self.backup_node(backup_dir, 'node', node)
+        # pgbench = node.pgbench(options=['-T', '10', '-c', '2'])
+        # pgbench.wait()
+
+        # Change FULLb backup status to ERROR
+        self.change_backup_status(backup_dir, 'node', backup_id_b, 'ERROR')
+
+        page_id_a1 = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        # pgbench = node.pgbench(options=['-T', '10', '-c', '2'])
+        # pgbench.wait()
+
+        # Change FULLb to OK
+        self.change_backup_status(backup_dir, 'node', backup_id_b, 'OK')
+
+        # Change PAGEa1 to ERROR
+        self.change_backup_status(backup_dir, 'node', page_id_a1, 'ERROR')
+
+        # PAGEa1 ERROR
+        # FULLb  OK
+        # FULLa  OK
+
+        page_id_b1 = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        # PAGEb1 OK
+        # PAGEa1 ERROR
+        # FULLb  OK
+        # FULLa  OK
+
+        # pgbench = node.pgbench(options=['-T', '10', '-c', '2'])
+        # pgbench.wait()
+
+        # Change PAGEa1 to OK
+        self.change_backup_status(backup_dir, 'node', page_id_a1, 'OK')
+
+        # Change PAGEb1 and FULLb to ERROR
+        self.change_backup_status(backup_dir, 'node', page_id_b1, 'ERROR')
+        self.change_backup_status(backup_dir, 'node', backup_id_b, 'ERROR')
+
+        # PAGEb1 ERROR
+        # PAGEa1 OK
+        # FULLb  ERROR
+        # FULLa  OK
+
+        page_id_a2 = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        # pgbench = node.pgbench(options=['-T', '10', '-c', '2'])
+        # pgbench.wait()
+
+        # PAGEa2 OK
+        # PAGEb1 ERROR
+        # PAGEa1 OK
+        # FULLb  ERROR
+        # FULLa  OK
+
+        # Change PAGEb1 and FULLb to OK
+        self.change_backup_status(backup_dir, 'node', page_id_b1, 'OK')
+        self.change_backup_status(backup_dir, 'node', backup_id_b, 'OK')
+
+        # Change PAGEa2 and FULLa to ERROR
+        self.change_backup_status(backup_dir, 'node', page_id_a2, 'ERROR')
+        self.change_backup_status(backup_dir, 'node', backup_id_a, 'ERROR')
+
+        # PAGEa2 ERROR
+        # PAGEb1 OK
+        # PAGEa1 OK
+        # FULLb  OK
+        # FULLa  ERROR
+
+        page_id_b2 = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        # pgbench = node.pgbench(options=['-T', '10', '-c', '2'])
+        # pgbench.wait()
+
+        # PAGEb2 OK
+        # PAGEa2 ERROR
+        # PAGEb1 OK
+        # PAGEa1 OK
+        # FULLb  OK
+        # FULLa  ERROR
+
+        # Change PAGEb2 and PAGEb1 to ERROR
+        self.change_backup_status(backup_dir, 'node', page_id_b2, 'ERROR')
+        self.change_backup_status(backup_dir, 'node', page_id_b1, 'ERROR')
+
+        # and FULL stuff
+        self.change_backup_status(backup_dir, 'node', backup_id_a, 'OK')
+        self.change_backup_status(backup_dir, 'node', backup_id_b, 'ERROR')
+
+        # PAGEb2 ERROR
+        # PAGEa2 ERROR
+        # PAGEb1 ERROR
+        # PAGEa1 OK
+        # FULLb  ERROR
+        # FULLa  OK
+
+        page_id_a3 = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+        # pgbench = node.pgbench(options=['-T', '10', '-c', '2'])
+        # pgbench.wait()
+
+        # PAGEa3 OK
+        # PAGEb2 ERROR
+        # PAGEa2 ERROR
+        # PAGEb1 ERROR
+        # PAGEa1 OK
+        # FULLb  ERROR
+        # FULLa  OK
+
+        # Change PAGEa3 to ERROR
+        self.change_backup_status(backup_dir, 'node', page_id_a3, 'ERROR')
+
+        # Change PAGEb2, PAGEb1 and FULLb to OK
+        self.change_backup_status(backup_dir, 'node', page_id_b2, 'OK')
+        self.change_backup_status(backup_dir, 'node', page_id_b1, 'OK')
+        self.change_backup_status(backup_dir, 'node', backup_id_b, 'OK')
+
+        page_id_b3 = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        # PAGEb3 OK
+        # PAGEa3 ERROR
+        # PAGEb2 OK
+        # PAGEa2 ERROR
+        # PAGEb1 OK
+        # PAGEa1 OK
+        # FULLb  OK
+        # FULLa  OK
+
+        # Change PAGEa3, PAGEa2 and PAGEb1 status to OK
+        self.change_backup_status(backup_dir, 'node', page_id_a3, 'OK')
+        self.change_backup_status(backup_dir, 'node', page_id_a2, 'OK')
+        self.change_backup_status(backup_dir, 'node', page_id_b1, 'OK')
+
+        # PAGEb3 OK
+        # PAGEa3 OK
+        # PAGEb2 OK
+        # PAGEa2 OK
+        # PAGEb1 OK
+        # PAGEa1 OK
+        # FULLb  OK
+        # FULLa  OK
+
+        # Check that page_id_a3 and page_id_a2 are both direct descendants of page_id_a1
+        self.assertEqual(
+            self.show_pb(
+                backup_dir, 'node', backup_id=page_id_a3)['parent-backup-id'],
+            page_id_a1)
+
+        self.assertEqual(
+            self.show_pb(
+                backup_dir, 'node', backup_id=page_id_a2)['parent-backup-id'],
+            page_id_a1)
+
+        # Purge backups
+        backups = os.path.join(backup_dir, 'backups', 'node')
+        for backup in os.listdir(backups):
+            if backup in [page_id_a3, page_id_b3, 'pg_probackup.conf']:
+                continue
+
+            with open(
+                    os.path.join(
+                        backups, backup, "backup.control"), "a") as conf:
+                conf.write("recovery_time='{:%Y-%m-%d %H:%M:%S}'\n".format(
+                    datetime.now() - timedelta(days=3)))
+
+        output = self.delete_expired(
+            backup_dir, 'node',
+            options=[
+                '--retention-window=1',
                 '--merge-expired', '--log-level-console=log'])
 
         self.assertEqual(len(self.show_pb(backup_dir, 'node')), 3)
 
         # Merging chain A
         self.assertIn(
-            "Merge incremental chain between FULL backup {0} and backup {1}".format(
+            "Merge incremental chain between full backup {0} and backup {1}".format(
                 backup_id_a, page_id_a3),
             output)
 
         self.assertIn(
-            "Merging backup {0} with backup {1}".format(
-                page_id_a1, backup_id_a), output)
+            "INFO: Rename merged full backup {0} to {1}".format(
+                backup_id_a, page_id_a3), output)
 
-        self.assertIn(
-            "INFO: Rename {0} to {1}".format(
-                backup_id_a, page_id_a1), output)
-
-        self.assertIn(
-            "WARNING: Backup {0} has multiple valid descendants. "
-            "Automatic merge is not possible.".format(
-                page_id_a1), output)
+#        self.assertIn(
+#            "WARNING: Backup {0} has multiple valid descendants. "
+#            "Automatic merge is not possible.".format(
+#                page_id_a1), output)
 
         # Merge chain B
         self.assertIn(
-            "Merge incremental chain between FULL backup {0} and backup {1}".format(
-                backup_id_b, page_id_b3),
-            output)
+            "Merge incremental chain between full backup {0} and backup {1}".format(
+                backup_id_b, page_id_b3), output)
 
         self.assertIn(
-            "Merging backup {0} with backup {1}".format(
-                page_id_b1, backup_id_b), output)
-
-        self.assertIn(
-            "INFO: Rename {0} to {1}".format(
-                backup_id_b, page_id_b1), output)
-
-        self.assertIn(
-            "Merging backup {0} with backup {1}".format(
-                page_id_b2, page_id_b1), output)
-
-        self.assertIn(
-            "INFO: Rename {0} to {1}".format(
-                page_id_b1, page_id_b2), output)
-
-        self.assertIn(
-            "Merging backup {0} with backup {1}".format(
-                page_id_b3, page_id_b2), output)
-
-        self.assertIn(
-            "INFO: Rename {0} to {1}".format(
-                page_id_b2, page_id_b3), output)
-
-        # this backup deleted because it is not guarded by retention
-        self.assertIn(
-            "INFO: Delete: {0}".format(
-                page_id_a1), output)
+            "INFO: Rename merged full backup {0} to {1}".format(
+                backup_id_b, page_id_b3), output)
 
         self.assertEqual(
             self.show_pb(backup_dir, 'node')[2]['id'],
@@ -1048,7 +1255,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         self.assertEqual(
             self.show_pb(backup_dir, 'node')[0]['id'],
-            page_id_a1)
+            page_id_a2)
 
         self.assertEqual(
             self.show_pb(backup_dir, 'node')[2]['backup-mode'],
@@ -1056,11 +1263,17 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         self.assertEqual(
             self.show_pb(backup_dir, 'node')[1]['backup-mode'],
-            'PAGE')
+            'FULL')
 
         self.assertEqual(
             self.show_pb(backup_dir, 'node')[0]['backup-mode'],
-            'FULL')
+            'PAGE')
+
+        output = self.delete_expired(
+            backup_dir, 'node',
+            options=[
+                '--retention-window=1',
+                '--delete-expired', '--log-level-console=log'])
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -1499,10 +1712,9 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
                 "without valid full backup.\n Output: {0} \n CMD: {1}".format(
                     repr(self.output), self.cmd))
         except ProbackupException as e:
-            self.assertIn(
-                "ERROR: Valid backup on current timeline 1 is not found. "
-                "Create new FULL backup before an incremental one.",
-                e.message,
+            self.assertTrue(
+                "WARNING: Valid backup on current timeline 1 is not found" in e.message and
+                "ERROR: Create new full backup before an incremental one" in e.message,
                 "\n Unexpected Error Message: {0}\n CMD: {1}".format(
                     repr(e.message), self.cmd))
 
@@ -1596,7 +1808,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         # create pair of MERGING backup as a result of failed merge 
         gdb = self.merge_backup(
             backup_dir, 'node', delta_id, gdb=True)
-        gdb.set_breakpoint('copy_file')
+        gdb.set_breakpoint('backup_non_data_file')
         gdb.run_until_break()
         gdb.continue_execution_until_break(2)
         gdb._execute('signal SIGKILL')
@@ -2462,7 +2674,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         self.assertIn(
             'LOG: Archive backup {0} to stay consistent protect from '
             'purge WAL interval between 000000010000000000000004 '
-            'and 000000010000000000000004 on timeline 1'.format(B1), output)
+            'and 000000010000000000000005 on timeline 1'.format(B1), output)
 
         start_lsn_B4 = self.show_pb(backup_dir, 'node', B4)['start-lsn']
         self.assertIn(
@@ -2471,13 +2683,13 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         self.assertIn(
             'LOG: Timeline 3 to stay reachable from timeline 1 protect '
-            'from purge WAL interval between 000000020000000000000005 and '
-            '000000020000000000000008 on timeline 2', output)
+            'from purge WAL interval between 000000020000000000000006 and '
+            '000000020000000000000009 on timeline 2', output)
 
         self.assertIn(
             'LOG: Timeline 3 to stay reachable from timeline 1 protect '
             'from purge WAL interval between 000000010000000000000004 and '
-            '000000010000000000000005 on timeline 1', output)
+            '000000010000000000000006 on timeline 1', output)
 
         show_tli1_before = self.show_archive(backup_dir, 'node', tli=1)
         show_tli2_before = self.show_archive(backup_dir, 'node', tli=2)
@@ -2491,9 +2703,13 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         self.assertTrue(show_tli4_before)
         self.assertTrue(show_tli5_before)
 
+        sleep(5)
+
         output = self.delete_pb(
             backup_dir, 'node',
             options=['--delete-wal', '--wal-depth=2', '--log-level-console=verbose'])
+
+#        print(output)
 
         show_tli1_after = self.show_archive(backup_dir, 'node', tli=1)
         show_tli2_after = self.show_archive(backup_dir, 'node', tli=2)
@@ -2528,19 +2744,19 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         self.assertEqual(
             show_tli1_after['lost-segments'][0]['begin-segno'],
-            '000000010000000000000006')
+            '000000010000000000000007')
 
         self.assertEqual(
             show_tli1_after['lost-segments'][0]['end-segno'],
-            '000000010000000000000009')
+            '00000001000000000000000A')
 
         self.assertEqual(
             show_tli2_after['lost-segments'][0]['begin-segno'],
-            '000000020000000000000009')
+            '00000002000000000000000A')
 
         self.assertEqual(
             show_tli2_after['lost-segments'][0]['end-segno'],
-            '000000020000000000000009')
+            '00000002000000000000000A')
 
         self.validate_pb(backup_dir, 'node')
 

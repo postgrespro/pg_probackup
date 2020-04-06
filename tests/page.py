@@ -54,6 +54,7 @@ class PageTest(ProbackupTest, unittest.TestCase):
 
         self.backup_node(backup_dir, 'node', node)
 
+        # TODO: make it dynamic
         node.safe_psql(
             "postgres",
             "delete from t_heap where ctid >= '(11,0)'")
@@ -97,6 +98,80 @@ class PageTest(ProbackupTest, unittest.TestCase):
             "select * from t_heap")
 
         self.assertEqual(result1, result2)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_page_vacuum_truncate_1(self):
+        """
+        make node, create table, take full backup,
+        delete all data, vacuum relation,
+        take page backup, insert some data,
+        take second page backup and check data correctness
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={'autovacuum': 'off'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        node.safe_psql(
+            "postgres",
+            "create sequence t_seq; "
+            "create table t_heap as select i as id, "
+            "md5(i::text) as text, "
+            "md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(0,1024) i")
+
+        node.safe_psql(
+            "postgres",
+            "vacuum t_heap")
+
+        self.backup_node(backup_dir, 'node', node)
+
+        node.safe_psql(
+            "postgres",
+            "delete from t_heap")
+
+        node.safe_psql(
+            "postgres",
+            "vacuum t_heap")
+
+        self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        node.safe_psql(
+            "postgres",
+            "insert into t_heap select i as id, "
+            "md5(i::text) as text, "
+            "md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(0,1) i")
+
+        self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        pgdata = self.pgdata_content(node.data_dir)
+
+        node_restored = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node_restored'))
+        node_restored.cleanup()
+
+        self.restore_node(backup_dir, 'node', node_restored)
+
+        # Physical comparison
+        pgdata_restored = self.pgdata_content(node_restored.data_dir)
+        self.compare_pgdata(pgdata, pgdata_restored)
+
+        self.set_auto_conf(node_restored, {'port': node_restored.port})
+        node_restored.slow_start()
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -316,13 +391,12 @@ class PageTest(ProbackupTest, unittest.TestCase):
         # PGBENCH STUFF
         pgbench = node.pgbench(options=['-T', '50', '-c', '1', '--no-vacuum'])
         pgbench.wait()
-        node.safe_psql("postgres", "checkpoint")
 
         # GET LOGICAL CONTENT FROM NODE
         result = node.safe_psql("postgres", "select * from pgbench_accounts")
         # PAGE BACKUP
-        self.backup_node(
-            backup_dir, 'node', node, backup_type='page')
+        self.backup_node(backup_dir, 'node', node, backup_type='page')
+
         # GET PHYSICAL CONTENT FROM NODE
         pgdata = self.pgdata_content(node.data_dir)
 
@@ -389,18 +463,15 @@ class PageTest(ProbackupTest, unittest.TestCase):
             "postgres",
             "create table t_heap tablespace somedata as select i as id,"
             " md5(i::text) as text, md5(i::text)::tsvector as tsvector"
-            " from generate_series(0,100) i"
-        )
+            " from generate_series(0,100) i")
 
         node.safe_psql(
             "postgres",
-            "delete from t_heap"
-        )
+            "delete from t_heap")
 
         node.safe_psql(
             "postgres",
-            "vacuum t_heap"
-        )
+            "vacuum t_heap")
 
         # PAGE BACKUP
         self.backup_node(
@@ -410,8 +481,7 @@ class PageTest(ProbackupTest, unittest.TestCase):
 
         # RESTORE
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored')
-        )
+            base_dir=os.path.join(module_name, fname, 'node_restored'))
         node_restored.cleanup()
 
         self.restore_node(
@@ -749,7 +819,7 @@ class PageTest(ProbackupTest, unittest.TestCase):
         self.backup_node(backup_dir, 'node', node)
 
         # make some wals
-        node.pgbench_init(scale=4)
+        node.pgbench_init(scale=10)
 
         # delete last wal segment
         wals_dir = os.path.join(backup_dir, 'wal', 'node')
@@ -804,7 +874,6 @@ class PageTest(ProbackupTest, unittest.TestCase):
                 'INFO: Wait for WAL segment' in e.message and
                 'to be archived' in e.message and
                 'Could not read WAL record at' in e.message and
-                'incorrect resource manager data checksum in record at' in e.message and
                 'Possible WAL corruption. Error has occured during reading WAL segment' in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
@@ -829,7 +898,6 @@ class PageTest(ProbackupTest, unittest.TestCase):
                 'INFO: Wait for WAL segment' in e.message and
                 'to be archived' in e.message and
                 'Could not read WAL record at' in e.message and
-                'incorrect resource manager data checksum in record at' in e.message and
                 'Possible WAL corruption. Error has occured during reading WAL segment "{0}"'.format(
                     file) in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
@@ -872,8 +940,10 @@ class PageTest(ProbackupTest, unittest.TestCase):
         self.set_archiving(backup_dir, 'alien_node', alien_node)
         alien_node.slow_start()
 
-        self.backup_node(backup_dir, 'node', node)
-        self.backup_node(backup_dir, 'alien_node', alien_node)
+        self.backup_node(
+            backup_dir, 'node', node, options=['--stream'])
+        self.backup_node(
+            backup_dir, 'alien_node', alien_node, options=['--stream'])
 
         # make some wals
         node.safe_psql(
@@ -926,8 +996,6 @@ class PageTest(ProbackupTest, unittest.TestCase):
                 'INFO: Wait for WAL segment' in e.message and
                 'to be archived' in e.message and
                 'Could not read WAL record at' in e.message and
-                'WAL file is from different database system: WAL file database system identifier is' in e.message and
-                'pg_control database system identifier is' in e.message and
                 'Possible WAL corruption. Error has occured during reading WAL segment' in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
@@ -1047,8 +1115,7 @@ class PageTest(ProbackupTest, unittest.TestCase):
 
         # RESTORE
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored')
-        )
+            base_dir=os.path.join(module_name, fname, 'node_restored'))
 
         node_restored.cleanup()
         self.restore_node(
@@ -1108,6 +1175,85 @@ class PageTest(ProbackupTest, unittest.TestCase):
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd)
             )
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    # @unittest.expectedFailure
+    def test_multi_timeline_page(self):
+        """
+        Check that backup in PAGE mode choose
+        parent backup correctly:
+        t12        /---P-->
+        ...
+        t3      /---->
+        t2   /---->
+        t1 -F-----D->
+
+        P must have F as parent
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={'autovacuum': 'off'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        node.pgbench_init(scale=50)
+        full_id = self.backup_node(backup_dir, 'node', node)
+
+        pgbench = node.pgbench(options=['-T', '20', '-c', '1', '--no-vacuum'])
+        pgbench.wait()
+
+        self.backup_node(backup_dir, 'node', node, backup_type='delta')
+
+        node.cleanup()
+        self.restore_node(
+            backup_dir, 'node', node, backup_id=full_id,
+            options=[
+                '--recovery-target=immediate',
+                '--recovery-target-action=promote'])
+
+        node.slow_start()
+
+        pgbench = node.pgbench(options=['-T', '20', '-c', '1', '--no-vacuum'])
+        pgbench.wait()
+
+        # create timelines
+        for i in range(2, 12):
+            node.cleanup()
+            self.restore_node(
+                backup_dir, 'node', node, backup_id=full_id,
+                options=['--recovery-target-timeline={0}'.format(i)])
+            node.slow_start()
+            pgbench = node.pgbench(options=['-T', '3', '-c', '1', '--no-vacuum'])
+            pgbench.wait()
+
+        page_id = self.backup_node(
+            backup_dir, 'node', node, backup_type='page',
+            options=['--log-level-file=VERBOSE'])
+
+        pgdata = self.pgdata_content(node.data_dir)
+        node.cleanup()
+        self.restore_node(backup_dir, 'node', node)
+        pgdata_restored = self.pgdata_content(node.data_dir)
+        self.compare_pgdata(pgdata, pgdata_restored)
+
+        show = self.show_archive(backup_dir)
+
+        timelines = show[0]['timelines']
+
+        # self.assertEqual()
+        self.assertEqual(
+            self.show_pb(backup_dir, 'node', page_id)['parent-backup-id'],
+            full_id)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)

@@ -103,6 +103,23 @@ do_add_instance(InstanceConfig *instance)
 				   SOURCE_FILE);
 	config_set_opt(instance_options, &instance->xlog_seg_size,
 				   SOURCE_FILE);
+
+	/* Kludge: do not save remote options into config */
+	config_set_opt(instance_options, &instance_config.remote.host,
+				   SOURCE_DEFAULT);
+	config_set_opt(instance_options, &instance_config.remote.proto,
+				   SOURCE_DEFAULT);
+	config_set_opt(instance_options, &instance_config.remote.port,
+				   SOURCE_DEFAULT);
+	config_set_opt(instance_options, &instance_config.remote.path,
+				   SOURCE_DEFAULT);
+	config_set_opt(instance_options, &instance_config.remote.user,
+				   SOURCE_DEFAULT);
+	config_set_opt(instance_options, &instance_config.remote.ssh_options,
+				   SOURCE_DEFAULT);
+	config_set_opt(instance_options, &instance_config.remote.ssh_config,
+				   SOURCE_DEFAULT);
+
 	/* pgdata was set through command line */
 	do_set_config(true);
 

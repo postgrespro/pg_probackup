@@ -24,22 +24,27 @@ class RemoteTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
 
-        try:
-            self.backup_node(
-                backup_dir, 'node',
-                node, options=['--remote-proto=ssh', '--stream'], no_remote=True)
-            # we should die here because exception is what we expect to happen
-            self.assertEqual(
-                1, 0,
-                "Expecting Error because remote-host option is missing."
-                "\n Output: {0} \n CMD: {1}".format(
-                    repr(self.output), self.cmd))
-        except ProbackupException as e:
-            self.assertIn(
-                "Insert correct error",
-                e.message,
-                "\n Unexpected Error Message: {0}\n CMD: {1}".format(
-                    repr(e.message), self.cmd))
+        output = self.backup_node(
+            backup_dir, 'node', node,
+            options=['--stream'], no_remote=True, return_id=False)
+        self.assertIn('remote: false', output)
+
+        # try:
+        #     self.backup_node(
+        #         backup_dir, 'node',
+        #         node, options=['--remote-proto=ssh', '--stream'], no_remote=True)
+        #     # we should die here because exception is what we expect to happen
+        #     self.assertEqual(
+        #         1, 0,
+        #         "Expecting Error because remote-host option is missing."
+        #         "\n Output: {0} \n CMD: {1}".format(
+        #             repr(self.output), self.cmd))
+        # except ProbackupException as e:
+        #     self.assertIn(
+        #         "Insert correct error",
+        #         e.message,
+        #         "\n Unexpected Error Message: {0}\n CMD: {1}".format(
+        #             repr(e.message), self.cmd))
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
