@@ -988,7 +988,7 @@ create_recovery_conf(time_t backup_id,
 		{
 			/* default cmdline, ok for local restore */
 			sprintf(restore_command_guc, "%s archive-get -B %s --instance %s "
-					"--wal-file-path=%%p --wal-file-name=%%f --batch-size=20",
+					"--wal-file-path=%%p --wal-file-name=%%f",
 					PROGRAM_FULL_PATH ? PROGRAM_FULL_PATH : PROGRAM_NAME,
 					backup_path, instance_name);
 
