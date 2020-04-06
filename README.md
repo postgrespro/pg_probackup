@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.com/postgrespro/pg_probackup.svg?branch=master)](https://travis-ci.com/postgrespro/pg_probackup)
+
 # pg_probackup
 
 `pg_probackup` is a utility to manage backup and recovery of PostgreSQL database clusters. It is designed to perform periodic backups of the PostgreSQL instance that enable you to restore the server in case of a failure.
