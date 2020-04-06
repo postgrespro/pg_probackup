@@ -2709,3 +2709,56 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_parent_backup_made_by_newer_version(self):
+        """incremental backup with parent made by newer version"""
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'])
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        backup_id = self.backup_node(backup_dir, 'node', node)
+
+        control_file = os.path.join(
+            backup_dir, "backups", "node", backup_id,
+            "backup.control")
+
+        version = self.probackup_version
+        fake_new_version = str(int(version.split('.')[0]) + 1) + '.0.0'
+
+        with open(control_file, 'r') as f:
+            data = f.read();
+
+        data = data.replace(version, fake_new_version)
+
+        with open(control_file, 'w') as f:
+            f.write(data);
+
+        try:
+            self.backup_node(backup_dir, 'node', node, backup_type="page")
+            # we should die here because exception is what we expect to happen
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because incremental backup should not be possible "
+                "if parent made by newer version.\n Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                "pg_probackup do not guarantee to be forward compatible. "
+                "Please upgrade pg_probackup binary.",
+                e.message,
+                "\n Unexpected Error Message: {0}\n CMD: {1}".format(
+                    repr(e.message), self.cmd))
+
+        self.assertEqual(
+            self.show_pb(backup_dir, 'node')[1]['status'], "ERROR")
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
