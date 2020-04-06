@@ -1129,8 +1129,18 @@ do_archive_get(InstanceConfig *instance, const char *prefetch_dir_arg,
 			/* We`ve failed to satisfy current request from prefetch directory,
 			 * therefore we can discard its content, since it may be corrupted or
 			 * contain stale files.
+			 *
+			 * UPDATE: cannot do that:
+			 * https://www.postgresql.org/message-id/dd6690b0-ec03-6b3c-6fac-c963f91f87a7%40postgrespro.ru
 			 */
-			rmtree(prefetch_dir, false);
+
+			//rmtree(prefetch_dir, false);
+			/* count the number of files in prefetch directory ... */
+			if (count_files_in_dir(prefetch_dir) > batch_size)
+				/* ... if it exeeds batch size,
+				 * then we assume that prefetch directory contain garbage
+				 */
+				rmtree(prefetch_dir, false);
 
 			/* prefetch files */
 			n_prefetched = run_wal_prefetch(prefetch_dir, instance->arclog_path,
@@ -1149,7 +1159,7 @@ do_archive_get(InstanceConfig *instance, const char *prefetch_dir_arg,
 			{
 				/* prefetch failed again, discard it */
 				n_prefetched = 0;
-				rmtree(prefetch_dir, false);
+//				rmtree(prefetch_dir, false);
 			}
 		}
 	}

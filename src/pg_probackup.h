@@ -855,6 +855,7 @@ extern bool backup_contains_external(const char *dir, parray *dirs_list);
 
 extern int dir_create_dir(const char *path, mode_t mode);
 extern bool dir_is_empty(const char *path, fio_location location);
+extern uint32 count_files_in_dir(const char *path);
 
 extern bool fileExists(const char *path, fio_location location);
 extern size_t pgFileSize(const char *path);
