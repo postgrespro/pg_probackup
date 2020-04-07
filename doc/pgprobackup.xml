@@ -3686,7 +3686,7 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
       <listitem>
       <para>
         Sets the
-        <ulink url="https://postgrespro.com/docs/postgresql/current/runtime-config-replication#GUC-PRIMARY-SLOT-NAME">primary_slot_name</ulink>
+        <ulink url="https://postgrespro.com/docs/postgresql/current/runtime-config-replication.html#GUC-PRIMARY-SLOT-NAME">primary_slot_name</ulink>
         parameter to the specified value.
         This option will be ignored unless the <option>-R</option> flag if specified.
       </para>
