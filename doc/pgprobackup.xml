@@ -3957,7 +3957,7 @@ pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replace
       <title>archive-push</title>
       <programlisting>
 pg_probackup archive-push -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable>
---wal-file-name=<replaceable>wal_file_name</replaceable>
+--wal-file-name=<replaceable>wal_file_name</replaceable> [--wal-file-path=<replaceable>wal_file_path</replaceable>]
 [--help] [--no-sync] [--compress] [--no-ready-rename] [--overwrite]
 [-j <replaceable>num_threads</replaceable>] [--batch-size=<replaceable>batch_size</replaceable>]
 [--archive-timeout=<replaceable>timeout</replaceable>]
@@ -3973,12 +3973,10 @@ pg_probackup archive-push -B <replaceable>backup_dir</replaceable> --instance <r
         backup instance and the cluster do not match, this command
         fails with the following error message: <literal>Refuse to push WAL
         segment segment_name into archive. Instance parameters
-        mismatch.</literal> For each WAL file moved to the backup catalog, you
-        will see the following message in the <productname>PostgreSQL</productname> log file:
-        <literal>pg_probackup archive-push completed successfully</literal>.
+        mismatch.</literal>
       </para>
       <para>
-        If the files to be copied already exist in the backup catalog,
+        If the files to be copied already exists in the backup catalog,
         <application>pg_probackup</application> computes and compares their checksums. If the
         checksums match, <command>archive-push</command> skips the corresponding file and
         returns a successful execution code. Otherwise, <command>archive-push</command>
@@ -4025,6 +4023,8 @@ pg_probackup archive-push -B <replaceable>backup_dir</replaceable> --instance <r
       <title>archive-get</title>
       <programlisting>
 pg_probackup archive-get -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> --wal-file-path=<replaceable>wal_file_path</replaceable> --wal-file-name=<replaceable>wal_file_name</replaceable>
+[-j <replaceable>num_threads</replaceable>] [--batch-size=<replaceable>batch_size</replaceable>]
+[--prefetch-dir=<replaceable>prefetch_dir_path</replaceable>] [--no-validate-wal]
 [--help] [<replaceable>remote_options</replaceable>] [<replaceable>logging_options</replaceable>]
 </programlisting>
       <para>
@@ -4034,6 +4034,17 @@ pg_probackup archive-get -B <replaceable>backup_dir</replaceable> --instance <re
         <command>restore_command</command> when
         restoring backups using a WAL archive. You do not need to set
         it manually.
+      </para>
+
+      <para>
+        To speed up recovery, you can specify the <option>-j</option> option
+        to run <command>archive-get</command> on multiple threads.
+        If you provide the <option>--batch-size</option> option, WAL segments
+        will be copied in batches of the specified size.
+      </para>
+
+      <para>
+        For details, see section <link linkend="pbk-archiving-options">Archiving Options</link>.
       </para>
     </refsect3>
   </refsect2>
@@ -4777,7 +4788,8 @@ pg_probackup archive-get -B <replaceable>backup_dir</replaceable> --instance <re
       <listitem>
       <para>
         Sets the maximum number of files that can be copied into the archive
-        by a single <command>archive-push</command> process.
+        by a single <command>archive-push</command> process, or from
+        the archive by a single <command>archive-get</command> process.
       </para>
       </listitem>
       </varlistentry>
@@ -4789,6 +4801,7 @@ pg_probackup archive-get -B <replaceable>backup_dir</replaceable> --instance <re
         Sets the timeout for considering existing <literal>.part</literal>
         files to be stale. By default, <application>pg_probackup</application>
         waits 300 seconds.
+        This option can be used only with <xref linkend="pbk-archive-push"/> command.
       </para>
       </listitem>
       </varlistentry>
@@ -4800,6 +4813,7 @@ pg_probackup archive-get -B <replaceable>backup_dir</replaceable> --instance <re
         Do not rename status files in the <literal>archive_status</literal> directory.
         This option should be used only if <parameter>archive_command</parameter>
         contains multiple commands.
+        This option can be used only with <xref linkend="pbk-archive-push"/> command.
       </para>
       </listitem>
       </varlistentry>
@@ -4811,6 +4825,31 @@ pg_probackup archive-get -B <replaceable>backup_dir</replaceable> --instance <re
         Do not sync copied WAL files to disk. You can use this flag to speed
         up archiving process. Using this flag can result in WAL archive
         corruption in case of operating system or hardware crash.
+        This option can be used only with <xref linkend="pbk-archive-push"/> command.
+      </para>
+      </listitem>
+      </varlistentry>
+
+      <varlistentry>
+<term><option>--prefetch-dir=<replaceable>path</replaceable></option></term>
+      <listitem>
+      <para>
+        Directory used to store prefetched WAL segments if <option>--batch-size</option> option is used.
+        Directory must be located on the same filesystem and on the same mountpoint the
+        <literal>PGDATA/pg_wal</literal> is located.
+        By default files are stored in <literal>PGDATA/pg_wal/pbk_prefetch</literal> directory.
+        This option can be used only with <xref linkend="pbk-archive-get"/> command.
+      </para>
+      </listitem>
+      </varlistentry>
+
+      <varlistentry>
+<term><option>--no-validate-wal</option></term>
+      <listitem>
+      <para>
+        Do not validate prefetched WAL file before using it.
+        Use this option if you want to increase the speed of recovery.
+        This option can be used only with <xref linkend="pbk-archive-get"/> command.
       </para>
       </listitem>
       </varlistentry>
