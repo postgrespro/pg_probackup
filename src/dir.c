@@ -1627,40 +1627,6 @@ dir_is_empty(const char *path, fio_location location)
 }
 
 /*
- * Check if directory empty.
- */
-uint32
-count_files_in_dir(const char *path)
-{
-	DIR		   *dir;
-	struct dirent *dir_ent;
-	uint32 n_files = 0;
-
-	dir = opendir(path);
-	if (dir == NULL)
-	{
-		/* Directory in path doesn't exist */
-		if (errno == ENOENT)
-			return n_files;
-		elog(ERROR, "Cannot open directory \"%s\": %s", path, strerror(errno));
-	}
-
-	while ((dir_ent = readdir(dir)))
-	{
-		/* Skip entries point current dir or parent dir */
-		if (strcmp(dir_ent->d_name, ".") == 0 ||
-			strcmp(dir_ent->d_name, "..") == 0)
-			continue;
-
-		n_files++;
-	}
-
-	fio_closedir(dir);
-
-	return n_files;
-}
-
-/*
  * Return true if the path is a existing regular file.
  */
 bool

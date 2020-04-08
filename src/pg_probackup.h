@@ -707,8 +707,8 @@ extern int do_add_instance(InstanceConfig *instance);
 extern void do_archive_push(InstanceConfig *instance, char *wal_file_path,
 						   char *wal_file_name, int batch_size, bool overwrite,
 						   bool no_sync, bool no_ready_rename);
-extern void do_archive_get(InstanceConfig *instance, const char *prefetch_dir_arg,
-						   char *wal_file_path, char *wal_file_name, int batch_size);
+extern void do_archive_get(InstanceConfig *instance, const char *prefetch_dir_arg, char *wal_file_path,
+						   char *wal_file_name, int batch_size, bool validate_wal);
 
 /* in configure.c */
 extern void do_show_config(void);
@@ -855,7 +855,6 @@ extern bool backup_contains_external(const char *dir, parray *dirs_list);
 
 extern int dir_create_dir(const char *path, mode_t mode);
 extern bool dir_is_empty(const char *path, fio_location location);
-extern uint32 count_files_in_dir(const char *path);
 
 extern bool fileExists(const char *path, fio_location location);
 extern size_t pgFileSize(const char *path);
@@ -923,9 +922,8 @@ extern void validate_wal(pgBackup *backup, const char *archivedir,
 						 time_t target_time, TransactionId target_xid,
 						 XLogRecPtr target_lsn, TimeLineID tli,
 						 uint32 seg_size);
-extern bool validate_wal_segment(const char *wal_file_name,
-								 const char *prefetch_dir,
-								 uint32 wal_seg_size);
+extern bool validate_wal_segment(TimeLineID tli, XLogSegNo segno,
+								 const char *prefetch_dir, uint32 wal_seg_size);
 extern bool read_recovery_info(const char *archivedir, TimeLineID tli,
 							   uint32 seg_size,
 							   XLogRecPtr start_lsn, XLogRecPtr stop_lsn,

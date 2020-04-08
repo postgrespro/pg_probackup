@@ -35,12 +35,15 @@ static const char *get_gz_error(gzFile gzf, int errnum);
 //								 const char *to_path, fio_location to_location,
 //								 bool unlink_on_error);
 
-static bool next_wal_segment_exists(const char *prefetch_dir, const char *wal_file_name, uint32 wal_seg_size);
-static int run_wal_prefetch(const char *prefetch_dir, const char *archive_dir, const char *first_file,
-							 int num_threads, bool inclusive, int batch_size, uint32 wal_seg_size);
-static bool wal_satisfy_from_prefetch(const char *wal_file_name, const char *prefetch_dir,
-									  const char *absolute_wal_file_path, uint32 wal_seg_size,
-									  bool parse_wal);
+static bool next_wal_segment_exists(TimeLineID tli, XLogSegNo segno, const char *prefetch_dir, uint32 wal_seg_size);
+static uint32 run_wal_prefetch(const char *prefetch_dir, const char *archive_dir, TimeLineID tli,
+							   XLogSegNo first_segno, int num_threads, bool inclusive, int batch_size,
+							   uint32 wal_seg_size);
+static bool wal_satisfy_from_prefetch(TimeLineID tli, XLogSegNo segno, const char *wal_file_name,
+									  const char *prefetch_dir, const char *absolute_wal_file_path,
+									  uint32 wal_seg_size, bool parse_wal, int thread_num);
+
+static uint32 maintain_prefetch(const char *prefetch_dir, XLogSegNo first_segno, uint32 wal_seg_size);
 
 static bool prefetch_stop = false;
 static uint32 xlog_seg_size;
@@ -81,15 +84,7 @@ typedef struct
 	const char *archive_dir;
 	int         thread_num;
 	parray     *files;
-	uint32      n_prefetched;
-
-	/*
-	 * Return value from the thread.
-	 * 0 means there is no error,
-	 * 1 - there is an error.
-	 * 2 - no error, but nothing to push
-	 */
-	int         ret;
+	uint32      n_fetched;
 } archive_get_arg;
 
 typedef struct WALSegno
@@ -1010,12 +1005,16 @@ setup_push_filelist(const char *archive_status_dir, const char *first_file,
  * as the fact, that requested file is missing and may take irreversible actions.
  * So if file copying has failed we must retry several times before bailing out.
  *
+ * TODO: add support of -D option.
  * TOTHINK: what can be done about ssh connection been broken?
  * TOTHINk: do we need our own rmtree function ?
+ * TOTHINk: so sort of async prefetch ?
+
  */
 void
 do_archive_get(InstanceConfig *instance, const char *prefetch_dir_arg,
-			   char *wal_file_path, char *wal_file_name, int batch_size)
+			   char *wal_file_path, char *wal_file_name, int batch_size,
+			   bool validate_wal)
 {
 	int         fail_count = 0;
 	char		backup_wal_file_path[MAXPGPATH];
@@ -1026,8 +1025,8 @@ do_archive_get(InstanceConfig *instance, const char *prefetch_dir_arg,
 	char		prefetched_file[MAXPGPATH];
 
 	/* reporting */
-	pid_t       my_pid;
-	int         n_prefetched = 0;
+	pid_t       my_pid = getpid();
+	uint32      n_fetched = 0;
 	int 		n_actual_threads = num_threads;
 	uint32      n_files_in_prefetch = 0;
 
@@ -1035,9 +1034,6 @@ do_archive_get(InstanceConfig *instance, const char *prefetch_dir_arg,
 	instr_time  start_time, end_time;
 	double      get_time;
 	char        pretty_time_str[20];
-
-
-	my_pid = getpid();
 
 	if (wal_file_name == NULL)
 		elog(ERROR, "PID [%d]: Required parameter not specified: --wal-file-name %%f", my_pid);
@@ -1075,8 +1071,13 @@ do_archive_get(InstanceConfig *instance, const char *prefetch_dir_arg,
 	 */
 	if (IsXLogFileName(wal_file_name) && batch_size > 1)
 	{
+		XLogSegNo segno;
+		TimeLineID tli;
+
 		elog(VERBOSE, "Obtaining XLOG_SEG_SIZE from pg_control file for prefetch calculations");
 		instance->xlog_seg_size = get_xlog_seg_size(current_dir);
+
+		GetXLogFromFileName(wal_file_name, &tli, &segno, instance->xlog_seg_size);
 
 		if (prefetch_dir_arg)
 			/* use provided prefetch directory */
@@ -1101,73 +1102,66 @@ do_archive_get(InstanceConfig *instance, const char *prefetch_dir_arg,
 			 * cannot be trusted. In this case we discard all prefetched files and
 			 * copy requested file directly from archive.
 			 */
-			if (!next_wal_segment_exists(prefetch_dir, wal_file_name, instance->xlog_seg_size))
-				n_prefetched = run_wal_prefetch(prefetch_dir, instance->arclog_path, wal_file_name,
-								 num_threads, false, batch_size, instance->xlog_seg_size);
+			if (!next_wal_segment_exists(tli, segno, prefetch_dir, instance->xlog_seg_size))
+				n_fetched = run_wal_prefetch(prefetch_dir, instance->arclog_path,
+											 tli, segno, num_threads, false, batch_size,
+											 instance->xlog_seg_size);
 
-			n_files_in_prefetch = count_files_in_dir(prefetch_dir);
+			n_files_in_prefetch = maintain_prefetch(prefetch_dir, segno, instance->xlog_seg_size);
 
-			if (wal_satisfy_from_prefetch(wal_file_name, prefetch_dir,
+			if (wal_satisfy_from_prefetch(tli, segno, wal_file_name, prefetch_dir,
 										  absolute_wal_file_path, instance->xlog_seg_size,
-										  true))
+										  validate_wal, 0))
 			{
+				n_files_in_prefetch--;
 				elog(INFO, "PID [%d]: pg_probackup archive-get used prefetched WAL segment %s, prefetch state: %u/%u",
 						my_pid, wal_file_name, n_files_in_prefetch, batch_size);
 				goto get_done;
 			}
 			else
 			{
-				n_prefetched = 0;
+				/* discard prefetch */
+//				n_fetched = 0;
 				rmtree(prefetch_dir, false);
 			}
 		}
 		else
 		{
-			/* Do prefetch maintenance here:
-			 *  - Discard current content of prefetch directory
-			 *  - Prefetch files anew.
-			 */
+			/* Do prefetch maintenance here */
 
-			mkdir(prefetch_dir, DIR_PERMISSION); /* In case if prefetch directory do not exists yet */
+			mkdir(prefetch_dir, DIR_PERMISSION); /* In case prefetch directory do not exists yet */
 
 			/* We`ve failed to satisfy current request from prefetch directory,
 			 * therefore we can discard its content, since it may be corrupted or
 			 * contain stale files.
 			 *
-			 * UPDATE: cannot do that:
-			 * https://www.postgresql.org/message-id/dd6690b0-ec03-6b3c-6fac-c963f91f87a7%40postgrespro.ru
+			 * UPDATE: we should not discard prefetch easily, because failing to satisfy
+			 * request for WAL may come from this recovery behavior:
+			 * https://www.postgresql.org/message-id/flat/16159-f5a34a3a04dc67e0%40postgresql.org
 			 */
-
-			//rmtree(prefetch_dir, false);
-			/* count the number of files in prefetch directory ... */
-			n_files_in_prefetch = count_files_in_dir(prefetch_dir);
-			if (n_files_in_prefetch > batch_size + 1)
-				/* ... if it exeeds batch size,
-				 * then we assume that prefetch directory contain garbage
-				 */
-				rmtree(prefetch_dir, false);
+//			rmtree(prefetch_dir, false);
 
 			/* prefetch files */
-			n_prefetched = run_wal_prefetch(prefetch_dir, instance->arclog_path,
-				             wal_file_name, num_threads, true, batch_size,
-				             instance->xlog_seg_size);
+			n_fetched = run_wal_prefetch(prefetch_dir, instance->arclog_path,
+										 tli, segno, num_threads, true, batch_size,
+										 instance->xlog_seg_size);
 
-			n_files_in_prefetch = count_files_in_dir(prefetch_dir);
+			n_files_in_prefetch = maintain_prefetch(prefetch_dir, segno, instance->xlog_seg_size);
 
-			if (wal_satisfy_from_prefetch(wal_file_name, prefetch_dir,
-										 absolute_wal_file_path, instance->xlog_seg_size,
-										 true))
+			if (wal_satisfy_from_prefetch(tli, segno, wal_file_name, prefetch_dir, absolute_wal_file_path,
+										  instance->xlog_seg_size, validate_wal, 0))
 			{
+				n_files_in_prefetch--;
 				elog(INFO, "PID [%d]: pg_probackup archive-get copied WAL file %s, prefetch state: %u/%u",
 						my_pid, wal_file_name, n_files_in_prefetch, batch_size);
 				goto get_done;
 			}
-			else
-			{
-				/* prefetch failed again, discard it */
-				n_prefetched = 0;
+//			else
+//			{
+//				/* yet again failed to satisfy request from prefetch */
+//				n_fetched = 0;
 //				rmtree(prefetch_dir, false);
-			}
+//			}
 		}
 	}
 
@@ -1192,6 +1186,7 @@ do_archive_get(InstanceConfig *instance, const char *prefetch_dir_arg,
 			fail_count = 0;
 			elog(INFO, "PID [%d]: pg_probackup archive-get copied WAL file %s",
 						my_pid, wal_file_name);
+			n_fetched++;
 			break;
 		}
 		else
@@ -1220,8 +1215,8 @@ get_done:
 	 * with SIGTERN to prevent recovery from starting up database.
 	 */
 	if (fail_count == 0)
-		elog(INFO, "PID [%d]: pg_probackup archive-get completed successfully, prefetched: %i/%i, time elapsed: %s",
-				my_pid, n_prefetched, batch_size, pretty_time_str);
+		elog(INFO, "PID [%d]: pg_probackup archive-get completed successfully, fetched: %i/%i, time elapsed: %s",
+				my_pid, n_fetched, batch_size, pretty_time_str);
 	else
 		elog(ERROR, "PID [%d]: pg_probackup archive-get failed to deliver WAL file %s, time elapsed: %s",
 				my_pid, wal_file_name, pretty_time_str);
@@ -1233,18 +1228,14 @@ get_done:
  *
  * inclusive - should we copy first_file or not.
  */
-int run_wal_prefetch(const char *prefetch_dir, const char *archive_dir,
-					 const char *first_file, int num_threads, bool inclusive,
-					 int batch_size, uint32 wal_seg_size)
+uint32 run_wal_prefetch(const char *prefetch_dir, const char *archive_dir,
+					 TimeLineID tli, XLogSegNo first_segno, int num_threads,
+					 bool inclusive, int batch_size, uint32 wal_seg_size)
 {
 	int         i;
-	TimeLineID  tli;
 	XLogSegNo   segno;
-	XLogSegNo   first_segno;
 	parray     *batch_files = parray_new();
-	int 		n_total_prefetched = 0;
-
-	GetXLogFromFileName(first_file, &tli, &first_segno, wal_seg_size);
+	int 		n_total_fetched = 0;
 
 	if (!inclusive)
 		first_segno++;
@@ -1282,7 +1273,7 @@ int run_wal_prefetch(const char *prefetch_dir, const char *archive_dir,
 				break;
 			}
 
-			n_total_prefetched++;
+			n_total_fetched++;
 		}
 	}
 	else
@@ -1304,9 +1295,6 @@ int run_wal_prefetch(const char *prefetch_dir, const char *archive_dir,
 
 			arg->thread_num = i+1;
 			arg->files = batch_files;
-
-			/* By default there are some error */
-			arg->ret = 1;
 		}
 
 		/* Run threads */
@@ -1320,11 +1308,11 @@ int run_wal_prefetch(const char *prefetch_dir, const char *archive_dir,
 		for (i = 0; i < num_threads; i++)
 		{
 			pthread_join(threads[i], NULL);
-			n_total_prefetched += threads_args[i].n_prefetched;
+			n_total_fetched += threads_args[i].n_fetched;
 		}
 	}
 	/* TODO: free batch_files */
-	return n_total_prefetched;
+	return n_total_fetched;
 }
 
 /*
@@ -1362,13 +1350,12 @@ get_files(void *arg)
 			break;
 		}
 
-		args->n_prefetched++;
+		args->n_fetched++;
 	}
 
 	/* close ssh connection */
 	fio_disconnect();
 
-	args->ret = 0;
 	return NULL;
 }
 
@@ -1655,18 +1642,12 @@ cleanup:
 	return exit_code;
 }
 
-bool next_wal_segment_exists(const char *prefetch_dir, const char *wal_file_name, uint32 wal_seg_size)
+bool next_wal_segment_exists(TimeLineID tli, XLogSegNo segno, const char *prefetch_dir, uint32 wal_seg_size)
 {
-	TimeLineID  tli;
-	XLogSegNo   segno;
 	char        next_wal_filename[MAXFNAMELEN];
 	char        next_wal_fullpath[MAXPGPATH];
 
-	GetXLogFromFileName(wal_file_name, &tli, &segno, wal_seg_size);
-
-	segno++;
-
-	GetXLogFileName(next_wal_filename, tli, segno, wal_seg_size);
+	GetXLogFileName(next_wal_filename, tli, segno + 1, wal_seg_size);
 
 	join_path_components(next_wal_fullpath, prefetch_dir, next_wal_filename);
 
@@ -1681,9 +1662,9 @@ bool next_wal_segment_exists(const char *prefetch_dir, const char *wal_file_name
  * If requested file do not exists or validation has failed, then
  * caller must copy WAL file directly from archive.
  */
-bool wal_satisfy_from_prefetch(const char *wal_file_name, const char *prefetch_dir,
-							   const char *absolute_wal_file_path, uint32 wal_seg_size,
-							   bool parse_wal)
+bool wal_satisfy_from_prefetch(TimeLineID tli, XLogSegNo segno, const char *wal_file_name,
+							   const char *prefetch_dir, const char *absolute_wal_file_path,
+							   uint32 wal_seg_size, bool parse_wal, int thread_num)
 {
 	char prefetched_file[MAXPGPATH];
 
@@ -1697,13 +1678,14 @@ bool wal_satisfy_from_prefetch(const char *wal_file_name, const char *prefetch_d
 	 * then current segment cannot be validated, therefore cannot be used
 	 * to satisfy recovery request.
 	 */
-	if (parse_wal && !next_wal_segment_exists(prefetch_dir, wal_file_name, wal_seg_size))
+	if (parse_wal && !next_wal_segment_exists(tli, segno, prefetch_dir, wal_seg_size))
 		return false;
 
-	if (parse_wal && !validate_wal_segment(wal_file_name, prefetch_dir, wal_seg_size))
+	if (parse_wal && !validate_wal_segment(tli, segno, prefetch_dir, wal_seg_size))
 	{
 		/* prefetched WAL segment is not looking good */
-		elog(LOG, "Prefetched WAL segment %s is invalid, cannot use it", wal_file_name);
+		elog(LOG, "Thread [%d]: Prefetched WAL segment %s is invalid, cannot use it",
+				thread_num, wal_file_name);
 		unlink(prefetched_file);
 		return false;
 	}
@@ -1712,7 +1694,64 @@ bool wal_satisfy_from_prefetch(const char *wal_file_name, const char *prefetch_d
 	if (rename(prefetched_file, absolute_wal_file_path) == 0)
 		return true;
 	else
+	{
+		elog(WARNING, "Thread [%d]: Cannot rename file '%s' to '%s': %s",
+				thread_num, prefetched_file, absolute_wal_file_path, strerror(errno));
 		unlink(prefetched_file);
+	}
 
 	return false;
+}
+
+/*
+ * Maintain prefetch directory: drop redundant files
+ * Return number of files in prefetch directory.
+ */
+uint32 maintain_prefetch(const char *prefetch_dir, XLogSegNo first_segno, uint32 wal_seg_size)
+{
+	DIR		   *dir;
+	struct dirent *dir_ent;
+	uint32 n_files = 0;
+
+	XLogSegNo segno;
+	TimeLineID tli;
+
+	char fullpath[MAXPGPATH];
+
+	dir = opendir(prefetch_dir);
+	if (dir == NULL)
+	{
+		if (errno != ENOENT)
+			elog(WARNING, "Cannot open directory \"%s\": %s", prefetch_dir, strerror(errno));
+
+		return n_files;
+	}
+
+	while ((dir_ent = readdir(dir)))
+	{
+		/* Skip entries point current dir or parent dir */
+		if (strcmp(dir_ent->d_name, ".") == 0 ||
+			strcmp(dir_ent->d_name, "..") == 0)
+			continue;
+
+		if (IsXLogFileName(dir_ent->d_name))
+		{
+
+			GetXLogFromFileName(dir_ent->d_name, &tli, &segno, wal_seg_size);
+
+			/* potentially useful segment, keep it */
+			if (segno >= first_segno)
+			{
+				n_files++;
+				continue;
+			}
+		}
+
+		join_path_components(fullpath, prefetch_dir, dir_ent->d_name);
+		unlink(fullpath);
+	}
+
+	closedir(dir);
+
+	return n_files;
 }

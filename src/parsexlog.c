@@ -875,8 +875,8 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 
 		/* If segment do not exists, but the same
 		 * segment with '.partial' suffix does, use it instead */
-		if (!fileExists(reader_data->xlogpath, FIO_BACKUP_HOST) &&
-			fileExists(partial_file, FIO_BACKUP_HOST))
+		if (!fileExists(reader_data->xlogpath, FIO_LOCAL_HOST) &&
+			fileExists(partial_file, FIO_LOCAL_HOST))
 		{
 			snprintf(reader_data->xlogpath, MAXPGPATH, "%s", partial_file);
 		}
@@ -1720,19 +1720,14 @@ getRecordTimestamp(XLogReaderState *record, TimestampTz *recordXtime)
 	return false;
 }
 
-bool validate_wal_segment(const char *wal_file_name, const char *prefetch_dir, uint32 wal_seg_size)
+bool validate_wal_segment(TimeLineID tli, XLogSegNo segno, const char *prefetch_dir, uint32 wal_seg_size)
 {
-	TimeLineID  tli;
-	XLogSegNo   segno;
-
 	XLogRecPtr startpoint;
 	XLogRecPtr endpoint;
 
 	bool rc;
 	int tmp_num_threads = num_threads;
 	num_threads = 1;
-
-	GetXLogFromFileName(wal_file_name, &tli, &segno, wal_seg_size);
 
 	/* calculate startpoint and endpoint */
 	GetXLogRecPtr(segno, 0, wal_seg_size, startpoint);

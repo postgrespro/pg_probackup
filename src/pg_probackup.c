@@ -133,6 +133,7 @@ static bool no_ready_rename = false;
 
 /* archive get options */
 static char *prefetch_dir;
+bool no_validate_wal = false;
 
 /* show options */
 ShowFormat show_format = SHOW_PLAIN;
@@ -224,10 +225,11 @@ static ConfigOption cmd_options[] =
 	{ 'b', 153, "no-ready-rename",	&no_ready_rename,	SOURCE_CMD_STRICT },
 	{ 'i', 162, "batch-size",		&batch_size,		SOURCE_CMD_STRICT },
 	/* archive-get options */
-	{ 's', 163, "prefetch_dir",		&prefetch_dir,		SOURCE_CMD_STRICT },
+	{ 's', 163, "prefetch-dir",		&prefetch_dir,		SOURCE_CMD_STRICT },
+	{ 'b', 164, "no-validate-wal",	&no_validate_wal,	SOURCE_CMD_STRICT },
 	/* show options */
-	{ 'f', 164, "format",			opt_show_format,	SOURCE_CMD_STRICT },
-	{ 'b', 165, "archive",			&show_archive,		SOURCE_CMD_STRICT },
+	{ 'f', 165, "format",			opt_show_format,	SOURCE_CMD_STRICT },
+	{ 'b', 166, "archive",			&show_archive,		SOURCE_CMD_STRICT },
 	/* set-backup options */
 	{ 'I', 170, "ttl", &ttl, SOURCE_CMD_STRICT, SOURCE_DEFAULT, 0, OPTION_UNIT_S, option_get_value},
 	{ 's', 171, "expire-time",		&expire_time_string,	SOURCE_CMD_STRICT },
@@ -772,7 +774,7 @@ main(int argc, char *argv[])
 			break;
 		case ARCHIVE_GET_CMD:
 			do_archive_get(&instance_config, prefetch_dir,
-							wal_file_path, wal_file_name, batch_size);
+						   wal_file_path, wal_file_name, batch_size, !no_validate_wal);
 			break;
 		case ADD_INSTANCE_CMD:
 			return do_add_instance(&instance_config);
