@@ -398,7 +398,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             log_content)
 
         self.assertIn(
-            'pg_probackup push WAL file',
+            'pg_probackup archive-push WAL file',
             log_content)
 
         self.assertIn(
@@ -482,7 +482,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         self.assertIn(
             'DETAIL:  The failed archive command was:', log_content)
         self.assertIn(
-            'pg_probackup push WAL file', log_content)
+            'pg_probackup archive-push WAL file', log_content)
         self.assertNotIn(
             'WAL file already exists in archive with '
             'different checksum, overwriting', log_content)
@@ -1767,7 +1767,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
-    # @unittest.skip("skip")
+    @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_archiving_and_slots(self):
         """
