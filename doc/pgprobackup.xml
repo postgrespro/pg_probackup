@@ -5252,7 +5252,7 @@ INFO: Backup PZ7YK2 completed
       <step id="pbk-lets-take-a-look-at-the-backup-catalog">
         <title>Let's take a look at the backup catalog:</title>
         <programlisting>
-[backupman@backup_host] pg_probackup-11 backup -B /mnt/backups --instance 'pg-11'
+[backupman@backup_host] pg_probackup-11 show -B /mnt/backups --instance 'pg-11'
 
 BACKUP INSTANCE 'pg-11'
 ==================================================================================================================================
@@ -5343,7 +5343,7 @@ remote-host = postgres_host
       <step id="pbk-lets-take-a-look-at-the-backup-catalog-1">
         <title>Let's take a look at the backup catalog:</title>
         <programlisting>
-[backupman@backup_host] pg_probackup-11 backup -B /mnt/backups --instance 'pg-11'
+[backupman@backup_host] pg_probackup-11 show -B /mnt/backups --instance 'pg-11'
 
 ====================================================================================================================================
  Instance  Version  ID      Recovery Time           Mode   WAL Mode  TLI  Time   Data   WAL  Zratio  Start LSN   Stop LSN    Status
