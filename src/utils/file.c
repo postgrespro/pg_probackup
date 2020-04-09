@@ -1871,7 +1871,7 @@ int fio_send_file(const char *from_fullpath, const char *to_fullpath, FILE* out,
 
 /* Send file content
  * On error we return FIO_ERROR message with following codes
- *	FILE_MISSING (-1)
+ *  FILE_MISSING (-1)
  *  OPEN_FAILED  (-2)
  *  READ_FAILED  (-3)
  *

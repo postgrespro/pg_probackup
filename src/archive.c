@@ -949,7 +949,7 @@ setup_push_filelist(const char *archive_status_dir, const char *first_file,
 	/* guarantee that first filename is in batch list */
 	xlogfile = palloc(sizeof(WALSegno));
 	pg_atomic_init_flag(&xlogfile->lock);
-	strncpy(xlogfile->name, first_file, MAXFNAMELEN);
+	snprintf(xlogfile->name, MAXFNAMELEN, "%s", first_file);
 	parray_append(batch_files, xlogfile);
 
 	if (batch_size < 2)
@@ -982,7 +982,7 @@ setup_push_filelist(const char *archive_status_dir, const char *first_file,
 		xlogfile = palloc(sizeof(WALSegno));
 		pg_atomic_init_flag(&xlogfile->lock);
 
-		strncpy(xlogfile->name, filename, MAXFNAMELEN);
+		snprintf(xlogfile->name, MAXFNAMELEN, "%s", filename);
 		parray_append(batch_files, xlogfile);
 
 		if (parray_num(batch_files) >= batch_size)
@@ -1017,17 +1017,17 @@ do_archive_get(InstanceConfig *instance, const char *prefetch_dir_arg,
 			   bool validate_wal)
 {
 	int         fail_count = 0;
-	char		backup_wal_file_path[MAXPGPATH];
-	char		absolute_wal_file_path[MAXPGPATH];
-	char		current_dir[MAXPGPATH];
-	char		prefetch_dir[MAXPGPATH];
-	char		pg_xlog_dir[MAXPGPATH];
-	char		prefetched_file[MAXPGPATH];
+	char        backup_wal_file_path[MAXPGPATH];
+	char        absolute_wal_file_path[MAXPGPATH];
+	char        current_dir[MAXPGPATH];
+	char        prefetch_dir[MAXPGPATH];
+	char        pg_xlog_dir[MAXPGPATH];
+	char        prefetched_file[MAXPGPATH];
 
 	/* reporting */
 	pid_t       my_pid = getpid();
 	uint32      n_fetched = 0;
-	int 		n_actual_threads = num_threads;
+	int         n_actual_threads = num_threads;
 	uint32      n_files_in_prefetch = 0;
 
 	/* time reporting */
@@ -1062,6 +1062,9 @@ do_archive_get(InstanceConfig *instance, const char *prefetch_dir_arg,
 
 	num_threads = n_actual_threads;
 
+	elog(VERBOSE, "Obtaining XLOG_SEG_SIZE from pg_control file");
+	instance->xlog_seg_size = get_xlog_seg_size(current_dir);
+
 	/* Prefetch optimization kicks in only if simple XLOG segments is requested
 	 * and batching is enabled.
 	 *
@@ -1073,9 +1076,6 @@ do_archive_get(InstanceConfig *instance, const char *prefetch_dir_arg,
 	{
 		XLogSegNo segno;
 		TimeLineID tli;
-
-		elog(VERBOSE, "Obtaining XLOG_SEG_SIZE from pg_control file for prefetch calculations");
-		instance->xlog_seg_size = get_xlog_seg_size(current_dir);
 
 		GetXLogFromFileName(wal_file_name, &tli, &segno, instance->xlog_seg_size);
 
@@ -1199,10 +1199,12 @@ do_archive_get(InstanceConfig *instance, const char *prefetch_dir_arg,
 	/* TODO/TOTHINK:
 	 * If requested file is corrupted, we have no way to warn PostgreSQL about it.
 	 * We either can:
-	 * 1. feed to recovery and let PostgreSQL sort it out. Currently we this.
+	 * 1. feed to recovery and let PostgreSQL sort it out. Currently we do this.
 	 * 2. error out.
 	 *
 	 * Also note, that we can detect corruption only if prefetch mode is used.
+	 * TODO: if corruption or network problem encountered, kill yourself
+	 * with SIGTERN to prevent recovery from starting up database.
 	 */
 
 get_done:
@@ -1211,9 +1213,6 @@ get_done:
 	get_time = INSTR_TIME_GET_DOUBLE(end_time);
 	pretty_time_interval(get_time, pretty_time_str, 20);
 
-	/* TODO: if corruption or network problem encountered, kill yourself
-	 * with SIGTERN to prevent recovery from starting up database.
-	 */
 	if (fail_count == 0)
 		elog(INFO, "PID [%d]: pg_probackup archive-get completed successfully, fetched: %i/%i, time elapsed: %s",
 				my_pid, n_fetched, batch_size, pretty_time_str);
@@ -1380,7 +1379,6 @@ get_wal_file(const char *filename, const char *from_fullpath,
 	{
 		elog(WARNING, "Thread [%d]: Failed to open file '%s': %s",
 				thread_num, to_fullpath, strerror(errno));
-		unlink(to_fullpath);
 		return false;
 	}
 
@@ -1393,7 +1391,7 @@ get_wal_file(const char *filename, const char *from_fullpath,
 		return false;
 	}
 
-	/* disable buffering */
+	/* disable buffering for output file */
 	setvbuf(out, NULL, _IONBF, BUFSIZ);
 
 	/* In prefetch mode, we do look only for full WAL segments
