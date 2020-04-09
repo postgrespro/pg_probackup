@@ -210,46 +210,36 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
                 "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;"
             )
 
-        if self.ptrack:
-            fnames = []
-            if node.major_version < 12:
-                fnames += [
-                    'pg_catalog.oideq(oid, oid)',
-                    'pg_catalog.ptrack_version()',
-                    'pg_catalog.pg_ptrack_clear()',
-                    'pg_catalog.pg_ptrack_control_lsn()',
-                    'pg_catalog.pg_ptrack_get_and_clear_db(oid, oid)',
-                    'pg_catalog.pg_ptrack_get_and_clear(oid, oid)',
-                    'pg_catalog.pg_ptrack_get_block_2(oid, oid, oid, bigint)'
-                    ]
-            else:
-                # TODO why backup works without these grants ?
-#                fnames += [
-#                    'pg_ptrack_get_pagemapset(pg_lsn)',
-#                    'pg_ptrack_control_lsn()',
-#                    'pg_ptrack_get_block(oid, oid, oid, bigint)'
-#                    ]
-
-                node.safe_psql(
-                    "backupdb",
-                    "CREATE SCHEMA ptrack")
-
-                node.safe_psql(
-                    "backupdb",
-                    "CREATE EXTENSION ptrack WITH SCHEMA ptrack")
-
-                node.safe_psql(
-                    "backupdb",
-                    "GRANT USAGE ON SCHEMA ptrack TO backup")
+        if node.major_version < 12:
+            fnames = [
+                'pg_catalog.oideq(oid, oid)',
+                'pg_catalog.ptrack_version()',
+                'pg_catalog.pg_ptrack_clear()',
+                'pg_catalog.pg_ptrack_control_lsn()',
+                'pg_catalog.pg_ptrack_get_and_clear_db(oid, oid)',
+                'pg_catalog.pg_ptrack_get_and_clear(oid, oid)',
+                'pg_catalog.pg_ptrack_get_block_2(oid, oid, oid, bigint)'
+                ]
 
             for fname in fnames:
                 node.safe_psql(
                     "backupdb",
                     "GRANT EXECUTE ON FUNCTION {0} TO backup".format(fname))
 
+        else:
             node.safe_psql(
                 "backupdb",
-                "GRANT SELECT ON TABLE pg_catalog.pg_extension TO backup")
+                "CREATE SCHEMA ptrack")
+            node.safe_psql(
+                "backupdb",
+                "CREATE EXTENSION ptrack WITH SCHEMA ptrack")
+            node.safe_psql(
+                "backupdb",
+                "GRANT USAGE ON SCHEMA ptrack TO backup")
+
+        node.safe_psql(
+            "backupdb",
+            "GRANT SELECT ON TABLE pg_catalog.pg_extension TO backup")
 
         if ProbackupTest.enterprise:
             node.safe_psql(
