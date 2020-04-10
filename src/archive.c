@@ -1217,7 +1217,7 @@ get_done:
 		elog(INFO, "PID [%d]: pg_probackup archive-get completed successfully, fetched: %i/%i, time elapsed: %s",
 				my_pid, n_fetched, batch_size, pretty_time_str);
 	else
-		elog(ERROR, "PID [%d]: pg_probackup archive-get failed to deliver WAL file %s, time elapsed: %s",
+		elog(ERROR, "PID [%d]: pg_probackup archive-get failed to deliver WAL file: %s, time elapsed: %s",
 				my_pid, wal_file_name, pretty_time_str);
 }
 
@@ -1468,8 +1468,8 @@ get_wal_file(const char *filename, const char *from_fullpath,
 	}
 
 	if (!prefetch_mode && (rc == FILE_MISSING))
-		elog(LOG, "Thread [%d]: Requested WAL file doesn't exists: '%s'",
-				thread_num, from_fullpath);
+		elog(LOG, "Thread [%d]: Target WAL file is missing: %s",
+				thread_num, filename);
 
 	if (rc < 0)
 	{
