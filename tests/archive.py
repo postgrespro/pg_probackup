@@ -1984,6 +1984,11 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         self.set_auto_conf(node_restored, {'port': node_restored.port})
         self.set_auto_conf(node_restored, {'hot_standby': 'off'})
 
+        # it will set node_restored as warm standby.
+#        with open(os.path.join(node_restored.data_dir, "standby.signal"), 'w') as f:
+#            f.flush()
+#            f.close()
+
         node_restored.slow_start()
 
         result = node.safe_psql(
