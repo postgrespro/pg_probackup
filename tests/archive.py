@@ -1767,7 +1767,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
-    # @unittest.skip("skip")
+    @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_archiving_and_slots(self):
         """
@@ -1903,6 +1903,101 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         self.assertNotIn('WARNING', output)
 
         # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.expectedFailure
+    # @unittest.skip("skip")
+    def test_archive_pg_receivexlog_partial_handling(self):
+        """check that archive-get delivers .partial and .gz.partial files"""
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+
+        node.slow_start()
+
+        self.backup_node(backup_dir, 'node', node, options=['--stream'])
+
+        replica = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'replica'))
+        replica.cleanup()
+
+        self.restore_node(
+            backup_dir, 'node', replica, replica.data_dir, options=['-R'])
+        self.set_auto_conf(replica, {'port': replica.port})
+        self.set_replica(node, replica)
+
+        self.add_instance(backup_dir, 'replica', replica)
+        # self.set_archiving(backup_dir, 'replica', replica, replica=True)
+
+        replica.slow_start(replica=True)
+
+        node.safe_psql('postgres', 'CHECKPOINT')
+
+        if self.get_version(replica) < 100000:
+            pg_receivexlog_path = self.get_bin_path('pg_receivexlog')
+        else:
+            pg_receivexlog_path = self.get_bin_path('pg_receivewal')
+
+        cmdline = [
+            pg_receivexlog_path, '-p', str(replica.port), '--synchronous',
+            '-D', os.path.join(backup_dir, 'wal', 'replica')]
+
+        if self.archive_compress and node.major_version >= 10:
+            cmdline += ['-Z', '1']
+
+        pg_receivexlog = self.run_binary(cmdline, asynchronous=True)
+
+        if pg_receivexlog.returncode:
+            self.assertFalse(
+                True,
+                'Failed to start pg_receivexlog: {0}'.format(
+                    pg_receivexlog.communicate()[1]))
+
+        node.safe_psql(
+            "postgres",
+            "create table t_heap as select i as id, md5(i::text) as text, "
+            "md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(0,1000000) i")
+
+        # FULL
+        self.backup_node(backup_dir, 'replica', replica, options=['--stream'])
+
+        node.safe_psql(
+            "postgres",
+            "insert into t_heap select i as id, md5(i::text) as text, "
+            "md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(1000000,2000000) i")
+
+        node_restored = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node_restored'))
+        node_restored.cleanup()
+
+        self.restore_node(
+            backup_dir, 'replica', node_restored,
+            node_restored.data_dir, options=['--recovery-target=latest', '--recovery-target-action=promote'])
+        self.set_auto_conf(node_restored, {'port': node_restored.port})
+        self.set_auto_conf(node_restored, {'hot_standby': 'off'})
+
+        node_restored.slow_start()
+
+        result = node.safe_psql(
+            "postgres",
+            "select sum(id) from t_heap")
+
+        result_new = node_restored.safe_psql(
+            "postgres",
+            "select sum(id) from t_heap")
+
+        self.assertEqual(result, result_new)
+
+        # Clean after yourself
+        pg_receivexlog.kill()
         self.del_test_dir(module_name, fname)
 
 # TODO test with multiple not archived segments.
