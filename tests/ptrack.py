@@ -3841,7 +3841,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
-    @unittest.expectedFailure
+    # @unittest.expectedFailure
     def test_ptrack_pg_resetxlog(self):
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
@@ -3946,7 +3946,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             )
         except ProbackupException as e:
             self.assertIn(
-                'Insert error message',
+                'ERROR: LSN from ptrack_control 0/0 differs from STOP LSN of previous backup',
                 e.message,
                 '\n Unexpected Error Message: {0}\n'
                 ' CMD: {1}'.format(repr(e.message), self.cmd))
