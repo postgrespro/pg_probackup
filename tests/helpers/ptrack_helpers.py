@@ -339,7 +339,7 @@ class ProbackupTest(object):
         options['wal_level'] = 'logical'
         options['hot_standby'] = 'off'
 
-        options['log_line_prefix'] = '"%t [%p]: [%l-1] "'
+        options['log_line_prefix'] = '%t [%p]: [%l-1] '
         options['log_statement'] = 'none'
         options['log_duration'] = 'on'
         options['log_min_duration_statement'] = 0
@@ -1259,7 +1259,8 @@ class ProbackupTest(object):
     def set_replica(
             self, master, replica,
             replica_name='replica',
-            synchronous=False
+            synchronous=False,
+            log_shipping=False
             ):
 
         self.set_auto_conf(
@@ -1279,19 +1280,22 @@ class ProbackupTest(object):
                 if os.stat(probackup_recovery_path).st_size > 0:
                     config = 'probackup_recovery.conf'
 
-            self.set_auto_conf(
-                replica,
-                {'primary_conninfo': 'user={0} port={1} application_name={2} '
-                ' sslmode=prefer sslcompression=1'.format(
-                    self.user, master.port, replica_name)},
-                config)
+            if not log_shipping:
+                self.set_auto_conf(
+                    replica,
+                    {'primary_conninfo': 'user={0} port={1} application_name={2} '
+                    ' sslmode=prefer sslcompression=1'.format(
+                        self.user, master.port, replica_name)},
+                    config)
         else:
             replica.append_conf('recovery.conf', 'standby_mode = on')
-            replica.append_conf(
-                'recovery.conf',
-                "primary_conninfo = 'user={0} port={1} application_name={2}"
-                " sslmode=prefer sslcompression=1'".format(
-                    self.user, master.port, replica_name))
+
+            if not log_shipping:
+                replica.append_conf(
+                    'recovery.conf',
+                    "primary_conninfo = 'user={0} port={1} application_name={2}"
+                    " sslmode=prefer sslcompression=1'".format(
+                        self.user, master.port, replica_name))
 
         if synchronous:
             self.set_auto_conf(
