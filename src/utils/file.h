@@ -40,6 +40,8 @@ typedef enum
 	FIO_SEND_PAGES,
 	FIO_SEND_PAGES_PAGEMAP,
 	FIO_ERROR,
+	FIO_SEND_FILE,
+//	FIO_CHUNK,
 	FIO_SEND_FILE_EOF,
 	FIO_SEND_FILE_CORRUPTION,
 	/* messages for closing connection */

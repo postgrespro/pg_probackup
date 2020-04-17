@@ -443,7 +443,7 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync)
 
 		/* TODO: add ms precision */
 		if (pagemap_isok)
-			elog(INFO, "Pagemap successfully extracted, time elapsed %.0f sec",
+			elog(INFO, "Pagemap successfully extracted, time elapsed: %.0f sec",
 				 difftime(end_time, start_time));
 		else
 			elog(ERROR, "Pagemap extraction failed, time elasped: %.0f sec",
