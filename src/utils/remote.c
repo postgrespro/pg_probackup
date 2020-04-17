@@ -220,7 +220,7 @@ bool launch_agent(void)
 			return false;
 	} else {
 #endif
-		elog(LOG, "Spawn agent %d version %s", child_pid, PROGRAM_VERSION);
+		elog(LOG, "Start SSH client process, pid %d", child_pid);
 		SYS_CHECK(close(infd[1]));  /* These are being used by the child */
 		SYS_CHECK(close(outfd[0]));
 		SYS_CHECK(close(errfd[1]));

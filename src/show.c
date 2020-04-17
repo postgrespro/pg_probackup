@@ -191,14 +191,18 @@ pretty_size(int64 size, char *buf, size_t len)
 }
 
 void
-pretty_time_interval(int64 num_seconds, char *buf, size_t len)
+pretty_time_interval(double time, char *buf, size_t len)
 {
-	int 	seconds = 0;
-	int 	minutes = 0;
-	int 	hours = 0;
-	int 	days = 0;
+	int     num_seconds = 0;
+	int     milliseconds = 0;
+	int     seconds = 0;
+	int     minutes = 0;
+	int     hours = 0;
+	int     days = 0;
 
-	if (num_seconds <= 0)
+	num_seconds = (int) time;
+
+	if (time <= 0)
 	{
 		strncpy(buf, "0", len);
 		return;
@@ -214,6 +218,7 @@ pretty_time_interval(int64 num_seconds, char *buf, size_t len)
 	num_seconds %= 60;
 
 	seconds = num_seconds;
+	milliseconds = (int)((time - (int) time) * 1000.0);
 
 	if (days > 0)
 	{
@@ -233,7 +238,16 @@ pretty_time_interval(int64 num_seconds, char *buf, size_t len)
 		return;
 	}
 
-	snprintf(buf, len, "%ds", seconds);
+	if (seconds > 0)
+	{
+		if (milliseconds > 0)
+			snprintf(buf, len, "%ds:%dms", seconds, milliseconds);
+		else
+			snprintf(buf, len, "%ds", seconds);
+		return;
+	}
+
+	snprintf(buf, len, "%dms", milliseconds);
 	return;
 }
 

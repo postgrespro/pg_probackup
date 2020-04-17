@@ -228,10 +228,9 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                 "without valid full backup.\n Output: {0} \n CMD: {1}".format(
                     repr(self.output), self.cmd))
         except ProbackupException as e:
-            self.assertIn(
-                "ERROR: Valid backup on current timeline 1 is not found. "
-                "Create new FULL backup before an incremental one.",
-                e.message,
+            self.assertTrue(
+                "WARNING: Valid backup on current timeline 1 is not found" in e.message and
+                "ERROR: Create new full backup before an incremental one" in e.message,
                 "\n Unexpected Error Message: {0}\n CMD: {1}".format(
                     repr(e.message), self.cmd))
 
@@ -2294,10 +2293,9 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                 "\n Output: {0} \n CMD: {1}".format(
                     repr(self.output), self.cmd))
         except ProbackupException as e:
-            self.assertIn(
-                'ERROR: Valid backup on current timeline 1 is not found. '
-                'Create new FULL backup before an incremental one.',
-                e.message,
+            self.assertTrue(
+                'WARNING: Valid backup on current timeline 1 is not found' in e.message and
+                'ERROR: Create new full backup before an incremental one' in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
@@ -2324,10 +2322,13 @@ class BackupTest(ProbackupTest, unittest.TestCase):
             initdb_params=['--data-checksums'],
             pg_options={
                 'archive_timeout': '30s',
-                'checkpoint_timeout': '1h'})
+                'archive_mode': 'always',
+                'checkpoint_timeout': '60s',
+                'wal_level': 'logical'})
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
+        self.set_config(backup_dir, 'node', options=['--archive-timeout=60s'])
         self.set_archiving(backup_dir, 'node', node)
         node.slow_start()
 
@@ -2447,12 +2448,15 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.restore_node(backup_dir, 'node', replica)
         self.set_replica(node, replica)
         self.add_instance(backup_dir, 'replica', replica)
+        self.set_config(
+            backup_dir, 'replica',
+            options=['--archive-timeout=120s', '--log-level-console=LOG'])
         self.set_archiving(backup_dir, 'replica', replica, replica=True)
         self.set_auto_conf(replica, {'hot_standby': 'on'})
 
         # freeze bgwriter to get rid of RUNNING XACTS records
-        bgwriter_pid = node.auxiliary_pids[ProcessType.BackgroundWriter][0]
-        gdb_checkpointer = self.gdb_attach(bgwriter_pid)
+        # bgwriter_pid = node.auxiliary_pids[ProcessType.BackgroundWriter][0]
+        # gdb_checkpointer = self.gdb_attach(bgwriter_pid)
 
         copy_tree(
             os.path.join(backup_dir, 'wal', 'node'),
@@ -2460,21 +2464,22 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 
         replica.slow_start(replica=True)
 
-        self.switch_wal_segment(node)
-        self.switch_wal_segment(node)
+        # self.switch_wal_segment(node)
+        # self.switch_wal_segment(node)
 
-        # FULL backup from replica
         self.backup_node(
             backup_dir, 'replica', replica,
-            datname='backupdb', options=['--stream', '-U', 'backup', '--archive-timeout=30s'])
+            datname='backupdb', options=['-U', 'backup'])
+
+        # stream full backup from replica
+        self.backup_node(
+            backup_dir, 'replica', replica,
+            datname='backupdb', options=['--stream', '-U', 'backup'])
 
 #        self.switch_wal_segment(node)
 
-        self.backup_node(
-            backup_dir, 'replica', replica, datname='backupdb',
-            options=['-U', 'backup', '--archive-timeout=300s'])
-
         # PAGE backup from replica
+        self.switch_wal_segment(node)
         self.backup_node(
             backup_dir, 'replica', replica, backup_type='page',
             datname='backupdb', options=['-U', 'backup', '--archive-timeout=30s'])
@@ -2484,20 +2489,22 @@ class BackupTest(ProbackupTest, unittest.TestCase):
             datname='backupdb', options=['--stream', '-U', 'backup'])
 
         # DELTA backup from replica
+        self.switch_wal_segment(node)
         self.backup_node(
             backup_dir, 'replica', replica, backup_type='delta',
-            datname='backupdb', options=['-U', 'backup', '--archive-timeout=30s'])
+            datname='backupdb', options=['-U', 'backup'])
         self.backup_node(
             backup_dir, 'replica', replica, backup_type='delta',
             datname='backupdb', options=['--stream', '-U', 'backup'])
 
         # PTRACK backup from replica
         if self.ptrack:
+            self.switch_wal_segment(node)
             self.backup_node(
-                backup_dir, 'replica', replica, backup_type='delta',
-                datname='backupdb', options=['-U', 'backup', '--archive-timeout=30s'])
+                backup_dir, 'replica', replica, backup_type='ptrack',
+                datname='backupdb', options=['-U', 'backup'])
             self.backup_node(
-                backup_dir, 'replica', replica, backup_type='delta',
+                backup_dir, 'replica', replica, backup_type='ptrack',
                 datname='backupdb', options=['--stream', '-U', 'backup'])
 
         # Clean after yourself

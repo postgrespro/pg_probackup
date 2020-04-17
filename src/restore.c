@@ -251,7 +251,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 
 		result = scan_parent_chain(dest_backup, &tmp_backup);
 
-		if (result == 0)
+		if (result == ChainIsBroken)
 		{
 			/* chain is broken, determine missing backup ID
 			 * and orphinize all his descendants
@@ -290,7 +290,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 			/* No point in doing futher */
 			elog(ERROR, "%s of backup %s failed.", action, base36enc(dest_backup->start_time));
 		}
-		else if (result == 1)
+		else if (result == ChainIsInvalid)
 		{
 			/* chain is intact, but at least one parent is invalid */
 			set_orphan_status(backups, tmp_backup);
@@ -403,7 +403,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 			 */
 			validate_wal(dest_backup, arclog_path, rt->target_time,
 						 rt->target_xid, rt->target_lsn,
-						 base_full_backup->tli, instance_config.xlog_seg_size);
+						 dest_backup->tli, instance_config.xlog_seg_size);
 		}
 		/* Orphanize every OK descendant of corrupted backup */
 		else
@@ -1326,7 +1326,7 @@ satisfy_timeline(const parray *timelines, const pgBackup *backup)
 		timeline = (TimeLineHistoryEntry *) parray_get(timelines, i);
 		if (backup->tli == timeline->tli &&
 			(XLogRecPtrIsInvalid(timeline->end) ||
-			 backup->stop_lsn < timeline->end))
+			 backup->stop_lsn <= timeline->end))
 			return true;
 	}
 	return false;

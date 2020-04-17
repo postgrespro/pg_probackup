@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.com/postgrespro/pg_probackup.svg?branch=master)](https://travis-ci.com/postgrespro/pg_probackup)
+
 # pg_probackup
 
 `pg_probackup` is a utility to manage backup and recovery of PostgreSQL database clusters. It is designed to perform periodic backups of the PostgreSQL instance that enable you to restore the server in case of a failure.
@@ -38,8 +40,9 @@ Regardless of the chosen backup type, all backups taken with `pg_probackup` supp
 
 `PTRACK` backup support provided via following options:
 * vanilla PostgreSQL compiled with ptrack patch. Currently there are patches for [PostgreSQL 9.6](https://gist.githubusercontent.com/gsmol/5b615c971dfd461c76ef41a118ff4d97/raw/e471251983f14e980041f43bea7709b8246f4178/ptrack_9.6.6_v1.5.patch) and [PostgreSQL 10](https://gist.githubusercontent.com/gsmol/be8ee2a132b88463821021fd910d960e/raw/de24f9499f4f314a4a3e5fae5ed4edb945964df8/ptrack_10.1_v1.5.patch)
-* Postgres Pro Standard 9.6, 10, 11
-* Postgres Pro Enterprise 9.6, 10, 11
+* vanilla PostgreSQL 12 with [ptrack extension](https://github.com/postgrespro/ptrack)
+* Postgres Pro Standard 9.6, 10, 11, 12
+* Postgres Pro Enterprise 9.6, 10, 11, 12
 
 ## Limitations
 

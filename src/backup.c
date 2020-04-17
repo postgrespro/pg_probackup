@@ -153,6 +153,10 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync)
 	PGconn	   *master_conn = NULL;
 	PGconn	   *pg_startbackup_conn = NULL;
 
+	/* used for multitimeline incremental backup */
+	parray       *tli_list = NULL;
+
+
 	/* for fancy reporting */
 	time_t		start_time, end_time;
 	char		pretty_time[20];
@@ -181,16 +185,42 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync)
 		current.backup_mode == BACKUP_MODE_DIFF_PTRACK ||
 		current.backup_mode == BACKUP_MODE_DIFF_DELTA)
 	{
-		char		prev_backup_filelist_path[MAXPGPATH];
-
 		/* get list of backups already taken */
 		backup_list = catalog_get_backup_list(instance_name, INVALID_BACKUP_ID);
 
 		prev_backup = catalog_get_last_data_backup(backup_list, current.tli, current.start_time);
 		if (prev_backup == NULL)
-			elog(ERROR, "Valid backup on current timeline %X is not found. "
-						"Create new FULL backup before an incremental one.",
+		{
+			/* try to setup multi-timeline backup chain */
+			elog(WARNING, "Valid backup on current timeline %u is not found, "
+						"try to look up on previous timelines",
 						current.tli);
+
+			tli_list = catalog_get_timelines(&instance_config);
+
+			if (parray_num(tli_list) == 0)
+				elog(WARNING, "Cannot find valid backup on previous timelines, "
+							"WAL archive is not available");
+			else
+			{
+				prev_backup = get_multi_timeline_parent(backup_list, tli_list, current.tli,
+														current.start_time, &instance_config);
+
+				if (prev_backup == NULL)
+					elog(WARNING, "Cannot find valid backup on previous timelines");
+			}
+
+			/* failed to find suitable parent, error out */
+			if (!prev_backup)
+				elog(ERROR, "Create new full backup before an incremental one");
+		}
+	}
+
+	if (prev_backup)
+	{
+		char		prev_backup_filelist_path[MAXPGPATH];
+
+		elog(INFO, "Parent backup: %s", base36enc(prev_backup->start_time));
 
 		join_path_components(prev_backup_filelist_path, prev_backup->root_dir,
 															DATABASE_FILE_LIST);
@@ -378,8 +408,10 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync)
 	if (current.backup_mode == BACKUP_MODE_DIFF_PAGE ||
 		current.backup_mode == BACKUP_MODE_DIFF_PTRACK)
 	{
-		elog(INFO, "Compiling pagemap of changed blocks");
+		bool pagemap_isok = true;
+
 		time(&start_time);
+		elog(INFO, "Extracting pagemap of changed blocks");
 
 		if (current.backup_mode == BACKUP_MODE_DIFF_PAGE)
 		{
@@ -388,8 +420,9 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync)
 			 * reading WAL segments present in archives up to the point
 			 * where this backup has started.
 			 */
-			extractPageMap(arclog_path, current.tli, instance_config.xlog_seg_size,
-						   prev_backup->start_lsn, current.start_lsn);
+			pagemap_isok = extractPageMap(arclog_path, instance_config.xlog_seg_size,
+						   prev_backup->start_lsn, prev_backup->tli,
+						   current.start_lsn, current.tli, tli_list);
 		}
 		else if (current.backup_mode == BACKUP_MODE_DIFF_PTRACK)
 		{
@@ -407,8 +440,14 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync)
 		}
 
 		time(&end_time);
-		elog(INFO, "Pagemap compiled, time elapsed %.0f sec",
-			 difftime(end_time, start_time));
+
+		/* TODO: add ms precision */
+		if (pagemap_isok)
+			elog(INFO, "Pagemap successfully extracted, time elapsed: %.0f sec",
+				 difftime(end_time, start_time));
+		else
+			elog(ERROR, "Pagemap extraction failed, time elasped: %.0f sec",
+				 difftime(end_time, start_time));
 	}
 
 	/*
@@ -667,6 +706,15 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync)
 		elog(INFO, "Backup files are synced, time elapsed: %s", pretty_time);
 	}
 
+	/* be paranoid about instance been from the past */
+	if (current.backup_mode != BACKUP_MODE_FULL &&
+		current.stop_lsn < prev_backup->stop_lsn)
+			elog(ERROR, "Current backup STOP LSN %X/%X is lower than STOP LSN %X/%X of previous backup %s. "
+				"It may indicate that we are trying to backup PostgreSQL instance from the past.",
+				(uint32) (current.stop_lsn >> 32), (uint32) (current.stop_lsn),
+				(uint32) (prev_backup->stop_lsn >> 32), (uint32) (prev_backup->stop_lsn),
+				base36enc(prev_backup->stop_lsn));
+
 	/* clean external directories list */
 	if (external_dirs)
 		free_dir_list(external_dirs);
@@ -676,6 +724,12 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync)
 	{
 		parray_walk(backup_list, pgBackupFree);
 		parray_free(backup_list);
+	}
+
+	if (tli_list)
+	{
+		parray_walk(tli_list, timelineInfoFree);
+		parray_free(tli_list);
 	}
 
 	parray_walk(backup_files_list, pgFileFree);

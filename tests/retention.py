@@ -1712,10 +1712,9 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
                 "without valid full backup.\n Output: {0} \n CMD: {1}".format(
                     repr(self.output), self.cmd))
         except ProbackupException as e:
-            self.assertIn(
-                "ERROR: Valid backup on current timeline 1 is not found. "
-                "Create new FULL backup before an incremental one.",
-                e.message,
+            self.assertTrue(
+                "WARNING: Valid backup on current timeline 1 is not found" in e.message and
+                "ERROR: Create new full backup before an incremental one" in e.message,
                 "\n Unexpected Error Message: {0}\n CMD: {1}".format(
                     repr(e.message), self.cmd))
 
@@ -2675,7 +2674,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         self.assertIn(
             'LOG: Archive backup {0} to stay consistent protect from '
             'purge WAL interval between 000000010000000000000004 '
-            'and 000000010000000000000004 on timeline 1'.format(B1), output)
+            'and 000000010000000000000005 on timeline 1'.format(B1), output)
 
         start_lsn_B4 = self.show_pb(backup_dir, 'node', B4)['start-lsn']
         self.assertIn(
@@ -2684,13 +2683,13 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         self.assertIn(
             'LOG: Timeline 3 to stay reachable from timeline 1 protect '
-            'from purge WAL interval between 000000020000000000000005 and '
-            '000000020000000000000008 on timeline 2', output)
+            'from purge WAL interval between 000000020000000000000006 and '
+            '000000020000000000000009 on timeline 2', output)
 
         self.assertIn(
             'LOG: Timeline 3 to stay reachable from timeline 1 protect '
             'from purge WAL interval between 000000010000000000000004 and '
-            '000000010000000000000005 on timeline 1', output)
+            '000000010000000000000006 on timeline 1', output)
 
         show_tli1_before = self.show_archive(backup_dir, 'node', tli=1)
         show_tli2_before = self.show_archive(backup_dir, 'node', tli=2)
@@ -2745,19 +2744,19 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         self.assertEqual(
             show_tli1_after['lost-segments'][0]['begin-segno'],
-            '000000010000000000000006')
+            '000000010000000000000007')
 
         self.assertEqual(
             show_tli1_after['lost-segments'][0]['end-segno'],
-            '000000010000000000000009')
+            '00000001000000000000000A')
 
         self.assertEqual(
             show_tli2_after['lost-segments'][0]['begin-segno'],
-            '000000020000000000000009')
+            '00000002000000000000000A')
 
         self.assertEqual(
             show_tli2_after['lost-segments'][0]['end-segno'],
-            '000000020000000000000009')
+            '00000002000000000000000A')
 
         self.validate_pb(backup_dir, 'node')
 

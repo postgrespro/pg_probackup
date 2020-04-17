@@ -131,7 +131,6 @@ doc/src/sgml/pgprobackup.sgml
    <arg choice="plain"><option>archive-push</option></arg>
    <arg choice="plain"><option>-B</option> <replaceable>backup_dir</replaceable></arg>
    <arg choice="plain"><option>--instance</option> <replaceable>instance_name</replaceable></arg>
-   <arg choice="plain"><option>--wal-file-path</option> <replaceable>wal_file_path</replaceable></arg>
    <arg choice="plain"><option>--wal-file-name</option> <replaceable>wal_file_name</replaceable></arg>
    <arg rep="repeat"><replaceable>option</replaceable></arg>
   </cmdsynopsis>
@@ -425,14 +424,6 @@ doc/src/sgml/pgprobackup.sgml
           Depending on cluster configuration, <productname>PostgreSQL</productname> itself may
           apply additional restrictions, such as CPU architecture
           or <application>libc</application>/<application>libicu</application> versions.
-        </para>
-      </listitem>
-      <listitem>
-        <para>
-          All backups in the incremental chain must belong to the same
-          timeline. For example, if you have taken incremental backups on a
-          standby server that gets promoted, you have to take another FULL
-          backup.
         </para>
       </listitem>
     </itemizedlist>
@@ -754,9 +745,10 @@ ALTER ROLE backup WITH REPLICATION;
     <title>Setting up Continuous WAL Archiving</title>
     <para>
       Making backups in PAGE backup mode, performing
-      <link linkend="pbk-performing-point-in-time-pitr-recovery">PITR</link>
-      and making backups with
-      <link linkend="pbk-archive-mode">ARCHIVE</link> WAL delivery mode
+      <link linkend="pbk-performing-point-in-time-pitr-recovery">PITR</link>,
+      making backups with
+      <link linkend="pbk-archive-mode">ARCHIVE</link> WAL delivery mode and
+      running incremental backup after timeline switch
       require
       <ulink url="https://postgrespro.com/docs/postgresql/current/continuous-archiving.html">continuous
       WAL archiving</ulink> to be enabled. To set up continuous
@@ -786,7 +778,7 @@ ALTER ROLE backup WITH REPLICATION;
           parameter, as follows:
         </para>
         <programlisting>
-archive_command = '<replaceable>install_dir</replaceable>/pg_probackup archive-push -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> --wal-file-path=%p --wal-file-name=%f [<replaceable>remote_options</replaceable>]'
+archive_command = '<replaceable>install_dir</replaceable>/pg_probackup archive-push -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> --wal-file-name=%f [<replaceable>remote_options</replaceable>]'
 </programlisting>
       </listitem>
     </itemizedlist>
@@ -1483,7 +1475,7 @@ pg_probackup checkdb [-B <replaceable>backup_dir</replaceable> [--instance <repl
       enough to specify the backup instance of this cluster for
       <application>pg_probackup</application> to determine the required
       connection options. However, if <literal>-B</literal> and
-      <literal>--instance</literal> options are ommitted, you have to provide
+      <literal>--instance</literal> options are omitted, you have to provide
       <link linkend="pbk-connection-opts">connection options</link> and
       <replaceable>data_dir</replaceable> via environment
       variables or command-line options.
@@ -2247,7 +2239,7 @@ BACKUP INSTANCE 'node'
               <para>
                 <literal>MERGED</literal> — the backup data files were
                 successfully merged, but its metadata is in the process
-                of been updated. Only full backup can have this status.
+                of being updated. Only full backups can have this status.
               </para>
             </listitem>
             <listitem>
@@ -2372,7 +2364,8 @@ primary_conninfo = 'user=backup passfile=/var/lib/pgsql/.pgpass port=5432 sslmod
         <listitem>
         <para>
           <literal>expire-time</literal> — the point in time
-          when a pinned backup can be removed by retention purge.
+          when a pinned backup can be removed in accordance with retention
+          policy. This attribute is only available for pinned backups.
         </para>
         </listitem>
         <listitem>
@@ -2816,17 +2809,19 @@ pg_probackup show -B <replaceable>backup_dir</replaceable> [--instance <replacea
   <refsect2 id="pbk-configuring-retention-policy">
     <title>Configuring Retention Policy</title>
     <para>
-      With <application>pg_probackup</application>, you can set retention policies for backups
-      and WAL archive. All policies can be combined together in any
-      way.
+      With <application>pg_probackup</application>, you can configure
+      retention policy to remove redundant backups, clean up unneeded
+      WAL files, as well as pin specific backups to ensure they are
+      kept for the specified time, as explained in the sections below.
+      All these actions can be combined together in any way.
     </para>
+
     <refsect3 id="pbk-retention-policy">
-      <title>Backup Retention Policy</title>
+      <title>Removing Redundant Backups</title>
       <para>
         By default, all backup copies created with <application>pg_probackup</application> are
         stored in the specified backup catalog. To save disk space,
-        you can configure retention policy and periodically clean up
-        redundant backup copies accordingly.
+        you can configure retention policy to remove redundant backup copies.
       </para>
       <para>
         To configure retention policy, set one or more of the
@@ -2849,56 +2844,51 @@ pg_probackup show -B <replaceable>backup_dir</replaceable> [--instance <replacea
         <emphasis role="strong">the number of days</emphasis> from the
         current moment. For example, if
         <literal>retention-window=7</literal>, <application>pg_probackup</application> must
-        delete all backup copies that are older than seven days, with
-        all the corresponding WAL files.
+        keep at least one backup copy that is older than seven days, with
+        all the corresponding WAL files, and all the backups that follow.
       </para>
       <para>
         If both <option>--retention-redundancy</option> and
-        <option>--retention-window</option> options are set,
-        <application>pg_probackup</application> keeps backup copies that satisfy at least one
-        condition. For example, if you set
-        <literal>--retention-redundancy=2</literal> and
-        <literal>--retention-window=7</literal>, <application>pg_probackup</application> purges
-        the backup catalog to keep only two full backup copies and all
-        backups that are newer than seven days:
+        <option>--retention-window</option> options are set, both these
+        conditions have to be taken into account when purging the backup
+        catalog. For example, if you set <literal>--retention-redundancy=2</literal>
+        and <literal>--retention-window=7</literal>,
+        <application>pg_probackup</application> has to keep two full backup
+        copies, as well as all the backups required to ensure recoverability
+        for the last seven days:
       </para>
       <programlisting>
 pg_probackup set-config -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> --retention-redundancy=2 --retention-window=7
 </programlisting>
+
       <para>
-        To clean up the backup catalog in accordance with retention
-        policy, run:
+        To clean up the backup catalog in accordance with retention policy,
+        you have to run the <xref linkend="pbk-delete"/> command with
+        <link linkend="pbk-retention-opts">retention flags</link>, as shown
+        below, or use the <xref linkend="pbk-backup"/> command with
+        these flags to process the outdated backup copies right when the new
+        backup is created.
+      </para>
+
+      <para>
+        For example, to remove all backup copies that no longer satisfy the
+        defined retention policy, run the following command with the
+        <literal>--delete-expired</literal> flag:
       </para>
       <programlisting>
 pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> --delete-expired
 </programlisting>
       <para>
-        <application>pg_probackup</application> deletes all backup copies that do not conform to
-        the defined retention policy.
-      </para>
-      <para>
         If you would like to also remove the WAL files that are no
-        longer required for any of the backups, add the
+        longer required for any of the backups, you should also specify the
         <option>--delete-wal</option> flag:
       </para>
       <programlisting>
 pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> --delete-expired --delete-wal
 </programlisting>
-      <note>
-        <para>
-          Alternatively, you can use the
-          <option>--delete-expired</option>,
-          <option>--merge-expired</option>,
-          <option>--delete-wal</option> flags and the
-          <option>--retention-window</option> and
-          <option>--retention-redundancy</option> options together
-          with the <xref linkend="pbk-backup"/> command to
-          remove and merge the outdated backup copies once the new
-          backup is created.
-        </para>
-      </note>
+
       <para>
-        You can set or override the current retention policy by
+        You can also set or override the current retention policy by
         specifying <option>--retention-redundancy</option> and
         <option>--retention-window</option> options directly when
         running <command>delete</command> or <command>backup</command>
@@ -2919,6 +2909,7 @@ pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replace
         <xref linkend="pbk-backup"/> or
         <xref linkend="pbk-delete"/> commands.
       </para>
+
       <para>
         Suppose you have backed up the <replaceable>node</replaceable>
         instance in the <replaceable>backup_dir</replaceable> directory,
@@ -2971,9 +2962,10 @@ BACKUP INSTANCE 'node'
           The <literal>Time</literal> field for the merged backup displays the time
           required for the merge.
         </para>
+
     </refsect3>
     <refsect3 id="pbk-backup-pinning">
-      <title>Backup Pinning</title>
+      <title>Pinning Backups</title>
       <para>
         If you need to keep certain backups longer than the
         established retention policy allows, you can pin them
@@ -3012,8 +3004,8 @@ pg_probackup show -B <replaceable>backup_dir</replaceable> --instance <replaceab
 </programlisting>
       </para>
       <para>
-        If the backup is pinned, the <literal>expire-time</literal>
-        attribute displays its expiration time:
+        If the backup is pinned, it has the <literal>expire-time</literal>
+        attribute that displays its expiration time:
       <programlisting>
 ...
 recovery-time = '2017-05-16 12:57:31'
@@ -3023,34 +3015,65 @@ data-bytes = 22288792
 </programlisting>
       </para>
       <para>
-        Only pinned backups have the <literal>expire-time</literal>
-        attribute in the backup metadata.
-      </para>
-      <note>
-        <para>
-          A pinned incremental backup implicitly pins all
-          its parent backups.
-        </para>
-      </note>
-      <para>
-        You can unpin the backup by setting the
-        <option>--ttl</option> option to zero using the
-        <xref linkend="pbk-set-backup"/> command. For example:
+        You can unpin the backup by setting the <option>--ttl</option> option to zero:
       </para>
       <programlisting>
 pg_probackup set-backup -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> -i <replaceable>backup_id</replaceable> --ttl=0
 </programlisting>
 
+      <note>
+        <para>
+          A pinned incremental backup implicitly pins all
+          its parent backups. If you unpin such a backup later,
+          its implicitly pinned parents will also be automatically unpinned.
+        </para>
+      </note>
+
     </refsect3>
     <refsect3 id="pbk-wal-archive-retention-policy">
-      <title>WAL Archive Retention Policy</title>
+      <title>Configuring WAL Archive Retention Policy</title>
       <para>
-        By default, <application>pg_probackup</application> purges
-        only redundant WAL segments that cannot be applied to any of the
-        backups in the backup catalog. To save disk space,
-        you can configure WAL archive retention policy, which allows to
-        keep WAL of limited depth measured in backups per timeline.
+        When <link linkend="pbk-setting-up-continuous-wal-archiving">continuous
+        WAL archiving</link> is enabled, archived WAL segments can take a lot
+        of disk space. Even if you delete old backup copies from time to time,
+        the <literal>--delete-wal</literal> flag can
+        purge only those WAL segments that do not apply to any of the
+        remaining backups in the backup catalog. However, if point-in-time
+        recovery is critical only for the most recent backups, you can
+        configure WAL archive retention policy to keep WAL archive of
+        limited depth and win back some more disk space.
       </para>
+
+      <para>
+        To configure WAL archive retention policy, you have to run the
+        <xref linkend="pbk-set-config"/> command with the
+        <literal>--wal-depth</literal> option that specifies the number
+        of backups that can be used for PITR.
+        This setting applies to all the timelines, so you should be able to perform
+        PITR for the same number of backups on each timeline, if available.
+        <link linkend="pbk-backup-pinning">Pinned backups</link> are
+        not included into this count: if one of the latest backups
+        is pinned, <application>pg_probackup</application> ensures that
+        PITR is possible for one extra backup.
+      </para>
+
+      <para>
+       To remove WAL segments that do not satisfy the defined WAL archive
+       retention policy, you simply have to run the <xref linkend="pbk-delete"/>
+       or <xref linkend="pbk-backup"/> command with the <literal>--delete-wal</literal>
+       flag. For archive backups, WAL segments between <literal>Start LSN</literal>
+       and <literal>Stop LSN</literal> are always kept intact, so such backups
+       remain valid regardless of the <literal>--wal-depth</literal> setting
+       and can still be restored, if required.
+      </para>
+
+      <para>
+        You can also use the <option>--wal-depth</option> option
+        with the <xref linkend="pbk-delete"/> and <xref linkend="pbk-backup"/>
+        commands to override the previously defined WAL archive retention
+        policy and purge old WAL segments on the fly.
+      </para>
+
       <para>
         Suppose you have backed up the <literal>node</literal>
         instance in the <replaceable>backup_dir</replaceable> directory and
@@ -3104,8 +3127,8 @@ ARCHIVE INSTANCE 'node'
 </programlisting>
       <para>
         If you would like, for example, to keep only those WAL
-        segments that can be applied to the last valid backup, use the
-        <option>--wal-depth</option> option:
+        segments that can be applied to the latest valid backup, set the
+        <option>--wal-depth</option> option to 1:
       </para>
       <programlisting>
 pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance node --delete-wal --wal-depth=1
@@ -3131,12 +3154,6 @@ ARCHIVE INSTANCE 'node'
 ===============================================================================================================================
  1    0           0/0          000000010000000000000048  000000010000000000000049  1           72kB  228.00  7          OK
 </programlisting>
-      <note>
-        <para>
-          <link linkend="pbk-backup-pinning">Pinned backups</link> are
-          ignored for the purpose of WAL Archive Retention Policy fulfilment.
-        </para>
-      </note>
     </refsect3>
   </refsect2>
   <refsect2 id="pbk-merging-backups">
@@ -3152,16 +3169,16 @@ ARCHIVE INSTANCE 'node'
 pg_probackup merge -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> -i <replaceable>backup_id</replaceable>
 </programlisting>
     <para>
-      This command merges the specified incremental backup to its
-      parent full backup, together with all incremental backups
-      between them. If the specified backup ID belong to the full backup,
-      then it will be merged with the closest incremental backup.
-      Once the merge is complete, the incremental
-      backups are removed as redundant. Thus, the merge operation is
-      virtually equivalent to retaking a full backup and removing all
-      the outdated backups, but it allows to save much time,
-      especially for large data volumes, as well as I/O and network traffic
-      if you are using <application>pg_probackup</application> in the
+      This command merges backups that belong to a common incremental backup
+      chain. If you specify a full backup, it will be merged with its first
+      incremental backup. If you specify an incremental backup, it will be
+      merged to its parent full backup, together with all incremental backups
+      between them. Once the merge is complete, the full backup takes in all
+      the merged data, and the incremental backups are removed as redundant.
+      Thus, the merge operation is virtually equivalent to retaking a full
+      backup and removing all the outdated backups, but it allows to save much
+      time, especially for large data volumes, as well as I/O and network
+      traffic if you are using <application>pg_probackup</application> in the
       <link linkend="pbk-remote-backup">remote</link> mode.
     </para>
     <para>
@@ -3175,8 +3192,10 @@ pg_probackup show -B <replaceable>backup_dir</replaceable> --instance <replaceab
 </programlisting>
     <para>
       If the merge is still in progress, the backup status is
-      displayed as <literal>MERGING</literal> or, at the final stage,
-      <literal>MERGED</literal>. The merge is idempotent, so you can
+      displayed as <literal>MERGING</literal>. For full backups,
+      it can also be shown as <literal>MERGED</literal> while the
+      metadata is being updated at the final stage of the merge.
+      The merge is idempotent, so you can
       restart the merge if it was interrupted.
     </para>
   </refsect2>
@@ -3581,9 +3600,11 @@ pg_probackup backup -B <replaceable>backup_dir</replaceable> -b <replaceable>bac
       <listitem>
       <para>
         Do not sync backed up files to disk. You can use this flag to speed
-        up backup process. Using this flag can result in data
+        up the backup process. Using this flag can result in data
         corruption in case of operating system or hardware crash.
-        Corruption can be detected by backup validation.
+        If you use this option, it is recommended to run the
+        <xref linkend="pbk-validate"/> command once the backup is complete
+        to detect possible issues.
       </para>
       </listitem>
       </varlistentry>
@@ -3617,7 +3638,7 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
 [--force] [--no-sync]
 [--restore-command=<replaceable>cmdline</replaceable>]
 [--primary-conninfo=<replaceable>primary_conninfo</replaceable>]
-[-S | --primary-slot-name=<replaceable>slotname</replaceable>]
+[-S | --primary-slot-name=<replaceable>slot_name</replaceable>]
 [<replaceable>recovery_target_options</replaceable>] [<replaceable>logging_options</replaceable>] [<replaceable>remote_options</replaceable>]
 [<replaceable>partial_restore_options</replaceable>] [<replaceable>remote_wal_archive_options</replaceable>]
 </programlisting>
@@ -3662,7 +3683,7 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
         Sets the
         <ulink url="https://postgrespro.com/docs/postgresql/current/runtime-config-replication.html#GUC-PRIMARY-CONNINFO">primary_conninfo</ulink>
         parameter to the specified value.
-        This option will be ignored unless the <option>-R</option> flag if specified.
+        This option will be ignored unless the <option>-R</option> flag is specified.
       </para>
       <para>
         Example: <literal>--primary-conninfo='host=192.168.1.50 port=5432 user=foo password=foopass'</literal>
@@ -3676,9 +3697,9 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
       <listitem>
       <para>
         Sets the
-        <ulink url="https://postgrespro.com/docs/postgresql/current/runtime-config-replication#GUC-PRIMARY-SLOT-NAME">primary_slot_name</ulink>
+        <ulink url="https://postgrespro.com/docs/postgresql/current/runtime-config-replication.html#GUC-PRIMARY-SLOT-NAME">primary_slot_name</ulink>
         parameter to the specified value.
-        This option will be ignored unless the <option>-R</option> flag if specified.
+        This option will be ignored unless the <option>-R</option> flag is specified.
       </para>
       </listitem>
       </varlistentry>
@@ -3775,6 +3796,8 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
         Do not sync restored files to disk. You can use this flag to speed
         up restore process. Using this flag can result in data
         corruption in case of operating system or hardware crash.
+        If it happens, you have to run the <xref linkend="pbk-restore"/>
+        command again.
       </para>
       </listitem>
       </varlistentry>
@@ -3902,12 +3925,12 @@ pg_probackup merge -B <replaceable>backup_dir</replaceable> --instance <replacea
 [<replaceable>logging_options</replaceable>]
 </programlisting>
       <para>
-        Merges the specified incremental backup to its parent full
-        backup, together with all incremental backups between them, if
-        any. If the specified backup ID belong to the full backup,
-        then it will be merged with the closest incremental backup.
-        As a result, the full backup takes in all the merged
-        data, and the incremental backups are removed as redundant.
+        Merges backups that belong to a common incremental backup
+        chain. If you specify a full backup, it will be merged with its first
+        incremental backup. If you specify an incremental backup, it will be
+        merged to its parent full backup, together with all incremental backups
+        between them. Once the merge is complete, the full backup takes in all
+        the merged data, and the incremental backups are removed as redundant.
       </para>
       <para>
         For details, see the section
@@ -3941,9 +3964,12 @@ pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replace
       <title>archive-push</title>
       <programlisting>
 pg_probackup archive-push -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable>
---wal-file-path=<replaceable>wal_file_path</replaceable> --wal-file-name=<replaceable>wal_file_name</replaceable>
-[--help] [--compress] [--compress-algorithm=<replaceable>compression_algorithm</replaceable>]
-[--compress-level=<replaceable>compression_level</replaceable>] [--overwrite]
+--wal-file-name=<replaceable>wal_file_name</replaceable> [--wal-file-path=<replaceable>wal_file_path</replaceable>]
+[--help] [--no-sync] [--compress] [--no-ready-rename] [--overwrite]
+[-j <replaceable>num_threads</replaceable>] [--batch-size=<replaceable>batch_size</replaceable>]
+[--archive-timeout=<replaceable>timeout</replaceable>]
+[--compress-algorithm=<replaceable>compression_algorithm</replaceable>]
+[--compress-level=<replaceable>compression_level</replaceable>]
 [<replaceable>remote_options</replaceable>] [<replaceable>logging_options</replaceable>]
 </programlisting>
       <para>
@@ -3954,12 +3980,10 @@ pg_probackup archive-push -B <replaceable>backup_dir</replaceable> --instance <r
         backup instance and the cluster do not match, this command
         fails with the following error message: <literal>Refuse to push WAL
         segment segment_name into archive. Instance parameters
-        mismatch.</literal> For each WAL file moved to the backup catalog, you
-        will see the following message in the <productname>PostgreSQL</productname> log file:
-        <literal>pg_probackup archive-push completed successfully</literal>.
+        mismatch.</literal>
       </para>
       <para>
-        If the files to be copied already exist in the backup catalog,
+        If the files to be copied already exists in the backup catalog,
         <application>pg_probackup</application> computes and compares their checksums. If the
         checksums match, <command>archive-push</command> skips the corresponding file and
         returns a successful execution code. Otherwise, <command>archive-push</command>
@@ -3968,13 +3992,25 @@ pg_probackup archive-push -B <replaceable>backup_dir</replaceable> --instance <r
         with the <option>--overwrite</option> flag.
       </para>
       <para>
-        The files are copied to a temporary file with the
-        <literal>.part</literal> suffix. After the copy is
-        done, atomic rename is performed. This algorithm ensures that a
-        failed <command>archive-push</command> will not stall continuous archiving and
-        that concurrent archiving from multiple sources into a single
-        WAL archive have no risk of archive corruption. WAL segments copied to
-        the archive are synced to disk.
+        Each file is copied to a temporary file with the
+        <literal>.part</literal> suffix. If the temporary file already
+        exists, <application>pg_probackup</application> will wait
+        <option>archive_timeout</option> seconds before discarding it.
+        After the copy is done, atomic rename is performed.
+        This algorithm ensures that a failed <command>archive-push</command>
+        will not stall continuous archiving and that concurrent archiving from
+        multiple sources into a single WAL archive has no risk of archive
+        corruption.
+      </para>
+      <para>
+        To speed up archiving, you can specify the <option>-j</option> option
+        to run <command>archive-push</command> on multiple threads.
+        If you provide the <option>--batch-size</option> option, WAL files
+        will be copied in batches of the specified size.
+      </para>
+      <para>
+        WAL segments copied to the archive are synced to disk unless
+        the <option>--no-sync</option> flag is used.
       </para>
       <para>
         You can use <command>archive-push</command> in the
@@ -3994,6 +4030,8 @@ pg_probackup archive-push -B <replaceable>backup_dir</replaceable> --instance <r
       <title>archive-get</title>
       <programlisting>
 pg_probackup archive-get -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> --wal-file-path=<replaceable>wal_file_path</replaceable> --wal-file-name=<replaceable>wal_file_name</replaceable>
+[-j <replaceable>num_threads</replaceable>] [--batch-size=<replaceable>batch_size</replaceable>]
+[--prefetch-dir=<replaceable>prefetch_dir_path</replaceable>] [--no-validate-wal]
 [--help] [<replaceable>remote_options</replaceable>] [<replaceable>logging_options</replaceable>]
 </programlisting>
       <para>
@@ -4003,6 +4041,17 @@ pg_probackup archive-get -B <replaceable>backup_dir</replaceable> --instance <re
         <command>restore_command</command> when
         restoring backups using a WAL archive. You do not need to set
         it manually.
+      </para>
+
+      <para>
+        To speed up recovery, you can specify the <option>-j</option> option
+        to run <command>archive-get</command> on multiple threads.
+        If you provide the <option>--batch-size</option> option, WAL segments
+        will be copied in batches of the specified size.
+      </para>
+
+      <para>
+        For details, see section <link linkend="pbk-archiving-options">Archiving Options</link>.
       </para>
     </refsect3>
   </refsect2>
@@ -4080,7 +4129,8 @@ pg_probackup archive-get -B <replaceable>backup_dir</replaceable> --instance <re
       <para>
         Sets the number of parallel threads for <command>backup</command>,
         <command>restore</command>, <command>merge</command>,
-        <command>validate</command>, and <command>checkdb</command> processes.
+        <command>validate</command>, <command>checkdb</command>, and
+        <command>archive-push</command> processes.
       </para>
       </listitem>
       </varlistentry>
@@ -4130,7 +4180,7 @@ pg_probackup archive-get -B <replaceable>backup_dir</replaceable> --instance <re
             The <literal>immediate</literal> value stops the recovery
             after reaching the consistent state of the specified
             backup, or the latest available backup if the
-            <option>-i</option>/<option>--backup_id</option> option is omitted.
+            <option>-i</option>/<option>--backup-id</option> option is omitted.
             This is the default behavior for STREAM backups.
           </para>
         </listitem>
@@ -4739,6 +4789,78 @@ pg_probackup archive-get -B <replaceable>backup_dir</replaceable> --instance <re
       </para>
       </listitem>
       </varlistentry>
+
+      <varlistentry>
+<term><option>--batch-size=<replaceable>batch_size</replaceable></option></term>
+      <listitem>
+      <para>
+        Sets the maximum number of files that can be copied into the archive
+        by a single <command>archive-push</command> process, or from
+        the archive by a single <command>archive-get</command> process.
+      </para>
+      </listitem>
+      </varlistentry>
+
+      <varlistentry>
+<term><option>--archive-timeout=<replaceable>wait_time</replaceable></option></term>
+      <listitem>
+      <para>
+        Sets the timeout for considering existing <literal>.part</literal>
+        files to be stale. By default, <application>pg_probackup</application>
+        waits 300 seconds.
+        This option can be used only with <xref linkend="pbk-archive-push"/> command.
+      </para>
+      </listitem>
+      </varlistentry>
+
+      <varlistentry>
+<term><option>--no-ready-rename</option></term>
+      <listitem>
+      <para>
+        Do not rename status files in the <literal>archive_status</literal> directory.
+        This option should be used only if <parameter>archive_command</parameter>
+        contains multiple commands.
+        This option can be used only with <xref linkend="pbk-archive-push"/> command.
+      </para>
+      </listitem>
+      </varlistentry>
+
+      <varlistentry>
+<term><option>--no-sync</option></term>
+      <listitem>
+      <para>
+        Do not sync copied WAL files to disk. You can use this flag to speed
+        up archiving process. Using this flag can result in WAL archive
+        corruption in case of operating system or hardware crash.
+        This option can be used only with <xref linkend="pbk-archive-push"/> command.
+      </para>
+      </listitem>
+      </varlistentry>
+
+      <varlistentry>
+<term><option>--prefetch-dir=<replaceable>path</replaceable></option></term>
+      <listitem>
+      <para>
+        Directory used to store prefetched WAL segments if <option>--batch-size</option> option is used.
+        Directory must be located on the same filesystem and on the same mountpoint the
+        <literal>PGDATA/pg_wal</literal> is located.
+        By default files are stored in <literal>PGDATA/pg_wal/pbk_prefetch</literal> directory.
+        This option can be used only with <xref linkend="pbk-archive-get"/> command.
+      </para>
+      </listitem>
+      </varlistentry>
+
+      <varlistentry>
+<term><option>--no-validate-wal</option></term>
+      <listitem>
+      <para>
+        Do not validate prefetched WAL file before using it.
+        Use this option if you want to increase the speed of recovery.
+        This option can be used only with <xref linkend="pbk-archive-get"/> command.
+      </para>
+      </listitem>
+      </varlistentry>
+
       </variablelist>
       </para>
     </refsect3>
@@ -5176,7 +5298,7 @@ INFO: Backup PZ7YK2 completed
       <step id="pbk-lets-take-a-look-at-the-backup-catalog">
         <title>Let's take a look at the backup catalog:</title>
         <programlisting>
-[backupman@backup_host] pg_probackup-11 backup -B /mnt/backups --instance 'pg-11'
+[backupman@backup_host] pg_probackup-11 show -B /mnt/backups --instance 'pg-11'
 
 BACKUP INSTANCE 'pg-11'
 ==================================================================================================================================
@@ -5267,7 +5389,7 @@ remote-host = postgres_host
       <step id="pbk-lets-take-a-look-at-the-backup-catalog-1">
         <title>Let's take a look at the backup catalog:</title>
         <programlisting>
-[backupman@backup_host] pg_probackup-11 backup -B /mnt/backups --instance 'pg-11'
+[backupman@backup_host] pg_probackup-11 show -B /mnt/backups --instance 'pg-11'
 
 ====================================================================================================================================
  Instance  Version  ID      Recovery Time           Mode   WAL Mode  TLI  Time   Data   WAL  Zratio  Start LSN   Stop LSN    Status

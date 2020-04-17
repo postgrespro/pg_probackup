@@ -125,9 +125,15 @@ bool 		compress_shortcut = false;
 char	   *instance_name;
 
 /* archive push options */
+int		batch_size = 1;
 static char *wal_file_path;
 static char *wal_file_name;
-static bool	file_overwrite = false;
+static bool file_overwrite = false;
+static bool no_ready_rename = false;
+
+/* archive get options */
+static char *prefetch_dir;
+bool no_validate_wal = false;
 
 /* show options */
 ShowFormat show_format = SHOW_PLAIN;
@@ -172,7 +178,6 @@ static ConfigOption cmd_options[] =
 	{ 'f', 'b', "backup-mode",		opt_backup_mode,	SOURCE_CMD_STRICT },
 	{ 'b', 'C', "smooth-checkpoint", &smooth_checkpoint,	SOURCE_CMD_STRICT },
 	{ 's', 'S', "slot",				&replication_slot,	SOURCE_CMD_STRICT },
-	{ 's', 'S', "primary-slot-name",&replication_slot,	SOURCE_CMD_STRICT },
 	{ 'b', 181, "temp-slot",		&temp_slot,			SOURCE_CMD_STRICT },
 	{ 'b', 182, "delete-wal",		&delete_wal,		SOURCE_CMD_STRICT },
 	{ 'b', 183, "delete-expired",	&delete_expired,	SOURCE_CMD_STRICT },
@@ -189,13 +194,14 @@ static ConfigOption cmd_options[] =
 	{ 'f', 155, "external-mapping",	opt_externaldir_map,	SOURCE_CMD_STRICT },
 	{ 's', 141, "recovery-target-name",	&target_name,		SOURCE_CMD_STRICT },
 	{ 's', 142, "recovery-target-action", &target_action,	SOURCE_CMD_STRICT },
-	{ 'b', 'R', "restore-as-replica", &restore_as_replica,	SOURCE_CMD_STRICT },
 	{ 'b', 143, "no-validate",		&no_validate,		SOURCE_CMD_STRICT },
 	{ 'b', 154, "skip-block-validation", &skip_block_validation,	SOURCE_CMD_STRICT },
 	{ 'b', 156, "skip-external-dirs", &skip_external_dirs,	SOURCE_CMD_STRICT },
 	{ 'f', 158, "db-include", 		opt_datname_include_list, SOURCE_CMD_STRICT },
 	{ 'f', 159, "db-exclude", 		opt_datname_exclude_list, SOURCE_CMD_STRICT },
+	{ 'b', 'R', "restore-as-replica", &restore_as_replica,	SOURCE_CMD_STRICT },
 	{ 's', 160, "primary-conninfo",	&primary_conninfo,	SOURCE_CMD_STRICT },
+	{ 's', 'S', "primary-slot-name",&replication_slot,	SOURCE_CMD_STRICT },
 	/* checkdb options */
 	{ 'b', 195, "amcheck",			&need_amcheck,		SOURCE_CMD_STRICT },
 	{ 'b', 196, "heapallindexed",	&heapallindexed,	SOURCE_CMD_STRICT },
@@ -218,9 +224,14 @@ static ConfigOption cmd_options[] =
 	{ 's', 150, "wal-file-path",	&wal_file_path,		SOURCE_CMD_STRICT },
 	{ 's', 151, "wal-file-name",	&wal_file_name,		SOURCE_CMD_STRICT },
 	{ 'b', 152, "overwrite",		&file_overwrite,	SOURCE_CMD_STRICT },
+	{ 'b', 153, "no-ready-rename",	&no_ready_rename,	SOURCE_CMD_STRICT },
+	{ 'i', 162, "batch-size",		&batch_size,		SOURCE_CMD_STRICT },
+	/* archive-get options */
+	{ 's', 163, "prefetch-dir",		&prefetch_dir,		SOURCE_CMD_STRICT },
+	{ 'b', 164, "no-validate-wal",	&no_validate_wal,	SOURCE_CMD_STRICT },
 	/* show options */
-	{ 'f', 153, "format",			opt_show_format,	SOURCE_CMD_STRICT },
-	{ 'b', 161, "archive",			&show_archive,		SOURCE_CMD_STRICT },
+	{ 'f', 165, "format",			opt_show_format,	SOURCE_CMD_STRICT },
+	{ 'b', 166, "archive",			&show_archive,		SOURCE_CMD_STRICT },
 	/* set-backup options */
 	{ 'I', 170, "ttl", &ttl, SOURCE_CMD_STRICT, SOURCE_DEFAULT, 0, OPTION_UNIT_S, option_get_value},
 	{ 's', 171, "expire-time",		&expire_time_string,	SOURCE_CMD_STRICT },
@@ -264,9 +275,6 @@ main(int argc, char *argv[])
 {
 	char	   *command = NULL,
 			   *command_name;
-	/* Check if backup_path is directory. */
-	struct stat stat_buf;
-	int			rc;
 
 	PROGRAM_NAME_FULL = argv[0];
 
@@ -446,11 +454,6 @@ main(int argc, char *argv[])
 		/* Ensure that backup_path is an absolute path */
 		if (!is_absolute_path(backup_path))
 			elog(ERROR, "-B, --backup-path must be an absolute path");
-
-		/* Ensure that backup_path is a path to a directory */
-		rc = stat(backup_path, &stat_buf);
-		if (rc != -1 && !S_ISDIR(stat_buf.st_mode))
-			elog(ERROR, "-B, --backup-path must be a path to directory");
 	}
 
 	/* Ensure that backup_path is an absolute path */
@@ -502,12 +505,16 @@ main(int argc, char *argv[])
 
 		/*
 		 * Ensure that requested backup instance exists.
-		 * for all commands except init, which doesn't take this parameter
-		 * and add-instance which creates new instance.
+		 * for all commands except init, which doesn't take this parameter,
+		 * add-instance which creates new instance
+		 * and archive-get, which just do not require it at this point
 		 */
-		if (backup_subcmd != INIT_CMD && backup_subcmd != ADD_INSTANCE_CMD)
+		if (backup_subcmd != INIT_CMD && backup_subcmd != ADD_INSTANCE_CMD &&
+			backup_subcmd != ARCHIVE_GET_CMD)
 		{
-			if (fio_access(backup_instance_path, F_OK, FIO_BACKUP_HOST) != 0)
+			struct stat st;
+
+			if (fio_stat(backup_instance_path, &st, true, FIO_BACKUP_HOST) != 0)
 			{
 				elog(WARNING, "Failed to access directory \"%s\": %s",
 					backup_instance_path, strerror(errno));
@@ -515,6 +522,12 @@ main(int argc, char *argv[])
 				// TODO: redundant message, should we get rid of it?
 				elog(ERROR, "Instance '%s' does not exist in this backup catalog",
 							instance_name);
+			}
+			else
+			{
+				/* Ensure that backup_path is a path to a directory */
+				if (!S_ISDIR(st.st_mode))
+					elog(ERROR, "-B, --backup-path must be a path to directory");
 			}
 		}
 	}
@@ -531,7 +544,8 @@ main(int argc, char *argv[])
 		config_get_opt_env(instance_options);
 
 		/* Read options from configuration file */
-		if (backup_subcmd != ADD_INSTANCE_CMD)
+		if (backup_subcmd != ADD_INSTANCE_CMD &&
+			backup_subcmd != ARCHIVE_GET_CMD)
 		{
 			join_path_components(path, backup_instance_path,
 								 BACKUP_CATALOG_CONF_FILE);
@@ -748,17 +762,22 @@ main(int argc, char *argv[])
 	if (num_threads < 1)
 		num_threads = 1;
 
+	if (batch_size < 1)
+		batch_size = 1;
+
 	compress_init();
 
 	/* do actual operation */
 	switch (backup_subcmd)
 	{
 		case ARCHIVE_PUSH_CMD:
-			return do_archive_push(&instance_config, wal_file_path,
-								   wal_file_name, file_overwrite);
+			do_archive_push(&instance_config, wal_file_path, wal_file_name,
+							batch_size, file_overwrite, no_sync, no_ready_rename);
+			break;
 		case ARCHIVE_GET_CMD:
-			return do_archive_get(&instance_config,
-								  wal_file_path, wal_file_name);
+			do_archive_get(&instance_config, prefetch_dir,
+						   wal_file_path, wal_file_name, batch_size, !no_validate_wal);
+			break;
 		case ADD_INSTANCE_CMD:
 			return do_add_instance(&instance_config);
 		case DELETE_INSTANCE_CMD:

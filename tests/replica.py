@@ -571,30 +571,25 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
                 'Skipped because backup from replica is not supported in PG 9.5')
 
         self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'master', master)
-        self.set_archiving(backup_dir, 'master', master)
+        self.add_instance(backup_dir, 'node', master)
+        self.set_archiving(backup_dir, 'node', master)
         master.slow_start()
 
         # freeze bgwriter to get rid of RUNNING XACTS records
         bgwriter_pid = master.auxiliary_pids[ProcessType.BackgroundWriter][0]
         gdb_checkpointer = self.gdb_attach(bgwriter_pid)
 
-        self.backup_node(backup_dir, 'master', master)
+        self.backup_node(backup_dir, 'node', master)
 
         # Create replica
         replica = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'replica'))
         replica.cleanup()
-        self.restore_node(backup_dir, 'master', replica)
+        self.restore_node(backup_dir, 'node', replica)
 
         # Settings for Replica
-        self.add_instance(backup_dir, 'replica', replica)
         self.set_replica(master, replica, synchronous=True)
-        self.set_archiving(backup_dir, 'replica', replica, replica=True)
-
-        copy_tree(
-            os.path.join(backup_dir, 'wal', 'master'),
-            os.path.join(backup_dir, 'wal', 'replica'))
+        self.set_archiving(backup_dir, 'node', replica, replica=True)
 
         replica.slow_start(replica=True)
 
@@ -602,7 +597,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         self.switch_wal_segment(master)
 
         output = self.backup_node(
-            backup_dir, 'replica', replica,
+            backup_dir, 'node', replica, replica.data_dir,
             options=[
                 '--archive-timeout=30',
                 '--log-level-console=LOG',
@@ -611,24 +606,24 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             return_id=False)
 
         self.assertIn(
-            'LOG: Null offset in stop_backup_lsn value 0/3000000',
+            'LOG: Null offset in stop_backup_lsn value 0/4000000',
             output)
 
         self.assertIn(
-            'WARNING: WAL segment 000000010000000000000003 could not be streamed in 30 seconds',
+            'WARNING: WAL segment 000000010000000000000004 could not be streamed in 30 seconds',
             output)
 
         self.assertIn(
-            'WARNING: Failed to get next WAL record after 0/3000000, looking for previous WAL record',
+            'WARNING: Failed to get next WAL record after 0/4000000, looking for previous WAL record',
             output)
 
         self.assertIn(
-            'LOG: Looking for LSN 0/3000000 in segment: 000000010000000000000002',
+            'LOG: Looking for LSN 0/4000000 in segment: 000000010000000000000003',
             output)
 
         self.assertIn(
-            'has endpoint 0/3000000 which is '
-            'equal or greater than requested LSN 0/3000000',
+            'has endpoint 0/4000000 which is '
+            'equal or greater than requested LSN 0/4000000',
             output)
 
         self.assertIn(
@@ -719,19 +714,19 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             log_content = f.read()
 
         self.assertIn(
-            'LOG: Null offset in stop_backup_lsn value 0/3000000',
+            'LOG: Null offset in stop_backup_lsn value 0/4000000',
             log_content)
 
         self.assertIn(
-            'LOG: Looking for segment: 000000010000000000000003',
+            'LOG: Looking for segment: 000000010000000000000004',
             log_content)
 
         self.assertIn(
-            'LOG: First record in WAL segment "000000010000000000000003": 0/3000028',
+            'LOG: First record in WAL segment "000000010000000000000004": 0/4000028',
             log_content)
 
         self.assertIn(
-            'LOG: current.stop_lsn: 0/3000028',
+            'LOG: current.stop_lsn: 0/4000028',
             log_content)
 
         # Clean after yourself
@@ -757,30 +752,25 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
                 'Skipped because backup from replica is not supported in PG 9.5')
 
         self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'master', master)
-        self.set_archiving(backup_dir, 'master', master)
+        self.add_instance(backup_dir, 'node', master)
+        self.set_archiving(backup_dir, 'node', master)
         master.slow_start()
 
-        self.backup_node(backup_dir, 'master', master)
+        self.backup_node(backup_dir, 'node', master)
 
         # Create replica
         replica = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'replica'))
         replica.cleanup()
-        self.restore_node(backup_dir, 'master', replica)
+        self.restore_node(backup_dir, 'node', replica)
 
         # Settings for Replica
-        self.add_instance(backup_dir, 'replica', replica)
         self.set_replica(master, replica, synchronous=True)
-        self.set_archiving(backup_dir, 'replica', replica, replica=True)
+        self.set_archiving(backup_dir, 'node', replica, replica=True)
 
         # freeze bgwriter to get rid of RUNNING XACTS records
         bgwriter_pid = master.auxiliary_pids[ProcessType.BackgroundWriter][0]
         gdb_checkpointer = self.gdb_attach(bgwriter_pid)
-
-        copy_tree(
-            os.path.join(backup_dir, 'wal', 'master'),
-            os.path.join(backup_dir, 'wal', 'replica'))
 
         replica.slow_start(replica=True)
 
@@ -789,7 +779,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
         # take backup from replica
         output = self.backup_node(
-            backup_dir, 'replica', replica,
+            backup_dir, 'node', replica, replica.data_dir,
             options=[
                 '--archive-timeout=30',
                 '--log-level-console=LOG',
@@ -797,24 +787,24 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             return_id=False)
 
         self.assertIn(
-            'LOG: Null offset in stop_backup_lsn value 0/3000000',
+            'LOG: Null offset in stop_backup_lsn value 0/4000000',
             output)
 
         self.assertIn(
-            'WARNING: WAL segment 000000010000000000000003 could not be archived in 30 seconds',
+            'WARNING: WAL segment 000000010000000000000004 could not be archived in 30 seconds',
             output)
 
         self.assertIn(
-            'WARNING: Failed to get next WAL record after 0/3000000, looking for previous WAL record',
+            'WARNING: Failed to get next WAL record after 0/4000000, looking for previous WAL record',
             output)
 
         self.assertIn(
-            'LOG: Looking for LSN 0/3000000 in segment: 000000010000000000000002',
+            'LOG: Looking for LSN 0/4000000 in segment: 000000010000000000000003',
             output)
 
         self.assertIn(
-            'has endpoint 0/3000000 which is '
-            'equal or greater than requested LSN 0/3000000',
+            'has endpoint 0/4000000 which is '
+            'equal or greater than requested LSN 0/4000000',
             output)
 
         self.assertIn(
@@ -846,44 +836,39 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
                 'Skipped because backup from replica is not supported in PG 9.5')
 
         self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'master', master)
-        self.set_archiving(backup_dir, 'master', master)
+        self.add_instance(backup_dir, 'node', master)
+        self.set_archiving(backup_dir, 'node', master)
         master.slow_start()
 
-        self.backup_node(backup_dir, 'master', master)
+        self.backup_node(backup_dir, 'node', master)
 
         # Create replica
         replica = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'replica'))
         replica.cleanup()
-        self.restore_node(backup_dir, 'master', replica)
+        self.restore_node(backup_dir, 'node', replica)
 
         # Settings for Replica
-        self.add_instance(backup_dir, 'replica', replica)
         self.set_replica(master, replica, synchronous=True)
-        self.set_archiving(backup_dir, 'replica', replica, replica=True)
-
-        copy_tree(
-            os.path.join(backup_dir, 'wal', 'master'),
-            os.path.join(backup_dir, 'wal', 'replica'))
+        self.set_archiving(backup_dir, 'node', replica, replica=True)
 
         replica.slow_start(replica=True)
 
         # take backup from replica
         self.backup_node(
-            backup_dir, 'replica', replica,
+            backup_dir, 'node', replica, replica.data_dir,
             options=[
                 '--archive-timeout=30',
-                '--log-level-console=verbose',
+                '--log-level-console=LOG',
                 '--no-validate'],
             return_id=False)
 
         try:
             self.backup_node(
-                backup_dir, 'replica', replica,
+                backup_dir, 'node', replica, replica.data_dir,
                 options=[
                     '--archive-timeout=30',
-                    '--log-level-console=verbose',
+                    '--log-level-console=LOG',
                     '--no-validate'])
             # we should die here because exception is what we expect to happen
             self.assertEqual(
@@ -893,19 +878,19 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
                     repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertIn(
-                'LOG: Looking for LSN 0/3000060 in segment: 000000010000000000000003',
+                'LOG: Looking for LSN 0/4000060 in segment: 000000010000000000000004',
                 e.message,
                 "\n Unexpected Error Message: {0}\n CMD: {1}".format(
                     repr(e.message), self.cmd))
 
             self.assertIn(
-                'INFO: Wait for LSN 0/3000060 in archived WAL segment',
+                'INFO: Wait for LSN 0/4000060 in archived WAL segment',
                 e.message,
                 "\n Unexpected Error Message: {0}\n CMD: {1}".format(
                     repr(e.message), self.cmd))
 
             self.assertIn(
-                'ERROR: WAL segment 000000010000000000000003 could not be archived in 30 seconds',
+                'ERROR: WAL segment 000000010000000000000004 could not be archived in 30 seconds',
                 e.message,
                 "\n Unexpected Error Message: {0}\n CMD: {1}".format(
                     repr(e.message), self.cmd))
@@ -1016,7 +1001,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
-    # @unittest.skip("skip")
+    @unittest.skip("skip")
     def test_replica_promote_1(self):
         """
         """
@@ -1037,7 +1022,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'master', master)
-        # set replica True, so archive_mode 'always' is used. 
+        # set replica True, so archive_mode 'always' is used.
         self.set_archiving(backup_dir, 'master', master, replica=True)
         master.slow_start()
 
@@ -1091,6 +1076,528 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
+    # @unittest.skip("skip")
+    def test_replica_promote_2(self):
+        """
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        master = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'master'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'master', master)
+        # set replica True, so archive_mode 'always' is used.
+        self.set_archiving(
+            backup_dir, 'master', master, replica=True)
+        master.slow_start()
+
+        self.backup_node(backup_dir, 'master', master)
+
+        # Create replica
+        replica = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'replica'))
+        replica.cleanup()
+        self.restore_node(backup_dir, 'master', replica)
+
+        # Settings for Replica
+        self.set_replica(master, replica)
+        self.set_auto_conf(replica, {'port': replica.port})
+
+        replica.slow_start(replica=True)
+
+        master.safe_psql(
+            'postgres',
+            'CREATE TABLE t1 AS '
+            'SELECT i, repeat(md5(i::text),5006056) AS fat_attr '
+            'FROM generate_series(0,1) i')
+
+        self.wait_until_replica_catch_with_master(master, replica)
+
+        replica.promote()
+
+        replica.safe_psql(
+            'postgres',
+            'CHECKPOINT')
+
+#        replica.safe_psql(
+#            'postgres',
+#            'create table t2()')
+#
+#        replica.safe_psql(
+#            'postgres',
+#            'CHECKPOINT')
+
+        self.backup_node(
+            backup_dir, 'master', replica, data_dir=replica.data_dir,
+            backup_type='page')
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_replica_promote_3(self):
+        """
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        master = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'master'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'master', master)
+
+        master.slow_start()
+
+        self.backup_node(backup_dir, 'master', master, options=['--stream'])
+
+        # Create replica
+        replica = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'replica'))
+        replica.cleanup()
+        self.restore_node(backup_dir, 'master', replica)
+
+        # Settings for Replica
+        self.set_replica(master, replica)
+        self.set_auto_conf(replica, {'port': replica.port})
+
+        replica.slow_start(replica=True)
+
+        master.safe_psql(
+            'postgres',
+            'CREATE TABLE t1 AS '
+            'SELECT i, repeat(md5(i::text),5006056) AS fat_attr '
+            'FROM generate_series(0,20) i')
+        self.wait_until_replica_catch_with_master(master, replica)
+
+        self.add_instance(backup_dir, 'replica', replica)
+
+        replica.safe_psql(
+            'postgres',
+            'CHECKPOINT')
+
+        full_id = self.backup_node(
+            backup_dir, 'replica',
+            replica, options=['--stream'])
+
+        master.safe_psql(
+            'postgres',
+            'CREATE TABLE t2 AS '
+            'SELECT i, repeat(md5(i::text),5006056) AS fat_attr '
+            'FROM generate_series(0,20) i')
+        self.wait_until_replica_catch_with_master(master, replica)
+
+        replica.safe_psql(
+            'postgres',
+            'CHECKPOINT')
+
+        self.backup_node(
+            backup_dir, 'replica', replica,
+            backup_type='delta', options=['--stream'])
+
+        replica.promote()
+
+        replica.safe_psql(
+            'postgres',
+            'CHECKPOINT')
+
+        # failing, because without archving, it is impossible to
+        # take multi-timeline backup.
+        try:
+            self.backup_node(
+                backup_dir, 'replica', replica,
+                backup_type='delta', options=['--stream'])
+            # we should die here because exception is what we expect to happen
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because of timeline switch "
+                "\n Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertTrue(
+                'WARNING: Cannot find valid backup on previous timelines, '
+                'WAL archive is not available' in e.message and
+                'ERROR: Create new full backup before an incremental one' in e.message,
+                "\n Unexpected Error Message: {0}\n CMD: {1}".format(
+                    repr(e.message), self.cmd))
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_replica_promote_archive_delta(self):
+        """
+        t3                    /---D3-->
+        t2               /------->
+        t1 --F---D1--D2--
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node1 = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node1'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'checkpoint_timeout': '30s',
+                'archive_timeout': '30s',
+                'autovacuum': 'off'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node1)
+        self.set_config(
+            backup_dir, 'node', options=['--archive-timeout=60s'])
+        self.set_archiving(backup_dir, 'node', node1)
+
+        node1.slow_start()
+
+        self.backup_node(backup_dir, 'node', node1, options=['--stream'])
+
+        # Create replica
+        node2 = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node2'))
+        node2.cleanup()
+        self.restore_node(backup_dir, 'node', node2, node2.data_dir)
+
+        # Settings for Replica
+        self.set_replica(node1, node2)
+        self.set_auto_conf(node2, {'port': node2.port})
+        self.set_archiving(backup_dir, 'node', node2, replica=True)
+
+        node2.slow_start(replica=True)
+
+        node1.safe_psql(
+            'postgres',
+            'CREATE TABLE t1 AS '
+            'SELECT i, repeat(md5(i::text),5006056) AS fat_attr '
+            'FROM generate_series(0,20) i')
+        self.wait_until_replica_catch_with_master(node1, node2)
+
+        node1.safe_psql(
+            'postgres',
+            'CREATE TABLE t2 AS '
+            'SELECT i, repeat(md5(i::text),5006056) AS fat_attr '
+            'FROM generate_series(0,20) i')
+        self.wait_until_replica_catch_with_master(node1, node2)
+
+        # delta backup on replica on timeline 1
+        delta1_id = self.backup_node(
+            backup_dir, 'node', node2, node2.data_dir,
+            'delta', options=['--stream'])
+
+        # delta backup on replica on timeline 1
+        delta2_id = self.backup_node(
+            backup_dir, 'node', node2, node2.data_dir, 'delta')
+
+        self.change_backup_status(
+            backup_dir, 'node', delta2_id, 'ERROR')
+
+        # node2 is now master
+        node2.promote()
+        node2.safe_psql('postgres', 'CHECKPOINT')
+
+        node2.safe_psql(
+            'postgres',
+            'CREATE TABLE t3 AS '
+            'SELECT i, repeat(md5(i::text),5006056) AS fat_attr '
+            'FROM generate_series(0,20) i')
+
+        # node1 is now replica
+        node1.cleanup()
+        # kludge "backup_id=delta1_id"
+        self.restore_node(
+            backup_dir, 'node', node1, node1.data_dir,
+            backup_id=delta1_id,
+            options=[
+                '--recovery-target-timeline=2',
+                '--recovery-target=latest'])
+
+        # Settings for Replica
+        self.set_replica(node2, node1)
+        self.set_auto_conf(node1, {'port': node1.port})
+        self.set_archiving(backup_dir, 'node', node1, replica=True)
+
+        node1.slow_start(replica=True)
+
+        node2.safe_psql(
+            'postgres',
+            'CREATE TABLE t4 AS '
+            'SELECT i, repeat(md5(i::text),5006056) AS fat_attr '
+            'FROM generate_series(0,30) i')
+        self.wait_until_replica_catch_with_master(node2, node1)
+
+        # node1 is back to be a master
+        node1.promote()
+        node1.safe_psql('postgres', 'CHECKPOINT')
+
+        # delta backup on timeline 3
+        self.backup_node(
+            backup_dir, 'node', node1, node1.data_dir, 'delta',
+            options=['--archive-timeout=60'])
+
+        pgdata = self.pgdata_content(node1.data_dir)
+
+        node1.cleanup()
+        self.restore_node(backup_dir, 'node', node1, node1.data_dir)
+
+        pgdata_restored = self.pgdata_content(node1.data_dir)
+        self.compare_pgdata(pgdata, pgdata_restored)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_replica_promote_archive_page(self):
+        """
+        t3                    /---P3-->
+        t2               /------->
+        t1 --F---P1--P2--
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node1 = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node1'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'checkpoint_timeout': '30s',
+                'archive_timeout': '30s',
+                'autovacuum': 'off'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node1)
+        self.set_archiving(backup_dir, 'node', node1)
+        self.set_config(
+            backup_dir, 'node', options=['--archive-timeout=60s'])
+
+        node1.slow_start()
+
+        self.backup_node(backup_dir, 'node', node1, options=['--stream'])
+
+        # Create replica
+        node2 = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node2'))
+        node2.cleanup()
+        self.restore_node(backup_dir, 'node', node2, node2.data_dir)
+
+        # Settings for Replica
+        self.set_replica(node1, node2)
+        self.set_auto_conf(node2, {'port': node2.port})
+        self.set_archiving(backup_dir, 'node', node2, replica=True)
+
+        node2.slow_start(replica=True)
+
+        node1.safe_psql(
+            'postgres',
+            'CREATE TABLE t1 AS '
+            'SELECT i, repeat(md5(i::text),5006056) AS fat_attr '
+            'FROM generate_series(0,20) i')
+        self.wait_until_replica_catch_with_master(node1, node2)
+
+        node1.safe_psql(
+            'postgres',
+            'CREATE TABLE t2 AS '
+            'SELECT i, repeat(md5(i::text),5006056) AS fat_attr '
+            'FROM generate_series(0,20) i')
+        self.wait_until_replica_catch_with_master(node1, node2)
+
+        # page backup on replica on timeline 1
+        page1_id = self.backup_node(
+            backup_dir, 'node', node2, node2.data_dir,
+            'page', options=['--stream'])
+
+        # page backup on replica on timeline 1
+        page2_id = self.backup_node(
+            backup_dir, 'node', node2, node2.data_dir, 'page')
+
+        self.change_backup_status(
+            backup_dir, 'node', page2_id, 'ERROR')
+
+        # node2 is now master
+        node2.promote()
+        node2.safe_psql('postgres', 'CHECKPOINT')
+
+        node2.safe_psql(
+            'postgres',
+            'CREATE TABLE t3 AS '
+            'SELECT i, repeat(md5(i::text),5006056) AS fat_attr '
+            'FROM generate_series(0,20) i')
+
+        # node1 is now replica
+        node1.cleanup()
+        # kludge "backup_id=page1_id"
+        self.restore_node(
+            backup_dir, 'node', node1, node1.data_dir,
+            backup_id=page1_id,
+            options=[
+                '--recovery-target-timeline=2',
+                '--recovery-target=latest'])
+
+        # Settings for Replica
+        self.set_replica(node2, node1)
+        self.set_auto_conf(node1, {'port': node1.port})
+        self.set_archiving(backup_dir, 'node', node1, replica=True)
+
+        node1.slow_start(replica=True)
+
+        node2.safe_psql(
+            'postgres',
+            'CREATE TABLE t4 AS '
+            'SELECT i, repeat(md5(i::text),5006056) AS fat_attr '
+            'FROM generate_series(0,30) i')
+        self.wait_until_replica_catch_with_master(node2, node1)
+
+        # node1 is back to be a master
+        node1.promote()
+        node1.safe_psql('postgres', 'CHECKPOINT')
+
+        # delta3_id = self.backup_node(
+        #     backup_dir, 'node', node2, node2.data_dir, 'delta')
+        # page backup on timeline 3
+        page3_id = self.backup_node(
+            backup_dir, 'node', node1, node1.data_dir, 'page',
+            options=['--archive-timeout=60'])
+
+        pgdata = self.pgdata_content(node1.data_dir)
+
+        node1.cleanup()
+        self.restore_node(backup_dir, 'node', node1, node1.data_dir)
+
+        pgdata_restored = self.pgdata_content(node1.data_dir)
+        self.compare_pgdata(pgdata, pgdata_restored)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_parent_choosing(self):
+        """
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        master = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'master'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'master', master)
+
+        master.slow_start()
+
+        self.backup_node(backup_dir, 'master', master, options=['--stream'])
+
+        # Create replica
+        replica = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'replica'))
+        replica.cleanup()
+        self.restore_node(backup_dir, 'master', replica)
+
+        # Settings for Replica
+        self.set_replica(master, replica)
+        self.set_auto_conf(replica, {'port': replica.port})
+
+        replica.slow_start(replica=True)
+
+        master.safe_psql(
+            'postgres',
+            'CREATE TABLE t1 AS '
+            'SELECT i, repeat(md5(i::text),5006056) AS fat_attr '
+            'FROM generate_series(0,20) i')
+        self.wait_until_replica_catch_with_master(master, replica)
+
+        self.add_instance(backup_dir, 'replica', replica)
+
+        full_id = self.backup_node(
+            backup_dir, 'replica',
+            replica, options=['--stream'])
+
+        master.safe_psql(
+            'postgres',
+            'CREATE TABLE t2 AS '
+            'SELECT i, repeat(md5(i::text),5006056) AS fat_attr '
+            'FROM generate_series(0,20) i')
+        self.wait_until_replica_catch_with_master(master, replica)
+
+        self.backup_node(
+            backup_dir, 'replica', replica,
+            backup_type='delta', options=['--stream'])
+
+        replica.promote()
+        replica.safe_psql('postgres', 'CHECKPOINT')
+
+        # failing, because without archving, it is impossible to
+        # take multi-timeline backup.
+        try:
+            self.backup_node(
+                backup_dir, 'replica', replica,
+                backup_type='delta', options=['--stream'])
+            # we should die here because exception is what we expect to happen
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because of timeline switch "
+                "\n Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertTrue(
+                'WARNING: Cannot find valid backup on previous timelines, '
+                'WAL archive is not available' in e.message and
+                'ERROR: Create new full backup before an incremental one' in e.message,
+                "\n Unexpected Error Message: {0}\n CMD: {1}".format(
+                    repr(e.message), self.cmd))
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_instance_from_the_past(self):
+        """
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+
+        node.slow_start()
+
+        full_id = self.backup_node(backup_dir, 'node', node, options=['--stream'])
+
+        node.pgbench_init(scale=10)
+        self.backup_node(backup_dir, 'node', node, options=['--stream'])
+        node.cleanup()
+
+        self.restore_node(backup_dir, 'node', node, backup_id=full_id)
+        node.slow_start()
+
+        try:
+            self.backup_node(
+                backup_dir, 'node', node,
+                backup_type='delta', options=['--stream'])
+            # we should die here because exception is what we expect to happen
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because instance is from the past "
+                "\n Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertTrue(
+                'ERROR: Current START LSN' in e.message and
+                'is lower than START LSN' in e.message and
+                'It may indicate that we are trying to backup '
+                'PostgreSQL instance from the past' in e.message,
+                "\n Unexpected Error Message: {0}\n CMD: {1}".format(
+                    repr(e.message), self.cmd))
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
 
 # TODO:
 # null offset STOP LSN and latest record in previous segment is conrecord (manual only)
