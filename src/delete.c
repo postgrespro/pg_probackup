@@ -1021,48 +1021,16 @@ do_delete_instance(void)
 	return 0;
 }
 
-/* checks that parray contains element */
-bool parray_contains(parray *array, void *elem)
-{
-	int i;
-	for (i = 0; i < parray_num(array); i++)
-	{
-		if (parray_get(array, i) == elem) return true;
-	}
-	return false;
-}
-
-
-void append_childs(parray *backup_list, pgBackup  *target_backup, parray *delete_list)
-{
-	int i;
-	pgBackup   *backup;
-	for (i = 0; i < parray_num(backup_list); i++)
-	{
-		backup = (pgBackup *)parray_get(backup_list, i);
-		if (backup == target_backup) continue;
-		/* check if backup is descendant of delete target */
-		if (is_parent(target_backup->start_time, backup, false))
-		{
-			if (!parray_contains(delete_list, backup))
-				parray_append(delete_list, backup);
-			/* recursive call */
-			append_childs(backup_list, backup, delete_list);
-		}
-	}
-
-}
-
 /* Delete all backups of given status in instance */
 void
 do_delete_status(InstanceConfig *instance_config, const char *status)
 {
-	parray		*backup_list, *delete_list;;
-	int 		i;
-	const char  *pretty_status;
-	int 		n_deleted = 0, n_found = 0;
-	size_t		size_to_delete = 0;
-	char		size_to_delete_pretty[20];
+	int         i;
+	parray     *backup_list, *delete_list;
+	const char *pretty_status;
+	int         n_deleted = 0, n_found = 0;
+	size_t      size_to_delete = 0;
+	char        size_to_delete_pretty[20];
 	pgBackup   *backup;
 
 	BackupStatus status_for_delete = str2status(status);
@@ -1086,9 +1054,12 @@ do_delete_status(InstanceConfig *instance_config, const char *status)
 		return;
 	}
 
-	elog(INFO, "Deleting all backups with status '%s'", pretty_status);
+	if (dry_run)
+		elog(INFO, "Deleting all backups with status '%s' in dry run mode", pretty_status);
+	else
+		elog(INFO, "Deleting all backups with status '%s'", pretty_status);
 
-	/* Selects backups for deleting to delete_list array.  Will delete all backups with specified status and childs*/
+	/* Selects backups with specified status and their children into delete_list array. */
 	for (i = 0; i < parray_num(backup_list); i++)
 	{
 		backup = (pgBackup *) parray_get(backup_list, i);
@@ -1096,34 +1067,36 @@ do_delete_status(InstanceConfig *instance_config, const char *status)
 		if (backup->status == status_for_delete)
 		{
 			n_found++;
-			if (parray_contains(delete_list, backup)) continue;
+
+			/* incremental backup can be already in delete_list due to append_children() */
+			if (parray_contains(delete_list, backup))
+				continue;
 			parray_append(delete_list, backup);
-			append_childs(backup_list, backup, delete_list);
+
+			append_children(backup_list, backup, delete_list);
 		}
 	}
+
+	parray_qsort(delete_list, pgBackupCompareIdDesc);
+
 	/* delete and calculate free size from delete_list */
 	for (i = 0; i < parray_num(delete_list); i++)
 	{
 		backup = (pgBackup *)parray_get(delete_list, i);
-		elog(dry_run ? INFO : LOG, "Backup %s with status %s %s be deleted",
+
+		elog(INFO, "Backup %s with status %s %s be deleted",
 			base36enc(backup->start_time), status2str(backup->status), dry_run ? "can" : "will");
 
 		size_to_delete += backup->data_bytes;
 		if (backup->stream)
 			size_to_delete += backup->wal_bytes;
 
-
 		if (!dry_run && lock_backup(backup))
-		{
-			if (interrupted)
-				elog(ERROR, "interrupted during delete backup");
-
 			delete_backup_files(backup);
-			n_deleted++;
 
-		}
-
+		n_deleted++;
 	}
+
 	/* Inform about data size to free */
 	if (size_to_delete >= 0)
 	{
@@ -1133,7 +1106,7 @@ do_delete_status(InstanceConfig *instance_config, const char *status)
 	}
 
 	/* delete selected backups */
-	if (!dry_run)
+	if (!dry_run && n_deleted > 0)
 		elog(INFO, "Successfully deleted %i %s from instance '%s'",
 			n_deleted, n_deleted == 1 ? "backup" : "backups",
 			instance_config->name);
@@ -1143,9 +1116,8 @@ do_delete_status(InstanceConfig *instance_config, const char *status)
 		elog(WARNING, "Instance '%s' has no backups with status '%s'",
 			instance_config->name, pretty_status);
 
-	/* Clean WAL segments */
-	if (delete_wal)
-		do_retention_wal(dry_run);
+	// we don`t do WAL purge here, because it is impossible to correctly handle
+	// dry-run case.
 
 	/* Cleanup */
 	parray_free(delete_list);

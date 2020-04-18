@@ -638,8 +638,8 @@ help_delete(void)
 	printf(_("      --wal-depth=wal-depth        number of latest valid backups per timeline that must\n"));
 	printf(_("                                   retain the ability to perform PITR; 0 disables; (default: 0)\n"));
 	printf(_("      --dry-run                    perform a trial run without any changes\n"));
-	printf(_("      --status=backups_status      delete all backups with specific status\n"));
-	
+	printf(_("      --status=backup_status       delete all backups with specified status\n"));
+
 	printf(_("\n  Logging options:\n"));
 	printf(_("      --log-level-console=log-level-console\n"));
 	printf(_("                                   level for console logging (default: info)\n"));

@@ -197,3 +197,16 @@ parray_bsearch(parray *array, const void *key, int(*compare)(const void *, const
 {
 	return bsearch(&key, array->data, array->used, sizeof(void *), compare);
 }
+
+/* checks that parray contains element */
+bool parray_contains(parray *array, void *elem)
+{
+	int i;
+
+	for (i = 0; i < parray_num(array); i++)
+	{
+		if (parray_get(array, i) == elem)
+			return true;
+	}
+	return false;
+}
