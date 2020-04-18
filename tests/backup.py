@@ -2726,7 +2726,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         node.slow_start()
 
         # FULL backup
-        self.backup_node(
+        backup_id = self.backup_node(
             backup_dir, 'node', node,
             options=['--stream', '--log-level-file=LOG', '--note=test_note'])
 
@@ -2735,6 +2735,14 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         print(self.show_pb(backup_dir, as_text=True, as_json=True))
 
         self.assertEqual(show_backups[0]['note'], "test_note")
+
+        self.set_backup(backup_dir, 'node', backup_id, options=['--note=none'])
+
+        backup_meta = self.show_pb(backup_dir, 'node', backup_id)
+
+        self.assertNotIn(
+            'note',
+            backup_meta)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
