@@ -90,6 +90,8 @@ extern const char  *PROGRAM_EMAIL;
 /* retry attempts */
 #define PAGE_READ_ATTEMPTS 100
 
+#define MAX_NOTE_SIZE 1024
+
 /* Check if an XLogRecPtr value is pointed to 0 offset */
 #define XRecOffIsNull(xlrp) \
 		((xlrp) % XLOG_BLCKSZ == 0)
@@ -391,7 +393,6 @@ struct pgBackup
 	parray			*files;			/* list of files belonging to this backup
 									 * must be populated explicitly */
 	char			*note;
-									
 };
 
 /* Recovery target for restore and validate subcommands */
@@ -435,14 +436,14 @@ typedef struct pgRestoreParams
 /* Options needed for set-backup command */
 typedef struct pgSetBackupParams
 {
-	int64	ttl; /* amount of time backup must be pinned
+	int64   ttl; /* amount of time backup must be pinned
 				  * -1 - do nothing
 				  * 0 - disable pinning
 				  */
-	time_t	expire_time; /* Point in time before which backup
+	time_t  expire_time; /* Point in time until backup
 						  * must be pinned.
 						  */
-	char *note;
+	char   *note;
 } pgSetBackupParams;
 
 typedef struct
@@ -781,8 +782,9 @@ extern void timelineInfoFree(void *tliInfo);
 extern parray *catalog_get_timelines(InstanceConfig *instance);
 extern void do_set_backup(const char *instance_name, time_t backup_id,
 							pgSetBackupParams *set_backup_params);
-extern bool pin_backup(pgBackup	*target_backup,
+extern void pin_backup(pgBackup	*target_backup,
 							pgSetBackupParams *set_backup_params);
+extern void add_note(pgBackup *target_backup, char *note);
 extern void pgBackupWriteControl(FILE *out, pgBackup *backup);
 extern void write_backup_filelist(pgBackup *backup, parray *files,
 								  const char *root, parray *external_list);

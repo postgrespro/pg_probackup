@@ -156,7 +156,6 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync)
 	/* used for multitimeline incremental backup */
 	parray       *tli_list = NULL;
 
-
 	/* for fancy reporting */
 	time_t		start_time, end_time;
 	char		pretty_time[20];
@@ -820,9 +819,7 @@ do_backup(time_t start_time, bool no_validate,
 	/* Update backup status and other metainfo. */
 	current.status = BACKUP_STATUS_RUNNING;
 	current.start_time = start_time;
-	
-	current.note = set_backup_params ? set_backup_params->note : NULL;
-	
+
 	StrNCpy(current.program_version, PROGRAM_VERSION,
 			sizeof(current.program_version));
 
@@ -905,6 +902,10 @@ do_backup(time_t start_time, bool no_validate,
 		if (instance_config.master_conn_opt.pghost == NULL)
 			elog(ERROR, "Options for connection to master must be provided to perform backup from replica");
 
+	/* add note to backup if requested */
+	if (set_backup_params && set_backup_params->note)
+		add_note(&current, set_backup_params->note);
+
 	/* backup data */
 	do_backup_instance(backup_conn, &nodeInfo, no_sync);
 	pgut_atexit_pop(backup_cleanup, NULL);
@@ -937,8 +938,7 @@ do_backup(time_t start_time, bool no_validate,
 		(set_backup_params->ttl > 0 ||
 		 set_backup_params->expire_time > 0))
 	{
-		if (!pin_backup(&current, set_backup_params))
-			elog(ERROR, "Failed to pin the backup %s", base36enc(current.backup_id));
+		pin_backup(&current, set_backup_params);
 	}
 
 	if (!no_validate)
