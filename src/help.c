@@ -193,7 +193,8 @@ help_pg_probackup(void)
 	printf(_("                 [--retention-redundancy=retention-redundancy]\n"));
 	printf(_("                 [--retention-window=retention-window]\n"));
 	printf(_("                 [--wal-depth=wal-depth]\n"));
-	printf(_("                 [--delete-wal] [-i backup-id | --delete-expired | --merge-expired | --status= ]\n"));
+	printf(_("                 [-i backup-id | --delete-expired | --merge-expired | --status=backup_status]\n"));
+	printf(_("                 [--delete-wal]\n"));
 	printf(_("                 [--dry-run]\n"));
 	printf(_("                 [--help]\n"));
 
