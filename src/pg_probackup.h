@@ -67,7 +67,6 @@ extern const char  *PROGRAM_EMAIL;
 #define DATABASE_MAP			"database_map"
 
 /* Timeout defaults */
-#define PARTIAL_WAL_TIMER			60
 #define ARCHIVE_TIMEOUT_DEFAULT		300
 #define REPLICA_TIMEOUT_DEFAULT		300
 
@@ -86,7 +85,10 @@ extern const char  *PROGRAM_EMAIL;
 #endif
 
 /* stdio buffer size */
-#define STDIO_BUFSIZE 65536 
+#define STDIO_BUFSIZE 65536
+
+/* retry attempts */
+#define PAGE_READ_ATTEMPTS 100
 
 /* Check if an XLogRecPtr value is pointed to 0 offset */
 #define XRecOffIsNull(xlrp) \
@@ -170,7 +172,8 @@ typedef struct pgFile
 	bool	exists_in_prev;		/* Mark files, both data and regular, that exists in previous backup */
 	CompressAlg		compress_alg;		/* compression algorithm applied to the file */
 	volatile 		pg_atomic_flag lock;/* lock for synchronization of parallel threads  */
-	datapagemap_t	pagemap;			/* bitmap of pages updated since previous backup */
+	datapagemap_t	pagemap;			/* bitmap of pages updated since previous backup
+										   may take up to 16kB per file */
 	bool			pagemap_isabsent;	/* Used to mark files with unknown state of pagemap,
 										 * i.e. datafiles without _ptrack */
 } pgFile;
@@ -421,6 +424,7 @@ typedef struct pgRestoreParams
 	bool	skip_external_dirs;
 	bool	skip_block_validation; //Start using it
 	const char *restore_command;
+	const char *primary_slot_name;
 
 	/* options for partial restore */
 	PartialRestoreType partial_restore_type;
@@ -473,7 +477,7 @@ struct timelineInfo {
 	TimeLineID tli;			/* this timeline */
 	TimeLineID parent_tli;  /* parent timeline. 0 if none */
 	timelineInfo *parent_link; /* link to parent timeline */
-	XLogRecPtr switchpoint;	   /* if this timeline has a parent
+	XLogRecPtr switchpoint;	   /* if this timeline has a parent, then
 								* switchpoint contains switchpoint LSN,
 								* otherwise 0 */
 	XLogSegNo begin_segno;	/* first present segment in this timeline */
@@ -498,6 +502,13 @@ typedef struct xlogInterval
 	XLogSegNo begin_segno;
 	XLogSegNo end_segno;
 } xlogInterval;
+
+typedef struct lsnInterval
+{
+	TimeLineID tli;
+	XLogRecPtr begin_lsn;
+	XLogRecPtr end_lsn;
+} lsnInterval;
 
 typedef enum xlogFileType
 {
@@ -529,9 +540,9 @@ typedef struct BackupPageHeader
 
 /* Special value for compressed_size field */
 #define PageIsOk		 0
+#define SkipCurrentPage -1
 #define PageIsTruncated -2
-#define SkipCurrentPage -3
-#define PageIsCorrupted -4 /* used by checkdb */
+#define PageIsCorrupted -3 /* used by checkdb */
 
 
 /*
@@ -571,6 +582,9 @@ typedef struct BackupPageHeader
 
 #define GetXLogSegNoFromScrath(logSegNo, log, seg, wal_segsz_bytes)	\
 		logSegNo = (uint64) log * XLogSegmentsPerXLogId(wal_segsz_bytes) + seg
+
+#define GetXLogFromFileName(fname, tli, logSegNo, wal_segsz_bytes) \
+		XLogFromFileName(fname, tli, logSegNo, wal_segsz_bytes)
 #else
 #define GetXLogSegNo(xlrp, logSegNo, wal_segsz_bytes) \
 	XLByteToSeg(xlrp, logSegNo)
@@ -587,6 +601,9 @@ typedef struct BackupPageHeader
 
 #define GetXLogSegNoFromScrath(logSegNo, log, seg, wal_segsz_bytes)	\
 		logSegNo = (uint64) log * XLogSegmentsPerXLogId + seg
+
+#define GetXLogFromFileName(fname, tli, logSegNo, wal_segsz_bytes) \
+		XLogFromFileName(fname, tli, logSegNo)
 #endif
 
 #define IsSshProtocol() (instance_config.remote.host && strcmp(instance_config.remote.proto, "ssh") == 0)
@@ -690,10 +707,11 @@ extern int do_init(void);
 extern int do_add_instance(InstanceConfig *instance);
 
 /* in archive.c */
-extern int do_archive_push(InstanceConfig *instance, char *wal_file_path,
-						   char *wal_file_name, bool overwrite);
-extern int do_archive_get(InstanceConfig *instance, char *wal_file_path,
-						  char *wal_file_name);
+extern void do_archive_push(InstanceConfig *instance, char *wal_file_path,
+						   char *wal_file_name, int batch_size, bool overwrite,
+						   bool no_sync, bool no_ready_rename);
+extern void do_archive_get(InstanceConfig *instance, const char *prefetch_dir_arg, char *wal_file_path,
+						   char *wal_file_name, int batch_size, bool validate_wal);
 
 /* in configure.c */
 extern void do_show_config(void);
@@ -707,8 +725,9 @@ extern int do_show(const char *instance_name, time_t requested_backup_id, bool s
 /* in delete.c */
 extern void do_delete(time_t backup_id);
 extern void delete_backup_files(pgBackup *backup);
-extern int do_retention(void);
+extern void do_retention(void);
 extern int do_delete_instance(void);
+extern void do_delete_status(InstanceConfig *instance_config, const char *status);
 
 /* in fetch.c */
 extern char *slurpFile(const char *datadir,
@@ -725,6 +744,18 @@ extern void help_command(char *command);
 /* in validate.c */
 extern void pgBackupValidate(pgBackup* backup, pgRestoreParams *params);
 extern int do_validate_all(void);
+extern int validate_one_page(Page page, BlockNumber absolute_blkno,
+							 XLogRecPtr stop_lsn, XLogRecPtr *page_lsn,
+							 uint32 checksum_version);
+
+/* return codes for validate_one_page */
+/* TODO: use enum */
+#define PAGE_IS_VALID (-1)
+#define PAGE_IS_NOT_FOUND (-2)
+#define PAGE_IS_ZEROED (-3)
+#define PAGE_HEADER_IS_INVALID (-4)
+#define PAGE_CHECKSUM_MISMATCH (-5)
+#define PAGE_LSN_FROM_FUTURE (-6)
 
 /* in catalog.c */
 extern pgBackup *read_backup(const char *instance_name, time_t timestamp);
@@ -743,6 +774,10 @@ extern void catalog_lock_backup_list(parray *backup_list, int from_idx,
 extern pgBackup *catalog_get_last_data_backup(parray *backup_list,
 											  TimeLineID tli,
 											  time_t current_start_time);
+extern pgBackup *get_multi_timeline_parent(parray *backup_list, parray *tli_list,
+	                      TimeLineID current_tli, time_t current_start_time,
+						  InstanceConfig *instance);
+extern void timelineInfoFree(void *tliInfo);
 extern parray *catalog_get_timelines(InstanceConfig *instance);
 extern void do_set_backup(const char *instance_name, time_t backup_id,
 							pgSetBackupParams *set_backup_params);
@@ -769,10 +804,15 @@ extern int pgBackupCompareIdEqual(const void *l, const void *r);
 
 extern pgBackup* find_parent_full_backup(pgBackup *current_backup);
 extern int scan_parent_chain(pgBackup *current_backup, pgBackup **result_backup);
+/* return codes for scan_parent_chain */
+#define ChainIsBroken 0
+#define ChainIsInvalid 1
+#define ChainIsOk 2
+
 extern bool is_parent(time_t parent_backup_time, pgBackup *child_backup, bool inclusive);
 extern bool is_prolific(parray *backup_list, pgBackup *target_backup);
-extern bool in_backup_list(parray *backup_list, pgBackup *target_backup);
 extern int get_backup_index_number(parray *backup_list, pgBackup *backup);
+extern void append_children(parray *backup_list, pgBackup *target_backup, parray *append_list);
 extern bool launch_agent(void);
 extern void launch_ssh(char* argv[]);
 extern void wait_ssh(void);
@@ -832,6 +872,7 @@ extern void pgFileDelete(pgFile *file, const char *full_path);
 extern void pgFileFree(void *file);
 
 extern pg_crc32 pgFileGetCRC(const char *file_path, bool missing_ok, bool use_crc32c);
+extern pg_crc32 pgFileGetCRCgz(const char *file_path, bool missing_ok, bool use_crc32c);
 
 extern int pgFileCompareName(const void *f1, const void *f2);
 extern int pgFileComparePath(const void *f1, const void *f2);
@@ -877,13 +918,16 @@ extern bool create_empty_file(fio_location from_location, const char *to_root,
 extern bool check_file_pages(pgFile *file, XLogRecPtr stop_lsn,
 							 uint32 checksum_version, uint32 backup_version);
 /* parsexlog.c */
-extern void extractPageMap(const char *archivedir,
-						   TimeLineID tli, uint32 seg_size,
-						   XLogRecPtr startpoint, XLogRecPtr endpoint);
+extern bool extractPageMap(const char *archivedir, uint32 wal_seg_size,
+						   XLogRecPtr startpoint, TimeLineID start_tli,
+						   XLogRecPtr endpoint, TimeLineID end_tli,
+						   parray *tli_list);
 extern void validate_wal(pgBackup *backup, const char *archivedir,
 						 time_t target_time, TransactionId target_xid,
 						 XLogRecPtr target_lsn, TimeLineID tli,
 						 uint32 seg_size);
+extern bool validate_wal_segment(TimeLineID tli, XLogSegNo segno,
+								 const char *prefetch_dir, uint32 wal_seg_size);
 extern bool read_recovery_info(const char *archivedir, TimeLineID tli,
 							   uint32 seg_size,
 							   XLogRecPtr start_lsn, XLogRecPtr stop_lsn,
@@ -913,6 +957,7 @@ extern void copy_pgcontrol_file(const char *from_fullpath, fio_location from_loc
 
 extern void time2iso(char *buf, size_t len, time_t time);
 extern const char *status2str(BackupStatus status);
+extern BackupStatus str2status(const char *status);
 extern const char *base36enc(long unsigned int value);
 extern char *base36enc_dup(long unsigned int value);
 extern long unsigned int base36dec(const char *text);
@@ -925,7 +970,7 @@ extern int32  do_decompress(void* dst, size_t dst_size, void const* src, size_t 
 							CompressAlg alg, const char **errormsg);
 
 extern void pretty_size(int64 size, char *buf, size_t len);
-extern void pretty_time_interval(int64 num_seconds, char *buf, size_t len);
+extern void pretty_time_interval(double time, char *buf, size_t len);
 
 extern PGconn *pgdata_basic_setup(ConnectionOptions conn_opt, PGNodeInfo *nodeInfo);
 extern void check_system_identifiers(PGconn *conn, char *pgdata);
@@ -948,8 +993,30 @@ extern char *pg_ptrack_get_and_clear(Oid tablespace_oid,
 extern XLogRecPtr get_last_ptrack_lsn(PGconn *backup_conn, PGNodeInfo *nodeInfo);
 extern parray * pg_ptrack_get_pagemapset(PGconn *backup_conn, const char *ptrack_schema, XLogRecPtr lsn);
 
-#ifdef WIN32
-#define setbuffer(stream, buf, size) setvbuf(stream, buf, buf ? _IOFBF : _IONBF, size);
-#endif
+/* FIO */
+extern int fio_send_pages(FILE* in, FILE* out, pgFile *file, XLogRecPtr horizonLsn,
+						   int calg, int clevel, uint32 checksum_version,
+						   datapagemap_t *pagemap, BlockNumber* err_blknum, char **errormsg);
+/* return codes for fio_send_pages */
+#define OUT_BUF_SIZE (1024 * 1024)
+extern int fio_send_file_gz(const char *from_fullpath, const char *to_fullpath, FILE* out, int thread_num);
+extern int fio_send_file(const char *from_fullpath, const char *to_fullpath, FILE* out, int thread_num);
+
+/* return codes for fio_send_pages() and fio_send_file() */
+#define SEND_OK       (0)
+#define FILE_MISSING (-1)
+#define OPEN_FAILED  (-2)
+#define READ_FAILED  (-3)
+#define WRITE_FAILED (-4)
+#define ZLIB_ERROR   (-5)
+#define REMOTE_ERROR (-6)
+#define PAGE_CORRUPTION (-8)
+
+/* Check if specified location is local for current node */
+extern bool fio_is_remote(fio_location location);
+
+extern void get_header_errormsg(Page page, char **errormsg);
+extern void get_checksum_errormsg(Page page, char **errormsg,
+								  BlockNumber absolute_blkno);
 
 #endif /* PG_PROBACKUP_H */

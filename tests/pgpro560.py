@@ -43,7 +43,7 @@ class CheckSystemID(ProbackupTest, unittest.TestCase):
                 "Output: {0} \n CMD: {1}".format(repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertTrue(
-                'ERROR: could not open file' in e.message and
+                'ERROR: Could not open file' in e.message and
                 'pg_control' in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))

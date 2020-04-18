@@ -801,3 +801,75 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
+
+    def test_delete_error_backups(self):
+        """delete increment and all after him"""
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'])
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # full backup mode
+        self.backup_node(backup_dir, 'node', node)
+        # page backup mode
+        self.backup_node(backup_dir, 'node', node, backup_type="page")
+
+        # Take FULL BACKUP
+        backup_id_a = self.backup_node(backup_dir, 'node', node)
+        # Take PAGE BACKUP
+        backup_id_b = self.backup_node(backup_dir, 'node', node, backup_type="page")
+
+        backup_id_c = self.backup_node(backup_dir, 'node', node, backup_type="page")
+
+        backup_id_d = self.backup_node(backup_dir, 'node', node, backup_type="page")
+
+        # full backup mode
+        self.backup_node(backup_dir, 'node', node)
+        self.backup_node(backup_dir, 'node', node, backup_type="page")
+        backup_id_e = self.backup_node(backup_dir, 'node', node, backup_type="page")
+        self.backup_node(backup_dir, 'node', node, backup_type="page")
+
+        # Change status to ERROR
+        self.change_backup_status(backup_dir, 'node', backup_id_a, 'ERROR')
+        self.change_backup_status(backup_dir, 'node', backup_id_c, 'ERROR')
+        self.change_backup_status(backup_dir, 'node', backup_id_e, 'ERROR')
+
+        print(self.show_pb(backup_dir, as_text=True, as_json=False))
+
+        show_backups = self.show_pb(backup_dir, 'node')
+        self.assertEqual(len(show_backups), 10)
+
+        # delete error backups
+        output = self.delete_pb(backup_dir, 'node', options=['--status=ERROR', '--dry-run'])
+        show_backups = self.show_pb(backup_dir, 'node')
+        self.assertEqual(len(show_backups), 10)
+
+        self.assertIn(
+            "Deleting all backups with status 'ERROR' in dry run mode",
+            output)
+
+        self.assertIn(
+            "INFO: Backup {0} with status OK can be deleted".format(backup_id_d),
+            output)
+
+        print(self.show_pb(backup_dir, as_text=True, as_json=False))
+
+        show_backups = self.show_pb(backup_dir, 'node')
+        output = self.delete_pb(backup_dir, 'node', options=['--status=ERROR'])
+        print(output)
+        show_backups = self.show_pb(backup_dir, 'node')
+        self.assertEqual(len(show_backups), 4)
+
+        self.assertEqual(show_backups[0]['status'], "OK")
+        self.assertEqual(show_backups[1]['status'], "OK")
+        self.assertEqual(show_backups[2]['status'], "OK")
+        self.assertEqual(show_backups[3]['status'], "OK")
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)

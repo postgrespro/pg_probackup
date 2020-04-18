@@ -339,7 +339,7 @@ class ProbackupTest(object):
         options['wal_level'] = 'logical'
         options['hot_standby'] = 'off'
 
-        options['log_line_prefix'] = '"%t [%p]: [%l-1] "'
+        options['log_line_prefix'] = '%t [%p]: [%l-1] '
         options['log_statement'] = 'none'
         options['log_duration'] = 'on'
         options['log_min_duration_statement'] = 0
@@ -1131,7 +1131,8 @@ class ProbackupTest(object):
 
     def set_archiving(
             self, backup_dir, instance, node, replica=False,
-            overwrite=False, compress=False, old_binary=False):
+            overwrite=False, compress=False, old_binary=False,
+            log_level=False, archive_timeout=False):
 
         # parse postgresql.auto.conf
         options = {}
@@ -1161,11 +1162,25 @@ class ProbackupTest(object):
         if overwrite:
             options['archive_command'] += '--overwrite '
 
+        options['archive_command'] += '--log-level-console=verbose '
+        options['archive_command'] += '-j 5 '
+        options['archive_command'] += '--batch-size 10 '
+        options['archive_command'] += '--no-sync '
+
+        if archive_timeout:
+            options['archive_command'] += '--archive-timeout={0} '.format(
+                archive_timeout)
+
         if os.name == 'posix':
             options['archive_command'] += '--wal-file-path=%p --wal-file-name=%f'
 
         elif os.name == 'nt':
             options['archive_command'] += '--wal-file-path="%p" --wal-file-name="%f"'
+
+        if log_level:
+            options['archive_command'] += ' --log-level-console={0}'.format(log_level)
+            options['archive_command'] += ' --log-level-file={0} '.format(log_level)
+
 
         self.set_auto_conf(node, options)
 
@@ -1244,7 +1259,8 @@ class ProbackupTest(object):
     def set_replica(
             self, master, replica,
             replica_name='replica',
-            synchronous=False
+            synchronous=False,
+            log_shipping=False
             ):
 
         self.set_auto_conf(
@@ -1264,19 +1280,22 @@ class ProbackupTest(object):
                 if os.stat(probackup_recovery_path).st_size > 0:
                     config = 'probackup_recovery.conf'
 
-            self.set_auto_conf(
-                replica,
-                {'primary_conninfo': 'user={0} port={1} application_name={2} '
-                ' sslmode=prefer sslcompression=1'.format(
-                    self.user, master.port, replica_name)},
-                config)
+            if not log_shipping:
+                self.set_auto_conf(
+                    replica,
+                    {'primary_conninfo': 'user={0} port={1} application_name={2} '
+                    ' sslmode=prefer sslcompression=1'.format(
+                        self.user, master.port, replica_name)},
+                    config)
         else:
             replica.append_conf('recovery.conf', 'standby_mode = on')
-            replica.append_conf(
-                'recovery.conf',
-                "primary_conninfo = 'user={0} port={1} application_name={2}"
-                " sslmode=prefer sslcompression=1'".format(
-                    self.user, master.port, replica_name))
+
+            if not log_shipping:
+                replica.append_conf(
+                    'recovery.conf',
+                    "primary_conninfo = 'user={0} port={1} application_name={2}"
+                    " sslmode=prefer sslcompression=1'".format(
+                        self.user, master.port, replica_name))
 
         if synchronous:
             self.set_auto_conf(

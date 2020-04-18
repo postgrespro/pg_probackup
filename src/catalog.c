@@ -42,6 +42,24 @@ timelineInfoNew(TimeLineID tli)
 	return tlinfo;
 }
 
+/* free timelineInfo object */
+void
+timelineInfoFree(void *tliInfo)
+{
+	timelineInfo *tli = (timelineInfo *) tliInfo;
+
+	parray_walk(tli->xlog_filelist, pgFileFree);
+	parray_free(tli->xlog_filelist);
+
+	if (tli->backups)
+	{
+		parray_walk(tli->backups, pgBackupFree);
+		parray_free(tli->backups);
+	}
+
+	pfree(tliInfo);
+}
+
 /* Iterate over locked backups and delete locks files */
 static void
 unlink_lock_atexit(void)
@@ -597,7 +615,7 @@ catalog_get_last_data_backup(parray *backup_list, TimeLineID tli, time_t current
 			switch (scan_parent_chain(backup, &tmp_backup))
 			{
 				/* broken chain */
-				case 0:
+				case ChainIsBroken:
 					invalid_backup_id = base36enc_dup(tmp_backup->parent_backup);
 
 					elog(WARNING, "Backup %s has missing parent: %s. Cannot be a parent",
@@ -606,7 +624,7 @@ catalog_get_last_data_backup(parray *backup_list, TimeLineID tli, time_t current
 					continue;
 
 				/* chain is intact, but at least one parent is invalid */
-				case 1:
+				case ChainIsInvalid:
 					invalid_backup_id = base36enc_dup(tmp_backup->start_time);
 
 					elog(WARNING, "Backup %s has invalid parent: %s. Cannot be a parent",
@@ -615,17 +633,13 @@ catalog_get_last_data_backup(parray *backup_list, TimeLineID tli, time_t current
 					continue;
 
 				/* chain is ok */
-				case 2:
+				case ChainIsOk:
 					/* Yes, we could call is_parent() earlier - after choosing the ancestor,
 					 * but this way we have an opportunity to detect and report all possible
 					 * anomalies.
 					 */
 					if (is_parent(full_backup->start_time, backup, true))
-					{
-						elog(INFO, "Parent backup: %s",
-							base36enc(backup->start_time));
 						return backup;
-					}
 			}
 		}
 		/* skip yourself */
@@ -636,6 +650,150 @@ catalog_get_last_data_backup(parray *backup_list, TimeLineID tli, time_t current
 			elog(WARNING, "Backup %s has status: %s. Cannot be a parent.",
 				base36enc(backup->start_time), status2str(backup->status));
 		}
+	}
+
+	return NULL;
+}
+
+/*
+ * For multi-timeline chain, look up suitable parent for incremental backup.
+ * Multi-timeline chain has full backup and one or more descendants located
+ * on different timelines.
+ */
+pgBackup *
+get_multi_timeline_parent(parray *backup_list, parray *tli_list,
+	                      TimeLineID current_tli, time_t current_start_time,
+						  InstanceConfig *instance)
+{
+	int           i;
+	timelineInfo *my_tlinfo = NULL;
+	timelineInfo *tmp_tlinfo = NULL;
+	pgBackup     *ancestor_backup = NULL;
+
+	/* there are no timelines in the archive */
+	if (parray_num(tli_list) == 0)
+		return NULL;
+
+	/* look for current timelineInfo */
+	for (i = 0; i < parray_num(tli_list); i++)
+	{
+		timelineInfo  *tlinfo = (timelineInfo  *) parray_get(tli_list, i);
+
+		if (tlinfo->tli == current_tli)
+		{
+			my_tlinfo = tlinfo;
+			break;
+		}
+	}
+
+	if (my_tlinfo == NULL)
+		return NULL;
+
+	/* Locate tlinfo of suitable full backup.
+	 * Consider this example:
+	 *  t3                    s2-------X <-! We are here
+	 *                        /
+	 *  t2         s1----D---*----E--->
+	 *             /
+	 *  t1--A--B--*---C------->
+	 *
+	 * A, E - full backups
+	 * B, C, D - incremental backups
+	 *
+	 * We must find A.
+	 */
+	tmp_tlinfo = my_tlinfo;
+	while (tmp_tlinfo->parent_link)
+	{
+		/* if timeline has backups, iterate over them */
+		if (tmp_tlinfo->parent_link->backups)
+		{
+			for (i = 0; i < parray_num(tmp_tlinfo->parent_link->backups); i++)
+			{
+				pgBackup *backup = (pgBackup *) parray_get(tmp_tlinfo->parent_link->backups, i);
+
+				if (backup->backup_mode == BACKUP_MODE_FULL &&
+					(backup->status == BACKUP_STATUS_OK ||
+					 backup->status == BACKUP_STATUS_DONE) &&
+					 backup->stop_lsn <= tmp_tlinfo->switchpoint)
+				{
+					ancestor_backup = backup;
+					break;
+				}
+			}
+		}
+
+		if (ancestor_backup)
+			break;
+
+		tmp_tlinfo = tmp_tlinfo->parent_link;
+	}
+
+	/* failed to find valid FULL backup on parent timelines */
+	if (!ancestor_backup)
+		return NULL;
+	else
+		elog(LOG, "Latest valid full backup: %s, tli: %i",
+			base36enc(ancestor_backup->start_time), ancestor_backup->tli);
+
+	/* At this point we found suitable full backup,
+	 * now we must find his latest child, suitable to be
+	 * parent of current incremental backup.
+	 * Consider this example:
+	 *  t3                    s2-------X <-! We are here
+	 *                        /
+	 *  t2         s1----D---*----E--->
+	 *             /
+	 *  t1--A--B--*---C------->
+	 *
+	 * A, E - full backups
+	 * B, C, D - incremental backups
+	 *
+	 * We found A, now we must find D.
+	 */
+
+	/* Optimistically, look on current timeline for valid incremental backup, child of ancestor */
+	if (my_tlinfo->backups)
+	{
+		/* backups are sorted in descending order and we need latest valid */
+		for (i = 0; i < parray_num(my_tlinfo->backups); i++)
+		{
+			pgBackup *tmp_backup = NULL;
+			pgBackup *backup = (pgBackup *) parray_get(my_tlinfo->backups, i);
+
+			/* found suitable parent */
+			if (scan_parent_chain(backup, &tmp_backup) == ChainIsOk &&
+				is_parent(ancestor_backup->start_time, backup, false))
+				return backup;
+		}
+	}
+
+	/* Iterate over parent timelines and look for a valid backup, child of ancestor */
+	tmp_tlinfo = my_tlinfo;
+	while (tmp_tlinfo->parent_link)
+	{
+
+		/* if timeline has backups, iterate over them */
+		if (tmp_tlinfo->parent_link->backups)
+		{
+			for (i = 0; i < parray_num(tmp_tlinfo->parent_link->backups); i++)
+			{
+				pgBackup *tmp_backup = NULL;
+				pgBackup *backup = (pgBackup *) parray_get(tmp_tlinfo->parent_link->backups, i);
+
+				/* We are not interested in backups
+				 * located outside of our timeline history
+				 */
+				if (backup->stop_lsn > tmp_tlinfo->switchpoint)
+					continue;
+
+				if (scan_parent_chain(backup, &tmp_backup) == ChainIsOk &&
+					is_parent(ancestor_backup->start_time, backup, true))
+					return backup;
+			}
+		}
+
+		tmp_tlinfo = tmp_tlinfo->parent_link;
 	}
 
 	return NULL;
@@ -2237,18 +2395,18 @@ scan_parent_chain(pgBackup *current_backup, pgBackup **result_backup)
 	{
 		/* Set oldest child backup in chain */
 		*result_backup = target_backup;
-		return 0;
+		return ChainIsBroken;
 	}
 
 	/* chain is ok, but some backups are invalid */
 	if (invalid_backup)
 	{
 		*result_backup = invalid_backup;
-		return 1;
+		return ChainIsInvalid;
 	}
 
 	*result_backup = target_backup;
-	return 2;
+	return ChainIsOk;
 }
 
 /*
@@ -2300,4 +2458,24 @@ get_backup_index_number(parray *backup_list, pgBackup *backup)
 	}
 	elog(WARNING, "Failed to find backup %s", base36enc(backup->start_time));
 	return -1;
+}
+
+/* On backup_list lookup children of target_backup and append them to append_list */
+void
+append_children(parray *backup_list, pgBackup *target_backup, parray *append_list)
+{
+	int i;
+
+	for (i = 0; i < parray_num(backup_list); i++)
+	{
+		pgBackup *backup = (pgBackup *) parray_get(backup_list, i);
+
+		/* check if backup is descendant of target backup */
+		if (is_parent(target_backup->start_time, backup, false))
+		{
+			/* if backup is already in the list, then skip it */
+			if (!parray_contains(append_list, backup))
+				parray_append(append_list, backup);
+		}
+	}
 }

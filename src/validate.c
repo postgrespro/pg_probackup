@@ -479,7 +479,7 @@ do_validate_instance(void)
 			result = scan_parent_chain(current_backup, &tmp_backup);
 
 			/* chain is broken */
-			if (result == 0)
+			if (result == ChainIsBroken)
 			{
 				char	   *parent_backup_id;
 				/* determine missing backup ID */
@@ -505,7 +505,7 @@ do_validate_instance(void)
 				continue;
 			}
 			/* chain is whole, but at least one parent is invalid */
-			else if (result == 1)
+			else if (result == ChainIsInvalid)
 			{
 				/* Oldest corrupt backup has a chance for revalidation */
 				if (current_backup->start_time != tmp_backup->start_time)
@@ -630,7 +630,7 @@ do_validate_instance(void)
 					 */
 					result = scan_parent_chain(backup, &tmp_backup);
 
-					if (result == 1)
+					if (result == ChainIsInvalid)
 					{
 						/* revalidation make sense only if oldest invalid backup is current_backup
 						 */

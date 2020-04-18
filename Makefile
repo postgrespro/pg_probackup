@@ -15,9 +15,9 @@ OBJS += src/pg_crc.o src/datapagemap.o src/receivelog.o src/streamutil.o \
 
 EXTRA_CLEAN = src/pg_crc.c src/datapagemap.c src/datapagemap.h \
 	src/receivelog.c src/receivelog.h src/streamutil.c src/streamutil.h \
-	src/xlogreader.c
+	src/xlogreader.c src/instr_time.h
 
-INCLUDES = src/datapagemap.h src/streamutil.h src/receivelog.h
+INCLUDES = src/datapagemap.h src/streamutil.h src/receivelog.h src/instr_time.h
 
 ifdef USE_PGXS
 PG_CONFIG = pg_config
@@ -60,6 +60,8 @@ all: checksrcdir $(INCLUDES);
 
 $(PROGRAM): $(OBJS)
 
+src/instr_time.h: $(top_srcdir)/src/include/portability/instr_time.h
+	rm -f $@ && $(LN_S) $(srchome)/src/include/portability/instr_time.h $@
 src/datapagemap.c: $(top_srcdir)/src/bin/pg_rewind/datapagemap.c
 	rm -f $@ && $(LN_S) $(srchome)/src/bin/pg_rewind/datapagemap.c $@
 src/datapagemap.h: $(top_srcdir)/src/bin/pg_rewind/datapagemap.h

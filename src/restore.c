@@ -251,7 +251,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 
 		result = scan_parent_chain(dest_backup, &tmp_backup);
 
-		if (result == 0)
+		if (result == ChainIsBroken)
 		{
 			/* chain is broken, determine missing backup ID
 			 * and orphinize all his descendants
@@ -290,7 +290,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 			/* No point in doing futher */
 			elog(ERROR, "%s of backup %s failed.", action, base36enc(dest_backup->start_time));
 		}
-		else if (result == 1)
+		else if (result == ChainIsInvalid)
 		{
 			/* chain is intact, but at least one parent is invalid */
 			set_orphan_status(backups, tmp_backup);
@@ -403,7 +403,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 			 */
 			validate_wal(dest_backup, arclog_path, rt->target_time,
 						 rt->target_xid, rt->target_lsn,
-						 base_full_backup->tli, instance_config.xlog_seg_size);
+						 dest_backup->tli, instance_config.xlog_seg_size);
 		}
 		/* Orphanize every OK descendant of corrupted backup */
 		else
@@ -471,6 +471,9 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 		/* Create recovery.conf with given recovery target parameters */
 		create_recovery_conf(target_backup_id, rt, dest_backup, params);
 	}
+
+	/* ssh connection to longer needed */
+	fio_disconnect();
 
 	/* cleanup */
 	parray_walk(backups, pgBackupFree);
@@ -854,7 +857,7 @@ restore_files(void *arg)
 			goto done;
 
 		if (!fio_is_remote_file(out))
-			setbuffer(out, buffer, STDIO_BUFSIZE);
+			setvbuf(out, buffer, _IOFBF, STDIO_BUFSIZE);
 
 		/* Restore destination file */
 		if (dest_file->is_datafile && !dest_file->is_cfs)
@@ -977,6 +980,7 @@ create_recovery_conf(time_t backup_id,
 	/* construct restore_command */
 	if (pitr_requested)
 	{
+		fio_fprintf(fp, "\n## recovery settings\n");
 		/* If restore_command is provided, use it. Otherwise construct it from scratch. */
 		if (restore_command_provided)
 			sprintf(restore_command_guc, "%s", instance_config.restore_command);
@@ -1052,8 +1056,15 @@ create_recovery_conf(time_t backup_id,
 			fio_fprintf(fp, "recovery_target_action = '%s'\n", "pause");
 	}
 
+	if (pitr_requested)
+	{
+		elog(LOG, "Setting restore_command to '%s'", restore_command_guc);
+		fio_fprintf(fp, "restore_command = '%s'\n", restore_command_guc);
+	}
+
 	if (params->restore_as_replica)
 	{
+		fio_fprintf(fp, "\n## standby settings\n");
 	/* standby_mode was removed in PG12 */
 #if PG_VERSION_NUM < 120000
 		fio_fprintf(fp, "standby_mode = 'on'\n");
@@ -1063,12 +1074,9 @@ create_recovery_conf(time_t backup_id,
 			fio_fprintf(fp, "primary_conninfo = '%s'\n", params->primary_conninfo);
 		else if (backup->primary_conninfo)
 			fio_fprintf(fp, "primary_conninfo = '%s'\n", backup->primary_conninfo);
-	}
 
-	if (pitr_requested)
-	{
-		elog(LOG, "Setting restore_command to '%s'", restore_command_guc);
-		fio_fprintf(fp, "restore_command = '%s'\n", restore_command_guc);
+		if (params->primary_slot_name != NULL)
+			fio_fprintf(fp, "primary_slot_name = '%s'\n", params->primary_slot_name);
 	}
 
 	if (fio_fflush(fp) != 0 ||
@@ -1318,7 +1326,7 @@ satisfy_timeline(const parray *timelines, const pgBackup *backup)
 		timeline = (TimeLineHistoryEntry *) parray_get(timelines, i);
 		if (backup->tli == timeline->tli &&
 			(XLogRecPtrIsInvalid(timeline->end) ||
-			 backup->stop_lsn < timeline->end))
+			 backup->stop_lsn <= timeline->end))
 			return true;
 	}
 	return false;

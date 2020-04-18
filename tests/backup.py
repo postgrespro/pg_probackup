@@ -228,10 +228,9 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                 "without valid full backup.\n Output: {0} \n CMD: {1}".format(
                     repr(self.output), self.cmd))
         except ProbackupException as e:
-            self.assertIn(
-                "ERROR: Valid backup on current timeline 1 is not found. "
-                "Create new FULL backup before an incremental one.",
-                e.message,
+            self.assertTrue(
+                "WARNING: Valid backup on current timeline 1 is not found" in e.message and
+                "ERROR: Create new full backup before an incremental one" in e.message,
                 "\n Unexpected Error Message: {0}\n CMD: {1}".format(
                     repr(e.message), self.cmd))
 
@@ -488,6 +487,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
         node.slow_start()
 
         if self.ptrack and node.major_version > 11:
@@ -499,24 +499,39 @@ class BackupTest(ProbackupTest, unittest.TestCase):
             "postgres",
             "create table t_heap as select 1 as id, md5(i::text) as text, "
             "md5(repeat(i::text,10))::tsvector as tsvector "
-            "from generate_series(0,1000) i")
-        node.safe_psql(
-            "postgres",
-            "CHECKPOINT;")
+            "from generate_series(0,10000) i")
 
         heap_path = node.safe_psql(
             "postgres",
             "select pg_relation_filepath('t_heap')").rstrip()
 
+        self.backup_node(
+            backup_dir, 'node', node,
+            backup_type="full", options=["-j", "4", "--stream"])
+
+        node.safe_psql(
+            "postgres",
+            "select count(*) from t_heap")
+
+        node.safe_psql(
+            "postgres",
+            "update t_heap set id = id + 10000")
+
         node.stop()
 
-        with open(os.path.join(node.data_dir, heap_path), "rb+", 0) as f:
+        heap_fullpath = os.path.join(node.data_dir, heap_path)
+
+        with open(heap_fullpath, "rb+", 0) as f:
                 f.seek(9000)
                 f.write(b"bla")
                 f.flush()
                 f.close
 
         node.slow_start()
+
+        # self.backup_node(
+        #     backup_dir, 'node', node,
+        #     backup_type="full", options=["-j", "4", "--stream"])
 
         try:
             self.backup_node(
@@ -525,11 +540,74 @@ class BackupTest(ProbackupTest, unittest.TestCase):
             # we should die here because exception is what we expect to happen
             self.assertEqual(
                 1, 0,
-                "Expecting Error because tablespace mapping is incorrect"
+                "Expecting Error because of block corruption"
                 "\n Output: {0} \n CMD: {1}".format(
                     repr(self.output), self.cmd))
         except ProbackupException as e:
-            if self.ptrack:
+            self.assertIn(
+                'ERROR: Corruption detected in file "{0}", block 1: '
+                'page verification failed, calculated checksum'.format(
+                    heap_fullpath),
+                e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        sleep(1)
+
+        try:
+            self.backup_node(
+                backup_dir, 'node', node,
+                backup_type="delta", options=["-j", "4", "--stream"])
+            # we should die here because exception is what we expect to happen
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because of block corruption"
+                "\n Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                'ERROR: Corruption detected in file "{0}", block 1: '
+                'page verification failed, calculated checksum'.format(
+                    heap_fullpath),
+                e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        sleep(1)
+
+        try:
+            self.backup_node(
+                backup_dir, 'node', node,
+                backup_type="page", options=["-j", "4", "--stream"])
+            # we should die here because exception is what we expect to happen
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because of block corruption"
+                "\n Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                'ERROR: Corruption detected in file "{0}", block 1: '
+                'page verification failed, calculated checksum'.format(
+                    heap_fullpath),
+                e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        sleep(1)
+
+        if self.ptrack:
+            try:
+                self.backup_node(
+                    backup_dir, 'node', node,
+                    backup_type="ptrack", options=["-j", "4", "--stream"])
+                # we should die here because exception is what we expect to happen
+                self.assertEqual(
+                    1, 0,
+                    "Expecting Error because of block corruption"
+                    "\n Output: {0} \n CMD: {1}".format(
+                        repr(self.output), self.cmd))
+            except ProbackupException as e:
                 self.assertTrue(
                     'WARNING:  page verification failed, '
                     'calculated checksum' in e.message and
@@ -538,24 +616,292 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                     'ERROR: Data files transferring failed' in e.message,
                     '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                         repr(e.message), self.cmd))
-            else:
-                if self.remote:
-                    self.assertTrue(
-                        "ERROR: Failed to read file" in e.message and
-                        "data file checksum mismatch" in e.message,
-                        '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
-                            repr(e.message), self.cmd))
-                else:
-                    self.assertIn(
-                        'WARNING: Corruption detected in file',
-                        e.message,
-                        '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
-                            repr(e.message), self.cmd))
-                    self.assertIn(
-                        'ERROR: Data file corruption',
-                        e.message,
-                        '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
-                            repr(e.message), self.cmd))
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_backup_detect_invalid_block_header(self):
+        """make node, corrupt some page, check that backup failed"""
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            ptrack_enable=self.ptrack,
+            initdb_params=['--data-checksums'])
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        if self.ptrack and node.major_version > 11:
+            node.safe_psql(
+                "postgres",
+                "create extension ptrack")
+
+        node.safe_psql(
+            "postgres",
+            "create table t_heap as select 1 as id, md5(i::text) as text, "
+            "md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(0,10000) i")
+
+        heap_path = node.safe_psql(
+            "postgres",
+            "select pg_relation_filepath('t_heap')").rstrip()
+
+        self.backup_node(
+            backup_dir, 'node', node,
+            backup_type="full", options=["-j", "4", "--stream"])
+
+        node.safe_psql(
+            "postgres",
+            "select count(*) from t_heap")
+
+        node.safe_psql(
+            "postgres",
+            "update t_heap set id = id + 10000")
+
+        node.stop()
+
+        heap_fullpath = os.path.join(node.data_dir, heap_path)
+        with open(heap_fullpath, "rb+", 0) as f:
+                f.seek(8193)
+                f.write(b"blahblahblahblah")
+                f.flush()
+                f.close
+
+        node.slow_start()
+
+#        self.backup_node(
+#            backup_dir, 'node', node,
+#            backup_type="full", options=["-j", "4", "--stream"])
+
+        try:
+            self.backup_node(
+                backup_dir, 'node', node,
+                backup_type="full", options=["-j", "4", "--stream"])
+            # we should die here because exception is what we expect to happen
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because of block corruption"
+                "\n Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                'ERROR: Corruption detected in file "{0}", block 1: '
+                'page header invalid, pd_lower'.format(heap_fullpath),
+                e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        sleep(1)
+
+        try:
+            self.backup_node(
+                backup_dir, 'node', node,
+                backup_type="delta", options=["-j", "4", "--stream"])
+            # we should die here because exception is what we expect to happen
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because of block corruption"
+                "\n Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                'ERROR: Corruption detected in file "{0}", block 1: '
+                'page header invalid, pd_lower'.format(heap_fullpath),
+                e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        sleep(1)
+
+        try:
+            self.backup_node(
+                backup_dir, 'node', node,
+                backup_type="page", options=["-j", "4", "--stream"])
+            # we should die here because exception is what we expect to happen
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because of block corruption"
+                "\n Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                'ERROR: Corruption detected in file "{0}", block 1: '
+                'page header invalid, pd_lower'.format(heap_fullpath),
+                e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        sleep(1)
+
+        if self.ptrack:
+            try:
+                self.backup_node(
+                    backup_dir, 'node', node,
+                    backup_type="ptrack", options=["-j", "4", "--stream"])
+                # we should die here because exception is what we expect to happen
+                self.assertEqual(
+                    1, 0,
+                    "Expecting Error because of block corruption"
+                    "\n Output: {0} \n CMD: {1}".format(
+                        repr(self.output), self.cmd))
+            except ProbackupException as e:
+                self.assertTrue(
+                    'WARNING:  page verification failed, '
+                    'calculated checksum' in e.message and
+                    'ERROR: query failed: ERROR:  '
+                    'invalid page in block 1 of relation' in e.message and
+                    'ERROR: Data files transferring failed' in e.message,
+                    '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                        repr(e.message), self.cmd))
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_backup_detect_missing_permissions(self):
+        """make node, corrupt some page, check that backup failed"""
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            ptrack_enable=self.ptrack,
+            initdb_params=['--data-checksums'])
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        if self.ptrack and node.major_version > 11:
+            node.safe_psql(
+                "postgres",
+                "create extension ptrack")
+
+        node.safe_psql(
+            "postgres",
+            "create table t_heap as select 1 as id, md5(i::text) as text, "
+            "md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(0,10000) i")
+
+        heap_path = node.safe_psql(
+            "postgres",
+            "select pg_relation_filepath('t_heap')").rstrip()
+
+        self.backup_node(
+            backup_dir, 'node', node,
+            backup_type="full", options=["-j", "4", "--stream"])
+
+        node.safe_psql(
+            "postgres",
+            "select count(*) from t_heap")
+
+        node.safe_psql(
+            "postgres",
+            "update t_heap set id = id + 10000")
+
+        node.stop()
+
+        heap_fullpath = os.path.join(node.data_dir, heap_path)
+        with open(heap_fullpath, "rb+", 0) as f:
+                f.seek(8193)
+                f.write(b"blahblahblahblah")
+                f.flush()
+                f.close
+
+        node.slow_start()
+
+#        self.backup_node(
+#            backup_dir, 'node', node,
+#            backup_type="full", options=["-j", "4", "--stream"])
+
+        try:
+            self.backup_node(
+                backup_dir, 'node', node,
+                backup_type="full", options=["-j", "4", "--stream"])
+            # we should die here because exception is what we expect to happen
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because of block corruption"
+                "\n Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                'ERROR: Corruption detected in file "{0}", block 1: '
+                'page header invalid, pd_lower'.format(heap_fullpath),
+                e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        sleep(1)
+
+        try:
+            self.backup_node(
+                backup_dir, 'node', node,
+                backup_type="delta", options=["-j", "4", "--stream"])
+            # we should die here because exception is what we expect to happen
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because of block corruption"
+                "\n Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                'ERROR: Corruption detected in file "{0}", block 1: '
+                'page header invalid, pd_lower'.format(heap_fullpath),
+                e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        sleep(1)
+
+        try:
+            self.backup_node(
+                backup_dir, 'node', node,
+                backup_type="page", options=["-j", "4", "--stream"])
+            # we should die here because exception is what we expect to happen
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because of block corruption"
+                "\n Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                'ERROR: Corruption detected in file "{0}", block 1: '
+                'page header invalid, pd_lower'.format(heap_fullpath),
+                e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        sleep(1)
+
+        if self.ptrack:
+            try:
+                self.backup_node(
+                    backup_dir, 'node', node,
+                    backup_type="ptrack", options=["-j", "4", "--stream"])
+                # we should die here because exception is what we expect to happen
+                self.assertEqual(
+                    1, 0,
+                    "Expecting Error because of block corruption"
+                    "\n Output: {0} \n CMD: {1}".format(
+                        repr(self.output), self.cmd))
+            except ProbackupException as e:
+                self.assertTrue(
+                    'WARNING:  page verification failed, '
+                    'calculated checksum' in e.message and
+                    'ERROR: query failed: ERROR:  '
+                    'invalid page in block 1 of relation' in e.message and
+                    'ERROR: Data files transferring failed' in e.message,
+                    '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                        repr(e.message), self.cmd))
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -1947,10 +2293,9 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                 "\n Output: {0} \n CMD: {1}".format(
                     repr(self.output), self.cmd))
         except ProbackupException as e:
-            self.assertIn(
-                'ERROR: Valid backup on current timeline 1 is not found. '
-                'Create new FULL backup before an incremental one.',
-                e.message,
+            self.assertTrue(
+                'WARNING: Valid backup on current timeline 1 is not found' in e.message and
+                'ERROR: Create new full backup before an incremental one' in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
@@ -1977,10 +2322,13 @@ class BackupTest(ProbackupTest, unittest.TestCase):
             initdb_params=['--data-checksums'],
             pg_options={
                 'archive_timeout': '30s',
-                'checkpoint_timeout': '1h'})
+                'archive_mode': 'always',
+                'checkpoint_timeout': '60s',
+                'wal_level': 'logical'})
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
+        self.set_config(backup_dir, 'node', options=['--archive-timeout=60s'])
         self.set_archiving(backup_dir, 'node', node)
         node.slow_start()
 
@@ -2100,12 +2448,15 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.restore_node(backup_dir, 'node', replica)
         self.set_replica(node, replica)
         self.add_instance(backup_dir, 'replica', replica)
+        self.set_config(
+            backup_dir, 'replica',
+            options=['--archive-timeout=120s', '--log-level-console=LOG'])
         self.set_archiving(backup_dir, 'replica', replica, replica=True)
         self.set_auto_conf(replica, {'hot_standby': 'on'})
 
         # freeze bgwriter to get rid of RUNNING XACTS records
-        bgwriter_pid = node.auxiliary_pids[ProcessType.BackgroundWriter][0]
-        gdb_checkpointer = self.gdb_attach(bgwriter_pid)
+        # bgwriter_pid = node.auxiliary_pids[ProcessType.BackgroundWriter][0]
+        # gdb_checkpointer = self.gdb_attach(bgwriter_pid)
 
         copy_tree(
             os.path.join(backup_dir, 'wal', 'node'),
@@ -2113,21 +2464,22 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 
         replica.slow_start(replica=True)
 
-        self.switch_wal_segment(node)
-        self.switch_wal_segment(node)
+        # self.switch_wal_segment(node)
+        # self.switch_wal_segment(node)
 
-        # FULL backup from replica
         self.backup_node(
             backup_dir, 'replica', replica,
-            datname='backupdb', options=['--stream', '-U', 'backup', '--archive-timeout=30s'])
+            datname='backupdb', options=['-U', 'backup'])
+
+        # stream full backup from replica
+        self.backup_node(
+            backup_dir, 'replica', replica,
+            datname='backupdb', options=['--stream', '-U', 'backup'])
 
 #        self.switch_wal_segment(node)
 
-        self.backup_node(
-            backup_dir, 'replica', replica, datname='backupdb',
-            options=['-U', 'backup', '--archive-timeout=300s'])
-
         # PAGE backup from replica
+        self.switch_wal_segment(node)
         self.backup_node(
             backup_dir, 'replica', replica, backup_type='page',
             datname='backupdb', options=['-U', 'backup', '--archive-timeout=30s'])
@@ -2137,20 +2489,22 @@ class BackupTest(ProbackupTest, unittest.TestCase):
             datname='backupdb', options=['--stream', '-U', 'backup'])
 
         # DELTA backup from replica
+        self.switch_wal_segment(node)
         self.backup_node(
             backup_dir, 'replica', replica, backup_type='delta',
-            datname='backupdb', options=['-U', 'backup', '--archive-timeout=30s'])
+            datname='backupdb', options=['-U', 'backup'])
         self.backup_node(
             backup_dir, 'replica', replica, backup_type='delta',
             datname='backupdb', options=['--stream', '-U', 'backup'])
 
         # PTRACK backup from replica
         if self.ptrack:
+            self.switch_wal_segment(node)
             self.backup_node(
-                backup_dir, 'replica', replica, backup_type='delta',
-                datname='backupdb', options=['-U', 'backup', '--archive-timeout=30s'])
+                backup_dir, 'replica', replica, backup_type='ptrack',
+                datname='backupdb', options=['-U', 'backup'])
             self.backup_node(
-                backup_dir, 'replica', replica, backup_type='delta',
+                backup_dir, 'replica', replica, backup_type='ptrack',
                 datname='backupdb', options=['--stream', '-U', 'backup'])
 
         # Clean after yourself
@@ -2356,91 +2710,31 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
-    # @unittest.skip("skip")
-    def test_streaming_timeout(self):
+    def test_note_sanity(self):
         """
-        Illustrate the problem of loosing exact error
-        message because our WAL streaming engine is "borrowed"
-        from pg_receivexlog
+        test that adding note to backup works as expected
         """
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
-        node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
-            set_replication=True,
-            initdb_params=['--data-checksums'],
-            pg_options={
-                'checkpoint_timeout': '1h',
-                'wal_sender_timeout': '5s'})
-
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
-        node.slow_start()
-
-        # FULL backup
-        gdb = self.backup_node(
-            backup_dir, 'node', node, gdb=True,
-            options=['--stream', '--log-level-file=LOG'])
-
-        gdb.set_breakpoint('pg_stop_backup')
-        gdb.run_until_break()
-
-        sleep(10)
-        gdb.continue_execution_until_error()
-        gdb._execute('detach')
-        sleep(2)
-
-        log_file_path = os.path.join(backup_dir, 'log', 'pg_probackup.log')
-        with open(log_file_path) as f:
-            log_content = f.read()
-
-        self.assertIn(
-            'could not receive data from WAL stream',
-            log_content)
-
-        self.assertIn(
-            'ERROR: Problem in receivexlog',
-            log_content)
-
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
-
-    def test_note(self):
-
-        fname = self.id().split('.')[3]
-
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
         node.slow_start()
 
         # FULL backup
-	self.backup_node(backup_dir, 'node', node, options=['--stream', '--log-level-file=LOG', '--note=test_note'])
+        self.backup_node(
+            backup_dir, 'node', node,
+            options=['--stream', '--log-level-file=LOG', '--note=test_note'])
 
- 	show_backups = self.show_pb(backup_dir, 'node')
-        # self.assertEqual(len(show_backups), 1)
-	# print(self.show_pb(backup_dir, as_text=True, as_json=True))
+        show_backups = self.show_pb(backup_dir, 'node')
 
-	self.assertEqual(show_backups[0]['note'], "test_note")
+        print(self.show_pb(backup_dir, as_text=True, as_json=True))
 
+        self.assertEqual(show_backups[0]['note'], "test_note")
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
-
-
-
-
-
-
-
-
-
-
-
-

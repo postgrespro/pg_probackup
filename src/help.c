@@ -153,6 +153,8 @@ help_pg_probackup(void)
 	printf(_("                 [--recovery-target-name=target-name]\n"));
 	printf(_("                 [--recovery-target-action=pause|promote|shutdown]\n"));
 	printf(_("                 [--restore-as-replica] [--force]\n"));
+	printf(_("                 [--primary-conninfo=primary_conninfo]\n"));
+	printf(_("                 [-S | --primary-slot-name=slotname]\n"));
 	printf(_("                 [--no-validate] [--skip-block-validation]\n"));
 	printf(_("                 [-T OLDDIR=NEWDIR] [--progress]\n"));
 	printf(_("                 [--external-mapping=OLDDIR=NEWDIR]\n"));
@@ -191,7 +193,8 @@ help_pg_probackup(void)
 	printf(_("                 [--retention-redundancy=retention-redundancy]\n"));
 	printf(_("                 [--retention-window=retention-window]\n"));
 	printf(_("                 [--wal-depth=wal-depth]\n"));
-	printf(_("                 [--delete-wal] [-i backup-id | --delete-expired | --merge-expired]\n"));
+	printf(_("                 [-i backup-id | --delete-expired | --merge-expired | --status=backup_status]\n"));
+	printf(_("                 [--delete-wal]\n"));
 	printf(_("                 [--dry-run]\n"));
 	printf(_("                 [--help]\n"));
 
@@ -212,10 +215,11 @@ help_pg_probackup(void)
 	printf(_("                 [--help]\n"));
 
 	printf(_("\n  %s archive-push -B backup-path --instance=instance_name\n"), PROGRAM_NAME);
-	printf(_("                 --wal-file-path=wal-file-path\n"));
 	printf(_("                 --wal-file-name=wal-file-name\n"));
-	printf(_("                 [--overwrite]\n"));
-	printf(_("                 [--compress]\n"));
+	printf(_("                 [-j num-threads] [--batch-size=batch_size]\n"));
+	printf(_("                 [--archive-timeout=timeout]\n"));
+	printf(_("                 [--no-ready-rename] [--no-sync]\n"));
+	printf(_("                 [--overwrite] [--compress]\n"));
 	printf(_("                 [--compress-algorithm=compress-algorithm]\n"));
 	printf(_("                 [--compress-level=compress-level]\n"));
 	printf(_("                 [--remote-proto] [--remote-host]\n"));
@@ -226,6 +230,8 @@ help_pg_probackup(void)
 	printf(_("\n  %s archive-get -B backup-path --instance=instance_name\n"), PROGRAM_NAME);
 	printf(_("                 --wal-file-path=wal-file-path\n"));
 	printf(_("                 --wal-file-name=wal-file-name\n"));
+	printf(_("                 [-j num-threads] [--batch-size=batch_size]\n"));
+	printf(_("                 [--no-validate-wal]\n"));
 	printf(_("                 [--remote-proto] [--remote-host]\n"));
 	printf(_("                 [--remote-port] [--remote-path] [--remote-user]\n"));
 	printf(_("                 [--ssh-options]\n"));
@@ -382,20 +388,20 @@ help_restore(void)
 {
 	printf(_("\n%s restore -B backup-path --instance=instance_name\n"), PROGRAM_NAME);
 	printf(_("                 [-D pgdata-path] [-i backup-id] [-j num-threads]\n"));
+	printf(_("                 [--progress] [--force] [--no-sync]\n"));
+	printf(_("                 [--no-validate] [--skip-block-validation]\n"));
+	printf(_("                 [-T OLDDIR=NEWDIR]\n"));
+	printf(_("                 [--external-mapping=OLDDIR=NEWDIR]\n"));
+	printf(_("                 [--skip-external-dirs]\n"));
+	printf(_("                 [--db-include dbname | --db-exclude dbname]\n"));
 	printf(_("                 [--recovery-target-time=time|--recovery-target-xid=xid\n"));
 	printf(_("                  |--recovery-target-lsn=lsn [--recovery-target-inclusive=boolean]]\n"));
 	printf(_("                 [--recovery-target-timeline=timeline]\n"));
 	printf(_("                 [--recovery-target=immediate|latest]\n"));
 	printf(_("                 [--recovery-target-name=target-name]\n"));
 	printf(_("                 [--recovery-target-action=pause|promote|shutdown]\n"));
-	printf(_("                 [--restore-as-replica] [--force]\n"));
-	printf(_("                 [--no-validate] [--skip-block-validation]\n"));
-	printf(_("                 [-T OLDDIR=NEWDIR] [--progress]\n"));
-	printf(_("                 [--external-mapping=OLDDIR=NEWDIR]\n"));
-	printf(_("                 [--skip-external-dirs]\n"));
 	printf(_("                 [--restore-command=cmdline]\n"));
-	printf(_("                 [--no-sync]\n"));
-	printf(_("                 [--db-include dbname | --db-exclude dbname]\n"));
+	printf(_("                 [-R | --restore-as-replica]\n"));
 	printf(_("                 [--remote-proto] [--remote-host]\n"));
 	printf(_("                 [--remote-port] [--remote-path] [--remote-user]\n"));
 	printf(_("                 [--ssh-options]\n"));
@@ -410,6 +416,22 @@ help_restore(void)
 	printf(_("  -j, --threads=NUM                number of parallel threads\n"));
 
 	printf(_("      --progress                   show progress\n"));
+	printf(_("      --force                      ignore invalid status of the restored backup\n"));
+	printf(_("      --no-sync                    do not sync restored files to disk\n"));
+	printf(_("      --no-validate                disable backup validation during restore\n"));
+	printf(_("      --skip-block-validation      set to validate only file-level checksum\n"));
+
+	printf(_("  -T, --tablespace-mapping=OLDDIR=NEWDIR\n"));
+	printf(_("                                   relocate the tablespace from directory OLDDIR to NEWDIR\n"));
+	printf(_("      --external-mapping=OLDDIR=NEWDIR\n"));
+	printf(_("                                   relocate the external directory from OLDDIR to NEWDIR\n"));
+	printf(_("      --skip-external-dirs         do not restore all external directories\n"));
+
+	printf(_("\n  Partial restore options:\n"));
+	printf(_("      --db-include dbname          restore only specified databases\n"));
+	printf(_("      --db-exclude dbname          do not restore specified databases\n"));
+
+	printf(_("\n  Recovery options:\n"));
 	printf(_("      --recovery-target-time=time  time stamp up to which recovery will proceed\n"));
 	printf(_("      --recovery-target-xid=xid    transaction ID up to which recovery will proceed\n"));
 	printf(_("      --recovery-target-lsn=lsn    LSN of the write-ahead log location up to which recovery will proceed\n"));
@@ -424,24 +446,15 @@ help_restore(void)
 	printf(_("      --recovery-target-action=pause|promote|shutdown\n"));
 	printf(_("                                   action the server should take once the recovery target is reached\n"));
 	printf(_("                                   (default: pause)\n"));
+	printf(_("      --restore-command=cmdline    command to use as 'restore_command' in recovery.conf; 'none' disables\n"));
 
+	printf(_("\n  Standby options:\n"));
 	printf(_("  -R, --restore-as-replica         write a minimal recovery.conf in the output directory\n"));
 	printf(_("                                   to ease setting up a standby server\n"));
-	printf(_("      --force                      ignore invalid status of the restored backup\n"));
-	printf(_("      --no-validate                disable backup validation during restore\n"));
-	printf(_("      --skip-block-validation      set to validate only file-level checksum\n"));
-
-	printf(_("  -T, --tablespace-mapping=OLDDIR=NEWDIR\n"));
-	printf(_("                                   relocate the tablespace from directory OLDDIR to NEWDIR\n"));
-	printf(_("      --external-mapping=OLDDIR=NEWDIR\n"));
-	printf(_("                                   relocate the external directory from OLDDIR to NEWDIR\n"));
-	printf(_("      --skip-external-dirs         do not restore all external directories\n"));
-	printf(_("      --restore-command=cmdline    command to use as 'restore_command' in recovery.conf; 'none' disables\n"));
-	printf(_("      --no-sync                    do not sync restored files to disk\n"));
-
-	printf(_("\n  Partial restore options:\n"));
-	printf(_("      --db-include dbname          restore only specified databases\n"));
-	printf(_("      --db-exclude dbname          do not restore specified databases\n"));
+	printf(_("      --primary-conninfo=primary_conninfo\n"));
+	printf(_("                                   connection string to be used for establishing connection\n"));
+	printf(_("                                   with the primary server\n"));
+	printf(_("  -S, --primary-slot-name=slotname replication slot to be used for WAL streaming from the primary server\n"));
 
 	printf(_("\n  Logging options:\n"));
 	printf(_("      --log-level-console=log-level-console\n"));
@@ -626,6 +639,7 @@ help_delete(void)
 	printf(_("      --wal-depth=wal-depth        number of latest valid backups per timeline that must\n"));
 	printf(_("                                   retain the ability to perform PITR; 0 disables; (default: 0)\n"));
 	printf(_("      --dry-run                    perform a trial run without any changes\n"));
+	printf(_("      --status=backup_status       delete all backups with specified status\n"));
 
 	printf(_("\n  Logging options:\n"));
 	printf(_("      --log-level-console=log-level-console\n"));
@@ -859,10 +873,11 @@ static void
 help_archive_push(void)
 {
 	printf(_("\n%s archive-push -B backup-path --instance=instance_name\n"), PROGRAM_NAME);
-	printf(_("                 --wal-file-path=wal-file-path\n"));
 	printf(_("                 --wal-file-name=wal-file-name\n"));
-	printf(_("                 [--overwrite]\n"));
-	printf(_("                 [--compress]\n"));
+	printf(_("                 [-j num-threads] [--batch-size=batch_size]\n"));
+	printf(_("                 [--archive-timeout=timeout]\n"));
+	printf(_("                 [--no-ready-rename] [--no-sync]\n"));
+	printf(_("                 [--overwrite] [--compress]\n"));
 	printf(_("                 [--compress-algorithm=compress-algorithm]\n"));
 	printf(_("                 [--compress-level=compress-level]\n"));
 	printf(_("                 [--remote-proto] [--remote-host]\n"));
@@ -871,10 +886,13 @@ help_archive_push(void)
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
 	printf(_("      --instance=instance_name     name of the instance to delete\n"));
-	printf(_("      --wal-file-path=wal-file-path\n"));
-	printf(_("                                   relative path name of the WAL file on the server\n"));
 	printf(_("      --wal-file-name=wal-file-name\n"));
-	printf(_("                                   name of the WAL file to retrieve from the server\n"));
+	printf(_("                                   name of the file to copy into WAL archive\n"));
+	printf(_("  -j, --threads=NUM                number of parallel threads\n"));
+	printf(_("      --batch-size=NUM             number of files to be copied\n"));
+	printf(_("      --archive-timeout=timeout    wait timeout before discarding stale temp file(default: 5min)\n"));
+	printf(_("      --no-ready-rename            do not rename '.ready' files in 'archive_status' directory\n"));
+	printf(_("      --no-sync                    do not sync WAL file to disk\n"));
 	printf(_("      --overwrite                  overwrite archived WAL file\n"));
 
 	printf(_("\n  Compression options:\n"));
@@ -902,6 +920,8 @@ help_archive_get(void)
 	printf(_("\n%s archive-get -B backup-path --instance=instance_name\n"), PROGRAM_NAME);
 	printf(_("                 --wal-file-path=wal-file-path\n"));
 	printf(_("                 --wal-file-name=wal-file-name\n"));
+	printf(_("                 [-j num-threads] [--batch-size=batch_size]\n"));
+	printf(_("                 [--no-validate-wal]\n"));
 	printf(_("                 [--remote-proto] [--remote-host]\n"));
 	printf(_("                 [--remote-port] [--remote-path] [--remote-user]\n"));
 	printf(_("                 [--ssh-options]\n\n"));
@@ -912,6 +932,10 @@ help_archive_get(void)
 	printf(_("                                   relative destination path name of the WAL file on the server\n"));
 	printf(_("      --wal-file-name=wal-file-name\n"));
 	printf(_("                                   name of the WAL file to retrieve from the archive\n"));
+	printf(_("  -j, --threads=NUM                number of parallel threads\n"));
+	printf(_("      --batch-size=NUM             number of files to be prefetched\n"));
+	printf(_("      --prefetch-dir=path          location of the store area for prefetched WAL files\n"));
+	printf(_("      --no-validate-wal            skip validation of prefetched WAL file before using it\n"));
 
 	printf(_("\n  Remote options:\n"));
 	printf(_("      --remote-proto=protocol      remote protocol to use\n"));
