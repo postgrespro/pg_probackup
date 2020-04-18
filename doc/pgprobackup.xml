@@ -3257,6 +3257,17 @@ pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replace
       all the available backups according to the current retention
       policy, without performing any irreversible actions.
     </para>
+    <para>
+      To delete all backups with specific status, use the <option>--status</option>:
+    </para>
+    <programlisting>
+pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> --status=ERROR
+    </programlisting>
+
+    <para>
+      Deleting backups by status ignores established retention policies.
+    </para>
+
 </refsect2>
 </refsect1>
 
@@ -3935,10 +3946,9 @@ pg_probackup merge -B <replaceable>backup_dir</replaceable> --instance <replacea
       <programlisting>
 pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable>
 [--help] [-j <replaceable>num_threads</replaceable>] [--progress]
-[--retention-redundancy=<replaceable>redundancy</replaceable>][--retention-window=<replaceable>window</replaceable>][--wal-depth=<replaceable>wal_depth</replaceable>]
-[--delete-wal] {-i <replaceable>backup_id</replaceable> | --delete-expired [--merge-expired] | --merge-expired}
-[--dry-run]
-[<replaceable>logging_options</replaceable>]
+[--retention-redundancy=<replaceable>redundancy</replaceable>][--retention-window=<replaceable>window</replaceable>][--wal-depth=<replaceable>wal_depth</replaceable>] [--delete-wal]
+{-i <replaceable>backup_id</replaceable> | --delete-expired [--merge-expired] | --merge-expired | --status=backup_status}
+[--dry-run] [<replaceable>logging_options</replaceable>]
 </programlisting>
       <para>
         Deletes backup with specified <replaceable>backup_id</replaceable>

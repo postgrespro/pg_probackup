@@ -2447,3 +2447,23 @@ get_backup_index_number(parray *backup_list, pgBackup *backup)
 	elog(WARNING, "Failed to find backup %s", base36enc(backup->start_time));
 	return -1;
 }
+
+/* On backup_list lookup children of target_backup and append them to append_list */
+void
+append_children(parray *backup_list, pgBackup *target_backup, parray *append_list)
+{
+	int i;
+
+	for (i = 0; i < parray_num(backup_list); i++)
+	{
+		pgBackup *backup = (pgBackup *) parray_get(backup_list, i);
+
+		/* check if backup is descendant of target backup */
+		if (is_parent(target_backup->start_time, backup, false))
+		{
+			/* if backup is already in the list, then skip it */
+			if (!parray_contains(append_list, backup))
+				parray_append(append_list, backup);
+		}
+	}
+}

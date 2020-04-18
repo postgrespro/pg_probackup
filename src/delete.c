@@ -123,7 +123,7 @@ do_delete(time_t backup_id)
  * which FULL backup should be keeped for redundancy obligation(only valid do),
  * but if invalid backup is not guarded by retention - it is removed
  */
-int do_retention(void)
+void do_retention(void)
 {
 	parray	   *backup_list = NULL;
 	parray	   *to_keep_list = parray_new();
@@ -154,7 +154,7 @@ int do_retention(void)
 			/* Retention is disabled but we still can cleanup wal */
 			elog(WARNING, "Retention policy is not set");
 			if (!delete_wal)
-				return 0;
+				return;
 		}
 		else
 			/* At least one retention policy is active */
@@ -196,9 +196,6 @@ int do_retention(void)
 	parray_free(backup_list);
 	parray_free(to_keep_list);
 	parray_free(to_purge_list);
-
-	return 0;
-
 }
 
 /* Evaluate every backup by retention policies and populate purge and keep lists.
@@ -1022,4 +1019,108 @@ do_delete_instance(void)
 
 	elog(INFO, "Instance '%s' successfully deleted", instance_name);
 	return 0;
+}
+
+/* Delete all backups of given status in instance */
+void
+do_delete_status(InstanceConfig *instance_config, const char *status)
+{
+	int         i;
+	parray     *backup_list, *delete_list;
+	const char *pretty_status;
+	int         n_deleted = 0, n_found = 0;
+	size_t      size_to_delete = 0;
+	char        size_to_delete_pretty[20];
+	pgBackup   *backup;
+
+	BackupStatus status_for_delete = str2status(status);
+	delete_list = parray_new();
+
+	if (status_for_delete == BACKUP_STATUS_INVALID)
+		elog(ERROR, "Unknown value for '--status' option: '%s'", status);
+
+	/*
+	 * User may have provided status string in lower case, but
+	 * we should print backup statuses consistently with show command,
+	 * so convert it.
+	 */
+	pretty_status = status2str(status_for_delete);
+
+	backup_list = catalog_get_backup_list(instance_config->name, INVALID_BACKUP_ID);
+
+	if (parray_num(backup_list) == 0)
+	{
+		elog(WARNING, "Instance '%s' has no backups", instance_config->name);
+		return;
+	}
+
+	if (dry_run)
+		elog(INFO, "Deleting all backups with status '%s' in dry run mode", pretty_status);
+	else
+		elog(INFO, "Deleting all backups with status '%s'", pretty_status);
+
+	/* Selects backups with specified status and their children into delete_list array. */
+	for (i = 0; i < parray_num(backup_list); i++)
+	{
+		backup = (pgBackup *) parray_get(backup_list, i);
+
+		if (backup->status == status_for_delete)
+		{
+			n_found++;
+
+			/* incremental backup can be already in delete_list due to append_children() */
+			if (parray_contains(delete_list, backup))
+				continue;
+			parray_append(delete_list, backup);
+
+			append_children(backup_list, backup, delete_list);
+		}
+	}
+
+	parray_qsort(delete_list, pgBackupCompareIdDesc);
+
+	/* delete and calculate free size from delete_list */
+	for (i = 0; i < parray_num(delete_list); i++)
+	{
+		backup = (pgBackup *)parray_get(delete_list, i);
+
+		elog(INFO, "Backup %s with status %s %s be deleted",
+			base36enc(backup->start_time), status2str(backup->status), dry_run ? "can" : "will");
+
+		size_to_delete += backup->data_bytes;
+		if (backup->stream)
+			size_to_delete += backup->wal_bytes;
+
+		if (!dry_run && lock_backup(backup))
+			delete_backup_files(backup);
+
+		n_deleted++;
+	}
+
+	/* Inform about data size to free */
+	if (size_to_delete >= 0)
+	{
+		pretty_size(size_to_delete, size_to_delete_pretty, lengthof(size_to_delete_pretty));
+		elog(INFO, "Resident data size to free by delete of %i backups: %s",
+			n_deleted, size_to_delete_pretty);
+	}
+
+	/* delete selected backups */
+	if (!dry_run && n_deleted > 0)
+		elog(INFO, "Successfully deleted %i %s from instance '%s'",
+			n_deleted, n_deleted == 1 ? "backup" : "backups",
+			instance_config->name);
+
+
+	if (n_found == 0)
+		elog(WARNING, "Instance '%s' has no backups with status '%s'",
+			instance_config->name, pretty_status);
+
+	// we don`t do WAL purge here, because it is impossible to correctly handle
+	// dry-run case.
+
+	/* Cleanup */
+	parray_free(delete_list);
+	parray_walk(backup_list, pgBackupFree);
+	parray_free(backup_list);
 }

@@ -722,8 +722,9 @@ extern int do_show(const char *instance_name, time_t requested_backup_id, bool s
 /* in delete.c */
 extern void do_delete(time_t backup_id);
 extern void delete_backup_files(pgBackup *backup);
-extern int do_retention(void);
+extern void do_retention(void);
 extern int do_delete_instance(void);
+extern void do_delete_status(InstanceConfig *instance_config, const char *status);
 
 /* in fetch.c */
 extern char *slurpFile(const char *datadir,
@@ -807,8 +808,8 @@ extern int scan_parent_chain(pgBackup *current_backup, pgBackup **result_backup)
 
 extern bool is_parent(time_t parent_backup_time, pgBackup *child_backup, bool inclusive);
 extern bool is_prolific(parray *backup_list, pgBackup *target_backup);
-extern bool in_backup_list(parray *backup_list, pgBackup *target_backup);
 extern int get_backup_index_number(parray *backup_list, pgBackup *backup);
+extern void append_children(parray *backup_list, pgBackup *target_backup, parray *append_list);
 extern bool launch_agent(void);
 extern void launch_ssh(char* argv[]);
 extern void wait_ssh(void);
@@ -953,6 +954,7 @@ extern void copy_pgcontrol_file(const char *from_fullpath, fio_location from_loc
 
 extern void time2iso(char *buf, size_t len, time_t time);
 extern const char *status2str(BackupStatus status);
+extern BackupStatus str2status(const char *status);
 extern const char *base36enc(long unsigned int value);
 extern char *base36enc_dup(long unsigned int value);
 extern long unsigned int base36dec(const char *text);

@@ -30,6 +30,7 @@ extern size_t parray_num(const parray *array);
 extern void parray_qsort(parray *array, int(*compare)(const void *, const void *));
 extern void *parray_bsearch(parray *array, const void *key, int(*compare)(const void *, const void *));
 extern void parray_walk(parray *array, void (*action)(void *));
+extern bool parray_contains(parray *array, void *elem);
 
 #endif /* PARRAY_H */
 
