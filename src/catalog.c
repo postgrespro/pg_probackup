@@ -1534,18 +1534,23 @@ do_set_backup(const char *instance_name, time_t backup_id,
 
 	target_backup = (pgBackup *) parray_get(backup_list, 0);
 
-	if (!pin_backup(target_backup, set_backup_params))
-		elog(ERROR, "Failed to pin the backup %s", base36enc(backup_id));
+	/* Pin or unpin backup if requested */
+	if (set_backup_params->ttl >= 0 || set_backup_params->expire_time > 0)
+		pin_backup(target_backup, set_backup_params);
+
+	if (set_backup_params->note)
+		add_note(target_backup, set_backup_params->note);
 }
 
 /*
  * Set 'expire-time' attribute based on set_backup_params, or unpin backup
  * if ttl is equal to zero.
  */
-bool
+void
 pin_backup(pgBackup	*target_backup, pgSetBackupParams *set_backup_params)
 {
 
+	/* sanity, backup must have positive recovery-time */
 	if (target_backup->recovery_time <= 0)
 		elog(ERROR, "Failed to set 'expire-time' for backup %s: invalid 'recovery-time'",
 						base36enc(target_backup->backup_id));
@@ -1563,7 +1568,7 @@ pin_backup(pgBackup	*target_backup, pgSetBackupParams *set_backup_params)
 		{
 			elog(WARNING, "Backup %s is not pinned, nothing to unpin",
 									base36enc(target_backup->start_time));
-			return false;
+			return;
 		}
 		target_backup->expire_time = 0;
 	}
@@ -1571,7 +1576,8 @@ pin_backup(pgBackup	*target_backup, pgSetBackupParams *set_backup_params)
 	else if (set_backup_params->expire_time > 0)
 		target_backup->expire_time = set_backup_params->expire_time;
 	else
-		return false;
+		/* nothing to do */
+		return;
 
 	/* Update backup.control */
 	write_backup(target_backup);
@@ -1587,7 +1593,44 @@ pin_backup(pgBackup	*target_backup, pgSetBackupParams *set_backup_params)
 	else
 		elog(INFO, "Backup %s is unpinned", base36enc(target_backup->start_time));
 
-	return true;
+	return;
+}
+
+/*
+ * Add note to backup metadata or unset already existing note.
+ * It is a job of the caller to make sure that note is not NULL.
+ */
+void
+add_note(pgBackup *target_backup, char *note)
+{
+
+	char *note_string;
+
+	/* unset note */
+	if (pg_strcasecmp(note, "none") == 0)
+	{
+		target_backup->note = NULL;
+		elog(INFO, "Removing note from backup %s",
+				base36enc(target_backup->start_time));
+	}
+	else
+	{
+		/* Currently we do not allow string with newlines as note,
+		 * because it will break parsing of backup.control.
+		 * So if user provides string like this "aaa\nbbbbb",
+		 * we save only "aaa"
+		 * Example: tests.set_backup.SetBackupTest.test_add_note_newlines
+		 */
+		note_string = pgut_malloc(MAX_NOTE_SIZE);
+		sscanf(note, "%[^\n]", note_string);
+
+		target_backup->note = note_string;
+		elog(INFO, "Adding note to backup %s: '%s'",
+				base36enc(target_backup->start_time), target_backup->note);
+	}
+
+	/* Update backup.control */
+	write_backup(target_backup);
 }
 
 /*
@@ -1682,6 +1725,10 @@ pgBackupWriteControl(FILE *out, pgBackup *backup)
 	/* print external directories list */
 	if (backup->external_dir_str)
 		fio_fprintf(out, "external-dirs = '%s'\n", backup->external_dir_str);
+
+	if (backup->note)
+		fio_fprintf(out, "note = '%s'\n", backup->note);
+
 }
 
 /*
@@ -1919,6 +1966,7 @@ readBackupControlFile(const char *path)
 		{'b', 0, "from-replica",		&backup->from_replica, SOURCE_FILE_STRICT},
 		{'s', 0, "primary-conninfo",	&backup->primary_conninfo, SOURCE_FILE_STRICT},
 		{'s', 0, "external-dirs",		&backup->external_dir_str, SOURCE_FILE_STRICT},
+		{'s', 0, "note",				&backup->note, SOURCE_FILE_STRICT},
 		{0}
 	};
 
@@ -2185,6 +2233,8 @@ pgBackupInit(pgBackup *backup)
 	backup->external_dir_str = NULL;
 	backup->root_dir = NULL;
 	backup->files = NULL;
+	backup->note = NULL;
+
 }
 
 /* free pgBackup object */
@@ -2196,6 +2246,7 @@ pgBackupFree(void *backup)
 	pfree(b->primary_conninfo);
 	pfree(b->external_dir_str);
 	pfree(b->root_dir);
+	pfree(b->note);
 	pfree(backup);
 }
 

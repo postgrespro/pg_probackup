@@ -2709,3 +2709,40 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
+
+    def test_note_sanity(self):
+        """
+        test that adding note to backup works as expected
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # FULL backup
+        backup_id = self.backup_node(
+            backup_dir, 'node', node,
+            options=['--stream', '--log-level-file=LOG', '--note=test_note'])
+
+        show_backups = self.show_pb(backup_dir, 'node')
+
+        print(self.show_pb(backup_dir, as_text=True, as_json=True))
+
+        self.assertEqual(show_backups[0]['note'], "test_note")
+
+        self.set_backup(backup_dir, 'node', backup_id, options=['--note=none'])
+
+        backup_meta = self.show_pb(backup_dir, 'node', backup_id)
+
+        self.assertNotIn(
+            'note',
+            backup_meta)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)

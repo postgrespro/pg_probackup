@@ -430,6 +430,11 @@ print_backup_json_object(PQExpBuffer buf, pgBackup *backup)
 	json_add_value(buf, "status", status2str(backup->status), json_level,
 					true);
 
+	if (backup->note){
+		json_add_value(buf, "note", backup->note,
+					json_level, true);
+
+	}
 	json_add(buf, JT_END_OBJECT, &json_level);
 }
 

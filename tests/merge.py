@@ -22,8 +22,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         # Initialize instance and backup directory
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
-            initdb_params=["--data-checksums"]
-        )
+            initdb_params=["--data-checksums"])
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, "node", node)
@@ -1981,8 +1980,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
-            pg_options={
-                'autovacuum': 'off'})
+            pg_options={'autovacuum': 'off'})
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
@@ -2381,6 +2379,61 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(
             page_id_2, self.show_pb(backup_dir, 'node')[0]['id'])
 
+
+        self.del_test_dir(module_name, fname)
+
+    def test_merge_correct_inheritance(self):
+        """
+        Make sure that backup metainformation fields
+        'note' and 'expire-time' are correctly inherited
+        during merge
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={'autovacuum': 'off'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # add database
+        node.safe_psql(
+            'postgres',
+            'CREATE DATABASE testdb')
+
+        # take FULL backup
+        self.backup_node(backup_dir, 'node', node, options=['--stream'])
+
+        # create database
+        node.safe_psql(
+            'postgres',
+            'create DATABASE testdb1')
+
+        # take PAGE backup
+        page_id = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        self.set_backup(
+            backup_dir, 'node', page_id, options=['--note=hello', '--ttl=20d'])
+
+        page_meta = self.show_pb(backup_dir, 'node', page_id)
+
+        self.merge_backup(backup_dir, 'node', page_id)
+
+        print(self.show_pb(backup_dir, 'node', page_id))
+
+        self.assertEqual(
+            page_meta['note'],
+            self.show_pb(backup_dir, 'node', page_id)['note'])
+
+        self.assertEqual(
+            page_meta['expire-time'],
+            self.show_pb(backup_dir, 'node', page_id)['expire-time'])
 
         self.del_test_dir(module_name, fname)
 

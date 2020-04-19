@@ -2402,6 +2402,11 @@ primary_conninfo = 'user=backup passfile=/var/lib/pgsql/.pgpass port=5432 sslmod
           password is not included.
         </para>
         </listitem>
+        <listitem>
+        <para>
+          <literal>note</literal> — text note attached to backup.
+        </para>
+        </listitem>
       </itemizedlist>
       </para>
       <para>
@@ -3377,15 +3382,28 @@ pg_probackup set-config -B <replaceable>backup_dir</replaceable> --instance <rep
       <title>set-backup</title>
       <programlisting>
 pg_probackup set-backup -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> -i <replaceable>backup_id</replaceable>
-{--ttl=<replaceable>ttl</replaceable> | --expire-time=<replaceable>time</replaceable>} [--help]
+{--ttl=<replaceable>ttl</replaceable> | --expire-time=<replaceable>time</replaceable>}
+[--note=<replaceable>backup_note</replaceable>] [--help]
 </programlisting>
       <para>
         Sets the provided backup-specific settings into the
         <filename>backup.control</filename> configuration file, or modifies the previously
         defined values.
       </para>
+      <varlistentry>
+<term><option>--note=<replaceable>backup_note</replaceable></option></term>
+      <listitem>
       <para>
-        For all available settings, see the section
+        Sets the text note for backup copy.
+        If <replaceable>backup_note</replaceable> contain newline characters,
+        then only substring before first newline character will be saved.
+        Max size of text note is 1 KB.
+        The <replaceable>'none'</replaceable> value removes current note.
+      </para>
+      </listitem>
+      </varlistentry>
+      <para>
+        For all available pinning settings, see the section
         <link linkend="pbk-pinning-options">Pinning Options</link>.
       </para>
     </refsect3>
@@ -3445,7 +3463,7 @@ pg_probackup backup -B <replaceable>backup_dir</replaceable> -b <replaceable>bac
 [--no-validate] [--skip-block-validation]
 [-w --no-password] [-W --password]
 [--archive-timeout=<replaceable>timeout</replaceable>] [--external-dirs=<replaceable>external_directory_path</replaceable>]
-[--no-sync]
+[--no-sync] [--note=<replaceable>backup_note</replaceable>]
 [<replaceable>connection_options</replaceable>] [<replaceable>compression_options</replaceable>] [<replaceable>remote_options</replaceable>]
 [<replaceable>retention_options</replaceable>] [<replaceable>pinning_options</replaceable>] [<replaceable>logging_options</replaceable>]
 </programlisting>
@@ -3612,6 +3630,19 @@ pg_probackup backup -B <replaceable>backup_dir</replaceable> -b <replaceable>bac
       </para>
       </listitem>
       </varlistentry>
+      <varlistentry>
+<term><option>--note=<replaceable>backup_note</replaceable></option></term>
+      <listitem>
+      <para>
+        Sets the text note for backup copy.
+        If <replaceable>backup_note</replaceable> contain newline characters,
+        then only substring before first newline character will be saved.
+        Max size of text note is 1 KB.
+        The <replaceable>'none'</replaceable> value removes current note.
+      </para>
+      </listitem>
+      </varlistentry>
+
       </variablelist>
       </para>
 

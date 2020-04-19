@@ -702,6 +702,15 @@ merge_chain(parray *parent_chain, pgBackup *full_backup, pgBackup *dest_backup)
 	full_backup->compress_alg = dest_backup->compress_alg;
 	full_backup->compress_level = dest_backup->compress_level;
 
+	/* If incremental backup is pinned,
+	 * then result FULL backup must also be pinned.
+	 */
+	if (dest_backup->expire_time)
+		full_backup->expire_time = dest_backup->expire_time;
+
+	if (dest_backup->note)
+		full_backup->note = pgut_strdup(dest_backup->note);
+
 	/* FULL backup must inherit wal mode. */
 	full_backup->stream = dest_backup->stream;
 

@@ -385,3 +385,90 @@ class SetBackupTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_add_note_newlines(self):
+        """"""
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'])
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.slow_start()
+
+        # FULL
+        backup_id = self.backup_node(
+            backup_dir, 'node', node,
+            options=['--stream', '--note={0}'.format('hello\nhello')])
+
+        backup_meta = self.show_pb(backup_dir, 'node', backup_id)
+        self.assertEqual(backup_meta['note'], "hello")
+
+        self.set_backup(backup_dir, 'node', backup_id, options=['--note=hello\nhello'])
+
+        backup_meta = self.show_pb(backup_dir, 'node', backup_id)
+        self.assertEqual(backup_meta['note'], "hello")
+
+        self.set_backup(backup_dir, 'node', backup_id, options=['--note=none'])
+
+        backup_meta = self.show_pb(backup_dir, 'node', backup_id)
+        self.assertNotIn('note', backup_meta)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_add_big_note(self):
+        """"""
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'])
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.slow_start()
+
+#        note = node.safe_psql(
+#            "postgres",
+#            "SELECT repeat('hello', 400)").rstrip() # TODO: investigate
+
+        note = node.safe_psql(
+            "postgres",
+            "SELECT repeat('hello', 210)").rstrip()
+
+        # FULL
+        try:
+            self.backup_node(
+                backup_dir, 'node', node,
+                options=['--stream', '--note={0}'.format(note)])
+            # we should die here because exception is what we expect to happen
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because note is too large "
+                "\n Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                "ERROR: Backup note cannot exceed 1024 bytes",
+                e.message,
+                "\n Unexpected Error Message: {0}\n CMD: {1}".format(
+                    repr(e.message), self.cmd))
+
+        note = node.safe_psql(
+            "postgres",
+            "SELECT repeat('hello', 200)").rstrip()
+
+        backup_id = self.backup_node(
+            backup_dir, 'node', node,
+            options=['--stream', '--note={0}'.format(note)])
+
+        backup_meta = self.show_pb(backup_dir, 'node', backup_id)
+        self.assertEqual(backup_meta['note'], note)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
