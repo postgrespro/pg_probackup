@@ -106,7 +106,8 @@ help_pg_probackup(void)
 	printf(_("                 [--help]\n"));
 
 	printf(_("\n  %s set-backup -B backup-path --instance=instance_name\n"), PROGRAM_NAME);
-	printf(_("                 -i backup-id [--ttl] [--expire-time]\n"));
+	printf(_("                 -i backup-id [--ttl=interval] [--expire-time=timestamp]\n"));
+	printf(_("                 [--note=text]\n"));
 	printf(_("                 [--help]\n"));
 
 	printf(_("\n  %s show-config -B backup-path --instance=instance_name\n"), PROGRAM_NAME);
@@ -140,7 +141,7 @@ help_pg_probackup(void)
 	printf(_("                 [--remote-proto] [--remote-host]\n"));
 	printf(_("                 [--remote-port] [--remote-path] [--remote-user]\n"));
 	printf(_("                 [--ssh-options]\n"));
-	printf(_("                 [--ttl] [--expire-time]\n"));
+	printf(_("                 [--ttl=interval] [--expire-time=timestamp] [--note=text]\n"));
 	printf(_("                 [--help]\n"));
 
 
@@ -285,7 +286,7 @@ help_backup(void)
 	printf(_("                 [--remote-proto] [--remote-host]\n"));
 	printf(_("                 [--remote-port] [--remote-path] [--remote-user]\n"));
 	printf(_("                 [--ssh-options]\n"));
-	printf(_("                 [--ttl] [--expire-time]\n\n"));
+	printf(_("                 [--ttl=interval] [--expire-time=timestamp] [--note=text]\n\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
 	printf(_("  -b, --backup-mode=backup-mode    backup mode=FULL|PAGE|DELTA|PTRACK\n"));
@@ -304,6 +305,8 @@ help_backup(void)
 	printf(_("                                   backup some directories not from pgdata \n"));
 	printf(_("                                   (example: --external-dirs=/tmp/dir1:/tmp/dir2)\n"));
 	printf(_("      --no-sync                    do not sync backed up files to disk\n"));
+	printf(_("      --note=text                  add note to backup\n"));
+	printf(_("                                   (example: --note='backup before app update to v13.1')\n"));
 
 	printf(_("\n  Logging options:\n"));
 	printf(_("      --log-level-console=log-level-console\n"));
@@ -341,8 +344,9 @@ help_backup(void)
 	printf(_("      --dry-run                    perform a trial run without any changes\n"));
 
 	printf(_("\n  Pinning options:\n"));
-	printf(_("      --ttl=ttl                    pin backup for specified amount of time; 0 unpin\n"));
+	printf(_("      --ttl=interval               pin backup for specified amount of time; 0 unpin\n"));
 	printf(_("                                   available units: 'ms', 's', 'min', 'h', 'd' (default: s)\n"));
+	printf(_("                                   (example: --ttl=20d)\n"));
 	printf(_("      --expire-time=time           pin backup until specified time stamp\n"));
 	printf(_("                                   (example: --expire-time='2024-01-01 00:00:00+03')\n"));
 
@@ -710,12 +714,15 @@ help_set_backup(void)
 {
 	printf(_("\n%s set-backup -B backup-path --instance=instance_name\n"), PROGRAM_NAME);
 	printf(_("                 -i backup-id\n"));
-	printf(_("                 [--ttl] [--expire-time]\n\n"));
+	printf(_("                 [--ttl=interval] [--expire-time=time] [--note=text]\n\n"));
 
-	printf(_("      --ttl=ttl                    pin backup for specified amount of time; 0 unpin\n"));
+	printf(_("      --ttl=interval               pin backup for specified amount of time; 0 unpin\n"));
 	printf(_("                                   available units: 'ms', 's', 'min', 'h', 'd' (default: s)\n"));
+	printf(_("                                   (example: --ttl=20d)\n"));
 	printf(_("      --expire-time=time           pin backup until specified time stamp\n"));
 	printf(_("                                   (example: --expire-time='2024-01-01 00:00:00+03')\n"));
+	printf(_("      --note=text                  add note to backup; 'none' to remove note\n"));
+	printf(_("                                   (example: --note='backup before app update to v13.1')\n"));
 }
 
 static void
