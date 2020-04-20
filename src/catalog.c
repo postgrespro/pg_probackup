@@ -89,14 +89,11 @@ unlink_lock_atexit(void)
  * If no backup matches, return NULL.
  */
 pgBackup *
-read_backup(const char *instance_name, time_t timestamp)
+read_backup(const char *root_dir)
 {
-	pgBackup	tmp;
 	char		conf_path[MAXPGPATH];
 
-	tmp.start_time = timestamp;
-	pgBackupGetPathInInstance(instance_name, &tmp, conf_path,
-					 lengthof(conf_path), BACKUP_CONTROL_FILE, NULL);
+	join_path_components(conf_path, root_dir, BACKUP_CONTROL_FILE);
 
 	return readBackupControlFile(conf_path);
 }
@@ -109,11 +106,11 @@ read_backup(const char *instance_name, time_t timestamp)
  */
 void
 write_backup_status(pgBackup *backup, BackupStatus status,
-					const char *instance_name)
+					const char *instance_name, bool strict)
 {
 	pgBackup   *tmp;
 
-	tmp = read_backup(instance_name, backup->start_time);
+	tmp = read_backup(backup->root_dir);
 	if (!tmp)
 	{
 		/*
@@ -125,7 +122,9 @@ write_backup_status(pgBackup *backup, BackupStatus status,
 
 	backup->status = status;
 	tmp->status = backup->status;
-	write_backup(tmp);
+	tmp->root_dir = pgut_strdup(backup->root_dir);
+
+	write_backup(tmp, strict);
 
 	pgBackupFree(tmp);
 }
@@ -134,7 +133,7 @@ write_backup_status(pgBackup *backup, BackupStatus status,
  * Create exclusive lockfile in the backup's directory.
  */
 bool
-lock_backup(pgBackup *backup)
+lock_backup(pgBackup *backup, bool strict)
 {
 	char		lock_file[MAXPGPATH];
 	int			fd;
@@ -280,6 +279,14 @@ lock_backup(pgBackup *backup)
 		fio_unlink(lock_file, FIO_BACKUP_HOST);
 		/* if write didn't set errno, assume problem is no disk space */
 		errno = save_errno ? save_errno : ENOSPC;
+
+		/* In lax mode if we failed to grab lock because of 'out of space error',
+		 * then treat backup as locked.
+		 * Only delete command should be run in lax mode.
+		 */
+		if (!strict && errno == ENOSPC)
+			return true;
+
 		elog(ERROR, "Could not write lock file \"%s\": %s",
 			 lock_file, strerror(errno));
 	}
@@ -536,7 +543,7 @@ get_backup_filelist(pgBackup *backup)
 	parray		*files = NULL;
 	char		backup_filelist_path[MAXPGPATH];
 
-	pgBackupGetPath(backup, backup_filelist_path, lengthof(backup_filelist_path), DATABASE_FILE_LIST);
+	join_path_components(backup_filelist_path, backup->root_dir, DATABASE_FILE_LIST);
 	files = dir_read_file_list(NULL, NULL, backup_filelist_path, FIO_BACKUP_HOST);
 
 	/* redundant sanity? */
@@ -550,7 +557,7 @@ get_backup_filelist(pgBackup *backup)
  * Lock list of backups. Function goes in backward direction.
  */
 void
-catalog_lock_backup_list(parray *backup_list, int from_idx, int to_idx)
+catalog_lock_backup_list(parray *backup_list, int from_idx, int to_idx, bool strict)
 {
 	int			start_idx,
 				end_idx;
@@ -565,7 +572,7 @@ catalog_lock_backup_list(parray *backup_list, int from_idx, int to_idx)
 	for (i = start_idx; i >= end_idx; i--)
 	{
 		pgBackup   *backup = (pgBackup *) parray_get(backup_list, i);
-		if (!lock_backup(backup))
+		if (!lock_backup(backup, strict))
 			elog(ERROR, "Cannot lock backup %s directory",
 				 base36enc(backup->start_time));
 	}
@@ -837,7 +844,7 @@ pgBackupCreateDir(pgBackup *backup)
 	/* create directories for actual backup files */
 	for (i = 0; i < parray_num(subdirs); i++)
 	{
-		pgBackupGetPath(backup, path, lengthof(path), parray_get(subdirs, i));
+		join_path_components(path, backup->root_dir, parray_get(subdirs, i));
 		fio_mkdir(path, DIR_PERMISSION, FIO_BACKUP_HOST);
 	}
 
@@ -1580,7 +1587,7 @@ pin_backup(pgBackup	*target_backup, pgSetBackupParams *set_backup_params)
 		return;
 
 	/* Update backup.control */
-	write_backup(target_backup);
+	write_backup(target_backup, true);
 
 	if (set_backup_params->ttl > 0 || set_backup_params->expire_time > 0)
 	{
@@ -1630,7 +1637,7 @@ add_note(pgBackup *target_backup, char *note)
 	}
 
 	/* Update backup.control */
-	write_backup(target_backup);
+	write_backup(target_backup, true);
 }
 
 /*
@@ -1735,14 +1742,15 @@ pgBackupWriteControl(FILE *out, pgBackup *backup)
  * Save the backup content into BACKUP_CONTROL_FILE.
  */
 void
-write_backup(pgBackup *backup)
+write_backup(pgBackup *backup, bool strict)
 {
-	FILE	   *fp = NULL;
-	char		path[MAXPGPATH];
-	char		path_temp[MAXPGPATH];
-	int			errno_temp;
+	FILE   *fp = NULL;
+	char    path[MAXPGPATH];
+	char    path_temp[MAXPGPATH];
+	int     errno_temp;
+	char    buf[4096];
 
-	pgBackupGetPath(backup, path, lengthof(path), BACKUP_CONTROL_FILE);
+	join_path_components(path, backup->root_dir, BACKUP_CONTROL_FILE);
 	snprintf(path_temp, sizeof(path_temp), "%s.tmp", path);
 
 	fp = fio_fopen(path_temp, PG_BINARY_W, FIO_BACKUP_HOST);
@@ -1750,12 +1758,18 @@ write_backup(pgBackup *backup)
 		elog(ERROR, "Cannot open configuration file \"%s\": %s",
 			 path_temp, strerror(errno));
 
+	setvbuf(fp, buf, _IOFBF, sizeof(buf));
+
 	pgBackupWriteControl(fp, backup);
 
-	if (fio_fflush(fp) || fio_fclose(fp))
+	if (fio_fclose(fp))
 	{
 		errno_temp = errno;
 		fio_unlink(path_temp, FIO_BACKUP_HOST);
+
+		if (!strict &&  errno_temp == ENOSPC)
+			return;
+
 		elog(ERROR, "Cannot write configuration file \"%s\": %s",
 			 path_temp, strerror(errno_temp));
 	}
@@ -1788,7 +1802,7 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 	int64 		uncompressed_size_on_disk = 0;
 	int64 		wal_size_on_disk = 0;
 
-	pgBackupGetPath(backup, path, lengthof(path), DATABASE_FILE_LIST);
+	join_path_components(path, backup->root_dir, DATABASE_FILE_LIST);
 	snprintf(path_temp, sizeof(path_temp), "%s.tmp", path);
 
 	out = fio_fopen(path_temp, PG_BINARY_W, FIO_BACKUP_HOST);

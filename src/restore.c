@@ -71,7 +71,7 @@ set_orphan_status(parray *backups, pgBackup *parent_backup)
 			if (backup->status == BACKUP_STATUS_OK ||
 				backup->status == BACKUP_STATUS_DONE)
 			{
-				write_backup_status(backup, BACKUP_STATUS_ORPHAN, instance_name);
+				write_backup_status(backup, BACKUP_STATUS_ORPHAN, instance_name, true);
 
 				elog(WARNING,
 					"Backup %s is orphaned because his parent %s has status: %s",
@@ -274,7 +274,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 					if (backup->status == BACKUP_STATUS_OK ||
 						backup->status == BACKUP_STATUS_DONE)
 					{
-						write_backup_status(backup, BACKUP_STATUS_ORPHAN, instance_name);
+						write_backup_status(backup, BACKUP_STATUS_ORPHAN, instance_name, true);
 
 						elog(WARNING, "Backup %s is orphaned because his parent %s is missing",
 								base36enc(backup->start_time), missing_backup_id);
@@ -361,7 +361,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 			tmp_backup = (pgBackup *) parray_get(parent_chain, i);
 
 			/* Do not interrupt, validate the next backup */
-			if (!lock_backup(tmp_backup))
+			if (!lock_backup(tmp_backup, true))
 			{
 				if (params->is_restore)
 					elog(ERROR, "Cannot lock backup %s directory",
@@ -523,7 +523,7 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 	{
 		pgBackup   *backup = (pgBackup *) parray_get(parent_chain, i);
 
-		if (!lock_backup(backup))
+		if (!lock_backup(backup, true))
 			elog(ERROR, "Cannot lock backup %s", base36enc(backup->start_time));
 
 		if (backup->status != BACKUP_STATUS_OK &&

@@ -397,7 +397,7 @@ do_merge(time_t backup_id)
 	parray_append(merge_list, full_backup);
 
 	/* Lock merge chain */
-	catalog_lock_backup_list(merge_list, parray_num(merge_list) - 1, 0);
+	catalog_lock_backup_list(merge_list, parray_num(merge_list) - 1, 0, true);
 
 	/* do actual merge */
 	merge_chain(merge_list, full_backup, dest_backup);
@@ -583,10 +583,10 @@ merge_chain(parray *parent_chain, pgBackup *full_backup, pgBackup *dest_backup)
 			 */
 			backup->merge_dest_backup = dest_backup->start_time;
 			backup->status = BACKUP_STATUS_MERGING;
-			write_backup(backup);
+			write_backup(backup, true);
 		}
 		else
-			write_backup_status(backup, BACKUP_STATUS_MERGING, instance_name);
+			write_backup_status(backup, BACKUP_STATUS_MERGING, instance_name, true);
 	}
 
 	/* Create directories */
@@ -704,9 +704,13 @@ merge_chain(parray *parent_chain, pgBackup *full_backup, pgBackup *dest_backup)
 
 	/* If incremental backup is pinned,
 	 * then result FULL backup must also be pinned.
+	 * And reverse, if FULL backup was pinned and dest was not,
+	 * then pinning is no more.
 	 */
-	if (dest_backup->expire_time)
-		full_backup->expire_time = dest_backup->expire_time;
+	full_backup->expire_time = dest_backup->expire_time;
+
+	pg_free(full_backup->note);
+	full_backup->note = NULL;
 
 	if (dest_backup->note)
 		full_backup->note = pgut_strdup(dest_backup->note);
@@ -724,7 +728,7 @@ merge_chain(parray *parent_chain, pgBackup *full_backup, pgBackup *dest_backup)
 	parray_qsort(result_filelist, pgFileCompareRelPathWithExternal);
 
 	write_backup_filelist(full_backup, result_filelist, full_database_dir, NULL);
-	write_backup(full_backup);
+	write_backup(full_backup, true);
 
 	/* Delete FULL backup files, that do not exists in destination backup
 	 * Both arrays must be sorted in in reversed order to delete from leaf
@@ -760,7 +764,7 @@ merge_chain(parray *parent_chain, pgBackup *full_backup, pgBackup *dest_backup)
 	 * Files are merged into FULL backup. It is time to remove incremental chain.
 	 */
 	full_backup->status = BACKUP_STATUS_MERGED;
-	write_backup(full_backup);
+	write_backup(full_backup, true);
 
 merge_delete:
 	for (i = parray_num(parent_chain) - 2; i >= 0; i--)
@@ -787,6 +791,10 @@ merge_rename:
 		if (rename(full_backup->root_dir, dest_backup->root_dir) == -1)
 			elog(ERROR, "Could not rename directory \"%s\" to \"%s\": %s",
 				 full_backup->root_dir, dest_backup->root_dir, strerror(errno));
+
+		/* update root_dir after rename */
+		pg_free(full_backup->root_dir);
+		full_backup->root_dir = pgut_strdup(dest_backup->root_dir);
 	}
 	else
 	{
@@ -804,6 +812,10 @@ merge_rename:
 		if (rename(full_backup->root_dir, destination_path) == -1)
 			elog(ERROR, "Could not rename directory \"%s\" to \"%s\": %s",
 				 full_backup->root_dir, destination_path, strerror(errno));
+
+		/* update root_dir after rename */
+		pg_free(full_backup->root_dir);
+		full_backup->root_dir = pgut_strdup(destination_path);
 	}
 
 	/* If we crash here, it will produce full backup in MERGED
@@ -821,7 +833,7 @@ merge_rename:
 	full_backup->status = BACKUP_STATUS_OK;
 	full_backup->start_time = full_backup->merge_dest_backup;
 	full_backup->merge_dest_backup = INVALID_BACKUP_ID;
-	write_backup(full_backup);
+	write_backup(full_backup, true);
 	/* Critical section end */
 
 	/* Cleanup */

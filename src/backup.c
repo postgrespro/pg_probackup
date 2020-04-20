@@ -230,7 +230,7 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync)
 		prev_backup_start_lsn = prev_backup->start_lsn;
 		current.parent_backup = prev_backup->start_time;
 
-		write_backup(&current);
+		write_backup(&current, true);
 	}
 
 	/*
@@ -287,7 +287,7 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync)
 				base36enc(prev_backup->start_time));
 
 	/* Update running backup meta with START LSN */
-	write_backup(&current);
+	write_backup(&current, true);
 
 	pgBackupGetPath(&current, database_path, lengthof(database_path),
 					DATABASE_DIR);
@@ -496,7 +496,7 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync)
 	/* write initial backup_content.control file and update backup.control  */
 	write_backup_filelist(&current, backup_files_list,
 						  instance_config.pgdata, external_dirs);
-	write_backup(&current);
+	write_backup(&current, true);
 
 	/* init thread args with own file lists */
 	threads = (pthread_t *) palloc(sizeof(pthread_t) * num_threads);
@@ -661,7 +661,7 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync)
 	write_backup_filelist(&current, backup_files_list, instance_config.pgdata,
 						  external_dirs);
 	/* update backup control file to update size info */
-	write_backup(&current);
+	write_backup(&current, true);
 
 	/* Sync all copied files unless '--no-sync' flag is used */
 	if (no_sync)
@@ -840,10 +840,10 @@ do_backup(time_t start_time, bool no_validate,
 	/* Create backup directory and BACKUP_CONTROL_FILE */
 	if (pgBackupCreateDir(&current))
 		elog(ERROR, "Cannot create backup directory");
-	if (!lock_backup(&current))
+	if (!lock_backup(&current, true))
 		elog(ERROR, "Cannot lock backup %s directory",
 			 base36enc(current.start_time));
-	write_backup(&current);
+	write_backup(&current, true);
 
 	/* set the error processing function for the backup process */
 	pgut_atexit_push(backup_cleanup, NULL);
@@ -931,7 +931,7 @@ do_backup(time_t start_time, bool no_validate,
 	/* Backup is done. Update backup status */
 	current.end_time = time(NULL);
 	current.status = BACKUP_STATUS_DONE;
-	write_backup(&current);
+	write_backup(&current, true);
 
 	/* Pin backup if requested */
 	if (set_backup_params &&
@@ -2020,7 +2020,7 @@ backup_cleanup(bool fatal, void *userdata)
 			 base36enc(current.start_time));
 		current.end_time = time(NULL);
 		current.status = BACKUP_STATUS_ERROR;
-		write_backup(&current);
+		write_backup(&current, true);
 	}
 }
 
@@ -2065,7 +2065,7 @@ backup_files(void *arg)
 				write_backup_filelist(&current, arguments->files_list, arguments->from_root,
 									  arguments->external_dirs);
 				/* update backup control file to update size info */
-				write_backup(&current);
+				write_backup(&current, true);
 			}
 		}
 

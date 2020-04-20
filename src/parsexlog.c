@@ -377,7 +377,7 @@ validate_backup_wal_from_start_to_stop(pgBackup *backup,
 		 * If we don't have WAL between start_lsn and stop_lsn,
 		 * the backup is definitely corrupted. Update its status.
 		 */
-		write_backup_status(backup, BACKUP_STATUS_CORRUPT, instance_name);
+		write_backup_status(backup, BACKUP_STATUS_CORRUPT, instance_name, true);
 
 		elog(WARNING, "There are not enough WAL records to consistenly restore "
 			"backup %s from START LSN: %X/%X to STOP LSN: %X/%X",
@@ -404,7 +404,6 @@ validate_wal(pgBackup *backup, const char *archivedir,
 	char		last_timestamp[100],
 				target_timestamp[100];
 	bool		all_wal = false;
-	char		backup_xlog_path[MAXPGPATH];
 
 	/* We need free() this later */
 	backup_id = base36enc(backup->start_time);
@@ -425,8 +424,11 @@ validate_wal(pgBackup *backup, const char *archivedir,
 	 */
 	if (backup->stream)
 	{
-		pgBackupGetPath2(backup, backup_xlog_path, lengthof(backup_xlog_path),
-						 DATABASE_DIR, PG_XLOG_DIR);
+		char	backup_database_dir[MAXPGPATH];
+		char	backup_xlog_path[MAXPGPATH];
+
+		join_path_components(backup_database_dir, backup->root_dir, DATABASE_DIR);
+		join_path_components(backup_xlog_path, backup_database_dir, PG_XLOG_DIR);
 
 		validate_backup_wal_from_start_to_stop(backup, backup_xlog_path, tli,
 											   wal_seg_size);

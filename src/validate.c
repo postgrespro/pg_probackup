@@ -69,7 +69,7 @@ pgBackupValidate(pgBackup *backup, pgRestoreParams *params)
 	{
 		elog(WARNING, "Backup %s has status %s, change it to ERROR and skip validation",
 			 base36enc(backup->start_time), status2str(backup->status));
-		write_backup_status(backup, BACKUP_STATUS_ERROR, instance_name);
+		write_backup_status(backup, BACKUP_STATUS_ERROR, instance_name, true);
 		corrupted_backup_found = true;
 		return;
 	}
@@ -108,9 +108,9 @@ pgBackupValidate(pgBackup *backup, pgRestoreParams *params)
 		backup->backup_mode != BACKUP_MODE_DIFF_DELTA)
 		elog(WARNING, "Invalid backup_mode of backup %s", base36enc(backup->start_time));
 
-	pgBackupGetPath(backup, base_path, lengthof(base_path), DATABASE_DIR);
-	pgBackupGetPath(backup, external_prefix, lengthof(external_prefix), EXTERNAL_DIR);
-	pgBackupGetPath(backup, path, lengthof(path), DATABASE_FILE_LIST);
+	join_path_components(base_path, backup->root_dir, DATABASE_DIR);
+	join_path_components(external_prefix, backup->root_dir, EXTERNAL_DIR);
+	join_path_components(path, backup->root_dir, DATABASE_FILE_LIST);
 	files = dir_read_file_list(base_path, external_prefix, path, FIO_BACKUP_HOST);
 
 //	if (params && params->partial_db_list)
@@ -174,7 +174,7 @@ pgBackupValidate(pgBackup *backup, pgRestoreParams *params)
 	if (corrupted)
 		backup->status = BACKUP_STATUS_CORRUPT;
 	write_backup_status(backup, corrupted ? BACKUP_STATUS_CORRUPT :
-											BACKUP_STATUS_OK, instance_name);
+											BACKUP_STATUS_OK, instance_name, true);
 
 	if (corrupted)
 		elog(WARNING, "Backup %s data files are corrupted", base36enc(backup->start_time));
@@ -189,7 +189,8 @@ pgBackupValidate(pgBackup *backup, pgRestoreParams *params)
 	{
 		char path[MAXPGPATH];
 
-		pgBackupGetPath(backup, path, lengthof(path), DATABASE_FILE_LIST);
+		//pgBackupGetPath(backup, path, lengthof(path), DATABASE_FILE_LIST);
+		join_path_components(path, backup->root_dir, DATABASE_FILE_LIST);
 
 		if (pgFileSize(path) >= (BLCKSZ*500))
 		{
@@ -198,7 +199,7 @@ pgBackupValidate(pgBackup *backup, pgRestoreParams *params)
 							"https://github.com/postgrespro/pg_probackup/issues/132",
 							base36enc(backup->start_time));
 			backup->status = BACKUP_STATUS_CORRUPT;
-			write_backup_status(backup, BACKUP_STATUS_CORRUPT, instance_name);
+			write_backup_status(backup, BACKUP_STATUS_CORRUPT, instance_name, true);
 		}
 
 	}
@@ -491,7 +492,7 @@ do_validate_instance(void)
 				if (current_backup->status == BACKUP_STATUS_OK ||
 					current_backup->status == BACKUP_STATUS_DONE)
 				{
-					write_backup_status(current_backup, BACKUP_STATUS_ORPHAN, instance_name);
+					write_backup_status(current_backup, BACKUP_STATUS_ORPHAN, instance_name, true);
 					elog(WARNING, "Backup %s is orphaned because his parent %s is missing",
 							base36enc(current_backup->start_time),
 							parent_backup_id);
@@ -515,7 +516,7 @@ do_validate_instance(void)
 					if (current_backup->status == BACKUP_STATUS_OK ||
 						current_backup->status == BACKUP_STATUS_DONE)
 					{
-						write_backup_status(current_backup, BACKUP_STATUS_ORPHAN, instance_name);
+						write_backup_status(current_backup, BACKUP_STATUS_ORPHAN, instance_name, true);
 						elog(WARNING, "Backup %s is orphaned because his parent %s has status: %s",
 								base36enc(current_backup->start_time), backup_id,
 								status2str(tmp_backup->status));
@@ -546,7 +547,7 @@ do_validate_instance(void)
 			base_full_backup = current_backup;
 
 		/* Do not interrupt, validate the next backup */
-		if (!lock_backup(current_backup))
+		if (!lock_backup(current_backup, true))
 		{
 			elog(WARNING, "Cannot lock backup %s directory, skip validation",
 				 base36enc(current_backup->start_time));
@@ -588,7 +589,7 @@ do_validate_instance(void)
 					if (backup->status == BACKUP_STATUS_OK ||
 						backup->status == BACKUP_STATUS_DONE)
 					{
-						write_backup_status(backup, BACKUP_STATUS_ORPHAN, instance_name);
+						write_backup_status(backup, BACKUP_STATUS_ORPHAN, instance_name, true);
 
 						elog(WARNING, "Backup %s is orphaned because his parent %s has status: %s",
 							 base36enc(backup->start_time),
@@ -641,7 +642,7 @@ do_validate_instance(void)
 						if (backup->status == BACKUP_STATUS_ORPHAN)
 						{
 							/* Do not interrupt, validate the next backup */
-							if (!lock_backup(backup))
+							if (!lock_backup(backup, true))
 							{
 								elog(WARNING, "Cannot lock backup %s directory, skip validation",
 									 base36enc(backup->start_time));

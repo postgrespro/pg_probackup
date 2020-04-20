@@ -89,7 +89,7 @@ do_delete(time_t backup_id)
 	if (!dry_run)
 	{
 		/* Lock marked for delete backups */
-		catalog_lock_backup_list(delete_list, parray_num(delete_list) - 1, 0);
+		catalog_lock_backup_list(delete_list, parray_num(delete_list) - 1, 0, false);
 
 		/* Delete backups from the end of list */
 		for (i = (int) parray_num(delete_list) - 1; i >= 0; i--)
@@ -510,7 +510,7 @@ do_retention_merge(parray *backup_list, parray *to_keep_list, parray *to_purge_l
 		parray_rm(to_purge_list, full_backup, pgBackupCompareId);
 
 		/* Lock merge chain */
-		catalog_lock_backup_list(merge_list, parray_num(merge_list) - 1, 0);
+		catalog_lock_backup_list(merge_list, parray_num(merge_list) - 1, 0, true);
 
 		/* Consider this extreme case */
 		//  PAGEa1    PAGEb1   both valid
@@ -627,7 +627,7 @@ do_retention_purge(parray *to_keep_list, parray *to_purge_list)
 			continue;
 
 		/* Actual purge */
-		if (!lock_backup(delete_backup))
+		if (!lock_backup(delete_backup, false))
 		{
 			/* If the backup still is used, do not interrupt and go to the next */
 			elog(WARNING, "Cannot lock backup %s directory, skip purging",
@@ -746,7 +746,7 @@ delete_backup_files(pgBackup *backup)
 	 * Update STATUS to BACKUP_STATUS_DELETING in preparation for the case which
 	 * the error occurs before deleting all backup files.
 	 */
-	write_backup_status(backup, BACKUP_STATUS_DELETING, instance_name);
+	write_backup_status(backup, BACKUP_STATUS_DELETING, instance_name, false);
 
 	/* list files to be deleted */
 	files = parray_new();
@@ -968,7 +968,7 @@ do_delete_instance(void)
 	/* Delete all backups. */
 	backup_list = catalog_get_backup_list(instance_name, INVALID_BACKUP_ID);
 
-	catalog_lock_backup_list(backup_list, 0, parray_num(backup_list) - 1);
+	catalog_lock_backup_list(backup_list, 0, parray_num(backup_list) - 1, true);
 
 	for (i = 0; i < parray_num(backup_list); i++)
 	{
@@ -1091,7 +1091,7 @@ do_delete_status(InstanceConfig *instance_config, const char *status)
 		if (backup->stream)
 			size_to_delete += backup->wal_bytes;
 
-		if (!dry_run && lock_backup(backup))
+		if (!dry_run && lock_backup(backup, false))
 			delete_backup_files(backup);
 
 		n_deleted++;

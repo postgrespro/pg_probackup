@@ -759,19 +759,19 @@ extern int validate_one_page(Page page, BlockNumber absolute_blkno,
 #define PAGE_LSN_FROM_FUTURE (-6)
 
 /* in catalog.c */
-extern pgBackup *read_backup(const char *instance_name, time_t timestamp);
-extern void write_backup(pgBackup *backup);
+extern pgBackup *read_backup(const char *root_dir);
+extern void write_backup(pgBackup *backup, bool strict);
 extern void write_backup_status(pgBackup *backup, BackupStatus status,
-								const char *instance_name);
+								const char *instance_name, bool strict);
 extern void write_backup_data_bytes(pgBackup *backup);
-extern bool lock_backup(pgBackup *backup);
+extern bool lock_backup(pgBackup *backup, bool strict);
 
 extern const char *pgBackupGetBackupMode(pgBackup *backup);
 
 extern parray *catalog_get_instance_list(void);
 extern parray *catalog_get_backup_list(const char *instance_name, time_t requested_backup_id);
 extern void catalog_lock_backup_list(parray *backup_list, int from_idx,
-									 int to_idx);
+									 int to_idx, bool strict);
 extern pgBackup *catalog_get_last_data_backup(parray *backup_list,
 											  TimeLineID tli,
 											  time_t current_start_time);
