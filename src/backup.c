@@ -217,13 +217,13 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync)
 
 	if (prev_backup)
 	{
+		char		prev_backup_filelist_path[MAXPGPATH];
+
         if (parse_program_version(prev_backup->program_version) > parse_program_version(PROGRAM_VERSION))
             elog(ERROR, "pg_probackup binary version is %s, but backup %s version is %s. "
                         "pg_probackup do not guarantee to be forward compatible. "
                         "Please upgrade pg_probackup binary.",
                         PROGRAM_VERSION, base36enc(prev_backup->start_time), prev_backup->program_version);
-
-		char		prev_backup_filelist_path[MAXPGPATH];
 
 		elog(INFO, "Parent backup: %s", base36enc(prev_backup->start_time));
 
