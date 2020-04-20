@@ -631,13 +631,14 @@ wal_contains_lsn(const char *archivedir, XLogRecPtr target_lsn,
  */
 XLogRecPtr
 get_first_record_lsn(const char *archivedir, XLogSegNo	segno,
-				 TimeLineID tli, uint32 wal_seg_size)
+					 TimeLineID tli, uint32 wal_seg_size, int timeout)
 {
 	XLogReaderState *xlogreader;
-	XLogReaderData reader_data;
-	XLogRecPtr	record = InvalidXLogRecPtr;
-	XLogRecPtr	startpoint;
-	char	wal_segment[MAXFNAMELEN];
+	XLogReaderData   reader_data;
+	XLogRecPtr       record = InvalidXLogRecPtr;
+	XLogRecPtr       startpoint;
+	char             wal_segment[MAXFNAMELEN];
+	int              attempts = 0;
 
 	if (segno <= 1)
 		elog(ERROR, "Invalid WAL segment number " UINT64_FORMAT, segno);
@@ -653,13 +654,22 @@ get_first_record_lsn(const char *archivedir, XLogSegNo	segno,
 	/* Set startpoint to 0 in segno */
 	GetXLogRecPtr(segno, 0, wal_seg_size, startpoint);
 
-	record = XLogFindNextRecord(xlogreader, startpoint);
+	while (attempts <= timeout)
+	{
+		record = XLogFindNextRecord(xlogreader, startpoint);
 
-	if (XLogRecPtrIsInvalid(record))
-		record = InvalidXLogRecPtr;
-	else
-		elog(LOG, "First record in WAL segment \"%s\": %X/%X", wal_segment,
-				(uint32) (record >> 32), (uint32) (record));
+		if (XLogRecPtrIsInvalid(record))
+			record = InvalidXLogRecPtr;
+		else
+		{
+			elog(LOG, "First record in WAL segment \"%s\": %X/%X", wal_segment,
+					(uint32) (record >> 32), (uint32) (record));
+			break;
+		}
+
+		attempts++;
+		sleep(1);
+	}
 
 	/* cleanup */
 	CleanupXLogPageRead(xlogreader);

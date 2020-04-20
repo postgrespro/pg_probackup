@@ -957,7 +957,7 @@ extern XLogRecPtr get_prior_record_lsn(const char *archivedir, XLogRecPtr start_
 								   bool seek_prev_segment, uint32 seg_size);
 
 extern XLogRecPtr get_first_record_lsn(const char *archivedir, XLogRecPtr start_lsn,
-									TimeLineID tli, uint32 wal_seg_size);
+									   TimeLineID tli, uint32 wal_seg_size, int timeout);
 
 /* in util.c */
 extern TimeLineID get_current_timeline(PGconn *conn);

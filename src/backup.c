@@ -1740,8 +1740,10 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn,
 
 		if (!XRecOffIsValid(stop_backup_lsn_tmp))
 		{
-			/* It is ok for replica to return STOP LSN with NullXRecOff */
-			if (backup->from_replica && XRecOffIsNull(stop_backup_lsn_tmp))
+			/* It is ok for replica to return STOP LSN with NullXRecOff
+			 * UPD: Apparently it is ok even for master.
+			 */
+			if (XRecOffIsNull(stop_backup_lsn_tmp))
 			{
 				char	   *xlog_path,
 							stream_xlog_path[MAXPGPATH];
@@ -1798,13 +1800,20 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn,
 
 				/* Get the first record in segment with current stop_lsn */
 				lsn_tmp = get_first_record_lsn(xlog_path, segno, backup->tli,
-										    instance_config.xlog_seg_size);
+										       instance_config.xlog_seg_size,
+										       instance_config.archive_timeout);
 
 				/* Check that returned LSN is valid and greater than stop_lsn */
 				if (XLogRecPtrIsInvalid(lsn_tmp) ||
 					!XRecOffIsValid(lsn_tmp) ||
 					lsn_tmp < stop_backup_lsn_tmp)
 				{
+					/* Backup from master should error out here */
+					if (!backup->from_replica)
+						elog(ERROR, "Failed to get next WAL record after %X/%X",
+									(uint32) (stop_backup_lsn_tmp >> 32),
+									(uint32) (stop_backup_lsn_tmp));
+
 					/* No luck, falling back to looking up for previous record */
 					elog(WARNING, "Failed to get next WAL record after %X/%X, "
 								"looking for previous WAL record",
