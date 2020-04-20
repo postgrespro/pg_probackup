@@ -1132,7 +1132,7 @@ class ProbackupTest(object):
 
     def set_archiving(
             self, backup_dir, instance, node, replica=False,
-            overwrite=False, compress=False, old_binary=False,
+            overwrite=False, compress=True, old_binary=False,
             log_level=False, archive_timeout=False):
 
         # parse postgresql.auto.conf
@@ -1157,7 +1157,7 @@ class ProbackupTest(object):
             options['archive_command'] += '--remote-proto=ssh '
             options['archive_command'] += '--remote-host=localhost '
 
-        if self.archive_compress or compress:
+        if self.archive_compress and compress:
             options['archive_command'] += '--compress '
 
         if overwrite:
