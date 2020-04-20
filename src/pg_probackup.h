@@ -46,7 +46,7 @@ extern const char  *PROGRAM_URL;
 extern const char  *PROGRAM_EMAIL;
 
 /* Directory/File names */
-#define DATABASE_DIR				"database"
+#define DATABASE_DIR			"database"
 #define BACKUPS_DIR				"backups"
 #if PG_VERSION_NUM >= 100000
 #define PG_XLOG_DIR				"pg_wal"
@@ -90,6 +90,7 @@ extern const char  *PROGRAM_EMAIL;
 /* retry attempts */
 #define PAGE_READ_ATTEMPTS 100
 
+/* max size of note, that can be added to backup */
 #define MAX_NOTE_SIZE 1024
 
 /* Check if an XLogRecPtr value is pointed to 0 offset */
@@ -514,18 +515,18 @@ typedef struct lsnInterval
 typedef enum xlogFileType
 {
 	SEGMENT,
+	TEMP_SEGMENT,
 	PARTIAL_SEGMENT,
 	BACKUP_HISTORY_FILE
 } xlogFileType;
 
 typedef struct xlogFile
 {
-	pgFile file;
-	XLogSegNo segno;
+	pgFile       file;
+	XLogSegNo    segno;
 	xlogFileType type;
-	bool keep; /* Used to prevent removal of WAL segments
-				* required by ARCHIVE backups.
-				*/
+	bool         keep; /* Used to prevent removal of WAL segments
+                        * required by ARCHIVE backups. */
 } xlogFile;
 
 
@@ -606,6 +607,21 @@ typedef struct BackupPageHeader
 #define GetXLogFromFileName(fname, tli, logSegNo, wal_segsz_bytes) \
 		XLogFromFileName(fname, tli, logSegNo)
 #endif
+
+#define IsPartialCompressXLogFileName(fname)	\
+	(strlen(fname) == XLOG_FNAME_LEN + strlen(".gz.partial") && \
+	 strspn(fname, "0123456789ABCDEF") == XLOG_FNAME_LEN &&		\
+	 strcmp((fname) + XLOG_FNAME_LEN, ".gz.partial") == 0)
+
+#define IsTempXLogFileName(fname)	\
+	(strlen(fname) == XLOG_FNAME_LEN + strlen(".part") &&	\
+	 strspn(fname, "0123456789ABCDEF") == XLOG_FNAME_LEN &&		\
+	 strcmp((fname) + XLOG_FNAME_LEN, ".part") == 0)
+
+#define IsTempCompressXLogFileName(fname)	\
+	(strlen(fname) == XLOG_FNAME_LEN + strlen(".gz.part") && \
+	 strspn(fname, "0123456789ABCDEF") == XLOG_FNAME_LEN &&		\
+	 strcmp((fname) + XLOG_FNAME_LEN, ".gz.part") == 0)
 
 #define IsSshProtocol() (instance_config.remote.host && strcmp(instance_config.remote.proto, "ssh") == 0)
 

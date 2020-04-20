@@ -942,6 +942,8 @@ delete_walfiles_in_tli(XLogRecPtr keep_lsn, timelineInfo *tlinfo,
 			{
 				if (wal_file->type == SEGMENT)
 					elog(VERBOSE, "Removed WAL segment \"%s\"", wal_file->file.path);
+				else if (wal_file->type == TEMP_SEGMENT)
+					elog(VERBOSE, "Removed temp WAL segment \"%s\"", wal_file->file.path);
 				else if (wal_file->type == PARTIAL_SEGMENT)
 					elog(VERBOSE, "Removed partial WAL segment \"%s\"", wal_file->file.path);
 				else if (wal_file->type == BACKUP_HISTORY_FILE)

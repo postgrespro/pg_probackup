@@ -853,7 +853,8 @@ pgBackupCreateDir(pgBackup *backup)
 }
 
 /*
- * Create list of timelines
+ * Create list of timelines.
+ * TODO: '.partial' and '.part' segno information should be added to tlinfo.
  */
 parray *
 catalog_get_timelines(InstanceConfig *instance)
@@ -933,7 +934,8 @@ catalog_get_timelines(InstanceConfig *instance)
 					continue;
 				}
 				/* partial WAL segment */
-				else if (IsPartialXLogFileName(file->name))
+				else if (IsPartialXLogFileName(file->name) ||
+						 IsPartialCompressXLogFileName(file->name))
 				{
 					elog(VERBOSE, "partial WAL file \"%s\"", file->name);
 
@@ -948,6 +950,27 @@ catalog_get_timelines(InstanceConfig *instance)
 					wal_file->file = *file;
 					wal_file->segno = segno;
 					wal_file->type = PARTIAL_SEGMENT;
+					wal_file->keep = false;
+					parray_append(tlinfo->xlog_filelist, wal_file);
+					continue;
+				}
+				/* temp WAL segment */
+				else if (IsTempXLogFileName(file->name) ||
+						 IsTempCompressXLogFileName(file->name))
+				{
+					elog(VERBOSE, "temp WAL file \"%s\"", file->name);
+
+					if (!tlinfo || tlinfo->tli != tli)
+					{
+						tlinfo = timelineInfoNew(tli);
+						parray_append(timelineinfos, tlinfo);
+					}
+
+					/* append file to xlog file list */
+					wal_file = palloc(sizeof(xlogFile));
+					wal_file->file = *file;
+					wal_file->segno = segno;
+					wal_file->type = TEMP_SEGMENT;
 					wal_file->keep = false;
 					parray_append(tlinfo->xlog_filelist, wal_file);
 					continue;
