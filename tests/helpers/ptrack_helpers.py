@@ -246,6 +246,18 @@ class ProbackupTest(object):
             print('pg_probackup binary is not found')
             exit(1)
 
+        self.probackup_version = None
+
+        try:
+            self.probackup_version_output = subprocess.check_output(
+                [self.probackup_path, "--version"],
+                stderr=subprocess.STDOUT,
+                ).decode('utf-8')
+        except subprocess.CalledProcessError as e:
+            raise ProbackupException(e.output.decode('utf-8'))
+
+        self.probackup_version = re.search(r"\d+\.\d+\.\d+", self.probackup_version_output).group(0)
+
         if os.name == 'posix':
             self.EXTERNAL_DIRECTORY_DELIMITER = ':'
             os.environ['PATH'] = os.path.dirname(
