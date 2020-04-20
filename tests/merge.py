@@ -2437,5 +2437,55 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
         self.del_test_dir(module_name, fname)
 
+    def test_merge_correct_inheritance_1(self):
+        """
+        Make sure that backup metainformation fields
+        'note' and 'expire-time' are correctly inherited
+        during merge
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={'autovacuum': 'off'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # add database
+        node.safe_psql(
+            'postgres',
+            'CREATE DATABASE testdb')
+
+        # take FULL backup
+        self.backup_node(
+            backup_dir, 'node', node,
+            options=['--stream', '--note=hello', '--ttl=20d'])
+
+        # create database
+        node.safe_psql(
+            'postgres',
+            'create DATABASE testdb1')
+
+        # take PAGE backup
+        page_id = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        self.merge_backup(backup_dir, 'node', page_id)
+
+        self.assertNotIn(
+            'note',
+            self.show_pb(backup_dir, 'node', page_id))
+
+        self.assertNotIn(
+            'expire-time',
+            self.show_pb(backup_dir, 'node', page_id))
+
+        self.del_test_dir(module_name, fname)
+
 # 1. Need new test with corrupted FULL backup
 # 2. different compression levels

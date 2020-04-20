@@ -870,7 +870,8 @@ class ProbackupTest(object):
 
     def restore_node(
             self, backup_dir, instance, node=False,
-            data_dir=None, backup_id=None, old_binary=False, options=[]
+            data_dir=None, backup_id=None, old_binary=False, options=[],
+            gdb=False
             ):
 
         if data_dir is None:
@@ -895,7 +896,7 @@ class ProbackupTest(object):
         if not old_binary:
             cmd_list += ['--no-sync']
 
-        return self.run_pb(cmd_list + options, old_binary=old_binary)
+        return self.run_pb(cmd_list + options, gdb=gdb, old_binary=old_binary)
 
     def show_pb(
             self, backup_dir, instance=None, backup_id=None,

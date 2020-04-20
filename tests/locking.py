@@ -440,3 +440,101 @@ class LockingTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
+
+    def test_locking_concurren_restore_and_delete(self):
+        """
+        make node, take full backup, launch restore
+        and stop it in the middle, delete full backup.
+        Expect it to fail.
+        """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'])
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # FULL
+        full_id = self.backup_node(backup_dir, 'node', node)
+
+        node.cleanup()
+        gdb = self.restore_node(backup_dir, 'node', node, gdb=True)
+
+        gdb.set_breakpoint('create_data_directories')
+        gdb.run_until_break()
+
+        # This PAGE backup is expected to be successfull
+        try:
+            self.delete_pb(backup_dir, 'node', full_id)
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because backup is locked\n "
+                "Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                "ERROR: Cannot lock backup {0} directory".format(full_id),
+                e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    def test_backup_directory_name(self):
+        """
+        """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'])
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # FULL
+        full_id_1 = self.backup_node(backup_dir, 'node', node)
+        page_id_1 = self.backup_node(backup_dir, 'node', node, backup_type='page')
+
+        full_id_2 = self.backup_node(backup_dir, 'node', node)
+        page_id_2 = self.backup_node(backup_dir, 'node', node, backup_type='page')
+
+        node.cleanup()
+
+        old_path = os.path.join(backup_dir, 'backups', 'node', full_id_1)
+        new_path = os.path.join(backup_dir, 'backups', 'node', 'hello_kitty')
+
+        os.rename(old_path, new_path)
+
+        # This PAGE backup is expected to be successfull
+        self.show_pb(backup_dir, 'node', full_id_1)
+
+        self.validate_pb(backup_dir)
+        self.validate_pb(backup_dir, 'node')
+        self.validate_pb(backup_dir, 'node', full_id_1)
+
+        self.restore_node(backup_dir, 'node', node, backup_id=full_id_1)
+
+        self.delete_pb(backup_dir, 'node', full_id_1)
+
+        old_path = os.path.join(backup_dir, 'backups', 'node', full_id_2)
+        new_path = os.path.join(backup_dir, 'backups', 'node', 'hello_kitty')
+
+        self.set_backup(
+            backup_dir, 'node', full_id_2, options=['--note=hello'])
+
+        self.merge_backup(backup_dir, 'node', page_id_2, options=["-j", "4"])
+
+        self.assertNotIn(
+            'note',
+            self.show_pb(backup_dir, 'node', page_id_2))
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
