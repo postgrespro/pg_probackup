@@ -1157,6 +1157,11 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
                 'checkpoint_timeout': '30s',
                 'autovacuum': 'off'})
 
+        if self.get_version(master) < self.version_to_num('9.6.0'):
+            self.del_test_dir(module_name, fname)
+            return unittest.skip(
+                'Skipped because backup from replica is not supported in PG 9.5')
+
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'master', master)
         self.set_archiving(backup_dir, 'master', master)
@@ -2145,6 +2150,11 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             initdb_params=['--data-checksums'],
             pg_options={'autovacuum': 'off'})
 
+        if self.get_version(node) < self.version_to_num('9.6.0'):
+            self.del_test_dir(module_name, fname)
+            return unittest.skip(
+                'Skipped because backup from replica is not supported in PG 9.5')
+
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -2321,7 +2331,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         os.remove(os.path.join(replica.logs_dir, 'postgresql.log'))
         replica.slow_start(replica=True)
 
-        sleep(10)
+        sleep(60)
 
         with open(os.path.join(replica.logs_dir, 'postgresql.log'), 'r') as f:
             postgres_log_content = f.read()

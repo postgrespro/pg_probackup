@@ -1333,6 +1333,8 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         node1.promote()
         node1.safe_psql('postgres', 'CHECKPOINT')
 
+        sleep(5)
+
         # delta backup on timeline 3
         self.backup_node(
             backup_dir, 'node', node1, node1.data_dir, 'delta',

@@ -517,7 +517,8 @@ class PageTest(ProbackupTest, unittest.TestCase):
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
-            set_replication=True, initdb_params=['--data-checksums'],
+            set_replication=True,
+            initdb_params=['--data-checksums'],
             pg_options={
                 'checkpoint_timeout': '30s',
                 'autovacuum': 'off'
@@ -925,10 +926,13 @@ class PageTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
             initdb_params=['--data-checksums'])
 
         alien_node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'alien_node'))
+            base_dir=os.path.join(module_name, fname, 'alien_node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
