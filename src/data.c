@@ -454,7 +454,7 @@ prepare_page(ConnectionArgs *conn_arg,
 			return PageIsOk;
 
 		/* Getting page with invalid header from shared buffers is unacceptable */
-		if (PAGE_HEADER_IS_INVALID)
+		if (rc == PAGE_HEADER_IS_INVALID)
 		{
 			char *errormsg = NULL;
 			get_header_errormsg(page, &errormsg);
