@@ -435,7 +435,7 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync)
 			/*
 			 * Build the page map from ptrack information.
 			 */
-			if (nodeInfo->ptrack_version_num == 20)
+			if (nodeInfo->ptrack_version_num >= 20)
 				make_pagemap_from_ptrack_2(backup_files_list, backup_conn,
 											nodeInfo->ptrack_schema,
 											prev_backup_start_lsn);

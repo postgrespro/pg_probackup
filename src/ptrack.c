@@ -199,6 +199,8 @@ get_ptrack_version(PGconn *backup_conn, PGNodeInfo *nodeInfo)
 		nodeInfo->ptrack_version_num = 17;
 	else if (strcmp(ptrack_version_str, "2.0") == 0)
 		nodeInfo->ptrack_version_num = 20;
+	else if (strcmp(ptrack_version_str, "2.1") == 0)
+		nodeInfo->ptrack_version_num = 21;
 	else
 		elog(WARNING, "Update your ptrack to the version 1.5 or upper. Current version is %s",
 			 ptrack_version_str);
@@ -567,7 +569,7 @@ pg_ptrack_enable2(PGconn *backup_conn)
 {
 	PGresult   *res_db;
 
-	res_db = pgut_execute(backup_conn, "SHOW ptrack_map_size", 0, NULL);
+	res_db = pgut_execute(backup_conn, "SHOW ptrack.map_size", 0, NULL);
 
 	if (strcmp(PQgetvalue(res_db, 0, 0), "0") == 0)
 	{

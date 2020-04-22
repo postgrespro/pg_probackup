@@ -269,7 +269,8 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True, initdb_params=['--data-checksums'],
             pg_options={
-                'checkpoint_timeout': '30s'})
+                'checkpoint_timeout': '30s',
+                'shared_preload_libraries': 'ptrack'})
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -336,16 +337,16 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         # DISABLE PTRACK
         if node.major_version >= 12:
-            node.safe_psql('postgres', "alter system set ptrack_map_size to 0")
+            node.safe_psql('postgres', "alter system set ptrack.map_size to 0")
         else:
             node.safe_psql('postgres', "alter system set ptrack_enable to off")
-
         node.stop()
         node.slow_start()
 
         # ENABLE PTRACK
         if node.major_version >= 12:
-            node.safe_psql('postgres', "alter system set ptrack_map_size to '128MB'")
+            node.safe_psql('postgres', "alter system set ptrack.map_size to '128'")
+            node.safe_psql('postgres', "alter system set shared_preload_libraries to 'ptrack'")
         else:
             node.safe_psql('postgres', "alter system set ptrack_enable to on")
         node.stop()
@@ -4054,7 +4055,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             'FATAL:  incorrect checksum of file "{0}"'.format(ptrack_map),
             log_content)
 
-        self.set_auto_conf(node, {'ptrack_map_size': '0'})
+        self.set_auto_conf(node, {'ptrack.map_size': '0'})
 
         node.slow_start()
 
@@ -4082,7 +4083,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         node.stop(['-m', 'immediate', '-D', node.data_dir])
 
-        self.set_auto_conf(node, {'ptrack_map_size': '32'})
+        self.set_auto_conf(node, {'ptrack.map_size': '32', 'shared_preload_libraries': 'ptrack'})
 
         node.slow_start()
 
