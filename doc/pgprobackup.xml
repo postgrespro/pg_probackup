@@ -1168,12 +1168,12 @@ CREATE EXTENSION ptrack;
       </listitem>
       <listitem>
       <para>
-       To enable tracking page updates, set <varname>ptrack_map_size</varname>
+       To enable tracking page updates, set <varname>ptrack.map_size</varname>
        parameter to a positive integer and restart the server.
       </para>
       <para>
        For optimal performance, it is recommended to set
-       <varname>ptrack_map_size</varname> to
+       <varname>ptrack.map_size</varname> to
        <literal><replaceable>N</replaceable> / 1024</literal>, where
        <replaceable>N</replaceable> is the size of the
        <productname>PostgreSQL</productname> cluster, in MB. If you set this
@@ -1181,7 +1181,7 @@ CREATE EXTENSION ptrack;
        together, which leads to false-positive results when tracking changed
        blocks and increases the incremental backup size as unchanged blocks
        can also be copied into the incremental backup.
-       Setting <varname>ptrack_map_size</varname> to a higher value
+       Setting <varname>ptrack.map_size</varname> to a higher value
        does not affect PTRACK operation. The maximum allowed value is 1024.
       </para>
      </listitem>
@@ -1201,11 +1201,11 @@ GRANT EXECUTE ON FUNCTION pg_ptrack_get_block(oid, oid, oid, bigint) TO backup;
 
    <note>
     <para>
-     If you change the <varname>ptrack_map_size</varname> parameter value,
+     If you change the <varname>ptrack.map_size</varname> parameter value,
      the previously created PTRACK map file is cleared,
      and tracking newly changed blocks starts from scratch. Thus, you have
      to retake a full backup before taking incremental PTRACK backups after
-     changing <varname>ptrack_map_size</varname>.
+     changing <varname>ptrack.map_size</varname>.
     </para>
    </note>
 
