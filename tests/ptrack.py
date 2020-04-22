@@ -344,10 +344,10 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         node.slow_start()
 
         # ENABLE PTRACK
-        if node.major_version < 11:
-            node.safe_psql('postgres', "alter system set ptrack_enable to on")
-        else:
+        if node.major_version >= 12:
             node.safe_psql('postgres', "alter system set ptrack_map_size to '128MB'")
+        else:
+            node.safe_psql('postgres', "alter system set ptrack_enable to on")
         node.stop()
         node.slow_start()
 
@@ -3966,6 +3966,10 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_corrupt_ptrack_map(self):
+
+        if self.pg_config_version < self.version_to_num('12.0'):
+            return unittest.skip('You need PostgreSQL >= 12 for this test')
+
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
