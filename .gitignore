@@ -44,6 +44,7 @@
 /src/xlogreader.c
 /src/walmethods.c
 /src/walmethods.h
+/src/instr_time.h
 
 # Doc files
 /doc/*html
