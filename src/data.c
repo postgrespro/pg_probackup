@@ -418,43 +418,55 @@ prepare_page(ConnectionArgs *conn_arg,
 		&& (ptrack_version_num >= 15 && ptrack_version_num < 20))
 			|| !page_is_valid)
 	{
+		int rc = 0;
 		size_t page_size = 0;
 		Page ptrack_page = NULL;
-		ptrack_page = (Page) pg_ptrack_get_block(conn_arg, file->dbOid, file->tblspcOid,
+		page = (Page) pg_ptrack_get_block(conn_arg, file->dbOid, file->tblspcOid,
 										  file->relOid, absolute_blknum, &page_size,
 										  ptrack_version_num, ptrack_schema);
 
 		if (ptrack_page == NULL)
-		{
 			/* This block was truncated.*/
 			return PageIsTruncated;
-		}
-		else if (page_size != BLCKSZ)
-		{
-			free(ptrack_page);
+
+		if (page_size != BLCKSZ)
 			elog(ERROR, "File: \"%s\", block %u, expected block size %d, but read %zu",
 					   from_fullpath, absolute_blknum, BLCKSZ, page_size);
-		}
-		else
+
+		/*
+		 * We need to copy the page that was successfully
+		 * retrieved from ptrack into our output "page" parameter.
+		 */
+		memcpy(page, ptrack_page, BLCKSZ);
+		pg_free(ptrack_page);
+
+		/* UPD: It apprears that is possible to get zeroed page or page with invalid header
+		 * from shared buffer.
+		 * Note, that getting page with wrong checksumm from shared buffer is
+		 * acceptable.
+		 */
+		rc = validate_one_page(page, absolute_blknum,
+								InvalidXLogRecPtr, &page_lsn,
+								checksum_version);
+
+		/* It is ok to get zeroed page */
+		if (rc == PAGE_IS_ZEROED)
+			return PageIsOk;
+
+		/* Getting page with invalid header from shared buffers is unacceptable */
+		if (PAGE_HEADER_IS_INVALID)
 		{
-			/*
-			 * We need to copy the page that was successfully
-			 * retrieved from ptrack into our output "page" parameter.
-			 * We must set checksum here, because it is outdated
-			 * in the block recieved from shared buffers.
-			 */
-			memcpy(page, ptrack_page, BLCKSZ);
-			free(ptrack_page);
-			if (checksum_version)
-				((PageHeader) page)->pd_checksum = pg_checksum_page(page, absolute_blknum);
+			char *errormsg = NULL;
+			get_header_errormsg(page, &errormsg);
+			elog(ERROR, "Corruption detected in file \"%s\", block %u: %s",
+								from_fullpath, blknum, errormsg);
 		}
 
-		/* get lsn from page, provided by pg_ptrack_get_block() */
-		if (backup_mode == BACKUP_MODE_DIFF_DELTA &&
-			file->exists_in_prev &&
-			!parse_page(page, &page_lsn))
-				elog(ERROR, "Cannot parse page after pg_ptrack_get_block. "
-								"Possible risk of a memory corruption");
+		/* We must set checksum here, because it is outdated
+		 * in the block recieved from shared buffers.
+		 */
+		if (checksum_version)
+			((PageHeader) page)->pd_checksum = pg_checksum_page(page, absolute_blknum);
 	}
 
 	/*
