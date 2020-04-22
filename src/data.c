@@ -431,7 +431,7 @@ prepare_page(ConnectionArgs *conn_arg,
 
 		if (page_size != BLCKSZ)
 			elog(ERROR, "File: \"%s\", block %u, expected block size %d, but read %zu",
-					   from_fullpath, absolute_blknum, BLCKSZ, page_size);
+					   from_fullpath, blknum, BLCKSZ, page_size);
 
 		/*
 		 * We need to copy the page that was successfully
