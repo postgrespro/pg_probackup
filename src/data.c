@@ -421,7 +421,7 @@ prepare_page(ConnectionArgs *conn_arg,
 		int rc = 0;
 		size_t page_size = 0;
 		Page ptrack_page = NULL;
-		page = (Page) pg_ptrack_get_block(conn_arg, file->dbOid, file->tblspcOid,
+		ptrack_page = (Page) pg_ptrack_get_block(conn_arg, file->dbOid, file->tblspcOid,
 										  file->relOid, absolute_blknum, &page_size,
 										  ptrack_version_num, ptrack_schema);
 
