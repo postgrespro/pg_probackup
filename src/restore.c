@@ -756,10 +756,10 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 static void *
 restore_files(void *arg)
 {
-	int			i;
-	char		to_fullpath[MAXPGPATH];
-	FILE		*out = NULL;
-	char 		buffer[STDIO_BUFSIZE];
+	int         i;
+	char        to_fullpath[MAXPGPATH];
+	FILE       *out = NULL;
+	char       *out_buf = pgut_malloc(STDIO_BUFSIZE);
 
 	restore_files_arg *arguments = (restore_files_arg *) arg;
 
@@ -856,18 +856,25 @@ restore_files(void *arg)
 		if (dest_file->write_size == 0)
 			goto done;
 
-		if (!fio_is_remote_file(out))
-			setvbuf(out, buffer, _IOFBF, STDIO_BUFSIZE);
-
 		/* Restore destination file */
 		if (dest_file->is_datafile && !dest_file->is_cfs)
+		{
+			/* enable stdio buffering for local destination file */
+			if (!fio_is_remote_file(out))
+				setvbuf(out, out_buf, _IOFBF, STDIO_BUFSIZE);
 			/* Destination file is data file */
 			arguments->restored_bytes += restore_data_file(arguments->parent_chain,
 															dest_file, out, to_fullpath);
+		}
 		else
+		{
+			/* disable stdio buffering for local destination file */
+			if (!fio_is_remote_file(out))
+				setvbuf(out, NULL, _IONBF, BUFSIZ);
 			/* Destination file is non-data file */
 			arguments->restored_bytes += restore_non_data_file(arguments->parent_chain,
 										arguments->dest_backup, dest_file, out, to_fullpath);
+		}
 
 done:
 		/* close file */
@@ -875,6 +882,8 @@ done:
 			elog(ERROR, "Cannot close file \"%s\": %s", to_fullpath,
 				 strerror(errno));
 	}
+
+	free(out_buf);
 
 	/* ssh connection to longer needed */
 	fio_disconnect();

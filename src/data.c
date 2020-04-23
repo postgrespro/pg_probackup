@@ -566,8 +566,8 @@ backup_data_file(ConnectionArgs* conn_arg, pgFile *file,
 	datapagemap_iterator_t *iter = NULL;
 
 	/* stdio buffers */
-	char 		in_buffer[STDIO_BUFSIZE];
-	char 		out_buffer[STDIO_BUFSIZE];
+	char *in_buf = NULL;
+	char *out_buf = NULL;
 
 	/* sanity */
 	if (file->size % BLCKSZ != 0)
@@ -634,16 +634,11 @@ backup_data_file(ConnectionArgs* conn_arg, pgFile *file,
 			 from_fullpath, strerror(errno));
 	}
 
-	if (!fio_is_remote_file(in))
-		setvbuf(in, in_buffer, _IOFBF, STDIO_BUFSIZE);
-
 	/* open backup file for write  */
 	out = fopen(to_fullpath, PG_BINARY_W);
 	if (out == NULL)
 		elog(ERROR, "Cannot open backup file \"%s\": %s",
 			 to_fullpath, strerror(errno));
-
-	setvbuf(out, out_buffer, _IOFBF, STDIO_BUFSIZE);
 
 	/* update file permission */
 	if (chmod(to_fullpath, FILE_PERMISSION) == -1)
@@ -667,6 +662,24 @@ backup_data_file(ConnectionArgs* conn_arg, pgFile *file,
 	else
 		use_pagemap = true;
 
+	if (!fio_is_remote_file(in))
+	{
+		/* enable stdio buffering for local input file,
+		 * unless the pagemap is involved, which
+		 * imply a lot of random access.
+		 */
+		if (use_pagemap)
+			setvbuf(in, NULL, _IONBF, BUFSIZ);
+		else
+		{
+			in_buf = pgut_malloc(STDIO_BUFSIZE);
+			setvbuf(in, in_buf, _IOFBF, STDIO_BUFSIZE);
+		}
+	}
+
+	/* enable stdio buffering for output file */
+	out_buf = pgut_malloc(STDIO_BUFSIZE);
+	setvbuf(out, out_buf, _IOFBF, STDIO_BUFSIZE);
 
 	/* Remote mode */
 	if (fio_is_remote_file(in))
@@ -789,6 +802,9 @@ backup_data_file(ConnectionArgs* conn_arg, pgFile *file,
 			elog(ERROR, "Cannot remove file \"%s\": %s", to_fullpath,
 				 strerror(errno));
 	}
+
+	pg_free(in_buf);
+	pg_free(out_buf);
 }
 
 /*
@@ -837,18 +853,18 @@ backup_non_data_file(pgFile *file, pgFile *prev_file,
 size_t
 restore_data_file(parray *parent_chain, pgFile *dest_file, FILE *out, const char *to_fullpath)
 {
-	int i;
+	int    i;
 	size_t total_write_len = 0;
-	char 		buffer[STDIO_BUFSIZE];
+	char  *in_buf;
 
 	for (i = parray_num(parent_chain) - 1; i >= 0; i--)
 	{
-		char		from_root[MAXPGPATH];
-		char		from_fullpath[MAXPGPATH];
-		FILE		*in = NULL;
+		char     from_root[MAXPGPATH];
+		char     from_fullpath[MAXPGPATH];
+		FILE    *in = NULL;
 
-		pgFile	   **res_file = NULL;
-		pgFile	   *tmp_file = NULL;
+		pgFile **res_file = NULL;
+		pgFile  *tmp_file = NULL;
 
 		pgBackup   *backup = (pgBackup *) parray_get(parent_chain, i);
 
@@ -886,7 +902,8 @@ restore_data_file(parray *parent_chain, pgFile *dest_file, FILE *out, const char
 			elog(ERROR, "Cannot open backup file \"%s\": %s", from_fullpath,
 				 strerror(errno));
 
-		setvbuf(in, buffer, _IOFBF, STDIO_BUFSIZE);
+		in_buf = pgut_malloc(STDIO_BUFSIZE);
+		setvbuf(in, in_buf, _IOFBF, STDIO_BUFSIZE);
 
 		/*
 		 * Restore the file.
@@ -902,6 +919,8 @@ restore_data_file(parray *parent_chain, pgFile *dest_file, FILE *out, const char
 			elog(ERROR, "Cannot close file \"%s\": %s", from_fullpath,
 				strerror(errno));
 	}
+	pg_free(in_buf);
+
 	return total_write_len;
 }
 
@@ -912,6 +931,21 @@ restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_vers
 	BackupPageHeader header;
 	BlockNumber	blknum = 0;
 	size_t	write_len = 0;
+	off_t   cur_pos = 0;
+
+	/*
+	 * We rely on stdio buffering of input and output.
+	 * For buffering to be efficient, we try to minimize the
+	 * number of lseek syscalls, because it forces buffer flush.
+	 * For that, we track current write position in
+	 * output file and issue fseek only when offset of block to be
+	 * written not equal to current write position, which happens
+	 * a lot when blocks from incremental backup are restored,
+	 * but should never happen in case of blocks from FULL backup.
+	 */
+	if (fio_fseek(out, cur_pos) < 0)
+			elog(ERROR, "Cannot seek block %u of \"%s\": %s",
+				blknum, to_fullpath, strerror(errno));
 
 	for (;;)
 	{
@@ -928,23 +962,24 @@ restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_vers
 		/* read BackupPageHeader */
 		read_len = fread(&header, 1, sizeof(header), in);
 
+		if (ferror(in))
+			elog(ERROR, "Cannot read header of block %u of \"%s\": %s",
+					 blknum, from_fullpath, strerror(errno));
+
 		if (read_len != sizeof(header))
 		{
-			int errno_tmp = errno;
 			if (read_len == 0 && feof(in))
 				break;		/* EOF found */
-			else if (read_len != 0 && feof(in))
+
+			if (read_len != 0 && feof(in))
 				elog(ERROR, "Odd size page found at block %u of \"%s\"",
 					 blknum, from_fullpath);
-			else
-				elog(ERROR, "Cannot read header of block %u of \"%s\": %s",
-					 blknum, from_fullpath, strerror(errno_tmp));
 		}
 
 		/* Consider empty blockm. wtf empty block ? */
 		if (header.block == 0 && header.compressed_size == 0)
 		{
-			elog(VERBOSE, "Skip empty block of \"%s\"", from_fullpath);
+			elog(WARNING, "Skip empty block of \"%s\"", from_fullpath);
 			continue;
 		}
 
@@ -1019,14 +1054,19 @@ restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_vers
 			is_compressed = true;
 		}
 
-		write_pos = blknum * BLCKSZ;
-
 		/*
 		 * Seek and write the restored page.
+		 * When restoring file from FULL backup, pages are written sequentially,
+		 * so there is no need to issue fseek for every page.
 		 */
-		if (fio_fseek(out, write_pos) < 0)
-			elog(ERROR, "Cannot seek block %u of \"%s\": %s",
-				 blknum, to_fullpath, strerror(errno));
+		write_pos = blknum * BLCKSZ;
+
+		if (cur_pos != write_pos)
+		{
+			if (fio_fseek(out, blknum * BLCKSZ) < 0)
+				elog(ERROR, "Cannot seek block %u of \"%s\": %s",
+					blknum, to_fullpath, strerror(errno));
+		}
 
 		/* If page is compressed and restore is in remote mode, send compressed
 		 * page to the remote side.
@@ -1048,6 +1088,7 @@ restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_vers
 		}
 
 		write_len += BLCKSZ;
+		cur_pos = write_pos + BLCKSZ; /* update current write position */
 	}
 
 	elog(VERBOSE, "Copied file \"%s\": %lu bytes", from_fullpath, write_len);
@@ -1063,8 +1104,8 @@ void
 restore_non_data_file_internal(FILE *in, FILE *out, pgFile *file,
 					  const char *from_fullpath, const char *to_fullpath)
 {
-	ssize_t		read_len = 0;
-	char		buf[STDIO_BUFSIZE]; /* 64kB buffer */
+	size_t     read_len = 0;
+	char      *buf = pgut_malloc(STDIO_BUFSIZE); /* 64kB buffer */
 
 	/* copy content */
 	for (;;)
@@ -1075,19 +1116,24 @@ restore_non_data_file_internal(FILE *in, FILE *out, pgFile *file,
 		if (interrupted || thread_interrupted)
 			elog(ERROR, "Interrupted during non-data file restore");
 
-		read_len = fread(buf, 1, sizeof(buf), in);
+		read_len = fread(buf, 1, STDIO_BUFSIZE, in);
 
-		if (read_len == 0 && feof(in))
-			break;
-
-		if (read_len < 0)
+		if (ferror(in))
 			elog(ERROR, "Cannot read backup file \"%s\": %s",
-				 from_fullpath, strerror(errno));
+				from_fullpath, strerror(errno));
 
-		if (fio_fwrite(out, buf, read_len) != read_len)
-			elog(ERROR, "Cannot write to \"%s\": %s", to_fullpath,
-				 strerror(errno));
+		if (read_len > 0)
+		{
+			if (fio_fwrite(out, buf, read_len) != read_len)
+				elog(ERROR, "Cannot write to \"%s\": %s", to_fullpath,
+					 strerror(errno));
+		}
+
+		if (feof(in))
+			break;
 	}
+
+	pg_free(buf);
 
 	elog(VERBOSE, "Copied file \"%s\": %lu bytes", from_fullpath, file->write_size);
 }
@@ -1103,7 +1149,6 @@ restore_non_data_file(parray *parent_chain, pgBackup *dest_backup,
 
 	pgFile		*tmp_file = NULL;
 	pgBackup	*tmp_backup = NULL;
-	char 		buffer[STDIO_BUFSIZE];
 
 	/* Check if full copy of destination file is available in destination backup */
 	if (dest_file->write_size > 0)
@@ -1176,7 +1221,8 @@ restore_non_data_file(parray *parent_chain, pgBackup *dest_backup,
 		elog(ERROR, "Cannot open backup file \"%s\": %s", from_fullpath,
 			 strerror(errno));
 
-	setvbuf(in, buffer, _IOFBF, STDIO_BUFSIZE);
+	/* disable stdio buffering for non-data files */
+	setvbuf(in, NULL, _IONBF, BUFSIZ);
 
 	/* do actual work */
 	restore_non_data_file_internal(in, out, tmp_file, from_fullpath, to_fullpath);
@@ -1192,6 +1238,7 @@ restore_non_data_file(parray *parent_chain, pgBackup *dest_backup,
  * Copy file to backup.
  * We do not apply compression to these files, because
  * it is either small control file or already compressed cfs file.
+ * TODO: optimize remote copying
  */
 void
 backup_non_data_file_internal(const char *from_fullpath,
@@ -1199,10 +1246,10 @@ backup_non_data_file_internal(const char *from_fullpath,
 							const char *to_fullpath, pgFile *file,
 							bool missing_ok)
 {
-	FILE	   *in;
-	FILE	   *out;
-	ssize_t		read_len = 0;
-	char		buf[STDIO_BUFSIZE]; /* 64kB buffer */
+	FILE       *in;
+	FILE       *out;
+	ssize_t     read_len = 0;
+	char	   *buf;
 	pg_crc32	crc;
 
 	INIT_FILE_CRC32(true, crc);
@@ -1247,17 +1294,25 @@ backup_non_data_file_internal(const char *from_fullpath,
 		elog(ERROR, "Cannot change mode of \"%s\": %s", to_fullpath,
 			 strerror(errno));
 
+	/* disable stdio buffering for local input/output files */
+	if (!fio_is_remote_file(in))
+		setvbuf(in, NULL, _IONBF, BUFSIZ);
+	setvbuf(out, NULL, _IONBF, BUFSIZ);
+
+	/* allocate 64kB buffer */
+	buf = pgut_malloc(STDIO_BUFSIZE);
+
 	/* copy content and calc CRC */
 	for (;;)
 	{
-		read_len = fio_fread(in, buf, sizeof(buf));
-
-		if (read_len == 0)
-			break;
+		read_len = fio_fread(in, buf, STDIO_BUFSIZE);
 
 		if (read_len < 0)
 			elog(ERROR, "Cannot read from source file \"%s\": %s",
 				 from_fullpath, strerror(errno));
+
+		if (read_len == 0)
+			break;
 
 		if (fwrite(buf, 1, read_len, out) != read_len)
 			elog(ERROR, "Cannot write to \"%s\": %s", to_fullpath,
@@ -1267,6 +1322,19 @@ backup_non_data_file_internal(const char *from_fullpath,
 		COMP_FILE_CRC32(true, crc, buf, read_len);
 
 		file->read_size += read_len;
+
+//		if (read_len < STDIO_BUFSIZE)
+//		{
+//			if (!fio_is_remote_file(in))
+//			{
+//				if (ferror(in))
+//					elog(ERROR, "Cannot read from source file \"%s\": %s",
+//						from_fullpath, strerror(errno));
+//
+//				if (feof(in))
+//					break;
+//			}
+//		}
 	}
 
 	file->write_size = (int64) file->read_size;
@@ -1280,6 +1348,7 @@ backup_non_data_file_internal(const char *from_fullpath,
 	if (fclose(out))
 		elog(ERROR, "Cannot write \"%s\": %s", to_fullpath, strerror(errno));
 	fio_fclose(in);
+	pg_free(buf);
 }
 
 /*
@@ -1478,9 +1547,13 @@ check_file_pages(pgFile *file, XLogRecPtr stop_lsn, uint32 checksum_version,
 
 		/* read BackupPageHeader */
 		read_len = fread(&header, 1, sizeof(header), in);
+
+		if (ferror(in))
+			elog(ERROR, "Cannot read header of block %u of \"%s\": %s",
+					 blknum, file->path, strerror(errno));
+
 		if (read_len != sizeof(header))
 		{
-			int			errno_tmp = errno;
 			if (read_len == 0 && feof(in))
 				break;		/* EOF found */
 			else if (read_len != 0 && feof(in))
@@ -1489,7 +1562,7 @@ check_file_pages(pgFile *file, XLogRecPtr stop_lsn, uint32 checksum_version,
 					 blknum, file->path);
 			else
 				elog(WARNING, "Cannot read header of block %u of \"%s\": %s",
-					 blknum, file->path, strerror(errno_tmp));
+					 blknum, file->path, strerror(errno));
 			return false;
 		}
 

@@ -1556,6 +1556,9 @@ get_wal_file_internal(const char *from_path, const char *to_path, FILE *out,
 			}
 			goto cleanup;
 		}
+
+		/* disable stdio buffering */
+		setvbuf(out, NULL, _IONBF, BUFSIZ);
 	}
 #ifdef HAVE_LIBZ
 	else

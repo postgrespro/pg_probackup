@@ -1470,6 +1470,7 @@ int fio_send_pages(FILE* in, FILE* out, pgFile *file, XLogRecPtr horizonLsn,
 	return n_blocks_read;
 }
 
+/* TODO: read file using large buffer */
 static void fio_send_pages_impl(int fd, int out, char* buf, bool with_pagemap)
 {
 	BlockNumber blknum = 0;
@@ -1881,7 +1882,7 @@ static void fio_send_file_impl(int out, char const* path)
 	FILE      *fp;
 	fio_header hdr;
 	char      *buf = pgut_malloc(CHUNK_SIZE);
-	ssize_t	   read_len = 0;
+	size_t	   read_len = 0;
 	char      *errormsg = NULL;
 
 	/* open source file for read */
@@ -1917,13 +1918,16 @@ static void fio_send_file_impl(int out, char const* path)
 		goto cleanup;
 	}
 
+	/* disable stdio buffering */
+	setvbuf(fp, NULL, _IONBF, BUFSIZ);
+
 	/* copy content */
 	for (;;)
 	{
 		read_len = fread(buf, 1, CHUNK_SIZE, fp);
 
 		/* report error */
-		if (read_len < 0 || (read_len == 0 && !feof(fp)))
+		if (ferror(fp))
 		{
 			hdr.cop = FIO_ERROR;
 			errormsg = pgut_malloc(MAXPGPATH);
@@ -1938,9 +1942,7 @@ static void fio_send_file_impl(int out, char const* path)
 			goto cleanup;
 		}
 
-		else if (read_len == 0)
-			break;
-		else
+		if (read_len > 0)
 		{
 			/* send chunk */
 			hdr.cop = FIO_PAGE;
@@ -1948,6 +1950,9 @@ static void fio_send_file_impl(int out, char const* path)
 			IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 			IO_CHECK(fio_write_all(out, buf, read_len), read_len);
 		}
+
+		if (feof(fp))
+			break;
 	}
 
 	/* we are done, send eof */

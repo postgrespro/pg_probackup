@@ -265,7 +265,7 @@ pgFileGetCRC(const char *file_path, bool use_crc32c, bool missing_ok)
 {
 	FILE	   *fp;
 	pg_crc32	crc = 0;
-	char		buf[STDIO_BUFSIZE];
+	char	   *buf;
 	size_t		len = 0;
 
 	INIT_FILE_CRC32(use_crc32c, crc);
@@ -287,30 +287,31 @@ pgFileGetCRC(const char *file_path, bool use_crc32c, bool missing_ok)
 			file_path, strerror(errno));
 	}
 
+	/* disable stdio buffering */
+	setvbuf(fp, NULL, _IONBF, BUFSIZ);
+	buf = pgut_malloc(STDIO_BUFSIZE);
+
 	/* calc CRC of file */
 	for (;;)
 	{
 		if (interrupted)
 			elog(ERROR, "interrupted during CRC calculation");
 
-		len = fread(&buf, 1, sizeof(buf), fp);
+		len = fread(buf, 1, STDIO_BUFSIZE, fp);
 
-		if (len == 0)
-		{
-			/* we either run into eof or error */
-			if (feof(fp))
-				break;
-
-			if (ferror(fp))
-				elog(ERROR, "Cannot read \"%s\": %s", file_path, strerror(errno));
-		}
+		if (ferror(fp))
+			elog(ERROR, "Cannot read \"%s\": %s", file_path, strerror(errno));
 
 		/* update CRC */
 		COMP_FILE_CRC32(use_crc32c, crc, buf, len);
+
+		if (feof(fp))
+			break;
 	}
 
 	FIN_FILE_CRC32(use_crc32c, crc);
 	fclose(fp);
+	pg_free(buf);
 
 	return crc;
 }
@@ -324,11 +325,11 @@ pgFileGetCRC(const char *file_path, bool use_crc32c, bool missing_ok)
 pg_crc32
 pgFileGetCRCgz(const char *file_path, bool use_crc32c, bool missing_ok)
 {
-	gzFile	    fp;
-	pg_crc32	crc = 0;
-	char		buf[STDIO_BUFSIZE];
-	int		len = 0;
-	int 	err;
+	gzFile    fp;
+	pg_crc32  crc = 0;
+	int       len = 0;
+	int       err;
+	char	 *buf;
 
 	INIT_FILE_CRC32(use_crc32c, crc);
 
@@ -349,13 +350,15 @@ pgFileGetCRCgz(const char *file_path, bool use_crc32c, bool missing_ok)
 			file_path, strerror(errno));
 	}
 
+	buf = pgut_malloc(STDIO_BUFSIZE);
+
 	/* calc CRC of file */
 	for (;;)
 	{
 		if (interrupted)
 			elog(ERROR, "interrupted during CRC calculation");
 
-		len = gzread(fp, &buf, sizeof(buf));
+		len = gzread(fp, buf, STDIO_BUFSIZE);
 
 		if (len <= 0)
 		{
@@ -377,6 +380,7 @@ pgFileGetCRCgz(const char *file_path, bool use_crc32c, bool missing_ok)
 
 	FIN_FILE_CRC32(use_crc32c, crc);
 	gzclose(fp);
+	pg_free(buf);
 
 	return crc;
 }
@@ -1505,10 +1509,15 @@ dir_read_file_list(const char *root, const char *external_prefix,
 	FILE   *fp;
 	parray *files;
 	char	buf[MAXPGPATH * 2];
+	char    stdio_buf[STDIO_BUFSIZE];
 
 	fp = fio_open_stream(file_txt, location);
 	if (fp == NULL)
 		elog(ERROR, "cannot open \"%s\": %s", file_txt, strerror(errno));
+
+	/* enable stdio buffering for local file */
+	if (!fio_is_remote(location))
+		setvbuf(fp, stdio_buf, _IOFBF, STDIO_BUFSIZE);
 
 	files = parray_new();
 
