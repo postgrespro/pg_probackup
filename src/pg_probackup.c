@@ -507,7 +507,7 @@ main(int argc, char *argv[])
 		/*
 		 * Ensure that requested backup instance exists.
 		 * for all commands except init, which doesn't take this parameter,
-		 * add-instance which creates new instance
+		 * add-instance, which creates new instance,
 		 * and archive-get, which just do not require it at this point
 		 */
 		if (backup_subcmd != INIT_CMD && backup_subcmd != ADD_INSTANCE_CMD &&

@@ -867,13 +867,21 @@ dir_list_file_internal(parray *files, pgFile *parent, bool exclude,
 			continue;
 		}
 
+		/* skip hidden files and directories */
+		if (file->name[0] == '.')
+		{
+			elog(WARNING, "Skip hidden file: '%s'", file->path);
+			pgFileFree(file);
+			continue;
+		}
+
 		/*
 		 * Add only files, directories and links. Skip sockets and other
 		 * unexpected file formats.
 		 */
 		if (!S_ISDIR(file->mode) && !S_ISREG(file->mode))
 		{
-			elog(WARNING, "Skip \"%s\": unexpected file format", file->path);
+			elog(WARNING, "Skip '%s': unexpected file format", file->path);
 			pgFileFree(file);
 			continue;
 		}

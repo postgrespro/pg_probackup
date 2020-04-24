@@ -779,7 +779,7 @@ restore_files(void *arg)
 			elog(ERROR, "Interrupted during restore");
 
 		if (progress)
-			elog(INFO, "Progress: (%d/%lu). Process file %s ",
+			elog(INFO, "Progress: (%d/%lu). Restore file \"%s\"",
 				 i + 1, (unsigned long) parray_num(arguments->dest_files),
 				 dest_file->rel_path);
 
