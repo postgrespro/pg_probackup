@@ -2279,7 +2279,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         # generate WAL, copy it into prefetch directory, then corrupt
         # some segment
         node.pgbench_init(scale=20)
-        sleep(10)
+        sleep(20)
 
         # now copy WAL files into prefetch directory and corrupt some of them
         archive_dir = os.path.join(backup_dir, 'wal', 'node')
