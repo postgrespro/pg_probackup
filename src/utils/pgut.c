@@ -187,8 +187,10 @@ pgut_get_conninfo_string(PGconn *conn)
 			(option->val != NULL && option->val[0] == '\0'))
 			continue;
 
-		/* do not print password into the file */
-		if (strcmp(option->keyword, "password") == 0)
+		/* do not print password, passfile and options into the file */
+		if (strcmp(option->keyword, "password") == 0 ||
+			strcmp(option->keyword, "passfile") == 0 ||
+			strcmp(option->keyword, "options") == 0)
 			continue;
 
 		if (!firstkeyword)
