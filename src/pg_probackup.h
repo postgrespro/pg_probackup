@@ -1016,7 +1016,7 @@ extern int fio_send_pages(FILE* in, FILE* out, pgFile *file, XLogRecPtr horizonL
 						   int calg, int clevel, uint32 checksum_version,
 						   datapagemap_t *pagemap, BlockNumber* err_blknum, char **errormsg);
 /* return codes for fio_send_pages */
-#define OUT_BUF_SIZE (1024 * 1024)
+#define OUT_BUF_SIZE (512 * 1024)
 extern int fio_send_file_gz(const char *from_fullpath, const char *to_fullpath, FILE* out, int thread_num);
 extern int fio_send_file(const char *from_fullpath, const char *to_fullpath, FILE* out, int thread_num);
 

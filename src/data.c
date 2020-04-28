@@ -855,7 +855,7 @@ restore_data_file(parray *parent_chain, pgFile *dest_file, FILE *out, const char
 {
 	int    i;
 	size_t total_write_len = 0;
-	char  *in_buf;
+	char  *in_buf = pgut_malloc(STDIO_BUFSIZE);
 
 	for (i = parray_num(parent_chain) - 1; i >= 0; i--)
 	{
@@ -902,7 +902,7 @@ restore_data_file(parray *parent_chain, pgFile *dest_file, FILE *out, const char
 			elog(ERROR, "Cannot open backup file \"%s\": %s", from_fullpath,
 				 strerror(errno));
 
-		in_buf = pgut_malloc(STDIO_BUFSIZE);
+		/* set stdio buffering for input data file */
 		setvbuf(in, in_buf, _IOFBF, STDIO_BUFSIZE);
 
 		/*

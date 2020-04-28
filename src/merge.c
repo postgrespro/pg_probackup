@@ -1132,11 +1132,11 @@ merge_data_file(parray *parent_chain, pgBackup *full_backup,
 				pgBackup *dest_backup, pgFile *dest_file, pgFile *tmp_file,
 				const char *full_database_dir)
 {
-	FILE	*out = NULL;
-	char	to_fullpath[MAXPGPATH];
-	char	to_fullpath_tmp1[MAXPGPATH]; /* used for restore */
-	char	to_fullpath_tmp2[MAXPGPATH]; /* used for backup */
-	char 	buffer[STDIO_BUFSIZE];
+	FILE   *out = NULL;
+	char   *buffer = pgut_malloc(STDIO_BUFSIZE);
+	char    to_fullpath[MAXPGPATH];
+	char    to_fullpath_tmp1[MAXPGPATH]; /* used for restore */
+	char    to_fullpath_tmp2[MAXPGPATH]; /* used for backup */
 
 	/* The next possible optimization is copying "as is" the file
 	 * from intermediate incremental backup, that didn`t changed in
@@ -1158,6 +1158,15 @@ merge_data_file(parray *parent_chain, pgBackup *full_backup,
 	/* restore file into temp file */
 	tmp_file->size = restore_data_file(parent_chain, dest_file, out, to_fullpath_tmp1);
 	fclose(out);
+	pg_free(buffer);
+
+	/* tmp_file->size is greedy, even if there is single 8KB block in file,
+	 * that was overwritten twice during restore_data_file, we would assume that its size is
+	 * 16KB.
+	 * TODO: maybe we should just trust dest_file->n_blocks?
+	 * No, we can`t, because current binary can be used to merge
+	 * 2 backups of old versions, were n_blocks is missing.
+	 */
 
 	backup_data_file(NULL, tmp_file, to_fullpath_tmp1, to_fullpath_tmp2,
 				 InvalidXLogRecPtr, BACKUP_MODE_FULL,

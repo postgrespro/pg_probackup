@@ -587,14 +587,11 @@ part_opened:
 						thread_num, from_fullpath, strerror(errno));
 		}
 
-		if (read_len > 0)
+		if (read_len > 0 && fio_write(out, buf, read_len) != read_len)
 		{
-			if (fio_write(out, buf, read_len) != read_len)
-			{
-				fio_unlink(to_fullpath_part, FIO_BACKUP_HOST);
-				elog(ERROR, "Thread [%d]: Cannot write to destination temp file \"%s\": %s",
-							thread_num, to_fullpath_part, strerror(errno));
-			}
+			fio_unlink(to_fullpath_part, FIO_BACKUP_HOST);
+			elog(ERROR, "Thread [%d]: Cannot write to destination temp file \"%s\": %s",
+						thread_num, to_fullpath_part, strerror(errno));
 		}
 
 		if (feof(in))
@@ -832,14 +829,11 @@ part_opened:
 								thread_num, from_fullpath, strerror(errno));
 		}
 
-		if (read_len > 0)
+		if (read_len > 0 && fio_gzwrite(out, buf, read_len) != read_len)
 		{
-			if (fio_gzwrite(out, buf, read_len) != read_len)
-			{
-				fio_unlink(to_fullpath_gz_part, FIO_BACKUP_HOST);
-				elog(ERROR, "Thread [%d]: Cannot write to compressed temp WAL file \"%s\": %s",
-							 thread_num, to_fullpath_gz_part, get_gz_error(out, errno));
-			}
+			fio_unlink(to_fullpath_gz_part, FIO_BACKUP_HOST);
+			elog(ERROR, "Thread [%d]: Cannot write to compressed temp WAL file \"%s\": %s",
+						 thread_num, to_fullpath_gz_part, get_gz_error(out, errno));
 		}
 
 		if (feof(in))
