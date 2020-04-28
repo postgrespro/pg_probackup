@@ -207,6 +207,7 @@ sub build_pgprobackup
         $probackup->AddIncludeDir("$pgsrc/src/interfaces/libpq");
         $probackup->AddIncludeDir("$pgsrc/src");
         $probackup->AddIncludeDir("$pgsrc/src/port");
+        $probackup->AddIncludeDir("$pgsrc/src/include/portability");
 
         $probackup->AddIncludeDir("$currpath");
         $probackup->AddIncludeDir("$currpath/src");
