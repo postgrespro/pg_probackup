@@ -340,7 +340,8 @@ class ProbackupTest(object):
 
         # set major version
         with open(os.path.join(node.data_dir, 'PG_VERSION')) as f:
-            node.major_version = float(str(f.read().rstrip()))
+            node.major_version_str = str(f.read().rstrip())
+            node.major_version = float(node.major_version_str)
 
         # Sane default parameters
         options = {}

@@ -388,7 +388,9 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             ptrack_enable=True,
             initdb_params=['--data-checksums'],
-            pg_options={'wal_level': 'replica'})
+            pg_options={
+                'wal_level': 'replica',
+                'autovacuum': 'off'})
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -421,18 +423,19 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         node_restored.cleanup()
 
         self.restore_node(
-            backup_dir, 'node', node_restored, options=["-j", "4"])
+            backup_dir, 'node', node_restored,
+            node_restored.data_dir, options=["-j", "4"])
 
-        # Physical comparison
-        if self.paranoia:
-            pgdata_restored = self.pgdata_content(
+        pgdata_restored = self.pgdata_content(
                 node_restored.data_dir, ignore_ptrack=False)
-            self.compare_pgdata(pgdata, pgdata_restored)
 
         self.set_auto_conf(
             node_restored, {'port': node_restored.port})
 
         node_restored.slow_start()
+
+        # Physical comparison
+        self.compare_pgdata(pgdata, pgdata_restored)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)

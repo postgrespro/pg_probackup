@@ -1455,6 +1455,9 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         # node1 is back to be a master
         node1.promote()
         node1.safe_psql('postgres', 'CHECKPOINT')
+        self.switch_wal_segment(node1)
+
+        sleep(5)
 
         # delta3_id = self.backup_node(
         #     backup_dir, 'node', node2, node2.data_dir, 'delta')

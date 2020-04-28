@@ -2462,7 +2462,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         node.slow_start()
 
         cat_version = node.get_control_data()["Catalog version number"]
-        version_specific_dir = 'PG_' + str(node.major_version) + '_' + cat_version
+        version_specific_dir = 'PG_' + node.major_version_str + '_' + cat_version
 
         # PG_10_201707211
         # pg_tblspc/33172/PG_9.5_201510051/16386/

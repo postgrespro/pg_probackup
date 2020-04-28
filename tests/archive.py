@@ -1200,7 +1200,6 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             os.path.join(backup_dir, 'wal', 'master'),
             os.path.join(backup_dir, 'wal', 'replica'))
 
-        # Check data correctness on replica
         replica.slow_start(replica=True)
 
         # FULL backup replica
