@@ -437,8 +437,9 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync)
 			 */
 			if (nodeInfo->ptrack_version_num >= 20)
 				make_pagemap_from_ptrack_2(backup_files_list, backup_conn,
-											nodeInfo->ptrack_schema,
-											prev_backup_start_lsn);
+										   nodeInfo->ptrack_schema,
+										   nodeInfo->ptrack_version_num,
+										   prev_backup_start_lsn);
 			else if (nodeInfo->ptrack_version_num == 15 ||
 					 nodeInfo->ptrack_version_num == 16 ||
 					 nodeInfo->ptrack_version_num == 17)
@@ -875,15 +876,10 @@ do_backup(time_t start_time, bool no_validate,
 #endif
 
 	get_ptrack_version(backup_conn, &nodeInfo);
-//	elog(WARNING, "ptrack_version_num %d", ptrack_version_num);
+	//	elog(WARNING, "ptrack_version_num %d", ptrack_version_num);
 
 	if (nodeInfo.ptrack_version_num > 0)
-	{
-		if (nodeInfo.ptrack_version_num >= 20)
-			nodeInfo.is_ptrack_enable = pg_ptrack_enable2(backup_conn);
-		else
-			nodeInfo.is_ptrack_enable = pg_ptrack_enable(backup_conn);
-	}
+		nodeInfo.is_ptrack_enable = pg_ptrack_enable(backup_conn, nodeInfo.ptrack_version_num);
 
 	if (current.backup_mode == BACKUP_MODE_DIFF_PTRACK)
 	{
