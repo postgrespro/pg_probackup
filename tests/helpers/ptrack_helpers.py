@@ -358,6 +358,7 @@ class ProbackupTest(object):
         options['log_min_duration_statement'] = 0
         options['log_connections'] = 'on'
         options['log_disconnections'] = 'on'
+        options['restart_after_crash'] = 'off'
 
         # Allow replication in pg_hba.conf
         if set_replication:
