@@ -4052,7 +4052,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             log_content = f.read()
 
         self.assertIn(
-            'FATAL:  incorrect checksum of file "{0}"'.format(ptrack_map),
+            'FATAL:  ptrack init: incorrect checksum of file "{0}"'.format(ptrack_map),
             log_content)
 
         self.set_auto_conf(node, {'ptrack.map_size': '0'})
