@@ -48,11 +48,11 @@ Regardless of the chosen backup type, all backups taken with `pg_probackup` supp
 
 `pg_probackup` currently has the following limitations:
 * The server from which the backup was taken and the restored server must be compatible by the [block_size](https://postgrespro.com/docs/postgresql/current/runtime-config-preset#GUC-BLOCK-SIZE) and [wal_block_size](https://postgrespro.com/docs/postgresql/current/runtime-config-preset#GUC-WAL-BLOCK-SIZE) parameters and have the same major release number.
-* Incremental chain can span only within one timeline. So if you have backup incremental chain taken from replica and it gets promoted, you would be forced to take another FULL backup.
+* Remote backup via ssh on Windows currently is not supported.
 
 ## Current release
 
-[2.2.7](https://github.com/postgrespro/pg_probackup/releases/tag/2.2.7)
+[2.3.0](https://github.com/postgrespro/pg_probackup/releases/tag/2.3.0)
 
 ## Documentation
 
