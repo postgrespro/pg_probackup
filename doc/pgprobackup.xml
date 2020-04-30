@@ -3390,6 +3390,7 @@ pg_probackup set-backup -B <replaceable>backup_dir</replaceable> --instance <rep
         <filename>backup.control</filename> configuration file, or modifies the previously
         defined values.
       </para>
+      <variablelist>
       <varlistentry>
 <term><option>--note=<replaceable>backup_note</replaceable></option></term>
       <listitem>
@@ -3402,6 +3403,7 @@ pg_probackup set-backup -B <replaceable>backup_dir</replaceable> --instance <rep
       </para>
       </listitem>
       </varlistentry>
+      </variablelist>
       <para>
         For all available pinning settings, see the section
         <link linkend="pbk-pinning-options">Pinning Options</link>.
