@@ -276,7 +276,6 @@ extractPageMap(const char *archivedir, uint32 wal_seg_size,
 		timelineInfo *end_tlinfo = NULL;
 		timelineInfo *tmp_tlinfo = NULL;
 		XLogRecPtr    prev_switchpoint = InvalidXLogRecPtr;
-		lsnInterval  *wal_interval = NULL;
 
 		/* We must find TLI information about final timeline (t3 in example) */
 		for (i = 0; i < parray_num(tli_list); i++)
@@ -298,7 +297,7 @@ extractPageMap(const char *archivedir, uint32 wal_seg_size,
 		tmp_tlinfo = end_tlinfo;
 		while (tmp_tlinfo)
 		{
-			wal_interval = pgut_malloc(sizeof(lsnInterval));
+			lsnInterval *wal_interval = pgut_malloc(sizeof(lsnInterval));
 			wal_interval->tli = tmp_tlinfo->tli;
 
 			if (tmp_tlinfo->tli == end_tli)
@@ -326,7 +325,7 @@ extractPageMap(const char *archivedir, uint32 wal_seg_size,
 		for (i = parray_num(interval_list) - 1; i >= 0; i--)
 		{
 			bool inclusive_endpoint;
-			wal_interval = parray_get(interval_list, i);
+			lsnInterval *tmp_interval = (lsnInterval *) parray_get(interval_list, i);
 
 			/* In case of replica promotion, endpoints of intermediate
 			 * timelines can be unreachable.
@@ -334,17 +333,17 @@ extractPageMap(const char *archivedir, uint32 wal_seg_size,
 			inclusive_endpoint = false;
 
 			/* ... but not the end timeline */
-			if (wal_interval->tli == end_tli)
+			if (tmp_interval->tli == end_tli)
 				inclusive_endpoint = true;
 
 			extract_isok = RunXLogThreads(archivedir, 0, InvalidTransactionId,
-									  InvalidXLogRecPtr, wal_interval->tli, wal_seg_size,
-									  wal_interval->begin_lsn, wal_interval->end_lsn,
+									  InvalidXLogRecPtr, tmp_interval->tli, wal_seg_size,
+									  tmp_interval->begin_lsn, tmp_interval->end_lsn,
 									  false, extractPageInfo, NULL, inclusive_endpoint);
 			if (!extract_isok)
 				break;
 
-			pg_free(wal_interval);
+			pg_free(tmp_interval);
 		}
 		pg_free(interval_list);
 	}
@@ -1063,6 +1062,12 @@ RunXLogThreads(const char *archivedir, time_t target_time,
 	if (!XRecOffIsValid(startpoint) && !XRecOffIsNull(startpoint))
 		elog(ERROR, "Invalid startpoint value %X/%X",
 			 (uint32) (startpoint >> 32), (uint32) (startpoint));
+
+	if (process_record)
+		elog(LOG, "Extracting pagemap from tli %i on range from %X/%X to %X/%X",
+				tli,
+				(uint32) (startpoint >> 32), (uint32) (startpoint),
+				(uint32) (endpoint >> 32), (uint32) (endpoint));
 
 	if (!XLogRecPtrIsInvalid(endpoint))
 	{
