@@ -445,7 +445,7 @@ static int
 show_backup(const char *instance_name, time_t requested_backup_id)
 {
 	int i;
-	pgBackup   *backup;
+	pgBackup   *backup = NULL;
 	parray	   *backups;
 
 	backups = catalog_get_backup_list(instance_name, INVALID_BACKUP_ID);
