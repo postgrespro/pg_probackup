@@ -320,6 +320,9 @@ extractPageMap(const char *archivedir, uint32 wal_seg_size,
 			tmp_tlinfo = tmp_tlinfo->parent_link;
 
 			parray_append(interval_list, wal_interval);
+
+			if (tmp_tlinfo->tli == start_tli)
+				break;
 		}
 
 		for (i = parray_num(interval_list) - 1; i >= 0; i--)
