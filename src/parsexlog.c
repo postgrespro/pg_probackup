@@ -272,7 +272,7 @@ extractPageMap(const char *archivedir, uint32 wal_seg_size,
 		 *  - [C,X] on t3
 		 */
 		int i;
-		parray *interval_list = parray_new();
+		parray       *interval_list = parray_new();
 		timelineInfo *end_tlinfo = NULL;
 		timelineInfo *tmp_tlinfo = NULL;
 		XLogRecPtr    prev_switchpoint = InvalidXLogRecPtr;
@@ -327,7 +327,7 @@ extractPageMap(const char *archivedir, uint32 wal_seg_size,
 
 		for (i = parray_num(interval_list) - 1; i >= 0; i--)
 		{
-			bool inclusive_endpoint;
+			bool         inclusive_endpoint;
 			lsnInterval *tmp_interval = (lsnInterval *) parray_get(interval_list, i);
 
 			/* In case of replica promotion, endpoints of intermediate
