@@ -316,13 +316,13 @@ extractPageMap(const char *archivedir, uint32 wal_seg_size,
 				wal_interval->end_lsn = prev_switchpoint;
 			}
 
-			prev_switchpoint = tmp_tlinfo->switchpoint;
-			tmp_tlinfo = tmp_tlinfo->parent_link;
-
 			parray_append(interval_list, wal_interval);
 
 			if (tmp_tlinfo->tli == start_tli)
 				break;
+
+			prev_switchpoint = tmp_tlinfo->switchpoint;
+			tmp_tlinfo = tmp_tlinfo->parent_link;
 		}
 
 		for (i = parray_num(interval_list) - 1; i >= 0; i--)
