@@ -1210,10 +1210,12 @@ class PageTest(ProbackupTest, unittest.TestCase):
         self.set_archiving(backup_dir, 'node', node)
         node.slow_start()
 
-        node.pgbench_init(scale=50)
+        node.safe_psql("postgres", "create extension pageinspect")
+
+        node.pgbench_init(scale=20)
         full_id = self.backup_node(backup_dir, 'node', node)
 
-        pgbench = node.pgbench(options=['-T', '20', '-c', '1', '--no-vacuum'])
+        pgbench = node.pgbench(options=['-T', '10', '-c', '1', '--no-vacuum'])
         pgbench.wait()
 
         self.backup_node(backup_dir, 'node', node, backup_type='delta')
@@ -1231,23 +1233,43 @@ class PageTest(ProbackupTest, unittest.TestCase):
         pgbench.wait()
 
         # create timelines
-        for i in range(2, 12):
+        for i in range(2, 6):
             node.cleanup()
             self.restore_node(
                 backup_dir, 'node', node, backup_id=full_id,
                 options=['--recovery-target-timeline={0}'.format(i)])
             node.slow_start()
-            pgbench = node.pgbench(options=['-T', '3', '-c', '1', '--no-vacuum'])
+            node.safe_psql("postgres", "CHECKPOINT")
+            pgbench = node.pgbench(options=['-T', '10', '-c', '1', '--no-vacuum'])
             pgbench.wait()
+
+            if i % 2 == 0:
+                self.backup_node(backup_dir, 'node', node, backup_type='page')
 
         page_id = self.backup_node(
             backup_dir, 'node', node, backup_type='page',
             options=['--log-level-file=VERBOSE'])
 
         pgdata = self.pgdata_content(node.data_dir)
-        node.cleanup()
-        self.restore_node(backup_dir, 'node', node)
-        pgdata_restored = self.pgdata_content(node.data_dir)
+
+#        result = node.safe_psql(
+#            "postgres", "select * from pgbench_accounts")
+
+        node_restored = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node_restored'))
+        node_restored.cleanup()
+
+        self.restore_node(backup_dir, 'node', node_restored)
+        pgdata_restored = self.pgdata_content(node_restored.data_dir)
+
+        self.set_auto_conf(node_restored, {'port': node_restored.port})
+        node_restored.slow_start()
+
+#        result_new = node_restored.safe_psql(
+#            "postgres", "select * from pgbench_accounts")
+
+#        self.assertEqual(result, result_new)
+
         self.compare_pgdata(pgdata, pgdata_restored)
 
         show = self.show_archive(backup_dir)
