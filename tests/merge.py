@@ -2487,5 +2487,124 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
         self.del_test_dir(module_name, fname)
 
+    # @unittest.skip("skip")
+    # @unittest.expectedFailure
+    def test_multi_timeline_merge(self):
+        """
+        Check that backup in PAGE mode choose
+        parent backup correctly:
+        t12        /---P-->
+        ...
+        t3      /---->
+        t2   /---->
+        t1 -F-----D->
+
+        P must have F as parent
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={'autovacuum': 'off'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        node.safe_psql("postgres", "create extension pageinspect")
+
+        try:
+            node.safe_psql(
+                "postgres",
+                "create extension amcheck")
+        except QueryException as e:
+            node.safe_psql(
+                "postgres",
+                "create extension amcheck_next")
+
+        node.pgbench_init(scale=20)
+        full_id = self.backup_node(backup_dir, 'node', node)
+
+        pgbench = node.pgbench(options=['-T', '10', '-c', '1', '--no-vacuum'])
+        pgbench.wait()
+
+        self.backup_node(backup_dir, 'node', node, backup_type='delta')
+
+        node.cleanup()
+        self.restore_node(
+            backup_dir, 'node', node, backup_id=full_id,
+            options=[
+                '--recovery-target=immediate',
+                '--recovery-target-action=promote'])
+
+        node.slow_start()
+
+        pgbench = node.pgbench(options=['-T', '10', '-c', '1', '--no-vacuum'])
+        pgbench.wait()
+
+        # create timelines
+        for i in range(2, 7):
+            node.cleanup()
+            self.restore_node(
+                backup_dir, 'node', node,
+                options=[
+                    '--recovery-target=latest',
+                    '--recovery-target-action=promote',
+                    '--recovery-target-timeline={0}'.format(i)])
+            node.slow_start()
+
+            # at this point there is i+1 timeline
+            pgbench = node.pgbench(options=['-T', '20', '-c', '1', '--no-vacuum'])
+            pgbench.wait()
+
+            # create backup at 2, 4 and 6 timeline
+            if i % 2 == 0:
+                self.backup_node(backup_dir, 'node', node, backup_type='page')
+
+        page_id = self.backup_node(backup_dir, 'node', node, backup_type='page')
+        pgdata = self.pgdata_content(node.data_dir)
+
+        self.merge_backup(backup_dir, 'node', page_id)
+
+        result = node.safe_psql(
+            "postgres", "select * from pgbench_accounts")
+
+        node_restored = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node_restored'))
+        node_restored.cleanup()
+
+        self.restore_node(backup_dir, 'node', node_restored)
+        pgdata_restored = self.pgdata_content(node_restored.data_dir)
+
+        self.set_auto_conf(node_restored, {'port': node_restored.port})
+        node_restored.slow_start()
+
+        result_new = node_restored.safe_psql(
+            "postgres", "select * from pgbench_accounts")
+
+        self.assertEqual(result, result_new)
+
+        self.compare_pgdata(pgdata, pgdata_restored)
+
+        self.checkdb_node(
+            backup_dir,
+            'node',
+            options=[
+                '--amcheck',
+                '-d', 'postgres', '-p', str(node.port)])
+
+        self.checkdb_node(
+            backup_dir,
+            'node',
+            options=[
+                '--amcheck',
+                '-d', 'postgres', '-p', str(node_restored.port)])
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
 # 1. Need new test with corrupted FULL backup
 # 2. different compression levels
