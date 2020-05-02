@@ -1238,7 +1238,7 @@ class PageTest(ProbackupTest, unittest.TestCase):
 
         node.slow_start()
 
-        pgbench = node.pgbench(options=['-T', '20', '-c', '1', '--no-vacuum'])
+        pgbench = node.pgbench(options=['-T', '10', '-c', '1', '--no-vacuum'])
         pgbench.wait()
 
         # create timelines
@@ -1246,11 +1246,14 @@ class PageTest(ProbackupTest, unittest.TestCase):
             node.cleanup()
             self.restore_node(
                 backup_dir, 'node', node,
-                options=['--recovery-target-timeline={0}'.format(i)])
+                options=[
+                    '--recovery-target=latest',
+                    '--recovery-target-action=promote',
+                    '--recovery-target-timeline={0}'.format(i)])
             node.slow_start()
 
             # at this point there is i+1 timeline
-            pgbench = node.pgbench(options=['-T', '10', '-c', '1', '--no-vacuum'])
+            pgbench = node.pgbench(options=['-T', '20', '-c', '1', '--no-vacuum'])
             pgbench.wait()
 
             # create backup at 2, 4 and 6 timeline
@@ -1302,18 +1305,22 @@ class PageTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(
             backup_list[2]['parent-backup-id'],
             backup_list[0]['id'])
+        self.assertEqual(backup_list[2]['current-tli'], 3)
 
         self.assertEqual(
             backup_list[3]['parent-backup-id'],
             backup_list[2]['id'])
+        self.assertEqual(backup_list[3]['current-tli'], 5)
 
         self.assertEqual(
             backup_list[4]['parent-backup-id'],
             backup_list[3]['id'])
+        self.assertEqual(backup_list[4]['current-tli'], 7)
 
         self.assertEqual(
             backup_list[5]['parent-backup-id'],
             backup_list[4]['id'])
+        self.assertEqual(backup_list[5]['current-tli'], 7)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
