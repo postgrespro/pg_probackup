@@ -631,8 +631,7 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         node.pgbench_init(scale=20)
 
         # FULL backup with OLD binary
-        self.backup_node(
-            backup_dir, 'node', node, old_binary=True)
+        self.backup_node(backup_dir, 'node', node, old_binary=True)
 
         pgbench = node.pgbench(
             stdout=subprocess.PIPE,
@@ -643,8 +642,7 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
 
         # PAGE1 backup with OLD binary
         self.backup_node(
-            backup_dir, 'node', node,
-            backup_type='page', old_binary=True, options=['--log-level-file=LOG'])
+            backup_dir, 'node', node, backup_type='page', old_binary=True)
 
         node.safe_psql(
             'postgres',
@@ -655,20 +653,13 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
             'VACUUM pgbench_accounts')
 
         # PAGE2 backup with OLD binary
-        self.backup_node(
-            backup_dir, 'node', node,
-            backup_type='page', old_binary=True, options=['--log-level-file=LOG'])
-
-        # PAGE3 backup with OLD binary
         backup_id = self.backup_node(
-            backup_dir, 'node', node,
-            backup_type='page', old_binary=True, options=['--log-level-file=LOG'])
+            backup_dir, 'node', node, backup_type='page', old_binary=True)
 
         pgdata = self.pgdata_content(node.data_dir)
 
         # merge chain created by old binary with new binary
-        output = self.merge_backup(
-            backup_dir, "node", backup_id, options=['--log-level-file=LOG'])
+        output = self.merge_backup(backup_dir, "node", backup_id)
 
         # check that in-place is disabled
         self.assertIn(
@@ -680,8 +671,7 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
             base_dir=os.path.join(module_name, fname, 'node_restored'))
         node_restored.cleanup()
 
-        self.restore_node(
-            backup_dir, 'node', node_restored, options=["-j", "4"])
+        self.restore_node(backup_dir, 'node', node_restored)
 
         pgdata_restored = self.pgdata_content(node_restored.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
