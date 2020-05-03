@@ -56,8 +56,7 @@ Regardless of the chosen backup type, all backups taken with `pg_probackup` supp
 
 ## Documentation
 
-Documentation can be found at [github](https://postgrespro.github.io/pg_probackup) and [Postgres Professional documentation](h
-ttps://postgrespro.com/docs/postgrespro/current/app-pgprobackup)
+Documentation can be found at [github](https://postgrespro.github.io/pg_probackup) and [Postgres Professional documentation](https://postgrespro.com/docs/postgrespro/current/app-pgprobackup)
 
 ## Installation and Setup
 ### Windows Installation
