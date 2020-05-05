@@ -1047,7 +1047,7 @@ restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_vers
 		{
 			elog(WARNING, "Skipping block %u because is was already restored", blknum);
 			/* TODO: check error */
-			fseek(in, compressed_size, SEEK_CUR);
+			fseek(in, MAXALIGN(compressed_size), SEEK_CUR);
 			continue;
 		}
 
