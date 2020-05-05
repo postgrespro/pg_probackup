@@ -860,7 +860,8 @@ restore_data_file(parray *parent_chain, pgFile *dest_file, FILE *out, const char
 	size_t total_write_len = 0;
 	char  *in_buf = pgut_malloc(STDIO_BUFSIZE);
 
-	for (i = parray_num(parent_chain) - 1; i >= 0; i--)
+//	for (i = parray_num(parent_chain) - 1; i >= 0; i--)
+	for (i = 0; i < parray_num(parent_chain); i++)
 	{
 		char     from_root[MAXPGPATH];
 		char     from_fullpath[MAXPGPATH];
@@ -916,11 +917,14 @@ restore_data_file(parray *parent_chain, pgFile *dest_file, FILE *out, const char
 		 */
 		total_write_len += restore_data_file_internal(in, out, tmp_file,
 					  parse_program_version(backup->program_version),
-					  from_fullpath, to_fullpath, dest_file->n_blocks);
+					  from_fullpath, to_fullpath, dest_file->n_blocks,
+					  &(dest_file)->pagemap);
 
 		if (fclose(in) != 0)
 			elog(ERROR, "Cannot close file \"%s\": %s", from_fullpath,
 				strerror(errno));
+
+//		datapagemap_print_debug(&(dest_file)->pagemap);
 	}
 	pg_free(in_buf);
 
@@ -929,7 +933,8 @@ restore_data_file(parray *parent_chain, pgFile *dest_file, FILE *out, const char
 
 size_t
 restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_version,
-					  const char *from_fullpath, const char *to_fullpath, int nblocks)
+					  const char *from_fullpath, const char *to_fullpath, int nblocks,
+					  datapagemap_t *map)
 {
 	BackupPageHeader header;
 	BlockNumber	blknum = 0;
@@ -987,9 +992,9 @@ restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_vers
 		}
 
 		/* sanity? */
-		if (header.block < blknum)
-			elog(ERROR, "Backup is broken at block %u of \"%s\"",
-				 blknum, from_fullpath);
+//		if (header.block < blknum)
+//			elog(ERROR, "Backup is broken at block %u of \"%s\"",
+//				 blknum, from_fullpath);
 
 		blknum = header.block;
 
@@ -1036,6 +1041,15 @@ restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_vers
 
 		if (compressed_size > BLCKSZ)
 			elog(ERROR, "Size of a blknum %i exceed BLCKSZ", blknum);
+
+		/* if this page was already restored, then skip it */
+		if (datapagemap_is_set(map, blknum))
+		{
+			elog(WARNING, "Skipping block %u because is was already restored", blknum);
+			/* TODO: check error */
+			fseek(in, compressed_size, SEEK_CUR);
+			continue;
+		}
 
 		/* read a page from file */
 		read_len = fread(page.data, 1, MAXALIGN(compressed_size), in);
@@ -1092,6 +1106,8 @@ restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_vers
 
 		write_len += BLCKSZ;
 		cur_pos = write_pos + BLCKSZ; /* update current write position */
+
+		datapagemap_add(map, blknum);
 	}
 
 	elog(VERBOSE, "Copied file \"%s\": %lu bytes", from_fullpath, write_len);

@@ -925,7 +925,8 @@ extern void backup_non_data_file_internal(const char *from_fullpath,
 extern size_t restore_data_file(parray *parent_chain, pgFile *dest_file,
 								  FILE *out, const char *to_fullpath);
 extern size_t restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_version,
-								  const char *from_fullpath, const char *to_fullpath, int nblocks);
+										 const char *from_fullpath, const char *to_fullpath, int nblocks,
+										 datapagemap_t *map);
 extern size_t restore_non_data_file(parray *parent_chain, pgBackup *dest_backup,
 								  pgFile *dest_file, FILE *out, const char *to_fullpath);
 extern void restore_non_data_file_internal(FILE *in, FILE *out, pgFile *file,
@@ -1036,5 +1037,11 @@ extern bool fio_is_remote(fio_location location);
 extern void get_header_errormsg(Page page, char **errormsg);
 extern void get_checksum_errormsg(Page page, char **errormsg,
 								  BlockNumber absolute_blkno);
+
+extern bool
+datapagemap_is_set(datapagemap_t *map, BlockNumber blkno);
+
+extern void
+datapagemap_print_debug(datapagemap_t *map);
 
 #endif /* PG_PROBACKUP_H */
