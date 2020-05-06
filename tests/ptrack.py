@@ -631,6 +631,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         node.slow_start()
 
         if node.major_version >= 12:
+            self.skipTest("skip --- we do not need ptrack_get_block for ptrack 2.*")
             node.safe_psql(
                 "postgres",
                 "CREATE EXTENSION ptrack")
