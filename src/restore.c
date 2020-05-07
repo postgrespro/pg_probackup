@@ -876,6 +876,9 @@ restore_files(void *arg)
 										arguments->dest_backup, dest_file, out, to_fullpath);
 		}
 
+		/* free pagemap used for restore optimization */
+		pg_free(dest_file->pagemap.bitmap);
+
 done:
 		/* close file */
 		if (fio_fclose(out) != 0)

@@ -1042,12 +1042,13 @@ restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_vers
 		if (compressed_size > BLCKSZ)
 			elog(ERROR, "Size of a blknum %i exceed BLCKSZ", blknum);
 
-		/* if this page was already restored, then skip it */
+		/* if this page is marked as already restored, then skip it */
 		if (datapagemap_is_set(map, blknum))
 		{
-			elog(WARNING, "Skipping block %u because is was already restored", blknum);
-			/* TODO: check error */
-			fseek(in, MAXALIGN(compressed_size), SEEK_CUR);
+			/* skip to the next page */
+			if (fseek(in, MAXALIGN(compressed_size), SEEK_CUR) != 0)
+				elog(ERROR, "Cannot seek block %u of '%s': %s",
+					blknum, from_fullpath, strerror(errno));
 			continue;
 		}
 
