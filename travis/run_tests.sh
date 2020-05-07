@@ -60,7 +60,7 @@ make USE_PGXS=1 top_srcdir=$PG_SRC install
 
 # Setup python environment
 echo "############### Setting up python env:"
-virtualenv pyenv
+python2 -m virtualenv pyenv
 source pyenv/bin/activate
 pip install testgres==1.8.2
 
