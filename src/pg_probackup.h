@@ -803,7 +803,7 @@ extern void pin_backup(pgBackup	*target_backup,
 extern void add_note(pgBackup *target_backup, char *note);
 extern void pgBackupWriteControl(FILE *out, pgBackup *backup);
 extern void write_backup_filelist(pgBackup *backup, parray *files,
-								  const char *root, parray *external_list);
+								  const char *root, parray *external_list, bool sync);
 
 extern void pgBackupGetPath(const pgBackup *backup, char *path, size_t len,
 							const char *subdir);

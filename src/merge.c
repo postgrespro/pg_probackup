@@ -729,7 +729,7 @@ merge_chain(parray *parent_chain, pgBackup *full_backup, pgBackup *dest_backup)
 
 	parray_qsort(result_filelist, pgFileCompareRelPathWithExternal);
 
-	write_backup_filelist(full_backup, result_filelist, full_database_dir, NULL);
+	write_backup_filelist(full_backup, result_filelist, full_database_dir, NULL, true);
 	write_backup(full_backup, true);
 
 	/* Delete FULL backup files, that do not exists in destination backup

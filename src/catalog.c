@@ -1770,40 +1770,39 @@ write_backup(pgBackup *backup, bool strict)
 	FILE   *fp = NULL;
 	char    path[MAXPGPATH];
 	char    path_temp[MAXPGPATH];
-	int     errno_temp;
 	char    buf[4096];
 
 	join_path_components(path, backup->root_dir, BACKUP_CONTROL_FILE);
 	snprintf(path_temp, sizeof(path_temp), "%s.tmp", path);
 
-	fp = fio_fopen(path_temp, PG_BINARY_W, FIO_BACKUP_HOST);
+	fp = fopen(path_temp, PG_BINARY_W);
 	if (fp == NULL)
-		elog(ERROR, "Cannot open configuration file \"%s\": %s",
+		elog(ERROR, "Cannot open control file \"%s\": %s",
 			 path_temp, strerror(errno));
+
+	if (chmod(path_temp, FILE_PERMISSION) == -1)
+		elog(ERROR, "Cannot change mode of \"%s\": %s", path_temp,
+			 strerror(errno));
 
 	setvbuf(fp, buf, _IOFBF, sizeof(buf));
 
 	pgBackupWriteControl(fp, backup);
 
-	if (fio_fclose(fp))
-	{
-		errno_temp = errno;
-		fio_unlink(path_temp, FIO_BACKUP_HOST);
+	if (fflush(fp) != 0)
+		elog(ERROR, "Cannot flush control file \"%s\": %s",
+			 path_temp, strerror(errno));
 
-		if (!strict &&  errno_temp == ENOSPC)
-			return;
+	if (fsync(fileno(fp)) < 0)
+		elog(ERROR, "Cannot sync control file \"%s\": %s",
+			 path_temp, strerror(errno));
 
-		elog(ERROR, "Cannot write configuration file \"%s\": %s",
-			 path_temp, strerror(errno_temp));
-	}
+	if (fclose(fp) != 0)
+		elog(ERROR, "Cannot close control file \"%s\": %s",
+			 path_temp, strerror(errno));
 
-	if (fio_rename(path_temp, path, FIO_BACKUP_HOST) < 0)
-	{
-		errno_temp = errno;
-		fio_unlink(path_temp, FIO_BACKUP_HOST);
-		elog(ERROR, "Cannot rename configuration file \"%s\" to \"%s\": %s",
-			 path_temp, path, strerror(errno_temp));
-	}
+	if (rename(path_temp, path) < 0)
+		elog(ERROR, "Cannot rename file \"%s\" to \"%s\": %s",
+			 path_temp, path, strerror(errno));
 }
 
 /*
@@ -1811,16 +1810,14 @@ write_backup(pgBackup *backup, bool strict)
  */
 void
 write_backup_filelist(pgBackup *backup, parray *files, const char *root,
-					  parray *external_list)
+					  parray *external_list, bool sync)
 {
 	FILE	   *out;
 	char		path[MAXPGPATH];
 	char		path_temp[MAXPGPATH];
-	int			errno_temp;
 	size_t		i = 0;
 	#define BUFFERSZ 1024*1024
 	char		*buf;
-	size_t		write_len = 0;
 	int64 		backup_size_on_disk = 0;
 	int64 		uncompressed_size_on_disk = 0;
 	int64 		wal_size_on_disk = 0;
@@ -1828,22 +1825,23 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 	join_path_components(path, backup->root_dir, DATABASE_FILE_LIST);
 	snprintf(path_temp, sizeof(path_temp), "%s.tmp", path);
 
-	out = fio_fopen(path_temp, PG_BINARY_W, FIO_BACKUP_HOST);
+	out = fopen(path_temp, PG_BINARY_W);
 	if (out == NULL)
 		elog(ERROR, "Cannot open file list \"%s\": %s", path_temp,
 			 strerror(errno));
 
+	if (chmod(path_temp, FILE_PERMISSION) == -1)
+		elog(ERROR, "Cannot change mode of \"%s\": %s", path_temp,
+			 strerror(errno));
+
 	buf = pgut_malloc(BUFFERSZ);
+	setvbuf(out, buf, _IOFBF, BUFFERSZ);
 
 	/* print each file in the list */
-	while(i < parray_num(files))
+	for (i = 0; i < parray_num(files); i++)
 	{
-		pgFile	   *file = (pgFile *) parray_get(files, i);
-		char	   *path = file->path; /* for streamed WAL files */
-		char	line[BLCKSZ];
-		int 	len = 0;
-
-		i++;
+		pgFile   *file = (pgFile *) parray_get(files, i);
+		char     *path = file->path; /* for streamed WAL files */
 
 		if (S_ISDIR(file->mode))
 		{
@@ -1875,7 +1873,7 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 			(file->external_dir_num && external_list))
 				path = file->rel_path;
 
-		len = sprintf(line, "{\"path\":\"%s\", \"size\":\"" INT64_FORMAT "\", "
+		fprintf(out, "{\"path\":\"%s\", \"size\":\"" INT64_FORMAT "\", "
 					 "\"mode\":\"%u\", \"is_datafile\":\"%u\", "
 					 "\"is_cfs\":\"%u\", \"crc\":\"%u\", "
 					 "\"compress_alg\":\"%s\", \"external_dir_num\":\"%d\", "
@@ -1889,59 +1887,32 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 					file->dbOid);
 
 		if (file->is_datafile)
-			len += sprintf(line+len, ",\"segno\":\"%d\"", file->segno);
+			fprintf(out, ",\"segno\":\"%d\"", file->segno);
 
 		if (file->linked)
-			len += sprintf(line+len, ",\"linked\":\"%s\"", file->linked);
+			fprintf(out, ",\"linked\":\"%s\"", file->linked);
 
 		if (file->n_blocks != BLOCKNUM_INVALID)
-			len += sprintf(line+len, ",\"n_blocks\":\"%i\"", file->n_blocks);
+			fprintf(out, ",\"n_blocks\":\"%i\"", file->n_blocks);
 
-		len += sprintf(line+len, "}\n");
-
-		if (write_len + len >= BUFFERSZ)
-		{
-			/* write buffer to file */
-			if (fio_fwrite(out, buf, write_len) != write_len)
-			{
-				errno_temp = errno;
-				fio_unlink(path_temp, FIO_BACKUP_HOST);
-				elog(ERROR, "Cannot write file list \"%s\": %s",
-					path_temp, strerror(errno));
-			}
-			/* reset write_len */
-			write_len = 0;
-		}
-
-		memcpy(buf+write_len, line, len);
-		write_len += len;
+		fprintf(out, "}\n");
 	}
 
-	/* write what is left in the buffer to file */
-	if (write_len > 0)
-		if (fio_fwrite(out, buf, write_len) != write_len)
-		{
-			errno_temp = errno;
-			fio_unlink(path_temp, FIO_BACKUP_HOST);
-			elog(ERROR, "Cannot write file list \"%s\": %s",
-				path_temp, strerror(errno));
-		}
-
-	if (fio_fflush(out) || fio_fclose(out))
-	{
-		errno_temp = errno;
-		fio_unlink(path_temp, FIO_BACKUP_HOST);
-		elog(ERROR, "Cannot write file list \"%s\": %s",
+	if (fflush(out) != 0)
+		elog(ERROR, "Cannot flush file list \"%s\": %s",
 			 path_temp, strerror(errno));
-	}
 
-	if (fio_rename(path_temp, path, FIO_BACKUP_HOST) < 0)
-	{
-		errno_temp = errno;
-		fio_unlink(path_temp, FIO_BACKUP_HOST);
-		elog(ERROR, "Cannot rename configuration file \"%s\" to \"%s\": %s",
-			 path_temp, path, strerror(errno_temp));
-	}
+	if (sync && fsync(fileno(out)) < 0)
+		elog(ERROR, "Cannot sync file list \"%s\": %s",
+			 path_temp, strerror(errno));
+
+	if (fclose(out) != 0)
+		elog(ERROR, "Cannot close file list \"%s\": %s",
+			 path_temp, strerror(errno));
+
+	if (rename(path_temp, path) < 0)
+		elog(ERROR, "Cannot rename file \"%s\" to \"%s\": %s",
+			 path_temp, path, strerror(errno));
 
 	/* use extra variable to avoid reset of previous data_bytes value in case of error */
 	backup->data_bytes = backup_size_on_disk;

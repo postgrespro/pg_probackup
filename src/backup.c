@@ -375,6 +375,12 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync)
 		if (file->external_dir_num != 0)
 			continue;
 
+		if (S_ISDIR(file->mode))
+		{
+			current.pgdata_bytes += 4096;
+			continue;
+		}
+
 		current.pgdata_bytes += file->size;
 	}
 
@@ -501,7 +507,7 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync)
 
 	/* write initial backup_content.control file and update backup.control  */
 	write_backup_filelist(&current, backup_files_list,
-						  instance_config.pgdata, external_dirs);
+						  instance_config.pgdata, external_dirs, true);
 	write_backup(&current, true);
 
 	/* init thread args with own file lists */
@@ -665,7 +671,7 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync)
 
 	/* Print the list of files to backup catalog */
 	write_backup_filelist(&current, backup_files_list, instance_config.pgdata,
-						  external_dirs);
+						  external_dirs, true);
 	/* update backup control file to update size info */
 	write_backup(&current, true);
 
@@ -2076,7 +2082,7 @@ backup_files(void *arg)
 			if ((difftime(time(NULL), prev_time)) > 60)
 			{
 				write_backup_filelist(&current, arguments->files_list, arguments->from_root,
-									  arguments->external_dirs);
+									  arguments->external_dirs, false);
 				/* update backup control file to update size info */
 				write_backup(&current, true);
 
