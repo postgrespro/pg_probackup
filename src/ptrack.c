@@ -235,7 +235,8 @@ pg_ptrack_enable(PGconn *backup_conn, int ptrack_version_num)
 	else
 	{
 		res_db = pgut_execute(backup_conn, "SHOW ptrack.map_size", 0, NULL);
-		result = strcmp(PQgetvalue(res_db, 0, 0), "0") != 0;
+		result = strcmp(PQgetvalue(res_db, 0, 0), "0") != 0 &&
+				 strcmp(PQgetvalue(res_db, 0, 0), "-1") != 0;
 	}
 
 	PQclear(res_db);
