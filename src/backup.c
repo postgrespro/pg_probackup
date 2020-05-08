@@ -2072,15 +2072,15 @@ backup_files(void *arg)
 
 		if (arguments->thread_num == 1)
 		{
-			/* update backup_content.control every 10 seconds */
-			if ((difftime(time(NULL), prev_time)) > 10)
+			/* update backup_content.control every 60 seconds */
+			if ((difftime(time(NULL), prev_time)) > 60)
 			{
-				prev_time = time(NULL);
-
 				write_backup_filelist(&current, arguments->files_list, arguments->from_root,
 									  arguments->external_dirs);
 				/* update backup control file to update size info */
 				write_backup(&current, true);
+
+				prev_time = time(NULL);
 			}
 		}
 
