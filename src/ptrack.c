@@ -526,7 +526,7 @@ pg_ptrack_get_block(ConnectionArgs *arguments,
 	if (arguments->cancel_conn == NULL)
 		arguments->cancel_conn = PQgetCancel(arguments->conn);
 
-	//elog(LOG, "db %i pg_ptrack_get_block(%i, %i, %u)",dbOid, tblsOid, relOid, blknum);
+	// elog(LOG, "db %i pg_ptrack_get_block(%i, %i, %u)",dbOid, tblsOid, relOid, blknum);
 
 	if (ptrack_version_num < 20)
 		res = pgut_execute_parallel(arguments->conn,
@@ -544,7 +544,8 @@ pg_ptrack_get_block(ConnectionArgs *arguments,
 		if (ptrack_version_num == 20)
 			sprintf(query, "SELECT %s.pg_ptrack_get_block($1, $2, $3, $4)", ptrack_schema);
 		else
-			sprintf(query, "SELECT %s.ptrack_get_block($1, $2, $3, $4)", ptrack_schema);
+			elog(ERROR, "ptrack >= 2.1.0 does not support pg_ptrack_get_block()");
+			// sprintf(query, "SELECT %s.ptrack_get_block($1, $2, $3, $4)", ptrack_schema);
 
 		res = pgut_execute_parallel(arguments->conn,
 									arguments->cancel_conn,

@@ -408,15 +408,12 @@ prepare_page(ConnectionArgs *conn_arg,
 		}
 	}
 
-	/* Get page via ptrack interface from PostgreSQL shared buffer.
-	 * We do this in following cases:
-	 * 1. PTRACK backup of 1.x versions
-	 * 2. During backup, regardless of backup mode, of PostgreSQL instance
-	 *    with ptrack support we encountered invalid page.
+	/*
+	 * Get page via ptrack interface from PostgreSQL shared buffer.
+	 * We do this only in the cases of PTRACK 1.x versions backup
 	 */
-	if ((backup_mode == BACKUP_MODE_DIFF_PTRACK
+	if (backup_mode == BACKUP_MODE_DIFF_PTRACK
 		&& (ptrack_version_num >= 15 && ptrack_version_num < 20))
-			|| !page_is_valid)
 	{
 		int rc = 0;
 		size_t page_size = 0;
@@ -440,7 +437,8 @@ prepare_page(ConnectionArgs *conn_arg,
 		memcpy(page, ptrack_page, BLCKSZ);
 		pg_free(ptrack_page);
 
-		/* UPD: It apprears that is possible to get zeroed page or page with invalid header
+		/*
+		 * UPD: It apprears that is possible to get zeroed page or page with invalid header
 		 * from shared buffer.
 		 * Note, that getting page with wrong checksumm from shared buffer is
 		 * acceptable.
@@ -462,7 +460,8 @@ prepare_page(ConnectionArgs *conn_arg,
 								from_fullpath, blknum, errormsg);
 		}
 
-		/* We must set checksum here, because it is outdated
+		/*
+		 * We must set checksum here, because it is outdated
 		 * in the block recieved from shared buffers.
 		 */
 		if (checksum_version)
