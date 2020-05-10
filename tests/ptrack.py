@@ -413,7 +413,11 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node', node, backup_type='ptrack',
             options=['--stream'])
 
-        pgdata = self.pgdata_content(node.data_dir)
+        # TODO: what's the point in taking pgdata content, then taking
+        # backup, and the trying to compare those two?  Backup issues a
+        # checkpoint, so it will modify pgdata with close to 100% chance.
+        if self.paranoia:
+            pgdata = self.pgdata_content(node.data_dir)
 
         self.backup_node(
             backup_dir, 'node', node, backup_type='ptrack',
@@ -427,8 +431,9 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node', node_restored,
             node_restored.data_dir, options=["-j", "4"])
 
-        pgdata_restored = self.pgdata_content(
-                node_restored.data_dir, ignore_ptrack=False)
+        if self.paranoia:
+            pgdata_restored = self.pgdata_content(
+                    node_restored.data_dir, ignore_ptrack=False)
 
         self.set_auto_conf(
             node_restored, {'port': node_restored.port})
@@ -436,7 +441,8 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         node_restored.slow_start()
 
         # Physical comparison
-        self.compare_pgdata(pgdata, pgdata_restored)
+        if self.paranoia:
+            self.compare_pgdata(pgdata, pgdata_restored)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
