@@ -977,6 +977,10 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
         replica.promote()
 
+        replica.safe_psql(
+            'postgres',
+            'CHECKPOINT')
+
         master.pgbench_init(scale=10)
         replica.pgbench_init(scale=10)
 
