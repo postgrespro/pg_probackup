@@ -538,17 +538,17 @@ err_proc:
  * TODO this function only used once. Is it really needed?
  */
 parray *
-get_backup_filelist(pgBackup *backup)
+get_backup_filelist(pgBackup *backup, bool strict)
 {
 	parray		*files = NULL;
 	char		backup_filelist_path[MAXPGPATH];
 
 	join_path_components(backup_filelist_path, backup->root_dir, DATABASE_FILE_LIST);
-	files = dir_read_file_list(NULL, NULL, backup_filelist_path, FIO_BACKUP_HOST);
+	files = dir_read_file_list(NULL, NULL, backup_filelist_path, FIO_BACKUP_HOST, backup->content_crc);
 
 	/* redundant sanity? */
 	if (!files)
-		elog(ERROR, "Failed to get filelist for backup %s", base36enc(backup->start_time));
+		elog(strict ? ERROR : WARNING, "Failed to get file list for backup %s", base36enc(backup->start_time));
 
 	return files;
 }
@@ -1759,6 +1759,9 @@ pgBackupWriteControl(FILE *out, pgBackup *backup)
 	if (backup->note)
 		fio_fprintf(out, "note = '%s'\n", backup->note);
 
+	if (backup->content_crc != 0)
+		fio_fprintf(out, "content-crc = %u\n", backup->content_crc);
+
 }
 
 /*
@@ -1813,8 +1816,8 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 					  parray *external_list, bool sync)
 {
 	FILE	   *out;
-	char		path[MAXPGPATH];
-	char		path_temp[MAXPGPATH];
+	char		control_path[MAXPGPATH];
+	char		control_path_temp[MAXPGPATH];
 	size_t		i = 0;
 	#define BUFFERSZ 1024*1024
 	char		*buf;
@@ -1822,24 +1825,29 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 	int64 		uncompressed_size_on_disk = 0;
 	int64 		wal_size_on_disk = 0;
 
-	join_path_components(path, backup->root_dir, DATABASE_FILE_LIST);
-	snprintf(path_temp, sizeof(path_temp), "%s.tmp", path);
+	join_path_components(control_path, backup->root_dir, DATABASE_FILE_LIST);
+	snprintf(control_path_temp, sizeof(control_path_temp), "%s.tmp", control_path);
 
-	out = fopen(path_temp, PG_BINARY_W);
+	out = fopen(control_path_temp, PG_BINARY_W);
 	if (out == NULL)
-		elog(ERROR, "Cannot open file list \"%s\": %s", path_temp,
+		elog(ERROR, "Cannot open file list \"%s\": %s", control_path_temp,
 			 strerror(errno));
 
-	if (chmod(path_temp, FILE_PERMISSION) == -1)
-		elog(ERROR, "Cannot change mode of \"%s\": %s", path_temp,
+	if (chmod(control_path_temp, FILE_PERMISSION) == -1)
+		elog(ERROR, "Cannot change mode of \"%s\": %s", control_path_temp,
 			 strerror(errno));
 
 	buf = pgut_malloc(BUFFERSZ);
 	setvbuf(out, buf, _IOFBF, BUFFERSZ);
 
+	if (sync)
+		INIT_FILE_CRC32(true, backup->content_crc);
+
 	/* print each file in the list */
 	for (i = 0; i < parray_num(files); i++)
 	{
+		int       len = 0;
+		char      line[BLCKSZ];
 		pgFile   *file = (pgFile *) parray_get(files, i);
 		char     *path = file->path; /* for streamed WAL files */
 
@@ -1873,7 +1881,7 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 			(file->external_dir_num && external_list))
 				path = file->rel_path;
 
-		fprintf(out, "{\"path\":\"%s\", \"size\":\"" INT64_FORMAT "\", "
+		len = sprintf(line, "{\"path\":\"%s\", \"size\":\"" INT64_FORMAT "\", "
 					 "\"mode\":\"%u\", \"is_datafile\":\"%u\", "
 					 "\"is_cfs\":\"%u\", \"crc\":\"%u\", "
 					 "\"compress_alg\":\"%s\", \"external_dir_num\":\"%d\", "
@@ -1887,32 +1895,40 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 					file->dbOid);
 
 		if (file->is_datafile)
-			fprintf(out, ",\"segno\":\"%d\"", file->segno);
+			len += sprintf(line+len, ",\"segno\":\"%d\"", file->segno);
 
 		if (file->linked)
-			fprintf(out, ",\"linked\":\"%s\"", file->linked);
+			len += sprintf(line+len, ",\"linked\":\"%s\"", file->linked);
 
 		if (file->n_blocks != BLOCKNUM_INVALID)
-			fprintf(out, ",\"n_blocks\":\"%i\"", file->n_blocks);
+			len += sprintf(line+len, ",\"n_blocks\":\"%i\"", file->n_blocks);
 
-		fprintf(out, "}\n");
+		sprintf(line+len, "}\n");
+
+		if (sync)
+			COMP_FILE_CRC32(true, backup->content_crc, line, strlen(line));
+
+		fprintf(out, "%s", line);
 	}
+
+	if (sync)
+		FIN_FILE_CRC32(true, backup->content_crc);
 
 	if (fflush(out) != 0)
 		elog(ERROR, "Cannot flush file list \"%s\": %s",
-			 path_temp, strerror(errno));
+			 control_path_temp, strerror(errno));
 
 	if (sync && fsync(fileno(out)) < 0)
 		elog(ERROR, "Cannot sync file list \"%s\": %s",
-			 path_temp, strerror(errno));
+			 control_path_temp, strerror(errno));
 
 	if (fclose(out) != 0)
 		elog(ERROR, "Cannot close file list \"%s\": %s",
-			 path_temp, strerror(errno));
+			 control_path_temp, strerror(errno));
 
-	if (rename(path_temp, path) < 0)
+	if (rename(control_path_temp, control_path) < 0)
 		elog(ERROR, "Cannot rename file \"%s\" to \"%s\": %s",
-			 path_temp, path, strerror(errno));
+			 control_path_temp, control_path, strerror(errno));
 
 	/* use extra variable to avoid reset of previous data_bytes value in case of error */
 	backup->data_bytes = backup_size_on_disk;
@@ -1975,6 +1991,7 @@ readBackupControlFile(const char *path)
 		{'s', 0, "primary-conninfo",	&backup->primary_conninfo, SOURCE_FILE_STRICT},
 		{'s', 0, "external-dirs",		&backup->external_dir_str, SOURCE_FILE_STRICT},
 		{'s', 0, "note",				&backup->note, SOURCE_FILE_STRICT},
+		{'u', 0, "content-crc",			&backup->content_crc, SOURCE_FILE_STRICT},
 		{0}
 	};
 
@@ -2242,6 +2259,7 @@ pgBackupInit(pgBackup *backup)
 	backup->root_dir = NULL;
 	backup->files = NULL;
 	backup->note = NULL;
+	backup->content_crc = 0;
 
 }
 

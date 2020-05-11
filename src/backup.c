@@ -217,8 +217,6 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync)
 
 	if (prev_backup)
 	{
-		char		prev_backup_filelist_path[MAXPGPATH];
-
         if (parse_program_version(prev_backup->program_version) > parse_program_version(PROGRAM_VERSION))
             elog(ERROR, "pg_probackup binary version is %s, but backup %s version is %s. "
                         "pg_probackup do not guarantee to be forward compatible. "
@@ -227,10 +225,8 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync)
 
 		elog(INFO, "Parent backup: %s", base36enc(prev_backup->start_time));
 
-		join_path_components(prev_backup_filelist_path, prev_backup->root_dir,
-															DATABASE_FILE_LIST);
 		/* Files of previous backup needed by DELTA backup */
-		prev_backup_filelist = dir_read_file_list(NULL, NULL, prev_backup_filelist_path, FIO_BACKUP_HOST);
+		prev_backup_filelist = get_backup_filelist(prev_backup, true);
 
 		/* If lsn is not NULL, only pages with higher lsn will be copied. */
 		prev_backup_start_lsn = prev_backup->start_lsn;

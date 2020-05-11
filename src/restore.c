@@ -494,7 +494,6 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 			  const char *pgdata_path, bool no_sync)
 {
 	int			i;
-	char		control_file[MAXPGPATH];
 	char		timestamp[100];
 	parray		*dest_files = NULL;
 	parray		*external_dirs = NULL;
@@ -515,8 +514,7 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 	time2iso(timestamp, lengthof(timestamp), dest_backup->start_time);
 	elog(INFO, "Restoring the database from backup at %s", timestamp);
 
-	join_path_components(control_file, dest_backup->root_dir, DATABASE_FILE_LIST);
-	dest_files = dir_read_file_list(NULL, NULL, control_file, FIO_BACKUP_HOST);
+	dest_files = get_backup_filelist(dest_backup, true);
 
 	/* Lock backup chain and make sanity checks */
 	for (i = parray_num(parent_chain) - 1; i >= 0; i--)
@@ -550,10 +548,7 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 
 		/* populate backup filelist */
 		if (backup->start_time != dest_backup->start_time)
-		{
-			join_path_components(control_file, backup->root_dir, DATABASE_FILE_LIST);
-			backup->files = dir_read_file_list(NULL, NULL, control_file, FIO_BACKUP_HOST);
-		}
+			backup->files = get_backup_filelist(backup, true);
 		else
 			backup->files = dest_files;
 
@@ -1496,7 +1491,7 @@ get_dbOid_exclude_list(pgBackup *backup, parray *datname_list,
 	char		database_map_path[MAXPGPATH];
 	parray		*files = NULL;
 
-	files = get_backup_filelist(backup);
+	files = get_backup_filelist(backup, true);
 
 	/* look for 'database_map' file in backup_content.control */
 	for (i = 0; i < parray_num(files); i++)

@@ -31,6 +31,7 @@ typedef struct
 	uint32		backup_version;
 	BackupMode	backup_mode;
 	parray		*dbOid_exclude_list;
+	const char	*external_prefix;
 
 	/*
 	 * Return value from the thread.
@@ -48,8 +49,7 @@ pgBackupValidate(pgBackup *backup, pgRestoreParams *params)
 {
 	char		base_path[MAXPGPATH];
 	char		external_prefix[MAXPGPATH];
-	char		path[MAXPGPATH];
-	parray	   *files;
+	parray	   *files = NULL;
 	bool		corrupted = false;
 	bool		validation_isok = true;
 	/* arrays with meta info for multi threaded validate */
@@ -110,8 +110,15 @@ pgBackupValidate(pgBackup *backup, pgRestoreParams *params)
 
 	join_path_components(base_path, backup->root_dir, DATABASE_DIR);
 	join_path_components(external_prefix, backup->root_dir, EXTERNAL_DIR);
-	join_path_components(path, backup->root_dir, DATABASE_FILE_LIST);
-	files = dir_read_file_list(base_path, external_prefix, path, FIO_BACKUP_HOST);
+	files = get_backup_filelist(backup, false);
+
+	if (!files)
+	{
+		elog(WARNING, "Backup %s file list is corrupted", base36enc(backup->start_time));
+		backup->status = BACKUP_STATUS_CORRUPT;
+		write_backup_status(backup, BACKUP_STATUS_CORRUPT, instance_name, true);
+		return;
+	}
 
 //	if (params && params->partial_db_list)
 //		dbOid_exclude_list = get_dbOid_exclude_list(backup, files, params->partial_db_list,
@@ -142,6 +149,7 @@ pgBackupValidate(pgBackup *backup, pgRestoreParams *params)
 		arg->stop_lsn = backup->stop_lsn;
 		arg->checksum_version = backup->checksum_version;
 		arg->backup_version = parse_program_version(backup->program_version);
+		arg->external_prefix = external_prefix;
 //		arg->dbOid_exclude_list = dbOid_exclude_list;
 		/* By default there are some error */
 		threads_args[i].ret = 1;
@@ -223,6 +231,7 @@ pgBackupValidateFiles(void *arg)
 	{
 		struct stat st;
 		pgFile	   *file = (pgFile *) parray_get(arguments->files, i);
+		char        file_fullpath[MAXPGPATH];
 
 		if (interrupted || thread_interrupted)
 			elog(ERROR, "Interrupted during validate");
@@ -243,14 +252,6 @@ pgBackupValidateFiles(void *arg)
 		//		 file->rel_path);
 		//	continue;
 		//}
-
-		/*
-		 * Currently we don't compute checksums for
-		 * cfs_compressed data files, so skip them.
-		 * TODO: investigate
-		 */
-		if (file->is_cfs)
-			continue;
 
 		if (!pg_atomic_test_set_flag(&file->lock))
 			continue;
@@ -282,14 +283,24 @@ pgBackupValidateFiles(void *arg)
 		if (file->write_size == 0)
 			continue;
 
+		if (file->external_dir_num)
+		{
+			char temp[MAXPGPATH];
+
+			makeExternalDirPathByNum(temp, arguments->external_prefix, file->external_dir_num);
+			join_path_components(file_fullpath, temp, file->rel_path);
+		}
+		else
+			join_path_components(file_fullpath, arguments->base_path, file->rel_path);
+
 		/* TODO: it is redundant to check file existence using stat */
-		if (stat(file->path, &st) == -1)
+		if (stat(file_fullpath, &st) == -1)
 		{
 			if (errno == ENOENT)
-				elog(WARNING, "Backup file \"%s\" is not found", file->path);
+				elog(WARNING, "Backup file \"%s\" is not found", file_fullpath);
 			else
 				elog(WARNING, "Cannot stat backup file \"%s\": %s",
-					file->path, strerror(errno));
+					file_fullpath, strerror(errno));
 			arguments->corrupted = true;
 			break;
 		}
@@ -297,7 +308,7 @@ pgBackupValidateFiles(void *arg)
 		if (file->write_size != st.st_size)
 		{
 			elog(WARNING, "Invalid size of backup file \"%s\" : " INT64_FORMAT ". Expected %lu",
-				 file->path, (unsigned long) st.st_size, file->write_size);
+				 file_fullpath, (unsigned long) st.st_size, file->write_size);
 			arguments->corrupted = true;
 			break;
 		}
@@ -305,8 +316,10 @@ pgBackupValidateFiles(void *arg)
 		/*
 		 * If option skip-block-validation is set, compute only file-level CRC for
 		 * datafiles, otherwise check them block by block.
+		 * Currently we don't compute checksums for
+		 * cfs_compressed data files, so skip block validation for them.
 		 */
-		if (!file->is_datafile || skip_block_validation)
+		if (!file->is_datafile || skip_block_validation || file->is_cfs)
 		{
 			/*
 			 * Pre 2.0.22 we use CRC-32C, but in newer version of pg_probackup we
@@ -326,14 +339,14 @@ pgBackupValidateFiles(void *arg)
 				!file->external_dir_num)
 				crc = get_pgcontrol_checksum(arguments->base_path);
 			else
-				crc = pgFileGetCRC(file->path,
+				crc = pgFileGetCRC(file_fullpath,
 								   arguments->backup_version <= 20021 ||
 								   arguments->backup_version >= 20025,
 								   false);
 			if (crc != file->crc)
 			{
 				elog(WARNING, "Invalid CRC of backup file \"%s\" : %X. Expected %X",
-						file->path, crc, file->crc);
+						file_fullpath, crc, file->crc);
 				arguments->corrupted = true;
 			}
 		}
@@ -344,7 +357,7 @@ pgBackupValidateFiles(void *arg)
 			 * check page headers, checksums (if enabled)
 			 * and compute checksum of the file
 			 */
-			if (!check_file_pages(file, arguments->stop_lsn,
+			if (!check_file_pages(file, file_fullpath, arguments->stop_lsn,
 								  arguments->checksum_version,
 								  arguments->backup_version))
 				arguments->corrupted = true;

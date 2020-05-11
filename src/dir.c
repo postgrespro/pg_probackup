@@ -1512,12 +1512,13 @@ bad_format:
  */
 parray *
 dir_read_file_list(const char *root, const char *external_prefix,
-				   const char *file_txt, fio_location location)
+				   const char *file_txt, fio_location location, pg_crc32 expected_crc)
 {
-	FILE   *fp;
-	parray *files;
-	char	buf[MAXPGPATH * 2];
-	char    stdio_buf[STDIO_BUFSIZE];
+	FILE    *fp;
+	parray  *files;
+	char     buf[BLCKSZ];
+	char     stdio_buf[STDIO_BUFSIZE];
+	pg_crc32 content_crc = 0;
 
 	fp = fio_open_stream(file_txt, location);
 	if (fp == NULL)
@@ -1528,6 +1529,8 @@ dir_read_file_list(const char *root, const char *external_prefix,
 		setvbuf(fp, stdio_buf, _IOFBF, STDIO_BUFSIZE);
 
 	files = parray_new();
+
+	INIT_FILE_CRC32(true, content_crc);
 
 	while (fgets(buf, lengthof(buf), fp))
 	{
@@ -1545,6 +1548,8 @@ dir_read_file_list(const char *root, const char *external_prefix,
 					n_blocks,
 					dbOid;		/* used for partial restore */
 		pgFile	   *file;
+
+		COMP_FILE_CRC32(true, content_crc, buf, strlen(buf));
 
 		get_control_value(buf, "path", path, NULL, true);
 		get_control_value(buf, "size", NULL, &write_size, true);
@@ -1598,10 +1603,21 @@ dir_read_file_list(const char *root, const char *external_prefix,
 		parray_append(files, file);
 	}
 
+	FIN_FILE_CRC32(true, content_crc);
+
 	if (ferror(fp))
 		elog(ERROR, "Failed to read from file: \"%s\"", file_txt);
 
 	fio_close_stream(fp);
+
+	if (expected_crc != 0 &&
+		expected_crc != content_crc)
+	{
+		elog(WARNING, "Invalid CRC of backup control file '%s': %u. Expected: %u",
+				file_txt, content_crc, expected_crc);
+		return NULL;
+	}
+
 	return files;
 }
 

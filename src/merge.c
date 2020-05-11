@@ -565,13 +565,9 @@ merge_chain(parray *parent_chain, pgBackup *full_backup, pgBackup *dest_backup)
 	 */
 	for (i = parray_num(parent_chain) - 1; i >= 0; i--)
 	{
-		char		control_file[MAXPGPATH];
-
 		pgBackup   *backup = (pgBackup *) parray_get(parent_chain, i);
 
-		join_path_components(control_file, backup->root_dir, DATABASE_FILE_LIST);
-		backup->files = dir_read_file_list(NULL, NULL, control_file, FIO_BACKUP_HOST);
-
+		backup->files = get_backup_filelist(backup, true);
 		parray_qsort(backup->files, pgFileCompareRelPathWithExternal);
 
 		/* Set MERGING status for every member of the chain */

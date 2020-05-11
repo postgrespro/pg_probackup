@@ -394,6 +394,8 @@ struct pgBackup
 	parray			*files;			/* list of files belonging to this backup
 									 * must be populated explicitly */
 	char			*note;
+
+	pg_crc32         content_crc;
 };
 
 /* Recovery target for restore and validate subcommands */
@@ -708,7 +710,7 @@ extern pgRecoveryTarget *parseRecoveryTargetOptions(
 extern parray *get_dbOid_exclude_list(pgBackup *backup, parray *datname_list,
 										PartialRestoreType partial_restore_type);
 
-extern parray *get_backup_filelist(pgBackup *backup);
+extern parray *get_backup_filelist(pgBackup *backup, bool strict);
 extern parray *read_timeline_history(const char *arclog_path, TimeLineID targetTLI);
 
 /* in merge.c */
@@ -867,7 +869,7 @@ extern void db_map_entry_free(void *map);
 extern void print_file_list(FILE *out, const parray *files, const char *root,
 							const char *external_prefix, parray *external_list);
 extern parray *dir_read_file_list(const char *root, const char *external_prefix,
-								  const char *file_txt, fio_location location);
+								  const char *file_txt, fio_location location, pg_crc32 expected_crc);
 extern parray *make_external_directory_list(const char *colon_separated_dirs,
 											bool remap);
 extern void free_dir_list(parray *list);
@@ -933,7 +935,7 @@ extern void restore_non_data_file_internal(FILE *in, FILE *out, pgFile *file,
 extern bool create_empty_file(fio_location from_location, const char *to_root,
 							  fio_location to_location, pgFile *file);
 
-extern bool check_file_pages(pgFile *file, XLogRecPtr stop_lsn,
+extern bool check_file_pages(pgFile *file, const char *fullpath, XLogRecPtr stop_lsn,
 							 uint32 checksum_version, uint32 backup_version);
 /* parsexlog.c */
 extern bool extractPageMap(const char *archivedir, uint32 wal_seg_size,
