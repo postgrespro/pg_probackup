@@ -110,3 +110,8 @@ class ConfigTest(ProbackupTest, unittest.TestCase):
                 e.message,
                 "\n Unexpected Error Message: {0}\n CMD: {1}".format(
                     repr(e.message), self.cmd))
+
+        self.show_pb(backup_dir, 'node', full1_id)['status']
+
+        self.assertEqual(self.show_pb(backup_dir, 'node')[0]['status'], 'CORRUPT')
+        self.assertEqual(self.show_pb(backup_dir, 'node')[1]['status'], 'OK')

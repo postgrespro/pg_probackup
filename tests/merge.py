@@ -1991,7 +1991,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         # Take FULL
         self.backup_node(backup_dir, 'node', node)
 
-        node.pgbench_init(scale=3)
+        node.pgbench_init(scale=5)
 
         # Take PAGE from future
         backup_id = self.backup_node(
@@ -2011,11 +2011,10 @@ class MergeTest(ProbackupTest, unittest.TestCase):
             os.path.join(backup_dir, 'backups', 'node', backup_id),
             os.path.join(backup_dir, 'backups', 'node', new_id))
 
-        pgbench = node.pgbench(options=['-T', '3', '-c', '2', '--no-vacuum'])
+        pgbench = node.pgbench(options=['-T', '5', '-c', '1', '--no-vacuum'])
         pgbench.wait()
 
-        backup_id = self.backup_node(
-            backup_dir, 'node', node, backup_type='page')
+        backup_id = self.backup_node(backup_dir, 'node', node, backup_type='page')
         pgdata = self.pgdata_content(node.data_dir)
 
         result = node.safe_psql(
