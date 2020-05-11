@@ -2407,6 +2407,12 @@ primary_conninfo = 'user=backup passfile=/var/lib/pgsql/.pgpass port=5432 sslmod
           <literal>note</literal> — text note attached to backup.
         </para>
         </listitem>
+        <listitem>
+        <para>
+          <literal>content-crc</literal> — CRC32 checksum of <literal>backup_content.control</literal> file.
+          It is used to detect corruption of backup metainformation.
+        </para>
+        </listitem>
       </itemizedlist>
       </para>
       <para>
