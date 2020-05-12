@@ -343,16 +343,8 @@ main(int argc, char *argv[])
 		else if (strcmp(argv[1], "ssh") == 0)
 		    launch_ssh(argv);
 #endif
-		else if (strcmp(argv[1], "agent") == 0 && argc > 2)
+		else if (strcmp(argv[1], "agent") == 0)
 		{
-			remote_agent = argv[2];
-			if (strcmp(remote_agent, PROGRAM_VERSION) != 0)
-			{
-				uint32 agent_version = parse_program_version(remote_agent);
-				elog(agent_version != AGENT_PROTOCOL_VERSION ? ERROR : WARNING,
-					 "Agent version %s doesn't match master pg_probackup version %s",
-					 PROGRAM_VERSION, remote_agent);
-			}
 			fio_communicate(STDIN_FILENO, STDOUT_FILENO);
 			return 0;
 		}
@@ -528,8 +520,7 @@ main(int argc, char *argv[])
 			{
 				/* Ensure that backup_path is a path to a directory */
 				if (!S_ISDIR(st.st_mode))
-					elog(ERROR, "-B, --backup-path must be a path to directory. Inode: %lu. ST_MODE: %u",
-						st.st_ino, st.st_mode);
+					elog(ERROR, "-B, --backup-path must be a path to directory");
 			}
 		}
 	}

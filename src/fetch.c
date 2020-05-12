@@ -44,7 +44,7 @@ slurpFile(const char *datadir, const char *path, size_t *filesize, bool safe, fi
 					fullpath, strerror(errno));
 	}
 
-	if (fio_fstat(fd, &statbuf) < 0)
+	if (fio_stat(fullpath, &statbuf, true, location) < 0)
 	{
 		if (safe)
 			return NULL;

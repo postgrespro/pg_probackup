@@ -111,6 +111,7 @@ bool launch_agent(void)
 	int outfd[2];
 	int infd[2];
 	int errfd[2];
+	int agent_version;
 
 	ssh_argc = 0;
 #ifdef WIN32
@@ -163,24 +164,24 @@ bool launch_agent(void)
 			}
 		}
 		if (needs_quotes(instance_config.remote.path) || needs_quotes(PROGRAM_NAME_FULL))
-			snprintf(cmd, sizeof(cmd), "\"%s\\%s\" agent %s",
-					 instance_config.remote.path, probackup, PROGRAM_VERSION);
+			snprintf(cmd, sizeof(cmd), "\"%s\\%s\" agent",
+					 instance_config.remote.path, probackup);
 		else
-			snprintf(cmd, sizeof(cmd), "%s\\%s agent %s",
-					 instance_config.remote.path, probackup, PROGRAM_VERSION);
+			snprintf(cmd, sizeof(cmd), "%s\\%s agent",
+					 instance_config.remote.path, probackup);
 #else
 		if (needs_quotes(instance_config.remote.path) || needs_quotes(PROGRAM_NAME_FULL))
-			snprintf(cmd, sizeof(cmd), "\"%s/%s\" agent %s",
-					 instance_config.remote.path, probackup, PROGRAM_VERSION);
+			snprintf(cmd, sizeof(cmd), "\"%s/%s\" agent",
+					 instance_config.remote.path, probackup);
 		else
-			snprintf(cmd, sizeof(cmd), "%s/%s agent %s",
-					 instance_config.remote.path, probackup, PROGRAM_VERSION);
+			snprintf(cmd, sizeof(cmd), "%s/%s agent",
+					 instance_config.remote.path, probackup);
 #endif
 	} else {
 		if (needs_quotes(PROGRAM_NAME_FULL))
-			snprintf(cmd, sizeof(cmd), "\"%s\" agent %s", PROGRAM_NAME_FULL, PROGRAM_VERSION);
+			snprintf(cmd, sizeof(cmd), "\"%s\" agent", PROGRAM_NAME_FULL);
 		else
-			snprintf(cmd, sizeof(cmd), "%s agent %s", PROGRAM_NAME_FULL, PROGRAM_VERSION);
+			snprintf(cmd, sizeof(cmd), "%s agent", PROGRAM_NAME_FULL);
 	}
 
 #ifdef WIN32
@@ -228,5 +229,22 @@ bool launch_agent(void)
 
 		fio_redirect(infd[0], outfd[1], errfd[0]); /* write to stdout */
 	}
+
+	/* Make sure that remote agent has the same version
+	 * TODO: we must also check PG version and fork edition
+	 */
+	agent_version = fio_get_agent_version();
+	if (agent_version != AGENT_PROTOCOL_VERSION)
+	{
+		char agent_version_str[1024];
+		sprintf(agent_version_str, "%d.%d.%d",
+				agent_version / 10000,
+				(agent_version / 100) % 100,
+				agent_version % 100);
+
+		elog(ERROR, "Remote agent version %s does not match local program version %s",
+			agent_version_str, PROGRAM_VERSION);
+	}
+
 	return true;
 }
