@@ -349,7 +349,7 @@ main(int argc, char *argv[])
 			if (strcmp(remote_agent, PROGRAM_VERSION) != 0)
 			{
 				uint32 agent_version = parse_program_version(remote_agent);
-				elog(agent_version < AGENT_PROTOCOL_VERSION ? ERROR : WARNING,
+				elog(agent_version != AGENT_PROTOCOL_VERSION ? ERROR : WARNING,
 					 "Agent version %s doesn't match master pg_probackup version %s",
 					 PROGRAM_VERSION, remote_agent);
 			}
@@ -528,7 +528,8 @@ main(int argc, char *argv[])
 			{
 				/* Ensure that backup_path is a path to a directory */
 				if (!S_ISDIR(st.st_mode))
-					elog(ERROR, "-B, --backup-path must be a path to directory");
+					elog(ERROR, "-B, --backup-path must be a path to directory. Inode: %lu. ST_MODE: %u",
+						st.st_ino, st.st_mode);
 			}
 		}
 	}
