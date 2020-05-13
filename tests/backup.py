@@ -1274,6 +1274,89 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
+    def test_drop_rel_during_full_backup(self):
+        """"""
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+
+        for i in range(1, 512):
+            node.safe_psql(
+                "postgres",
+                "create table t_heap_{0} as select i"
+                " as id from generate_series(0,100) i".format(i))
+
+        node.safe_psql(
+            "postgres",
+            "VACUUM")
+
+        node.pgbench_init(scale=10)
+
+        relative_path_1 = node.safe_psql(
+            "postgres",
+            "select pg_relation_filepath('t_heap_1')").rstrip()
+
+        relative_path_2 = node.safe_psql(
+            "postgres",
+            "select pg_relation_filepath('t_heap_1')").rstrip()
+
+        absolute_path_1 = os.path.join(node.data_dir, relative_path_1)
+        absolute_path_2 = os.path.join(node.data_dir, relative_path_2)
+
+        # FULL backup
+        gdb = self.backup_node(
+            backup_dir, 'node', node,
+            options=['--stream', '--log-level-file=LOG', '--log-level-console=LOG', '--progress'],
+            gdb=True)
+
+        gdb.set_breakpoint('backup_files')
+        gdb.run_until_break()
+
+        # REMOVE file
+        for i in range(1, 512):
+            node.safe_psql(
+                "postgres",
+                "drop table t_heap_{0}".format(i))
+
+        node.safe_psql(
+            "postgres",
+            "CHECKPOINT")
+
+        node.safe_psql(
+            "postgres",
+            "CHECKPOINT")
+
+        # File removed, we can proceed with backup
+        gdb.continue_execution_until_exit()
+
+        pgdata = self.pgdata_content(node.data_dir)
+
+        #with open(os.path.join(backup_dir, 'log', 'pg_probackup.log')) as f:
+        #    log_content = f.read()
+        #    self.assertTrue(
+        #        'LOG: File "{0}" is not found'.format(absolute_path) in log_content,
+        #        'File "{0}" should be deleted but it`s not'.format(absolute_path))
+
+        node.cleanup()
+        self.restore_node(backup_dir, 'node', node)
+
+        # Physical comparison
+        pgdata_restored = self.pgdata_content(node.data_dir)
+        self.compare_pgdata(pgdata, pgdata_restored)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
     def test_drop_rel_during_backup_delta(self):
         """"""
         fname = self.id().split('.')[3]
@@ -1287,6 +1370,8 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
         node.slow_start()
+
+        node.pgbench_init(scale=10)
 
         node.safe_psql(
             "postgres",
