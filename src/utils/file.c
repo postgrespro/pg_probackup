@@ -368,6 +368,7 @@ int fio_open(char const* path, int mode, fio_location location)
 		if (hdr.arg != 0)
 		{
 			errno = hdr.arg;
+			fio_fdset &= ~(1 << hdr.handle);
 			return -1;
 		}
 		fd = i | FIO_PIPE_MARKER;
