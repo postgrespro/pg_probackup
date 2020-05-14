@@ -1285,9 +1285,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
-        self.set_archiving(backup_dir, 'node', node)
         node.slow_start()
-
 
         for i in range(1, 512):
             node.safe_psql(
@@ -1326,6 +1324,74 @@ class BackupTest(ProbackupTest, unittest.TestCase):
             node.safe_psql(
                 "postgres",
                 "drop table t_heap_{0}".format(i))
+
+        node.safe_psql(
+            "postgres",
+            "CHECKPOINT")
+
+        node.safe_psql(
+            "postgres",
+            "CHECKPOINT")
+
+        # File removed, we can proceed with backup
+        gdb.continue_execution_until_exit()
+
+        pgdata = self.pgdata_content(node.data_dir)
+
+        #with open(os.path.join(backup_dir, 'log', 'pg_probackup.log')) as f:
+        #    log_content = f.read()
+        #    self.assertTrue(
+        #        'LOG: File "{0}" is not found'.format(absolute_path) in log_content,
+        #        'File "{0}" should be deleted but it`s not'.format(absolute_path))
+
+        node.cleanup()
+        self.restore_node(backup_dir, 'node', node)
+
+        # Physical comparison
+        pgdata_restored = self.pgdata_content(node.data_dir)
+        self.compare_pgdata(pgdata, pgdata_restored)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_drop_db_during_full_backup(self):
+        """"""
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.slow_start()
+
+        for i in range(1, 100):
+            node.safe_psql(
+                "postgres",
+                "create database t_heap_{0}".format(i))
+
+        node.safe_psql(
+            "postgres",
+            "VACUUM")
+
+        # FULL backup
+        gdb = self.backup_node(
+            backup_dir, 'node', node, gdb=True,
+            options=[
+                '--stream', '--log-level-file=LOG',
+                '--log-level-console=LOG', '--progress'])
+
+        gdb.set_breakpoint('backup_files')
+        gdb.run_until_break()
+
+        # REMOVE file
+        for i in range(1, 100):
+            node.safe_psql(
+                "postgres",
+                "drop database t_heap_{0}".format(i))
 
         node.safe_psql(
             "postgres",
