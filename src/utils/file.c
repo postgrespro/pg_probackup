@@ -262,8 +262,8 @@ DIR* fio_opendir(char const* path, fio_location location)
 		mask = fio_fdset;
 		for (i = 0; (mask & 1) != 0; i++, mask >>= 1);
 		if (i == FIO_FDMAX) {
-			elog(ERROR, "FIO_FDMAX is exceeded in fio_opendir, "
-					"probably too many remote directories has been opened");
+			elog(ERROR, "Descriptor pool for remote files is exhausted, "
+					"probably too many remote directories are opened");
 		}
 		hdr.cop = FIO_OPENDIR;
 		hdr.handle = i;
@@ -351,8 +351,8 @@ int fio_open(char const* path, int mode, fio_location location)
 		mask = fio_fdset;
 		for (i = 0; (mask & 1) != 0; i++, mask >>= 1);
 		if (i == FIO_FDMAX)
-			elog(ERROR, "FIO_FDMAX is exceeded in fio_open, "
-					"probably too many remote files has been opened");
+			elog(ERROR, "Descriptor pool for remote files is exhausted, "
+					"probably too many remote files are opened");
 
 		hdr.cop = FIO_OPEN;
 		hdr.handle = i;
