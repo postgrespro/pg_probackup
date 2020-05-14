@@ -1354,7 +1354,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
-    # @unittest.skip("skip")
+    @unittest.skip("skip")
     def test_drop_db_during_full_backup(self):
         """"""
         fname = self.id().split('.')[3]
@@ -1368,7 +1368,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
 
-        for i in range(1, 100):
+        for i in range(1, 2):
             node.safe_psql(
                 "postgres",
                 "create database t_heap_{0}".format(i))
@@ -1388,7 +1388,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         gdb.run_until_break()
 
         # REMOVE file
-        for i in range(1, 100):
+        for i in range(1, 2):
             node.safe_psql(
                 "postgres",
                 "drop database t_heap_{0}".format(i))
