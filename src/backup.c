@@ -352,6 +352,9 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync)
 			dir_list_file(backup_files_list, parray_get(external_dirs, i),
 						  false, true, false, i+1, FIO_DB_HOST);
 
+	/* close ssh session in main thread */
+	fio_disconnect();
+
 	/* Sanity check for backup_files_list, thank you, Windows:
 	 * https://github.com/postgrespro/pg_probackup/issues/48
 	 */
@@ -525,9 +528,6 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync)
 		/* By default there are some error */
 		arg->ret = 1;
 	}
-
-	/* close ssh session in main thread */
-	fio_disconnect();
 
 	/* Run threads */
 	thread_interrupted = false;
