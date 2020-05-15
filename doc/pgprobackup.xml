@@ -740,6 +740,16 @@ ALTER ROLE backup WITH REPLICATION;
       DELTA, and PTRACK backups in the
       <link linkend="pbk-stream-mode">STREAM</link> WAL mode.
     </para>
+    <note>
+      <para>
+        If you are planning to rely on
+        <ulink url="https://postgrespro.com/docs/postgresql/current/libpq-pgpass.html">.pgpass</ulink>
+        for authentication when running backup in STREAM mode,
+        then .pgpass must contain credentials for <literal>replication</literal> database,
+        used to establish connection via replication protocol. Example:
+        pghost:5432:replication:backup_user:my_strong_password
+      </para>
+    </note>
   </refsect2>
   <refsect2 id="pbk-setting-up-continuous-wal-archiving">
     <title>Setting up Continuous WAL Archiving</title>
@@ -4714,7 +4724,7 @@ pg_probackup archive-get -B <replaceable>backup_dir</replaceable> --instance <re
 <term><option>--password</option></term>
       <listitem>
       <para>
-        Forces a password prompt.
+        Forces a password prompt. (Deprecated)
       </para>
       </listitem>
       </varlistentry>
