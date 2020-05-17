@@ -889,7 +889,7 @@ merge_files(void *arg)
 		if (!pg_atomic_test_set_flag(&dest_file->lock))
 			continue;
 
-		tmp_file = pgFileInit(dest_file->rel_path, dest_file->rel_path);
+		tmp_file = pgFileInit(dest_file->rel_path);
 		tmp_file->mode = dest_file->mode;
 		tmp_file->is_datafile = dest_file->is_datafile;
 		tmp_file->is_cfs = dest_file->is_cfs;
@@ -1056,7 +1056,7 @@ remove_dir_with_files(const char *path)
 	char 		full_path[MAXPGPATH];
 
 	dir_list_file(files, path, true, true, true, 0, FIO_LOCAL_HOST);
-	parray_qsort(files, pgFileComparePathDesc);
+	parray_qsort(files, pgFileCompareRelPathWithExternalDesc);
 	for (i = 0; i < parray_num(files); i++)
 	{
 		pgFile	   *file = (pgFile *) parray_get(files, i);

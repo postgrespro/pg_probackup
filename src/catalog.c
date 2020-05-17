@@ -471,6 +471,9 @@ catalog_get_backup_list(const char *instance_name, time_t requested_backup_id)
 
 		backup->root_dir = pgut_strdup(data_path);
 
+		backup->database_dir = pgut_malloc(MAXPGPATH);
+		join_path_components(backup->database_dir, backup->root_dir, DATABASE_DIR);
+
 		/* TODO: save encoded backup id */
 		backup->backup_id = backup->start_time;
 		if (requested_backup_id != INVALID_BACKUP_ID
@@ -841,6 +844,9 @@ pgBackupCreateDir(pgBackup *backup)
 	fio_mkdir(path, DIR_PERMISSION, FIO_BACKUP_HOST);
 	backup->root_dir = pgut_strdup(path);
 
+	backup->database_dir = pgut_malloc(MAXPGPATH);
+	join_path_components(backup->database_dir, backup->root_dir, DATABASE_DIR);
+
 	/* create directories for actual backup files */
 	for (i = 0; i < parray_num(subdirs); i++)
 	{
@@ -873,7 +879,7 @@ catalog_get_timelines(InstanceConfig *instance)
 	/* read all xlog files that belong to this archive */
 	sprintf(arclog_path, "%s/%s/%s", backup_path, "wal", instance->name);
 	dir_list_file(xlog_files_list, arclog_path, false, false, false, 0, FIO_BACKUP_HOST);
-	parray_qsort(xlog_files_list, pgFileComparePath);
+	parray_qsort(xlog_files_list, pgFileCompareName);
 
 	timelineinfos = parray_new();
 	tlinfo = NULL;
@@ -1849,7 +1855,6 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 		int       len = 0;
 		char      line[BLCKSZ];
 		pgFile   *file = (pgFile *) parray_get(files, i);
-		char     *path = file->path; /* for streamed WAL files */
 
 		if (S_ISDIR(file->mode))
 		{
@@ -1873,20 +1878,12 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 			}
 		}
 
-		/* for files from PGDATA and external files use rel_path
-		 * streamed WAL files has rel_path relative not to "database/"
-		 * but to "database/pg_wal", so for them use path.
-		 */
-		if ((root && strstr(path, root) == path) ||
-			(file->external_dir_num && external_list))
-				path = file->rel_path;
-
 		len = sprintf(line, "{\"path\":\"%s\", \"size\":\"" INT64_FORMAT "\", "
 					 "\"mode\":\"%u\", \"is_datafile\":\"%u\", "
 					 "\"is_cfs\":\"%u\", \"crc\":\"%u\", "
 					 "\"compress_alg\":\"%s\", \"external_dir_num\":\"%d\", "
 					 "\"dbOid\":\"%u\"",
-					path, file->write_size, file->mode,
+					file->rel_path, file->write_size, file->mode,
 					file->is_datafile ? 1 : 0,
 					file->is_cfs ? 1 : 0,
 					file->crc,
@@ -2257,6 +2254,7 @@ pgBackupInit(pgBackup *backup)
 	backup->server_version[0] = '\0';
 	backup->external_dir_str = NULL;
 	backup->root_dir = NULL;
+	backup->database_dir = NULL;
 	backup->files = NULL;
 	backup->note = NULL;
 	backup->content_crc = 0;
@@ -2272,6 +2270,7 @@ pgBackupFree(void *backup)
 	pfree(b->primary_conninfo);
 	pfree(b->external_dir_str);
 	pfree(b->root_dir);
+	pfree(b->database_dir);
 	pfree(b->note);
 	pfree(backup);
 }

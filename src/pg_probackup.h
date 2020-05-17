@@ -118,6 +118,15 @@ typedef enum CompressAlg
 	ZLIB_COMPRESS,
 } CompressAlg;
 
+typedef enum ForkName
+{
+	VM,
+	FSM,
+	CFM,
+	INIT,
+	PTRACK
+} ForkName;
+
 #define INIT_FILE_CRC32(use_crc32c, crc) \
 do { \
 	if (use_crc32c) \
@@ -154,21 +163,20 @@ typedef struct pgFile
 	int64	write_size;		/* size of the backed-up file. BYTES_INVALID means
 							   that the file existed but was not backed up
 							   because not modified since last backup. */
-	int64	uncompressed_size;	/* size of the backed-up file before compression
+	size_t	uncompressed_size;	/* size of the backed-up file before compression
 								 * and adding block headers.
 								 */
 							/* we need int64 here to store '-1' value */
 	pg_crc32 crc;			/* CRC value of the file, regular file only */
 	char   *linked;			/* path of the linked file */
 	bool	is_datafile;	/* true if the file is PostgreSQL data file */
-	char   *path;			/* absolute path of the file */
 	char   *rel_path;		/* relative path of the file */
 	Oid		tblspcOid;		/* tblspcOid extracted from path, if applicable */
 	Oid		dbOid;			/* dbOid extracted from path, if applicable */
 	Oid		relOid;			/* relOid extracted from path, if applicable */
-	char   *forkName;		/* forkName extracted from path, if applicable */
+	ForkName   forkName;	/* forkName extracted from path, if applicable */
 	int		segno;			/* Segment number for ptrack */
-	int		n_blocks;		/* size of the file in blocks, readed during DELTA backup */
+	BlockNumber	n_blocks;   /* size of the data file in blocks */
 	bool	is_cfs;			/* Flag to distinguish files compressed by CFS*/
 	bool	is_database;
 	int		external_dir_num;	/* Number of external directory. 0 if not external */
@@ -391,6 +399,8 @@ struct pgBackup
 										 * separated by ':' */
 	char			*root_dir;		/* Full path for root backup directory:
 									   backup_path/instance_name/backup_id */
+	char			*database_dir;	/* Full path to directory with data files:
+									   backup_path/instance_name/backup_id/database */
 	parray			*files;			/* list of files belonging to this backup
 									 * must be populated explicitly */
 	char			*note;
@@ -886,7 +896,7 @@ extern size_t pgFileSize(const char *path);
 extern pgFile *pgFileNew(const char *path, const char *rel_path,
 						 bool follow_symlink, int external_dir_num,
 						 fio_location location);
-extern pgFile *pgFileInit(const char *path, const char *rel_path);
+extern pgFile *pgFileInit(const char *rel_path);
 extern void pgFileDelete(pgFile *file, const char *full_path);
 
 extern void pgFileFree(void *file);
@@ -894,14 +904,10 @@ extern void pgFileFree(void *file);
 extern pg_crc32 pgFileGetCRC(const char *file_path, bool missing_ok, bool use_crc32c);
 extern pg_crc32 pgFileGetCRCgz(const char *file_path, bool missing_ok, bool use_crc32c);
 
-extern int pgFileCompareName(const void *f1, const void *f2);
-extern int pgFileComparePath(const void *f1, const void *f2);
 extern int pgFileMapComparePath(const void *f1, const void *f2);
-extern int pgFileComparePathWithExternal(const void *f1, const void *f2);
+extern int pgFileCompareName(const void *f1, const void *f2);
 extern int pgFileCompareRelPathWithExternal(const void *f1, const void *f2);
 extern int pgFileCompareRelPathWithExternalDesc(const void *f1, const void *f2);
-extern int pgFileComparePathDesc(const void *f1, const void *f2);
-extern int pgFileComparePathWithExternalDesc(const void *f1, const void *f2);
 extern int pgFileCompareLinked(const void *f1, const void *f2);
 extern int pgFileCompareSize(const void *f1, const void *f2);
 extern int pgCompareOid(const void *f1, const void *f2);

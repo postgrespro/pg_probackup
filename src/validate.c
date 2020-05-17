@@ -258,7 +258,7 @@ pgBackupValidateFiles(void *arg)
 
 		if (progress)
 			elog(INFO, "Progress: (%d/%d). Validate file \"%s\"",
-				 i + 1, num_files, file->path);
+				 i + 1, num_files, file->rel_path);
 
 		/*
 		 * Skip files which has no data, because they
@@ -271,7 +271,7 @@ pgBackupValidateFiles(void *arg)
 			{
 				/* It is illegal for file in FULL backup to have BYTES_INVALID */
 				elog(WARNING, "Backup file \"%s\" has invalid size. Possible metadata corruption.",
-					file->path);
+					file->rel_path);
 				arguments->corrupted = true;
 				break;
 			}

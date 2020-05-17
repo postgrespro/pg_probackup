@@ -24,7 +24,7 @@
 /*
  * Given a list of files in the instance to backup, build a pagemap for each
  * data file that has ptrack. Result is saved in the pagemap field of pgFile.
- * NOTE we rely on the fact that provided parray is sorted by file->path.
+ * NOTE we rely on the fact that provided parray is sorted by file->rel_path.
  */
 void
 make_pagemap_from_ptrack_1(parray *files, PGconn *backup_conn)
@@ -46,11 +46,6 @@ make_pagemap_from_ptrack_1(parray *files, PGconn *backup_conn)
 		 */
 		if (file->is_database)
 		{
-			char *filename = strrchr(file->path, '/');
-
-			Assert(filename != NULL);
-			filename++;
-
 			/*
 			 * The function pg_ptrack_get_and_clear_db returns true
 			 * if there was a ptrack_init file.
@@ -71,7 +66,7 @@ make_pagemap_from_ptrack_1(parray *files, PGconn *backup_conn)
 				file->dbOid == dbOid_with_ptrack_init)
 			{
 				/* ignore ptrack if ptrack_init exists */
-				elog(VERBOSE, "Ignoring ptrack because of ptrack_init for file: %s", file->path);
+				elog(VERBOSE, "Ignoring ptrack because of ptrack_init for file: %s", file->rel_path);
 				file->pagemap_isabsent = true;
 				continue;
 			}
@@ -106,7 +101,7 @@ make_pagemap_from_ptrack_1(parray *files, PGconn *backup_conn)
 				 */
 				if (start_addr > ptrack_nonparsed_size)
 				{
-					elog(VERBOSE, "Ptrack is missing for file: %s", file->path);
+					elog(VERBOSE, "Ptrack is missing for file: %s", file->rel_path);
 					file->pagemap_isabsent = true;
 				}
 				else
@@ -137,7 +132,7 @@ make_pagemap_from_ptrack_1(parray *files, PGconn *backup_conn)
 				 * i.e. CREATE DATABASE
 				 * - target relation was deleted.
 				 */
-				elog(VERBOSE, "Ptrack is missing for file: %s", file->path);
+				elog(VERBOSE, "Ptrack is missing for file: %s", file->rel_path);
 				file->pagemap_isabsent = true;
 			}
 		}
