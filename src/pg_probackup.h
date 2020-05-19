@@ -87,6 +87,10 @@ extern const char  *PROGRAM_EMAIL;
 /* stdio buffer size */
 #define STDIO_BUFSIZE 65536
 
+#define ERRMSG_MAX_LEN 2048
+#define CHUNK_SIZE (128 * 1024)
+#define OUT_BUF_SIZE (512 * 1024)
+
 /* retry attempts */
 #define PAGE_READ_ATTEMPTS 100
 
@@ -168,9 +172,9 @@ typedef struct pgFile
 								 */
 							/* we need int64 here to store '-1' value */
 	pg_crc32 crc;			/* CRC value of the file, regular file only */
+	char   *rel_path;		/* relative path of the file */
 	char   *linked;			/* path of the linked file */
 	bool	is_datafile;	/* true if the file is PostgreSQL data file */
-	char   *rel_path;		/* relative path of the file */
 	Oid		tblspcOid;		/* tblspcOid extracted from path, if applicable */
 	Oid		dbOid;			/* dbOid extracted from path, if applicable */
 	Oid		relOid;			/* relOid extracted from path, if applicable */
@@ -178,7 +182,7 @@ typedef struct pgFile
 	int		segno;			/* Segment number for ptrack */
 	BlockNumber	n_blocks;   /* size of the data file in blocks */
 	bool	is_cfs;			/* Flag to distinguish files compressed by CFS*/
-	bool	is_database;
+	bool	is_database;	/* Flag used strictly by ptrack 1.x backup */
 	int		external_dir_num;	/* Number of external directory. 0 if not external */
 	bool	exists_in_prev;		/* Mark files, both data and regular, that exists in previous backup */
 	CompressAlg		compress_alg;		/* compression algorithm applied to the file */
@@ -1020,13 +1024,14 @@ extern XLogRecPtr get_last_ptrack_lsn(PGconn *backup_conn, PGNodeInfo *nodeInfo)
 extern parray * pg_ptrack_get_pagemapset(PGconn *backup_conn, const char *ptrack_schema, XLogRecPtr lsn);
 
 /* FIO */
-extern int fio_send_pages(FILE* in, FILE* out, pgFile *file, XLogRecPtr horizonLsn,
+extern int fio_send_pages(FILE* out, const char *from_fullpath, pgFile *file, XLogRecPtr horizonLsn,
 						   int calg, int clevel, uint32 checksum_version,
 						   datapagemap_t *pagemap, BlockNumber* err_blknum, char **errormsg);
 /* return codes for fio_send_pages */
-#define OUT_BUF_SIZE (512 * 1024)
-extern int fio_send_file_gz(const char *from_fullpath, const char *to_fullpath, FILE* out, int thread_num);
-extern int fio_send_file(const char *from_fullpath, const char *to_fullpath, FILE* out, int thread_num);
+extern int fio_send_file_gz(const char *from_fullpath, const char *to_fullpath, FILE* out,
+															pgFile *file, char **errormsg);
+extern int fio_send_file(const char *from_fullpath, const char *to_fullpath, FILE* out,
+														pgFile *file, char **errormsg);
 
 /* return codes for fio_send_pages() and fio_send_file() */
 #define SEND_OK       (0)

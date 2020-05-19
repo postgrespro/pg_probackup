@@ -1856,6 +1856,10 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 		char      line[BLCKSZ];
 		pgFile   *file = (pgFile *) parray_get(files, i);
 
+		/* Ignore disappeared file */
+		if (file->write_size == FILE_NOT_FOUND)
+			continue;
+
 		if (S_ISDIR(file->mode))
 		{
 			backup_size_on_disk += 4096;

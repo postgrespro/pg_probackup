@@ -550,19 +550,6 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync)
 		elog(ERROR, "Data files transferring failed, time elapsed: %s",
 			pretty_time);
 
-	/* Remove disappeared during backup files from backup_list */
-	for (i = 0; i < parray_num(backup_files_list); i++)
-	{
-		pgFile	   *tmp_file = (pgFile *) parray_get(backup_files_list, i);
-
-		if (tmp_file->write_size == FILE_NOT_FOUND)
-		{
-			pgFileFree(tmp_file);
-			parray_remove(backup_files_list, i);
-			i--;
-		}
-	}
-
 	/* clean previous backup file list */
 	if (prev_backup_filelist)
 	{
@@ -2150,6 +2137,12 @@ backup_files(void *arg)
 								 current.backup_mode, current.parent_backup, true);
 		}
 
+		/* No point in storing empty, missing or not changed files */
+		if (file->write_size <= 0)
+			unlink(to_fullpath);
+//			elog(ERROR, "Cannot remove file \"%s\": %s", to_fullpath,
+//					strerror(errno));
+
 		if (file->write_size == FILE_NOT_FOUND)
 			continue;
 
@@ -2192,10 +2185,7 @@ parse_filelist_filenames(parray *files, const char *root)
 	while (i < parray_num(files))
 	{
 		pgFile	   *file = (pgFile *) parray_get(files, i);
-//		char	   *relative;
 		int 		sscanf_result;
-
-//		relative = GetRelativePath(file->rel_path, root);
 
 		if (S_ISREG(file->mode) &&
 			path_is_prefix_of_path(PG_TBLSPC_DIR, file->rel_path))
