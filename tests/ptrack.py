@@ -269,7 +269,8 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True, initdb_params=['--data-checksums'],
             pg_options={
-                'checkpoint_timeout': '30s'})
+                'checkpoint_timeout': '30s',
+                'shared_preload_libraries': 'ptrack'})
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -336,16 +337,16 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         # DISABLE PTRACK
         if node.major_version >= 12:
-            node.safe_psql('postgres', "alter system set ptrack_map_size to 0")
+            node.safe_psql('postgres', "alter system set ptrack.map_size to 0")
         else:
             node.safe_psql('postgres', "alter system set ptrack_enable to off")
-
         node.stop()
         node.slow_start()
 
         # ENABLE PTRACK
         if node.major_version >= 12:
-            node.safe_psql('postgres', "alter system set ptrack_map_size to '128MB'")
+            node.safe_psql('postgres', "alter system set ptrack.map_size to '128'")
+            node.safe_psql('postgres', "alter system set shared_preload_libraries to 'ptrack'")
         else:
             node.safe_psql('postgres', "alter system set ptrack_enable to on")
         node.stop()
@@ -412,7 +413,11 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node', node, backup_type='ptrack',
             options=['--stream'])
 
-        pgdata = self.pgdata_content(node.data_dir)
+        # TODO: what's the point in taking pgdata content, then taking
+        # backup, and the trying to compare those two?  Backup issues a
+        # checkpoint, so it will modify pgdata with close to 100% chance.
+        if self.paranoia:
+            pgdata = self.pgdata_content(node.data_dir)
 
         self.backup_node(
             backup_dir, 'node', node, backup_type='ptrack',
@@ -426,8 +431,9 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node', node_restored,
             node_restored.data_dir, options=["-j", "4"])
 
-        pgdata_restored = self.pgdata_content(
-                node_restored.data_dir, ignore_ptrack=False)
+        if self.paranoia:
+            pgdata_restored = self.pgdata_content(
+                    node_restored.data_dir, ignore_ptrack=False)
 
         self.set_auto_conf(
             node_restored, {'port': node_restored.port})
@@ -435,7 +441,8 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         node_restored.slow_start()
 
         # Physical comparison
-        self.compare_pgdata(pgdata, pgdata_restored)
+        if self.paranoia:
+            self.compare_pgdata(pgdata, pgdata_restored)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -630,6 +637,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         node.slow_start()
 
         if node.major_version >= 12:
+            self.skipTest("skip --- we do not need ptrack_get_block for ptrack 2.*")
             node.safe_psql(
                 "postgres",
                 "CREATE EXTENSION ptrack")
@@ -3841,7 +3849,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
-    @unittest.expectedFailure
+    # @unittest.expectedFailure
     def test_ptrack_pg_resetxlog(self):
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
@@ -3946,7 +3954,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             )
         except ProbackupException as e:
             self.assertIn(
-                'Insert error message',
+                'ERROR: LSN from ptrack_control 0/0 differs from STOP LSN of previous backup',
                 e.message,
                 '\n Unexpected Error Message: {0}\n'
                 ' CMD: {1}'.format(repr(e.message), self.cmd))
@@ -4051,10 +4059,10 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             log_content = f.read()
 
         self.assertIn(
-            'FATAL:  incorrect checksum of file "{0}"'.format(ptrack_map),
+            'FATAL:  ptrack init: incorrect checksum of file "{0}"'.format(ptrack_map),
             log_content)
 
-        self.set_auto_conf(node, {'ptrack_map_size': '0'})
+        self.set_auto_conf(node, {'ptrack.map_size': '0'})
 
         node.slow_start()
 
@@ -4082,7 +4090,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         node.stop(['-m', 'immediate', '-D', node.data_dir])
 
-        self.set_auto_conf(node, {'ptrack_map_size': '32'})
+        self.set_auto_conf(node, {'ptrack.map_size': '32', 'shared_preload_libraries': 'ptrack'})
 
         node.slow_start()
 

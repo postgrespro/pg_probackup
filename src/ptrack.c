@@ -199,6 +199,8 @@ get_ptrack_version(PGconn *backup_conn, PGNodeInfo *nodeInfo)
 		nodeInfo->ptrack_version_num = 17;
 	else if (strcmp(ptrack_version_str, "2.0") == 0)
 		nodeInfo->ptrack_version_num = 20;
+	else if (strcmp(ptrack_version_str, "2.1") == 0)
+		nodeInfo->ptrack_version_num = 21;
 	else
 		elog(WARNING, "Update your ptrack to the version 1.5 or upper. Current version is %s",
 			 ptrack_version_str);
@@ -210,19 +212,30 @@ get_ptrack_version(PGconn *backup_conn, PGNodeInfo *nodeInfo)
  * Check if ptrack is enabled in target instance
  */
 bool
-pg_ptrack_enable(PGconn *backup_conn)
+pg_ptrack_enable(PGconn *backup_conn, int ptrack_version_num)
 {
 	PGresult   *res_db;
+	bool		result = false;
 
-	res_db = pgut_execute(backup_conn, "SHOW ptrack_enable", 0, NULL);
-
-	if (strcmp(PQgetvalue(res_db, 0, 0), "on") != 0)
+	if (ptrack_version_num < 20)
 	{
-		PQclear(res_db);
-		return false;
+		res_db = pgut_execute(backup_conn, "SHOW ptrack_enable", 0, NULL);
+		result = strcmp(PQgetvalue(res_db, 0, 0), "on") == 0;
 	}
+	else if (ptrack_version_num == 20)
+	{
+		res_db = pgut_execute(backup_conn, "SHOW ptrack_map_size", 0, NULL);
+		result = strcmp(PQgetvalue(res_db, 0, 0), "0") != 0;
+	}
+	else
+	{
+		res_db = pgut_execute(backup_conn, "SHOW ptrack.map_size", 0, NULL);
+		result = strcmp(PQgetvalue(res_db, 0, 0), "0") != 0 &&
+				 strcmp(PQgetvalue(res_db, 0, 0), "-1") != 0;
+	}
+
 	PQclear(res_db);
-	return true;
+	return result;
 }
 
 
@@ -452,7 +465,11 @@ get_last_ptrack_lsn(PGconn *backup_conn, PGNodeInfo *nodeInfo)
 	{
 		char query[128];
 
-		sprintf(query, "SELECT %s.pg_ptrack_control_lsn()", nodeInfo->ptrack_schema);
+		if (nodeInfo->ptrack_version_num == 20)
+			sprintf(query, "SELECT %s.pg_ptrack_control_lsn()", nodeInfo->ptrack_schema);
+		else
+			sprintf(query, "SELECT %s.ptrack_init_lsn()", nodeInfo->ptrack_schema);
+
 		res = pgut_execute(backup_conn, query, 0, NULL);
 	}
 
@@ -504,7 +521,7 @@ pg_ptrack_get_block(ConnectionArgs *arguments,
 	if (arguments->cancel_conn == NULL)
 		arguments->cancel_conn = PQgetCancel(arguments->conn);
 
-	//elog(LOG, "db %i pg_ptrack_get_block(%i, %i, %u)",dbOid, tblsOid, relOid, blknum);
+	// elog(LOG, "db %i pg_ptrack_get_block(%i, %i, %u)",dbOid, tblsOid, relOid, blknum);
 
 	if (ptrack_version_num < 20)
 		res = pgut_execute_parallel(arguments->conn,
@@ -519,7 +536,11 @@ pg_ptrack_get_block(ConnectionArgs *arguments,
 		if (!ptrack_schema)
 			elog(ERROR, "Schema name of ptrack extension is missing");
 
-		sprintf(query, "SELECT %s.pg_ptrack_get_block($1, $2, $3, $4)", ptrack_schema);
+		if (ptrack_version_num == 20)
+			sprintf(query, "SELECT %s.pg_ptrack_get_block($1, $2, $3, $4)", ptrack_schema);
+		else
+			elog(ERROR, "ptrack >= 2.1.0 does not support pg_ptrack_get_block()");
+			// sprintf(query, "SELECT %s.ptrack_get_block($1, $2, $3, $4)", ptrack_schema);
 
 		res = pgut_execute_parallel(arguments->conn,
 									arguments->cancel_conn,
@@ -560,29 +581,11 @@ pg_ptrack_get_block(ConnectionArgs *arguments,
  */
 
 /*
- * Check if ptrack is enabled in target instance
- */
-bool
-pg_ptrack_enable2(PGconn *backup_conn)
-{
-	PGresult   *res_db;
-
-	res_db = pgut_execute(backup_conn, "SHOW ptrack_map_size", 0, NULL);
-
-	if (strcmp(PQgetvalue(res_db, 0, 0), "0") == 0)
-	{
-		PQclear(res_db);
-		return false;
-	}
-	PQclear(res_db);
-	return true;
-}
-
-/*
  * Fetch a list of changed files with their ptrack maps.
  */
 parray *
-pg_ptrack_get_pagemapset(PGconn *backup_conn, const char *ptrack_schema, XLogRecPtr lsn)
+pg_ptrack_get_pagemapset(PGconn *backup_conn, const char *ptrack_schema,
+						 int ptrack_version_num, XLogRecPtr lsn)
 {
 	PGresult   *res;
 	char		lsn_buf[17 + 1];
@@ -597,8 +600,12 @@ pg_ptrack_get_pagemapset(PGconn *backup_conn, const char *ptrack_schema, XLogRec
 	if (!ptrack_schema)
 		elog(ERROR, "Schema name of ptrack extension is missing");
 
-	sprintf(query, "SELECT path, pagemap FROM %s.pg_ptrack_get_pagemapset($1) ORDER BY 1",
-			ptrack_schema);
+	if (ptrack_version_num == 20)
+		sprintf(query, "SELECT path, pagemap FROM %s.pg_ptrack_get_pagemapset($1) ORDER BY 1",
+				ptrack_schema);
+	else
+		sprintf(query, "SELECT path, pagemap FROM %s.ptrack_get_pagemapset($1) ORDER BY 1",
+				ptrack_schema);
 
 	res = pgut_execute(backup_conn, query, 1, (const char **) params);
 	pfree(params[0]);
@@ -640,16 +647,18 @@ pg_ptrack_get_pagemapset(PGconn *backup_conn, const char *ptrack_schema, XLogRec
  */
 void
 make_pagemap_from_ptrack_2(parray *files,
-							PGconn *backup_conn,
-							const char *ptrack_schema,
-							XLogRecPtr lsn)
+						   PGconn *backup_conn,
+						   const char *ptrack_schema,
+						   int ptrack_version_num,
+						   XLogRecPtr lsn)
 {
 	parray *filemaps;
 	int		file_i = 0;
 	page_map_entry *dummy_map = NULL;
 
 	/* Receive all available ptrack bitmaps at once */
-	filemaps = pg_ptrack_get_pagemapset(backup_conn, ptrack_schema, lsn);
+	filemaps = pg_ptrack_get_pagemapset(backup_conn, ptrack_schema,
+										ptrack_version_num, lsn);
 
 	if (filemaps != NULL)
 		parray_qsort(filemaps, pgFileMapComparePath);
