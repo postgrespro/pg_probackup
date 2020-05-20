@@ -1772,6 +1772,7 @@ pgBackupWriteControl(FILE *out, pgBackup *backup)
 
 /*
  * Save the backup content into BACKUP_CONTROL_FILE.
+ * TODO: honor the strict flag
  */
 void
 write_backup(pgBackup *backup, bool strict)

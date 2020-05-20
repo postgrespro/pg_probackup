@@ -36,6 +36,33 @@ typedef struct
 } fio_send_request;
 
 
+typedef struct
+{
+	char path[MAXPGPATH];
+	bool exclude;
+	bool follow_symlink;
+	bool add_root;
+	int  external_dir_num;
+} fio_list_dir_request;
+
+typedef struct
+{
+	mode_t	mode;
+	size_t	size;
+	time_t  mtime;
+	bool	is_datafile;
+	bool	is_database;
+
+	Oid		tblspcOid;
+	Oid		dbOid;
+	Oid		relOid;
+	ForkName   forkName;
+	int		segno;
+	int		external_dir_num;
+	int     linked_len;
+} fio_pgFile;
+
+
 /* Convert FIO pseudo handle to index in file descriptor array */
 #define fio_fileno(f) (((size_t)f - 1) | FIO_PIPE_MARKER)
 
@@ -2036,6 +2063,157 @@ cleanup:
 	return;
 }
 
+/* Compile the array of files located on remote machine in directory root */
+void fio_list_dir(parray *files, const char *root, bool exclude,
+				  bool follow_symlink, bool add_root, int external_dir_num)
+{
+	fio_header hdr;
+	fio_list_dir_request req;
+	char *buf = pgut_malloc(CHUNK_SIZE);
+
+	/* Send to the agent message with parameters for directory listing */
+	snprintf(req.path, MAXPGPATH, "%s", root);
+	req.exclude = exclude;
+	req.follow_symlink = follow_symlink;
+	req.add_root = add_root;
+	req.external_dir_num = external_dir_num;
+
+	hdr.cop = FIO_LIST_DIR;
+	hdr.size = sizeof(req);
+
+	IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
+	IO_CHECK(fio_write_all(fio_stdout, &req, hdr.size), hdr.size);
+
+	for (;;)
+	{
+		/* receive data */
+		IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
+
+		if (hdr.cop == FIO_SEND_FILE_EOF)
+		{
+			/* the work is done */
+			break;
+		}
+		else if (hdr.cop == FIO_SEND_FILE)
+		{
+			pgFile *file = NULL;
+			fio_pgFile  fio_file;
+
+			/* receive rel_path */
+			IO_CHECK(fio_read_all(fio_stdin, buf, hdr.size), hdr.size);
+			file = pgFileInit(buf);
+
+			/* receive metainformation */
+			IO_CHECK(fio_read_all(fio_stdin, &fio_file, sizeof(fio_file)), sizeof(fio_file));
+
+			file->mode = fio_file.mode;
+			file->size = fio_file.size;
+			file->mtime = fio_file.mtime;
+			file->is_datafile = fio_file.is_datafile;
+			file->is_database = fio_file.is_database;
+			file->tblspcOid = fio_file.tblspcOid;
+			file->dbOid = fio_file.dbOid;
+			file->relOid = fio_file.relOid;
+			file->forkName = fio_file.forkName;
+			file->segno = fio_file.segno;
+			file->external_dir_num = fio_file.external_dir_num;
+
+			if (fio_file.linked_len > 0)
+			{
+				IO_CHECK(fio_read_all(fio_stdin, buf, fio_file.linked_len), fio_file.linked_len);
+
+				file->linked = pgut_malloc(fio_file.linked_len);
+				snprintf(file->linked, fio_file.linked_len, "%s", buf);
+			}
+
+//			elog(INFO, "Received file: %s, mode: %u, size: %lu, mtime: %lu",
+//				file->rel_path, file->mode, file->size, file->mtime);
+
+			parray_append(files, file);
+		}
+		else
+		{
+			/* TODO: fio_disconnect may get assert fail when running after this */
+			elog(ERROR, "Remote agent returned message of unexpected type: %i", hdr.cop);
+		}
+	}
+
+	pg_free(buf);
+}
+
+
+/*
+ * To get the arrays of files we use the same function dir_list_file(),
+ * that is used for local backup.
+ * After that we iterate over arrays and for every file send at least
+ * two messages to main process:
+ * 1. rel_path
+ * 2. metainformation (size, mtime, etc)
+ * 3. link path (optional)
+ *
+ * TODO: replace FIO_SEND_FILE and FIO_SEND_FILE_EOF with dedicated messages
+ */
+static void fio_list_dir_impl(int out, char* buf)
+{
+	int i;
+	fio_header hdr;
+	fio_list_dir_request *req = (fio_list_dir_request*) buf;
+	parray *file_files = parray_new();
+
+	/*
+	 * Disable logging into console any messages with exception of ERROR messages,
+	 * to avoid sending messages to main process, because it may screw his FIO message parsing.
+	 */
+	instance_config.logger.log_level_console = ERROR;
+
+	dir_list_file(file_files, req->path, req->exclude, req->follow_symlink,
+				req->add_root, req->external_dir_num, FIO_LOCAL_HOST);
+
+	/* send information about files to the main process */
+	for (i = 0; i < parray_num(file_files); i++)
+	{
+		fio_pgFile  fio_file;
+		pgFile	   *file = (pgFile *) parray_get(file_files, i);
+
+		fio_file.mode = file->mode;
+		fio_file.size = file->size;
+		fio_file.mtime = file->mtime;
+		fio_file.is_datafile = file->is_datafile;
+		fio_file.is_database = file->is_database;
+		fio_file.tblspcOid = file->tblspcOid;
+		fio_file.dbOid = file->dbOid;
+		fio_file.relOid = file->relOid;
+		fio_file.forkName = file->forkName;
+		fio_file.segno = file->segno;
+		fio_file.external_dir_num = file->external_dir_num;
+
+		if (file->linked)
+			fio_file.linked_len = strlen(file->linked) + 1;
+		else
+			fio_file.linked_len = 0;
+
+		hdr.cop = FIO_SEND_FILE;
+		hdr.size = strlen(file->rel_path) + 1;
+
+		/* send rel_path first */
+		IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
+		IO_CHECK(fio_write_all(out, file->rel_path, hdr.size), hdr.size);
+
+		/* now send file metainformation */
+		IO_CHECK(fio_write_all(out, &fio_file, sizeof(fio_file)), sizeof(fio_file));
+
+		/* If file is a symlink, then send link path */
+		if (file->linked)
+			IO_CHECK(fio_write_all(out, file->linked, fio_file.linked_len), fio_file.linked_len);
+
+		pgFileFree(file);
+	}
+
+	parray_free(file_files);
+	hdr.cop = FIO_SEND_FILE_EOF;
+	IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
+}
+
 /* Execute commands at remote host */
 void fio_communicate(int in, int out)
 {
@@ -2172,6 +2350,10 @@ void fio_communicate(int in, int out)
 			break;
 		  case FIO_TRUNCATE: /* Truncate file */
 			SYS_CHECK(ftruncate(fd[hdr.handle], hdr.arg));
+			break;
+		  case FIO_LIST_DIR:
+			// buf contain fio_send_request header and bitmap.
+			fio_list_dir_impl(out, buf);
 			break;
 		  case FIO_SEND_PAGES:
 			// buf contain fio_send_request header and bitmap.

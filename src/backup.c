@@ -331,8 +331,12 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync)
 	backup_files_list = parray_new();
 
 	/* list files with the logical path. omit $PGDATA */
-	dir_list_file(backup_files_list, instance_config.pgdata,
-				  true, true, false, 0, FIO_DB_HOST);
+	if (fio_is_remote(FIO_DB_HOST))
+		fio_list_dir(backup_files_list, instance_config.pgdata,
+					 true, true, false, 0);
+	else
+		dir_list_file(backup_files_list, instance_config.pgdata,
+					  true, true, false, 0, FIO_LOCAL_HOST);
 
 	/*
 	 * Get database_map (name to oid) for use in partial restore feature.
@@ -345,11 +349,19 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync)
 	 * from external directory option
 	 */
 	if (external_dirs)
+	{
 		for (i = 0; i < parray_num(external_dirs); i++)
+		{
 			/* External dirs numeration starts with 1.
 			 * 0 value is not external dir */
-			dir_list_file(backup_files_list, parray_get(external_dirs, i),
-						  false, true, false, i+1, FIO_DB_HOST);
+			if (fio_is_remote(FIO_DB_HOST))
+				fio_list_dir(backup_files_list, parray_get(external_dirs, i),
+						  false, true, false, i+1);
+			else
+				dir_list_file(backup_files_list, parray_get(external_dirs, i),
+							  false, true, false, i+1, FIO_LOCAL_HOST);
+		}
+	}
 
 	/* close ssh session in main thread */
 	fio_disconnect();

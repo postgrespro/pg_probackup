@@ -1035,6 +1035,9 @@ extern int fio_send_file_gz(const char *from_fullpath, const char *to_fullpath, 
 extern int fio_send_file(const char *from_fullpath, const char *to_fullpath, FILE* out,
 														pgFile *file, char **errormsg);
 
+extern void fio_list_dir(parray *files, const char *root, bool exclude,
+						 bool follow_symlink, bool add_root, int external_dir_num);
+
 /* return codes for fio_send_pages() and fio_send_file() */
 #define SEND_OK       (0)
 #define FILE_MISSING (-1)

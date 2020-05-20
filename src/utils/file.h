@@ -46,7 +46,8 @@ typedef enum
 	FIO_DISCONNECT,
 	FIO_DISCONNECTED,
 	/* message for compatibility check */
-	FIO_AGENT_VERSION
+	FIO_AGENT_VERSION,
+	FIO_LIST_DIR
 } fio_operations;
 
 typedef enum
