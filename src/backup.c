@@ -80,7 +80,7 @@ static void backup_cleanup(bool fatal, void *userdata);
 
 static void *backup_files(void *arg);
 
-static void do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync);
+static void do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool backup_logs);
 
 static void pg_start_backup(const char *label, bool smooth, pgBackup *backup,
 							PGNodeInfo *nodeInfo, PGconn *backup_conn, PGconn *master_conn);
@@ -129,7 +129,7 @@ backup_stopbackup_callback(bool fatal, void *userdata)
  * Move files from 'pgdata' to a subdirectory in 'backup_path'.
  */
 static void
-do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync)
+do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool backup_logs)
 {
 	int			i;
 	char		database_path[MAXPGPATH];
@@ -331,8 +331,12 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync)
 	backup_files_list = parray_new();
 
 	/* list files with the logical path. omit $PGDATA */
-	dir_list_file(backup_files_list, instance_config.pgdata,
-				  true, true, false, 0, FIO_DB_HOST);
+	if (fio_is_remote(FIO_DB_HOST))
+		fio_list_dir(backup_files_list, instance_config.pgdata,
+					 true, true, false, backup_logs, 0);
+	else
+		dir_list_file(backup_files_list, instance_config.pgdata,
+					  true, true, false, backup_logs, 0, FIO_LOCAL_HOST);
 
 	/*
 	 * Get database_map (name to oid) for use in partial restore feature.
@@ -345,11 +349,19 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync)
 	 * from external directory option
 	 */
 	if (external_dirs)
+	{
 		for (i = 0; i < parray_num(external_dirs); i++)
+		{
 			/* External dirs numeration starts with 1.
 			 * 0 value is not external dir */
-			dir_list_file(backup_files_list, parray_get(external_dirs, i),
-						  false, true, false, i+1, FIO_DB_HOST);
+			if (fio_is_remote(FIO_DB_HOST))
+				fio_list_dir(backup_files_list, parray_get(external_dirs, i),
+						  false, true, false, false, i+1);
+			else
+				dir_list_file(backup_files_list, parray_get(external_dirs, i),
+							  false, true, false, false, i+1, FIO_LOCAL_HOST);
+		}
+	}
 
 	/* close ssh session in main thread */
 	fio_disconnect();
@@ -551,19 +563,6 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync)
 		elog(ERROR, "Data files transferring failed, time elapsed: %s",
 			pretty_time);
 
-	/* Remove disappeared during backup files from backup_list */
-	for (i = 0; i < parray_num(backup_files_list); i++)
-	{
-		pgFile	   *tmp_file = (pgFile *) parray_get(backup_files_list, i);
-
-		if (tmp_file->write_size == FILE_NOT_FOUND)
-		{
-			pgFileFree(tmp_file);
-			parray_remove(backup_files_list, i);
-			i--;
-		}
-	}
-
 	/* clean previous backup file list */
 	if (prev_backup_filelist)
 	{
@@ -616,7 +615,7 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync)
 		/* Scan backup PG_XLOG_DIR */
 		xlog_files_list = parray_new();
 		join_path_components(pg_xlog_path, database_path, PG_XLOG_DIR);
-		dir_list_file(xlog_files_list, pg_xlog_path, false, true, false, 0,
+		dir_list_file(xlog_files_list, pg_xlog_path, false, true, false, false, 0,
 					  FIO_BACKUP_HOST);
 
 		/* TODO: Drop streamed WAL segments greater than stop_lsn */
@@ -802,8 +801,8 @@ pgdata_basic_setup(ConnectionOptions conn_opt, PGNodeInfo *nodeInfo)
  * Entry point of pg_probackup BACKUP subcommand.
  */
 int
-do_backup(time_t start_time, bool no_validate,
-			pgSetBackupParams *set_backup_params, bool no_sync)
+do_backup(time_t start_time, pgSetBackupParams *set_backup_params,
+			bool no_validate, bool no_sync, bool backup_logs)
 {
 	PGconn		*backup_conn = NULL;
 	PGNodeInfo	nodeInfo;
@@ -902,7 +901,7 @@ do_backup(time_t start_time, bool no_validate,
 		add_note(&current, set_backup_params->note);
 
 	/* backup data */
-	do_backup_instance(backup_conn, &nodeInfo, no_sync);
+	do_backup_instance(backup_conn, &nodeInfo, no_sync, backup_logs);
 	pgut_atexit_pop(backup_cleanup, NULL);
 
 	/* compute size of wal files of this backup stored in the archive */
@@ -2146,6 +2145,12 @@ backup_files(void *arg)
 								 current.backup_mode, current.parent_backup, true);
 		}
 
+		/* No point in storing empty, missing or not changed files */
+		if (file->write_size <= 0)
+			unlink(to_fullpath);
+//			elog(ERROR, "Cannot remove file \"%s\": %s", to_fullpath,
+//					strerror(errno));
+
 		if (file->write_size == FILE_NOT_FOUND)
 			continue;
 
@@ -2188,10 +2193,7 @@ parse_filelist_filenames(parray *files, const char *root)
 	while (i < parray_num(files))
 	{
 		pgFile	   *file = (pgFile *) parray_get(files, i);
-//		char	   *relative;
 		int 		sscanf_result;
-
-//		relative = GetRelativePath(file->rel_path, root);
 
 		if (S_ISREG(file->mode) &&
 			path_is_prefix_of_path(PG_TBLSPC_DIR, file->rel_path))

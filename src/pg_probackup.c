@@ -668,17 +668,6 @@ main(int argc, char *argv[])
 	if (instance_config.conn_opt.pguser != NULL)
 		dbuser = pstrdup(instance_config.conn_opt.pguser);
 
-	/* setup exclusion list for file search */
-	if (!backup_logs)
-	{
-		int			i;
-
-		for (i = 0; pgdata_exclude_dir[i]; i++);		/* find first empty slot */
-
-		/* Set 'pg_log' in first empty slot */
-		pgdata_exclude_dir[i] = PG_LOG_DIR;
-	}
-
 	if (backup_subcmd == VALIDATE_CMD || backup_subcmd == RESTORE_CMD)
 	{
 		/*
@@ -802,7 +791,7 @@ main(int argc, char *argv[])
 					elog(ERROR, "required parameter not specified: BACKUP_MODE "
 						 "(-b, --backup-mode)");
 
-				return do_backup(start_time, no_validate, set_backup_params, no_sync);
+				return do_backup(start_time, set_backup_params, no_validate, no_sync, backup_logs);
 			}
 		case RESTORE_CMD:
 			return do_restore_or_validate(current.backup_id,

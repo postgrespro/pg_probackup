@@ -413,7 +413,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         node.slow_start()
 
         # Fill with data
-        node.pgbench_init(scale=5)
+        node.pgbench_init(scale=20)
 
         # Do uncompressed FULL backup
         self.backup_node(backup_dir, "node", node)
@@ -423,7 +423,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(show_backup["backup-mode"], "FULL")
 
         # Change data
-        pgbench = node.pgbench(options=['-T', '20', '-c', '2', '--no-vacuum'])
+        pgbench = node.pgbench(options=['-T', '10', '-c', '1', '--no-vacuum'])
         pgbench.wait()
 
         # Do compressed DELTA backup
@@ -432,7 +432,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
             options=['--compress-algorithm=zlib', '--stream'])
 
         # Change data
-        pgbench = node.pgbench(options=['-T', '20', '-c', '2', '--no-vacuum'])
+        pgbench = node.pgbench(options=['-T', '10', '-c', '1', '--no-vacuum'])
         pgbench.wait()
 
         # Do uncompressed PAGE backup

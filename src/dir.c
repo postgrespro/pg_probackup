@@ -513,7 +513,7 @@ db_map_entry_free(void *entry)
  */
 void
 dir_list_file(parray *files, const char *root, bool exclude, bool follow_symlink,
-			  bool add_root, int external_dir_num, fio_location location)
+			  bool add_root, bool backup_logs, int external_dir_num, fio_location location)
 {
 	pgFile	   *file;
 
@@ -525,6 +525,17 @@ dir_list_file(parray *files, const char *root, bool exclude, bool follow_symlink
 			elog(ERROR, "External directory is not found: \"%s\"", root);
 		else
 			return;
+	}
+
+	/* setup exclusion list for file search */
+	if (!backup_logs)
+	{
+		int			i;
+
+		for (i = 0; pgdata_exclude_dir[i]; i++);		/* find first empty slot */
+
+		/* Set 'pg_log' in first empty slot */
+		pgdata_exclude_dir[i] = PG_LOG_DIR;
 	}
 
 	if (!S_ISDIR(file->mode))

@@ -944,7 +944,7 @@ setup_push_filelist(const char *archive_status_dir, const char *first_file,
 
 	/* get list of files from archive_status */
 	status_files = parray_new();
-	dir_list_file(status_files, archive_status_dir, false, false, false, 0, FIO_DB_HOST);
+	dir_list_file(status_files, archive_status_dir, false, false, false, false, 0, FIO_DB_HOST);
 	parray_qsort(status_files, pgFileCompareName);
 
 	for (i = 0; i < parray_num(status_files); i++)
@@ -1387,15 +1387,16 @@ get_wal_file(const char *filename, const char *from_fullpath,
 	 */
 	if (fio_is_remote(FIO_BACKUP_HOST))
 	{
+		char *errmsg = NULL;
 		/* get file via ssh */
 #ifdef HAVE_LIBZ
 		/* If requested file is regular WAL segment, then try to open it with '.gz' suffix... */
 		if (IsXLogFileName(filename))
-			rc = fio_send_file_gz(from_fullpath_gz, to_fullpath, out, thread_num);
+			rc = fio_send_file_gz(from_fullpath_gz, to_fullpath, out, NULL, &errmsg);
 		if (rc == FILE_MISSING)
 #endif
 			/* ... failing that, use uncompressed */
-			rc = fio_send_file(from_fullpath, to_fullpath, out, thread_num);
+			rc = fio_send_file(from_fullpath, to_fullpath, out, NULL, &errmsg);
 
 		/* When not in prefetch mode, try to use partial file */
 		if (rc == FILE_MISSING && !prefetch_mode && IsXLogFileName(filename))
@@ -1405,18 +1406,27 @@ get_wal_file(const char *filename, const char *from_fullpath,
 #ifdef HAVE_LIBZ
 			/* '.gz.partial' goes first ... */
 			snprintf(from_partial, sizeof(from_partial), "%s.gz.partial", from_fullpath);
-			rc = fio_send_file_gz(from_partial, to_fullpath, out, thread_num);
+			rc = fio_send_file_gz(from_partial, to_fullpath, out, NULL, &errmsg);
 			if (rc == FILE_MISSING)
 #endif
 			{
 				/* ... failing that, use '.partial' */
 				snprintf(from_partial, sizeof(from_partial), "%s.partial", from_fullpath);
-				rc = fio_send_file(from_partial, to_fullpath, out, thread_num);
+				rc = fio_send_file(from_partial, to_fullpath, out, NULL, &errmsg);
 			}
 
 			if (rc == SEND_OK)
 				src_partial = true;
 		}
+
+		if (rc == WRITE_FAILED)
+			elog(WARNING, "Thread [%d]: Cannot write to file '%s': %s",
+					thread_num, to_fullpath, strerror(errno));
+
+		if (errmsg)
+			elog(WARNING, "Thread [%d]: %s", thread_num, errmsg);
+
+		pg_free(errmsg);
 	}
 	else
 	{

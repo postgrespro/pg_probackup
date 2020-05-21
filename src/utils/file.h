@@ -37,7 +37,6 @@ typedef enum
 	FIO_GET_CRC32,
 	 /* used in fio_send_pages */
 	FIO_SEND_PAGES,
-	FIO_SEND_PAGES_PAGEMAP,
 	FIO_ERROR,
 	FIO_SEND_FILE,
 //	FIO_CHUNK,
@@ -47,7 +46,8 @@ typedef enum
 	FIO_DISCONNECT,
 	FIO_DISCONNECTED,
 	/* message for compatibility check */
-	FIO_AGENT_VERSION
+	FIO_AGENT_VERSION,
+	FIO_LIST_DIR
 } fio_operations;
 
 typedef enum

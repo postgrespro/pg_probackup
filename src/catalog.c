@@ -878,7 +878,7 @@ catalog_get_timelines(InstanceConfig *instance)
 
 	/* read all xlog files that belong to this archive */
 	sprintf(arclog_path, "%s/%s/%s", backup_path, "wal", instance->name);
-	dir_list_file(xlog_files_list, arclog_path, false, false, false, 0, FIO_BACKUP_HOST);
+	dir_list_file(xlog_files_list, arclog_path, false, false, false, false, 0, FIO_BACKUP_HOST);
 	parray_qsort(xlog_files_list, pgFileCompareName);
 
 	timelineinfos = parray_new();
@@ -1772,6 +1772,7 @@ pgBackupWriteControl(FILE *out, pgBackup *backup)
 
 /*
  * Save the backup content into BACKUP_CONTROL_FILE.
+ * TODO: honor the strict flag
  */
 void
 write_backup(pgBackup *backup, bool strict)
@@ -1855,6 +1856,10 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 		int       len = 0;
 		char      line[BLCKSZ];
 		pgFile   *file = (pgFile *) parray_get(files, i);
+
+		/* Ignore disappeared file */
+		if (file->write_size == FILE_NOT_FOUND)
+			continue;
 
 		if (S_ISDIR(file->mode))
 		{

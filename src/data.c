@@ -199,44 +199,44 @@ void
 get_header_errormsg(Page page, char **errormsg)
 {
 	PageHeader  phdr = (PageHeader) page;
-	*errormsg = pgut_malloc(MAXPGPATH);
+	*errormsg = pgut_malloc(ERRMSG_MAX_LEN);
 
 	if (PageGetPageSize(phdr) != BLCKSZ)
-		snprintf(*errormsg, MAXPGPATH, "page header invalid, "
+		snprintf(*errormsg, ERRMSG_MAX_LEN, "page header invalid, "
 				"page size %lu is not equal to block size %u",
 				PageGetPageSize(phdr), BLCKSZ);
 
 	else if (phdr->pd_lower < SizeOfPageHeaderData)
-		snprintf(*errormsg, MAXPGPATH, "page header invalid, "
+		snprintf(*errormsg, ERRMSG_MAX_LEN, "page header invalid, "
 				"pd_lower %i is less than page header size %lu",
 				phdr->pd_lower, SizeOfPageHeaderData);
 
 	else if (phdr->pd_lower > phdr->pd_upper)
-		snprintf(*errormsg, MAXPGPATH, "page header invalid, "
+		snprintf(*errormsg, ERRMSG_MAX_LEN, "page header invalid, "
 				"pd_lower %u is greater than pd_upper %u",
 				phdr->pd_lower, phdr->pd_upper);
 
 	else if (phdr->pd_upper > phdr->pd_special)
-		snprintf(*errormsg, MAXPGPATH, "page header invalid, "
+		snprintf(*errormsg, ERRMSG_MAX_LEN, "page header invalid, "
 				"pd_upper %u is greater than pd_special %u",
 				phdr->pd_upper, phdr->pd_special);
 
 	else if (phdr->pd_special > BLCKSZ)
-		snprintf(*errormsg, MAXPGPATH, "page header invalid, "
+		snprintf(*errormsg, ERRMSG_MAX_LEN, "page header invalid, "
 				"pd_special %u is greater than block size %u",
 				phdr->pd_special, BLCKSZ);
 
 	else if (phdr->pd_special != MAXALIGN(phdr->pd_special))
-		snprintf(*errormsg, MAXPGPATH, "page header invalid, "
+		snprintf(*errormsg, ERRMSG_MAX_LEN, "page header invalid, "
 				"pd_special %i is misaligned, expected %lu",
 				phdr->pd_special, MAXALIGN(phdr->pd_special));
 
 	else if (phdr->pd_flags & ~PD_VALID_FLAG_BITS)
-		snprintf(*errormsg, MAXPGPATH, "page header invalid, "
+		snprintf(*errormsg, ERRMSG_MAX_LEN, "page header invalid, "
 				"pd_flags mask contain illegal bits");
 
 	else
-		snprintf(*errormsg, MAXPGPATH, "page header invalid");
+		snprintf(*errormsg, ERRMSG_MAX_LEN, "page header invalid");
 }
 
 /* We know that checksumms are mismatched, store specific
@@ -246,9 +246,9 @@ void
 get_checksum_errormsg(Page page, char **errormsg, BlockNumber absolute_blkno)
 {
 	PageHeader	phdr = (PageHeader) page;
-	*errormsg = pgut_malloc(MAXPGPATH);
+	*errormsg = pgut_malloc(ERRMSG_MAX_LEN);
 
-	snprintf(*errormsg, MAXPGPATH,
+	snprintf(*errormsg, ERRMSG_MAX_LEN,
 			 "page verification failed, "
 			 "calculated checksum %u but expected %u",
 			 phdr->pd_checksum,
@@ -554,8 +554,8 @@ backup_data_file(ConnectionArgs* conn_arg, pgFile *file,
 				 CompressAlg calg, int clevel, uint32 checksum_version,
 				 int ptrack_version_num, const char *ptrack_schema, bool missing_ok)
 {
-	FILE       *in;
-	FILE       *out;
+	FILE       *in = NULL;
+	FILE       *out = NULL;
 	BlockNumber blknum = 0;
 	BlockNumber nblocks = 0;		/* number of blocks in source file */
 	BlockNumber n_blocks_skipped = 0;
@@ -606,33 +606,6 @@ backup_data_file(ConnectionArgs* conn_arg, pgFile *file,
 	file->uncompressed_size = 0;
 	INIT_FILE_CRC32(true, file->crc);
 
-	/* open source file for read */
-	in = fio_fopen(from_fullpath, PG_BINARY_R, FIO_DB_HOST);
-	if (in == NULL)
-	{
-		FIN_FILE_CRC32(true, file->crc);
-
-		/*
-		 * If file is not found, this is not en error.
-		 * It could have been deleted by concurrent postgres transaction.
-		 */
-		if (errno == ENOENT)
-		{
-			if (missing_ok)
-			{
-				elog(LOG, "File \"%s\" is not found", from_fullpath);
-				file->write_size = FILE_NOT_FOUND;
-				return;
-			}
-			else
-				elog(ERROR, "File \"%s\" is not found", from_fullpath);
-		}
-
-		/* In all other cases throw an error */
-		elog(ERROR, "Cannot open file \"%s\": %s",
-			 from_fullpath, strerror(errno));
-	}
-
 	/* open backup file for write  */
 	out = fopen(to_fullpath, PG_BINARY_W);
 	if (out == NULL)
@@ -661,33 +634,17 @@ backup_data_file(ConnectionArgs* conn_arg, pgFile *file,
 	else
 		use_pagemap = true;
 
-	if (!fio_is_remote_file(in))
-	{
-		/* enable stdio buffering for local input file,
-		 * unless the pagemap is involved, which
-		 * imply a lot of random access.
-		 */
-		if (use_pagemap)
-			setvbuf(in, NULL, _IONBF, BUFSIZ);
-		else
-		{
-			in_buf = pgut_malloc(STDIO_BUFSIZE);
-			setvbuf(in, in_buf, _IOFBF, STDIO_BUFSIZE);
-		}
-	}
-
 	/* enable stdio buffering for output file */
 	out_buf = pgut_malloc(STDIO_BUFSIZE);
 	setvbuf(out, out_buf, _IOFBF, STDIO_BUFSIZE);
 
 	/* Remote mode */
-	if (fio_is_remote_file(in))
+	if (fio_is_remote(FIO_DB_HOST))
 	{
 		char *errmsg = NULL;
 		BlockNumber	err_blknum = 0;
 
-		/* TODO: retrying via ptrack should be implemented on the agent */
-		int rc = fio_send_pages(in, out, file,
+		int rc = fio_send_pages(out, from_fullpath, file,
 								/* send prev backup START_LSN */
 								backup_mode == BACKUP_MODE_DIFF_DELTA &&
 								file->exists_in_prev ? prev_backup_start_lsn : InvalidXLogRecPtr,
@@ -698,9 +655,16 @@ backup_data_file(ConnectionArgs* conn_arg, pgFile *file,
 								&err_blknum, &errmsg);
 
 		/* check for errors */
-		if (rc == REMOTE_ERROR)
-			elog(ERROR, "Cannot read block %u of \"%s\": %s",
-					err_blknum, from_fullpath, strerror(errno));
+		if (rc == FILE_MISSING)
+		{
+			elog(LOG, "File \"%s\" is not found", from_fullpath);
+			file->write_size = FILE_NOT_FOUND;
+			goto cleanup;
+		}
+
+		else if (rc == WRITE_FAILED)
+			elog(ERROR, "Cannot write block %u of \"%s\": %s",
+					err_blknum, to_fullpath, strerror(errno));
 
 		else if (rc == PAGE_CORRUPTION)
 		{
@@ -711,10 +675,21 @@ backup_data_file(ConnectionArgs* conn_arg, pgFile *file,
 				elog(ERROR, "Corruption detected in file \"%s\", block %u",
 						from_fullpath, err_blknum);
 		}
-
-		else if (rc == WRITE_FAILED)
-			elog(ERROR, "Cannot write block %u of \"%s\": %s",
-					err_blknum, to_fullpath, strerror(errno));
+		/* OPEN_FAILED and READ_FAILED */
+		else if (rc == OPEN_FAILED)
+		{
+			if (errmsg)
+				elog(ERROR, "%s", errmsg);
+			else
+				elog(ERROR, "Failed to open for reading remote file \"%s\"", from_fullpath);
+		}
+		else if (rc == READ_FAILED)
+		{
+			if (errmsg)
+				elog(ERROR, "%s", errmsg);
+			else
+				elog(ERROR, "Failed to read from remote file \"%s\"", from_fullpath);
+		}
 
 		file->read_size = rc * BLCKSZ;
 		pg_free(errmsg);
@@ -723,10 +698,47 @@ backup_data_file(ConnectionArgs* conn_arg, pgFile *file,
 	/* Local mode */
 	else
 	{
+		/* open source file for read */
+		in = fopen(from_fullpath, PG_BINARY_R);
+		if (in == NULL)
+		{
+			/*
+			 * If file is not found, this is not en error.
+			 * It could have been deleted by concurrent postgres transaction.
+			 */
+			if (errno == ENOENT)
+			{
+				if (missing_ok)
+				{
+					elog(LOG, "File \"%s\" is not found", from_fullpath);
+					file->write_size = FILE_NOT_FOUND;
+					goto cleanup;
+				}
+				else
+					elog(ERROR, "File \"%s\" is not found", from_fullpath);
+			}
+
+			/* In all other cases throw an error */
+			elog(ERROR, "Cannot open file \"%s\": %s",
+				 from_fullpath, strerror(errno));
+		}
+
+		/* Enable stdio buffering for local input file,
+		 * unless the pagemap is involved, which
+		 * imply a lot of random access.
+		 */
+
 		if (use_pagemap)
 		{
 			iter = datapagemap_iterate(&file->pagemap);
 			datapagemap_next(iter, &blknum); /* set first block */
+
+			setvbuf(in, NULL, _IONBF, BUFSIZ);
+		}
+		else
+		{
+			in_buf = pgut_malloc(STDIO_BUFSIZE);
+			setvbuf(in, in_buf, _IOFBF, STDIO_BUFSIZE);
 		}
 
 		while (blknum < nblocks)
@@ -775,14 +787,6 @@ backup_data_file(ConnectionArgs* conn_arg, pgFile *file,
 	    backup_mode == BACKUP_MODE_DIFF_DELTA)
 		file->n_blocks = file->read_size / BLCKSZ;
 
-	if (fclose(out))
-		elog(ERROR, "Cannot close the backup file \"%s\": %s",
-			 to_fullpath, strerror(errno));
-
-	fio_fclose(in);
-
-	FIN_FILE_CRC32(true, file->crc);
-
 	/* Determine that file didn`t changed in case of incremental backup */
 	if (backup_mode != BACKUP_MODE_FULL &&
 		file->exists_in_prev &&
@@ -792,15 +796,19 @@ backup_data_file(ConnectionArgs* conn_arg, pgFile *file,
 		file->write_size = BYTES_INVALID;
 	}
 
-	/*
-	 * No point in storing empty files.
-	 */
-	if (file->write_size <= 0)
-	{
-		if (unlink(to_fullpath) == -1)
-			elog(ERROR, "Cannot remove file \"%s\": %s", to_fullpath,
-				 strerror(errno));
-	}
+cleanup:
+	/* finish CRC calculation */
+	FIN_FILE_CRC32(true, file->crc);
+
+	/* close local input file */
+	if (in && fclose(in))
+		elog(ERROR, "Cannot close the source file \"%s\": %s",
+			 to_fullpath, strerror(errno));
+
+	/* close local output file */
+	if (out && fclose(out))
+		elog(ERROR, "Cannot close the backup file \"%s\": %s",
+			 to_fullpath, strerror(errno));
 
 	pg_free(in_buf);
 	pg_free(out_buf);
@@ -1265,42 +1273,17 @@ backup_non_data_file_internal(const char *from_fullpath,
 							const char *to_fullpath, pgFile *file,
 							bool missing_ok)
 {
-	FILE       *in;
-	FILE       *out;
+	FILE       *in = NULL;
+	FILE       *out = NULL;
 	ssize_t     read_len = 0;
-	char	   *buf;
-	pg_crc32	crc;
+	char	   *buf = NULL;
 
-	INIT_FILE_CRC32(true, crc);
+	INIT_FILE_CRC32(true, file->crc);
 
 	/* reset size summary */
 	file->read_size = 0;
 	file->write_size = 0;
 	file->uncompressed_size = 0;
-
-	/* open source file for read */
-	in = fio_fopen(from_fullpath, PG_BINARY_R, from_location);
-	if (in == NULL)
-	{
-		FIN_FILE_CRC32(true, crc);
-		file->crc = crc;
-
-		/* maybe deleted, it's not error in case of backup */
-		if (errno == ENOENT)
-		{
-			if (missing_ok)
-			{
-				elog(LOG, "File \"%s\" is not found", from_fullpath);
-				file->write_size = FILE_NOT_FOUND;
-				return;
-			}
-			else
-				elog(ERROR, "File \"%s\" is not found", from_fullpath);
-		}
-
-		elog(ERROR, "Cannot open source file \"%s\": %s", from_fullpath,
-			 strerror(errno));
-	}
 
 	/* open backup file for write  */
 	out = fopen(to_fullpath, PG_BINARY_W);
@@ -1313,60 +1296,108 @@ backup_non_data_file_internal(const char *from_fullpath,
 		elog(ERROR, "Cannot change mode of \"%s\": %s", to_fullpath,
 			 strerror(errno));
 
-	/* disable stdio buffering for local input/output files */
-	if (!fio_is_remote_file(in))
-		setvbuf(in, NULL, _IONBF, BUFSIZ);
-	setvbuf(out, NULL, _IONBF, BUFSIZ);
-
-	/* allocate 64kB buffer */
-	buf = pgut_malloc(STDIO_BUFSIZE);
-
-	/* copy content and calc CRC */
-	for (;;)
+	/* backup remote file  */
+	if (fio_is_remote(FIO_DB_HOST))
 	{
-		read_len = fio_fread(in, buf, STDIO_BUFSIZE);
+		char *errmsg = NULL;
+		int rc = fio_send_file(from_fullpath, to_fullpath, out, file, &errmsg);
 
-		if (read_len < 0)
-			elog(ERROR, "Cannot read from source file \"%s\": %s",
-				 from_fullpath, strerror(errno));
+		/* handle errors */
+		if (rc == FILE_MISSING)
+		{
+			/* maybe deleted, it's not error in case of backup */
+			if (missing_ok)
+			{
+				elog(LOG, "File \"%s\" is not found", from_fullpath);
+				file->write_size = FILE_NOT_FOUND;
+				goto cleanup;
+			}
+			else
+				elog(ERROR, "File \"%s\" is not found", from_fullpath);
+		}
+		else if (rc == WRITE_FAILED)
+			elog(ERROR, "Cannot write to \"%s\": %s", to_fullpath, strerror(errno));
+		else if (rc != SEND_OK)
+		{
+			if (errmsg)
+				elog(ERROR, "%s", errmsg);
+			else
+				elog(ERROR, "Cannot access remote file \"%s\"", from_fullpath);
+		}
 
-		if (read_len == 0)
-			break;
+		pg_free(errmsg);
+	}
+	/* backup local file */
+	else
+	{
+		/* open source file for read */
+		in = fopen(from_fullpath, PG_BINARY_R);
+		if (in == NULL)
+		{
+			/* maybe deleted, it's not error in case of backup */
+			if (errno == ENOENT)
+			{
+				if (missing_ok)
+				{
+					elog(LOG, "File \"%s\" is not found", from_fullpath);
+					file->write_size = FILE_NOT_FOUND;
+					goto cleanup;
+				}
+				else
+					elog(ERROR, "File \"%s\" is not found", from_fullpath);
+			}
 
-		if (fwrite(buf, 1, read_len, out) != read_len)
-			elog(ERROR, "Cannot write to \"%s\": %s", to_fullpath,
+			elog(ERROR, "Cannot open file \"%s\": %s", from_fullpath,
 				 strerror(errno));
+		}
 
-		/* update CRC */
-		COMP_FILE_CRC32(true, crc, buf, read_len);
+		/* disable stdio buffering for local input/output files to avoid triple buffering */
+		setvbuf(in, NULL, _IONBF, BUFSIZ);
+		setvbuf(out, NULL, _IONBF, BUFSIZ);
 
-		file->read_size += read_len;
+		/* allocate 64kB buffer */
+		buf = pgut_malloc(CHUNK_SIZE);
 
-//		if (read_len < STDIO_BUFSIZE)
-//		{
-//			if (!fio_is_remote_file(in))
-//			{
-//				if (ferror(in))
-//					elog(ERROR, "Cannot read from source file \"%s\": %s",
-//						from_fullpath, strerror(errno));
-//
-//				if (feof(in))
-//					break;
-//			}
-//		}
+		/* copy content and calc CRC */
+		for (;;)
+		{
+			read_len = fread(buf, 1, CHUNK_SIZE, in);
+
+			if (ferror(in))
+				elog(ERROR, "Cannot read from file \"%s\": %s",
+					 from_fullpath, strerror(errno));
+
+			if (read_len > 0)
+			{
+				if (fwrite(buf, 1, read_len, out) != read_len)
+					elog(ERROR, "Cannot write to file \"%s\": %s", to_fullpath,
+						 strerror(errno));
+
+				/* update CRC */
+				COMP_FILE_CRC32(true, file->crc, buf, read_len);
+				file->read_size += read_len;
+			}
+
+			if (feof(in))
+				break;
+		}
 	}
 
 	file->write_size = (int64) file->read_size;
 
 	if (file->write_size > 0)
 		file->uncompressed_size = file->write_size;
-	/* finish CRC calculation and store into pgFile */
-	FIN_FILE_CRC32(true, crc);
-	file->crc = crc;
 
-	if (fclose(out))
-		elog(ERROR, "Cannot write \"%s\": %s", to_fullpath, strerror(errno));
-	fio_fclose(in);
+cleanup:
+	/* finish CRC calculation and store into pgFile */
+	FIN_FILE_CRC32(true, file->crc);
+
+	if (in && fclose(in))
+		elog(ERROR, "Cannot close the file \"%s\": %s", from_fullpath, strerror(errno));
+
+	if (out && fclose(out))
+		elog(ERROR, "Cannot close the file \"%s\": %s", to_fullpath, strerror(errno));
+
 	pg_free(buf);
 }
 
