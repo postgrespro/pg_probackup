@@ -570,7 +570,7 @@ backup_data_file(ConnectionArgs* conn_arg, pgFile *file,
 
 	/* sanity */
 	if (file->size % BLCKSZ != 0)
-		elog(WARNING, "File: '%s', invalid file size %zu", from_fullpath, file->size);
+		elog(WARNING, "File: \"%s\", invalid file size %zu", from_fullpath, file->size);
 
 	/*
 	 * Compute expected number of blocks in the file.
@@ -609,12 +609,12 @@ backup_data_file(ConnectionArgs* conn_arg, pgFile *file,
 	/* open backup file for write  */
 	out = fopen(to_fullpath, PG_BINARY_W);
 	if (out == NULL)
-		elog(ERROR, "Cannot open backup file '%s': %s",
+		elog(ERROR, "Cannot open backup file \"%s\": %s",
 			 to_fullpath, strerror(errno));
 
 	/* update file permission */
 	if (chmod(to_fullpath, FILE_PERMISSION) == -1)
-		elog(ERROR, "Cannot change mode of '%s': %s", to_fullpath,
+		elog(ERROR, "Cannot change mode of \"%s\": %s", to_fullpath,
 			 strerror(errno));
 
 	/*
@@ -657,22 +657,22 @@ backup_data_file(ConnectionArgs* conn_arg, pgFile *file,
 		/* check for errors */
 		if (rc == FILE_MISSING)
 		{
-			elog(LOG, "File '%s' is not found", from_fullpath);
+			elog(LOG, "File \"%s\" is not found", from_fullpath);
 			file->write_size = FILE_NOT_FOUND;
 			goto cleanup;
 		}
 
 		else if (rc == WRITE_FAILED)
-			elog(ERROR, "Cannot write block %u of '%s': %s",
+			elog(ERROR, "Cannot write block %u of \"%s\": %s",
 					err_blknum, to_fullpath, strerror(errno));
 
 		else if (rc == PAGE_CORRUPTION)
 		{
 			if (errmsg)
-				elog(ERROR, "Corruption detected in file '%s', block %u: %s",
+				elog(ERROR, "Corruption detected in file \"%s\", block %u: %s",
 						from_fullpath, err_blknum, errmsg);
 			else
-				elog(ERROR, "Corruption detected in file '%s', block %u",
+				elog(ERROR, "Corruption detected in file \"%s\", block %u",
 						from_fullpath, err_blknum);
 		}
 		/* OPEN_FAILED and READ_FAILED */
@@ -681,14 +681,14 @@ backup_data_file(ConnectionArgs* conn_arg, pgFile *file,
 			if (errmsg)
 				elog(ERROR, "%s", errmsg);
 			else
-				elog(ERROR, "Failed to open for reading remote file '%s'", from_fullpath);
+				elog(ERROR, "Failed to open for reading remote file \"%s\"", from_fullpath);
 		}
 		else if (rc == READ_FAILED)
 		{
 			if (errmsg)
 				elog(ERROR, "%s", errmsg);
 			else
-				elog(ERROR, "Failed to read from remote file '%s'", from_fullpath);
+				elog(ERROR, "Failed to read from remote file \"%s\"", from_fullpath);
 		}
 
 		file->read_size = rc * BLCKSZ;
@@ -710,16 +710,16 @@ backup_data_file(ConnectionArgs* conn_arg, pgFile *file,
 			{
 				if (missing_ok)
 				{
-					elog(LOG, "File '%s' is not found", from_fullpath);
+					elog(LOG, "File \"%s\" is not found", from_fullpath);
 					file->write_size = FILE_NOT_FOUND;
 					goto cleanup;
 				}
 				else
-					elog(ERROR, "File '%s' is not found", from_fullpath);
+					elog(ERROR, "File \"%s\" is not found", from_fullpath);
 			}
 
 			/* In all other cases throw an error */
-			elog(ERROR, "Cannot open file '%s': %s",
+			elog(ERROR, "Cannot open file \"%s\": %s",
 				 from_fullpath, strerror(errno));
 		}
 
@@ -802,12 +802,12 @@ cleanup:
 
 	/* close local input file */
 	if (in && fclose(in))
-		elog(ERROR, "Cannot close the source file '%s': %s",
+		elog(ERROR, "Cannot close the source file \"%s\": %s",
 			 to_fullpath, strerror(errno));
 
 	/* close local output file */
 	if (out && fclose(out))
-		elog(ERROR, "Cannot close the backup file '%s': %s",
+		elog(ERROR, "Cannot close the backup file \"%s\": %s",
 			 to_fullpath, strerror(errno));
 
 	pg_free(in_buf);
@@ -1271,12 +1271,12 @@ backup_non_data_file_internal(const char *from_fullpath,
 	/* open backup file for write  */
 	out = fopen(to_fullpath, PG_BINARY_W);
 	if (out == NULL)
-		elog(ERROR, "Cannot open destination file '%s': %s",
+		elog(ERROR, "Cannot open destination file \"%s\": %s",
 			 to_fullpath, strerror(errno));
 
 	/* update file permission */
 	if (chmod(to_fullpath, file->mode) == -1)
-		elog(ERROR, "Cannot change mode of '%s': %s", to_fullpath,
+		elog(ERROR, "Cannot change mode of \"%s\": %s", to_fullpath,
 			 strerror(errno));
 
 	/* backup remote file  */
@@ -1291,21 +1291,21 @@ backup_non_data_file_internal(const char *from_fullpath,
 			/* maybe deleted, it's not error in case of backup */
 			if (missing_ok)
 			{
-				elog(LOG, "File '%s' is not found", from_fullpath);
+				elog(LOG, "File \"%s\" is not found", from_fullpath);
 				file->write_size = FILE_NOT_FOUND;
 				goto cleanup;
 			}
 			else
-				elog(ERROR, "File '%s' is not found", from_fullpath);
+				elog(ERROR, "File \"%s\" is not found", from_fullpath);
 		}
 		else if (rc == WRITE_FAILED)
-			elog(ERROR, "Cannot write to '%s': %s", to_fullpath, strerror(errno));
+			elog(ERROR, "Cannot write to \"%s\": %s", to_fullpath, strerror(errno));
 		else if (rc != SEND_OK)
 		{
 			if (errmsg)
 				elog(ERROR, "%s", errmsg);
 			else
-				elog(ERROR, "Cannot access remote file '%s'", from_fullpath);
+				elog(ERROR, "Cannot access remote file \"%s\"", from_fullpath);
 		}
 
 		pg_free(errmsg);
@@ -1322,15 +1322,15 @@ backup_non_data_file_internal(const char *from_fullpath,
 			{
 				if (missing_ok)
 				{
-					elog(LOG, "File '%s' is not found", from_fullpath);
+					elog(LOG, "File \"%s\" is not found", from_fullpath);
 					file->write_size = FILE_NOT_FOUND;
 					goto cleanup;
 				}
 				else
-					elog(ERROR, "File '%s' is not found", from_fullpath);
+					elog(ERROR, "File \"%s\" is not found", from_fullpath);
 			}
 
-			elog(ERROR, "Cannot open file '%s': %s", from_fullpath,
+			elog(ERROR, "Cannot open file \"%s\": %s", from_fullpath,
 				 strerror(errno));
 		}
 
@@ -1347,13 +1347,13 @@ backup_non_data_file_internal(const char *from_fullpath,
 			read_len = fread(buf, 1, CHUNK_SIZE, in);
 
 			if (ferror(in))
-				elog(ERROR, "Cannot read from file '%s': %s",
+				elog(ERROR, "Cannot read from file \"%s\": %s",
 					 from_fullpath, strerror(errno));
 
 			if (read_len > 0)
 			{
 				if (fwrite(buf, 1, read_len, out) != read_len)
-					elog(ERROR, "Cannot write to file '%s': %s", to_fullpath,
+					elog(ERROR, "Cannot write to file \"%s\": %s", to_fullpath,
 						 strerror(errno));
 
 				/* update CRC */
@@ -1376,10 +1376,10 @@ cleanup:
 	FIN_FILE_CRC32(true, file->crc);
 
 	if (in && fclose(in))
-		elog(ERROR, "Cannot close the file '%s': %s", from_fullpath, strerror(errno));
+		elog(ERROR, "Cannot close the file \"%s\": %s", from_fullpath, strerror(errno));
 
 	if (out && fclose(out))
-		elog(ERROR, "Cannot close the file '%s': %s", to_fullpath, strerror(errno));
+		elog(ERROR, "Cannot close the file \"%s\": %s", to_fullpath, strerror(errno));
 
 	pg_free(buf);
 }
