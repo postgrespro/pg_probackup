@@ -1030,6 +1030,8 @@ extern int fio_send_pages(FILE* in, FILE* out, pgFile *file, XLogRecPtr horizonL
 extern int fio_send_file_gz(const char *from_fullpath, const char *to_fullpath, FILE* out, int thread_num);
 extern int fio_send_file(const char *from_fullpath, const char *to_fullpath, FILE* out, int thread_num);
 
+extern bool pgut_rmtree(const char *path, bool rmtopdir, bool strict);
+
 /* return codes for fio_send_pages() and fio_send_file() */
 #define SEND_OK       (0)
 #define FILE_MISSING (-1)
