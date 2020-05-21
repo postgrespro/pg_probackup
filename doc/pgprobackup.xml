@@ -4055,10 +4055,10 @@ pg_probackup archive-push -B <replaceable>backup_dir</replaceable> --instance <r
         corruption.
       </para>
       <para>
-        To speed up archiving, you can specify the <option>-j</option> option
-        to run <command>archive-push</command> on multiple threads.
-        If you provide the <option>--batch-size</option> option, WAL files
-        will be copied in batches of the specified size.
+        To speed up archiving, you can specify the <option>--batch-size</option> option
+        to copy WAL segments in batches of the specified size.
+        If <option>--batch-size</option> option is used, then you can also specify
+        the <option>-j</option> option to copy the batch of WAL segments on multiple threads.
       </para>
       <para>
         WAL segments copied to the archive are synced to disk unless
@@ -4096,10 +4096,10 @@ pg_probackup archive-get -B <replaceable>backup_dir</replaceable> --instance <re
       </para>
 
       <para>
-        To speed up recovery, you can specify the <option>-j</option> option
-        to run <command>archive-get</command> on multiple threads.
-        If you provide the <option>--batch-size</option> option, WAL segments
-        will be copied in batches of the specified size.
+        To speed up recovery, you can specify the <option>--batch-size</option> option
+        to copy WAL segments in batches of the specified size.
+        If <option>--batch-size</option> option is used, then you can also specify
+        the <option>-j</option> option to copy the batch of WAL segments on multiple threads.
       </para>
 
       <para>

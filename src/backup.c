@@ -191,7 +191,7 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync)
 		{
 			/* try to setup multi-timeline backup chain */
 			elog(WARNING, "Valid backup on current timeline %u is not found, "
-						"try to look up on previous timelines",
+						"trying to look up on previous timelines",
 						current.tli);
 
 			tli_list = catalog_get_timelines(&instance_config);
