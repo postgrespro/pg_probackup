@@ -42,23 +42,24 @@ typedef struct
 	bool exclude;
 	bool follow_symlink;
 	bool add_root;
+	bool backup_logs;
+	bool exclusive_backup;
 	int  external_dir_num;
 } fio_list_dir_request;
 
 typedef struct
 {
-	mode_t	mode;
-	size_t	size;
+	mode_t  mode;
+	size_t  size;
 	time_t  mtime;
-	bool	is_datafile;
-	bool	is_database;
-
-	Oid		tblspcOid;
-	Oid		dbOid;
-	Oid		relOid;
+	bool    is_datafile;
+	bool    is_database;
+	Oid     tblspcOid;
+	Oid     dbOid;
+	Oid     relOid;
 	ForkName   forkName;
-	int		segno;
-	int		external_dir_num;
+	int     segno;
+	int     external_dir_num;
 	int     linked_len;
 } fio_pgFile;
 
@@ -2065,7 +2066,7 @@ cleanup:
 
 /* Compile the array of files located on remote machine in directory root */
 void fio_list_dir(parray *files, const char *root, bool exclude,
-				  bool follow_symlink, bool add_root, int external_dir_num)
+				  bool follow_symlink, bool add_root, bool backup_logs, int external_dir_num)
 {
 	fio_header hdr;
 	fio_list_dir_request req;
@@ -2076,6 +2077,8 @@ void fio_list_dir(parray *files, const char *root, bool exclude,
 	req.exclude = exclude;
 	req.follow_symlink = follow_symlink;
 	req.add_root = add_root;
+	req.backup_logs = backup_logs;
+	req.exclusive_backup = exclusive_backup;
 	req.external_dir_num = external_dir_num;
 
 	hdr.cop = FIO_LIST_DIR;
@@ -2162,12 +2165,15 @@ static void fio_list_dir_impl(int out, char* buf)
 
 	/*
 	 * Disable logging into console any messages with exception of ERROR messages,
-	 * to avoid sending messages to main process, because it may screw his FIO message parsing.
+	 * because currently we have no mechanism to notify the main process
+	 * about then message been sent.
+	 * TODO: correctly send elog messages from agent to main process.
 	 */
 	instance_config.logger.log_level_console = ERROR;
+	exclusive_backup = req->exclusive_backup;
 
 	dir_list_file(file_files, req->path, req->exclude, req->follow_symlink,
-				req->add_root, req->external_dir_num, FIO_LOCAL_HOST);
+				req->add_root, req->backup_logs, req->external_dir_num, FIO_LOCAL_HOST);
 
 	/* send information about files to the main process */
 	for (i = 0; i < parray_num(file_files); i++)
@@ -2352,7 +2358,6 @@ void fio_communicate(int in, int out)
 			SYS_CHECK(ftruncate(fd[hdr.handle], hdr.arg));
 			break;
 		  case FIO_LIST_DIR:
-			// buf contain fio_send_request header and bitmap.
 			fio_list_dir_impl(out, buf);
 			break;
 		  case FIO_SEND_PAGES:

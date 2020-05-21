@@ -878,7 +878,7 @@ catalog_get_timelines(InstanceConfig *instance)
 
 	/* read all xlog files that belong to this archive */
 	sprintf(arclog_path, "%s/%s/%s", backup_path, "wal", instance->name);
-	dir_list_file(xlog_files_list, arclog_path, false, false, false, 0, FIO_BACKUP_HOST);
+	dir_list_file(xlog_files_list, arclog_path, false, false, false, false, 0, FIO_BACKUP_HOST);
 	parray_qsort(xlog_files_list, pgFileCompareName);
 
 	timelineinfos = parray_new();

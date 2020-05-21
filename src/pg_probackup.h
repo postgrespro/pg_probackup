@@ -694,8 +694,8 @@ extern char** commands_args;
 extern const char *pgdata_exclude_dir[];
 
 /* in backup.c */
-extern int do_backup(time_t start_time, bool no_validate,
-					 pgSetBackupParams *set_backup_params, bool no_sync);
+extern int do_backup(time_t start_time, pgSetBackupParams *set_backup_params,
+					 bool no_validate, bool no_sync, bool backup_logs);
 extern void do_checkdb(bool need_amcheck, ConnectionOptions conn_opt,
 				  char *pgdata);
 extern BackupMode parse_backup_mode(const char *value);
@@ -859,7 +859,7 @@ extern const char* deparse_compress_alg(int alg);
 
 /* in dir.c */
 extern void dir_list_file(parray *files, const char *root, bool exclude,
-						  bool follow_symlink, bool add_root,
+						  bool follow_symlink, bool add_root, bool backup_logs,
 						  int external_dir_num, fio_location location);
 
 extern void create_data_directories(parray *dest_files,
@@ -1035,8 +1035,8 @@ extern int fio_send_file_gz(const char *from_fullpath, const char *to_fullpath, 
 extern int fio_send_file(const char *from_fullpath, const char *to_fullpath, FILE* out,
 														pgFile *file, char **errormsg);
 
-extern void fio_list_dir(parray *files, const char *root, bool exclude,
-						 bool follow_symlink, bool add_root, int external_dir_num);
+extern void fio_list_dir(parray *files, const char *root, bool exclude, bool follow_symlink,
+						 bool add_root, bool backup_logs, int external_dir_num);
 
 /* return codes for fio_send_pages() and fio_send_file() */
 #define SEND_OK       (0)

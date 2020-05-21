@@ -80,7 +80,7 @@ static void backup_cleanup(bool fatal, void *userdata);
 
 static void *backup_files(void *arg);
 
-static void do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync);
+static void do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool backup_logs);
 
 static void pg_start_backup(const char *label, bool smooth, pgBackup *backup,
 							PGNodeInfo *nodeInfo, PGconn *backup_conn, PGconn *master_conn);
@@ -129,7 +129,7 @@ backup_stopbackup_callback(bool fatal, void *userdata)
  * Move files from 'pgdata' to a subdirectory in 'backup_path'.
  */
 static void
-do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync)
+do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool backup_logs)
 {
 	int			i;
 	char		database_path[MAXPGPATH];
@@ -333,10 +333,10 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync)
 	/* list files with the logical path. omit $PGDATA */
 	if (fio_is_remote(FIO_DB_HOST))
 		fio_list_dir(backup_files_list, instance_config.pgdata,
-					 true, true, false, 0);
+					 true, true, false, backup_logs, 0);
 	else
 		dir_list_file(backup_files_list, instance_config.pgdata,
-					  true, true, false, 0, FIO_LOCAL_HOST);
+					  true, true, false, backup_logs, 0, FIO_LOCAL_HOST);
 
 	/*
 	 * Get database_map (name to oid) for use in partial restore feature.
@@ -356,10 +356,10 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync)
 			 * 0 value is not external dir */
 			if (fio_is_remote(FIO_DB_HOST))
 				fio_list_dir(backup_files_list, parray_get(external_dirs, i),
-						  false, true, false, i+1);
+						  false, true, false, false, i+1);
 			else
 				dir_list_file(backup_files_list, parray_get(external_dirs, i),
-							  false, true, false, i+1, FIO_LOCAL_HOST);
+							  false, true, false, false, i+1, FIO_LOCAL_HOST);
 		}
 	}
 
@@ -615,7 +615,7 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync)
 		/* Scan backup PG_XLOG_DIR */
 		xlog_files_list = parray_new();
 		join_path_components(pg_xlog_path, database_path, PG_XLOG_DIR);
-		dir_list_file(xlog_files_list, pg_xlog_path, false, true, false, 0,
+		dir_list_file(xlog_files_list, pg_xlog_path, false, true, false, false, 0,
 					  FIO_BACKUP_HOST);
 
 		/* TODO: Drop streamed WAL segments greater than stop_lsn */
@@ -801,8 +801,8 @@ pgdata_basic_setup(ConnectionOptions conn_opt, PGNodeInfo *nodeInfo)
  * Entry point of pg_probackup BACKUP subcommand.
  */
 int
-do_backup(time_t start_time, bool no_validate,
-			pgSetBackupParams *set_backup_params, bool no_sync)
+do_backup(time_t start_time, pgSetBackupParams *set_backup_params,
+			bool no_validate, bool no_sync, bool backup_logs)
 {
 	PGconn		*backup_conn = NULL;
 	PGNodeInfo	nodeInfo;
@@ -901,7 +901,7 @@ do_backup(time_t start_time, bool no_validate,
 		add_note(&current, set_backup_params->note);
 
 	/* backup data */
-	do_backup_instance(backup_conn, &nodeInfo, no_sync);
+	do_backup_instance(backup_conn, &nodeInfo, no_sync, backup_logs);
 	pgut_atexit_pop(backup_cleanup, NULL);
 
 	/* compute size of wal files of this backup stored in the archive */
