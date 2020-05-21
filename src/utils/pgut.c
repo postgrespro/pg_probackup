@@ -43,6 +43,9 @@ static void on_interrupt(void);
 static void on_cleanup(void);
 static pqsigfunc oldhandler = NULL;
 
+static char ** pgut_pgfnames(const char *path, bool strict);
+static void pgut_pgfnames_cleanup(char **filenames);
+
 void discard_response(PGconn *conn);
 
 void
@@ -1061,4 +1064,141 @@ discard_response(PGconn *conn)
 		if (res)
 			PQclear(res);
 	} while (res);
+}
+
+/*
+ * pgfnames
+ *
+ * return a list of the names of objects in the argument directory.  Caller
+ * must call pgfnames_cleanup later to free the memory allocated by this
+ * function.
+ */
+char **
+pgut_pgfnames(const char *path, bool strict)
+{
+	DIR		   *dir;
+	struct dirent *file;
+	char	  **filenames;
+	int			numnames = 0;
+	int			fnsize = 200;	/* enough for many small dbs */
+
+	dir = opendir(path);
+	if (dir == NULL)
+	{
+		elog(strict ? ERROR : WARNING, "could not open directory \"%s\": %m", path);
+		return NULL;
+	}
+
+	filenames = (char **) palloc(fnsize * sizeof(char *));
+
+	while (errno = 0, (file = readdir(dir)) != NULL)
+	{
+		if (strcmp(file->d_name, ".") != 0 && strcmp(file->d_name, "..") != 0)
+		{
+			if (numnames + 1 >= fnsize)
+			{
+				fnsize *= 2;
+				filenames = (char **) repalloc(filenames,
+											   fnsize * sizeof(char *));
+			}
+			filenames[numnames++] = pstrdup(file->d_name);
+		}
+	}
+
+	if (errno)
+	{
+		elog(strict ? ERROR : WARNING, "could not read directory \"%s\": %m", path);
+		return NULL;
+	}
+
+	filenames[numnames] = NULL;
+
+	if (closedir(dir))
+	{
+		elog(strict ? ERROR : WARNING, "could not close directory \"%s\": %m", path);
+		return NULL;
+	}
+
+	return filenames;
+}
+
+/*
+ *	pgfnames_cleanup
+ *
+ *	deallocate memory used for filenames
+ */
+void
+pgut_pgfnames_cleanup(char **filenames)
+{
+	char	  **fn;
+
+	for (fn = filenames; *fn; fn++)
+		pfree(*fn);
+
+	pfree(filenames);
+}
+
+/* Shamelessly stolen from commom/rmtree.c */
+bool
+pgut_rmtree(const char *path, bool rmtopdir, bool strict)
+{
+	bool		result = true;
+	char		pathbuf[MAXPGPATH];
+	char	  **filenames;
+	char	  **filename;
+	struct stat statbuf;
+
+	/*
+	 * we copy all the names out of the directory before we start modifying
+	 * it.
+	 */
+	filenames = pgut_pgfnames(path, strict);
+
+	if (filenames == NULL)
+		return false;
+
+	/* now we have the names we can start removing things */
+	for (filename = filenames; *filename; filename++)
+	{
+		snprintf(pathbuf, MAXPGPATH, "%s/%s", path, *filename);
+
+		if (lstat(pathbuf, &statbuf) != 0)
+		{
+			elog(strict ? ERROR : WARNING, "could not stat file or directory \"%s\": %m", pathbuf);
+			result = false;
+			break;
+		}
+
+		if (S_ISDIR(statbuf.st_mode))
+		{
+			/* call ourselves recursively for a directory */
+			if (!pgut_rmtree(pathbuf, true, strict))
+			{
+				result = false;
+				break;
+			}
+		}
+		else
+		{
+			if (unlink(pathbuf) != 0)
+			{
+				elog(strict ? ERROR : WARNING, "could not remove file or directory \"%s\": %m", pathbuf);
+				result = false;
+				break;
+			}
+		}
+	}
+
+	if (rmtopdir)
+	{
+		if (rmdir(path) != 0)
+		{
+			elog(strict ? ERROR : WARNING, "could not remove file or directory \"%s\": %m", path);
+			result = false;
+		}
+	}
+
+	pgut_pgfnames_cleanup(filenames);
+
+	return result;
 }

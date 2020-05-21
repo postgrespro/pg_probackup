@@ -1038,6 +1038,8 @@ extern int fio_send_file(const char *from_fullpath, const char *to_fullpath, FIL
 extern void fio_list_dir(parray *files, const char *root, bool exclude, bool follow_symlink,
 						 bool add_root, bool backup_logs, int external_dir_num);
 
+extern bool pgut_rmtree(const char *path, bool rmtopdir, bool strict);
+
 /* return codes for fio_send_pages() and fio_send_file() */
 #define SEND_OK       (0)
 #define FILE_MISSING (-1)

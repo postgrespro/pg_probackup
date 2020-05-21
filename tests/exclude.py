@@ -153,3 +153,85 @@ class ExcludeTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_exclude_log_dir(self):
+        """
+        check that by default 'log' and 'pg_log' directories are not backed up
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'logging_collector': 'on',
+                'log_filename': 'postgresql.log'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.slow_start()
+
+        self.backup_node(
+            backup_dir, 'node', node,
+            backup_type='full', options=['--stream'])
+
+        log_dir = node.safe_psql(
+            'postgres',
+            'show log_directory').rstrip()
+
+        node.cleanup()
+
+        self.restore_node(
+            backup_dir, 'node', node, options=["-j", "4"])
+
+        # check that PGDATA/log or PGDATA/pg_log do not exists
+        path = os.path.join(node.data_dir, log_dir)
+        log_file = os.path.join(path, 'postgresql.log')
+        self.assertTrue(os.path.exists(path))
+        self.assertFalse(os.path.exists(log_file))
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_exclude_log_dir_1(self):
+        """
+        check that "--backup-pg-log" works correctly
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'logging_collector': 'on',
+                'log_filename': 'postgresql.log'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.slow_start()
+
+        log_dir = node.safe_psql(
+            'postgres',
+            'show log_directory').rstrip()
+
+        self.backup_node(
+            backup_dir, 'node', node,
+            backup_type='full', options=['--stream', '--backup-pg-log'])
+
+        node.cleanup()
+
+        self.restore_node(
+            backup_dir, 'node', node, options=["-j", "4"])
+
+        # check that PGDATA/log or PGDATA/pg_log do not exists
+        path = os.path.join(node.data_dir, log_dir)
+        log_file = os.path.join(path, 'postgresql.log')
+        self.assertTrue(os.path.exists(path))
+        self.assertTrue(os.path.exists(log_file))
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
