@@ -1,4 +1,5 @@
 [![Build Status](https://travis-ci.com/postgrespro/pg_probackup.svg?branch=master)](https://travis-ci.com/postgrespro/pg_probackup)
+[![GitHub release](https://img.shields.io/github/v/release/postgrespro/pg_probackup?include_prereleases)](https://github.com/postgrespro/pg_probackup/releases/latest)
 
 # pg_probackup
 
@@ -49,10 +50,11 @@ Regardless of the chosen backup type, all backups taken with `pg_probackup` supp
 `pg_probackup` currently has the following limitations:
 * The server from which the backup was taken and the restored server must be compatible by the [block_size](https://postgrespro.com/docs/postgresql/current/runtime-config-preset#GUC-BLOCK-SIZE) and [wal_block_size](https://postgrespro.com/docs/postgresql/current/runtime-config-preset#GUC-WAL-BLOCK-SIZE) parameters and have the same major release number.
 * Remote backup via ssh on Windows currently is not supported.
+* When running remote operations via ssh, remote and local pg_probackup versions must be the same.
 
 ## Current release
 
-[2.3.1](https://github.com/postgrespro/pg_probackup/releases/tag/2.3.1)
+[2.3.3](https://github.com/postgrespro/pg_probackup/releases/tag/2.3.3)
 
 ## Documentation
 
@@ -60,7 +62,7 @@ Documentation can be found at [github](https://postgrespro.github.io/pg_probacku
 
 ## Installation and Setup
 ### Windows Installation
-Installers are available in release **assets**. [Latests](https://github.com/postgrespro/pg_probackup/releases/latest).
+Installers are available in release **assets**. [Latests](https://github.com/postgrespro/pg_probackup/releases/2.3.3).
 
 ### Linux Installation
 #### pg_probackup for vanilla PostgreSQL

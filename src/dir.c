@@ -124,8 +124,8 @@ typedef struct TablespaceCreatedList
 static int pgCompareString(const void *str1, const void *str2);
 
 static char dir_check_file(pgFile *file);
-static void dir_list_file_internal(parray *files, pgFile *parent, bool exclude,
-								   bool follow_symlink,
+static void dir_list_file_internal(parray *files, pgFile *parent, const char *parent_dir,
+								   bool exclude, bool follow_symlink,
 								   int external_dir_num, fio_location location);
 static void opt_path_map(ConfigOption *opt, const char *arg,
 						 TablespaceList *list, const char *type);
@@ -178,7 +178,7 @@ pgFileNew(const char *path, const char *rel_path, bool follow_symlink,
 			strerror(errno));
 	}
 
-	file = pgFileInit(path, rel_path);
+	file = pgFileInit(rel_path);
 	file->size = st.st_size;
 	file->mode = st.st_mode;
 	file->mtime = st.st_mtime;
@@ -188,7 +188,7 @@ pgFileNew(const char *path, const char *rel_path, bool follow_symlink,
 }
 
 pgFile *
-pgFileInit(const char *path, const char *rel_path)
+pgFileInit(const char *rel_path)
 {
 	pgFile	   *file;
 	char	   *file_name = NULL;
@@ -196,20 +196,14 @@ pgFileInit(const char *path, const char *rel_path)
 	file = (pgFile *) pgut_malloc(sizeof(pgFile));
 	MemSet(file, 0, sizeof(pgFile));
 
-	file->forkName = pgut_malloc(MAXPGPATH);
-	file->forkName[0] = '\0';
-
-	file->path = pgut_strdup(path);
-	canonicalize_path(file->path);
-
 	file->rel_path = pgut_strdup(rel_path);
 	canonicalize_path(file->rel_path);
 
 	/* Get file name from the path */
-	file_name = pgut_strdup(last_dir_separator(file->path));
+	file_name = last_dir_separator(file->rel_path);
 
 	if (file_name == NULL)
-		file->name = file->path;
+		file->name = file->rel_path;
 	else
 	{
 		file_name++;
@@ -395,25 +389,10 @@ pgFileFree(void *file)
 
 	file_ptr = (pgFile *) file;
 
-	if (file_ptr->linked)
-		free(file_ptr->linked);
-
-	if (file_ptr->forkName)
-		free(file_ptr->forkName);
-
-	pfree(file_ptr->path);
+	pfree(file_ptr->linked);
 	pfree(file_ptr->rel_path);
+
 	pfree(file);
-}
-
-/* Compare two pgFile with their path in ascending order of ASCII code. */
-int
-pgFileComparePath(const void *f1, const void *f2)
-{
-	pgFile *f1p = *(pgFile **)f1;
-	pgFile *f2p = *(pgFile **)f2;
-
-	return strcmp(f1p->path, f2p->path);
 }
 
 /* Compare two pgFile with their path in ascending order of ASCII code. */
@@ -434,30 +413,6 @@ pgFileCompareName(const void *f1, const void *f2)
 	pgFile *f2p = *(pgFile **)f2;
 
 	return strcmp(f1p->name, f2p->name);
-}
-
-/*
- * Compare two pgFile with their path and external_dir_num
- * in ascending order of ASCII code.
- */
-int
-pgFileComparePathWithExternal(const void *f1, const void *f2)
-{
-	pgFile *f1p = *(pgFile **)f1;
-	pgFile *f2p = *(pgFile **)f2;
-	int 		res;
-
-	res = strcmp(f1p->path, f2p->path);
-	if (!res)
-	{
-		if (f1p->external_dir_num > f2p->external_dir_num)
-			return 1;
-		else if (f1p->external_dir_num < f2p->external_dir_num)
-			return -1;
-		else
-			return 0;
-	}
-	return res;
 }
 
 /*
@@ -482,23 +437,6 @@ pgFileCompareRelPathWithExternal(const void *f1, const void *f2)
 			return 0;
 	}
 	return res;
-}
-
-/* Compare two pgFile with their path in descending order of ASCII code. */
-int
-pgFileComparePathDesc(const void *f1, const void *f2)
-{
-	return -pgFileComparePath(f1, f2);
-}
-
-/*
- * Compare two pgFile with their path and external_dir_num
- * in descending order of ASCII code.
- */
-int
-pgFileComparePathWithExternalDesc(const void *f1, const void *f2)
-{
-	return -pgFileComparePathWithExternal(f1, f2);
 }
 
 /*
@@ -593,15 +531,15 @@ dir_list_file(parray *files, const char *root, bool exclude, bool follow_symlink
 	{
 		if (external_dir_num > 0)
 			elog(ERROR, " --external-dirs option \"%s\": directory or symbolic link expected",
-				 file->path);
+					root);
 		else
-			elog(WARNING, "Skip \"%s\": unexpected file format", file->path);
+			elog(WARNING, "Skip \"%s\": unexpected file format", root);
 		return;
 	}
 	if (add_root)
 		parray_append(files, file);
 
-	dir_list_file_internal(files, file, exclude, follow_symlink,
+	dir_list_file_internal(files, file, root, exclude, follow_symlink,
 						   external_dir_num, location);
 
 	if (!add_root)
@@ -661,7 +599,7 @@ dir_check_file(pgFile *file)
 	 * If the directory name is in the exclude list, do not list the
 	 * contents.
 	 */
-	else if (S_ISDIR(file->mode) && !in_tablespace)
+	else if (S_ISDIR(file->mode) && !in_tablespace && file->external_dir_num == 0)
 	{
 		/*
 		 * If the item in the exclude list starts with '/', compare to
@@ -670,20 +608,10 @@ dir_check_file(pgFile *file)
 		 */
 		for (i = 0; pgdata_exclude_dir[i]; i++)
 		{
-			/* Full-path exclude*/
-			if (pgdata_exclude_dir[i][0] == '/')
+			/* relative path exclude */
+			if (strcmp(file->rel_path, pgdata_exclude_dir[i]) == 0)
 			{
-				if (strcmp(file->path, pgdata_exclude_dir[i]) == 0)
-				{
-					elog(VERBOSE, "Excluding directory content: %s",
-						 file->name);
-					return CHECK_EXCLUDE_FALSE;
-				}
-			}
-			else if (strcmp(file->name, pgdata_exclude_dir[i]) == 0)
-			{
-				elog(VERBOSE, "Excluding directory content: %s",
-					 file->name);
+				elog(VERBOSE, "Excluding directory content: %s", file->rel_path);
 				return CHECK_EXCLUDE_FALSE;
 			}
 		}
@@ -780,10 +708,23 @@ dir_check_file(pgFile *file)
 			if (fork_name)
 			{
 				/* Auxiliary fork of the relfile */
-				sscanf(file->name, "%u_%s", &(file->relOid), file->forkName);
+				if (strcmp(fork_name, "vm") == 0)
+					file->forkName = VM;
+
+				else if (strcmp(fork_name, "fsm") == 0)
+					file->forkName = FSM;
+
+				else if (strcmp(fork_name, "cfm") == 0)
+					file->forkName = CFM;
+
+				else if (strcmp(fork_name, "init") == 0)
+					file->forkName = INIT;
+
+				else if (strcmp(fork_name, "ptrack") == 0)
+					file->forkName = PTRACK;
 
 				/* Do not backup ptrack files */
-				if (strcmp(file->forkName, "ptrack") == 0)
+				if (file->forkName == PTRACK)
 					return CHECK_FALSE;
 			}
 			else
@@ -820,18 +761,18 @@ dir_check_file(pgFile *file)
  * pgdata_exclude_dir.
  */
 static void
-dir_list_file_internal(parray *files, pgFile *parent, bool exclude,
-					   bool follow_symlink,
+dir_list_file_internal(parray *files, pgFile *parent, const char *parent_dir,
+					   bool exclude, bool follow_symlink,
 					   int external_dir_num, fio_location location)
 {
 	DIR			  *dir;
 	struct dirent *dent;
 
 	if (!S_ISDIR(parent->mode))
-		elog(ERROR, "\"%s\" is not a directory", parent->path);
+		elog(ERROR, "\"%s\" is not a directory", parent_dir);
 
 	/* Open directory and list contents */
-	dir = fio_opendir(parent->path, location);
+	dir = fio_opendir(parent_dir, location);
 	if (dir == NULL)
 	{
 		if (errno == ENOENT)
@@ -840,7 +781,7 @@ dir_list_file_internal(parray *files, pgFile *parent, bool exclude,
 			return;
 		}
 		elog(ERROR, "Cannot open directory \"%s\": %s",
-			 parent->path, strerror(errno));
+				parent_dir, strerror(errno));
 	}
 
 	errno = 0;
@@ -851,7 +792,7 @@ dir_list_file_internal(parray *files, pgFile *parent, bool exclude,
 		char		rel_child[MAXPGPATH];
 		char		check_res;
 
-		join_path_components(child, parent->path, dent->d_name);
+		join_path_components(child, parent_dir, dent->d_name);
 		join_path_components(rel_child, parent->rel_path, dent->d_name);
 
 		file = pgFileNew(child, rel_child, follow_symlink, external_dir_num,
@@ -870,7 +811,7 @@ dir_list_file_internal(parray *files, pgFile *parent, bool exclude,
 		/* skip hidden files and directories */
 		if (file->name[0] == '.')
 		{
-			elog(WARNING, "Skip hidden file: '%s'", file->path);
+			elog(WARNING, "Skip hidden file: '%s'", child);
 			pgFileFree(file);
 			continue;
 		}
@@ -881,7 +822,7 @@ dir_list_file_internal(parray *files, pgFile *parent, bool exclude,
 		 */
 		if (!S_ISDIR(file->mode) && !S_ISREG(file->mode))
 		{
-			elog(WARNING, "Skip '%s': unexpected file format", file->path);
+			elog(WARNING, "Skip '%s': unexpected file format", child);
 			pgFileFree(file);
 			continue;
 		}
@@ -910,7 +851,7 @@ dir_list_file_internal(parray *files, pgFile *parent, bool exclude,
 		 * recursively.
 		 */
 		if (S_ISDIR(file->mode))
-			dir_list_file_internal(files, file, exclude, follow_symlink,
+			dir_list_file_internal(files, file, child, exclude, follow_symlink,
 								   external_dir_num, location);
 	}
 
@@ -919,7 +860,7 @@ dir_list_file_internal(parray *files, pgFile *parent, bool exclude,
 		int			errno_tmp = errno;
 		fio_closedir(dir);
 		elog(ERROR, "Cannot read directory \"%s\": %s",
-			 parent->path, strerror(errno_tmp));
+				parent_dir, strerror(errno_tmp));
 	}
 	fio_closedir(dir);
 }
@@ -1201,16 +1142,10 @@ read_tablespace_map(parray *files, const char *backup_dir)
 		file = pgut_new(pgFile);
 		memset(file, 0, sizeof(pgFile));
 
-		file->path = pgut_malloc(strlen(link_name) + 1);
-		strcpy(file->path, link_name);
-
-		file->name = file->path;
-
-		file->linked = pgut_malloc(strlen(path) + 1);
-		strcpy(file->linked, path);
-
+		/* follow the convention for pgFileFree */
+		file->name = pgut_strdup(link_name);
+		file->linked = pgut_strdup(path);
 		canonicalize_path(file->linked);
-		canonicalize_path(file->path);
 
 		parray_append(files, file);
 	}
@@ -1512,12 +1447,13 @@ bad_format:
  */
 parray *
 dir_read_file_list(const char *root, const char *external_prefix,
-				   const char *file_txt, fio_location location)
+				   const char *file_txt, fio_location location, pg_crc32 expected_crc)
 {
-	FILE   *fp;
-	parray *files;
-	char	buf[MAXPGPATH * 2];
-	char    stdio_buf[STDIO_BUFSIZE];
+	FILE    *fp;
+	parray  *files;
+	char     buf[BLCKSZ];
+	char     stdio_buf[STDIO_BUFSIZE];
+	pg_crc32 content_crc = 0;
 
 	fp = fio_open_stream(file_txt, location);
 	if (fp == NULL)
@@ -1529,10 +1465,11 @@ dir_read_file_list(const char *root, const char *external_prefix,
 
 	files = parray_new();
 
+	INIT_FILE_CRC32(true, content_crc);
+
 	while (fgets(buf, lengthof(buf), fp))
 	{
 		char		path[MAXPGPATH];
-		char		filepath[MAXPGPATH];
 		char		linked[MAXPGPATH];
 		char		compress_alg_string[MAXPGPATH];
 		int64		write_size,
@@ -1546,6 +1483,8 @@ dir_read_file_list(const char *root, const char *external_prefix,
 					dbOid;		/* used for partial restore */
 		pgFile	   *file;
 
+		COMP_FILE_CRC32(true, content_crc, buf, strlen(buf));
+
 		get_control_value(buf, "path", path, NULL, true);
 		get_control_value(buf, "size", NULL, &write_size, true);
 		get_control_value(buf, "mode", NULL, &mode, true);
@@ -1556,20 +1495,7 @@ dir_read_file_list(const char *root, const char *external_prefix,
 		get_control_value(buf, "external_dir_num", NULL, &external_dir_num, false);
 		get_control_value(buf, "dbOid", NULL, &dbOid, false);
 
-		if (external_dir_num && external_prefix)
-		{
-			char temp[MAXPGPATH];
-
-			makeExternalDirPathByNum(temp, external_prefix, external_dir_num);
-			join_path_components(filepath, temp, path);
-		}
-		else if (root)
-			join_path_components(filepath, root, path);
-		else
-			strcpy(filepath, path);
-
-		file = pgFileInit(filepath, path);
-
+		file = pgFileInit(path);
 		file->write_size = (int64) write_size;
 		file->mode = (mode_t) mode;
 		file->is_datafile = is_datafile ? true : false;
@@ -1598,10 +1524,21 @@ dir_read_file_list(const char *root, const char *external_prefix,
 		parray_append(files, file);
 	}
 
+	FIN_FILE_CRC32(true, content_crc);
+
 	if (ferror(fp))
 		elog(ERROR, "Failed to read from file: \"%s\"", file_txt);
 
 	fio_close_stream(fp);
+
+	if (expected_crc != 0 &&
+		expected_crc != content_crc)
+	{
+		elog(WARNING, "Invalid CRC of backup control file '%s': %u. Expected: %u",
+				file_txt, content_crc, expected_crc);
+		return NULL;
+	}
+
 	return files;
 }
 
@@ -1795,12 +1732,10 @@ write_database_map(pgBackup *backup, parray *database_map, parray *backup_files_
 	/* Add metadata to backup_content.control */
 	file = pgFileNew(database_map_path, DATABASE_MAP, true, 0,
 								 FIO_BACKUP_HOST);
-	pfree(file->path);
-	file->path = pgut_strdup(DATABASE_MAP);
 	file->crc = pgFileGetCRC(database_map_path, true, false);
-
 	file->write_size = file->size;
 	file->uncompressed_size = file->read_size;
+
 	parray_append(backup_files_list, file);
 }
 

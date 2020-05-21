@@ -753,7 +753,7 @@ delete_backup_files(pgBackup *backup)
 	dir_list_file(files, backup->root_dir, false, true, true, 0, FIO_BACKUP_HOST);
 
 	/* delete leaf node first */
-	parray_qsort(files, pgFileComparePathDesc);
+	parray_qsort(files, pgFileCompareRelPathWithExternalDesc);
 	num_files = parray_num(files);
 	for (i = 0; i < num_files; i++)
 	{
@@ -923,31 +923,35 @@ delete_walfiles_in_tli(XLogRecPtr keep_lsn, timelineInfo *tlinfo,
 		 */
 		if (purge_all || wal_file->segno < OldestToKeepSegNo)
 		{
+			char wal_fullpath[MAXPGPATH];
+
+			join_path_components(wal_fullpath, instance_config.arclog_path, wal_file->file.name);
+
 			/* save segment from purging */
 			if (instance_config.wal_depth >= 0 && wal_file->keep)
 			{
-				elog(VERBOSE, "Retain WAL segment \"%s\"", wal_file->file.path);
+				elog(VERBOSE, "Retain WAL segment \"%s\"", wal_fullpath);
 				continue;
 			}
 
 			/* unlink segment */
-			if (fio_unlink(wal_file->file.path, FIO_BACKUP_HOST) < 0)
+			if (fio_unlink(wal_fullpath, FIO_BACKUP_HOST) < 0)
 			{
 				/* Missing file is not considered as error condition */
 				if (errno != ENOENT)
 					elog(ERROR, "Could not remove file \"%s\": %s",
-								 wal_file->file.path, strerror(errno));
+							wal_fullpath, strerror(errno));
 			}
 			else
 			{
 				if (wal_file->type == SEGMENT)
-					elog(VERBOSE, "Removed WAL segment \"%s\"", wal_file->file.path);
+					elog(VERBOSE, "Removed WAL segment \"%s\"", wal_fullpath);
 				else if (wal_file->type == TEMP_SEGMENT)
-					elog(VERBOSE, "Removed temp WAL segment \"%s\"", wal_file->file.path);
+					elog(VERBOSE, "Removed temp WAL segment \"%s\"", wal_fullpath);
 				else if (wal_file->type == PARTIAL_SEGMENT)
-					elog(VERBOSE, "Removed partial WAL segment \"%s\"", wal_file->file.path);
+					elog(VERBOSE, "Removed partial WAL segment \"%s\"", wal_fullpath);
 				else if (wal_file->type == BACKUP_HISTORY_FILE)
-					elog(VERBOSE, "Removed backup history file \"%s\"", wal_file->file.path);
+					elog(VERBOSE, "Removed backup history file \"%s\"", wal_fullpath);
 			}
 
 			wal_deleted = true;
@@ -961,7 +965,6 @@ int
 do_delete_instance(void)
 {
 	parray		*backup_list;
-	parray		*xlog_files_list;
 	int 		i;
 	int 		rc;
 	char		instance_config_path[MAXPGPATH];
@@ -983,24 +986,7 @@ do_delete_instance(void)
 	parray_free(backup_list);
 
 	/* Delete all wal files. */
-	xlog_files_list = parray_new();
-	dir_list_file(xlog_files_list, arclog_path, false, false, false, 0, FIO_BACKUP_HOST);
-
-	for (i = 0; i < parray_num(xlog_files_list); i++)
-	{
-		pgFile	   *wal_file = (pgFile *) parray_get(xlog_files_list, i);
-		if (S_ISREG(wal_file->mode))
-		{
-			rc = unlink(wal_file->path);
-			if (rc != 0)
-				elog(WARNING, "Failed to remove file \"%s\": %s",
-					 wal_file->path, strerror(errno));
-		}
-	}
-
-	/* Cleanup */
-	parray_walk(xlog_files_list, pgFileFree);
-	parray_free(xlog_files_list);
+	pgut_rmtree(arclog_path, false, true);
 
 	/* Delete backup instance config file */
 	join_path_components(instance_config_path, backup_instance_path, BACKUP_CATALOG_CONF_FILE);

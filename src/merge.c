@@ -565,13 +565,9 @@ merge_chain(parray *parent_chain, pgBackup *full_backup, pgBackup *dest_backup)
 	 */
 	for (i = parray_num(parent_chain) - 1; i >= 0; i--)
 	{
-		char		control_file[MAXPGPATH];
-
 		pgBackup   *backup = (pgBackup *) parray_get(parent_chain, i);
 
-		join_path_components(control_file, backup->root_dir, DATABASE_FILE_LIST);
-		backup->files = dir_read_file_list(NULL, NULL, control_file, FIO_BACKUP_HOST);
-
+		backup->files = get_backup_filelist(backup, true);
 		parray_qsort(backup->files, pgFileCompareRelPathWithExternal);
 
 		/* Set MERGING status for every member of the chain */
@@ -729,7 +725,7 @@ merge_chain(parray *parent_chain, pgBackup *full_backup, pgBackup *dest_backup)
 
 	parray_qsort(result_filelist, pgFileCompareRelPathWithExternal);
 
-	write_backup_filelist(full_backup, result_filelist, full_database_dir, NULL);
+	write_backup_filelist(full_backup, result_filelist, full_database_dir, NULL, true);
 	write_backup(full_backup, true);
 
 	/* Delete FULL backup files, that do not exists in destination backup
@@ -893,7 +889,7 @@ merge_files(void *arg)
 		if (!pg_atomic_test_set_flag(&dest_file->lock))
 			continue;
 
-		tmp_file = pgFileInit(dest_file->rel_path, dest_file->rel_path);
+		tmp_file = pgFileInit(dest_file->rel_path);
 		tmp_file->mode = dest_file->mode;
 		tmp_file->is_datafile = dest_file->is_datafile;
 		tmp_file->is_cfs = dest_file->is_cfs;
@@ -1060,7 +1056,7 @@ remove_dir_with_files(const char *path)
 	char 		full_path[MAXPGPATH];
 
 	dir_list_file(files, path, true, true, true, 0, FIO_LOCAL_HOST);
-	parray_qsort(files, pgFileComparePathDesc);
+	parray_qsort(files, pgFileCompareRelPathWithExternalDesc);
 	for (i = 0; i < parray_num(files); i++)
 	{
 		pgFile	   *file = (pgFile *) parray_get(files, i);

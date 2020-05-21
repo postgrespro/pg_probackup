@@ -118,6 +118,15 @@ typedef enum CompressAlg
 	ZLIB_COMPRESS,
 } CompressAlg;
 
+typedef enum ForkName
+{
+	VM,
+	FSM,
+	CFM,
+	INIT,
+	PTRACK
+} ForkName;
+
 #define INIT_FILE_CRC32(use_crc32c, crc) \
 do { \
 	if (use_crc32c) \
@@ -154,21 +163,20 @@ typedef struct pgFile
 	int64	write_size;		/* size of the backed-up file. BYTES_INVALID means
 							   that the file existed but was not backed up
 							   because not modified since last backup. */
-	int64	uncompressed_size;	/* size of the backed-up file before compression
+	size_t	uncompressed_size;	/* size of the backed-up file before compression
 								 * and adding block headers.
 								 */
 							/* we need int64 here to store '-1' value */
 	pg_crc32 crc;			/* CRC value of the file, regular file only */
 	char   *linked;			/* path of the linked file */
 	bool	is_datafile;	/* true if the file is PostgreSQL data file */
-	char   *path;			/* absolute path of the file */
 	char   *rel_path;		/* relative path of the file */
 	Oid		tblspcOid;		/* tblspcOid extracted from path, if applicable */
 	Oid		dbOid;			/* dbOid extracted from path, if applicable */
 	Oid		relOid;			/* relOid extracted from path, if applicable */
-	char   *forkName;		/* forkName extracted from path, if applicable */
+	ForkName   forkName;	/* forkName extracted from path, if applicable */
 	int		segno;			/* Segment number for ptrack */
-	int		n_blocks;		/* size of the file in blocks, readed during DELTA backup */
+	BlockNumber	n_blocks;   /* size of the data file in blocks */
 	bool	is_cfs;			/* Flag to distinguish files compressed by CFS*/
 	bool	is_database;
 	int		external_dir_num;	/* Number of external directory. 0 if not external */
@@ -229,8 +237,8 @@ typedef enum ShowFormat
 #define BYTES_INVALID		(-1) /* file didn`t changed since previous backup, DELTA backup do not rely on it */
 #define FILE_NOT_FOUND		(-2) /* file disappeared during backup */
 #define BLOCKNUM_INVALID	(-1)
-#define PROGRAM_VERSION	"2.3.1"
-#define AGENT_PROTOCOL_VERSION 20301
+#define PROGRAM_VERSION	"2.3.3"
+#define AGENT_PROTOCOL_VERSION 20303
 
 
 typedef struct ConnectionOptions
@@ -391,9 +399,13 @@ struct pgBackup
 										 * separated by ':' */
 	char			*root_dir;		/* Full path for root backup directory:
 									   backup_path/instance_name/backup_id */
+	char			*database_dir;	/* Full path to directory with data files:
+									   backup_path/instance_name/backup_id/database */
 	parray			*files;			/* list of files belonging to this backup
 									 * must be populated explicitly */
 	char			*note;
+
+	pg_crc32         content_crc;
 };
 
 /* Recovery target for restore and validate subcommands */
@@ -708,7 +720,7 @@ extern pgRecoveryTarget *parseRecoveryTargetOptions(
 extern parray *get_dbOid_exclude_list(pgBackup *backup, parray *datname_list,
 										PartialRestoreType partial_restore_type);
 
-extern parray *get_backup_filelist(pgBackup *backup);
+extern parray *get_backup_filelist(pgBackup *backup, bool strict);
 extern parray *read_timeline_history(const char *arclog_path, TimeLineID targetTLI);
 
 /* in merge.c */
@@ -803,7 +815,7 @@ extern void pin_backup(pgBackup	*target_backup,
 extern void add_note(pgBackup *target_backup, char *note);
 extern void pgBackupWriteControl(FILE *out, pgBackup *backup);
 extern void write_backup_filelist(pgBackup *backup, parray *files,
-								  const char *root, parray *external_list);
+								  const char *root, parray *external_list, bool sync);
 
 extern void pgBackupGetPath(const pgBackup *backup, char *path, size_t len,
 							const char *subdir);
@@ -867,7 +879,7 @@ extern void db_map_entry_free(void *map);
 extern void print_file_list(FILE *out, const parray *files, const char *root,
 							const char *external_prefix, parray *external_list);
 extern parray *dir_read_file_list(const char *root, const char *external_prefix,
-								  const char *file_txt, fio_location location);
+								  const char *file_txt, fio_location location, pg_crc32 expected_crc);
 extern parray *make_external_directory_list(const char *colon_separated_dirs,
 											bool remap);
 extern void free_dir_list(parray *list);
@@ -884,7 +896,7 @@ extern size_t pgFileSize(const char *path);
 extern pgFile *pgFileNew(const char *path, const char *rel_path,
 						 bool follow_symlink, int external_dir_num,
 						 fio_location location);
-extern pgFile *pgFileInit(const char *path, const char *rel_path);
+extern pgFile *pgFileInit(const char *rel_path);
 extern void pgFileDelete(pgFile *file, const char *full_path);
 
 extern void pgFileFree(void *file);
@@ -892,14 +904,10 @@ extern void pgFileFree(void *file);
 extern pg_crc32 pgFileGetCRC(const char *file_path, bool missing_ok, bool use_crc32c);
 extern pg_crc32 pgFileGetCRCgz(const char *file_path, bool missing_ok, bool use_crc32c);
 
-extern int pgFileCompareName(const void *f1, const void *f2);
-extern int pgFileComparePath(const void *f1, const void *f2);
 extern int pgFileMapComparePath(const void *f1, const void *f2);
-extern int pgFileComparePathWithExternal(const void *f1, const void *f2);
+extern int pgFileCompareName(const void *f1, const void *f2);
 extern int pgFileCompareRelPathWithExternal(const void *f1, const void *f2);
 extern int pgFileCompareRelPathWithExternalDesc(const void *f1, const void *f2);
-extern int pgFileComparePathDesc(const void *f1, const void *f2);
-extern int pgFileComparePathWithExternalDesc(const void *f1, const void *f2);
 extern int pgFileCompareLinked(const void *f1, const void *f2);
 extern int pgFileCompareSize(const void *f1, const void *f2);
 extern int pgCompareOid(const void *f1, const void *f2);
@@ -934,7 +942,7 @@ extern void restore_non_data_file_internal(FILE *in, FILE *out, pgFile *file,
 extern bool create_empty_file(fio_location from_location, const char *to_root,
 							  fio_location to_location, pgFile *file);
 
-extern bool check_file_pages(pgFile *file, XLogRecPtr stop_lsn,
+extern bool check_file_pages(pgFile *file, const char *fullpath, XLogRecPtr stop_lsn,
 							 uint32 checksum_version, uint32 backup_version);
 /* parsexlog.c */
 extern bool extractPageMap(const char *archivedir, uint32 wal_seg_size,
@@ -998,11 +1006,12 @@ extern void parse_filelist_filenames(parray *files, const char *root);
 /* in ptrack.c */
 extern void make_pagemap_from_ptrack_1(parray* files, PGconn* backup_conn);
 extern void make_pagemap_from_ptrack_2(parray* files, PGconn* backup_conn,
-										const char *ptrack_schema, XLogRecPtr lsn);
+									   const char *ptrack_schema,
+									   int ptrack_version_num,
+									   XLogRecPtr lsn);
 extern void pg_ptrack_clear(PGconn *backup_conn, int ptrack_version_num);
 extern void get_ptrack_version(PGconn *backup_conn, PGNodeInfo *nodeInfo);
-extern bool pg_ptrack_enable(PGconn *backup_conn);
-extern bool pg_ptrack_enable2(PGconn *backup_conn);
+extern bool pg_ptrack_enable(PGconn *backup_conn, int ptrack_version_num);
 extern bool pg_ptrack_get_and_clear_db(Oid dbOid, Oid tblspcOid, PGconn *backup_conn);
 extern char *pg_ptrack_get_and_clear(Oid tablespace_oid,
 									 Oid db_oid,
@@ -1010,7 +1019,8 @@ extern char *pg_ptrack_get_and_clear(Oid tablespace_oid,
 									 size_t *result_size,
 									 PGconn *backup_conn);
 extern XLogRecPtr get_last_ptrack_lsn(PGconn *backup_conn, PGNodeInfo *nodeInfo);
-extern parray * pg_ptrack_get_pagemapset(PGconn *backup_conn, const char *ptrack_schema, XLogRecPtr lsn);
+extern parray * pg_ptrack_get_pagemapset(PGconn *backup_conn, const char *ptrack_schema,
+										 int ptrack_version_num, XLogRecPtr lsn);
 
 /* FIO */
 extern int fio_send_pages(FILE* in, FILE* out, pgFile *file, XLogRecPtr horizonLsn,
@@ -1020,6 +1030,8 @@ extern int fio_send_pages(FILE* in, FILE* out, pgFile *file, XLogRecPtr horizonL
 #define OUT_BUF_SIZE (512 * 1024)
 extern int fio_send_file_gz(const char *from_fullpath, const char *to_fullpath, FILE* out, int thread_num);
 extern int fio_send_file(const char *from_fullpath, const char *to_fullpath, FILE* out, int thread_num);
+
+extern bool pgut_rmtree(const char *path, bool rmtopdir, bool strict);
 
 /* return codes for fio_send_pages() and fio_send_file() */
 #define SEND_OK       (0)

@@ -185,6 +185,19 @@ static ssize_t fio_write_all(int fd, void const* buf, size_t size)
 	return offs;
 }
 
+/* Get version of remote agent */
+int fio_get_agent_version(void)
+{
+	fio_header hdr;
+	hdr.cop = FIO_AGENT_VERSION;
+	hdr.size = 0;
+
+	IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
+	IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
+
+	return hdr.arg;
+}
+
 /* Open input stream. Remote file is fetched to the in-memory buffer and then accessed through Linux fmemopen */
 FILE* fio_open_stream(char const* path, fio_location location)
 {
@@ -249,7 +262,8 @@ DIR* fio_opendir(char const* path, fio_location location)
 		mask = fio_fdset;
 		for (i = 0; (mask & 1) != 0; i++, mask >>= 1);
 		if (i == FIO_FDMAX) {
-			return NULL;
+			elog(ERROR, "Descriptor pool for remote files is exhausted, "
+					"probably too many remote directories are opened");
 		}
 		hdr.cop = FIO_OPENDIR;
 		hdr.handle = i;
@@ -264,6 +278,7 @@ DIR* fio_opendir(char const* path, fio_location location)
 		if (hdr.arg != 0)
 		{
 			errno = hdr.arg;
+			fio_fdset &= ~(1 << hdr.handle);
 			return NULL;
 		}
 		dir = (DIR*)(size_t)(i + 1);
@@ -335,9 +350,10 @@ int fio_open(char const* path, int mode, fio_location location)
 
 		mask = fio_fdset;
 		for (i = 0; (mask & 1) != 0; i++, mask >>= 1);
-		if (i == FIO_FDMAX) {
-			return -1;
-		}
+		if (i == FIO_FDMAX)
+			elog(ERROR, "Descriptor pool for remote files is exhausted, "
+					"probably too many remote files are opened");
+
 		hdr.cop = FIO_OPEN;
 		hdr.handle = i;
 		hdr.size = strlen(path) + 1;
@@ -355,6 +371,7 @@ int fio_open(char const* path, int mode, fio_location location)
 		if (hdr.arg != 0)
 		{
 			errno = hdr.arg;
+			fio_fdset &= ~(1 << hdr.handle);
 			return -1;
 		}
 		fd = i | FIO_PIPE_MARKER;
@@ -725,44 +742,6 @@ ssize_t fio_read(int fd, void* buf, size_t size)
 	else
 	{
 		return read(fd, buf, size);
-	}
-}
-
-/* Get information about stdio file */
-int fio_ffstat(FILE* f, struct stat* st)
-{
-	return fio_is_remote_file(f)
-		? fio_fstat(fio_fileno(f), st)
-		: fio_fstat(fileno(f), st);
-}
-
-/* Get information about file descriptor */
-int fio_fstat(int fd, struct stat* st)
-{
-	if (fio_is_remote_fd(fd))
-	{
-		fio_header hdr;
-
-		hdr.cop = FIO_FSTAT;
-		hdr.handle = fd & ~FIO_PIPE_MARKER;
-		hdr.size = 0;
-
-		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
-
-		IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
-		Assert(hdr.cop == FIO_FSTAT);
-		IO_CHECK(fio_read_all(fio_stdin, st, sizeof(*st)), sizeof(*st));
-
-		if (hdr.arg != 0)
-		{
-			errno = hdr.arg;
-			return -1;
-		}
-		return 0;
-	}
-	else
-	{
-		return fstat(fd, st);
 	}
 }
 
@@ -2065,11 +2044,9 @@ void fio_communicate(int in, int out)
 			if (hdr.size != 0)
 				IO_CHECK(fio_write_all(out, buf, hdr.size),  hdr.size);
 			break;
-		  case FIO_FSTAT: /* Get information about opened file */
-			hdr.size = sizeof(st);
-			hdr.arg = fstat(fd[hdr.handle], &st) < 0 ? errno : 0;
+		  case FIO_AGENT_VERSION:
+			hdr.arg = AGENT_PROTOCOL_VERSION;
 			IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
-			IO_CHECK(fio_write_all(out, &st, sizeof(st)), sizeof(st));
 			break;
 		  case FIO_STAT: /* Get information about file with specified path */
 			hdr.size = sizeof(st);

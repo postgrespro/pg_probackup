@@ -1747,7 +1747,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         # Take FULL
         self.backup_node(backup_dir, 'node', node)
 
-        node.pgbench_init(scale=3)
+        node.pgbench_init(scale=5)
         # pgbench = node.pgbench(options=['-T', '20', '-c', '2'])
         # pgbench.wait()
 
@@ -1769,11 +1769,10 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             os.path.join(backup_dir, 'backups', 'node', backup_id),
             os.path.join(backup_dir, 'backups', 'node', new_id))
 
-        pgbench = node.pgbench(options=['-T', '3', '-c', '2', '--no-vacuum'])
+        pgbench = node.pgbench(options=['-T', '7', '-c', '1', '--no-vacuum'])
         pgbench.wait()
 
-        backup_id = self.backup_node(
-            backup_dir, 'node', node, backup_type='page')
+        backup_id = self.backup_node(backup_dir, 'node', node, backup_type='page')
         pgdata = self.pgdata_content(node.data_dir)
 
         node.cleanup()

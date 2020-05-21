@@ -149,7 +149,6 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync)
 	parray	   *external_dirs = NULL;
 	parray	   *database_map = NULL;
 
-	pgFile	   *pg_control = NULL;
 	PGconn	   *master_conn = NULL;
 	PGconn	   *pg_startbackup_conn = NULL;
 
@@ -192,7 +191,7 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync)
 		{
 			/* try to setup multi-timeline backup chain */
 			elog(WARNING, "Valid backup on current timeline %u is not found, "
-						"try to look up on previous timelines",
+						"trying to look up on previous timelines",
 						current.tli);
 
 			tli_list = catalog_get_timelines(&instance_config);
@@ -217,8 +216,6 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync)
 
 	if (prev_backup)
 	{
-		char		prev_backup_filelist_path[MAXPGPATH];
-
         if (parse_program_version(prev_backup->program_version) > parse_program_version(PROGRAM_VERSION))
             elog(ERROR, "pg_probackup binary version is %s, but backup %s version is %s. "
                         "pg_probackup do not guarantee to be forward compatible. "
@@ -227,10 +224,8 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync)
 
 		elog(INFO, "Parent backup: %s", base36enc(prev_backup->start_time));
 
-		join_path_components(prev_backup_filelist_path, prev_backup->root_dir,
-															DATABASE_FILE_LIST);
 		/* Files of previous backup needed by DELTA backup */
-		prev_backup_filelist = dir_read_file_list(NULL, NULL, prev_backup_filelist_path, FIO_BACKUP_HOST);
+		prev_backup_filelist = get_backup_filelist(prev_backup, true);
 
 		/* If lsn is not NULL, only pages with higher lsn will be copied. */
 		prev_backup_start_lsn = prev_backup->start_lsn;
@@ -375,6 +370,12 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync)
 		if (file->external_dir_num != 0)
 			continue;
 
+		if (S_ISDIR(file->mode))
+		{
+			current.pgdata_bytes += 4096;
+			continue;
+		}
+
 		current.pgdata_bytes += file->size;
 	}
 
@@ -392,7 +393,7 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync)
 	 * Sorted array is used at least in parse_filelist_filenames(),
 	 * extractPageMap(), make_pagemap_from_ptrack().
 	 */
-	parray_qsort(backup_files_list, pgFileComparePath);
+	parray_qsort(backup_files_list, pgFileCompareRelPathWithExternal);
 
 	/* Extract information about files in backup_list parsing their names:*/
 	parse_filelist_filenames(backup_files_list, instance_config.pgdata);
@@ -434,10 +435,11 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync)
 			/*
 			 * Build the page map from ptrack information.
 			 */
-			if (nodeInfo->ptrack_version_num == 20)
+			if (nodeInfo->ptrack_version_num >= 20)
 				make_pagemap_from_ptrack_2(backup_files_list, backup_conn,
-											nodeInfo->ptrack_schema,
-											prev_backup_start_lsn);
+										   nodeInfo->ptrack_schema,
+										   nodeInfo->ptrack_version_num,
+										   prev_backup_start_lsn);
 			else if (nodeInfo->ptrack_version_num == 15 ||
 					 nodeInfo->ptrack_version_num == 16 ||
 					 nodeInfo->ptrack_version_num == 17)
@@ -466,26 +468,18 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync)
 		if (S_ISDIR(file->mode))
 		{
 			char		dirpath[MAXPGPATH];
-			char	   *dir_name;
-
-			if (file->external_dir_num)
-				dir_name = GetRelativePath(file->path,
-								parray_get(external_dirs,
-											file->external_dir_num - 1));
-			else
-				dir_name = GetRelativePath(file->path, instance_config.pgdata);
-
-			elog(VERBOSE, "Create directory \"%s\"", dir_name);
 
 			if (file->external_dir_num)
 			{
 				char		temp[MAXPGPATH];
 				snprintf(temp, MAXPGPATH, "%s%d", external_prefix,
 						 file->external_dir_num);
-				join_path_components(dirpath, temp, dir_name);
+				join_path_components(dirpath, temp, file->rel_path);
 			}
 			else
-				join_path_components(dirpath, database_path, dir_name);
+				join_path_components(dirpath, database_path, file->rel_path);
+
+			elog(VERBOSE, "Create directory '%s'", dirpath);
 			fio_mkdir(dirpath, DIR_PERMISSION, FIO_BACKUP_HOST);
 		}
 
@@ -501,7 +495,7 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync)
 
 	/* write initial backup_content.control file and update backup.control  */
 	write_backup_filelist(&current, backup_files_list,
-						  instance_config.pgdata, external_dirs);
+						  instance_config.pgdata, external_dirs, true);
 	write_backup(&current, true);
 
 	/* init thread args with own file lists */
@@ -588,16 +582,14 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync)
 	 */
 	if (current.from_replica && !exclusive_backup)
 	{
-		char		pg_control_path[MAXPGPATH];
-
-		snprintf(pg_control_path, sizeof(pg_control_path), "%s/%s",
-				 instance_config.pgdata, XLOG_CONTROL_FILE);
+		pgFile	   *pg_control = NULL;
 
 		for (i = 0; i < parray_num(backup_files_list); i++)
 		{
 			pgFile	   *tmp_file = (pgFile *) parray_get(backup_files_list, i);
 
-			if (strcmp(tmp_file->path, pg_control_path) == 0)
+			if (tmp_file->external_dir_num == 0 &&
+				(strcmp(tmp_file->rel_path, XLOG_CONTROL_FILE) == 0))
 			{
 				pg_control = tmp_file;
 				break;
@@ -606,7 +598,7 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync)
 
 		if (!pg_control)
 			elog(ERROR, "Failed to find file \"%s\" in backup filelist.",
-							pg_control_path);
+							XLOG_CONTROL_FILE);
 
 		set_min_recovery_point(pg_control, database_path, current.stop_lsn);
 	}
@@ -634,21 +626,23 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync)
 
 			join_path_components(wal_full_path, pg_xlog_path, file->rel_path);
 
-			if (S_ISREG(file->mode))
-			{
-				file->crc = pgFileGetCRC(wal_full_path, true, false);
-				file->write_size = file->size;
-			}
-			/* Remove file path root prefix*/
-			if (strstr(file->path, database_path) == file->path)
-			{
-				char	   *ptr = file->path;
+			if (!S_ISREG(file->mode))
+				continue;
 
-				file->path = pgut_strdup(GetRelativePath(ptr, database_path));
-				file->rel_path = pgut_strdup(file->path);
-				free(ptr);
-			}
+			file->crc = pgFileGetCRC(wal_full_path, true, false);
+			file->write_size = file->size;
+
+			/* overwrite rel_path, because now it is relative to
+			 * /backup_dir/backups/instance_name/backup_id/database/pg_xlog/
+			 */
+			pg_free(file->rel_path);
+
+			file->rel_path = pgut_strdup(GetRelativePath(wal_full_path, database_path));
+			file->name = last_dir_separator(file->rel_path);
+
+			/* Now it is relative to /backup_dir/backups/instance_name/backup_id/database/ */
 		}
+
 		/* Add xlog files into the list of backed up files */
 		parray_concat(backup_files_list, xlog_files_list);
 		parray_free(xlog_files_list);
@@ -665,7 +659,7 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync)
 
 	/* Print the list of files to backup catalog */
 	write_backup_filelist(&current, backup_files_list, instance_config.pgdata,
-						  external_dirs);
+						  external_dirs, true);
 	/* update backup control file to update size info */
 	write_backup(&current, true);
 
@@ -882,15 +876,10 @@ do_backup(time_t start_time, bool no_validate,
 #endif
 
 	get_ptrack_version(backup_conn, &nodeInfo);
-//	elog(WARNING, "ptrack_version_num %d", ptrack_version_num);
+	//	elog(WARNING, "ptrack_version_num %d", ptrack_version_num);
 
 	if (nodeInfo.ptrack_version_num > 0)
-	{
-		if (nodeInfo.ptrack_version_num >= 20)
-			nodeInfo.is_ptrack_enable = pg_ptrack_enable2(backup_conn);
-		else
-			nodeInfo.is_ptrack_enable = pg_ptrack_enable(backup_conn);
-	}
+		nodeInfo.is_ptrack_enable = pg_ptrack_enable(backup_conn, nodeInfo.ptrack_version_num);
 
 	if (current.backup_mode == BACKUP_MODE_DIFF_PTRACK)
 	{
@@ -1882,8 +1871,6 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn,
 
 				file->write_size = file->size;
 				file->uncompressed_size = file->size;
-				free(file->path);
-				file->path = strdup(PG_BACKUP_LABEL_FILE);
 				parray_append(backup_files_list, file);
 			}
 		}
@@ -1930,8 +1917,7 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn,
 					file->crc = pgFileGetCRC(tablespace_map, true, false);
 					file->write_size = file->size;
 				}
-				free(file->path);
-				file->path = strdup(PG_TABLESPACE_MAP_FILE);
+
 				parray_append(backup_files_list, file);
 			}
 		}
@@ -2072,15 +2058,15 @@ backup_files(void *arg)
 
 		if (arguments->thread_num == 1)
 		{
-			/* update backup_content.control every 10 seconds */
-			if ((difftime(time(NULL), prev_time)) > 10)
+			/* update backup_content.control every 60 seconds */
+			if ((difftime(time(NULL), prev_time)) > 60)
 			{
-				prev_time = time(NULL);
-
 				write_backup_filelist(&current, arguments->files_list, arguments->from_root,
-									  arguments->external_dirs);
+									  arguments->external_dirs, false);
 				/* update backup control file to update size info */
 				write_backup(&current, true);
+
+				prev_time = time(NULL);
 			}
 		}
 
@@ -2202,13 +2188,13 @@ parse_filelist_filenames(parray *files, const char *root)
 	while (i < parray_num(files))
 	{
 		pgFile	   *file = (pgFile *) parray_get(files, i);
-		char	   *relative;
+//		char	   *relative;
 		int 		sscanf_result;
 
-		relative = GetRelativePath(file->path, root);
+//		relative = GetRelativePath(file->rel_path, root);
 
 		if (S_ISREG(file->mode) &&
-			path_is_prefix_of_path(PG_TBLSPC_DIR, relative))
+			path_is_prefix_of_path(PG_TBLSPC_DIR, file->rel_path))
 		{
 			/*
 			 * Found file in pg_tblspc/tblsOid/TABLESPACE_VERSION_DIRECTORY
@@ -2223,21 +2209,21 @@ parse_filelist_filenames(parray *files, const char *root)
 				 * Check that the file is located under
 				 * TABLESPACE_VERSION_DIRECTORY
 				 */
-				sscanf_result = sscanf(relative, PG_TBLSPC_DIR "/%u/%s/%u",
+				sscanf_result = sscanf(file->rel_path, PG_TBLSPC_DIR "/%u/%s/%u",
 									   &tblspcOid, tmp_rel_path, &dbOid);
 
 				/* Yes, it is */
 				if (sscanf_result == 2 &&
 					strncmp(tmp_rel_path, TABLESPACE_VERSION_DIRECTORY,
 							strlen(TABLESPACE_VERSION_DIRECTORY)) == 0)
-					set_cfs_datafiles(files, root, relative, i);
+					set_cfs_datafiles(files, root, file->rel_path, i);
 			}
 		}
 
 		if (S_ISREG(file->mode) && file->tblspcOid != 0 &&
 			file->name && file->name[0])
 		{
-			if (strcmp(file->forkName, "init") == 0)
+			if (file->forkName == INIT)
 			{
 				/*
 				 * Do not backup files of unlogged relations.
@@ -2288,7 +2274,6 @@ set_cfs_datafiles(parray *files, const char *root, char *relative, size_t i)
 	int			p;
 	pgFile	   *prev_file;
 	char	   *cfs_tblspc_path;
-	char	   *relative_prev_file;
 
 	cfs_tblspc_path = strdup(relative);
 	if(!cfs_tblspc_path)
@@ -2300,22 +2285,21 @@ set_cfs_datafiles(parray *files, const char *root, char *relative, size_t i)
 	for (p = (int) i; p >= 0; p--)
 	{
 		prev_file = (pgFile *) parray_get(files, (size_t) p);
-		relative_prev_file = GetRelativePath(prev_file->path, root);
 
-		elog(VERBOSE, "Checking file in cfs tablespace %s", relative_prev_file);
+		elog(VERBOSE, "Checking file in cfs tablespace %s", prev_file->rel_path);
 
-		if (strstr(relative_prev_file, cfs_tblspc_path) != NULL)
+		if (strstr(prev_file->rel_path, cfs_tblspc_path) != NULL)
 		{
 			if (S_ISREG(prev_file->mode) && prev_file->is_datafile)
 			{
 				elog(VERBOSE, "Setting 'is_cfs' on file %s, name %s",
-					relative_prev_file, prev_file->name);
+					prev_file->rel_path, prev_file->name);
 				prev_file->is_cfs = true;
 			}
 		}
 		else
 		{
-			elog(VERBOSE, "Breaking on %s", relative_prev_file);
+			elog(VERBOSE, "Breaking on %s", prev_file->rel_path);
 			break;
 		}
 	}
@@ -2329,7 +2313,7 @@ set_cfs_datafiles(parray *files, const char *root, char *relative, size_t i)
 void
 process_block_change(ForkNumber forknum, RelFileNode rnode, BlockNumber blkno)
 {
-	char	   *path;
+//	char	   *path;
 	char	   *rel_path;
 	BlockNumber blkno_inseg;
 	int			segno;
@@ -2341,16 +2325,15 @@ process_block_change(ForkNumber forknum, RelFileNode rnode, BlockNumber blkno)
 
 	rel_path = relpathperm(rnode, forknum);
 	if (segno > 0)
-		path = psprintf("%s/%s.%u", instance_config.pgdata, rel_path, segno);
+		f.rel_path = psprintf("%s.%u", rel_path, segno);
 	else
-		path = psprintf("%s/%s", instance_config.pgdata, rel_path);
+		f.rel_path = rel_path;
 
-	pg_free(rel_path);
+	f.external_dir_num = 0;
 
-	f.path = path;
 	/* backup_files_list should be sorted before */
 	file_item = (pgFile **) parray_bsearch(backup_files_list, &f,
-										   pgFileComparePath);
+										   pgFileCompareRelPathWithExternal);
 
 	/*
 	 * If we don't have any record of this file in the file map, it means
@@ -2370,7 +2353,7 @@ process_block_change(ForkNumber forknum, RelFileNode rnode, BlockNumber blkno)
 			pthread_mutex_unlock(&backup_pagemap_mutex);
 	}
 
-	pg_free(path);
+	pg_free(rel_path);
 }
 
 /*

@@ -366,7 +366,8 @@ class ProbackupTest(object):
 
         if ptrack_enable:
             if node.major_version > 11:
-                options['ptrack_map_size'] = '128MB'
+                options['ptrack.map_size'] = '128'
+                options['shared_preload_libraries'] = 'ptrack'
             else:
                 options['ptrack_enable'] = 'on'
 

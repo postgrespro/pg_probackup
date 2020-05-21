@@ -343,15 +343,17 @@ main(int argc, char *argv[])
 		else if (strcmp(argv[1], "ssh") == 0)
 		    launch_ssh(argv);
 #endif
-		else if (strcmp(argv[1], "agent") == 0 && argc > 2)
+		else if (strcmp(argv[1], "agent") == 0)
 		{
-			remote_agent = argv[2];
-			if (strcmp(remote_agent, PROGRAM_VERSION) != 0)
+			/* 'No forward compatibility' sanity:
+			 *   /old/binary  -> ssh execute -> /newer/binary agent version_num
+			 * If we are executed as an agent for older binary, then exit with error
+			 */
+			if (argc > 2)
 			{
-				uint32 agent_version = parse_program_version(remote_agent);
-				elog(agent_version < AGENT_PROTOCOL_VERSION ? ERROR : WARNING,
-					 "Agent version %s doesn't match master pg_probackup version %s",
-					 PROGRAM_VERSION, remote_agent);
+				elog(ERROR, "Version mismatch, pg_probackup binary with version '%s' "
+						"is launched as an agent for pg_probackup binary with version '%s'",
+						PROGRAM_VERSION, argv[2]);
 			}
 			fio_communicate(STDIN_FILENO, STDOUT_FILENO);
 			return 0;

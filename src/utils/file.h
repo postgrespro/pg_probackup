@@ -27,7 +27,6 @@ typedef enum
 	FIO_READ,
 	FIO_LOAD,
 	FIO_STAT,
-	FIO_FSTAT,
 	FIO_SEND,
 	FIO_ACCESS,
 	FIO_OPENDIR,
@@ -47,6 +46,8 @@ typedef enum
 	/* messages for closing connection */
 	FIO_DISCONNECT,
 	FIO_DISCONNECTED,
+	/* message for compatibility check */
+	FIO_AGENT_VERSION
 } fio_operations;
 
 typedef enum
@@ -79,6 +80,7 @@ extern fio_location MyLocation;
 extern void    fio_redirect(int in, int out, int err);
 extern void    fio_communicate(int in, int out);
 
+extern int     fio_get_agent_version(void);
 extern FILE*   fio_fopen(char const* name, char const* mode, fio_location location);
 extern size_t  fio_fwrite(FILE* f, void const* buf, size_t size);
 extern ssize_t fio_fwrite_compressed(FILE* f, void const* buf, size_t size, int compress_alg);

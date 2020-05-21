@@ -408,15 +408,12 @@ prepare_page(ConnectionArgs *conn_arg,
 		}
 	}
 
-	/* Get page via ptrack interface from PostgreSQL shared buffer.
-	 * We do this in following cases:
-	 * 1. PTRACK backup of 1.x versions
-	 * 2. During backup, regardless of backup mode, of PostgreSQL instance
-	 *    with ptrack support we encountered invalid page.
+	/*
+	 * Get page via ptrack interface from PostgreSQL shared buffer.
+	 * We do this only in the cases of PTRACK 1.x versions backup
 	 */
-	if ((backup_mode == BACKUP_MODE_DIFF_PTRACK
+	if (backup_mode == BACKUP_MODE_DIFF_PTRACK
 		&& (ptrack_version_num >= 15 && ptrack_version_num < 20))
-			|| !page_is_valid)
 	{
 		int rc = 0;
 		size_t page_size = 0;
@@ -440,7 +437,8 @@ prepare_page(ConnectionArgs *conn_arg,
 		memcpy(page, ptrack_page, BLCKSZ);
 		pg_free(ptrack_page);
 
-		/* UPD: It apprears that is possible to get zeroed page or page with invalid header
+		/*
+		 * UPD: It apprears that is possible to get zeroed page or page with invalid header
 		 * from shared buffer.
 		 * Note, that getting page with wrong checksumm from shared buffer is
 		 * acceptable.
@@ -462,7 +460,8 @@ prepare_page(ConnectionArgs *conn_arg,
 								from_fullpath, blknum, errormsg);
 		}
 
-		/* We must set checksum here, because it is outdated
+		/*
+		 * We must set checksum here, because it is outdated
 		 * in the block recieved from shared buffers.
 		 */
 		if (checksum_version)
@@ -1479,7 +1478,7 @@ check_data_file(ConnectionArgs *arguments, pgFile *file,
 		 */
 		if (errno == ENOENT)
 		{
-			elog(LOG, "File \"%s\" is not found", file->path);
+			elog(LOG, "File \"%s\" is not found", from_fullpath);
 			return true;
 		}
 
@@ -1489,7 +1488,7 @@ check_data_file(ConnectionArgs *arguments, pgFile *file,
 	}
 
 	if (file->size % BLCKSZ != 0)
-		elog(WARNING, "File: \"%s\", invalid file size %zu", file->path, file->size);
+		elog(WARNING, "File: \"%s\", invalid file size %zu", from_fullpath, file->size);
 
 	/*
 	 * Compute expected number of blocks in the file.
@@ -1525,8 +1524,8 @@ check_data_file(ConnectionArgs *arguments, pgFile *file,
 
 /* Valiate pages of datafile in backup one by one */
 bool
-check_file_pages(pgFile *file, XLogRecPtr stop_lsn, uint32 checksum_version,
-				 uint32 backup_version)
+check_file_pages(pgFile *file, const char *fullpath, XLogRecPtr stop_lsn,
+				 uint32 checksum_version, uint32 backup_version)
 {
 	size_t		read_len = 0;
 	bool		is_valid = true;
@@ -1534,19 +1533,19 @@ check_file_pages(pgFile *file, XLogRecPtr stop_lsn, uint32 checksum_version,
 	pg_crc32	crc;
 	bool		use_crc32c = backup_version <= 20021 || backup_version >= 20025;
 
-	elog(VERBOSE, "Validate relation blocks for file \"%s\"", file->path);
+	elog(VERBOSE, "Validate relation blocks for file \"%s\"", fullpath);
 
-	in = fopen(file->path, PG_BINARY_R);
+	in = fopen(fullpath, PG_BINARY_R);
 	if (in == NULL)
 	{
 		if (errno == ENOENT)
 		{
-			elog(WARNING, "File \"%s\" is not found", file->path);
+			elog(WARNING, "File \"%s\" is not found", fullpath);
 			return false;
 		}
 
 		elog(ERROR, "Cannot open file \"%s\": %s",
-			 file->path, strerror(errno));
+			 fullpath, strerror(errno));
 	}
 
 	/* calc CRC of backup file */
@@ -1570,7 +1569,7 @@ check_file_pages(pgFile *file, XLogRecPtr stop_lsn, uint32 checksum_version,
 
 		if (ferror(in))
 			elog(ERROR, "Cannot read header of block %u of \"%s\": %s",
-					 blknum, file->path, strerror(errno));
+					 blknum, fullpath, strerror(errno));
 
 		if (read_len != sizeof(header))
 		{
@@ -1579,10 +1578,10 @@ check_file_pages(pgFile *file, XLogRecPtr stop_lsn, uint32 checksum_version,
 			else if (read_len != 0 && feof(in))
 				elog(WARNING,
 					 "Odd size page found at block %u of \"%s\"",
-					 blknum, file->path);
+					 blknum, fullpath);
 			else
 				elog(WARNING, "Cannot read header of block %u of \"%s\": %s",
-					 blknum, file->path, strerror(errno));
+					 blknum, fullpath, strerror(errno));
 			return false;
 		}
 
@@ -1590,14 +1589,14 @@ check_file_pages(pgFile *file, XLogRecPtr stop_lsn, uint32 checksum_version,
 
 		if (header.block == 0 && header.compressed_size == 0)
 		{
-			elog(VERBOSE, "Skip empty block of \"%s\"", file->path);
+			elog(VERBOSE, "Skip empty block of \"%s\"", fullpath);
 			continue;
 		}
 
 		if (header.block < blknum)
 		{
 			elog(WARNING, "Backup is broken at block %u of \"%s\"",
-				 blknum, file->path);
+				 blknum, fullpath);
 			return false;
 		}
 
@@ -1606,7 +1605,7 @@ check_file_pages(pgFile *file, XLogRecPtr stop_lsn, uint32 checksum_version,
 		if (header.compressed_size == PageIsTruncated)
 		{
 			elog(LOG, "Block %u of \"%s\" is truncated",
-				 blknum, file->path);
+				 blknum, fullpath);
 			continue;
 		}
 
@@ -1617,7 +1616,7 @@ check_file_pages(pgFile *file, XLogRecPtr stop_lsn, uint32 checksum_version,
 		if (read_len != MAXALIGN(header.compressed_size))
 		{
 			elog(WARNING, "Cannot read block %u of \"%s\" read %zu of %d",
-				blknum, file->path, read_len, header.compressed_size);
+				blknum, fullpath, read_len, header.compressed_size);
 			return false;
 		}
 
@@ -1637,7 +1636,7 @@ check_file_pages(pgFile *file, XLogRecPtr stop_lsn, uint32 checksum_version,
 											  &errormsg);
 			if (uncompressed_size < 0 && errormsg != NULL)
 				elog(WARNING, "An error occured during decompressing block %u of file \"%s\": %s",
-					 blknum, file->path, errormsg);
+					 blknum, fullpath, errormsg);
 
 			if (uncompressed_size != BLCKSZ)
 			{
@@ -1647,7 +1646,7 @@ check_file_pages(pgFile *file, XLogRecPtr stop_lsn, uint32 checksum_version,
 					continue;
 				}
 				elog(WARNING, "Page of file \"%s\" uncompressed to %d bytes. != BLCKSZ",
-					 file->path, uncompressed_size);
+						fullpath, uncompressed_size);
 				return false;
 			}
 
@@ -1693,7 +1692,7 @@ check_file_pages(pgFile *file, XLogRecPtr stop_lsn, uint32 checksum_version,
 	if (crc != file->crc)
 	{
 		elog(WARNING, "Invalid CRC of backup file \"%s\": %X. Expected %X",
-				file->path, crc, file->crc);
+				fullpath, crc, file->crc);
 		is_valid = false;
 	}
 

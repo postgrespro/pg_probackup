@@ -261,7 +261,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         node.slow_start()
 
         # Fill with data
-        node.pgbench_init(scale=5)
+        node.pgbench_init(scale=10)
 
         # Do compressed FULL backup
         self.backup_node(backup_dir, "node", node, options=[
@@ -272,7 +272,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(show_backup["backup-mode"], "FULL")
 
         # Change data
-        pgbench = node.pgbench(options=['-T', '20', '-c', '2', '--no-vacuum'])
+        pgbench = node.pgbench(options=['-T', '10', '-c', '1', '--no-vacuum'])
         pgbench.wait()
 
         # Do compressed DELTA backup
@@ -281,7 +281,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
             options=['--compress', '--stream'])
 
         # Change data
-        pgbench = node.pgbench(options=['-T', '20', '-c', '2', '--no-vacuum'])
+        pgbench = node.pgbench(options=['-T', '10', '-c', '1', '--no-vacuum'])
         pgbench.wait()
 
         # Do uncompressed PAGE backup
@@ -1530,8 +1530,8 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         gdb.set_breakpoint('write_backup_filelist')
         gdb.run_until_break()
 
-        gdb.set_breakpoint('fio_fwrite')
-        gdb.continue_execution_until_break(2)
+        gdb.set_breakpoint('sprintf')
+        gdb.continue_execution_until_break(20)
 
         gdb._execute('signal SIGKILL')
 
@@ -1621,8 +1621,8 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         gdb.set_breakpoint('write_backup_filelist')
         gdb.run_until_break()
 
-        gdb.set_breakpoint('fio_fwrite')
-        gdb.continue_execution_until_break(2)
+        gdb.set_breakpoint('sprintf')
+        gdb.continue_execution_until_break(20)
 
         gdb._execute('signal SIGKILL')
 
@@ -1991,7 +1991,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         # Take FULL
         self.backup_node(backup_dir, 'node', node)
 
-        node.pgbench_init(scale=3)
+        node.pgbench_init(scale=5)
 
         # Take PAGE from future
         backup_id = self.backup_node(
@@ -2011,11 +2011,10 @@ class MergeTest(ProbackupTest, unittest.TestCase):
             os.path.join(backup_dir, 'backups', 'node', backup_id),
             os.path.join(backup_dir, 'backups', 'node', new_id))
 
-        pgbench = node.pgbench(options=['-T', '3', '-c', '2', '--no-vacuum'])
+        pgbench = node.pgbench(options=['-T', '5', '-c', '1', '--no-vacuum'])
         pgbench.wait()
 
-        backup_id = self.backup_node(
-            backup_dir, 'node', node, backup_type='page')
+        backup_id = self.backup_node(backup_dir, 'node', node, backup_type='page')
         pgdata = self.pgdata_content(node.data_dir)
 
         result = node.safe_psql(
