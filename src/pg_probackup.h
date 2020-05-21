@@ -120,11 +120,11 @@ typedef enum CompressAlg
 
 typedef enum ForkName
 {
-	VM,
-	FSM,
-	CFM,
-	INIT,
-	PTRACK
+	vm,
+	fsm,
+	cfm,
+	init,
+	ptrack
 } ForkName;
 
 #define INIT_FILE_CRC32(use_crc32c, crc) \

@@ -966,7 +966,6 @@ do_delete_instance(void)
 {
 	parray		*backup_list;
 	int 		i;
-	int 		rc;
 	char		instance_config_path[MAXPGPATH];
 
 
