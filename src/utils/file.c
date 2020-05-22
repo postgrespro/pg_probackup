@@ -1732,8 +1732,7 @@ cleanup:
  *   ZLIB_ERROR   (-5)
  *   REMOTE_ERROR (-6)
  */
-int fio_send_file_gz(const char *from_fullpath, const char *to_fullpath, FILE* out,
-													pgFile *file, char **errormsg)
+int fio_send_file_gz(const char *from_fullpath, const char *to_fullpath, FILE* out, char **errormsg)
 {
 	fio_header hdr;
 	int exit_code = SEND_OK;

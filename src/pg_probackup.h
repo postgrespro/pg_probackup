@@ -1031,8 +1031,7 @@ extern int fio_send_pages(FILE* out, const char *from_fullpath, pgFile *file, XL
 						   int calg, int clevel, uint32 checksum_version,
 						   datapagemap_t *pagemap, BlockNumber* err_blknum, char **errormsg);
 /* return codes for fio_send_pages */
-extern int fio_send_file_gz(const char *from_fullpath, const char *to_fullpath, FILE* out,
-															pgFile *file, char **errormsg);
+extern int fio_send_file_gz(const char *from_fullpath, const char *to_fullpath, FILE* out, char **errormsg);
 extern int fio_send_file(const char *from_fullpath, const char *to_fullpath, FILE* out,
 														pgFile *file, char **errormsg);
 
