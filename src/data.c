@@ -861,14 +861,25 @@ backup_non_data_file(pgFile *file, pgFile *prev_file,
  * Apply changed blocks to destination file from every backup in parent chain.
  */
 size_t
-restore_data_file(parray *parent_chain, pgFile *dest_file, FILE *out, const char *to_fullpath)
+restore_data_file(parray *parent_chain, pgFile *dest_file, FILE *out,
+						const char *to_fullpath, bool use_bitmap)
 {
-	int    i;
 	size_t total_write_len = 0;
 	char  *in_buf = pgut_malloc(STDIO_BUFSIZE);
+	int    backup_seq = 0;
+
+	// FULL -> INCR -> DEST
+	//  2       1       0
+	if (use_bitmap)
+		/* start with dest backup  */
+		backup_seq = 0;
+	else
+		/* start with full backup */
+		backup_seq = parray_num(parent_chain) - 1;
 
 //	for (i = parray_num(parent_chain) - 1; i >= 0; i--)
-	for (i = 0; i < parray_num(parent_chain); i++)
+//	for (i = 0; i < parray_num(parent_chain); i++)
+	while (backup_seq >= 0 && backup_seq < parray_num(parent_chain))
 	{
 		char     from_root[MAXPGPATH];
 		char     from_fullpath[MAXPGPATH];
@@ -877,7 +888,12 @@ restore_data_file(parray *parent_chain, pgFile *dest_file, FILE *out, const char
 		pgFile **res_file = NULL;
 		pgFile  *tmp_file = NULL;
 
-		pgBackup   *backup = (pgBackup *) parray_get(parent_chain, i);
+		pgBackup   *backup = (pgBackup *) parray_get(parent_chain, backup_seq);
+
+		if (use_bitmap)
+			backup_seq++;
+		else
+			backup_seq--;
 
 		/* lookup file in intermediate backup */
 		res_file =  parray_bsearch(backup->files, dest_file, pgFileCompareRelPathWithExternal);
@@ -925,7 +941,7 @@ restore_data_file(parray *parent_chain, pgFile *dest_file, FILE *out, const char
 		total_write_len += restore_data_file_internal(in, out, tmp_file,
 					  parse_program_version(backup->program_version),
 					  from_fullpath, to_fullpath, dest_file->n_blocks,
-					  &(dest_file)->pagemap);
+					  use_bitmap ? &(dest_file)->pagemap : NULL);
 
 		if (fclose(in) != 0)
 			elog(ERROR, "Cannot close file \"%s\": %s", from_fullpath,
@@ -938,6 +954,11 @@ restore_data_file(parray *parent_chain, pgFile *dest_file, FILE *out, const char
 	return total_write_len;
 }
 
+/* Restore block from "in" file to "out" file.
+ * If "nblocks" is greater than zero, then skip restoring blocks,
+ * whose position if greater than "nblocks".
+ * If map is NULL, then page bitmap cannot be used for restore optimization
+ */
 size_t
 restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_version,
 					  const char *from_fullpath, const char *to_fullpath, int nblocks,
@@ -1050,7 +1071,7 @@ restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_vers
 			elog(ERROR, "Size of a blknum %i exceed BLCKSZ", blknum);
 
 		/* if this page is marked as already restored, then skip it */
-		if (datapagemap_is_set(map, blknum))
+		if (map && datapagemap_is_set(map, blknum))
 		{
 			/* skip to the next page */
 			if (fseek(in, MAXALIGN(compressed_size), SEEK_CUR) != 0)
@@ -1115,7 +1136,8 @@ restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_vers
 		write_len += BLCKSZ;
 		cur_pos = write_pos + BLCKSZ; /* update current write position */
 
-		datapagemap_add(map, blknum);
+		if (map)
+			datapagemap_add(map, blknum);
 	}
 
 	elog(VERBOSE, "Copied file \"%s\": %lu bytes", from_fullpath, write_len);
@@ -1191,6 +1213,7 @@ restore_non_data_file(parray *parent_chain, pgBackup *dest_backup,
 		 * full copy of destination file.
 		 * Full copy is latest possible destination file with size equal or
 		 * greater than zero.
+		 * TODO: rewrite to use parent_link of dest backup.
 		 */
 		for (i = 1; i < parray_num(parent_chain); i++)
 		{

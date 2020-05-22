@@ -935,7 +935,7 @@ extern void backup_non_data_file_internal(const char *from_fullpath,
 										  bool missing_ok);
 
 extern size_t restore_data_file(parray *parent_chain, pgFile *dest_file,
-								  FILE *out, const char *to_fullpath);
+								  FILE *out, const char *to_fullpath, bool use_bitmap);
 extern size_t restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_version,
 										 const char *from_fullpath, const char *to_fullpath, int nblocks,
 										 datapagemap_t *map);
