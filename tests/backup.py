@@ -324,7 +324,6 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
-            ptrack_enable=True,
             initdb_params=['--data-checksums'])
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
@@ -356,26 +355,32 @@ class BackupTest(ProbackupTest, unittest.TestCase):
             "postgres",
             "select pg_relation_filepath('t_heap')").rstrip()
 
-        with open(os.path.join(node.data_dir, heap_path), "rb+", 0) as f:
+        path = os.path.join(node.data_dir, heap_path)
+        with open(path, "rb+", 0) as f:
                 f.seek(9000)
                 f.write(b"bla")
                 f.flush()
                 f.close
 
-        self.backup_node(
-            backup_dir, 'node', node, backup_type="full",
-            options=["-j", "4", "--stream", "--log-level-file=VERBOSE"])
+        try:
+            self.backup_node(
+                backup_dir, 'node', node, backup_type="full",
+                options=["-j", "4", "--stream", "--log-level-file=VERBOSE"])
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because data file is corrupted"
+                "\n Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertTrue(
+                'ERROR: Corruption detected in file "{0}", '
+                'block 1: page verification failed, calculated checksum'.format(path),
+                e.message)
 
-        # open log file and check
-        with open(os.path.join(backup_dir, 'log', 'pg_probackup.log')) as f:
-            log_content = f.read()
-            self.assertIn('block 1, try to fetch via shared buffer', log_content)
-            self.assertIn('SELECT pg_catalog.pg_ptrack_get_block', log_content)
-            f.close
-
-        self.assertTrue(
-            self.show_pb(backup_dir, 'node')[1]['status'] == 'OK',
-            "Backup Status should be OK")
+        self.assertEqual(
+            self.show_pb(backup_dir, 'node')[1]['status'],
+            'ERROR',
+            "Backup Status should be ERROR")
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -453,8 +458,8 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                     repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertIn(
-                "ERROR: Corruption detected in file '{0}', block 1: "
-                "page verification failed, calculated checksum".format(
+                'ERROR: Corruption detected in file "{0}", block 1: '
+                'page verification failed, calculated checksum'.format(
                     heap_fullpath),
                 e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
@@ -474,8 +479,8 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                     repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertIn(
-                "ERROR: Corruption detected in file '{0}', block 1: "
-                "page verification failed, calculated checksum".format(
+                'ERROR: Corruption detected in file "{0}", block 1: '
+                'page verification failed, calculated checksum'.format(
                     heap_fullpath),
                 e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
@@ -495,8 +500,8 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                     repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertIn(
-                "ERROR: Corruption detected in file '{0}', block 1: "
-                "page verification failed, calculated checksum".format(
+                'ERROR: Corruption detected in file "{0}", block 1: '
+                'page verification failed, calculated checksum'.format(
                     heap_fullpath),
                 e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
@@ -598,8 +603,8 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                     repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertIn(
-                "ERROR: Corruption detected in file '{0}', block 1: "
-                "page header invalid, pd_lower".format(heap_fullpath),
+                'ERROR: Corruption detected in file "{0}", block 1: '
+                'page header invalid, pd_lower'.format(heap_fullpath),
                 e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
@@ -618,8 +623,8 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                     repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertIn(
-                "ERROR: Corruption detected in file '{0}', block 1: "
-                "page header invalid, pd_lower".format(heap_fullpath),
+                'ERROR: Corruption detected in file "{0}", block 1: '
+                'page header invalid, pd_lower'.format(heap_fullpath),
                 e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
@@ -638,8 +643,8 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                     repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertIn(
-                "ERROR: Corruption detected in file '{0}', block 1: "
-                "page header invalid, pd_lower".format(heap_fullpath),
+                'ERROR: Corruption detected in file "{0}", block 1: '
+                'page header invalid, pd_lower'.format(heap_fullpath),
                 e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
@@ -741,8 +746,8 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                     repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertIn(
-                "ERROR: Corruption detected in file '{0}', block 1: "
-                "page header invalid, pd_lower".format(heap_fullpath),
+                'ERROR: Corruption detected in file "{0}", block 1: '
+                'page header invalid, pd_lower'.format(heap_fullpath),
                 e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
@@ -761,8 +766,8 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                     repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertIn(
-                "ERROR: Corruption detected in file '{0}', block 1: "
-                "page header invalid, pd_lower".format(heap_fullpath),
+                'ERROR: Corruption detected in file "{0}", block 1: '
+                'page header invalid, pd_lower'.format(heap_fullpath),
                 e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
@@ -781,8 +786,8 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                     repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertIn(
-                "ERROR: Corruption detected in file '{0}', block 1: "
-                "page header invalid, pd_lower".format(heap_fullpath),
+                'ERROR: Corruption detected in file "{0}", block 1: '
+                'page header invalid, pd_lower'.format(heap_fullpath),
                 e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
@@ -1385,8 +1390,8 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         with open(os.path.join(backup_dir, 'log', 'pg_probackup.log')) as f:
             log_content = f.read()
             self.assertTrue(
-                "LOG: File '{0}' is not found".format(absolute_path) in log_content,
-                "File '{0}' should be deleted but it`s not".format(absolute_path))
+                'LOG: File "{0}" is not found'.format(absolute_path) in log_content,
+                'File "{0}" should be deleted but it`s not'.format(absolute_path))
 
         node.cleanup()
         self.restore_node(backup_dir, 'node', node, options=["-j", "4"])
