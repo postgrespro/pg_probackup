@@ -629,15 +629,15 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         self.set_archiving(backup_dir, 'node', node)
         node.slow_start()
 
-        node.pgbench_init(scale=3)
+        node.pgbench_init(scale=5)
 
         # Take FULL BACKUPs
         backup_id_a = self.backup_node(backup_dir, 'node', node)
-        pgbench = node.pgbench(options=['-t', '10', '-c', '2'])
+        pgbench = node.pgbench(options=['-t', '20', '-c', '1'])
         pgbench.wait()
 
         backup_id_b = self.backup_node(backup_dir, 'node', node)
-        pgbench = node.pgbench(options=['-t', '10', '-c', '2'])
+        pgbench = node.pgbench(options=['-t', '20', '-c', '1'])
         pgbench.wait()
 
         # Change FULL B backup status to ERROR
@@ -648,7 +648,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         pgdata_a1 = self.pgdata_content(node.data_dir)
 
-        pgbench = node.pgbench(options=['-t', '10', '-c', '2'])
+        pgbench = node.pgbench(options=['-t', '20', '-c', '1'])
         pgbench.wait()
 
         # PAGEa1 OK
@@ -666,20 +666,20 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         page_id_b1 = self.backup_node(
             backup_dir, 'node', node, backup_type='page')
 
-        pgbench = node.pgbench(options=['-t', '10', '-c', '2'])
+        pgbench = node.pgbench(options=['-t', '20', '-c', '1'])
         pgbench.wait()
 
         page_id_b2 = self.backup_node(
             backup_dir, 'node', node, backup_type='page')
 
-        pgbench = node.pgbench(options=['-t', '10', '-c', '2'])
+        pgbench = node.pgbench(options=['-t', '20', '-c', '1'])
         pgbench.wait()
 
         page_id_b3 = self.backup_node(
             backup_dir, 'node', node, backup_type='page')
         pgdata_b3 = self.pgdata_content(node.data_dir)
 
-        pgbench = node.pgbench(options=['-t', '10', '-c', '2'])
+        pgbench = node.pgbench(options=['-t', '20', '-c', '1'])
         pgbench.wait()
 
         # PAGEb3 OK
