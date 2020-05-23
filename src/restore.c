@@ -569,6 +569,10 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 	if (parse_program_version(dest_backup->program_version) < 20300)
 		use_bitmap = false;
 
+	/* There is no point in bitmap restore, when restoring a single FULL backup */
+	if (parray_num(parent_chain) == 1)
+		use_bitmap = false;
+
 	/*
 	 * Restore dest_backup internal directories.
 	 */
