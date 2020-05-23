@@ -1191,7 +1191,7 @@ size_t
 restore_non_data_file(parray *parent_chain, pgBackup *dest_backup,
 					  pgFile *dest_file, FILE *out, const char *to_fullpath)
 {
-	int			i;
+//	int			i;
 	char		from_root[MAXPGPATH];
 	char		from_fullpath[MAXPGPATH];
 	FILE		*in = NULL;
@@ -1213,13 +1213,11 @@ restore_non_data_file(parray *parent_chain, pgBackup *dest_backup,
 		 * full copy of destination file.
 		 * Full copy is latest possible destination file with size equal or
 		 * greater than zero.
-		 * TODO: rewrite to use parent_link of dest backup.
 		 */
-		for (i = 1; i < parray_num(parent_chain); i++)
+		tmp_backup = dest_backup->parent_backup_link;
+		while (tmp_backup)
 		{
 			pgFile	   **res_file = NULL;
-
-			tmp_backup = (pgBackup *) parray_get(parent_chain, i);
 
 			/* lookup file in intermediate backup */
 			res_file =  parray_bsearch(tmp_backup->files, dest_file, pgFileCompareRelPathWithExternal);
@@ -1243,6 +1241,8 @@ restore_non_data_file(parray *parent_chain, pgBackup *dest_backup,
 			/* Full copy is found */
 			if (tmp_file->write_size > 0)
 				break;
+
+			tmp_backup = tmp_backup->parent_backup_link;
 		}
 	}
 
@@ -1253,6 +1253,11 @@ restore_non_data_file(parray *parent_chain, pgBackup *dest_backup,
 
 	if (!tmp_file)
 		elog(ERROR, "Failed to locate a full copy of non-data file \"%s\"", to_fullpath);
+
+	if (tmp_file->write_size <= 0)
+		elog(ERROR, "Full copy of non-data file has invalid size. "
+				"Metadata corruption in backup %s in file: \"%s\"",
+				base36enc(tmp_backup->start_time), to_fullpath);
 
 	if (tmp_file->external_dir_num == 0)
 		join_path_components(from_root, tmp_backup->root_dir, DATABASE_DIR);
