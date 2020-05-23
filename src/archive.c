@@ -1109,8 +1109,7 @@ do_archive_get(InstanceConfig *instance, const char *prefetch_dir_arg,
 			{
 				/* discard prefetch */
 //				n_fetched = 0;
-//				pgut_rmtree(prefetch_dir, false, false);
-				rmtree(prefetch_dir, false);
+				pgut_rmtree(prefetch_dir, false, false);
 			}
 		}
 		else
