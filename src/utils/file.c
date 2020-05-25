@@ -147,6 +147,15 @@ bool fio_is_remote(fio_location location)
 	return is_remote;
 }
 
+/* Check if specified location is local for current node */
+bool fio_is_remote_simple(fio_location location)
+{
+	bool is_remote = MyLocation != FIO_LOCAL_HOST
+		&& location != FIO_LOCAL_HOST
+		&& location != MyLocation;
+	return is_remote;
+}
+
 /* Try to read specified amount of bytes unless error or EOF are encountered */
 static ssize_t fio_read_all(int fd, void* buf, size_t size)
 {
