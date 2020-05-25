@@ -965,7 +965,7 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         old_version should be < 2.3.0
         Create hidden file in pgdata, take backup
         with old binary, then try to delete backup
-        with new binary 
+        with new binary
         """
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
@@ -982,7 +982,7 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         open(os.path.join(node.data_dir, ".hidden_stuff"), 'a').close()
 
         backup_id = self.backup_node(
-            backup_dir, 'node',node, old_binary=True, options=['--compress'])
+            backup_dir, 'node',node, old_binary=True, options=['--stream'])
 
         self.delete_pb(backup_dir, 'node', backup_id)
 
