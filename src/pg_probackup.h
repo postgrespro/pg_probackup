@@ -180,7 +180,7 @@ typedef struct pgFile
 	Oid		relOid;			/* relOid extracted from path, if applicable */
 	ForkName   forkName;	/* forkName extracted from path, if applicable */
 	int		segno;			/* Segment number for ptrack */
-	BlockNumber	n_blocks;   /* size of the data file in blocks */
+	int		n_blocks;		/* size of the data file in blocks */
 	bool	is_cfs;			/* Flag to distinguish files compressed by CFS*/
 	bool	is_database;	/* Flag used strictly by ptrack 1.x backup */
 	int		external_dir_num;	/* Number of external directory. 0 if not external */
@@ -441,6 +441,7 @@ typedef struct pgRestoreParams
 	bool	restore_as_replica;
 	bool	skip_external_dirs;
 	bool	skip_block_validation; //Start using it
+	bool	incremental;
 	const char *restore_command;
 	const char *primary_slot_name;
 
@@ -902,6 +903,7 @@ extern pgFile *pgFileNew(const char *path, const char *rel_path,
 						 fio_location location);
 extern pgFile *pgFileInit(const char *rel_path);
 extern void pgFileDelete(pgFile *file, const char *full_path);
+extern void fio_pgFileDelete(pgFile *file, const char *full_path);
 
 extern void pgFileFree(void *file);
 
@@ -934,17 +936,21 @@ extern void backup_non_data_file_internal(const char *from_fullpath,
 										  const char *to_fullpath, pgFile *file,
 										  bool missing_ok);
 
-extern size_t restore_data_file(parray *parent_chain, pgFile *dest_file,
-								  FILE *out, const char *to_fullpath, bool use_bitmap);
+extern size_t restore_data_file(parray *parent_chain, pgFile *dest_file, FILE *out,
+								const char *to_fullpath, bool use_bitmap, uint16 *checksum_map);
 extern size_t restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_version,
 										 const char *from_fullpath, const char *to_fullpath, int nblocks,
-										 datapagemap_t *map);
+										 datapagemap_t *map, uint16 *checksum_map, int checksum_version);
 extern size_t restore_non_data_file(parray *parent_chain, pgBackup *dest_backup,
-								  pgFile *dest_file, FILE *out, const char *to_fullpath);
+									pgFile *dest_file, FILE *out, const char *to_fullpath,
+									bool already_exists);
 extern void restore_non_data_file_internal(FILE *in, FILE *out, pgFile *file,
 										   const char *from_fullpath, const char *to_fullpath);
 extern bool create_empty_file(fio_location from_location, const char *to_root,
 							  fio_location to_location, pgFile *file);
+
+extern uint16 *get_checksum_map(const char *fullpath, uint32 checksum_version,
+								int n_blocks, XLogRecPtr dest_stop_lsn, BlockNumber segmentno);
 
 extern bool check_file_pages(pgFile *file, const char *fullpath, XLogRecPtr stop_lsn,
 							 uint32 checksum_version, uint32 backup_version);
@@ -1039,6 +1045,11 @@ extern void fio_list_dir(parray *files, const char *root, bool exclude, bool fol
 						 bool add_root, bool backup_logs, int external_dir_num);
 
 extern bool pgut_rmtree(const char *path, bool rmtopdir, bool strict);
+
+extern uint16 *fio_get_checksum_map(const char *fullpath, uint32 checksum_version,
+							int n_blocks, XLogRecPtr dest_stop_lsn, BlockNumber segmentno);
+
+extern int32 fio_decompress(void* dst, void const* src, size_t size, int compress_alg);
 
 /* return codes for fio_send_pages() and fio_send_file() */
 #define SEND_OK       (0)

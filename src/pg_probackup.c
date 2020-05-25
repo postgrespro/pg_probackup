@@ -98,6 +98,7 @@ static pgRestoreParams *restore_params = NULL;
 time_t current_time = 0;
 bool restore_as_replica = false;
 bool no_validate = false;
+bool incremental_restore = false;
 
 bool skip_block_validation = false;
 bool skip_external_dirs = false;
@@ -203,6 +204,7 @@ static ConfigOption cmd_options[] =
 	{ 'b', 'R', "restore-as-replica", &restore_as_replica,	SOURCE_CMD_STRICT },
 	{ 's', 160, "primary-conninfo",	&primary_conninfo,	SOURCE_CMD_STRICT },
 	{ 's', 'S', "primary-slot-name",&replication_slot,	SOURCE_CMD_STRICT },
+	{ 'b', 161, "incremental",      &incremental_restore,	SOURCE_CMD_STRICT },
 	/* checkdb options */
 	{ 'b', 195, "amcheck",			&need_amcheck,		SOURCE_CMD_STRICT },
 	{ 'b', 196, "heapallindexed",	&heapallindexed,	SOURCE_CMD_STRICT },
@@ -703,6 +705,7 @@ main(int argc, char *argv[])
 		restore_params->partial_db_list = NULL;
 		restore_params->partial_restore_type = NONE;
 		restore_params->primary_conninfo = primary_conninfo;
+		restore_params->incremental = incremental_restore;
 
 		/* handle partial restore parameters */
 		if (datname_exclude_list && datname_include_list)

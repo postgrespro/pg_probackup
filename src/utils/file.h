@@ -35,6 +35,7 @@ typedef enum
 	FIO_PAGE,
 	FIO_WRITE_COMPRESSED,
 	FIO_GET_CRC32,
+	FIO_GET_CHECKSUM_MAP,
 	 /* used in fio_send_pages */
 	FIO_SEND_PAGES,
 	FIO_ERROR,
@@ -44,7 +45,6 @@ typedef enum
 	FIO_SEND_FILE_CORRUPTION,
 	/* messages for closing connection */
 	FIO_DISCONNECT,
-	FIO_DISCONNECTED,
 	/* message for compatibility check */
 	FIO_AGENT_VERSION,
 	FIO_LIST_DIR

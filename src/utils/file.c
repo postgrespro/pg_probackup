@@ -63,6 +63,14 @@ typedef struct
 	int     linked_len;
 } fio_pgFile;
 
+typedef struct
+{
+	BlockNumber n_blocks;
+	BlockNumber segmentno;
+	XLogRecPtr  stop_lsn;
+	uint32      checksumVersion;
+} fio_checksum_map_request;
+
 
 /* Convert FIO pseudo handle to index in file descriptor array */
 #define fio_fileno(f) (((size_t)f - 1) | FIO_PIPE_MARKER)
@@ -423,7 +431,7 @@ fio_disconnect(void)
 		hdr.size = 0;
 		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
 		IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
-		Assert(hdr.cop == FIO_DISCONNECTED);
+		Assert(hdr.cop == FIO_SEND_FILE_EOF);
 		SYS_CHECK(close(fio_stdin));
 		SYS_CHECK(close(fio_stdout));
 		fio_stdin = 0;
@@ -678,7 +686,7 @@ ssize_t fio_write(int fd, void const* buf, size_t size)
 	}
 }
 
-static int32
+int32
 fio_decompress(void* dst, void const* src, size_t size, int compress_alg)
 {
 	const char *errormsg = NULL;
@@ -2219,6 +2227,59 @@ static void fio_list_dir_impl(int out, char* buf)
 	IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 }
 
+uint16 *fio_get_checksum_map(const char *fullpath, uint32 checksum_version,
+							 int n_blocks, XLogRecPtr dest_stop_lsn, BlockNumber segmentno)
+{
+
+	fio_header hdr;
+	fio_checksum_map_request req_hdr;
+	uint16 *checksum_map = NULL;
+	size_t path_len = strlen(fullpath) + 1;
+
+	req_hdr.n_blocks = n_blocks;
+	req_hdr.segmentno = segmentno;
+	req_hdr.stop_lsn = dest_stop_lsn;
+	req_hdr.checksumVersion = checksum_version;
+
+	hdr.cop = FIO_GET_CHECKSUM_MAP;
+	hdr.size = sizeof(req_hdr) + path_len;
+
+	IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
+	IO_CHECK(fio_write_all(fio_stdout, &req_hdr, sizeof(req_hdr)), sizeof(req_hdr));
+	IO_CHECK(fio_write_all(fio_stdout, fullpath, path_len), path_len);
+
+	/* receive data */
+	IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
+
+	if (hdr.size > 0)
+	{
+		checksum_map = pgut_malloc(hdr.size * sizeof(uint16));
+		IO_CHECK(fio_read_all(fio_stdin, checksum_map, hdr.size * sizeof(uint16)), hdr.size * sizeof(uint16));
+	}
+
+	return checksum_map;
+}
+
+/* TODO: sent n_blocks to truncate file before reading */
+static void fio_get_checksum_map_impl(int out, char *buf)
+{
+	fio_header  hdr;
+	uint16     *checksum_map = NULL;
+	char       *fullpath = (char*) buf + sizeof(fio_checksum_map_request);
+	fio_checksum_map_request *req = (fio_checksum_map_request*) buf;
+
+	checksum_map = get_checksum_map(fullpath, req->checksumVersion,
+									req->n_blocks, req->stop_lsn, req->segmentno);
+	hdr.size = req->n_blocks;
+
+	/* send arrays of checksums to main process */
+	IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
+	if (hdr.size > 0)
+		IO_CHECK(fio_write_all(out, checksum_map, hdr.size * sizeof(uint16)), hdr.size * sizeof(uint16));
+
+	pg_free(checksum_map);
+}
+
 /* Execute commands at remote host */
 void fio_communicate(int in, int out)
 {
@@ -2390,8 +2451,12 @@ void fio_communicate(int in, int out)
 				crc = pgFileGetCRC(buf, true, true);
 			IO_CHECK(fio_write_all(out, &crc, sizeof(crc)), sizeof(crc));
 			break;
+		  case FIO_GET_CHECKSUM_MAP:
+			/* calculate crc32 for a file */
+			fio_get_checksum_map_impl(out, buf);
+			break;
 		  case FIO_DISCONNECT:
-			hdr.cop = FIO_DISCONNECTED;
+			hdr.cop = FIO_SEND_FILE_EOF;
 			IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 			break;
 		  default:

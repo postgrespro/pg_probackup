@@ -19,6 +19,7 @@
 
 typedef struct
 {
+	parray	   *pgdata_files;
 	parray	   *dest_files;
 	pgBackup   *dest_backup;
 	parray	   *dest_external_dirs;
@@ -28,6 +29,7 @@ typedef struct
 	const char *to_root;
 	size_t		restored_bytes;
 	bool        use_bitmap;
+	bool        incremental;
 
 	/*
 	 * Return value from the thread.
@@ -117,8 +119,24 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 				"required parameter not specified: PGDATA (-D, --pgdata)");
 		/* Check if restore destination empty */
 		if (!dir_is_empty(instance_config.pgdata, FIO_DB_HOST))
-			elog(ERROR, "restore destination is not empty: \"%s\"",
-				 instance_config.pgdata);
+		{
+			// TODO: check that remote systemd id is the same as ours.
+			// TODO: check that remote system is NOT running, check pg_control and pid.
+			if (params->incremental)
+			{
+				elog(INFO, "Running incremental restore into nonempty directory: \"%s\"",
+					 instance_config.pgdata);
+			}
+			else
+				elog(ERROR, "Restore destination is not empty: \"%s\"",
+					 instance_config.pgdata);
+		}
+		else
+		{
+			/* if remote directory is empty then disable incremental restore */
+			if (params->incremental)
+				params->incremental = false;
+		}
 	}
 
 	if (instance_name == NULL)
@@ -496,6 +514,7 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 {
 	int			i;
 	char		timestamp[100];
+	parray      *pgdata_files = NULL;
 	parray		*dest_files = NULL;
 	parray		*external_dirs = NULL;
 	/* arrays with meta info for multi threaded backup */
@@ -567,9 +586,15 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 	 * which is not always available in old backups.
 	 */
 	if (parse_program_version(dest_backup->program_version) < 20300)
+	{
 		use_bitmap = false;
 
+		if (params->incremental)
+			elog(ERROR, "incremental restore is not possible for backups older than 2.3.0 version");
+	}
+
 	/* There is no point in bitmap restore, when restoring a single FULL backup */
+	// TODO: if there is lsn-based incremental restore, then bitmap is mandatory
 	if (parray_num(parent_chain) == 1)
 		use_bitmap = false;
 
@@ -627,6 +652,46 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 		pg_atomic_clear_flag(&file->lock);
 	}
 
+	// Get list of files in destination directory and remove redundant files.
+	if (params->incremental)
+	{
+		pgdata_files = parray_new();
+
+		elog(INFO, "Extracting the content of destination directory for incremental restore");
+
+		/* TODO: external directorues */
+		if (fio_is_remote(FIO_DB_HOST))
+			fio_list_dir(pgdata_files, pgdata_path, false, true, false, false, 0);
+		else
+			dir_list_file(pgdata_files, pgdata_path,
+						  false, true, false, false, 0, FIO_LOCAL_HOST);
+
+		parray_qsort(pgdata_files, pgFileCompareRelPathWithExternalDesc);
+		elog(INFO, "Destination directory content extracted, time elapsed:");
+
+		elog(INFO, "Removing redundant files");
+		for (i = 0; i < parray_num(pgdata_files); i++)
+		{
+			pgFile	   *file = (pgFile *) parray_get(pgdata_files, i);
+
+			/* if file does not exists in destination list, then we can safely unlink it */
+			if (parray_bsearch(dest_backup->files, file, pgFileCompareRelPathWithExternal) == NULL)
+			{
+				char		full_file_path[MAXPGPATH];
+
+				join_path_components(full_file_path, pgdata_path, file->rel_path);
+
+				fio_pgFileDelete(file, full_file_path);
+				elog(WARNING, "Deleted remote file \"%s\"", full_file_path);
+			}
+		}
+
+		elog(INFO, "Redundant files are removed, time elapsed:");
+
+//		use_bitmap = true;
+		/* At this point PDATA do not contain files, that also do not exists in backup filelist */
+	}
+
 	/*
 	 * Close ssh connection belonging to the main thread
 	 * to avoid the possibility of been killed for idleness
@@ -652,6 +717,7 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 		restore_files_arg *arg = &(threads_args[i]);
 
 		arg->dest_files = dest_files;
+		arg->pgdata_files = pgdata_files;
 		arg->dest_backup = dest_backup;
 		arg->dest_external_dirs = external_dirs;
 		arg->parent_chain = parent_chain;
@@ -659,6 +725,7 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 		arg->skip_external_dirs = params->skip_external_dirs;
 		arg->to_root = pgdata_path;
 		arg->use_bitmap = use_bitmap;
+		arg->incremental = params->incremental;
 		threads_args[i].restored_bytes = 0;
 		/* By default there are some error */
 		threads_args[i].ret = 1;
@@ -750,6 +817,12 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 	if (external_dirs != NULL)
 		free_dir_list(external_dirs);
 
+	if (pgdata_files)
+	{
+		parray_walk(pgdata_files, pgFileFree);
+		parray_free(pgdata_files);
+	}
+
 	for (i = parray_num(parent_chain) - 1; i >= 0; i--)
 	{
 		pgBackup   *backup = (pgBackup *) parray_get(parent_chain, i);
@@ -766,15 +839,20 @@ static void *
 restore_files(void *arg)
 {
 	int         i;
+	uint64      n_files;
 	char        to_fullpath[MAXPGPATH];
 	FILE       *out = NULL;
 	char       *out_buf = pgut_malloc(STDIO_BUFSIZE);
 
 	restore_files_arg *arguments = (restore_files_arg *) arg;
 
+	n_files = (unsigned long) parray_num(arguments->dest_files);
+
 	for (i = 0; i < parray_num(arguments->dest_files); i++)
 	{
-		pgFile	   *dest_file = (pgFile *) parray_get(arguments->dest_files, i);
+		bool     already_exists = false;
+		uint16  *checksum_map = NULL; /* it should take 512kB at most */
+		pgFile	*dest_file = (pgFile *) parray_get(arguments->dest_files, i);
 
 		/* Directories were created before */
 		if (S_ISDIR(dest_file->mode))
@@ -789,8 +867,7 @@ restore_files(void *arg)
 
 		if (progress)
 			elog(INFO, "Progress: (%d/%lu). Restore file \"%s\"",
-				 i + 1, (unsigned long) parray_num(arguments->dest_files),
-				 dest_file->rel_path);
+				 i + 1, n_files, dest_file->rel_path);
 
 		/* Only files from pgdata can be skipped by partial restore */
 		if (arguments->dbOid_exclude_list && dest_file->external_dir_num == 0)
@@ -842,14 +919,40 @@ restore_files(void *arg)
 			join_path_components(to_fullpath, external_path, dest_file->rel_path);
 		}
 
-		/* open destination file */
-		out = fio_fopen(to_fullpath, PG_BINARY_W, FIO_DB_HOST);
-		if (out == NULL)
+		if (arguments->incremental &&
+			parray_bsearch(arguments->pgdata_files, dest_file, pgFileCompareRelPathWithExternalDesc))
+			already_exists = true;
+
+		/*
+		 * Handle incremental restore case for data files.
+		 * If file is already exists in pgdata, then
+		 * we scan it block by block and get
+		 * array of checksums for every page.
+		 */
+		if (already_exists &&
+			dest_file->is_datafile && !dest_file->is_cfs &&
+			dest_file->n_blocks > 0)
 		{
-			int errno_tmp = errno;
-			elog(ERROR, "Cannot open restore target file \"%s\": %s",
-				 to_fullpath, strerror(errno_tmp));
+			/* remote mode */
+			if (fio_is_remote(FIO_DB_HOST))
+				checksum_map = fio_get_checksum_map(to_fullpath, arguments->dest_backup->checksum_version,
+													dest_file->n_blocks, arguments->dest_backup->stop_lsn,
+													dest_file->segno * RELSEG_SIZE);
+			/* local mode */
+			else
+				checksum_map = get_checksum_map(to_fullpath, arguments->dest_backup->checksum_version,
+												dest_file->n_blocks, arguments->dest_backup->stop_lsn,
+												dest_file->segno * RELSEG_SIZE);
 		}
+
+		/* open destination file */
+		if (already_exists)
+			out = fio_fopen(to_fullpath, PG_BINARY_R "+", FIO_DB_HOST);
+		else
+			out = fio_fopen(to_fullpath, PG_BINARY_W, FIO_DB_HOST);
+		if (out == NULL)
+			elog(ERROR, "Cannot open restore target file \"%s\": %s",
+				 to_fullpath, strerror(errno));
 
 		/* update file permission */
 		if (fio_chmod(to_fullpath, dest_file->mode, FIO_DB_HOST) == -1)
@@ -873,8 +976,8 @@ restore_files(void *arg)
 				setvbuf(out, out_buf, _IOFBF, STDIO_BUFSIZE);
 			/* Destination file is data file */
 			arguments->restored_bytes += restore_data_file(arguments->parent_chain,
-															dest_file, out, to_fullpath,
-															arguments->use_bitmap);
+														   dest_file, out, to_fullpath,
+														   arguments->use_bitmap, checksum_map);
 		}
 		else
 		{
@@ -883,7 +986,8 @@ restore_files(void *arg)
 				setvbuf(out, NULL, _IONBF, BUFSIZ);
 			/* Destination file is non-data file */
 			arguments->restored_bytes += restore_non_data_file(arguments->parent_chain,
-										arguments->dest_backup, dest_file, out, to_fullpath);
+										arguments->dest_backup, dest_file, out, to_fullpath,
+										already_exists);
 		}
 
 		/* free pagemap used for restore optimization */
@@ -894,6 +998,8 @@ done:
 		if (fio_fclose(out) != 0)
 			elog(ERROR, "Cannot close file \"%s\": %s", to_fullpath,
 				 strerror(errno));
+
+		pg_free(checksum_map);
 	}
 
 	free(out_buf);

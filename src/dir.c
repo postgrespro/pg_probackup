@@ -249,6 +249,38 @@ delete_file:
 }
 
 /*
+ * Delete file pointed by the pgFile.
+ * If the pgFile points directory, the directory must be empty.
+ */
+void
+fio_pgFileDelete(pgFile *file, const char *full_path)
+{
+	if (S_ISDIR(file->mode))
+	{
+		if (fio_unlink(full_path, FIO_DB_HOST) == -1)
+		{
+			if (errno == ENOENT)
+				return;
+			else if (errno == ENOTDIR)	/* could be symbolic link */
+				goto delete_file;
+
+			elog(ERROR, "Cannot remove directory \"%s\": %s",
+				full_path, strerror(errno));
+		}
+		return;
+	}
+
+delete_file:
+	if (fio_unlink(full_path, FIO_DB_HOST) == -1)
+	{
+		if (errno == ENOENT)
+			return;
+		elog(ERROR, "Cannot remove file \"%s\": %s", full_path,
+			strerror(errno));
+	}
+}
+
+/*
  * Read the local file to compute its CRC.
  * We cannot make decision about file decompression because
  * user may ask to backup already compressed files and we should be

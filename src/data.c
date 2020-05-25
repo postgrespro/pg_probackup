@@ -862,7 +862,7 @@ backup_non_data_file(pgFile *file, pgFile *prev_file,
  */
 size_t
 restore_data_file(parray *parent_chain, pgFile *dest_file, FILE *out,
-						const char *to_fullpath, bool use_bitmap)
+				  const char *to_fullpath, bool use_bitmap, uint16 *checksum_map)
 {
 	size_t total_write_len = 0;
 	char  *in_buf = pgut_malloc(STDIO_BUFSIZE);
@@ -941,7 +941,8 @@ restore_data_file(parray *parent_chain, pgFile *dest_file, FILE *out,
 		total_write_len += restore_data_file_internal(in, out, tmp_file,
 					  parse_program_version(backup->program_version),
 					  from_fullpath, to_fullpath, dest_file->n_blocks,
-					  use_bitmap ? &(dest_file)->pagemap : NULL);
+					  use_bitmap ? &(dest_file)->pagemap : NULL,
+					  checksum_map, backup->checksum_version);
 
 		if (fclose(in) != 0)
 			elog(ERROR, "Cannot close file \"%s\": %s", from_fullpath,
@@ -962,7 +963,7 @@ restore_data_file(parray *parent_chain, pgFile *dest_file, FILE *out,
 size_t
 restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_version,
 					  const char *from_fullpath, const char *to_fullpath, int nblocks,
-					  datapagemap_t *map)
+					  datapagemap_t *map, uint16 *checksum_map, int checksum_version)
 {
 	BackupPageHeader header;
 	BlockNumber	blknum = 0;
@@ -1100,6 +1101,43 @@ restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_vers
 			is_compressed = true;
 		}
 
+		/* Incremental restore */
+		if (checksum_map && checksum_map[blknum] != 0)
+		{
+			uint16 page_crc = 0;
+
+			if (is_compressed)
+			{
+				char uncompressed_buf[BLCKSZ];
+				fio_decompress(uncompressed_buf, page.data, compressed_size, file->compress_alg);
+
+				/* If checksumms are enabled, then we can trust checksumm in header */
+				if (checksum_version)
+					page_crc = ((PageHeader) uncompressed_buf)->pd_checksum;
+				else
+					page_crc = pg_checksum_page(uncompressed_buf, file->segno * RELSEG_SIZE + blknum);
+
+//				page_crc_1 = pg_checksum_page(uncompressed_buf, file->segno * RELSEG_SIZE + blknum);
+//				Assert(page_crc == page_crc_1);
+			}
+			else
+			{
+				/* if checksumms are enabled, then we can trust checksumm in header */
+				if (checksum_version)
+					page_crc = ((PageHeader) page.data)->pd_checksum;
+				else
+					page_crc = pg_checksum_page(page.data, file->segno + blknum);
+			}
+
+			/* the heart of incremental restore */
+			if (page_crc == checksum_map[blknum])
+			{
+				if (map)
+					datapagemap_add(map, blknum);
+				continue;
+			}
+		}
+
 		/*
 		 * Seek and write the restored page.
 		 * When restoring file from FULL backup, pages are written sequentially,
@@ -1189,7 +1227,8 @@ restore_non_data_file_internal(FILE *in, FILE *out, pgFile *file,
 
 size_t
 restore_non_data_file(parray *parent_chain, pgBackup *dest_backup,
-					  pgFile *dest_file, FILE *out, const char *to_fullpath)
+					  pgFile *dest_file, FILE *out, const char *to_fullpath,
+					  bool already_exists)
 {
 //	int			i;
 	char		from_root[MAXPGPATH];
@@ -1258,6 +1297,20 @@ restore_non_data_file(parray *parent_chain, pgBackup *dest_backup,
 		elog(ERROR, "Full copy of non-data file has invalid size. "
 				"Metadata corruption in backup %s in file: \"%s\"",
 				base36enc(tmp_backup->start_time), to_fullpath);
+
+	/* incremental restore */
+	if (already_exists)
+	{
+		/* compare checksumms of remote and local files */
+		pg_crc32 file_crc = fio_get_crc32(to_fullpath, FIO_DB_HOST, false);
+
+		if (file_crc == tmp_file->crc)
+		{
+			elog(VERBOSE, "Remote nondata file \"%s\" is unchanged, skip restore",
+				to_fullpath);
+			return 0;
+		}
+	}
 
 	if (tmp_file->external_dir_num == 0)
 		join_path_components(from_root, tmp_backup->root_dir, DATABASE_DIR);
@@ -1756,4 +1809,69 @@ check_file_pages(pgFile *file, const char *fullpath, XLogRecPtr stop_lsn,
 	}
 
 	return is_valid;
+}
+
+/* read local data file and construct map with block checksums */
+uint16 *get_checksum_map(const char *fullpath, uint32 checksum_version,
+						 int n_blocks, XLogRecPtr dest_stop_lsn, BlockNumber segmentno)
+{
+	uint16     *checksum_map = NULL;
+	FILE       *in = NULL;
+	BlockNumber blknum = 0;
+	XLogRecPtr  page_lsn = 0;
+	char        read_buffer[BLCKSZ];
+	char        in_buf[STDIO_BUFSIZE];
+
+	/* truncate up to blocks */
+	if (truncate(fullpath, n_blocks * BLCKSZ) != 0)
+		elog(ERROR, "Cannot truncate file to blknum %u \"%s\": %s",
+				n_blocks, fullpath, strerror(errno));
+
+	/* open file */
+	in = fopen(fullpath, PG_BINARY_R);
+	if (!in)
+		elog(ERROR, "Cannot open source file \"%s\": %s", fullpath, strerror(errno));
+	setvbuf(in, in_buf, _IOFBF, STDIO_BUFSIZE);
+
+	/* initialize array of checksums */
+	checksum_map = pgut_malloc(n_blocks * sizeof(uint16));
+	memset(checksum_map, 0, n_blocks * sizeof(uint16));
+
+	for (blknum = 0; blknum < n_blocks;  blknum++)
+	{
+		size_t read_len = fread(read_buffer, 1, BLCKSZ, in);
+		page_lsn = InvalidXLogRecPtr;
+
+		/* report error */
+		if (ferror(in))
+			elog(ERROR, "Cannot read block %u of \"%s\": %s",
+					blknum, fullpath, strerror(errno));
+
+		if (read_len == BLCKSZ)
+		{
+			int rc = validate_one_page(read_buffer, segmentno + blknum,
+									   dest_stop_lsn, &page_lsn, checksum_version);
+
+			if (rc == PAGE_IS_VALID)
+			{
+				if (checksum_version)
+					checksum_map[blknum] = ((PageHeader) read_buffer)->pd_checksum;
+				else
+					checksum_map[blknum] = pg_checksum_page(read_buffer, segmentno + blknum);
+			}
+		}
+		else
+			elog(ERROR, "Failed to read blknum %u from file \"%s\"", blknum, fullpath);
+
+		if (feof(in))
+			break;
+
+		if (interrupted)
+			elog(ERROR, "Interrupted during page reading");
+	}
+
+	if (in)
+		fclose(in);
+
+	return checksum_map;
 }
