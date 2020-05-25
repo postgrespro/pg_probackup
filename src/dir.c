@@ -720,22 +720,22 @@ dir_check_file(pgFile *file)
 			{
 				/* Auxiliary fork of the relfile */
 				if (strcmp(fork_name, "vm") == 0)
-					file->forkName = VM;
+					file->forkName = vm;
 
 				else if (strcmp(fork_name, "fsm") == 0)
-					file->forkName = FSM;
+					file->forkName = fsm;
 
 				else if (strcmp(fork_name, "cfm") == 0)
-					file->forkName = CFM;
-
-				else if (strcmp(fork_name, "init") == 0)
-					file->forkName = INIT;
+					file->forkName = cfm;
 
 				else if (strcmp(fork_name, "ptrack") == 0)
-					file->forkName = PTRACK;
+					file->forkName = ptrack;
+
+				else if (strcmp(fork_name, "init") == 0)
+					file->forkName = init;
 
 				/* Do not backup ptrack files */
-				if (file->forkName == PTRACK)
+				if (file->forkName == ptrack)
 					return CHECK_FALSE;
 			}
 			else

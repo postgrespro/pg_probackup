@@ -28,6 +28,7 @@ typedef struct
 //	size_t		in_place_merge_bytes;
 	bool		compression_match;
 	bool		program_version_match;
+	bool        use_bitmap;
 
 	/*
 	 * Return value from the thread.
@@ -47,7 +48,7 @@ get_external_index(const char *key, const parray *list);
 static void
 merge_data_file(parray *parent_chain, pgBackup *full_backup,
 				pgBackup *dest_backup, pgFile *dest_file,
-				pgFile *tmp_file, const char *to_root);
+				pgFile *tmp_file, const char *to_root, bool use_bitmap);
 
 static void
 merge_non_data_file(parray *parent_chain, pgBackup *full_backup,
@@ -439,6 +440,7 @@ merge_chain(parray *parent_chain, pgBackup *full_backup, pgBackup *dest_backup)
 				*dest_externals = NULL;
 
 	parray		*result_filelist = NULL;
+	bool        use_bitmap = true;
 //	size_t 		total_in_place_merge_bytes = 0;
 
 	pthread_t	*threads = NULL;
@@ -601,6 +603,9 @@ merge_chain(parray *parent_chain, pgBackup *full_backup, pgBackup *dest_backup)
 	if (full_externals && dest_externals)
 		reorder_external_dirs(full_backup, full_externals, dest_externals);
 
+	if (parse_program_version(dest_backup->program_version) < 20300)
+		use_bitmap = false;
+
 	/* Setup threads */
 	for (i = 0; i < parray_num(dest_backup->files); i++)
 	{
@@ -639,6 +644,7 @@ merge_chain(parray *parent_chain, pgBackup *full_backup, pgBackup *dest_backup)
 
 		arg->compression_match = compression_match;
 		arg->program_version_match = program_version_match;
+		arg->use_bitmap = use_bitmap;
 		/* By default there are some error */
 		arg->ret = 1;
 
@@ -1028,7 +1034,8 @@ merge_files(void *arg)
 							arguments->full_backup,
 							arguments->dest_backup,
 							dest_file, tmp_file,
-							arguments->full_database_dir);
+							arguments->full_database_dir,
+							arguments->use_bitmap);
 		else
 			merge_non_data_file(arguments->parent_chain,
 								arguments->full_backup,
@@ -1128,7 +1135,7 @@ reorder_external_dirs(pgBackup *to_backup, parray *to_external,
 void
 merge_data_file(parray *parent_chain, pgBackup *full_backup,
 				pgBackup *dest_backup, pgFile *dest_file, pgFile *tmp_file,
-				const char *full_database_dir)
+				const char *full_database_dir, bool use_bitmap)
 {
 	FILE   *out = NULL;
 	char   *buffer = pgut_malloc(STDIO_BUFSIZE);
@@ -1154,7 +1161,7 @@ merge_data_file(parray *parent_chain, pgBackup *full_backup,
 	setvbuf(out, buffer, _IOFBF, STDIO_BUFSIZE);
 
 	/* restore file into temp file */
-	tmp_file->size = restore_data_file(parent_chain, dest_file, out, to_fullpath_tmp1);
+	tmp_file->size = restore_data_file(parent_chain, dest_file, out, to_fullpath_tmp1, use_bitmap);
 	fclose(out);
 	pg_free(buffer);
 

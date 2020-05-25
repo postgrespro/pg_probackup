@@ -2225,7 +2225,7 @@ parse_filelist_filenames(parray *files, const char *root)
 		if (S_ISREG(file->mode) && file->tblspcOid != 0 &&
 			file->name && file->name[0])
 		{
-			if (file->forkName == INIT)
+			if (file->forkName == init)
 			{
 				/*
 				 * Do not backup files of unlogged relations.
