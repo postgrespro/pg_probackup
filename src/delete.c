@@ -750,7 +750,7 @@ delete_backup_files(pgBackup *backup)
 
 	/* list files to be deleted */
 	files = parray_new();
-	dir_list_file(files, backup->root_dir, false, true, true, 0, FIO_BACKUP_HOST);
+	dir_list_file(files, backup->root_dir, false, true, true, false, 0, FIO_BACKUP_HOST);
 
 	/* delete leaf node first */
 	parray_qsort(files, pgFileComparePathDesc);
@@ -984,7 +984,7 @@ do_delete_instance(void)
 
 	/* Delete all wal files. */
 	xlog_files_list = parray_new();
-	dir_list_file(xlog_files_list, arclog_path, false, false, false, 0, FIO_BACKUP_HOST);
+	dir_list_file(xlog_files_list, arclog_path, false, false, false, false, 0, FIO_BACKUP_HOST);
 
 	for (i = 0; i < parray_num(xlog_files_list); i++)
 	{

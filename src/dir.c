@@ -125,7 +125,7 @@ static int pgCompareString(const void *str1, const void *str2);
 
 static char dir_check_file(pgFile *file);
 static void dir_list_file_internal(parray *files, pgFile *parent, bool exclude,
-								   bool follow_symlink,
+								   bool follow_symlink, bool skip_hidden,
 								   int external_dir_num, fio_location location);
 static void opt_path_map(ConfigOption *opt, const char *arg,
 						 TablespaceList *list, const char *type);
@@ -575,7 +575,7 @@ db_map_entry_free(void *entry)
  */
 void
 dir_list_file(parray *files, const char *root, bool exclude, bool follow_symlink,
-			  bool add_root, int external_dir_num, fio_location location)
+			  bool add_root, bool skip_hidden, int external_dir_num, fio_location location)
 {
 	pgFile	   *file;
 
@@ -601,7 +601,7 @@ dir_list_file(parray *files, const char *root, bool exclude, bool follow_symlink
 	if (add_root)
 		parray_append(files, file);
 
-	dir_list_file_internal(files, file, exclude, follow_symlink,
+	dir_list_file_internal(files, file, exclude, follow_symlink, skip_hidden,
 						   external_dir_num, location);
 
 	if (!add_root)
@@ -821,7 +821,7 @@ dir_check_file(pgFile *file)
  */
 static void
 dir_list_file_internal(parray *files, pgFile *parent, bool exclude,
-					   bool follow_symlink,
+					   bool follow_symlink, bool skip_hidden,
 					   int external_dir_num, fio_location location)
 {
 	DIR			  *dir;
@@ -868,7 +868,7 @@ dir_list_file_internal(parray *files, pgFile *parent, bool exclude,
 		}
 
 		/* skip hidden files and directories */
-		if (file->name[0] == '.')
+		if (skip_hidden && file->name[0] == '.')
 		{
 			elog(WARNING, "Skip hidden file: '%s'", file->path);
 			pgFileFree(file);
@@ -911,7 +911,7 @@ dir_list_file_internal(parray *files, pgFile *parent, bool exclude,
 		 */
 		if (S_ISDIR(file->mode))
 			dir_list_file_internal(files, file, exclude, follow_symlink,
-								   external_dir_num, location);
+								   skip_hidden, external_dir_num, location);
 	}
 
 	if (errno && errno != ENOENT)

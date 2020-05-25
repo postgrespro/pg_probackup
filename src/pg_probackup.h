@@ -845,7 +845,7 @@ extern const char* deparse_compress_alg(int alg);
 
 /* in dir.c */
 extern void dir_list_file(parray *files, const char *root, bool exclude,
-						  bool follow_symlink, bool add_root,
+						  bool follow_symlink, bool add_root, bool skip_hidden,
 						  int external_dir_num, fio_location location);
 
 extern void create_data_directories(parray *dest_files,

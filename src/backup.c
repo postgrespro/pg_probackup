@@ -333,7 +333,7 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync)
 
 	/* list files with the logical path. omit $PGDATA */
 	dir_list_file(backup_files_list, instance_config.pgdata,
-				  true, true, false, 0, FIO_DB_HOST);
+				  true, true, false, true, 0, FIO_DB_HOST);
 
 	/*
 	 * Get database_map (name to oid) for use in partial restore feature.
@@ -350,7 +350,7 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync)
 			/* External dirs numeration starts with 1.
 			 * 0 value is not external dir */
 			dir_list_file(backup_files_list, parray_get(external_dirs, i),
-						  false, true, false, i+1, FIO_DB_HOST);
+						  false, true, false, true, i+1, FIO_DB_HOST);
 
 	/* close ssh session in main thread */
 	fio_disconnect();
@@ -627,7 +627,7 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync)
 		/* Scan backup PG_XLOG_DIR */
 		xlog_files_list = parray_new();
 		join_path_components(pg_xlog_path, database_path, PG_XLOG_DIR);
-		dir_list_file(xlog_files_list, pg_xlog_path, false, true, false, 0,
+		dir_list_file(xlog_files_list, pg_xlog_path, false, true, false, true, 0,
 					  FIO_BACKUP_HOST);
 
 		/* TODO: Drop streamed WAL segments greater than stop_lsn */
