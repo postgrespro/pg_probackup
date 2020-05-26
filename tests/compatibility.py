@@ -958,3 +958,33 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_hidden_files(self):
+        """
+        old_version should be < 2.3.0
+        Create hidden file in pgdata, take backup
+        with old binary, then try to delete backup
+        with new binary
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={'autovacuum': 'off'})
+
+        self.init_pb(backup_dir, old_binary=True)
+        self.add_instance(backup_dir, 'node', node, old_binary=True)
+        node.slow_start()
+
+        open(os.path.join(node.data_dir, ".hidden_stuff"), 'a').close()
+
+        backup_id = self.backup_node(
+            backup_dir, 'node',node, old_binary=True, options=['--stream'])
+
+        self.delete_pb(backup_dir, 'node', backup_id)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
