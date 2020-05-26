@@ -661,10 +661,10 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 
 		/* TODO: external directorues */
 		if (fio_is_remote(FIO_DB_HOST))
-			fio_list_dir(pgdata_files, pgdata_path, false, true, false, false, 0);
+			fio_list_dir(pgdata_files, pgdata_path, false, true, false, false, true, 0);
 		else
 			dir_list_file(pgdata_files, pgdata_path,
-						  false, true, false, false, 0, FIO_LOCAL_HOST);
+						  false, true, false, false, true, 0, FIO_LOCAL_HOST);
 
 		parray_qsort(pgdata_files, pgFileCompareRelPathWithExternalDesc);
 		elog(INFO, "Destination directory content extracted, time elapsed:");
@@ -933,6 +933,7 @@ restore_files(void *arg)
 			dest_file->is_datafile && !dest_file->is_cfs &&
 			dest_file->n_blocks > 0)
 		{
+			elog(INFO, "HELLO");
 			/* remote mode */
 			if (fio_is_remote(FIO_DB_HOST))
 				checksum_map = fio_get_checksum_map(to_fullpath, arguments->dest_backup->checksum_version,
