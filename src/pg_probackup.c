@@ -563,9 +563,18 @@ main(int argc, char *argv[])
 		setMyLocation();
 	}
 
-	/* disable logging into file for archive-push and archive-get */
-	if (backup_subcmd == ARCHIVE_GET_CMD ||
-		backup_subcmd == ARCHIVE_PUSH_CMD)
+	/*
+	 * Disable logging into file for archive-push and archive-get.
+	 * Note, that we should NOT use fio_is_remote() here,
+	 * because it will launch ssh connection and we do not
+	 * want it, because it will kill archive-get prefetch
+	 * performance.
+	 *
+	 * TODO: make logging into file possible via ssh
+	 */
+	if (fio_is_remote_simple(FIO_BACKUP_HOST) &&
+		(backup_subcmd == ARCHIVE_GET_CMD ||
+		backup_subcmd == ARCHIVE_PUSH_CMD))
 	{
 		instance_config.logger.log_level_file = LOG_OFF;
 	}

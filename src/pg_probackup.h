@@ -241,8 +241,8 @@ typedef enum ShowFormat
 #define BYTES_INVALID		(-1) /* file didn`t changed since previous backup, DELTA backup do not rely on it */
 #define FILE_NOT_FOUND		(-2) /* file disappeared during backup */
 #define BLOCKNUM_INVALID	(-1)
-#define PROGRAM_VERSION	"2.3.3"
-#define AGENT_PROTOCOL_VERSION 20303
+#define PROGRAM_VERSION	"2.3.4"
+#define AGENT_PROTOCOL_VERSION 20304
 
 
 typedef struct ConnectionOptions
@@ -861,7 +861,7 @@ extern const char* deparse_compress_alg(int alg);
 /* in dir.c */
 extern void dir_list_file(parray *files, const char *root, bool exclude,
 						  bool follow_symlink, bool add_root, bool backup_logs,
-						  int external_dir_num, fio_location location);
+						  bool skip_hidden, int external_dir_num, fio_location location);
 
 extern void create_data_directories(parray *dest_files,
 										const char *data_dir,
@@ -1042,7 +1042,7 @@ extern int fio_send_file(const char *from_fullpath, const char *to_fullpath, FIL
 														pgFile *file, char **errormsg);
 
 extern void fio_list_dir(parray *files, const char *root, bool exclude, bool follow_symlink,
-						 bool add_root, bool backup_logs, int external_dir_num);
+						 bool add_root, bool backup_logs, bool skip_hidden, int external_dir_num);
 
 extern bool pgut_rmtree(const char *path, bool rmtopdir, bool strict);
 
@@ -1063,6 +1063,7 @@ extern int32 fio_decompress(void* dst, void const* src, size_t size, int compres
 
 /* Check if specified location is local for current node */
 extern bool fio_is_remote(fio_location location);
+extern bool fio_is_remote_simple(fio_location location);
 
 extern void get_header_errormsg(Page page, char **errormsg);
 extern void get_checksum_errormsg(Page page, char **errormsg,

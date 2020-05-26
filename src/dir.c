@@ -124,8 +124,9 @@ typedef struct TablespaceCreatedList
 static int pgCompareString(const void *str1, const void *str2);
 
 static char dir_check_file(pgFile *file);
+
 static void dir_list_file_internal(parray *files, pgFile *parent, const char *parent_dir,
-								   bool exclude, bool follow_symlink,
+								   bool exclude, bool follow_symlink, bool skip_hidden,
 								   int external_dir_num, fio_location location);
 static void opt_path_map(ConfigOption *opt, const char *arg,
 						 TablespaceList *list, const char *type);
@@ -545,7 +546,8 @@ db_map_entry_free(void *entry)
  */
 void
 dir_list_file(parray *files, const char *root, bool exclude, bool follow_symlink,
-			  bool add_root, bool backup_logs, int external_dir_num, fio_location location)
+			  bool add_root, bool backup_logs, bool skip_hidden, int external_dir_num,
+			  fio_location location)
 {
 	pgFile	   *file;
 
@@ -583,7 +585,7 @@ dir_list_file(parray *files, const char *root, bool exclude, bool follow_symlink
 		parray_append(files, file);
 
 	dir_list_file_internal(files, file, root, exclude, follow_symlink,
-						   external_dir_num, location);
+						   skip_hidden, external_dir_num, location);
 
 	if (!add_root)
 		pgFileFree(file);
@@ -805,7 +807,7 @@ dir_check_file(pgFile *file)
  */
 static void
 dir_list_file_internal(parray *files, pgFile *parent, const char *parent_dir,
-					   bool exclude, bool follow_symlink,
+					   bool exclude, bool follow_symlink, bool skip_hidden,
 					   int external_dir_num, fio_location location)
 {
 	DIR			  *dir;
@@ -852,7 +854,7 @@ dir_list_file_internal(parray *files, pgFile *parent, const char *parent_dir,
 		}
 
 		/* skip hidden files and directories */
-		if (file->name[0] == '.')
+		if (skip_hidden && file->name[0] == '.')
 		{
 			elog(WARNING, "Skip hidden file: '%s'", child);
 			pgFileFree(file);
@@ -895,7 +897,7 @@ dir_list_file_internal(parray *files, pgFile *parent, const char *parent_dir,
 		 */
 		if (S_ISDIR(file->mode))
 			dir_list_file_internal(files, file, child, exclude, follow_symlink,
-								   external_dir_num, location);
+								   skip_hidden, external_dir_num, location);
 	}
 
 	if (errno && errno != ENOENT)

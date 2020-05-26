@@ -1062,7 +1062,7 @@ remove_dir_with_files(const char *path)
 	int			i;
 	char 		full_path[MAXPGPATH];
 
-	dir_list_file(files, path, false, false, true, false, 0, FIO_LOCAL_HOST);
+	dir_list_file(files, path, false, false, true, false, false, 0, FIO_LOCAL_HOST);
 	parray_qsort(files, pgFileCompareRelPathWithExternalDesc);
 	for (i = 0; i < parray_num(files); i++)
 	{

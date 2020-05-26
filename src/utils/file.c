@@ -44,6 +44,7 @@ typedef struct
 	bool add_root;
 	bool backup_logs;
 	bool exclusive_backup;
+	bool skip_hidden;
 	int  external_dir_num;
 } fio_list_dir_request;
 
@@ -180,6 +181,15 @@ bool fio_is_remote(fio_location location)
 		&& location != MyLocation;
 	if (is_remote && !fio_stdin && !launch_agent())
 		elog(ERROR, "Failed to establish SSH connection: %s", strerror(errno));
+	return is_remote;
+}
+
+/* Check if specified location is local for current node */
+bool fio_is_remote_simple(fio_location location)
+{
+	bool is_remote = MyLocation != FIO_LOCAL_HOST
+		&& location != FIO_LOCAL_HOST
+		&& location != MyLocation;
 	return is_remote;
 }
 
@@ -1544,7 +1554,7 @@ static void fio_send_pages_impl(int out, char* buf)
 			hdr.arg = OPEN_FAILED;
 			errormsg = pgut_malloc(ERRMSG_MAX_LEN);
 			/* Construct the error message */
-			snprintf(errormsg, ERRMSG_MAX_LEN, "Cannot open source file '%s': %s",
+			snprintf(errormsg, ERRMSG_MAX_LEN, "Cannot open file \"%s\": %s",
 					 from_fullpath, strerror(errno));
 			hdr.size = strlen(errormsg) + 1;
 		}
@@ -2073,7 +2083,8 @@ cleanup:
 
 /* Compile the array of files located on remote machine in directory root */
 void fio_list_dir(parray *files, const char *root, bool exclude,
-				  bool follow_symlink, bool add_root, bool backup_logs, int external_dir_num)
+				  bool follow_symlink, bool add_root, bool backup_logs,
+				  bool skip_hidden, int external_dir_num)
 {
 	fio_header hdr;
 	fio_list_dir_request req;
@@ -2086,6 +2097,7 @@ void fio_list_dir(parray *files, const char *root, bool exclude,
 	req.add_root = add_root;
 	req.backup_logs = backup_logs;
 	req.exclusive_backup = exclusive_backup;
+	req.skip_hidden = skip_hidden;
 	req.external_dir_num = external_dir_num;
 
 	hdr.cop = FIO_LIST_DIR;
@@ -2180,7 +2192,8 @@ static void fio_list_dir_impl(int out, char* buf)
 	exclusive_backup = req->exclusive_backup;
 
 	dir_list_file(file_files, req->path, req->exclude, req->follow_symlink,
-				req->add_root, req->backup_logs, req->external_dir_num, FIO_LOCAL_HOST);
+				  req->add_root, req->backup_logs, req->skip_hidden,
+				  req->external_dir_num, FIO_LOCAL_HOST);
 
 	/* send information about files to the main process */
 	for (i = 0; i < parray_num(file_files); i++)
