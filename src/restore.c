@@ -49,6 +49,8 @@ static void pg12_recovery_config(pgBackup *backup, bool add_include);
 static void restore_chain(pgBackup *dest_backup, parray *parent_chain,
 						  parray *dbOid_exclude_list, pgRestoreParams *params,
 						  const char *pgdata_path, bool no_sync);
+static void check_incremental_compatibility(const char *pgdata, uint64 system_identifier,
+											bool lsn_based);
 
 /*
  * Iterate over backup list to find all ancestors of the broken parent_backup
@@ -111,6 +113,8 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 	char	   *action = params->is_restore ? "Restore":"Validate";
 	parray	   *parent_chain = NULL;
 	parray	   *dbOid_exclude_list = NULL;
+	bool        pgdata_is_empty = true;
+	bool        tblspaces_are_empty = true;
 
 	if (params->is_restore)
 	{
@@ -126,16 +130,17 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 			{
 				elog(INFO, "Running incremental restore into nonempty directory: \"%s\"",
 					 instance_config.pgdata);
+
+				check_incremental_compatibility(instance_config.pgdata,
+												instance_config.system_identifier,
+												false);
 			}
 			else
 				elog(ERROR, "Restore destination is not empty: \"%s\"",
 					 instance_config.pgdata);
-		}
-		else
-		{
-			/* if remote directory is empty then disable incremental restore */
-			if (params->incremental)
-				params->incremental = false;
+
+			/* if remote directory is empty then incremental restore may be disabled */
+			pgdata_is_empty = true;
 		}
 	}
 
@@ -340,7 +345,10 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 	 */
 	if (params->is_restore)
 	{
-		check_tablespace_mapping(dest_backup);
+		check_tablespace_mapping(dest_backup, params->incremental, &tblspaces_are_empty);
+
+		if (pgdata_is_empty && tblspaces_are_empty)
+			params->incremental = false;
 
 		/* no point in checking external directories if their restore is not requested */
 		if (!params->skip_external_dirs)
@@ -602,7 +610,8 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 	 * Restore dest_backup internal directories.
 	 */
 	create_data_directories(dest_files, instance_config.pgdata,
-							dest_backup->root_dir, true, FIO_DB_HOST);
+							dest_backup->root_dir, true,
+							params->incremental, FIO_DB_HOST);
 
 	/*
 	 * Restore dest_backup external directories.
@@ -660,16 +669,23 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 		elog(INFO, "Extracting the content of destination directory for incremental restore");
 
 		/* TODO: external directorues */
+		time(&start_time);
 		if (fio_is_remote(FIO_DB_HOST))
 			fio_list_dir(pgdata_files, pgdata_path, false, true, false, false, true, 0);
 		else
 			dir_list_file(pgdata_files, pgdata_path,
 						  false, true, false, false, true, 0, FIO_LOCAL_HOST);
-
 		parray_qsort(pgdata_files, pgFileCompareRelPathWithExternalDesc);
-		elog(INFO, "Destination directory content extracted, time elapsed:");
 
-		elog(INFO, "Removing redundant files");
+		time(&end_time);
+		pretty_time_interval(difftime(end_time, start_time),
+							 pretty_time, lengthof(pretty_time));
+
+		elog(INFO, "Destination directory content extracted, time elapsed: %s",
+				pretty_time);
+
+		elog(INFO, "Removing redundant files in destination directory");
+		time(&start_time);
 		for (i = 0; i < parray_num(pgdata_files); i++)
 		{
 			pgFile	   *file = (pgFile *) parray_get(pgdata_files, i);
@@ -686,7 +702,11 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 			}
 		}
 
-		elog(INFO, "Redundant files are removed, time elapsed:");
+		time(&end_time);
+		pretty_time_interval(difftime(end_time, start_time),
+							 pretty_time, lengthof(pretty_time));
+
+		elog(INFO, "Redundant files are removed, time elapsed: %s", pretty_time);
 
 //		use_bitmap = true;
 		/* At this point PDATA do not contain files, that also do not exists in backup filelist */
@@ -756,9 +776,9 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 		elog(INFO, "Backup files are restored. Transfered bytes: %s, time elapsed: %s",
 			pretty_total_bytes, pretty_time);
 
-		elog(INFO, "Approximate restore efficiency ratio: %.f%% (%s/%s)",
-			((float) dest_bytes / total_bytes) * 100,
-			pretty_dest_bytes, pretty_total_bytes);
+		elog(INFO, "Restore overwriting ratio (less is better): %.f%% (%s/%s)",
+			((float) total_bytes / dest_bytes) * 100,
+			pretty_total_bytes, pretty_dest_bytes);
 	}
 	else
 		elog(ERROR, "Backup files restoring failed. Transfered bytes: %s, time elapsed: %s",
@@ -921,7 +941,9 @@ restore_files(void *arg)
 
 		if (arguments->incremental &&
 			parray_bsearch(arguments->pgdata_files, dest_file, pgFileCompareRelPathWithExternalDesc))
+		{
 			already_exists = true;
+		}
 
 		/*
 		 * Handle incremental restore case for data files.
@@ -933,7 +955,6 @@ restore_files(void *arg)
 			dest_file->is_datafile && !dest_file->is_cfs &&
 			dest_file->n_blocks > 0)
 		{
-			elog(INFO, "HELLO");
 			/* remote mode */
 			if (fio_is_remote(FIO_DB_HOST))
 				checksum_map = fio_get_checksum_map(to_fullpath, arguments->dest_backup->checksum_version,
@@ -1742,4 +1763,73 @@ get_dbOid_exclude_list(pgBackup *backup, parray *datname_list,
 	parray_qsort(dbOid_exclude_list, pgCompareOid);
 
 	return dbOid_exclude_list;
+}
+
+/* check that instance has the same SYSTEM_ID, */
+void
+check_incremental_compatibility(const char *pgdata, uint64 system_identifier, bool lsn_based)
+{
+	uint64	system_id_pgdata;
+	bool    success = true;
+	pid_t   pid;
+	char    backup_label[MAXPGPATH];
+
+	/* slurp pg_control and check that system ID is the same */
+	/* check that instance is not running */
+	/* if lsn_based, check that there is no backup_label files is around AND
+	 * get redo point lsn from destination pg_control.
+
+	 * It is really important to be sure that pg_control is in cohesion with
+	 * data files content, because based on pg_control information we will
+	 * choose a backup suitable for lsn based incremental restore.
+	 */
+	/* TODO: handle timeline discrepancies */
+
+	system_id_pgdata = get_system_identifier(pgdata);
+
+	if (system_id_pgdata != instance_config.system_identifier)
+	{
+		elog(WARNING, "Backup catalog was initialized for system id %lu, "
+					"but destination directory system id is %lu",
+					system_identifier, system_id_pgdata);
+		success = false;
+	}
+
+	/* check postmaster pid */
+	if (fio_is_remote(FIO_DB_HOST))
+		pid = fio_check_postmaster(pgdata);
+	else
+		pid = check_postmaster(pgdata);
+
+	if (pid == 1) /* postmaster.pid is mangled */
+	{
+		char pid_file[MAXPGPATH];
+
+		snprintf(pid_file, MAXPGPATH, "%s/postmaster.pid", pgdata);
+		elog(WARNING, "Pid file \"%s\" is mangled, cannot determine whether postmaster is running or not",
+			pid_file);
+		success = false;
+	}
+	else if (pid > 1)
+	{
+		elog(WARNING, "Postmaster with pid %u is running in destination directory \"%s\"",
+			pid, pgdata);
+		success = false;
+	}
+
+	if (lsn_based)
+	{
+		snprintf(backup_label, MAXPGPATH, "%s/backup_label", pgdata);
+		if (fio_access(backup_label, F_OK, FIO_DB_HOST) == 0)
+		{
+			elog(WARNING, "Destination directory contains \"backup_control\" file. "
+				"It does not mean that you should delete this file, only that "
+				"lsn-based incremental restore is dangerous to use in this case. "
+				"Consider to use checksum-based incremental restore");
+			success = false;
+		}
+	}
+
+	if (!success)
+		elog(ERROR, "Incremental restore is impossible");
 }

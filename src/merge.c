@@ -589,7 +589,7 @@ merge_chain(parray *parent_chain, pgBackup *full_backup, pgBackup *dest_backup)
 
 	/* Create directories */
 	create_data_directories(dest_backup->files, full_database_dir,
-							dest_backup->root_dir, false, FIO_BACKUP_HOST);
+							dest_backup->root_dir, false, false, FIO_BACKUP_HOST);
 
 	/* External directories stuff */
 	if (dest_backup->external_dir_str)

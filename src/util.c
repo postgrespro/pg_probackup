@@ -549,3 +549,50 @@ datapagemap_print_debug(datapagemap_t *map)
 
 	pg_free(iter);
 }
+
+/*
+ * return pid of postmaster process running in given pgdata.
+ * return 0 if there is none.
+ */
+pid_t
+check_postmaster(const char *pgdata)
+{
+	FILE  *fp;
+	pid_t  pid;
+	char   pid_file[MAXPGPATH];
+
+	snprintf(pid_file, MAXPGPATH, "%s/postmaster.pid", pgdata);
+
+	fp = fopen(pid_file, "r");
+	if (fp == NULL)
+	{
+		/* No pid file, acceptable*/
+		if (errno == ENOENT)
+			return 0;
+		else
+			elog(ERROR, "Cannot open file \"%s\": %s",
+				pid_file, strerror(errno));
+	}
+
+	if (fscanf(fp, "%i", &pid) != 1)
+	{
+		/* something is wrong with the file content */
+		pid = 1;
+	}
+
+	if (pid > 1)
+	{
+		if (kill(pid, 0) != 0)
+		{
+			/* process no longer exists */
+			if (errno == ESRCH)
+				pid = 0;
+			else
+				elog(ERROR, "Failed to send signal 0 to a process %d: %s",
+						pid, strerror(errno));
+		}
+	}
+
+	fclose(fp);
+	return pid;
+}

@@ -47,7 +47,8 @@ typedef enum
 	FIO_DISCONNECT,
 	/* message for compatibility check */
 	FIO_AGENT_VERSION,
-	FIO_LIST_DIR
+	FIO_LIST_DIR,
+	FIO_CHECK_POSTMASTER
 } fio_operations;
 
 typedef enum
@@ -66,8 +67,9 @@ typedef enum
 
 typedef struct
 {
-	unsigned cop    : 5;
-	unsigned handle : 7;
+//	fio_operations cop;
+	unsigned cop    : 6;
+	unsigned handle : 6;
 	unsigned size   : 20;
 	unsigned arg;
 } fio_header;
@@ -107,7 +109,7 @@ extern int     fio_sync(char const* path, fio_location location);
 extern pg_crc32 fio_get_crc32(const char *file_path, fio_location location, bool decompress);
 
 extern int     fio_rename(char const* old_path, char const* new_path, fio_location location);
-extern int     fio_symlink(char const* target, char const* link_path, fio_location location);
+extern int     fio_symlink(char const* target, char const* link_path, bool overwrite, fio_location location);
 extern int     fio_unlink(char const* path, fio_location location);
 extern int     fio_mkdir(char const* path, int mode, fio_location location);
 extern int     fio_chmod(char const* path, int mode, fio_location location);

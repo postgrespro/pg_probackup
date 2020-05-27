@@ -1902,7 +1902,7 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 		if (file->linked)
 			len += sprintf(line+len, ",\"linked\":\"%s\"", file->linked);
 
-		if (file->n_blocks != BLOCKNUM_INVALID)
+		if (file->n_blocks > 0)
 			len += sprintf(line+len, ",\"n_blocks\":\"%i\"", file->n_blocks);
 
 		sprintf(line+len, "}\n");

@@ -1021,7 +1021,7 @@ opt_externaldir_map(ConfigOption *opt, const char *arg)
  */
 void
 create_data_directories(parray *dest_files, const char *data_dir, const char *backup_dir,
-						bool extract_tablespaces, fio_location location)
+						bool extract_tablespaces, bool incremental, fio_location location)
 {
 	int			i;
 	parray		*links = NULL;
@@ -1126,7 +1126,7 @@ create_data_directories(parray *dest_files, const char *data_dir, const char *ba
 					fio_mkdir(linked_path, pg_tablespace_mode, location);
 
 					/* create link to linked_path */
-					if (fio_symlink(linked_path, to_path, location) < 0)
+					if (fio_symlink(linked_path, to_path, incremental, location) < 0)
 						elog(ERROR, "Could not create symbolic link \"%s\": %s",
 							 to_path, strerror(errno));
 
@@ -1203,13 +1203,18 @@ read_tablespace_map(parray *files, const char *backup_dir)
 
 /*
  * Check that all tablespace mapping entries have correct linked directory
- * paths. Linked directories must be empty or do not exist.
+ * paths. Linked directories must be empty or do not exist, unless
+ * we are running incremental restore, then linked directories can be nonempty.
  *
  * If tablespace-mapping option is supplied, all OLDDIR entries must have
  * entries in tablespace_map file.
+ *
+ * When running incremental restore with tablespace remapping, then
+ * new tablespace directory MUST be empty, because there is no
+ * we can be sure, that files laying there belong to our instance.
  */
 void
-check_tablespace_mapping(pgBackup *backup)
+check_tablespace_mapping(pgBackup *backup, bool incremental, bool *tblspaces_are_empty)
 {
 //	char		this_backup_path[MAXPGPATH];
 	parray	   *links;
@@ -1236,6 +1241,18 @@ check_tablespace_mapping(pgBackup *backup)
 			elog(ERROR, "--tablespace-mapping option's old directory "
 				 "doesn't have an entry in tablespace_map file: \"%s\"",
 				 cell->old_dir);
+
+		/* For incremental restore, check that new directory is empty */
+		if (incremental)
+		{
+			if (!is_absolute_path(cell->new_dir))
+				elog(ERROR, "tablespace directory is not an absolute path: %s\n",
+					 cell->new_dir);
+
+			if (!dir_is_empty(cell->new_dir, FIO_DB_HOST))
+				elog(ERROR, "restore tablespace destination is not empty: \"%s\"",
+					 cell->new_dir);
+		}
 	}
 
 	/* 2 - all linked directories must be empty */
@@ -1257,8 +1274,12 @@ check_tablespace_mapping(pgBackup *backup)
 				 linked_path);
 
 		if (!dir_is_empty(linked_path, FIO_DB_HOST))
-			elog(ERROR, "restore tablespace destination is not empty: \"%s\"",
-				 linked_path);
+		{
+			if (!incremental)
+				elog(ERROR, "restore tablespace destination is not empty: \"%s\"",
+					 linked_path);
+			*tblspaces_are_empty = false;
+		}
 	}
 
 	free(tmp_file);

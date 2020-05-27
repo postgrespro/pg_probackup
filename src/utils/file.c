@@ -856,7 +856,7 @@ int fio_access(char const* path, int mode, fio_location location)
 }
 
 /* Create symbolic link */
-int fio_symlink(char const* target, char const* link_path, fio_location location)
+int fio_symlink(char const* target, char const* link_path, bool overwrite, fio_location location)
 {
 	if (fio_is_remote(location))
 	{
@@ -866,6 +866,7 @@ int fio_symlink(char const* target, char const* link_path, fio_location location
 		hdr.cop = FIO_SYMLINK;
 		hdr.handle = -1;
 		hdr.size = target_len + link_path_len;
+		hdr.arg = overwrite ? 1 : 0;
 
 		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
 		IO_CHECK(fio_write_all(fio_stdout, target, target_len), target_len);
@@ -875,8 +876,24 @@ int fio_symlink(char const* target, char const* link_path, fio_location location
 	}
 	else
 	{
+		if (overwrite)
+			remove_file_or_dir(link_path);
+
 		return symlink(target, link_path);
 	}
+}
+
+static void fio_symlink_impl(int out, char *buf, bool overwrite)
+{
+	char *linked_path = buf;
+	char *link_path = buf + strlen(buf) + 1;
+
+	if (overwrite)
+		remove_file_or_dir(link_path);
+
+	if (symlink(linked_path, link_path))
+		elog(ERROR, "Could not create symbolic link \"%s\": %s",
+			link_path, strerror(errno));
 }
 
 /* Rename file */
@@ -1393,6 +1410,9 @@ int fio_send_pages(FILE* out, const char *from_fullpath, pgFile *file, XLogRecPt
 	| fio_header | fio_send_request | FILE PATH | BITMAP(if any) |
 	--------------------------------------------------------------
 	*/
+
+//	elog(WARNING, "Size: %lu", sizeof(fio_header));
+//	elog(ERROR, "Size: %lu", MAXALIGN(sizeof(fio_header)));
 
 	req.hdr.cop = FIO_SEND_PAGES;
 
@@ -2243,7 +2263,6 @@ static void fio_list_dir_impl(int out, char* buf)
 uint16 *fio_get_checksum_map(const char *fullpath, uint32 checksum_version,
 							 int n_blocks, XLogRecPtr dest_stop_lsn, BlockNumber segmentno)
 {
-
 	fio_header hdr;
 	fio_checksum_map_request req_hdr;
 	uint16 *checksum_map = NULL;
@@ -2291,6 +2310,34 @@ static void fio_get_checksum_map_impl(int out, char *buf)
 		IO_CHECK(fio_write_all(out, checksum_map, hdr.size * sizeof(uint16)), hdr.size * sizeof(uint16));
 
 	pg_free(checksum_map);
+}
+
+pid_t fio_check_postmaster(const char *pgdata)
+{
+	fio_header hdr;
+
+	hdr.cop = FIO_CHECK_POSTMASTER;
+	hdr.size = strlen(pgdata) + 1;
+
+	IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
+	IO_CHECK(fio_write_all(fio_stdout, pgdata, hdr.size), hdr.size);
+
+	/* receive result */
+	IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
+	return hdr.arg;
+}
+
+static void fio_check_postmaster_impl(int out, char *buf)
+{
+	fio_header  hdr;
+	pid_t       postmaster_pid;
+	char       *pgdata = (char*) buf;
+
+	postmaster_pid = check_postmaster(pgdata);
+
+	/* send arrays of checksums to main process */
+	hdr.arg = postmaster_pid;
+	IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 }
 
 /* Execute commands at remote host */
@@ -2411,7 +2458,7 @@ void fio_communicate(int in, int out)
 			SYS_CHECK(rename(buf, buf + strlen(buf) + 1));
 			break;
 		  case FIO_SYMLINK: /* Create symbolic link */
-			SYS_CHECK(symlink(buf, buf + strlen(buf) + 1));
+			fio_symlink_impl(out, buf, hdr.arg > 0 ? true : false);
 			break;
 		  case FIO_UNLINK: /* Remove file or directory (TODO: Win32) */
 			SYS_CHECK(remove_file_or_dir(buf));
@@ -2467,6 +2514,10 @@ void fio_communicate(int in, int out)
 		  case FIO_GET_CHECKSUM_MAP:
 			/* calculate crc32 for a file */
 			fio_get_checksum_map_impl(out, buf);
+			break;
+		  case FIO_CHECK_POSTMASTER:
+			/* calculate crc32 for a file */
+			fio_check_postmaster_impl(out, buf);
 			break;
 		  case FIO_DISCONNECT:
 			hdr.cop = FIO_SEND_FILE_EOF;

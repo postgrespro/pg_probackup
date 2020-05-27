@@ -867,12 +867,13 @@ extern void create_data_directories(parray *dest_files,
 										const char *data_dir,
 										const char *backup_dir,
 										bool extract_tablespaces,
+										bool incremental,
 										fio_location location);
 
 extern void read_tablespace_map(parray *files, const char *backup_dir);
 extern void opt_tablespace_map(ConfigOption *opt, const char *arg);
 extern void opt_externaldir_map(ConfigOption *opt, const char *arg);
-extern void check_tablespace_mapping(pgBackup *backup);
+extern void check_tablespace_mapping(pgBackup *backup, bool incremental, bool *tblspaces_are_empty);
 extern void check_external_dir_mapping(pgBackup *backup);
 extern char *get_external_remap(char *current_dir);
 
@@ -951,6 +952,7 @@ extern bool create_empty_file(fio_location from_location, const char *to_root,
 
 extern uint16 *get_checksum_map(const char *fullpath, uint32 checksum_version,
 								int n_blocks, XLogRecPtr dest_stop_lsn, BlockNumber segmentno);
+extern pid_t check_postmaster(const char *pgdata);
 
 extern bool check_file_pages(pgFile *file, const char *fullpath, XLogRecPtr stop_lsn,
 							 uint32 checksum_version, uint32 backup_version);
@@ -1048,6 +1050,7 @@ extern bool pgut_rmtree(const char *path, bool rmtopdir, bool strict);
 
 extern uint16 *fio_get_checksum_map(const char *fullpath, uint32 checksum_version,
 							int n_blocks, XLogRecPtr dest_stop_lsn, BlockNumber segmentno);
+extern pid_t fio_check_postmaster(const char *pgdata);
 
 extern int32 fio_decompress(void* dst, void const* src, size_t size, int compress_alg);
 
