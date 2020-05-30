@@ -351,6 +351,37 @@ get_pgcontrol_checksum(const char *pgdata_path)
 	return ControlFile.crc;
 }
 
+void
+get_redo(const char *pgdata_path, RedoParams *redo)
+{
+	ControlFileData ControlFile;
+	char	   *buffer;
+	size_t		size;
+
+	/* First fetch file... */
+	buffer = slurpFile(pgdata_path, XLOG_CONTROL_FILE, &size, false, FIO_DB_HOST);
+
+	digestControlFile(&ControlFile, buffer, size);
+	pg_free(buffer);
+
+	redo->lsn = ControlFile.checkPointCopy.redo;
+	redo->tli = ControlFile.checkPointCopy.ThisTimeLineID;
+
+	if (ControlFile.minRecoveryPoint > 0 &&
+		ControlFile.minRecoveryPoint < redo->lsn)
+	{
+		redo->lsn = ControlFile.minRecoveryPoint;
+		redo->tli = ControlFile.minRecoveryPointTLI;
+	}
+
+	if (ControlFile.backupStartPoint > 0 &&
+		ControlFile.backupStartPoint < redo->lsn)
+	{
+		redo->lsn = ControlFile.backupStartPoint;
+		redo->tli = ControlFile.checkPointCopy.ThisTimeLineID;
+	}
+}
+
 /*
  * Rewrite minRecoveryPoint of pg_control in backup directory. minRecoveryPoint
  * 'as-is' is not to be trusted.
@@ -551,8 +582,9 @@ datapagemap_print_debug(datapagemap_t *map)
 }
 
 /*
- * return pid of postmaster process running in given pgdata.
- * return 0 if there is none.
+ * Return pid of postmaster process running in given pgdata.
+ * Return 0 if there is none.
+ * Return 1 if postmaster.pid is mangled.
  */
 pid_t
 check_postmaster(const char *pgdata)

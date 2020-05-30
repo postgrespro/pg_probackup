@@ -35,7 +35,9 @@ typedef enum
 	FIO_PAGE,
 	FIO_WRITE_COMPRESSED,
 	FIO_GET_CRC32,
+	/* used for incremental restore */
 	FIO_GET_CHECKSUM_MAP,
+	FIO_GET_LSN_MAP,
 	 /* used in fio_send_pages */
 	FIO_SEND_PAGES,
 	FIO_ERROR,

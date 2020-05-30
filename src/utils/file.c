@@ -72,6 +72,14 @@ typedef struct
 	uint32      checksumVersion;
 } fio_checksum_map_request;
 
+typedef struct
+{
+	BlockNumber n_blocks;
+	BlockNumber segmentno;
+	XLogRecPtr  horizonLsn;
+	uint32      checksumVersion;
+} fio_lsn_map_request;
+
 
 /* Convert FIO pseudo handle to index in file descriptor array */
 #define fio_fileno(f) (((size_t)f - 1) | FIO_PIPE_MARKER)
@@ -99,6 +107,7 @@ void fio_error(int rc, int size, char const* file, int line)
 	else
 	{
 		char buf[PRINTF_BUF_SIZE+1];
+//		Assert(false);
 		int err_size = read(fio_stderr, buf, PRINTF_BUF_SIZE);
 		if (err_size > 0)
 		{
@@ -200,14 +209,16 @@ static ssize_t fio_read_all(int fd, void* buf, size_t size)
 	while (offs < size)
 	{
 		ssize_t rc = read(fd, (char*)buf + offs, size - offs);
-		if (rc < 0) {
-			if (errno == EINTR) {
+		if (rc < 0)
+		{
+			if (errno == EINTR)
 				continue;
-			}
+			elog(WARNING, "fio_read_all error: %s", strerror(errno));
 			return rc;
-		} else if (rc == 0) {
-			break;
 		}
+		else if (rc == 0)
+			break;
+
 		offs += rc;
 	}
 	return offs;
@@ -2260,43 +2271,53 @@ static void fio_list_dir_impl(int out, char* buf)
 	IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 }
 
-uint16 *fio_get_checksum_map(const char *fullpath, uint32 checksum_version,
-							 int n_blocks, XLogRecPtr dest_stop_lsn, BlockNumber segmentno)
+PageState *
+fio_get_checksum_map(const char *fullpath, uint32 checksum_version, int n_blocks,
+					 XLogRecPtr dest_stop_lsn, BlockNumber segmentno, fio_location location)
 {
-	fio_header hdr;
-	fio_checksum_map_request req_hdr;
-	uint16 *checksum_map = NULL;
-	size_t path_len = strlen(fullpath) + 1;
-
-	req_hdr.n_blocks = n_blocks;
-	req_hdr.segmentno = segmentno;
-	req_hdr.stop_lsn = dest_stop_lsn;
-	req_hdr.checksumVersion = checksum_version;
-
-	hdr.cop = FIO_GET_CHECKSUM_MAP;
-	hdr.size = sizeof(req_hdr) + path_len;
-
-	IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
-	IO_CHECK(fio_write_all(fio_stdout, &req_hdr, sizeof(req_hdr)), sizeof(req_hdr));
-	IO_CHECK(fio_write_all(fio_stdout, fullpath, path_len), path_len);
-
-	/* receive data */
-	IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
-
-	if (hdr.size > 0)
+	if (fio_is_remote(location))
 	{
-		checksum_map = pgut_malloc(hdr.size * sizeof(uint16));
-		IO_CHECK(fio_read_all(fio_stdin, checksum_map, hdr.size * sizeof(uint16)), hdr.size * sizeof(uint16));
-	}
+		fio_header hdr;
+		fio_checksum_map_request req_hdr;
+		PageState *checksum_map = NULL;
+		size_t path_len = strlen(fullpath) + 1;
 
-	return checksum_map;
+		req_hdr.n_blocks = n_blocks;
+		req_hdr.segmentno = segmentno;
+		req_hdr.stop_lsn = dest_stop_lsn;
+		req_hdr.checksumVersion = checksum_version;
+
+		hdr.cop = FIO_GET_CHECKSUM_MAP;
+		hdr.size = sizeof(req_hdr) + path_len;
+
+		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
+		IO_CHECK(fio_write_all(fio_stdout, &req_hdr, sizeof(req_hdr)), sizeof(req_hdr));
+		IO_CHECK(fio_write_all(fio_stdout, fullpath, path_len), path_len);
+
+		/* receive data */
+		IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
+
+		if (hdr.size > 0)
+		{
+			checksum_map = pgut_malloc(n_blocks * sizeof(PageState));
+			memset(checksum_map, 0, n_blocks * sizeof(PageState));
+			IO_CHECK(fio_read_all(fio_stdin, checksum_map, hdr.size * sizeof(PageState)), hdr.size * sizeof(PageState));
+		}
+
+		return checksum_map;
+	}
+	else
+	{
+
+		return get_checksum_map(fullpath, checksum_version,
+								n_blocks, dest_stop_lsn, segmentno);
+	}
 }
 
-/* TODO: sent n_blocks to truncate file before reading */
 static void fio_get_checksum_map_impl(int out, char *buf)
 {
 	fio_header  hdr;
-	uint16     *checksum_map = NULL;
+	PageState  *checksum_map = NULL;
 	char       *fullpath = (char*) buf + sizeof(fio_checksum_map_request);
 	fio_checksum_map_request *req = (fio_checksum_map_request*) buf;
 
@@ -2307,24 +2328,107 @@ static void fio_get_checksum_map_impl(int out, char *buf)
 	/* send arrays of checksums to main process */
 	IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 	if (hdr.size > 0)
-		IO_CHECK(fio_write_all(out, checksum_map, hdr.size * sizeof(uint16)), hdr.size * sizeof(uint16));
+		IO_CHECK(fio_write_all(out, checksum_map, hdr.size * sizeof(PageState)), hdr.size * sizeof(PageState));
 
 	pg_free(checksum_map);
 }
 
-pid_t fio_check_postmaster(const char *pgdata)
+datapagemap_t *
+fio_get_lsn_map(const char *fullpath, uint32 checksum_version,
+				int n_blocks, XLogRecPtr horizonLsn, BlockNumber segmentno,
+				fio_location location)
 {
-	fio_header hdr;
+	datapagemap_t* lsn_map = NULL;
 
-	hdr.cop = FIO_CHECK_POSTMASTER;
-	hdr.size = strlen(pgdata) + 1;
+	if (fio_is_remote(location))
+	{
+		fio_header hdr;
+		fio_lsn_map_request req_hdr;
+		size_t path_len = strlen(fullpath) + 1;
 
-	IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
-	IO_CHECK(fio_write_all(fio_stdout, pgdata, hdr.size), hdr.size);
+		req_hdr.n_blocks = n_blocks;
+		req_hdr.segmentno = segmentno;
+		req_hdr.horizonLsn = horizonLsn;
+		req_hdr.checksumVersion = checksum_version;
 
-	/* receive result */
-	IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
-	return hdr.arg;
+		hdr.cop = FIO_GET_LSN_MAP;
+		hdr.size = sizeof(req_hdr) + path_len;
+
+		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
+		IO_CHECK(fio_write_all(fio_stdout, &req_hdr, sizeof(req_hdr)), sizeof(req_hdr));
+		IO_CHECK(fio_write_all(fio_stdout, fullpath, path_len), path_len);
+
+		/* receive data */
+		IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
+
+		if (hdr.size > 0)
+		{
+			lsn_map = pgut_malloc(sizeof(datapagemap_t));
+			memset(lsn_map, 0, sizeof(datapagemap_t));
+
+			lsn_map->bitmap = pgut_malloc(hdr.size);
+			lsn_map->bitmapsize = hdr.size;
+
+			IO_CHECK(fio_read_all(fio_stdin, lsn_map->bitmap, hdr.size), hdr.size);
+		}
+	}
+	else
+	{
+		lsn_map = get_lsn_map(fullpath, checksum_version, n_blocks,
+							  horizonLsn, segmentno);
+	}
+
+	return lsn_map;
+}
+
+static void fio_get_lsn_map_impl(int out, char *buf)
+{
+	fio_header     hdr;
+	datapagemap_t *lsn_map = NULL;
+	char          *fullpath = (char*) buf + sizeof(fio_lsn_map_request);
+	fio_lsn_map_request *req = (fio_lsn_map_request*) buf;
+
+	lsn_map = get_lsn_map(fullpath, req->checksumVersion, req->n_blocks,
+						  req->horizonLsn, req->segmentno);
+	if (lsn_map)
+		hdr.size = lsn_map->bitmapsize;
+	else
+		hdr.size = 0;
+
+	/* send arrays of checksums to main process */
+	IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
+	if (hdr.size > 0)
+		IO_CHECK(fio_write_all(out, lsn_map->bitmap, hdr.size), hdr.size);
+
+	if (lsn_map)
+	{
+		pg_free(lsn_map->bitmap);
+		pg_free(lsn_map);
+	}
+}
+
+/*
+ * Go to the remote host and get postmaster pid from file postmaster.pid
+ * and check that process is running, if process is running, return its pid number.
+ */
+pid_t fio_check_postmaster(const char *pgdata, fio_location location)
+{
+	if (fio_is_remote(location))
+	{
+		fio_header hdr;
+
+		hdr.cop = FIO_CHECK_POSTMASTER;
+		hdr.size = strlen(pgdata) + 1;
+
+		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
+		IO_CHECK(fio_write_all(fio_stdout, pgdata, hdr.size), hdr.size);
+
+		/* receive result */
+		IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
+		return hdr.arg;
+	}
+	else
+		return check_postmaster(pgdata);
 }
 
 static void fio_check_postmaster_impl(int out, char *buf)
@@ -2514,6 +2618,10 @@ void fio_communicate(int in, int out)
 		  case FIO_GET_CHECKSUM_MAP:
 			/* calculate crc32 for a file */
 			fio_get_checksum_map_impl(out, buf);
+			break;
+		  case FIO_GET_LSN_MAP:
+			/* calculate crc32 for a file */
+			fio_get_lsn_map_impl(out, buf);
 			break;
 		  case FIO_CHECK_POSTMASTER:
 			/* calculate crc32 for a file */

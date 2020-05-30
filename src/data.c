@@ -862,14 +862,19 @@ backup_non_data_file(pgFile *file, pgFile *prev_file,
  */
 size_t
 restore_data_file(parray *parent_chain, pgFile *dest_file, FILE *out,
-				  const char *to_fullpath, bool use_bitmap, uint16 *checksum_map)
+				  const char *to_fullpath, bool use_bitmap, PageState *checksum_map,
+				  XLogRecPtr horizonLsn, datapagemap_t *lsn_map)
 {
 	size_t total_write_len = 0;
 	char  *in_buf = pgut_malloc(STDIO_BUFSIZE);
 	int    backup_seq = 0;
 
-	// FULL -> INCR -> DEST
-	//  2       1       0
+	/*
+	 * FULL -> INCR -> DEST
+	 *  2       1       0
+	 * Restore of backups of older versions cannot be optimized with bitmap
+	 * because of n_blocks
+	 */
 	if (use_bitmap)
 		/* start with dest backup  */
 		backup_seq = 0;
@@ -942,7 +947,8 @@ restore_data_file(parray *parent_chain, pgFile *dest_file, FILE *out,
 					  parse_program_version(backup->program_version),
 					  from_fullpath, to_fullpath, dest_file->n_blocks,
 					  use_bitmap ? &(dest_file)->pagemap : NULL,
-					  checksum_map, backup->checksum_version);
+					  checksum_map, backup->checksum_version,
+					  backup->start_lsn <= horizonLsn ? lsn_map : NULL);
 
 		if (fclose(in) != 0)
 			elog(ERROR, "Cannot close file \"%s\": %s", from_fullpath,
@@ -963,7 +969,8 @@ restore_data_file(parray *parent_chain, pgFile *dest_file, FILE *out,
 size_t
 restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_version,
 					  const char *from_fullpath, const char *to_fullpath, int nblocks,
-					  datapagemap_t *map, uint16 *checksum_map, int checksum_version)
+					  datapagemap_t *map, PageState *checksum_map, int checksum_version,
+					  datapagemap_t *lsn_map)
 {
 	BackupPageHeader header;
 	BlockNumber	blknum = 0;
@@ -1071,6 +1078,9 @@ restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_vers
 		if (compressed_size > BLCKSZ)
 			elog(ERROR, "Size of a blknum %i exceed BLCKSZ", blknum);
 
+		if (lsn_map && datapagemap_is_set(lsn_map, blknum))
+			datapagemap_add(map, blknum);
+
 		/* if this page is marked as already restored, then skip it */
 		if (map && datapagemap_is_set(map, blknum))
 		{
@@ -1101,10 +1111,14 @@ restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_vers
 			is_compressed = true;
 		}
 
-		/* Incremental restore */
-		if (checksum_map && checksum_map[blknum] != 0)
+		/* Incremental restore
+		 * TODO: move to another function
+		 */
+		if (checksum_map && checksum_map[blknum].checksum != 0)
 		{
 			uint16 page_crc = 0;
+			XLogRecPtr page_lsn = InvalidXLogRecPtr;
+			PageHeader	phdr;
 
 			if (is_compressed)
 			{
@@ -1117,8 +1131,7 @@ restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_vers
 				else
 					page_crc = pg_checksum_page(uncompressed_buf, file->segno * RELSEG_SIZE + blknum);
 
-//				page_crc_1 = pg_checksum_page(uncompressed_buf, file->segno * RELSEG_SIZE + blknum);
-//				Assert(page_crc == page_crc_1);
+				phdr = (PageHeader) uncompressed_buf;
 			}
 			else
 			{
@@ -1127,10 +1140,19 @@ restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_vers
 					page_crc = ((PageHeader) page.data)->pd_checksum;
 				else
 					page_crc = pg_checksum_page(page.data, file->segno + blknum);
+
+				phdr = (PageHeader) page.data;
 			}
 
-			/* the heart of incremental restore */
-			if (page_crc == checksum_map[blknum])
+			page_lsn = PageXLogRecPtrGet(phdr->pd_lsn);
+
+			/*
+			 * The heart of incremental restore
+			 * If page in backup has the same checksum and lsn as
+			 * page in backup, then page can be skipped.
+			 */
+			if (page_crc == checksum_map[blknum].checksum &&
+				page_lsn == checksum_map[blknum].lsn)
 			{
 				if (map)
 					datapagemap_add(map, blknum);
@@ -1812,10 +1834,10 @@ check_file_pages(pgFile *file, const char *fullpath, XLogRecPtr stop_lsn,
 }
 
 /* read local data file and construct map with block checksums */
-uint16 *get_checksum_map(const char *fullpath, uint32 checksum_version,
+PageState *get_checksum_map(const char *fullpath, uint32 checksum_version,
 						 int n_blocks, XLogRecPtr dest_stop_lsn, BlockNumber segmentno)
 {
-	uint16     *checksum_map = NULL;
+	PageState  *checksum_map = NULL;
 	FILE       *in = NULL;
 	BlockNumber blknum = 0;
 	XLogRecPtr  page_lsn = 0;
@@ -1834,8 +1856,8 @@ uint16 *get_checksum_map(const char *fullpath, uint32 checksum_version,
 	setvbuf(in, in_buf, _IOFBF, STDIO_BUFSIZE);
 
 	/* initialize array of checksums */
-	checksum_map = pgut_malloc(n_blocks * sizeof(uint16));
-	memset(checksum_map, 0, n_blocks * sizeof(uint16));
+	checksum_map = pgut_malloc(n_blocks * sizeof(PageState));
+	memset(checksum_map, 0, n_blocks * sizeof(PageState));
 
 	for (blknum = 0; blknum < n_blocks;  blknum++)
 	{
@@ -1855,9 +1877,11 @@ uint16 *get_checksum_map(const char *fullpath, uint32 checksum_version,
 			if (rc == PAGE_IS_VALID)
 			{
 				if (checksum_version)
-					checksum_map[blknum] = ((PageHeader) read_buffer)->pd_checksum;
+					checksum_map[blknum].checksum = ((PageHeader) read_buffer)->pd_checksum;
 				else
-					checksum_map[blknum] = pg_checksum_page(read_buffer, segmentno + blknum);
+					checksum_map[blknum].checksum = pg_checksum_page(read_buffer, segmentno + blknum);
+
+				checksum_map[blknum].lsn = page_lsn;
 			}
 		}
 		else
@@ -1874,4 +1898,72 @@ uint16 *get_checksum_map(const char *fullpath, uint32 checksum_version,
 		fclose(in);
 
 	return checksum_map;
+}
+
+/* return bitmap of valid blocks, bitmap is empty, then NULL is returned */
+datapagemap_t *
+get_lsn_map(const char *fullpath, uint32 checksum_version,
+			int n_blocks, XLogRecPtr horizonLsn, BlockNumber segmentno)
+{
+	FILE           *in = NULL;
+	BlockNumber     blknum = 0;
+	XLogRecPtr      page_lsn = 0;
+	char            read_buffer[BLCKSZ];
+	char            in_buf[STDIO_BUFSIZE];
+	datapagemap_t  *lsn_map = NULL;
+
+	/* truncate up to blocks */
+	if (truncate(fullpath, n_blocks * BLCKSZ) != 0)
+		elog(ERROR, "Cannot truncate file to blknum %u \"%s\": %s",
+				n_blocks, fullpath, strerror(errno));
+
+	Assert(horizonLsn > 0);
+
+	/* open file */
+	in = fopen(fullpath, PG_BINARY_R);
+	if (!in)
+		elog(ERROR, "Cannot open source file \"%s\": %s", fullpath, strerror(errno));
+	setvbuf(in, in_buf, _IOFBF, STDIO_BUFSIZE);
+
+	lsn_map = pgut_malloc(sizeof(datapagemap_t));
+	memset(lsn_map, 0, sizeof(datapagemap_t));
+
+	for (blknum = 0; blknum < n_blocks;  blknum++)
+	{
+		size_t read_len = fread(read_buffer, 1, BLCKSZ, in);
+		page_lsn = InvalidXLogRecPtr;
+
+		/* report error */
+		if (ferror(in))
+			elog(ERROR, "Cannot read block %u of \"%s\": %s",
+					blknum, fullpath, strerror(errno));
+
+		if (read_len == BLCKSZ)
+		{
+			int rc = validate_one_page(read_buffer, segmentno + blknum,
+									   horizonLsn, &page_lsn, checksum_version);
+
+			if (rc == PAGE_IS_VALID)
+				datapagemap_add(lsn_map, blknum);
+		}
+		else
+			elog(ERROR, "Failed to read blknum %u from file \"%s\"", blknum, fullpath);
+
+		if (feof(in))
+			break;
+
+		if (interrupted)
+			elog(ERROR, "Interrupted during page reading");
+	}
+
+	if (in)
+		fclose(in);
+
+	if (lsn_map->bitmapsize == 0)
+	{
+		pg_free(lsn_map);
+		lsn_map = NULL;
+	}
+
+	return lsn_map;
 }

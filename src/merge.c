@@ -1161,8 +1161,12 @@ merge_data_file(parray *parent_chain, pgBackup *full_backup,
 	setvbuf(out, buffer, _IOFBF, STDIO_BUFSIZE);
 
 	/* restore file into temp file */
-	tmp_file->size = restore_data_file(parent_chain, dest_file, out, to_fullpath_tmp1, use_bitmap, NULL);
-	fclose(out);
+	tmp_file->size = restore_data_file(parent_chain, dest_file, out, to_fullpath_tmp1,
+									   use_bitmap, NULL, InvalidXLogRecPtr, NULL);
+	if (fclose(out) != 0)
+		elog(ERROR, "Cannot close file \"%s\": %s",
+			 to_fullpath_tmp1, strerror(errno));
+
 	pg_free(buffer);
 
 	/* tmp_file->size is greedy, even if there is single 8KB block in file,

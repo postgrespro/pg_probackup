@@ -101,6 +101,18 @@ extern const char  *PROGRAM_EMAIL;
 #define XRecOffIsNull(xlrp) \
 		((xlrp) % XLOG_BLCKSZ == 0)
 
+typedef struct RedoParams
+{
+	TimeLineID  tli;
+	XLogRecPtr  lsn;
+} RedoParams;
+
+typedef struct PageState
+{
+	uint16  checksum;
+	XLogRecPtr  lsn;
+} PageState;
+
 typedef struct db_map_entry
 {
 	Oid dbOid;
@@ -442,6 +454,8 @@ typedef struct pgRestoreParams
 	bool	skip_external_dirs;
 	bool	skip_block_validation; //Start using it
 	bool	incremental;
+	bool    incremental_lsn;
+	XLogRecPtr horizonLsn;
 	const char *restore_command;
 	const char *primary_slot_name;
 
@@ -938,10 +952,12 @@ extern void backup_non_data_file_internal(const char *from_fullpath,
 										  bool missing_ok);
 
 extern size_t restore_data_file(parray *parent_chain, pgFile *dest_file, FILE *out,
-								const char *to_fullpath, bool use_bitmap, uint16 *checksum_map);
+								const char *to_fullpath, bool use_bitmap, PageState *checksum_map,
+								XLogRecPtr horizonLsn, datapagemap_t *lsn_map);
 extern size_t restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_version,
 										 const char *from_fullpath, const char *to_fullpath, int nblocks,
-										 datapagemap_t *map, uint16 *checksum_map, int checksum_version);
+										 datapagemap_t *map, PageState *checksum_map, int checksum_version,
+										 datapagemap_t *lsn_map);
 extern size_t restore_non_data_file(parray *parent_chain, pgBackup *dest_backup,
 									pgFile *dest_file, FILE *out, const char *to_fullpath,
 									bool already_exists);
@@ -950,8 +966,10 @@ extern void restore_non_data_file_internal(FILE *in, FILE *out, pgFile *file,
 extern bool create_empty_file(fio_location from_location, const char *to_root,
 							  fio_location to_location, pgFile *file);
 
-extern uint16 *get_checksum_map(const char *fullpath, uint32 checksum_version,
+extern PageState *get_checksum_map(const char *fullpath, uint32 checksum_version,
 								int n_blocks, XLogRecPtr dest_stop_lsn, BlockNumber segmentno);
+extern datapagemap_t *get_lsn_map(const char *fullpath, uint32 checksum_version,
+								  int n_blocks, XLogRecPtr horizonLsn, BlockNumber segmentno);
 extern pid_t check_postmaster(const char *pgdata);
 
 extern bool check_file_pages(pgFile *file, const char *fullpath, XLogRecPtr stop_lsn,
@@ -989,6 +1007,7 @@ extern uint64 get_remote_system_identifier(PGconn *conn);
 extern uint32 get_data_checksum_version(bool safe);
 extern pg_crc32c get_pgcontrol_checksum(const char *pgdata_path);
 extern uint32 get_xlog_seg_size(char *pgdata_path);
+extern void get_redo(const char *pgdata_path, RedoParams *redo);
 extern void set_min_recovery_point(pgFile *file, const char *backup_path,
 								   XLogRecPtr stop_backup_lsn);
 extern void copy_pgcontrol_file(const char *from_fullpath, fio_location from_location,
@@ -1048,9 +1067,13 @@ extern void fio_list_dir(parray *files, const char *root, bool exclude, bool fol
 
 extern bool pgut_rmtree(const char *path, bool rmtopdir, bool strict);
 
-extern uint16 *fio_get_checksum_map(const char *fullpath, uint32 checksum_version,
-							int n_blocks, XLogRecPtr dest_stop_lsn, BlockNumber segmentno);
-extern pid_t fio_check_postmaster(const char *pgdata);
+extern PageState *fio_get_checksum_map(const char *fullpath, uint32 checksum_version, int n_blocks,
+									XLogRecPtr dest_stop_lsn, BlockNumber segmentno, fio_location location);
+
+extern datapagemap_t *fio_get_lsn_map(const char *fullpath, uint32 checksum_version,
+							int n_blocks, XLogRecPtr horizonLsn, BlockNumber segmentno,
+							fio_location location);
+extern pid_t fio_check_postmaster(const char *pgdata, fio_location location);
 
 extern int32 fio_decompress(void* dst, void const* src, size_t size, int compress_alg);
 
