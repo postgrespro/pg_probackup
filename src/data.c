@@ -353,17 +353,6 @@ prepare_page(ConnectionArgs *conn_arg,
 						Assert(false);
 				}
 			}
-
-			/*
-			 * If ptrack support is available, use it to get invalid block
-			 * instead of rereading it 99 times
-			 */
-			if (!page_is_valid && strict && ptrack_version_num > 0)
-			{
-				elog(WARNING, "File \"%s\", block %u, try to fetch via shared buffer",
-					from_fullpath, blknum);
-				break;
-			}
 		}
 
 		/*
@@ -385,7 +374,7 @@ prepare_page(ConnectionArgs *conn_arg,
 			/* Error out in case of merge or backup without ptrack support;
 			 * issue warning in case of checkdb or backup with ptrack support
 			 */
-			if (!strict || (strict && ptrack_version_num > 0))
+			if (!strict)
 				elevel = WARNING;
 
 			if (errormsg)
@@ -396,16 +385,12 @@ prepare_page(ConnectionArgs *conn_arg,
 								from_fullpath, blknum);
 
 			pg_free(errormsg);
+			return PageIsCorrupted;
 		}
 
 		/* Checkdb not going futher */
 		if (!strict)
-		{
-			if (page_is_valid)
-				return PageIsOk;
-			else
-				return PageIsCorrupted;
-		}
+			return PageIsOk;
 	}
 
 	/*
