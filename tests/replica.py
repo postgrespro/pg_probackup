@@ -606,7 +606,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             return_id=False)
 
         self.assertIn(
-            'LOG: Null offset in stop_backup_lsn value 0/4000000',
+            'LOG: Invalid offset in stop_lsn value 0/4000000',
             output)
 
         self.assertIn(
@@ -714,7 +714,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             log_content = f.read()
 
         self.assertIn(
-            'LOG: Null offset in stop_backup_lsn value 0/4000000',
+            'LOG: Invalid offset in stop_lsn value 0/4000000',
             log_content)
 
         self.assertIn(
@@ -787,7 +787,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             return_id=False)
 
         self.assertIn(
-            'LOG: Null offset in stop_backup_lsn value 0/4000000',
+            'LOG: Invalid offset in stop_lsn value 0/4000000',
             output)
 
         self.assertIn(
