@@ -691,7 +691,8 @@ get_next_record_lsn(const char *archivedir, XLogSegNo	segno,
 {
 	XLogReaderState *xlogreader;
 	XLogReaderData   reader_data;
-	XLogRecPtr       startpoint, found, res;
+	XLogRecPtr       startpoint, found;
+	XLogRecPtr       res = InvalidXLogRecPtr;
 	char             wal_segment[MAXFNAMELEN];
 	int              attempts = 0;
 
