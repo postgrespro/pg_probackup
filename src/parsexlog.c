@@ -680,6 +680,97 @@ get_first_record_lsn(const char *archivedir, XLogSegNo	segno,
 	return record;
 }
 
+
+/*
+ * Get LSN of the record next after target lsn.
+ */
+XLogRecPtr
+get_next_record_lsn(const char *archivedir, XLogSegNo	segno,
+					 TimeLineID tli, uint32 wal_seg_size, int timeout,
+					 XLogRecPtr target)
+{
+	XLogReaderState *xlogreader;
+	XLogReaderData   reader_data;
+	XLogRecPtr       startpoint, found, res;
+	char             wal_segment[MAXFNAMELEN];
+	int              attempts = 0;
+
+	if (segno <= 1)
+		elog(ERROR, "Invalid WAL segment number " UINT64_FORMAT, segno);
+
+	GetXLogFileName(wal_segment, tli, segno, instance_config.xlog_seg_size);
+
+	xlogreader = InitXLogPageRead(&reader_data, archivedir, tli, wal_seg_size,
+								  false, false, true);
+	if (xlogreader == NULL)
+			elog(ERROR, "Out of memory");
+	xlogreader->system_identifier = instance_config.system_identifier;
+
+	/* Set startpoint to 0 in segno */
+	GetXLogRecPtr(segno, 0, wal_seg_size, startpoint);
+
+	found = XLogFindNextRecord(xlogreader, startpoint);
+
+	if (XLogRecPtrIsInvalid(found))
+	{
+		if (xlogreader->errormsg_buf[0] != '\0')
+			elog(WARNING, "Could not read WAL record at %X/%X: %s",
+				 (uint32) (startpoint >> 32), (uint32) (startpoint),
+				 xlogreader->errormsg_buf);
+		else
+			elog(WARNING, "Could not read WAL record at %X/%X",
+				 (uint32) (startpoint >> 32), (uint32) (startpoint));
+		PrintXLogCorruptionMsg(&reader_data, ERROR);
+	}
+	startpoint = found;
+
+	while (attempts <= timeout)
+	{
+		XLogRecord *record;
+		char	   *errormsg;
+
+		if (interrupted)
+			elog(ERROR, "Interrupted during WAL reading");
+
+		record = XLogReadRecord(xlogreader, startpoint, &errormsg);
+
+		if (record == NULL)
+		{
+			XLogRecPtr	errptr;
+
+			errptr = XLogRecPtrIsInvalid(startpoint) ? xlogreader->EndRecPtr :
+				startpoint;
+
+			if (errormsg)
+				elog(WARNING, "Could not read WAL record at %X/%X: %s",
+					 (uint32) (errptr >> 32), (uint32) (errptr),
+					 errormsg);
+			else
+				elog(WARNING, "Could not read WAL record at %X/%X",
+					 (uint32) (errptr >> 32), (uint32) (errptr));
+			PrintXLogCorruptionMsg(&reader_data, ERROR);
+		}
+
+		if (xlogreader->ReadRecPtr >= target)
+		{
+			elog(LOG, "Record %X/%X is next after target LSN %X/%X",
+				(uint32) (xlogreader->ReadRecPtr >> 32), (uint32) (xlogreader->ReadRecPtr),
+				(uint32) (target >> 32), (uint32) (target));
+			res = xlogreader->ReadRecPtr;
+			break;
+		}
+		else
+			startpoint = InvalidXLogRecPtr;
+	}
+
+	/* cleanup */
+	CleanupXLogPageRead(xlogreader);
+	XLogReaderFree(xlogreader);
+
+	return res;
+}
+
+
 /*
  * Get LSN of a record prior to target_lsn.
  * If 'start_lsn' is in the segment with number 'segno' then start from 'start_lsn',
