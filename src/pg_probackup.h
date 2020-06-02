@@ -1044,4 +1044,7 @@ extern void get_header_errormsg(Page page, char **errormsg);
 extern void get_checksum_errormsg(Page page, char **errormsg,
 								  BlockNumber absolute_blkno);
 
+extern char *escape_single_quotes(const char *src);
+extern char *escapeConnectionParameter(const char *src);
+
 #endif /* PG_PROBACKUP_H */

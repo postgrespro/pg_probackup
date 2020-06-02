@@ -302,6 +302,11 @@ skip_space(const char *str, const char *line)
 	return str;
 }
 
+/*
+ * TODO:
+ * user provides: -U "Mr. Mac'Nuggets"
+ * to recovery.conf in primary_conninfo must be saved: user=''Mr. Mac\\''Nuggets''
+ */
 static const char *
 get_next_token(const char *src, char *dst, const char *line)
 {
@@ -313,22 +318,27 @@ get_next_token(const char *src, char *dst, const char *line)
 		return NULL;
 
 	/* parse quoted string */
-	if (*s == '\'')
+	if (*s == '\'' || *s == '"')
 	{
 		s++;
 		for (i = 0, j = 0; s[i] != '\0'; i++)
 		{
-			if (s[i] == '\'')
+			/* If the current token is a single quote or a double quote and
+			 * the next token is string terminator, then there is no point in going futher
+			 */
+			if ((s[i] == '\'' || s[i] == '"') &&
+				s[i+1] == '\0')
 			{
 				i++;
-				/* doubled quote becomes just one quote */
-				if (s[i] == '\'')
-					dst[j] = s[i];
-				else
-					break;
+				break;
 			}
-			else
-				dst[j] = s[i];
+
+			/* doubled quote becomes just one quote */
+			if (s[i] == '\'' && s[i+1] == '\'')
+				i++;
+
+			/* simple token */
+			dst[j] = s[i];
 			j++;
 		}
 	}
@@ -342,7 +352,13 @@ get_next_token(const char *src, char *dst, const char *line)
 	return s + i;
 }
 
-static bool
+/* Return codes:
+ * 0 - PARSED pair
+ * 1 - SKIP
+ * 2 - ERROR
+ */
+
+static int
 parse_pair(const char buffer[], char key[], char value[])
 {
 	const char *start;
@@ -355,7 +371,7 @@ parse_pair(const char buffer[], char key[], char value[])
 	 */
 	start = buffer;
 	if ((start = skip_space(start, buffer)) == NULL)
-		return false;
+		return 1;
 
 	end = start + strcspn(start, "=# \n\r\t\v");
 
@@ -363,8 +379,12 @@ parse_pair(const char buffer[], char key[], char value[])
 	if (end - start <= 0)
 	{
 		if (*start == '=')
-			elog(ERROR, "Syntax error in \"%s\"", buffer);
-		return false;
+		{
+			elog(WARNING, "Syntax error in \"%s\"", buffer);
+			return 2;
+		}
+
+		return 1;
 	}
 
 	/* key found */
@@ -373,12 +393,12 @@ parse_pair(const char buffer[], char key[], char value[])
 
 	/* find key and value split char */
 	if ((start = skip_space(end, buffer)) == NULL)
-		return false;
+		return 1;
 
 	if (*start != '=')
 	{
-		elog(ERROR, "Syntax error in \"%s\"", buffer);
-		return false;
+		elog(WARNING, "Syntax error in \"%s\"", buffer);
+		return 2;
 	}
 
 	start++;
@@ -387,18 +407,18 @@ parse_pair(const char buffer[], char key[], char value[])
 	 * parse value
 	 */
 	if ((end = get_next_token(start, value, buffer)) == NULL)
-		return false;
+		return 1;
 
 	if ((start = skip_space(end, buffer)) == NULL)
-		return false;
+		return 1;
 
 	if (*start != '\0' && *start != '#')
 	{
-		elog(ERROR, "Syntax error in \"%s\"", buffer);
-		return false;
+		elog(WARNING, "Syntax error in \"%s\"", buffer);
+		return 2;
 	}
 
-	return true;
+	return 0;
 }
 
 /*
@@ -484,6 +504,8 @@ config_get_opt(int argc, char **argv, ConfigOption cmd_options[],
 /*
  * Get configuration from configuration file.
  * Return number of parsed options.
+ *
+ * -1 means that error was encountered
  */
 int
 config_read_opt(const char *path, ConfigOption options[], int elevel,
@@ -503,12 +525,15 @@ config_read_opt(const char *path, ConfigOption options[], int elevel,
 
 	while (fgets(buf, lengthof(buf), fp))
 	{
+		int         rc;
 		size_t		i;
 
 		for (i = strlen(buf); i > 0 && IsSpace(buf[i - 1]); i--)
 			buf[i - 1] = '\0';
 
-		if (parse_pair(buf, key, value))
+		rc = parse_pair(buf, key, value);
+
+		if (rc == 0)
 		{
 			for (i = 0; options[i].type; i++)
 			{
@@ -530,6 +555,11 @@ config_read_opt(const char *path, ConfigOption options[], int elevel,
 			}
 			if (strict && !options[i].type)
 				elog(elevel, "Invalid option \"%s\" in file \"%s\"", key, path);
+		}
+		else if (rc == 2)
+		{
+			elog(elevel, "Failed to parse string \"%s\" in file \"%s\"", buf, path);
+			return -1;
 		}
 	}
 

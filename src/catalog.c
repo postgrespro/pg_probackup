@@ -2012,6 +2012,13 @@ readBackupControlFile(const char *path)
 		return NULL;
 	}
 
+	if (parsed_options == -1)
+	{
+		elog(WARNING, "Failed to parse control file \"%s\"", path);
+		pgBackupFree(backup);
+		return NULL;
+	}
+
 	if (backup->start_time == 0)
 	{
 		elog(WARNING, "Invalid ID/start-time, control file \"%s\" is corrupted", path);

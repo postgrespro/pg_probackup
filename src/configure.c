@@ -621,6 +621,13 @@ readInstanceConfigFile(const char *instance_name)
 		return NULL;
 	}
 
+	if (parsed_options == -1)
+	{
+		elog(WARNING, "Failed to parse control file \"%s\"", path);
+		pfree(instance);
+		return NULL;
+	}
+
 	if (log_level_console)
 		instance->logger.log_level_console = parse_log_level(log_level_console);
 

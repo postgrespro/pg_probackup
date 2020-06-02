@@ -1069,6 +1069,9 @@ create_recovery_conf(time_t backup_id,
 
 	if (params->restore_as_replica)
 	{
+		char *primary_conninfo = NULL;
+		char *escaped = NULL;
+		char *connstr = NULL;
 		fio_fprintf(fp, "\n## standby settings\n");
 	/* standby_mode was removed in PG12 */
 #if PG_VERSION_NUM < 120000
@@ -1076,9 +1079,27 @@ create_recovery_conf(time_t backup_id,
 #endif
 
 		if (params->primary_conninfo)
-			fio_fprintf(fp, "primary_conninfo = '%s'\n", params->primary_conninfo);
+		{
+//			fio_fprintf(fp, "primary_conninfo = '%s'\n", params->primary_conninfo);
+			primary_conninfo = escape_single_quotes(params->primary_conninfo);
+		}
 		else if (backup->primary_conninfo)
-			fio_fprintf(fp, "primary_conninfo = '%s'\n", backup->primary_conninfo);
+		{
+//			fio_fprintf(fp, "primary_conninfo = '%s'\n", backup->primary_conninfo);
+			primary_conninfo = escape_single_quotes(backup->primary_conninfo);
+		}
+
+		escaped = escapeConnectionParameter(primary_conninfo);
+		connstr = escape_single_quotes(escaped);
+
+//		pg_free(escaped);
+//		pg_free(connstr);
+
+		fio_fprintf(fp, "primary_conninfo = '%s'\n", connstr);
+		pg_free(primary_conninfo);
+		pg_free(escaped);
+		pg_free(connstr);
+
 
 		if (params->primary_slot_name != NULL)
 			fio_fprintf(fp, "primary_slot_name = '%s'\n", params->primary_slot_name);

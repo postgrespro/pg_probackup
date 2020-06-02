@@ -420,8 +420,16 @@ print_backup_json_object(PQExpBuffer buf, pgBackup *backup)
 	}
 
 	if (backup->primary_conninfo)
+	{
+//		char *escaped = escapeConnectionParameter(backup->primary_conninfo);
+//		char *connstr = escape_single_quotes(escaped);
+
 		json_add_value(buf, "primary_conninfo", backup->primary_conninfo,
 						json_level, true);
+
+//		pg_free(escaped);
+//		pg_free(connstr);
+	}
 
 	if (backup->external_dir_str)
 		json_add_value(buf, "external-dirs", backup->external_dir_str,

@@ -101,7 +101,7 @@ prompt_for_password(const char *username)
  *
  * The returned string is malloc'd. Return NULL on out-of-memory.
  */
-static char *
+char *
 escapeConnectionParameter(const char *src)
 {
 	bool		need_quotes = false;
@@ -156,6 +156,47 @@ escapeConnectionParameter(const char *src)
 	return dstbuf;
 }
 
+/*
+ * Escape (by doubling) any single quotes or backslashes in given string
+ *
+ * Note: this is used to process postgresql.conf entries and to quote
+ * string literals in pg_basebackup for creating recovery.conf.
+ * Since postgresql.conf strings are defined to treat backslashes as escapes,
+ * we have to double backslashes here.
+ *
+ * Since this function is only used for parsing or creating configuration
+ * files, we do not care about encoding considerations.
+ *
+ * Returns a malloced() string that it's the responsibility of the caller
+ * to free.
+ */
+char *
+escape_single_quotes(const char *src)
+{
+	int			len = strlen(src),
+				i,
+				j;
+	char	   *result = malloc(len * 2 + 1);
+
+	if (!result)
+		return NULL;
+
+	for (i = 0, j = 0; i < len; i++)
+	{
+//		if (SQL_STR_DOUBLE(src[i], true))
+//			result[j++] = src[i];
+		if (src[i] == '\'')
+			result[j++] = src[i];
+		else if (src[i] == '\\')
+			result[j++] = src[i];
+
+		result[j++] = src[i];
+//		result[j++] = src[i];
+	}
+	result[j] = '\0';
+	return result;
+}
+
 /* Construct a connection string for possible future use in recovery.conf */
 char *
 pgut_get_conninfo_string(PGconn *conn)
@@ -165,7 +206,7 @@ pgut_get_conninfo_string(PGconn *conn)
 	PQExpBuffer buf = createPQExpBuffer();
 	char	   *connstr;
 	bool		firstkeyword = true;
-	char	   *escaped;
+	char	   *escaped = NULL;
 
 	connOptions = PQconninfo(conn);
 	if (connOptions == NULL)
@@ -198,12 +239,18 @@ pgut_get_conninfo_string(PGconn *conn)
 
 		firstkeyword = false;
 
-		escaped = escapeConnectionParameter(option->val);
-		appendPQExpBuffer(buf, "%s=%s", option->keyword, escaped);
-		free(escaped);
+//		escaped = escapeConnectionParameter(option->val);
+		appendPQExpBuffer(buf, "%s=%s", option->keyword, option->val);
+		pg_free(escaped);
 	}
 
-	connstr = pg_strdup(buf->data);
+//	elog(INFO, "CONNSTR: %s", buf->data);
+//	connstr = escape_single_quotes(buf->data);
+
+	connstr = pgut_strdup(buf->data);
+
+	elog(INFO, "CONNSTR2: %s", connstr);
+
 	destroyPQExpBuffer(buf);
 	return connstr;
 }
