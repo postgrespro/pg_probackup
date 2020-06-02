@@ -147,10 +147,9 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                 "without valid full backup.\n Output: {0} \n CMD: {1}".format(
                     repr(self.output), self.cmd))
         except ProbackupException as e:
-            self.assertIn(
-                "ERROR: Valid backup on current timeline 1 is not found. "
-                "Create new FULL backup before an incremental one.",
-                e.message,
+            self.assertTrue(
+                "WARNING: Valid backup on current timeline 1 is not found" in e.message and
+                "ERROR: Create new full backup before an incremental one" in e.message,
                 "\n Unexpected Error Message: {0}\n CMD: {1}".format(
                     repr(e.message), self.cmd))
 
@@ -165,15 +164,18 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                 "without valid full backup.\n Output: {0} \n CMD: {1}".format(
                     repr(self.output), self.cmd))
         except ProbackupException as e:
-            self.assertIn(
-                "ERROR: Valid backup on current timeline 1 is not found. "
-                "Create new FULL backup before an incremental one.",
-                e.message,
+            self.assertTrue(
+                "WARNING: Valid backup on current timeline 1 is not found" in e.message and
+                "ERROR: Create new full backup before an incremental one" in e.message,
                 "\n Unexpected Error Message: {0}\n CMD: {1}".format(
                     repr(e.message), self.cmd))
 
         self.assertEqual(
             self.show_pb(backup_dir, 'node')[0]['status'],
+            "ERROR")
+
+        self.assertEqual(
+            self.show_pb(backup_dir, 'node')[1]['status'],
             "ERROR")
 
         # Clean after yourself
@@ -315,10 +317,8 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
-    def test_page_corruption_heal_via_ptrack_1(self):
+    def test_page_detect_corruption(self):
         """make node, corrupt some page, check that backup failed"""
-        if not self.ptrack:
-            return unittest.skip('Skipped because ptrack support is disabled')
 
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
@@ -380,98 +380,6 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
-    # @unittest.skip("skip")
-    def test_page_corruption_heal_via_ptrack_2(self):
-        """make node, corrupt some page, check that backup failed"""
-        if not self.ptrack:
-            return unittest.skip('Skipped because ptrack support is disabled')
-
-        fname = self.id().split('.')[3]
-        node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
-            set_replication=True,
-            ptrack_enable=True,
-            initdb_params=['--data-checksums'])
-
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
-
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
-        node.slow_start()
-
-        if node.major_version >= 12:
-            node.safe_psql(
-                "postgres",
-                "CREATE EXTENSION ptrack WITH SCHEMA pg_catalog")
-
-        self.backup_node(
-            backup_dir, 'node', node, backup_type="full",
-            options=["-j", "4", "--stream"])
-
-        node.safe_psql(
-            "postgres",
-            "create table t_heap as select 1 as id, md5(i::text) as text, "
-            "md5(repeat(i::text,10))::tsvector as tsvector "
-            "from generate_series(0,1000) i")
-        node.safe_psql(
-            "postgres",
-            "CHECKPOINT;")
-
-        heap_path = node.safe_psql(
-            "postgres",
-            "select pg_relation_filepath('t_heap')").rstrip()
-        node.stop()
-
-        with open(os.path.join(node.data_dir, heap_path), "rb+", 0) as f:
-                f.seek(9000)
-                f.write(b"bla")
-                f.flush()
-                f.close
-        node.slow_start()
-
-        try:
-            self.backup_node(
-                backup_dir, 'node', node, backup_type="full",
-                options=["-j", "4", "--stream", '--log-level-console=LOG'])
-            # we should die here because exception is what we expect to happen
-            self.assertEqual(
-                1, 0,
-                "Expecting Error because of page "
-                "corruption in PostgreSQL instance.\n"
-                " Output: {0} \n CMD: {1}".format(
-                    repr(self.output), self.cmd))
-        except ProbackupException as e:
-            if self.remote:
-                self.assertTrue(
-                    "WARNING: File" in e.message and
-                    "try to fetch via shared buffer" in e.message and
-                    "WARNING:  page verification failed, "
-                    "calculated checksum" in e.message and
-                    "ERROR: query failed: "
-                    "ERROR:  invalid page in block" in e.message and
-                    "query was: SELECT pg_catalog.pg_ptrack_get_block" in e.message,
-                    "\n Unexpected Error Message: {0}\n CMD: {1}".format(
-                        repr(e.message), self.cmd))
-            else:
-                self.assertTrue(
-                    "LOG: File" in e.message and
-                    "blknum" in e.message and
-                    "have wrong checksum" in e.message and
-                    "try to fetch via shared buffer" in e.message and
-                    "WARNING:  page verification failed, "
-                    "calculated checksum" in e.message and
-                    "ERROR: query failed: "
-                    "ERROR:  invalid page in block" in e.message and
-                    "query was: SELECT pg_catalog.pg_ptrack_get_block" in e.message,
-                    "\n Unexpected Error Message: {0}\n CMD: {1}".format(
-                        repr(e.message), self.cmd))
-
-        self.assertTrue(
-             self.show_pb(backup_dir, 'node')[1]['status'] == 'ERROR',
-             "Backup Status should be ERROR")
-
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def test_backup_detect_corruption(self):
@@ -494,6 +402,10 @@ class BackupTest(ProbackupTest, unittest.TestCase):
             node.safe_psql(
                 "postgres",
                 "create extension ptrack")
+
+        self.backup_node(
+            backup_dir, 'node', node,
+            backup_type="full", options=["-j", "4", "--stream"])
 
         node.safe_psql(
             "postgres",
@@ -528,10 +440,6 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                 f.close
 
         node.slow_start()
-
-        # self.backup_node(
-        #     backup_dir, 'node', node,
-        #     backup_type="full", options=["-j", "4", "--stream"])
 
         try:
             self.backup_node(
@@ -608,12 +516,11 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                     "\n Output: {0} \n CMD: {1}".format(
                         repr(self.output), self.cmd))
             except ProbackupException as e:
-                self.assertTrue(
-                    'WARNING:  page verification failed, '
-                    'calculated checksum' in e.message and
-                    'ERROR: query failed: ERROR:  '
-                    'invalid page in block 1 of relation' in e.message and
-                    'ERROR: Data files transferring failed' in e.message,
+                self.assertIn(
+                    'ERROR: Corruption detected in file "{0}", block 1: '
+                    'page verification failed, calculated checksum'.format(
+                        heap_fullpath),
+                    e.message,
                     '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                         repr(e.message), self.cmd))
 

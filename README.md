@@ -1,4 +1,5 @@
 [![Build Status](https://travis-ci.com/postgrespro/pg_probackup.svg?branch=master)](https://travis-ci.com/postgrespro/pg_probackup)
+[![GitHub release](https://img.shields.io/github/v/release/postgrespro/pg_probackup?include_prereleases)](https://github.com/postgrespro/pg_probackup/releases/latest)
 
 # pg_probackup
 
@@ -53,7 +54,7 @@ Regardless of the chosen backup type, all backups taken with `pg_probackup` supp
 
 ## Current release
 
-[2.3.2](https://github.com/postgrespro/pg_probackup/releases/tag/2.3.2)
+[2.3.4](https://github.com/postgrespro/pg_probackup/releases/tag/2.3.4)
 
 ## Documentation
 
@@ -61,7 +62,7 @@ Documentation can be found at [github](https://postgrespro.github.io/pg_probacku
 
 ## Installation and Setup
 ### Windows Installation
-Installers are available in release **assets**. [Latests](https://github.com/postgrespro/pg_probackup/releases/2.3.1).
+Installers are available in release **assets**. [Latests](https://github.com/postgrespro/pg_probackup/releases/2.3.3).
 
 ### Linux Installation
 #### pg_probackup for vanilla PostgreSQL

@@ -740,6 +740,16 @@ ALTER ROLE backup WITH REPLICATION;
       DELTA, and PTRACK backups in the
       <link linkend="pbk-stream-mode">STREAM</link> WAL mode.
     </para>
+    <note>
+      <para>
+        If you are planning to rely on
+        <ulink url="https://postgrespro.com/docs/postgresql/current/libpq-pgpass.html">.pgpass</ulink>
+        for authentication when running backup in STREAM mode,
+        then .pgpass must contain credentials for <literal>replication</literal> database,
+        used to establish connection via replication protocol. Example:
+        pghost:5432:replication:backup_user:my_strong_password
+      </para>
+    </note>
   </refsect2>
   <refsect2 id="pbk-setting-up-continuous-wal-archiving">
     <title>Setting up Continuous WAL Archiving</title>
@@ -1158,12 +1168,12 @@ CREATE EXTENSION ptrack;
       </listitem>
       <listitem>
       <para>
-       To enable tracking page updates, set <varname>ptrack_map_size</varname>
+       To enable tracking page updates, set <varname>ptrack.map_size</varname>
        parameter to a positive integer and restart the server.
       </para>
       <para>
        For optimal performance, it is recommended to set
-       <varname>ptrack_map_size</varname> to
+       <varname>ptrack.map_size</varname> to
        <literal><replaceable>N</replaceable> / 1024</literal>, where
        <replaceable>N</replaceable> is the size of the
        <productname>PostgreSQL</productname> cluster, in MB. If you set this
@@ -1171,7 +1181,7 @@ CREATE EXTENSION ptrack;
        together, which leads to false-positive results when tracking changed
        blocks and increases the incremental backup size as unchanged blocks
        can also be copied into the incremental backup.
-       Setting <varname>ptrack_map_size</varname> to a higher value
+       Setting <varname>ptrack.map_size</varname> to a higher value
        does not affect PTRACK operation. The maximum allowed value is 1024.
       </para>
      </listitem>
@@ -1191,11 +1201,11 @@ GRANT EXECUTE ON FUNCTION pg_ptrack_get_block(oid, oid, oid, bigint) TO backup;
 
    <note>
     <para>
-     If you change the <varname>ptrack_map_size</varname> parameter value,
+     If you change the <varname>ptrack.map_size</varname> parameter value,
      the previously created PTRACK map file is cleared,
      and tracking newly changed blocks starts from scratch. Thus, you have
      to retake a full backup before taking incremental PTRACK backups after
-     changing <varname>ptrack_map_size</varname>.
+     changing <varname>ptrack.map_size</varname>.
     </para>
    </note>
 
@@ -4045,10 +4055,10 @@ pg_probackup archive-push -B <replaceable>backup_dir</replaceable> --instance <r
         corruption.
       </para>
       <para>
-        To speed up archiving, you can specify the <option>-j</option> option
-        to run <command>archive-push</command> on multiple threads.
-        If you provide the <option>--batch-size</option> option, WAL files
-        will be copied in batches of the specified size.
+        To speed up archiving, you can specify the <option>--batch-size</option> option
+        to copy WAL segments in batches of the specified size.
+        If <option>--batch-size</option> option is used, then you can also specify
+        the <option>-j</option> option to copy the batch of WAL segments on multiple threads.
       </para>
       <para>
         WAL segments copied to the archive are synced to disk unless
@@ -4086,10 +4096,10 @@ pg_probackup archive-get -B <replaceable>backup_dir</replaceable> --instance <re
       </para>
 
       <para>
-        To speed up recovery, you can specify the <option>-j</option> option
-        to run <command>archive-get</command> on multiple threads.
-        If you provide the <option>--batch-size</option> option, WAL segments
-        will be copied in batches of the specified size.
+        To speed up recovery, you can specify the <option>--batch-size</option> option
+        to copy WAL segments in batches of the specified size.
+        If <option>--batch-size</option> option is used, then you can also specify
+        the <option>-j</option> option to copy the batch of WAL segments on multiple threads.
       </para>
 
       <para>
@@ -4714,7 +4724,7 @@ pg_probackup archive-get -B <replaceable>backup_dir</replaceable> --instance <re
 <term><option>--password</option></term>
       <listitem>
       <para>
-        Forces a password prompt.
+        Forces a password prompt. (Deprecated)
       </para>
       </listitem>
       </varlistentry>

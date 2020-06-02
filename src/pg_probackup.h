@@ -229,8 +229,8 @@ typedef enum ShowFormat
 #define BYTES_INVALID		(-1) /* file didn`t changed since previous backup, DELTA backup do not rely on it */
 #define FILE_NOT_FOUND		(-2) /* file disappeared during backup */
 #define BLOCKNUM_INVALID	(-1)
-#define PROGRAM_VERSION	"2.3.3"
-#define AGENT_PROTOCOL_VERSION 20303
+#define PROGRAM_VERSION	"2.3.4"
+#define AGENT_PROTOCOL_VERSION 20304
 
 
 typedef struct ConnectionOptions
@@ -845,7 +845,7 @@ extern const char* deparse_compress_alg(int alg);
 
 /* in dir.c */
 extern void dir_list_file(parray *files, const char *root, bool exclude,
-						  bool follow_symlink, bool add_root,
+						  bool follow_symlink, bool add_root, bool skip_hidden,
 						  int external_dir_num, fio_location location);
 
 extern void create_data_directories(parray *dest_files,
@@ -960,6 +960,8 @@ extern XLogRecPtr get_prior_record_lsn(const char *archivedir, XLogRecPtr start_
 
 extern XLogRecPtr get_first_record_lsn(const char *archivedir, XLogRecPtr start_lsn,
 									   TimeLineID tli, uint32 wal_seg_size, int timeout);
+extern XLogRecPtr get_next_record_lsn(const char *archivedir, XLogSegNo	segno, TimeLineID tli,
+									  uint32 wal_seg_size, int timeout, XLogRecPtr target);
 
 /* in util.c */
 extern TimeLineID get_current_timeline(PGconn *conn);
@@ -999,11 +1001,12 @@ extern void parse_filelist_filenames(parray *files, const char *root);
 /* in ptrack.c */
 extern void make_pagemap_from_ptrack_1(parray* files, PGconn* backup_conn);
 extern void make_pagemap_from_ptrack_2(parray* files, PGconn* backup_conn,
-										const char *ptrack_schema, XLogRecPtr lsn);
+									   const char *ptrack_schema,
+									   int ptrack_version_num,
+									   XLogRecPtr lsn);
 extern void pg_ptrack_clear(PGconn *backup_conn, int ptrack_version_num);
 extern void get_ptrack_version(PGconn *backup_conn, PGNodeInfo *nodeInfo);
-extern bool pg_ptrack_enable(PGconn *backup_conn);
-extern bool pg_ptrack_enable2(PGconn *backup_conn);
+extern bool pg_ptrack_enable(PGconn *backup_conn, int ptrack_version_num);
 extern bool pg_ptrack_get_and_clear_db(Oid dbOid, Oid tblspcOid, PGconn *backup_conn);
 extern char *pg_ptrack_get_and_clear(Oid tablespace_oid,
 									 Oid db_oid,
@@ -1011,7 +1014,8 @@ extern char *pg_ptrack_get_and_clear(Oid tablespace_oid,
 									 size_t *result_size,
 									 PGconn *backup_conn);
 extern XLogRecPtr get_last_ptrack_lsn(PGconn *backup_conn, PGNodeInfo *nodeInfo);
-extern parray * pg_ptrack_get_pagemapset(PGconn *backup_conn, const char *ptrack_schema, XLogRecPtr lsn);
+extern parray * pg_ptrack_get_pagemapset(PGconn *backup_conn, const char *ptrack_schema,
+										 int ptrack_version_num, XLogRecPtr lsn);
 
 /* FIO */
 extern int fio_send_pages(FILE* in, FILE* out, pgFile *file, XLogRecPtr horizonLsn,
@@ -1034,6 +1038,7 @@ extern int fio_send_file(const char *from_fullpath, const char *to_fullpath, FIL
 
 /* Check if specified location is local for current node */
 extern bool fio_is_remote(fio_location location);
+extern bool fio_is_remote_simple(fio_location location);
 
 extern void get_header_errormsg(Page page, char **errormsg);
 extern void get_checksum_errormsg(Page page, char **errormsg,

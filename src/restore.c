@@ -99,7 +99,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 {
 	int			i = 0;
 	int			j = 0;
-	parray	   *backups;
+	parray	   *backups = NULL;
 	pgBackup   *tmp_backup = NULL;
 	pgBackup   *current_backup = NULL;
 	pgBackup   *dest_backup = NULL;
@@ -475,13 +475,14 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 	/* ssh connection to longer needed */
 	fio_disconnect();
 
+	elog(INFO, "%s of backup %s completed.",
+		 action, base36enc(dest_backup->start_time));
+
 	/* cleanup */
 	parray_walk(backups, pgBackupFree);
 	parray_free(backups);
 	parray_free(parent_chain);
 
-	elog(INFO, "%s of backup %s completed.",
-		 action, base36enc(dest_backup->start_time));
 	return 0;
 }
 
