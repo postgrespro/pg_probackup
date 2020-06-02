@@ -4310,7 +4310,7 @@ pg_probackup archive-get -B <replaceable>backup_dir</replaceable> --instance <re
         <option>--recovery-target-lsn</option> or
         <option>--recovery-target-xid</option> options. The default
         depends on the
-        <ulink url="https://postgrespro.com/docs/postgresql/current/recovery-target-settings.html#RECOVERY-TARGET-INCLUSIVE">recovery_target_inclusive</ulink>
+        <ulink url="https://postgrespro.com/docs/postgresql/current/runtime-config-wal#GUC-RECOVERY-TARGET-INCLUSIVE">recovery_target_inclusive</ulink>
         parameter.
       </para>
       </listitem>
