@@ -726,7 +726,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             log_content)
 
         self.assertIn(
-            'LOG: current.stop_lsn: 0/4000028',
+            'LOG: stop_lsn: 0/4000028',
             log_content)
 
         # Clean after yourself
