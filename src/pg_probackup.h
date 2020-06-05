@@ -740,7 +740,8 @@ extern parray *get_dbOid_exclude_list(pgBackup *backup, parray *datname_list,
 										PartialRestoreType partial_restore_type);
 
 extern parray *get_backup_filelist(pgBackup *backup, bool strict);
-extern parray *read_timeline_history(const char *arclog_path, TimeLineID targetTLI);
+extern parray *read_timeline_history(const char *arclog_path, TimeLineID targetTLI, bool strict);
+extern bool tliIsPartOfHistory(const parray *timelines, TimeLineID tli);
 
 /* in merge.c */
 extern void do_merge(time_t backup_id);
@@ -888,7 +889,7 @@ extern void read_tablespace_map(parray *files, const char *backup_dir);
 extern void opt_tablespace_map(ConfigOption *opt, const char *arg);
 extern void opt_externaldir_map(ConfigOption *opt, const char *arg);
 extern void check_tablespace_mapping(pgBackup *backup, bool incremental, bool *tblspaces_are_empty);
-extern void check_external_dir_mapping(pgBackup *backup);
+extern void check_external_dir_mapping(pgBackup *backup, bool incremental);
 extern char *get_external_remap(char *current_dir);
 
 extern void print_database_map(FILE *out, parray *database_list);

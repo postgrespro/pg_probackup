@@ -1048,7 +1048,7 @@ catalog_get_timelines(InstanceConfig *instance)
 			TimeLineHistoryEntry *tln;
 
 			sscanf(file->name, "%08X.history", &tli);
-			timelines = read_timeline_history(arclog_path, tli);
+			timelines = read_timeline_history(arclog_path, tli, true);
 
 			if (!tlinfo || tlinfo->tli != tli)
 			{

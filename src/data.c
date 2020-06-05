@@ -933,7 +933,8 @@ restore_data_file(parray *parent_chain, pgFile *dest_file, FILE *out,
 					  from_fullpath, to_fullpath, dest_file->n_blocks,
 					  use_bitmap ? &(dest_file)->pagemap : NULL,
 					  checksum_map, backup->checksum_version,
-					  backup->start_lsn <= horizonLsn ? lsn_map : NULL);
+					  /* shiftmap can be used only if backup state precedes the shift */
+					  backup->stop_lsn <= horizonLsn ? lsn_map : NULL);
 
 		if (fclose(in) != 0)
 			elog(ERROR, "Cannot close file \"%s\": %s", from_fullpath,
@@ -1026,7 +1027,7 @@ restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_vers
 		 * special value PageIsTruncated is encountered.
 		 * It was inefficient.
 		 *
-		 * Nowadays every backup type has n_blocks, so instead
+		 * Nowadays every backup type has n_blocks, so instead of
 		 * writing and then truncating redundant data, writing
 		 * is not happening in the first place.
 		 * TODO: remove in 3.0.0
@@ -1097,7 +1098,9 @@ restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_vers
 		}
 
 		/* Incremental restore
-		 * TODO: move to another function
+		 * TODO: move to separate function,
+		 * TODO: move BackupPageHeader headers to some separate storage,
+		 * so they can be accessed without reading through whole file.
 		 */
 		if (checksum_map && checksum_map[blknum].checksum != 0)
 		{
@@ -1110,7 +1113,7 @@ restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_vers
 				char uncompressed_buf[BLCKSZ];
 				fio_decompress(uncompressed_buf, page.data, compressed_size, file->compress_alg);
 
-				/* If checksumms are enabled, then we can trust checksumm in header */
+				/* If checksums are enabled, then we can trust checksum in header */
 				if (checksum_version)
 					page_crc = ((PageHeader) uncompressed_buf)->pd_checksum;
 				else
@@ -1143,6 +1146,8 @@ restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_vers
 					datapagemap_add(map, blknum);
 				continue;
 			}
+
+//			elog(INFO, "Replace blknum %u in file %s", blknum, to_fullpath);
 		}
 
 		/*
@@ -1313,7 +1318,7 @@ restore_non_data_file(parray *parent_chain, pgBackup *dest_backup,
 
 		if (file_crc == tmp_file->crc)
 		{
-			elog(VERBOSE, "Remote nondata file \"%s\" is unchanged, skip restore",
+			elog(VERBOSE, "Remote nonedata file \"%s\" is unchanged, skip restore",
 				to_fullpath);
 			return 0;
 		}
@@ -1820,7 +1825,7 @@ check_file_pages(pgFile *file, const char *fullpath, XLogRecPtr stop_lsn,
 
 /* read local data file and construct map with block checksums */
 PageState *get_checksum_map(const char *fullpath, uint32 checksum_version,
-						 int n_blocks, XLogRecPtr dest_stop_lsn, BlockNumber segmentno)
+							int n_blocks, XLogRecPtr dest_stop_lsn, BlockNumber segmentno)
 {
 	PageState  *checksum_map = NULL;
 	FILE       *in = NULL;

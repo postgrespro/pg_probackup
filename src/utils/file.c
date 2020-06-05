@@ -213,7 +213,7 @@ static ssize_t fio_read_all(int fd, void* buf, size_t size)
 		{
 			if (errno == EINTR)
 				continue;
-			elog(WARNING, "fio_read_all error: %s", strerror(errno));
+			elog(ERROR, "fio_read_all error, fd %i: %s", fd, strerror(errno));
 			return rc;
 		}
 		else if (rc == 0)
@@ -231,10 +231,13 @@ static ssize_t fio_write_all(int fd, void const* buf, size_t size)
 	while (offs < size)
 	{
 		ssize_t rc = write(fd, (char*)buf + offs, size - offs);
-		if (rc <= 0) {
-			if (errno == EINTR) {
+		if (rc <= 0)
+		{
+			if (errno == EINTR)
 				continue;
-			}
+
+			elog(ERROR, "fio_write_all error, fd %i: %s", fd, strerror(errno));
+
 			return rc;
 		}
 		offs += rc;

@@ -223,7 +223,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 
 			//	elog(LOG, "target timeline ID = %u", rt->target_tli);
 				/* Read timeline history files from archives */
-				timelines = read_timeline_history(arclog_path, rt->target_tli);
+				timelines = read_timeline_history(arclog_path, rt->target_tli, true);
 
 				if (!satisfy_timeline(timelines, current_backup))
 				{
@@ -354,7 +354,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 
 		/* no point in checking external directories if their restore is not requested */
 		if (!params->skip_external_dirs)
-			check_external_dir_mapping(dest_backup);
+			check_external_dir_mapping(dest_backup, params->incremental);
 	}
 
 	/* At this point we are sure that parent chain is whole
@@ -375,8 +375,8 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 	}
 
 	/*
-	 * Determine horizon LSN
-	 * Consider the following example:
+	 * Determine the shift-LSN
+	 * Consider the example A:
 	 *
 	 *
 	 *              /----D----------F->
@@ -385,51 +385,98 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 	 * [A,F] - incremental chain
 	 * X - the state of pgdata
 	 * F - destination backup
+	 * * - switch point
 	 *
-	 * When running incremental-lsn restore, we get a bitmap of pages,
-	 * whose LSN is less than C.
+	 * When running incremental restore in shift mode, we get a bitmap of pages,
+	 * whose LSN is less than shift-LSN (backup C stop_lsn).
 	 * So when restoring file, we can skip restore of pages coming from
 	 * A, B and C.
 	 * Pages from D and F cannot be skipped due to incremental restore.
+	 *
+	 * Consider the example B:
+	 *
+	 *
+	 *      /----------X---->
+	 * ----*---A---B---C-->
+	 *
+	 * [A,C] - incremental chain
+	 * X - the state of pgdata
+	 * C - destination backup
+	 * * - switch point
+	 *
+	 * Incremental restore in shift mode IS NOT POSSIBLE in this case.
+	 * We must be able to differentiate the scenario A and scenario B.
 	 *
 	 */
 	if (params->is_restore && params->incremental && params->incremental_lsn)
 	{
 		RedoParams redo;
+		parray	  *timelines = NULL;
 		get_redo(instance_config.pgdata, &redo);
+
+		timelines = read_timeline_history(arclog_path, redo.tli, false);
+
+		if (!timelines)
+			elog(WARNING, "Failed to get history for redo timeline %i, "
+				"multi-timeline incremental restore in shift mode is impossible", redo.tli);
 
 		tmp_backup = dest_backup;
 
 		while (tmp_backup)
 		{
-			if (tmp_backup->start_lsn < redo.lsn &&
-				redo.tli == tmp_backup->tli)
+			/* Candidate, whose stop_lsn if less than shift LSN, is found */
+			if (tmp_backup->stop_lsn < redo.lsn)
 			{
-				horizonLsn = tmp_backup->start_lsn;
-				break;
-			}
+				/* if candidate timeline is the same as redo TLI,
+				 * then we are good to go.
+				 */
+				if (redo.tli == tmp_backup->tli)
+				{
+					elog(INFO, "Backup %s is chosen as shiftpoint",
+						base36enc(tmp_backup->start_time));
 
-			if (!tmp_backup->parent_backup_link)
-				break;
+					horizonLsn = tmp_backup->stop_lsn;
+					break;
+				}
+
+				if (!timelines)
+				{
+					elog(WARNING, "Redo timeline %i differs from target timeline %i, "
+						"in this case, to safely run incremental restore in shift mode, "
+						"the history file for timeline %i is mandatory",
+						redo.tli, tmp_backup->tli, redo.tli);
+					break;
+				}
+
+				/* check whether the candidate tli is a part of redo TLI history */
+				if (tliIsPartOfHistory(timelines, tmp_backup->tli))
+				{
+					horizonLsn = tmp_backup->stop_lsn;
+					break;
+				}
+				else
+					elog(INFO, "Backup %s cannot be a shiftpoint, "
+							"because its tli %i is not in history of redo timeline %i",
+						base36enc(tmp_backup->start_time), tmp_backup->tli, redo.tli);
+			}
 
 			tmp_backup = tmp_backup->parent_backup_link;
 		}
 
 		if (XLogRecPtrIsInvalid(horizonLsn))
-			elog(ERROR, "Cannot perform lsn-based incremental restore of backup chain %s, "
-						"because destination directory redo point %X/%X on tli %i is less than "
-						"START LSN %X/%X of oldest backup in chain",
+			elog(ERROR, "Cannot perform incremental restore of backup chain %s in shift mode, "
+						"because destination directory redo point %X/%X on tli %i is out of reach",
 					base36enc(dest_backup->start_time),
-					(uint32) (redo.lsn >> 32), (uint32) redo.lsn, redo.tli,
-					(uint32) (tmp_backup->start_lsn >> 32), (uint32) tmp_backup->start_lsn);
+					(uint32) (redo.lsn >> 32), (uint32) redo.lsn, redo.tli);
 		else
 			elog(INFO, "Destination directory redo point %X/%X on tli %i is within reach of "
-					"backup %s with START LSN %X/%X, lsn-based incremental restore is possible",
+					"backup %s with STOP LSN %X/%X on tli %i, incremental restore in shift mode is possible",
 				(uint32) (redo.lsn >> 32), (uint32) redo.lsn, redo.tli,
 				base36enc(tmp_backup->start_time),
-				(uint32) (tmp_backup->start_lsn >> 32), (uint32) tmp_backup->start_lsn);
+				(uint32) (tmp_backup->stop_lsn >> 32), (uint32) tmp_backup->stop_lsn,
+				tmp_backup->tli);
 
-		elog(INFO, "Horizon LSN: %X/%X",
+		elog(INFO, "shift LSN: %X/%X",
 			(uint32) (horizonLsn >> 32), (uint32) horizonLsn);
 
 		params->horizonLsn = horizonLsn;
@@ -736,13 +783,34 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 
 		elog(INFO, "Extracting the content of destination directory for incremental restore");
 
-		/* TODO: external directorues */
 		time(&start_time);
 		if (fio_is_remote(FIO_DB_HOST))
 			fio_list_dir(pgdata_files, pgdata_path, false, true, false, false, true, 0);
 		else
 			dir_list_file(pgdata_files, pgdata_path,
 						  false, true, false, false, true, 0, FIO_LOCAL_HOST);
+
+		/* get external dirs content */
+		if (external_dirs)
+		{
+			for (i = 0; i < parray_num(external_dirs); i++)
+			{
+				char *external_path = parray_get(external_dirs, i);
+				parray	*external_files = parray_new();
+
+				if (fio_is_remote(FIO_DB_HOST))
+					fio_list_dir(external_files, external_path,
+								 false, true, false, false, true, i+1);
+				else
+					dir_list_file(external_files, external_path,
+								  false, true, false, false, true, i+1,
+								  FIO_LOCAL_HOST);
+
+				parray_concat(pgdata_files, external_files);
+				parray_free(external_files);
+			}
+		}
+
 		parray_qsort(pgdata_files, pgFileCompareRelPathWithExternalDesc);
 
 		time(&end_time);
@@ -767,6 +835,10 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 
 				fio_pgFileDelete(file, full_file_path);
 				elog(WARNING, "Deleted file \"%s\"", full_file_path);
+
+				/* shrink pgdata list */
+				parray_remove(pgdata_files, i);
+				i--;
 			}
 		}
 
@@ -1085,17 +1157,19 @@ restore_files(void *arg)
 										already_exists);
 		}
 
-		/* free pagemap used for restore optimization */
-		pg_free(dest_file->pagemap.bitmap);
-
 done:
 		/* close file */
 		if (fio_fclose(out) != 0)
 			elog(ERROR, "Cannot close file \"%s\": %s", to_fullpath,
 				 strerror(errno));
 
+		/* free pagemap used for restore optimization */
+		pg_free(dest_file->pagemap.bitmap);
+
 		if (lsn_map)
 			pg_free(lsn_map->bitmap);
+
+		pg_free(lsn_map);
 		pg_free(checksum_map);
 	}
 
@@ -1427,7 +1501,7 @@ pg12_recovery_config(pgBackup *backup, bool add_include)
  * based on readTimeLineHistory() in timeline.c
  */
 parray *
-read_timeline_history(const char *arclog_path, TimeLineID targetTLI)
+read_timeline_history(const char *arclog_path, TimeLineID targetTLI, bool strict)
 {
 	parray	   *result;
 	char		path[MAXPGPATH];
@@ -1451,8 +1525,11 @@ read_timeline_history(const char *arclog_path, TimeLineID targetTLI)
 					strerror(errno));
 
 			/* There is no history file for target timeline */
-			elog(ERROR, "recovery target timeline %u does not exist",
-				 targetTLI);
+			if (strict)
+				elog(ERROR, "recovery target timeline %u does not exist",
+					 targetTLI);
+			else
+				return NULL;
 		}
 	}
 
@@ -1557,6 +1634,28 @@ satisfy_timeline(const parray *timelines, const pgBackup *backup)
 			 backup->stop_lsn <= timeline->end))
 			return true;
 	}
+	return false;
+}
+
+/* timelines represents a history of one particular timeline,
+ * we must determine whether a target tli is part of that history.
+ *
+ *           /--------*
+ * ---------*-------------->
+ */
+bool
+tliIsPartOfHistory(const parray *timelines, TimeLineID tli)
+{
+	int			i;
+
+	for (i = 0; i < parray_num(timelines); i++)
+	{
+		TimeLineHistoryEntry *timeline = (TimeLineHistoryEntry *) parray_get(timelines, i);
+
+		if (tli == timeline->tli)
+			return true;
+	}
+
 	return false;
 }
 /*

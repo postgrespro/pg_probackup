@@ -123,11 +123,11 @@ typedef struct TablespaceCreatedList
 
 static int pgCompareString(const void *str1, const void *str2);
 
-static char dir_check_file(pgFile *file);
+static char dir_check_file(pgFile *file, bool backup_logs);
 
 static void dir_list_file_internal(parray *files, pgFile *parent, const char *parent_dir,
-								   bool exclude, bool follow_symlink, bool skip_hidden,
-								   int external_dir_num, fio_location location);
+								   bool exclude, bool follow_symlink, bool backup_logs,
+								   bool skip_hidden, int external_dir_num, fio_location location);
 static void opt_path_map(ConfigOption *opt, const char *arg,
 						 TablespaceList *list, const char *type);
 
@@ -561,17 +561,6 @@ dir_list_file(parray *files, const char *root, bool exclude, bool follow_symlink
 			return;
 	}
 
-	/* setup exclusion list for file search */
-	if (!backup_logs)
-	{
-		int			i;
-
-		for (i = 0; pgdata_exclude_dir[i]; i++);		/* find first empty slot */
-
-		/* Set 'pg_log' in first empty slot */
-		pgdata_exclude_dir[i] = PG_LOG_DIR;
-	}
-
 	if (!S_ISDIR(file->mode))
 	{
 		if (external_dir_num > 0)
@@ -585,7 +574,7 @@ dir_list_file(parray *files, const char *root, bool exclude, bool follow_symlink
 		parray_append(files, file);
 
 	dir_list_file_internal(files, file, root, exclude, follow_symlink,
-						   skip_hidden, external_dir_num, location);
+						   backup_logs, skip_hidden, external_dir_num, location);
 
 	if (!add_root)
 		pgFileFree(file);
@@ -609,7 +598,7 @@ dir_list_file(parray *files, const char *root, bool exclude, bool follow_symlink
  * - datafiles
  */
 static char
-dir_check_file(pgFile *file)
+dir_check_file(pgFile *file, bool backup_logs)
 {
 	int			i;
 	int			sscanf_res;
@@ -623,7 +612,7 @@ dir_check_file(pgFile *file)
 		if (!exclusive_backup)
 		{
 			for (i = 0; pgdata_exclude_files_non_exclusive[i]; i++)
-				if (strcmp(file->name,
+				if (strcmp(file->rel_path,
 						   pgdata_exclude_files_non_exclusive[i]) == 0)
 				{
 					/* Skip */
@@ -633,7 +622,7 @@ dir_check_file(pgFile *file)
 		}
 
 		for (i = 0; pgdata_exclude_files[i]; i++)
-			if (strcmp(file->name, pgdata_exclude_files[i]) == 0)
+			if (strcmp(file->rel_path, pgdata_exclude_files[i]) == 0)
 			{
 				/* Skip */
 				elog(VERBOSE, "Excluding file: %s", file->name);
@@ -656,6 +645,16 @@ dir_check_file(pgFile *file)
 			/* relative path exclude */
 			if (strcmp(file->rel_path, pgdata_exclude_dir[i]) == 0)
 			{
+				elog(VERBOSE, "Excluding directory content: %s", file->rel_path);
+				return CHECK_EXCLUDE_FALSE;
+			}
+		}
+
+		if (!backup_logs)
+		{
+			if (strcmp(file->rel_path, PG_LOG_DIR) == 0)
+			{
+				/* Skip */
 				elog(VERBOSE, "Excluding directory content: %s", file->rel_path);
 				return CHECK_EXCLUDE_FALSE;
 			}
@@ -807,8 +806,8 @@ dir_check_file(pgFile *file)
  */
 static void
 dir_list_file_internal(parray *files, pgFile *parent, const char *parent_dir,
-					   bool exclude, bool follow_symlink, bool skip_hidden,
-					   int external_dir_num, fio_location location)
+					   bool exclude, bool follow_symlink, bool backup_logs,
+					   bool skip_hidden, int external_dir_num, fio_location location)
 {
 	DIR			  *dir;
 	struct dirent *dent;
@@ -874,7 +873,7 @@ dir_list_file_internal(parray *files, pgFile *parent, const char *parent_dir,
 
 		if (exclude)
 		{
-			check_res = dir_check_file(file);
+			check_res = dir_check_file(file, backup_logs);
 			if (check_res == CHECK_FALSE)
 			{
 				/* Skip */
@@ -897,7 +896,7 @@ dir_list_file_internal(parray *files, pgFile *parent, const char *parent_dir,
 		 */
 		if (S_ISDIR(file->mode))
 			dir_list_file_internal(files, file, child, exclude, follow_symlink,
-								   skip_hidden, external_dir_num, location);
+								   backup_logs, skip_hidden, external_dir_num, location);
 	}
 
 	if (errno && errno != ENOENT)
@@ -1288,7 +1287,7 @@ check_tablespace_mapping(pgBackup *backup, bool incremental, bool *tblspaces_are
 }
 
 void
-check_external_dir_mapping(pgBackup *backup)
+check_external_dir_mapping(pgBackup *backup, bool incremental)
 {
 	TablespaceListCell *cell;
 	parray *external_dirs_to_restore;
@@ -1341,7 +1340,7 @@ check_external_dir_mapping(pgBackup *backup)
 		char	    *external_dir = (char *) parray_get(external_dirs_to_restore,
 														i);
 
-		if (!dir_is_empty(external_dir, FIO_DB_HOST))
+		if (!incremental && !dir_is_empty(external_dir, FIO_DB_HOST))
 			elog(ERROR, "External directory is not empty: \"%s\"",
 				 external_dir);
 	}
