@@ -3716,20 +3716,6 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
-# validate empty backup list
-# page from future during validate
-# page from future during backup
-
-# corrupt block, so file become unaligned:
-# 712                     Assert(header.compressed_size <= BLCKSZ);
-# 713
-# 714                     read_len = fread(compressed_page.data, 1,
-# 715                             MAXALIGN(header.compressed_size), in);
-# 716                     if (read_len != MAXALIGN(header.compressed_size))
-# -> 717                             elog(ERROR, "cannot read block %u of \"%s\" read %lu of %d",
-# 718                                     blknum, file->path, read_len, header.compressed_size);
-
-
     # @unittest.skip("skip")
     def test_not_validate_diffenent_pg_version(self):
         """Do not validate backup, if binary is compiled with different PG version"""
@@ -3774,7 +3760,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
                     repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertIn(
-                "ERROR: Backup was made with server version",
+                "ERROR: Backup {0} has server version".format(backup_id),
                 e.message,
                 "\n Unexpected Error Message: {0}\n CMD: {1}".format(
                     repr(e.message), self.cmd))
@@ -3782,3 +3768,16 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
+
+# validate empty backup list
+# page from future during validate
+# page from future during backup
+
+# corrupt block, so file become unaligned:
+# 712                     Assert(header.compressed_size <= BLCKSZ);
+# 713
+# 714                     read_len = fread(compressed_page.data, 1,
+# 715                             MAXALIGN(header.compressed_size), in);
+# 716                     if (read_len != MAXALIGN(header.compressed_size))
+# -> 717                             elog(ERROR, "cannot read block %u of \"%s\" read %lu of %d",
+# 718                                     blknum, file->path, read_len, header.compressed_size);
