@@ -120,6 +120,13 @@ pgBackupValidate(pgBackup *backup, pgRestoreParams *params)
 		return;
 	}
 
+    if (strcmp(backup->server_version, PG_MAJORVERSION) != 0)
+    {
+        elog(ERROR, "Backup was made with server version %s, but pg_probackup compiled "
+               "with server version %s.",
+                backup->server_version, PG_MAJORVERSION);
+    }
+
 //	if (params && params->partial_db_list)
 //		dbOid_exclude_list = get_dbOid_exclude_list(backup, files, params->partial_db_list,
 //														params->partial_restore_type);
