@@ -3,6 +3,7 @@
 import unittest
 import os
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
+from testgres import QueryException
 import shutil
 from datetime import datetime, timedelta
 import time
