@@ -62,7 +62,7 @@ Documentation can be found at [github](https://postgrespro.github.io/pg_probacku
 
 ## Installation and Setup
 ### Windows Installation
-Installers are available in release **assets**. [Latests](https://github.com/postgrespro/pg_probackup/releases/2.3.3).
+Installers are available in release **assets**. [Latests](https://github.com/postgrespro/pg_probackup/releases/2.3.5).
 
 ### Linux Installation
 #### pg_probackup for vanilla PostgreSQL
@@ -115,7 +115,7 @@ sudo apt-get install pg_probackup-{12,11,10,9.6,9.5}
 sudo apt-get install pg_probackup-{12,11,10,9.6,9.5}-debuginfo
 ```
 
-#### pg_probackup for PostgresPro Standart and Enterprise
+#### pg_probackup for PostgresPro Standard and Enterprise
 ```shell
 #DEB Ubuntu|Debian Packages
 sudo echo "deb [arch=amd64] https://repo.postgrespro.ru/pg_probackup-forks/deb/ $(lsb_release -cs) main-$(lsb_release -cs)" > /etc/apt/sources.list.d/pg_probackup-forks.list
