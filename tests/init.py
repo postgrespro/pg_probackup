@@ -1,6 +1,7 @@
 import os
 import unittest
 from .helpers.ptrack_helpers import dir_files, ProbackupTest, ProbackupException
+import shutil
 
 
 module_name = 'init'
@@ -101,6 +102,56 @@ class InitTest(ProbackupTest, unittest.TestCase):
                 "ERROR: -B, --backup-path must be an absolute path",
                 e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    # @unittest.expectedFailure
+    def test_add_instance_idempotence(self):
+        """
+        https://github.com/postgrespro/pg_probackup/issues/219
+        """
+        fname = self.id().split(".")[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(base_dir=os.path.join(module_name, fname, 'node'))
+        self.init_pb(backup_dir)
+
+        self.add_instance(backup_dir, 'node', node)
+        shutil.rmtree(os.path.join(backup_dir, 'backups', 'node'))
+
+        dir_backups = os.path.join(backup_dir, 'backups', 'node')
+        dir_wal = os.path.join(backup_dir, 'wal', 'node')
+
+        try:
+            self.add_instance(backup_dir, 'node', node)
+            # we should die here because exception is what we expect to happen
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because page backup should not be possible "
+                "\n Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                "ERROR: Instance 'node' WAL archive directory already exists: ",
+                e.message,
+                "\n Unexpected Error Message: {0}\n CMD: {1}".format(
+                    repr(e.message), self.cmd))
+
+        try:
+            self.add_instance(backup_dir, 'node', node)
+            # we should die here because exception is what we expect to happen
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because page backup should not be possible "
+                "\n Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                "ERROR: Instance 'node' WAL archive directory already exists: ",
+                e.message,
+                "\n Unexpected Error Message: {0}\n CMD: {1}".format(
+                    repr(e.message), self.cmd))
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)

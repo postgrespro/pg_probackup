@@ -3716,6 +3716,59 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
+    # @unittest.skip("skip")
+    def test_not_validate_diffenent_pg_version(self):
+        """Do not validate backup, if binary is compiled with different PG version"""
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'])
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        backup_id = self.backup_node(backup_dir, 'node', node)
+
+        control_file = os.path.join(
+            backup_dir, "backups", "node", backup_id,
+            "backup.control")
+
+        pg_version = node.major_version
+
+        if pg_version.is_integer():
+            pg_version = int(pg_version)
+
+        fake_new_pg_version = pg_version + 1
+
+        with open(control_file, 'r') as f:
+            data = f.read();
+
+        data = data.replace(str(pg_version), str(fake_new_pg_version))
+
+        with open(control_file, 'w') as f:
+            f.write(data);
+
+        try:
+            self.validate_pb(backup_dir)
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because validation is forbidden if server version of backup "
+                "is different from the server version of pg_probackup.\n Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                "ERROR: Backup {0} has server version".format(backup_id),
+                e.message,
+                "\n Unexpected Error Message: {0}\n CMD: {1}".format(
+                    repr(e.message), self.cmd))
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+
 # validate empty backup list
 # page from future during validate
 # page from future during backup

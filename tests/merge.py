@@ -3,6 +3,7 @@
 import unittest
 import os
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
+from testgres import QueryException
 import shutil
 from datetime import datetime, timedelta
 import time
@@ -175,10 +176,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True, initdb_params=["--data-checksums"],
-            pg_options={
-                'autovacuum': 'off'
-            }
-        )
+            pg_options={'autovacuum': 'off'})
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, "node", node)
@@ -186,7 +184,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         node.slow_start()
 
         # Fill with data
-        node.pgbench_init(scale=5)
+        node.pgbench_init(scale=10)
 
         # Do compressed FULL backup
         self.backup_node(backup_dir, "node", node, options=['--compress', '--stream'])
@@ -196,7 +194,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(show_backup["backup-mode"], "FULL")
 
         # Change data
-        pgbench = node.pgbench(options=['-T', '20', '-c', '2', '--no-vacuum'])
+        pgbench = node.pgbench(options=['-T', '10', '-c', '1', '--no-vacuum'])
         pgbench.wait()
 
         # Do compressed DELTA backup
@@ -205,7 +203,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
             backup_type="delta", options=['--compress', '--stream'])
 
         # Change data
-        pgbench = node.pgbench(options=['-T', '20', '-c', '2', '--no-vacuum'])
+        pgbench = node.pgbench(options=['-T', '10', '-c', '1', '--no-vacuum'])
         pgbench.wait()
 
         # Do compressed PAGE backup
@@ -1478,10 +1476,12 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
         self.del_test_dir(module_name, fname)
 
+    @unittest.skip("skip")
     def test_crash_after_opening_backup_control_2(self):
         """
         check that crashing after opening backup_content.control
         for writing will not result in losing metadata about backup files
+        TODO: rewrite
         """
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
@@ -1531,7 +1531,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         gdb.run_until_break()
 
         gdb.set_breakpoint('sprintf')
-        gdb.continue_execution_until_break(20)
+        gdb.continue_execution_until_break(1)
 
         gdb._execute('signal SIGKILL')
 
@@ -1568,10 +1568,12 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
         self.del_test_dir(module_name, fname)
 
+    @unittest.skip("skip")
     def test_losing_file_after_failed_merge(self):
         """
         check that crashing after opening backup_content.control
         for writing will not result in losing metadata about backup files
+        TODO: rewrite
         """
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
