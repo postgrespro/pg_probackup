@@ -67,20 +67,19 @@ do_add_instance(InstanceConfig *instance)
 
 	/* Ensure that all root directories already exist */
 	if (access(backup_path, F_OK) != 0)
-		elog(ERROR, "%s directory does not exist.", backup_path);
+		elog(ERROR, "Directory does not exist: '%s'", backup_path);
 
 	join_path_components(path, backup_path, BACKUPS_DIR);
 	if (access(path, F_OK) != 0)
-		elog(ERROR, "%s directory does not exist.", path);
+		elog(ERROR, "Directory does not exist: '%s'", path);
 
 	join_path_components(arclog_path_dir, backup_path, "wal");
 	if (access(arclog_path_dir, F_OK) != 0)
-		elog(ERROR, "%s directory does not exist.", arclog_path_dir);
+		elog(ERROR, "Directory does not exist: '%s'", arclog_path_dir);
 
-	/* Create directory for data files of this specific instance */
 	if (stat(instance->backup_instance_path, &st) == 0 && S_ISDIR(st.st_mode))
-		elog(ERROR, "instance '%s' already exists", instance->backup_instance_path);
-	dir_create_dir(instance->backup_instance_path, DIR_PERMISSION);
+		elog(ERROR, "Instance '%s' backup directory already exists: '%s'",
+			instance->name, instance->backup_instance_path);
 
 	/*
 	 * Create directory for wal files of this specific instance.
@@ -88,7 +87,11 @@ do_add_instance(InstanceConfig *instance)
 	 * directory in data dir, we shouldn't have it in wal as well.
 	 */
 	if (stat(instance->arclog_path, &st) == 0 && S_ISDIR(st.st_mode))
-		elog(ERROR, "arclog_path '%s' already exists", instance->arclog_path);
+		elog(ERROR, "Instance '%s' WAL archive directory already exists: '%s'",
+				instance->name, instance->arclog_path);
+
+	/* Create directory for data files of this specific instance */
+	dir_create_dir(instance->backup_instance_path, DIR_PERMISSION);
 	dir_create_dir(instance->arclog_path, DIR_PERMISSION);
 
 	/*

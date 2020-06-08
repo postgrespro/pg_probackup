@@ -1855,7 +1855,7 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn,
 		}
 
 		elog(LOG, "stop_lsn: %X/%X",
-			(uint32) (stop_backup_lsn >> 32), (uint32) (stop_backup_lsn));
+			(uint32) (stop_backup_lsn_tmp >> 32), (uint32) (stop_backup_lsn_tmp));
 
 		/* Write backup_label and tablespace_map */
 		if (!exclusive_backup)

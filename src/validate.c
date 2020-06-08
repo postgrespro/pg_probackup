@@ -58,12 +58,18 @@ pgBackupValidate(pgBackup *backup, pgRestoreParams *params)
 	int			i;
 //	parray		*dbOid_exclude_list = NULL;
 
-	/* Check backup version */
+	/* Check backup program version */
 	if (parse_program_version(backup->program_version) > parse_program_version(PROGRAM_VERSION))
 		elog(ERROR, "pg_probackup binary version is %s, but backup %s version is %s. "
 			"pg_probackup do not guarantee to be forward compatible. "
 			"Please upgrade pg_probackup binary.",
 				PROGRAM_VERSION, base36enc(backup->start_time), backup->program_version);
+
+	/* Check backup server version */
+	if (strcmp(backup->server_version, PG_MAJORVERSION) != 0)
+        elog(ERROR, "Backup %s has server version %s, but current pg_probackup binary "
+					"compiled with server version %s",
+                base36enc(backup->start_time), backup->server_version, PG_MAJORVERSION);
 
 	if (backup->status == BACKUP_STATUS_RUNNING)
 	{
