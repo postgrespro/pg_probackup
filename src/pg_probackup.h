@@ -119,6 +119,13 @@ typedef struct db_map_entry
 	char *datname;
 } db_map_entry;
 
+typedef enum IncrRestoreMode
+{
+	INCR_NONE,
+	INCR_CHECKSUM,
+	INCR_LSN
+} IncrRestoreMode;
+
 typedef enum PartialRestoreType
 {
 	NONE,
@@ -453,16 +460,17 @@ typedef struct pgRestoreParams
 	bool	restore_as_replica;
 	bool	skip_external_dirs;
 	bool	skip_block_validation; //Start using it
-	bool	incremental;
-	bool    incremental_lsn;
-	XLogRecPtr horizonLsn;
 	const char *restore_command;
 	const char *primary_slot_name;
+	const char *primary_conninfo;
+
+	/* options for incremental restore */
+	IncrRestoreMode	incremental_mode;
+	XLogRecPtr shift_lsn;
 
 	/* options for partial restore */
 	PartialRestoreType partial_restore_type;
 	parray *partial_db_list;
-	const char *primary_conninfo;
 } pgRestoreParams;
 
 /* Options needed for set-backup command */

@@ -98,8 +98,7 @@ static pgRestoreParams *restore_params = NULL;
 time_t current_time = 0;
 bool restore_as_replica = false;
 bool no_validate = false;
-bool incremental = false;
-bool incremental_lsn = false;
+IncrRestoreMode incremental_mode = INCR_NONE;
 
 bool skip_block_validation = false;
 bool skip_external_dirs = false;
@@ -152,6 +151,7 @@ static ProbackupSubcmd backup_subcmd = NO_CMD;
 
 static bool help_opt = false;
 
+static void opt_incr_restore_mode(ConfigOption *opt, const char *arg);
 static void opt_backup_mode(ConfigOption *opt, const char *arg);
 static void opt_show_format(ConfigOption *opt, const char *arg);
 
@@ -205,8 +205,7 @@ static ConfigOption cmd_options[] =
 	{ 'b', 'R', "restore-as-replica", &restore_as_replica,	SOURCE_CMD_STRICT },
 	{ 's', 160, "primary-conninfo",	&primary_conninfo,	SOURCE_CMD_STRICT },
 	{ 's', 'S', "primary-slot-name",&replication_slot,	SOURCE_CMD_STRICT },
-	{ 'b', 161, "incremental",      &incremental,	SOURCE_CMD_STRICT },
-	{ 'b', 167, "incremental-lsn",  &incremental_lsn,	SOURCE_CMD_STRICT },
+	{ 'f', 'I', "incremental-mode", opt_incr_restore_mode,	SOURCE_CMD_STRICT },
 	/* checkdb options */
 	{ 'b', 195, "amcheck",			&need_amcheck,		SOURCE_CMD_STRICT },
 	{ 'b', 196, "heapallindexed",	&heapallindexed,	SOURCE_CMD_STRICT },
@@ -704,9 +703,6 @@ main(int argc, char *argv[])
 		if (replication_slot != NULL)
 			restore_as_replica = true;
 
-		if (!incremental && incremental_lsn)
-			incremental = true;
-
 		/* keep all params in one structure */
 		restore_params = pgut_new(pgRestoreParams);
 		restore_params->is_restore = (backup_subcmd == RESTORE_CMD);
@@ -719,8 +715,7 @@ main(int argc, char *argv[])
 		restore_params->partial_db_list = NULL;
 		restore_params->partial_restore_type = NONE;
 		restore_params->primary_conninfo = primary_conninfo;
-		restore_params->incremental = incremental;
-		restore_params->incremental_lsn = incremental_lsn;
+		restore_params->incremental_mode = incremental_mode;
 
 		/* handle partial restore parameters */
 		if (datname_exclude_list && datname_include_list)
@@ -876,6 +871,29 @@ main(int argc, char *argv[])
 	}
 
 	return 0;
+}
+
+static void
+opt_incr_restore_mode(ConfigOption *opt, const char *arg)
+{
+	if (pg_strcasecmp(arg, "none") == 0)
+	{
+		incremental_mode = INCR_NONE;
+		return;
+	}
+	else if (pg_strcasecmp(arg, "checksum") == 0)
+	{
+		incremental_mode = INCR_CHECKSUM;
+		return;
+	}
+	else if (pg_strcasecmp(arg, "lsn") == 0)
+	{
+		incremental_mode = INCR_LSN;
+		return;
+	}
+
+	/* Backup mode is invalid, so leave with an error */
+	elog(ERROR, "Invalid value for '--incremental-mode' option: '%s'", arg);
 }
 
 static void
