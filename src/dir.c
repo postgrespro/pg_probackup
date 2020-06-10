@@ -1242,16 +1242,16 @@ check_tablespace_mapping(pgBackup *backup, bool incremental, bool *tblspaces_are
 				 cell->old_dir);
 
 		/* For incremental restore, check that new directory is empty */
-		if (incremental)
-		{
-			if (!is_absolute_path(cell->new_dir))
-				elog(ERROR, "tablespace directory is not an absolute path: %s\n",
-					 cell->new_dir);
-
-			if (!dir_is_empty(cell->new_dir, FIO_DB_HOST))
-				elog(ERROR, "restore tablespace destination is not empty: \"%s\"",
-					 cell->new_dir);
-		}
+//		if (incremental)
+//		{
+//			if (!is_absolute_path(cell->new_dir))
+//				elog(ERROR, "tablespace directory is not an absolute path: %s\n",
+//					 cell->new_dir);
+//
+//			if (!dir_is_empty(cell->new_dir, FIO_DB_HOST))
+//				elog(ERROR, "restore tablespace destination is not empty: \"%s\"",
+//					 cell->new_dir);
+//		}
 	}
 
 	/* 2 - all linked directories must be empty */
