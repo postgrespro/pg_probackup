@@ -88,7 +88,7 @@ extern const char  *PROGRAM_EMAIL;
 #define STDIO_BUFSIZE 65536
 
 /* retry attempts */
-#define PAGE_READ_ATTEMPTS 100
+#define PAGE_READ_ATTEMPTS 300
 
 /* max size of note, that can be added to backup */
 #define MAX_NOTE_SIZE 1024
