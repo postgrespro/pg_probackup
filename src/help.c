@@ -160,6 +160,7 @@ help_pg_probackup(void)
 	printf(_("                 [-T OLDDIR=NEWDIR] [--progress]\n"));
 	printf(_("                 [--external-mapping=OLDDIR=NEWDIR]\n"));
 	printf(_("                 [--skip-external-dirs] [--restore-command=cmdline]\n"));
+	printf(_("                 [--incremental-mode=none|checksum|lsn\n"));
 	printf(_("                 [--no-sync]\n"));
 	printf(_("                 [--db-include | --db-exclude]\n"));
 	printf(_("                 [--remote-proto] [--remote-host]\n"));
@@ -397,6 +398,7 @@ help_restore(void)
 	printf(_("                 [-T OLDDIR=NEWDIR]\n"));
 	printf(_("                 [--external-mapping=OLDDIR=NEWDIR]\n"));
 	printf(_("                 [--skip-external-dirs]\n"));
+	printf(_("                 [--incremental-mode=none|checksum|lsn\n"));
 	printf(_("                 [--db-include dbname | --db-exclude dbname]\n"));
 	printf(_("                 [--recovery-target-time=time|--recovery-target-xid=xid\n"));
 	printf(_("                  |--recovery-target-lsn=lsn [--recovery-target-inclusive=boolean]]\n"));
@@ -430,6 +432,9 @@ help_restore(void)
 	printf(_("      --external-mapping=OLDDIR=NEWDIR\n"));
 	printf(_("                                   relocate the external directory from OLDDIR to NEWDIR\n"));
 	printf(_("      --skip-external-dirs         do not restore all external directories\n"));
+	printf(_("  -I, --incremental-mode=none|checksum|lsn\n"));
+	printf(_("                                   reuse already existing unchanged valid pages in PGDATA\n"));
+	printf(_("                                   (default: none)\n"));
 
 	printf(_("\n  Partial restore options:\n"));
 	printf(_("      --db-include dbname          restore only specified databases\n"));
