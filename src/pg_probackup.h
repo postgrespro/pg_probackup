@@ -962,7 +962,7 @@ extern void backup_non_data_file_internal(const char *from_fullpath,
 
 extern size_t restore_data_file(parray *parent_chain, pgFile *dest_file, FILE *out,
 								const char *to_fullpath, bool use_bitmap, PageState *checksum_map,
-								XLogRecPtr horizonLsn, datapagemap_t *lsn_map);
+								XLogRecPtr shift_lsn, datapagemap_t *lsn_map);
 extern size_t restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_version,
 										 const char *from_fullpath, const char *to_fullpath, int nblocks,
 										 datapagemap_t *map, PageState *checksum_map, int checksum_version,
@@ -978,7 +978,7 @@ extern bool create_empty_file(fio_location from_location, const char *to_root,
 extern PageState *get_checksum_map(const char *fullpath, uint32 checksum_version,
 								int n_blocks, XLogRecPtr dest_stop_lsn, BlockNumber segmentno);
 extern datapagemap_t *get_lsn_map(const char *fullpath, uint32 checksum_version,
-								  int n_blocks, XLogRecPtr horizonLsn, BlockNumber segmentno);
+								  int n_blocks, XLogRecPtr shift_lsn, BlockNumber segmentno);
 extern pid_t check_postmaster(const char *pgdata);
 
 extern bool check_file_pages(pgFile *file, const char *fullpath, XLogRecPtr stop_lsn,

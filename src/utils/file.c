@@ -76,7 +76,7 @@ typedef struct
 {
 	BlockNumber n_blocks;
 	BlockNumber segmentno;
-	XLogRecPtr  horizonLsn;
+	XLogRecPtr  shift_lsn;
 	uint32      checksumVersion;
 } fio_lsn_map_request;
 
@@ -2338,7 +2338,7 @@ static void fio_get_checksum_map_impl(int out, char *buf)
 
 datapagemap_t *
 fio_get_lsn_map(const char *fullpath, uint32 checksum_version,
-				int n_blocks, XLogRecPtr horizonLsn, BlockNumber segmentno,
+				int n_blocks, XLogRecPtr shift_lsn, BlockNumber segmentno,
 				fio_location location)
 {
 	datapagemap_t* lsn_map = NULL;
@@ -2351,7 +2351,7 @@ fio_get_lsn_map(const char *fullpath, uint32 checksum_version,
 
 		req_hdr.n_blocks = n_blocks;
 		req_hdr.segmentno = segmentno;
-		req_hdr.horizonLsn = horizonLsn;
+		req_hdr.shift_lsn = shift_lsn;
 		req_hdr.checksumVersion = checksum_version;
 
 		hdr.cop = FIO_GET_LSN_MAP;
@@ -2378,7 +2378,7 @@ fio_get_lsn_map(const char *fullpath, uint32 checksum_version,
 	else
 	{
 		lsn_map = get_lsn_map(fullpath, checksum_version, n_blocks,
-							  horizonLsn, segmentno);
+							  shift_lsn, segmentno);
 	}
 
 	return lsn_map;
@@ -2392,7 +2392,7 @@ static void fio_get_lsn_map_impl(int out, char *buf)
 	fio_lsn_map_request *req = (fio_lsn_map_request*) buf;
 
 	lsn_map = get_lsn_map(fullpath, req->checksumVersion, req->n_blocks,
-						  req->horizonLsn, req->segmentno);
+						  req->shift_lsn, req->segmentno);
 	if (lsn_map)
 		hdr.size = lsn_map->bitmapsize;
 	else

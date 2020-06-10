@@ -848,7 +848,7 @@ backup_non_data_file(pgFile *file, pgFile *prev_file,
 size_t
 restore_data_file(parray *parent_chain, pgFile *dest_file, FILE *out,
 				  const char *to_fullpath, bool use_bitmap, PageState *checksum_map,
-				  XLogRecPtr horizonLsn, datapagemap_t *lsn_map)
+				  XLogRecPtr shift_lsn, datapagemap_t *lsn_map)
 {
 	size_t total_write_len = 0;
 	char  *in_buf = pgut_malloc(STDIO_BUFSIZE);
@@ -934,7 +934,7 @@ restore_data_file(parray *parent_chain, pgFile *dest_file, FILE *out,
 					  use_bitmap ? &(dest_file)->pagemap : NULL,
 					  checksum_map, backup->checksum_version,
 					  /* shiftmap can be used only if backup state precedes the shift */
-					  backup->stop_lsn <= horizonLsn ? lsn_map : NULL);
+					  backup->stop_lsn <= shift_lsn ? lsn_map : NULL);
 
 		if (fclose(in) != 0)
 			elog(ERROR, "Cannot close file \"%s\": %s", from_fullpath,
@@ -1893,7 +1893,7 @@ PageState *get_checksum_map(const char *fullpath, uint32 checksum_version,
 /* return bitmap of valid blocks, bitmap is empty, then NULL is returned */
 datapagemap_t *
 get_lsn_map(const char *fullpath, uint32 checksum_version,
-			int n_blocks, XLogRecPtr horizonLsn, BlockNumber segmentno)
+			int n_blocks, XLogRecPtr shift_lsn, BlockNumber segmentno)
 {
 	FILE           *in = NULL;
 	BlockNumber     blknum = 0;
@@ -1907,7 +1907,7 @@ get_lsn_map(const char *fullpath, uint32 checksum_version,
 		elog(ERROR, "Cannot truncate file to blknum %u \"%s\": %s",
 				n_blocks, fullpath, strerror(errno));
 
-	Assert(horizonLsn > 0);
+	Assert(shift_lsn > 0);
 
 	/* open file */
 	in = fopen(fullpath, PG_BINARY_R);
@@ -1931,7 +1931,7 @@ get_lsn_map(const char *fullpath, uint32 checksum_version,
 		if (read_len == BLCKSZ)
 		{
 			int rc = validate_one_page(read_buffer, segmentno + blknum,
-									   horizonLsn, &page_lsn, checksum_version);
+									   shift_lsn, &page_lsn, checksum_version);
 
 			if (rc == PAGE_IS_VALID)
 				datapagemap_add(lsn_map, blknum);
