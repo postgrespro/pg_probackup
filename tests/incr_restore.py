@@ -176,8 +176,6 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         pgdata_restored = self.pgdata_content(node.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        exit(1)
-
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
