@@ -324,6 +324,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
+            ptrack_enable=True,
             initdb_params=['--data-checksums'])
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
@@ -663,12 +664,10 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                     "\n Output: {0} \n CMD: {1}".format(
                         repr(self.output), self.cmd))
             except ProbackupException as e:
-                self.assertTrue(
-                    'WARNING:  page verification failed, '
-                    'calculated checksum' in e.message and
-                    'ERROR: query failed: ERROR:  '
-                    'invalid page in block 1 of relation' in e.message and
-                    'ERROR: Data files transferring failed' in e.message,
+                self.assertIn(
+                    'ERROR: Corruption detected in file "{0}", block 1: '
+                    'page header invalid, pd_lower'.format(heap_fullpath),
+                    e.message,
                     '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                         repr(e.message), self.cmd))
 
@@ -806,12 +805,10 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                     "\n Output: {0} \n CMD: {1}".format(
                         repr(self.output), self.cmd))
             except ProbackupException as e:
-                self.assertTrue(
-                    'WARNING:  page verification failed, '
-                    'calculated checksum' in e.message and
-                    'ERROR: query failed: ERROR:  '
-                    'invalid page in block 1 of relation' in e.message and
-                    'ERROR: Data files transferring failed' in e.message,
+                self.assertIn(
+                    'ERROR: Corruption detected in file "{0}", block 1: '
+                    'page header invalid, pd_lower'.format(heap_fullpath),
+                    e.message,
                     '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                         repr(e.message), self.cmd))
 
@@ -1480,7 +1477,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
-            ptrack_enable=True,
+            ptrack_enable=self.ptrack,
             initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
@@ -2131,9 +2128,8 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                         "TO backup".format(fname))
             else:
                 fnames = [
-                    'pg_catalog.pg_ptrack_get_pagemapset(pg_lsn)',
-                    'pg_catalog.pg_ptrack_control_lsn()',
-                    'pg_catalog.pg_ptrack_get_block(oid, oid, oid, bigint)'
+                    'pg_catalog.ptrack_get_pagemapset(pg_lsn)',
+                    'pg_catalog.ptrack_init_lsn()'
                 ]
 
                 for fname in fnames:
