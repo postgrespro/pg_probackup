@@ -433,7 +433,7 @@ help_restore(void)
 	printf(_("                                   relocate the external directory from OLDDIR to NEWDIR\n"));
 	printf(_("      --skip-external-dirs         do not restore all external directories\n"));
 	printf(_("  -I, --incremental-mode=none|checksum|lsn\n"));
-	printf(_("                                   reuse already existing unchanged valid pages in PGDATA\n"));
+	printf(_("                                   reuse valid pages available in PGDATA if they have not changed\n"));
 	printf(_("                                   (default: none)\n"));
 
 	printf(_("\n  Partial restore options:\n"));

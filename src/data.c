@@ -1135,7 +1135,7 @@ restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_vers
 			page_lsn = PageXLogRecPtrGet(phdr->pd_lsn);
 
 			/*
-			 * The heart of incremental restore
+			 * The heart of incremental restore in 'checksum' mode
 			 * If page in backup has the same checksum and lsn as
 			 * page in backup, then page can be skipped.
 			 */

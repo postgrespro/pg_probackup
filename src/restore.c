@@ -712,7 +712,7 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 	 */
 	if (use_bitmap && parray_num(parent_chain) == 1)
 	{
-		if (params->incremental_mode == INCR_NONE)
+		if (params->incremental_mode == INCR_LSN)
 			use_bitmap = true;
 		else
 			use_bitmap = false;
