@@ -832,7 +832,7 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 				join_path_components(full_file_path, pgdata_path, file->rel_path);
 
 				fio_pgFileDelete(file, full_file_path);
-				elog(WARNING, "Deleted file \"%s\"", full_file_path);
+				elog(VERBOSE, "Deleted file \"%s\"", full_file_path);
 
 				/* shrink pgdata list */
 				parray_remove(pgdata_files, i);
@@ -1461,6 +1461,7 @@ pg12_recovery_config(pgBackup *backup, bool add_include)
 			elog(ERROR, "cannot write to file \"%s\": %s", postgres_auto_path,
 				strerror(errno));
 
+		// TODO: check if include 'probackup_recovery.conf' already exists
 		fio_fprintf(fp, "\n# created by pg_probackup restore of backup %s at '%s'\n",
 			base36enc(backup->start_time), current_time_str);
 		fio_fprintf(fp, "include '%s'\n", "probackup_recovery.conf");
