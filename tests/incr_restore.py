@@ -529,13 +529,13 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
-    def test_incr_shift_sanity(self):
+    def test_incr_lsn_sanity(self):
         """
                 /----A-----B
         F------*--------X
 
         X - is instance, we want to return it to state B.
-        fail is expected behaviour in case of shift restore.
+        fail is expected behaviour in case of lsn restore.
         """
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
@@ -583,7 +583,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
             # we should die here because exception is what we expect to happen
             self.assertEqual(
                 1, 0,
-                "Expecting Error because incremental restore in shift mode is impossible\n "
+                "Expecting Error because incremental restore in lsn mode is impossible\n "
                 "Output: {0} \n CMD: {1}".format(
                     repr(self.output), self.cmd))
         except ProbackupException as e:
@@ -716,7 +716,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
         # @unittest.skip("skip")
-    def test_incr_shift_corruption_detection(self):
+    def test_incr_lsn_corruption_detection(self):
         """
         check that corrupted page got detected and replaced
         """
@@ -846,7 +846,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure
-    def test_incr_shift_restore_multiple_external(self):
+    def test_incr_lsn_restore_multiple_external(self):
         """check that cmdline has priority over config"""
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
@@ -911,6 +911,197 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         pgdata_restored = self.pgdata_content(
             node.base_dir, exclude_dirs=['logs'])
         self.compare_pgdata(pgdata, pgdata_restored)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    # @unittest.expectedFailure
+    def test_incr_lsn_restore_backward(self):
+        """
+        """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={'autovacuum': 'off', 'wal_log_hints': 'on', 'hot_standby': 'on'})
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # FULL backup
+        node.pgbench_init(scale=2)
+        full_id = self.backup_node(
+            backup_dir, 'node', node,
+            backup_type="full", options=["-j", "4"])
+
+        full_pgdata = self.pgdata_content(node.data_dir)
+
+        pgbench = node.pgbench(options=['-T', '10', '-c', '1'])
+        pgbench.wait()
+
+        page_id = self.backup_node(
+            backup_dir, 'node', node,
+            backup_type='page', options=["-j", "4"])
+
+        page_pgdata = self.pgdata_content(node.data_dir)
+
+        pgbench = node.pgbench(options=['-T', '10', '-c', '1'])
+        pgbench.wait()
+
+        delta_id = self.backup_node(
+            backup_dir, 'node', node,
+            backup_type='delta', options=["-j", "4"])
+
+        delta_pgdata = self.pgdata_content(node.data_dir)
+
+        pgbench = node.pgbench(options=['-T', '10', '-c', '1'])
+        pgbench.wait()
+
+        node.stop()
+
+        print(self.restore_node(
+            backup_dir, 'node', node, backup_id=full_id,
+            options=[
+                "-j", "4", '--incremental-mode=lsn',
+                '--recovery-target=immediate', '--recovery-target-action=pause']))
+
+        pgdata_restored = self.pgdata_content(node.data_dir)
+        self.compare_pgdata(full_pgdata, pgdata_restored)
+
+        node.slow_start(replica=True)
+        node.stop()
+
+        try:
+            self.restore_node(
+                backup_dir, 'node', node, backup_id=page_id,
+                options=[
+                    "-j", "4", '--incremental-mode=lsn',
+                    '--recovery-target=immediate', '--recovery-target-action=pause'])
+            # we should die here because exception is what we expect to happen
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because incremental restore in lsn mode is impossible\n "
+                "Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                "Cannot perform incremental restore of backup chain",
+                e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        self.restore_node(
+            backup_dir, 'node', node, backup_id=page_id,
+            options=[
+                "-j", "4", '--incremental-mode=checksum',
+                '--recovery-target=immediate', '--recovery-target-action=pause'])
+
+        pgdata_restored = self.pgdata_content(node.data_dir)
+        self.compare_pgdata(page_pgdata, pgdata_restored)
+
+        node.slow_start(replica=True)
+        node.stop()
+
+        print(self.restore_node(
+            backup_dir, 'node', node, backup_id=delta_id,
+            options=[
+                "-j", "4", '--incremental-mode=lsn',
+                '--recovery-target=immediate', '--recovery-target-action=pause']))
+
+        pgdata_restored = self.pgdata_content(node.data_dir)
+        self.compare_pgdata(delta_pgdata, pgdata_restored)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    # @unittest.expectedFailure
+    def test_incr_checksum_restore_backward(self):
+        """
+        """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'autovacuum': 'off',
+                'hot_standby': 'on'})
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # FULL backup
+        node.pgbench_init(scale=20)
+        full_id = self.backup_node(
+            backup_dir, 'node', node,
+            backup_type="full", options=["-j", "4"])
+
+        full_pgdata = self.pgdata_content(node.data_dir)
+
+        pgbench = node.pgbench(options=['-T', '10', '-c', '1'])
+        pgbench.wait()
+
+        page_id = self.backup_node(
+            backup_dir, 'node', node,
+            backup_type='page', options=["-j", "4"])
+
+        page_pgdata = self.pgdata_content(node.data_dir)
+
+        pgbench = node.pgbench(options=['-T', '10', '-c', '1'])
+        pgbench.wait()
+
+        delta_id = self.backup_node(
+            backup_dir, 'node', node,
+            backup_type='delta', options=["-j", "4"])
+
+        delta_pgdata = self.pgdata_content(node.data_dir)
+
+        pgbench = node.pgbench(options=['-T', '10', '-c', '1'])
+        pgbench.wait()
+
+        node.stop()
+
+        print(self.restore_node(
+            backup_dir, 'node', node, backup_id=full_id,
+            options=[
+                "-j", "4", '--incremental-mode=checksum',
+                '--recovery-target=immediate', '--recovery-target-action=pause']))
+
+        pgdata_restored = self.pgdata_content(node.data_dir)
+        self.compare_pgdata(full_pgdata, pgdata_restored)
+
+        node.slow_start(replica=True)
+        node.stop()
+
+        print(self.restore_node(
+            backup_dir, 'node', node, backup_id=page_id,
+            options=[
+                "-j", "4", '--incremental-mode=checksum',
+                '--recovery-target=immediate', '--recovery-target-action=pause']))
+
+        pgdata_restored = self.pgdata_content(node.data_dir)
+        self.compare_pgdata(page_pgdata, pgdata_restored)
+
+        node.slow_start(replica=True)
+        node.stop()
+
+        print(self.restore_node(
+            backup_dir, 'node', node, backup_id=delta_id,
+            options=[
+                "-j", "4", '--incremental-mode=checksum',
+                '--recovery-target=immediate', '--recovery-target-action=pause']))
+
+        pgdata_restored = self.pgdata_content(node.data_dir)
+        self.compare_pgdata(delta_pgdata, pgdata_restored)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
