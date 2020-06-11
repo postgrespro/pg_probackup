@@ -207,10 +207,6 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
         before = master.safe_psql("postgres", "SELECT * FROM t_heap")
 
-        master.psql(
-            "postgres",
-            "CHECKPOINT")
-
         self.wait_until_replica_catch_with_master(master, replica)
 
         backup_id = self.backup_node(
@@ -382,10 +378,6 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             "create table t_heap as select i as id, md5(i::text) as text, "
             "md5(repeat(i::text,10))::tsvector as tsvector "
             "from generate_series(0,165000) i")
-
-        master.psql(
-            "postgres",
-            "CHECKPOINT")
 
         master.psql(
             "postgres",
@@ -726,8 +718,10 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             log_content)
 
         self.assertIn(
-            'LOG: stop_lsn: 0/4000028',
+            'LOG: stop_lsn: 0/4000000',
             log_content)
+
+        self.assertTrue(self.show_pb(backup_dir, 'replica')[0]['status'] == 'DONE')
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -1118,18 +1112,6 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
         replica.promote()
 
-        replica.safe_psql(
-            'postgres',
-            'CHECKPOINT')
-
-#        replica.safe_psql(
-#            'postgres',
-#            'create table t2()')
-#
-#        replica.safe_psql(
-#            'postgres',
-#            'CHECKPOINT')
-
         self.backup_node(
             backup_dir, 'master', replica, data_dir=replica.data_dir,
             backup_type='page')
@@ -1176,10 +1158,6 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
         self.add_instance(backup_dir, 'replica', replica)
 
-        replica.safe_psql(
-            'postgres',
-            'CHECKPOINT')
-
         full_id = self.backup_node(
             backup_dir, 'replica',
             replica, options=['--stream'])
@@ -1191,19 +1169,11 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             'FROM generate_series(0,20) i')
         self.wait_until_replica_catch_with_master(master, replica)
 
-        replica.safe_psql(
-            'postgres',
-            'CHECKPOINT')
-
         self.backup_node(
             backup_dir, 'replica', replica,
             backup_type='delta', options=['--stream'])
 
         replica.promote()
-
-        replica.safe_psql(
-            'postgres',
-            'CHECKPOINT')
 
         # failing, because without archving, it is impossible to
         # take multi-timeline backup.
@@ -1297,7 +1267,6 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
         # node2 is now master
         node2.promote()
-        node2.safe_psql('postgres', 'CHECKPOINT')
 
         node2.safe_psql(
             'postgres',
@@ -1331,7 +1300,6 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
         # node1 is back to be a master
         node1.promote()
-        node1.safe_psql('postgres', 'CHECKPOINT')
 
         sleep(5)
 
@@ -1420,7 +1388,6 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
         # node2 is now master
         node2.promote()
-        node2.safe_psql('postgres', 'CHECKPOINT')
 
         node2.safe_psql(
             'postgres',
@@ -1454,7 +1421,6 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
         # node1 is back to be a master
         node1.promote()
-        node1.safe_psql('postgres', 'CHECKPOINT')
         self.switch_wal_segment(node1)
 
         sleep(5)
@@ -1532,7 +1498,6 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             backup_type='delta', options=['--stream'])
 
         replica.promote()
-        replica.safe_psql('postgres', 'CHECKPOINT')
 
         # failing, because without archving, it is impossible to
         # take multi-timeline backup.

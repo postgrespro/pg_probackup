@@ -980,9 +980,9 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         # Create tablespace table
         with node.connect("postgres") as con:
-            con.connection.autocommit = True
-            con.execute("CHECKPOINT")
-            con.connection.autocommit = False
+#            con.connection.autocommit = True
+#            con.execute("CHECKPOINT")
+#            con.connection.autocommit = False
             con.execute("CREATE TABLE tbl1 (a int) TABLESPACE tblspc")
             con.execute(
                 "INSERT INTO tbl1 SELECT * "
@@ -1388,10 +1388,6 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         node.safe_psql(
             'postgres',
             'create extension pageinspect')
-
-        node.safe_psql(
-            'postgres',
-            'checkpoint')
 
         node.safe_psql(
             'postgres',
@@ -3025,6 +3021,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
+            ptrack_enable=self.ptrack,
             initdb_params=['--data-checksums'],
             pg_options={'autovacuum': 'off'})
 
@@ -3276,17 +3273,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.backup_node(
             backup_dir, 'node', node, options=['--stream'])
 
-        node.pgbench_init(scale=1)
-
-        node.safe_psql(
-            'postgres',
-            'CHECKPOINT')
-
-        node.pgbench_init(scale=1)
-
-        node.safe_psql(
-            'postgres',
-            'CHECKPOINT')
+        node.pgbench_init(scale=5)
 
         node.safe_psql(
             'postgres',

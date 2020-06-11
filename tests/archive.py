@@ -765,10 +765,6 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
         before = master.safe_psql("postgres", "SELECT * FROM t_heap")
 
-        master.safe_psql(
-            "postgres",
-            "CHECKPOINT")
-
         self.wait_until_replica_catch_with_master(master, replica)
 
         backup_id = self.backup_node(
@@ -863,10 +859,6 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             "insert into t_heap select i as id, md5(i::text) as text, "
             "md5(repeat(i::text,10))::tsvector as tsvector "
             "from generate_series(0, 60000) i")
-
-        master.psql(
-            "postgres",
-            "CHECKPOINT")
 
         backup_id = self.backup_node(
             backup_dir, 'replica', replica,
@@ -976,10 +968,6 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         sleep(10)
 
         replica.promote()
-
-        replica.safe_psql(
-            'postgres',
-            'CHECKPOINT')
 
         master.pgbench_init(scale=10)
         replica.pgbench_init(scale=10)
@@ -1220,11 +1208,6 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
         # create timeline t2
         replica.promote()
-
-        # do checkpoint to increment timeline ID in pg_control
-        replica.safe_psql(
-            'postgres',
-            'CHECKPOINT')
 
         # FULL backup replica
         A1 = self.backup_node(
@@ -1959,7 +1942,8 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
         replica.slow_start(replica=True)
 
-        node.safe_psql('postgres', 'CHECKPOINT')
+        # FULL
+        self.backup_node(backup_dir, 'replica', replica, options=['--stream'])
 
         if self.get_version(replica) < 100000:
             pg_receivexlog_path = self.get_bin_path('pg_receivexlog')
@@ -1981,14 +1965,18 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
                 'Failed to start pg_receivexlog: {0}'.format(
                     pg_receivexlog.communicate()[1]))
 
+        replica.safe_psql(
+            'postgres',
+            'CHECKPOINT')
+
         node.safe_psql(
             "postgres",
             "create table t_heap as select i as id, md5(i::text) as text, "
             "md5(repeat(i::text,10))::tsvector as tsvector "
             "from generate_series(0,1000000) i")
 
-        # FULL
-        self.backup_node(backup_dir, 'replica', replica, options=['--stream'])
+        # PAGE
+        self.backup_node(backup_dir, 'replica', replica, backup_type='page')
 
         node.safe_psql(
             "postgres",
@@ -2027,6 +2015,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         pg_receivexlog.kill()
         self.del_test_dir(module_name, fname)
 
+    @unittest.skip("skip")
     def test_multi_timeline_recovery_prefetching(self):
         """"""
         fname = self.id().split('.')[3]
