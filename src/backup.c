@@ -83,7 +83,7 @@ static void *backup_files(void *arg);
 static void do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool backup_logs);
 
 static void pg_start_backup(const char *label, bool smooth, pgBackup *backup,
-							PGNodeInfo *nodeInfo, PGconn *backup_conn, PGconn *master_conn);
+							PGNodeInfo *nodeInfo, PGconn *conn);
 static void pg_switch_wal(PGconn *conn);
 static void pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn, PGNodeInfo *nodeInfo);
 static int checkpoint_timeout(PGconn *backup_conn);
@@ -149,9 +149,6 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool
 	parray	   *external_dirs = NULL;
 	parray	   *database_map = NULL;
 
-	PGconn	   *master_conn = NULL;
-	PGconn	   *pg_startbackup_conn = NULL;
-
 	/* used for multitimeline incremental backup */
 	parray       *tli_list = NULL;
 
@@ -168,12 +165,33 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool
 		check_external_for_tablespaces(external_dirs, backup_conn);
 	}
 
+	/* Clear ptrack files for not PTRACK backups */
+	if (current.backup_mode != BACKUP_MODE_DIFF_PTRACK && nodeInfo->is_ptrack_enable)
+		pg_ptrack_clear(backup_conn, nodeInfo->ptrack_version_num);
+
+	/* notify start of backup to PostgreSQL server */
+	time2iso(label, lengthof(label), current.start_time);
+	strncat(label, " with pg_probackup", lengthof(label) -
+			strlen(" with pg_probackup"));
+
+	/* Call pg_start_backup function in PostgreSQL connect */
+	pg_start_backup(label, smooth_checkpoint, &current, nodeInfo, backup_conn);
+
 	/* Obtain current timeline */
 #if PG_VERSION_NUM >= 90600
 	current.tli = get_current_timeline(backup_conn);
 #else
 	current.tli = get_current_timeline_from_control(false);
 #endif
+
+	/* In PAGE mode or in ARCHIVE wal-mode wait for current segment */
+	if (current.backup_mode == BACKUP_MODE_DIFF_PAGE ||!stream_wal)
+		/*
+		 * Do not wait start_lsn for stream backup.
+		 * Because WAL streaming will start after pg_start_backup() in stream
+		 * mode.
+		 */
+		wait_wal_lsn(current.start_lsn, true, current.tli, false, true, ERROR, false);
 
 	/*
 	 * In incremental backup mode ensure that already-validated
@@ -252,29 +270,6 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool
 		}
 	}
 
-	/* Clear ptrack files for FULL and PAGE backup */
-	if (current.backup_mode != BACKUP_MODE_DIFF_PTRACK && nodeInfo->is_ptrack_enable)
-		pg_ptrack_clear(backup_conn, nodeInfo->ptrack_version_num);
-
-	/* notify start of backup to PostgreSQL server */
-	time2iso(label, lengthof(label), current.start_time);
-	strncat(label, " with pg_probackup", lengthof(label) -
-			strlen(" with pg_probackup"));
-
-	/* Create connection to master server needed to call pg_start_backup */
-	if (current.from_replica && exclusive_backup)
-	{
-		master_conn = pgut_connect(instance_config.master_conn_opt.pghost,
-								   instance_config.master_conn_opt.pgport,
-								   instance_config.master_conn_opt.pgdatabase,
-								   instance_config.master_conn_opt.pguser);
-		pg_startbackup_conn = master_conn;
-	}
-	else
-		pg_startbackup_conn = backup_conn;
-
-	pg_start_backup(label, smooth_checkpoint, &current, nodeInfo, backup_conn, pg_startbackup_conn);
-
 	/* For incremental backup check that start_lsn is not from the past
 	 * Though it will not save us if PostgreSQL instance is actually
 	 * restored STREAM backup.
@@ -342,7 +337,7 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool
 	 * Get database_map (name to oid) for use in partial restore feature.
 	 * It's possible that we fail and database_map will be NULL.
 	 */
-	database_map = get_database_map(pg_startbackup_conn);
+	database_map = get_database_map(backup_conn);
 
 	/*
 	 * Append to backup list all files and directories
@@ -571,7 +566,7 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool
 	}
 
 	/* Notify end of backup */
-	pg_stop_backup(&current, pg_startbackup_conn, nodeInfo);
+	pg_stop_backup(&current, backup_conn, nodeInfo);
 
 	/* In case of backup from replica >= 9.6 we must fix minRecPoint,
 	 * First we must find pg_control in backup_files_list.
@@ -1101,18 +1096,14 @@ confirm_block_size(PGconn *conn, const char *name, int blcksz)
  */
 static void
 pg_start_backup(const char *label, bool smooth, pgBackup *backup,
-				PGNodeInfo *nodeInfo, PGconn *backup_conn, PGconn *pg_startbackup_conn)
+				PGNodeInfo *nodeInfo, PGconn *conn)
 {
 	PGresult   *res;
 	const char *params[2];
 	uint32		lsn_hi;
 	uint32		lsn_lo;
-	PGconn	   *conn;
 
 	params[0] = label;
-
-	/* For 9.5 replica we call pg_start_backup() on master */
-	conn = pg_startbackup_conn;
 
 	/* 2nd argument is 'fast'*/
 	params[1] = smooth ? "false" : "true";
@@ -1132,7 +1123,7 @@ pg_start_backup(const char *label, bool smooth, pgBackup *backup,
 	 * is necessary to call pg_stop_backup() in backup_cleanup().
 	 */
 	backup_in_progress = true;
-	pgut_atexit_push(backup_stopbackup_callback, pg_startbackup_conn);
+	pgut_atexit_push(backup_stopbackup_callback, conn);
 
 	/* Extract timeline and LSN from results of pg_start_backup() */
 	XLogDataFromLSN(PQgetvalue(res, 0, 0), &lsn_hi, &lsn_lo);
@@ -1152,15 +1143,6 @@ pg_start_backup(const char *label, bool smooth, pgBackup *backup,
 		 * (because in 9.5 only superuser can switch WAL)
 		 */
 		pg_switch_wal(conn);
-
-	/* In PAGE mode or in ARCHIVE wal-mode wait for current segment */
-	if (current.backup_mode == BACKUP_MODE_DIFF_PAGE ||!stream_wal)
-		/*
-		 * Do not wait start_lsn for stream backup.
-		 * Because WAL streaming will start after pg_start_backup() in stream
-		 * mode.
-		 */
-		wait_wal_lsn(backup->start_lsn, true, backup->tli, false, true, ERROR, false);
 }
 
 /*
