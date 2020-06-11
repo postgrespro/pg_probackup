@@ -284,7 +284,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
-    def test_incr_restore_sanity(self):
+    def test_basic_incr_restore_sanity(self):
         """recovery to target timeline"""
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
@@ -1102,6 +1102,152 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
 
         pgdata_restored = self.pgdata_content(node.data_dir)
         self.compare_pgdata(delta_pgdata, pgdata_restored)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_make_replica_via_incr_checksum_restore(self):
+        """
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        master = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'master'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        if self.get_version(master) < self.version_to_num('9.6.0'):
+            self.del_test_dir(module_name, fname)
+            return unittest.skip(
+                'Skipped because backup from replica is not supported in PG 9.5')
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', master)
+        self.set_archiving(backup_dir, 'node', master, replica=True)
+        master.slow_start()
+
+        replica = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'replica'))
+        replica.cleanup()
+
+        master.pgbench_init(scale=20)
+
+        self.backup_node(backup_dir, 'node', master)
+
+        self.restore_node(
+            backup_dir, 'node', replica, options=['-R'])
+
+        # Settings for Replica
+        self.set_replica(master, replica, synchronous=False)
+
+        replica.slow_start(replica=True)
+
+        pgbench = master.pgbench(options=['-T', '10', '-c', '1'])
+        pgbench.wait()
+
+        # PROMOTIONS
+        replica.promote()
+        new_master = replica
+
+        # old master is going a bit further
+        old_master = master
+        pgbench = old_master.pgbench(options=['-T', '10', '-c', '1'])
+        pgbench.wait()
+        old_master.stop()
+
+        pgbench = new_master.pgbench(options=['-T', '10', '-c', '1'])
+        pgbench.wait()
+
+        # take backup from new master
+        self.backup_node(
+            backup_dir, 'node', new_master,
+            data_dir=new_master.data_dir, backup_type='page')
+
+        # restore old master as replica
+        print(self.restore_node(
+            backup_dir, 'node', old_master, data_dir=old_master.data_dir,
+            options=['-R', '--incremental-mode=checksum']))
+
+        self.set_replica(new_master, old_master, synchronous=True)
+
+        old_master.slow_start(replica=True)
+
+        pgbench = new_master.pgbench(options=['-T', '10', '-c', '1'])
+        pgbench.wait()
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_make_replica_via_incr_lsn_restore(self):
+        """
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        master = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'master'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        if self.get_version(master) < self.version_to_num('9.6.0'):
+            self.del_test_dir(module_name, fname)
+            return unittest.skip(
+                'Skipped because backup from replica is not supported in PG 9.5')
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', master)
+        self.set_archiving(backup_dir, 'node', master, replica=True)
+        master.slow_start()
+
+        replica = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'replica'))
+        replica.cleanup()
+
+        master.pgbench_init(scale=20)
+
+        self.backup_node(backup_dir, 'node', master)
+
+        self.restore_node(
+            backup_dir, 'node', replica, options=['-R'])
+
+        # Settings for Replica
+        self.set_replica(master, replica, synchronous=False)
+
+        replica.slow_start(replica=True)
+
+        pgbench = master.pgbench(options=['-T', '10', '-c', '1'])
+        pgbench.wait()
+
+        # PROMOTIONS
+        replica.promote()
+        new_master = replica
+
+        # old master is going a bit further
+        old_master = master
+        pgbench = old_master.pgbench(options=['-T', '10', '-c', '1'])
+        pgbench.wait()
+        old_master.stop()
+
+        pgbench = new_master.pgbench(options=['-T', '10', '-c', '1'])
+        pgbench.wait()
+
+        # take backup from new master
+        self.backup_node(
+            backup_dir, 'node', new_master,
+            data_dir=new_master.data_dir, backup_type='page')
+
+        # restore old master as replica
+        print(self.restore_node(
+            backup_dir, 'node', old_master, data_dir=old_master.data_dir,
+            options=['-R', '--incremental-mode=lsn']))
+
+        self.set_replica(new_master, old_master, synchronous=True)
+
+        old_master.slow_start(replica=True)
+
+        pgbench = new_master.pgbench(options=['-T', '10', '-c', '1'])
+        pgbench.wait()
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
