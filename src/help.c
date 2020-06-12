@@ -432,6 +432,8 @@ help_restore(void)
 	printf(_("      --external-mapping=OLDDIR=NEWDIR\n"));
 	printf(_("                                   relocate the external directory from OLDDIR to NEWDIR\n"));
 	printf(_("      --skip-external-dirs         do not restore all external directories\n"));
+
+	printf(_("\n  Incremental restore options:\n"));
 	printf(_("  -I, --incremental-mode=none|checksum|lsn\n"));
 	printf(_("                                   reuse valid pages available in PGDATA if they have not changed\n"));
 	printf(_("                                   (default: none)\n"));
