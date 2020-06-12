@@ -153,15 +153,15 @@ help_pg_probackup(void)
 	printf(_("                 [--recovery-target=immediate|latest]\n"));
 	printf(_("                 [--recovery-target-name=target-name]\n"));
 	printf(_("                 [--recovery-target-action=pause|promote|shutdown]\n"));
-	printf(_("                 [--restore-as-replica] [--force]\n"));
+	printf(_("                 [--restore-command=cmdline]\n"));
+	printf(_("                 [-R | --restore-as-replica] [--force]\n"));
 	printf(_("                 [--primary-conninfo=primary_conninfo]\n"));
 	printf(_("                 [-S | --primary-slot-name=slotname]\n"));
 	printf(_("                 [--no-validate] [--skip-block-validation]\n"));
 	printf(_("                 [-T OLDDIR=NEWDIR] [--progress]\n"));
 	printf(_("                 [--external-mapping=OLDDIR=NEWDIR]\n"));
-	printf(_("                 [--skip-external-dirs] [--restore-command=cmdline]\n"));
-	printf(_("                 [--incremental-mode=none|checksum|lsn]\n"));
-	printf(_("                 [--no-sync]\n"));
+	printf(_("                 [--skip-external-dirs] [--no-sync]\n"));
+	printf(_("                 [-I | --incremental-mode=none|checksum|lsn]\n"));
 	printf(_("                 [--db-include | --db-exclude]\n"));
 	printf(_("                 [--remote-proto] [--remote-host]\n"));
 	printf(_("                 [--remote-port] [--remote-path] [--remote-user]\n"));
@@ -398,7 +398,7 @@ help_restore(void)
 	printf(_("                 [-T OLDDIR=NEWDIR]\n"));
 	printf(_("                 [--external-mapping=OLDDIR=NEWDIR]\n"));
 	printf(_("                 [--skip-external-dirs]\n"));
-	printf(_("                 [--incremental-mode=none|checksum|lsn]\n"));
+	printf(_("                 [-I | --incremental-mode=none|checksum|lsn]\n"));
 	printf(_("                 [--db-include dbname | --db-exclude dbname]\n"));
 	printf(_("                 [--recovery-target-time=time|--recovery-target-xid=xid\n"));
 	printf(_("                  |--recovery-target-lsn=lsn [--recovery-target-inclusive=boolean]]\n"));
@@ -408,6 +408,8 @@ help_restore(void)
 	printf(_("                 [--recovery-target-action=pause|promote|shutdown]\n"));
 	printf(_("                 [--restore-command=cmdline]\n"));
 	printf(_("                 [-R | --restore-as-replica]\n"));
+	printf(_("                 [--primary-conninfo=primary_conninfo]\n"));
+	printf(_("                 [-S | --primary-slot-name=slotname]\n"));
 	printf(_("                 [--remote-proto] [--remote-host]\n"));
 	printf(_("                 [--remote-port] [--remote-path] [--remote-user]\n"));
 	printf(_("                 [--ssh-options]\n"));
