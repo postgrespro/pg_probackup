@@ -198,6 +198,12 @@ doc/src/sgml/pgprobackup.sgml
     </listitem>
     <listitem>
       <para>
+        Incremental restore: speed up restore from backup by reusing
+        valid unchanged pages available in PGDATA.
+      </para>
+    </listitem>
+    <listitem>
+      <para>
         Validation: automatic data consistency checks and on-demand
         backup validation without actual data recovery.
       </para>
@@ -1698,6 +1704,96 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
         speed up the recovery.
       </para>
     </note>
+    <refsect3 id="pbk-incremental-restore">
+      <title>Incremental Restore</title>
+      <para>
+        The speed of restore from backup can be significantly improved
+        by replacing only invalid and changed pages in already
+        existing PostgreSQL data directory using
+        <link linkend="pbk-incremental-restore-options">incremental
+        restore options</link> with the <xref linkend="pbk-restore"/>
+        command.
+      </para>
+      <para>
+        To restore the database cluster from a backup in incremental mode,
+        run the <xref linkend="pbk-restore"/> command with the following options:
+      </para>
+      <programlisting>
+pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> -D <replaceable>data_dir</replaceable> -I <replaceable>incremental_mode</replaceable>
+      </programlisting>
+      <para>
+      Where <replaceable>incremental_mode</replaceable> can take one of the
+      following values:
+      </para>
+    <itemizedlist spacing="compact">
+      <listitem>
+        <para>
+          CHECKSUM — read all data files in the data directory, validate
+          header and checksum in every page and replace only invalid
+          pages and those with checksum and LSN not matching with
+          corresponding page in backup. This is the simplest,
+          the most fool-proof incremental mode.
+        </para>
+      </listitem>
+      <listitem>
+        <para>
+          LSN — read the <replaceable>pg_control</replaceable> in the
+          data directory to obtain redo LSN and redo TLI, which allows
+          to determine a point in history(shiftpoint), where data directory
+          state shifted from backup chain history. If shiftpoint is not within
+          reach of backup chain history, then restore is aborted.
+          If shiftpoint is within reach of backup chain history, then read
+          all data files in the data directory, validate header and checksum in
+          every page and replace only invalid pages and those with LSN greater
+          than shiftpoint.
+          This mode offer a greatest speed up, but rely on <replaceable>pg_control</replaceable>
+          been synched with state of data directory,
+          so it is not recommended to use in any situation, where this condition
+          is not met, for example, after <replaceable>pg_resetxlog</replaceable> execution,
+          after restore from backup without recovery been run, etc.
+        </para>
+      </listitem>
+      <listitem>
+        <para>
+          NONE — regular restore without any incremental optimizations.
+        </para>
+      </listitem>
+    </itemizedlist>
+
+        <para>
+        Suppose you want to return an old master as replica after switchover
+        using incremental restore in LSN mode:
+      </para>
+      <programlisting>
+=============================================================================================================================================
+ Instance  Version  ID      Recovery Time           Mode   WAL Mode  TLI      Time    Data    WAL  Zratio  Start LSN    Stop LSN     Status
+=============================================================================================================================================
+ node      12       QBRNBP  2020-06-11 17:40:58+03  DELTA  ARCHIVE   16/15     40s   194MB   16MB    8.26  15/2C000028  15/2D000128  OK
+ node      12       QBRIDX  2020-06-11 15:51:42+03  PAGE   ARCHIVE   15/15     11s    18MB   16MB    5.10  14/DC000028  14/DD0000B8  OK
+ node      12       QBRIAJ  2020-06-11 15:51:08+03  PAGE   ARCHIVE   15/15     20s   141MB   96MB    6.22  14/D4BABFE0  14/DA9871D0  OK
+ node      12       QBRHT8  2020-06-11 15:45:56+03  FULL   ARCHIVE   15/0   2m:11s  1371MB  416MB   10.93  14/9D000028  14/B782E9A0  OK
+
+pg_probackup restore -B /backup --instance node -R -I lsn
+INFO: Running incremental restore into nonempty directory: "/var/lib/pgsql/12/data"
+INFO: Destination directory redo point 15/2E000028 on tli 16 is within reach of backup QBRIDX with Stop LSN 14/DD0000B8 on tli 15, incremental restore in 'lsn' mode is possible
+INFO: shift LSN: 14/DD0000B8
+INFO: Restoring the database from backup at 2020-06-11 15:39:08+03
+INFO: Extracting the content of destination directory for incremental restore
+INFO: Destination directory content extracted, time elapsed: 1s
+INFO: Removing redundant files in destination directory
+INFO: Redundant files are removed, time elapsed: 1s
+INFO: Start restoring backup files. PGDATA size: 15GB
+INFO: Backup files are restored. Transfered bytes: 1693MB, time elapsed: 43s
+INFO: Restore incremental ratio (less is better): 11% (1693MB/15GB)
+INFO: Restore of backup QBRHT8 completed.
+      </programlisting>
+      <note>
+        <para>
+          Incremental restore is possible only for backups with
+          <literal>program_version</literal> equal or greater than 2.3.0.
+        </para>
+      </note>
+    </refsect3>
     <refsect3 id="pbk-partial-restore">
       <title>Partial Restore</title>
       <para>
@@ -1715,7 +1811,7 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
       </para>
       <programlisting>
 pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> --db-include=<replaceable>database_name</replaceable>
-</programlisting>
+      </programlisting>
       <para>
         The <option>--db-include</option> option can be specified
         multiple times. For example, to restore only databases
@@ -3863,7 +3959,7 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
         options</link>,
         <link linkend="pbk-remote-wal-archive-options">remote WAL archive
         options</link>, <link linkend="pbk-logging-opts">logging
-        options</link>, <link linkend="pbk-partial-restore">partial
+        options</link>, <link linkend="pbk-partial-restore-options">partial
         restore options</link>, and <link linkend="pbk-common-options">common
         options</link> can be used.
       </para>
@@ -5069,6 +5165,45 @@ pg_probackup archive-get -B <replaceable>backup_dir</replaceable> --instance <re
       </para>
       <para>
        Default: <productname>PostgreSQL</productname> user
+      </para>
+      </listitem>
+      </varlistentry>
+      </variablelist>
+      </para>
+    </refsect3>
+    <refsect3 id="pbk-incremental-restore-options">
+      <title>Incremental Restore Options</title>
+      <para>
+        This section describes the options for incremental cluster restore.
+        These options can be used with the
+        <xref linkend="pbk-restore"/> command.
+      </para>
+      <para>
+      <variablelist>
+      <varlistentry>
+<term><option>-I <replaceable>incremental_mode</replaceable></option></term>
+<term><option>--incremental-mode=<replaceable>incremental_mode</replaceable></option></term>
+      <listitem>
+      <para>
+        Specifies the incremental mode to be used. Possible values are:
+
+      <itemizedlist spacing="compact">
+        <listitem>
+          <para>
+            <literal>CHECKSUM</literal> — replace only pages with mismatched checksum and LSN.
+          </para>
+        </listitem>
+        <listitem>
+          <para>
+            <literal>LSN</literal> — replace only pages with LSN greater than point of divergence.
+          </para>
+        </listitem>
+        <listitem>
+          <para>
+            <literal>NONE</literal> — regular restore.
+          </para>
+        </listitem>
+      </itemizedlist>
       </para>
       </listitem>
       </varlistentry>
