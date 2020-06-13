@@ -1746,10 +1746,19 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
           all data files in the data directory, validate header and checksum in
           every page and replace only invalid pages and those with LSN greater
           than shiftpoint.
-          This mode offer a greatest speed up, but rely on <replaceable>pg_control</replaceable>
-          been synched with state of data directory,
-          so it is not recommended to use in any situation, where this condition
-          is not met, for example, after <replaceable>pg_resetxlog</replaceable> execution,
+          This mode offer a far greater speed up compared to CHECKSUM, but rely
+          on two conditions to be met. First,
+          <ulink url="https://postgrespro.com/docs/postgresql/current/runtime-config-preset.html#GUC-DATA-CHECKSUMS">
+          data checksums</ulink> parameter must be enabled in data directory (to avoid corruption
+          due to hint bits). This condition will be checked at the start of
+          incremental restore and the operation will be aborted if checksums are disabled.
+          Second, the <replaceable>pg_control</replaceable> file must be
+          synched with state of data directory. This condition cannot checked
+          at the start of restore, so it is a user responsibility to ensure
+          that pg_control contain valid information. Because of that is not
+          recommended to use LSN mode in any situation, where pg_control has
+          been tampered with:
+          after <replaceable>pg_resetxlog</replaceable> execution,
           after restore from backup without recovery been run, etc.
         </para>
       </listitem>
