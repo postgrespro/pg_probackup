@@ -1252,5 +1252,247 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
+    # @unittest.skip("skip")
+    # @unittest.expectedFailure
+    def test_incr_checksum_long_xact(self):
+        """
+        """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+#            initdb_params=['--data-checksums'],
+            pg_options={
+                'autovacuum': 'off'})
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        node.safe_psql(
+            'postgres',
+            'create extension pageinspect')
+
+        # FULL backup
+        con = node.connect("postgres")
+        con.execute("CREATE TABLE t1 (a int)")
+        con.commit()
+
+
+        con.execute("INSERT INTO t1 values (1)")
+        con.commit()
+
+        # leave uncommited
+        con2 = node.connect("postgres")
+        con.execute("INSERT INTO t1 values (2)")
+        con2.execute("INSERT INTO t1 values (3)")
+
+        full_id = self.backup_node(
+            backup_dir, 'node', node,
+            backup_type="full", options=["-j", "4", "--stream"])
+
+        self.backup_node(
+            backup_dir, 'node', node,
+            backup_type="delta", options=["-j", "4", "--stream"])
+
+        con.commit()
+
+        node.safe_psql(
+            'postgres',
+            'select * from t1')
+
+        con2.commit()
+        node.safe_psql(
+            'postgres',
+            'select * from t1')
+
+        node.stop()
+
+        print(self.restore_node(
+            backup_dir, 'node', node, backup_id=full_id,
+            options=["-j", "4", '--incremental-mode=checksum']))
+
+        node.slow_start()
+
+        self.assertEqual(
+            node.safe_psql(
+                'postgres',
+                'select count(*) from t1').rstrip(),
+            '1')
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    # @unittest.expectedFailure
+    def test_incr_lsn_long_xact_1(self):
+        """
+        """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+#            initdb_params=['--data-checksums'],
+            pg_options={
+                'autovacuum': 'off'})
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        node.safe_psql(
+            'postgres',
+            'create extension pageinspect')
+
+        # FULL backup
+        con = node.connect("postgres")
+        con.execute("CREATE TABLE t1 (a int)")
+        con.commit()
+
+
+        con.execute("INSERT INTO t1 values (1)")
+        con.commit()
+
+        # leave uncommited
+        con2 = node.connect("postgres")
+        con.execute("INSERT INTO t1 values (2)")
+        con2.execute("INSERT INTO t1 values (3)")
+
+        full_id = self.backup_node(
+            backup_dir, 'node', node,
+            backup_type="full", options=["-j", "4", "--stream"])
+
+        self.backup_node(
+            backup_dir, 'node', node,
+            backup_type="delta", options=["-j", "4", "--stream"])
+
+        con.commit()
+
+        # when does LSN gets stamped when checksum gets updated ?
+        node.safe_psql(
+            'postgres',
+            'select * from t1')
+
+        con2.commit()
+        node.safe_psql(
+            'postgres',
+            'select * from t1')
+
+        node.stop()
+
+        try:
+            print(self.restore_node(
+                backup_dir, 'node', node, backup_id=full_id,
+                options=["-j", "4", '--incremental-mode=lsn']))
+            # we should die here because exception is what we expect to happen
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because incremental restore in lsn mode is impossible\n "
+                "Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                "ERROR: Incremental restore in 'lsn' mode require data_checksums to be "
+                "enabled in destination data directory",
+                e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    # @unittest.expectedFailure
+    def test_incr_lsn_long_xact_2(self):
+        """
+        """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'autovacuum': 'off',
+                'full_page_writes': 'off',
+                'wal_log_hints': 'off'})
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        node.safe_psql(
+            'postgres',
+            'create extension pageinspect')
+
+        # FULL backup
+        con = node.connect("postgres")
+        con.execute("CREATE TABLE t1 (a int)")
+        con.commit()
+
+
+        con.execute("INSERT INTO t1 values (1)")
+        con.commit()
+
+        # leave uncommited
+        con2 = node.connect("postgres")
+        con.execute("INSERT INTO t1 values (2)")
+        con2.execute("INSERT INTO t1 values (3)")
+
+        full_id = self.backup_node(
+            backup_dir, 'node', node,
+            backup_type="full", options=["-j", "4", "--stream"])
+
+        self.backup_node(
+            backup_dir, 'node', node,
+            backup_type="delta", options=["-j", "4", "--stream"])
+
+        print(node.safe_psql(
+            'postgres',
+            "select * from page_header(get_raw_page('t1', 0))"))
+
+        con.commit()
+
+        # when does LSN gets stamped when checksum gets updated ?
+        node.safe_psql(
+            'postgres',
+            'select * from t1')
+
+        print(node.safe_psql(
+            'postgres',
+            "select * from page_header(get_raw_page('t1', 0))"))
+
+        print("HELLO")
+
+        con2.commit()
+        node.safe_psql(
+            'postgres',
+            'select * from t1')
+
+        print(node.safe_psql(
+            'postgres',
+            "select * from page_header(get_raw_page('t1', 0))"))
+
+        node.stop()
+
+        print(self.restore_node(
+            backup_dir, 'node', node, backup_id=full_id,
+            options=["-j", "4", '--incremental-mode=lsn']))
+
+        node.slow_start()
+
+        self.assertEqual(
+            node.safe_psql(
+                'postgres',
+                'select count(*) from t1').rstrip(),
+            '1')
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
 # check that MinRecPoint and BackupStartLsn are correctly used in case of --incrementa-lsn
 # incremental restore + partial restore.
