@@ -1126,7 +1126,7 @@ restore_files(void *arg)
 				 strerror(errno));
 
 		if (!dest_file->is_datafile || dest_file->is_cfs)
-			elog(VERBOSE, "Restoring non-data file: \"%s\"", to_fullpath);
+			elog(VERBOSE, "Restoring nonedata file: \"%s\"", to_fullpath);
 		else
 			elog(VERBOSE, "Restoring data file: \"%s\"", to_fullpath);
 
