@@ -411,6 +411,10 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 		parray	  *timelines = NULL;
 		get_redo(instance_config.pgdata, &redo);
 
+		if (redo.checksum_version == 0)
+			elog(ERROR, "Incremental restore in 'lsn' mode require "
+				"data_checksums to be enabled in destination data directory");
+
 		timelines = read_timeline_history(arclog_path, redo.tli, false);
 
 		if (!timelines)

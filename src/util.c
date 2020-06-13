@@ -380,6 +380,8 @@ get_redo(const char *pgdata_path, RedoParams *redo)
 		redo->lsn = ControlFile.backupStartPoint;
 		redo->tli = ControlFile.checkPointCopy.ThisTimeLineID;
 	}
+
+	redo->checksum_version = ControlFile.data_checksum_version;
 }
 
 /*

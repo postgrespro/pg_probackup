@@ -105,6 +105,7 @@ typedef struct RedoParams
 {
 	TimeLineID  tli;
 	XLogRecPtr  lsn;
+	uint32      checksum_version;
 } RedoParams;
 
 typedef struct PageState

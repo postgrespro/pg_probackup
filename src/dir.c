@@ -1208,8 +1208,9 @@ read_tablespace_map(parray *files, const char *backup_dir)
  * If tablespace-mapping option is supplied, all OLDDIR entries must have
  * entries in tablespace_map file.
  *
- * When running incremental restore with tablespace remapping, then
- * new tablespace directory MUST be empty, because there is no
+ *
+ * TODO: maybe when running incremental restore with tablespace remapping, then
+ * new tablespace directory MUST be empty? because there is no
  * we can be sure, that files laying there belong to our instance.
  */
 void
