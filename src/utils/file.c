@@ -1519,8 +1519,6 @@ int fio_send_pages(FILE* out, const char *from_fullpath, pgFile *file, XLogRecPt
 				*headers = pgut_malloc(hdr.size);
 				IO_CHECK(fio_read_all(fio_stdin, *headers, hdr.size), hdr.size);
 				file->n_headers = hdr.size / sizeof(BackupPageHeader2);
-
-//				elog(INFO, "Size: %u", hdr.size);
 			}
 
 			break;
@@ -1795,9 +1793,14 @@ eof:
 	/* We are done, send eof */
 	hdr.cop = FIO_SEND_FILE_EOF;
 	hdr.arg = n_blocks_read;
-	hdr.size = (hdr_num+1) * sizeof(BackupPageHeader2);
+	hdr.size = 0;
+
+	if (headers)
+		hdr.size = (hdr_num+1) * sizeof(BackupPageHeader2);
 	IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
-	IO_CHECK(fio_write_all(out, headers, hdr.size), hdr.size);
+
+	if (headers)
+		IO_CHECK(fio_write_all(out, headers, hdr.size), hdr.size);
 
 		/* send headers */
 //	hdr.cop = FIO_SEND_FILE_HEADERS;

@@ -829,7 +829,7 @@ cleanup:
 
 	/* handle hdr */
 	/* TODO: move in separate function */
-	if (headers)
+	if (headers && file->n_headers > 0)
 	{
 		size_t hdr_size;
 		char   to_fullpath_hdr[MAXPGPATH];
@@ -862,10 +862,12 @@ cleanup:
 		if (fclose(out))
 			elog(ERROR, "Cannot close file \"%s\": %s", to_fullpath_hdr, strerror(errno));
 
-//		elog(INFO, "n_headers: %u", file->n_headers);
+		/* TODO: fsync */
 
-		pg_free(headers);
+//		elog(INFO, "n_headers: %u", file->n_headers);
 	}
+
+	pg_free(headers);
 }
 
 /*
@@ -1176,6 +1178,8 @@ restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_vers
 
 			cur_pos_in = headers[n_hdr].pos;
 		}
+
+//		elog(INFO, "BKLKUM: %u", blknum);
 
 //		elog(INFO, "Cur_pos: %u", ftell(in));
 
