@@ -342,7 +342,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 	{
 		check_tablespace_mapping(dest_backup, params->incremental_mode != INCR_NONE, &tblspaces_are_empty);
 
-		if (pgdata_is_empty && tblspaces_are_empty)
+		if (params->incremental_mode != INCR_NONE && pgdata_is_empty && tblspaces_are_empty)
 		{
 			elog(INFO, "Destination directory and tablespace directories are empty, "
 					"disabled incremental restore");
@@ -703,7 +703,7 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 	 * is impossible to use, because bitmap restore rely on pgFile.n_blocks,
 	 * which is not always available in old backups.
 	 */
-	if (parse_program_version(dest_backup->program_version) < 20300)
+	if (parse_program_version(dest_backup->program_version) < 20400)
 	{
 		use_bitmap = false;
 
@@ -716,10 +716,10 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 	 */
 	if (use_bitmap && parray_num(parent_chain) == 1)
 	{
-		if (params->incremental_mode == INCR_LSN)
-			use_bitmap = true;
-		else
+		if (params->incremental_mode == INCR_NONE)
 			use_bitmap = false;
+		else
+			use_bitmap = true;
 	}
 
 	/*

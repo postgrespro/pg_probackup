@@ -1905,6 +1905,9 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 		if (file->n_blocks > 0)
 			len += sprintf(line+len, ",\"n_blocks\":\"%i\"", file->n_blocks);
 
+		if (file->n_headers > 0)
+			len += sprintf(line+len, ",\"n_headers\":\"%i\"", file->n_headers);
+
 		sprintf(line+len, "}\n");
 
 		if (sync)

@@ -214,6 +214,9 @@ pgFileInit(const char *rel_path)
 	/* Number of blocks readed during backup */
 	file->n_blocks = BLOCKNUM_INVALID;
 
+	/* Number of blocks backed up during backup */
+	file->n_headers = 0;
+
 	return file;
 }
 
@@ -1546,6 +1549,7 @@ dir_read_file_list(const char *root, const char *external_prefix,
 					crc,
 					segno,
 					n_blocks,
+					n_headers,
 					dbOid;		/* used for partial restore */
 		pgFile	   *file;
 
@@ -1586,6 +1590,9 @@ dir_read_file_list(const char *root, const char *external_prefix,
 
 		if (get_control_value(buf, "n_blocks", NULL, &n_blocks, false))
 			file->n_blocks = (int) n_blocks;
+
+		if (get_control_value(buf, "n_headers", NULL, &n_headers, false))
+			file->n_headers = (int) n_headers;
 
 		parray_append(files, file);
 	}

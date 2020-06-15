@@ -363,7 +363,7 @@ pgBackupValidateFiles(void *arg)
 			 * check page headers, checksums (if enabled)
 			 * and compute checksum of the file
 			 */
-			if (!check_file_pages(file, file_fullpath, arguments->stop_lsn,
+			if (!check_file_pages_new(file, file_fullpath, arguments->stop_lsn,
 								  arguments->checksum_version,
 								  arguments->backup_version))
 				arguments->corrupted = true;

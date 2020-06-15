@@ -200,7 +200,8 @@ typedef struct pgFile
 	Oid		relOid;			/* relOid extracted from path, if applicable */
 	ForkName   forkName;	/* forkName extracted from path, if applicable */
 	int		segno;			/* Segment number for ptrack */
-	int		n_blocks;		/* size of the data file in blocks */
+	int		n_blocks;		/* number of blocks in the data file in data directory */
+	int		n_headers;		/* number of blocks in the data file in backup */
 	bool	is_cfs;			/* Flag to distinguish files compressed by CFS*/
 	bool	is_database;	/* Flag used strictly by ptrack 1.x backup */
 	int		external_dir_num;	/* Number of external directory. 0 if not external */
@@ -580,6 +581,16 @@ typedef struct BackupPageHeader
 	int32		compressed_size;
 } BackupPageHeader;
 
+/* 4MB for 1GB file */
+typedef struct BackupPageHeader2
+{
+	int32	    block;			 /* block number */
+	int32       pos;
+	int32       compressed_size;
+	XLogRecPtr  lsn;
+	uint16      checksum;
+} BackupPageHeader2;
+
 /* Special value for compressed_size field */
 #define PageIsOk		 0
 #define SkipCurrentPage -1
@@ -803,7 +814,7 @@ extern void help_command(char *command);
 extern void pgBackupValidate(pgBackup* backup, pgRestoreParams *params);
 extern int do_validate_all(void);
 extern int validate_one_page(Page page, BlockNumber absolute_blkno,
-							 XLogRecPtr stop_lsn, XLogRecPtr *page_lsn,
+							 XLogRecPtr stop_lsn, PageState *page_st,
 							 uint32 checksum_version);
 
 /* return codes for validate_one_page */
@@ -967,7 +978,7 @@ extern size_t restore_data_file(parray *parent_chain, pgFile *dest_file, FILE *o
 extern size_t restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_version,
 										 const char *from_fullpath, const char *to_fullpath, int nblocks,
 										 datapagemap_t *map, PageState *checksum_map, int checksum_version,
-										 datapagemap_t *lsn_map);
+										 datapagemap_t *lsn_map, BackupPageHeader2 *headers);
 extern size_t restore_non_data_file(parray *parent_chain, pgBackup *dest_backup,
 									pgFile *dest_file, FILE *out, const char *to_fullpath,
 									bool already_exists);
@@ -982,7 +993,7 @@ extern datapagemap_t *get_lsn_map(const char *fullpath, uint32 checksum_version,
 								  int n_blocks, XLogRecPtr shift_lsn, BlockNumber segmentno);
 extern pid_t check_postmaster(const char *pgdata);
 
-extern bool check_file_pages(pgFile *file, const char *fullpath, XLogRecPtr stop_lsn,
+extern bool check_file_pages_new(pgFile *file, const char *fullpath, XLogRecPtr stop_lsn,
 							 uint32 checksum_version, uint32 backup_version);
 /* parsexlog.c */
 extern bool extractPageMap(const char *archivedir, uint32 wal_seg_size,
@@ -1067,8 +1078,8 @@ extern parray * pg_ptrack_get_pagemapset(PGconn *backup_conn, const char *ptrack
 
 /* FIO */
 extern int fio_send_pages(FILE* out, const char *from_fullpath, pgFile *file, XLogRecPtr horizonLsn,
-						   int calg, int clevel, uint32 checksum_version,
-						   datapagemap_t *pagemap, BlockNumber* err_blknum, char **errormsg);
+						   int calg, int clevel, uint32 checksum_version, datapagemap_t *pagemap,
+						   BlockNumber* err_blknum, char **errormsg, BackupPageHeader2 **headers);
 /* return codes for fio_send_pages */
 extern int fio_send_file_gz(const char *from_fullpath, const char *to_fullpath, FILE* out, char **errormsg);
 extern int fio_send_file(const char *from_fullpath, const char *to_fullpath, FILE* out,

@@ -45,6 +45,7 @@ typedef enum
 //	FIO_CHUNK,
 	FIO_SEND_FILE_EOF,
 	FIO_SEND_FILE_CORRUPTION,
+	FIO_SEND_FILE_HEADERS,
 	/* messages for closing connection */
 	FIO_DISCONNECT,
 	/* message for compatibility check */

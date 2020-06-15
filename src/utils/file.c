@@ -1408,7 +1408,7 @@ static void fio_load_file(int out, char const* path)
 int fio_send_pages(FILE* out, const char *from_fullpath, pgFile *file, XLogRecPtr horizonLsn,
 						   int calg, int clevel, uint32 checksum_version,
 						   datapagemap_t *pagemap, BlockNumber* err_blknum,
-						   char **errormsg)
+						   char **errormsg, BackupPageHeader2 **headers)
 {
 	struct {
 		fio_header hdr;
@@ -1511,7 +1511,18 @@ int fio_send_pages(FILE* out, const char *from_fullpath, pgFile *file, XLogRecPt
 		else if (hdr.cop == FIO_SEND_FILE_EOF)
 		{
 			/* n_blocks_read reported by EOF */
-			n_blocks_read = hdr.size;
+			n_blocks_read = hdr.arg;
+
+			/* receive headers if any */
+			if (hdr.size > 0)
+			{
+				*headers = pgut_malloc(hdr.size);
+				IO_CHECK(fio_read_all(fio_stdin, *headers, hdr.size), hdr.size);
+				file->n_headers = hdr.size / sizeof(BackupPageHeader2);
+
+//				elog(INFO, "Size: %u", hdr.size);
+			}
+
 			break;
 		}
 		else if (hdr.cop == FIO_PAGE)
@@ -1554,7 +1565,9 @@ static void fio_send_pages_impl(int out, char* buf)
 	FILE        *in = NULL;
 	BlockNumber  blknum = 0;
 	BlockNumber  n_blocks_read = 0;
-	XLogRecPtr   page_lsn = 0;
+	PageState    page_st;
+//	XLogRecPtr   page_lsn = 0;
+//	uint16       page_crc = 0;
 	char         read_buffer[BLCKSZ+1];
 	char         in_buf[STDIO_BUFSIZE];
 	fio_header   hdr;
@@ -1567,6 +1580,10 @@ static void fio_send_pages_impl(int out, char* buf)
 	/* parse buffer */
 	datapagemap_t *map = NULL;
 	datapagemap_iterator_t *iter = NULL;
+	/* page headers */
+	int32       hdr_num = -1;
+	int32       hdr_cur_pos = 0;
+	BackupPageHeader2 *headers = NULL;
 
 	/* open source file */
 	in = fopen(from_fullpath, PG_BINARY_R);
@@ -1644,7 +1661,9 @@ static void fio_send_pages_impl(int out, char* buf)
 			}
 
 			read_len = fread(read_buffer, 1, BLCKSZ, in);
-			page_lsn = InvalidXLogRecPtr;
+
+			page_st.lsn = InvalidXLogRecPtr;
+			page_st.checksum = 0;
 
 			current_pos += BLCKSZ;
 
@@ -1669,7 +1688,8 @@ static void fio_send_pages_impl(int out, char* buf)
 			if (read_len == BLCKSZ)
 			{
 				rc = validate_one_page(read_buffer, req->segmentno + blknum,
-										   InvalidXLogRecPtr, &page_lsn, req->checksumVersion);
+										   InvalidXLogRecPtr, &page_st,
+										   req->checksumVersion);
 
 				/* TODO: optimize copy of zeroed page */
 				if (rc == PAGE_IS_ZEROED)
@@ -1719,32 +1739,45 @@ static void fio_send_pages_impl(int out, char* buf)
 		 * there is no sense to add more checks.
 		 */
 		if ((req->horizonLsn == InvalidXLogRecPtr) ||
-			(page_lsn == InvalidXLogRecPtr) ||                     /* zeroed page */
-			(req->horizonLsn > 0 && page_lsn >= req->horizonLsn))  /* delta */
+			(page_st.lsn == InvalidXLogRecPtr) ||                     /* zeroed page */
+			(req->horizonLsn > 0 && page_st.lsn >= req->horizonLsn))  /* delta */
 		{
+			int  compressed_size = 0;
 			char write_buffer[BLCKSZ*2];
-			BackupPageHeader* bph = (BackupPageHeader*)write_buffer;
 
 			/* compress page */
 			hdr.cop = FIO_PAGE;
-			hdr.arg = bph->block = blknum;
-			hdr.size = sizeof(BackupPageHeader);
+			hdr.arg = blknum;
 
-			bph->compressed_size = do_compress(write_buffer + sizeof(BackupPageHeader),
-											   sizeof(write_buffer) - sizeof(BackupPageHeader),
-											   read_buffer, BLCKSZ, req->calg, req->clevel,
-											   NULL);
+			compressed_size = do_compress(write_buffer, sizeof(write_buffer),
+											read_buffer, BLCKSZ, req->calg, req->clevel,
+											NULL);
 
-			if (bph->compressed_size <= 0 || bph->compressed_size >= BLCKSZ)
+			if (compressed_size <= 0 || compressed_size >= BLCKSZ)
 			{
 				/* Do not compress page */
-				memcpy(write_buffer + sizeof(BackupPageHeader), read_buffer, BLCKSZ);
-				bph->compressed_size = BLCKSZ;
+				memcpy(write_buffer, read_buffer, BLCKSZ);
+				compressed_size = BLCKSZ;
 			}
-			hdr.size += MAXALIGN(bph->compressed_size);
+			hdr.size = MAXALIGN(compressed_size);
 
 			IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 			IO_CHECK(fio_write_all(out, write_buffer, hdr.size), hdr.size);
+
+			/* set page header for this file */
+			hdr_num++;
+			if (!headers)
+				headers = (BackupPageHeader2 *) pgut_malloc(sizeof(BackupPageHeader2));
+			else
+				headers = (BackupPageHeader2 *) pgut_realloc(headers, (hdr_num+1 ) * sizeof(BackupPageHeader2));
+
+			headers[hdr_num].block = blknum;
+			headers[hdr_num].lsn = page_st.lsn;
+			headers[hdr_num].checksum = page_st.checksum;
+			headers[hdr_num].pos = hdr_cur_pos;
+			headers[hdr_num].compressed_size = hdr.size;
+
+			hdr_cur_pos += hdr.size;
 		}
 
 		/* next block */
@@ -1761,14 +1794,23 @@ static void fio_send_pages_impl(int out, char* buf)
 eof:
 	/* We are done, send eof */
 	hdr.cop = FIO_SEND_FILE_EOF;
-	hdr.arg = 0;
-	hdr.size = n_blocks_read; /* TODO: report number of backed up blocks */
+	hdr.arg = n_blocks_read;
+	hdr.size = (hdr_num+1) * sizeof(BackupPageHeader2);
 	IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
+	IO_CHECK(fio_write_all(out, headers, hdr.size), hdr.size);
+
+		/* send headers */
+//	hdr.cop = FIO_SEND_FILE_HEADERS;
+//	hdr.arg = hdr_num +1;
+//	hdr.size = hdr.arg * sizeof(BackupPageHeader2);
+//	IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
+//	IO_CHECK(fio_write_all(out, headers, hdr.size), hdr.size);
 
 cleanup:
 	pg_free(map);
 	pg_free(iter);
 	pg_free(errormsg);
+	pg_free(headers);
 	if (in)
 		fclose(in);
 	return;
