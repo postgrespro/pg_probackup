@@ -1020,6 +1020,9 @@ merge_files(void *arg)
 					tmp_file->n_blocks = file->n_blocks;
 					tmp_file->compress_alg = file->compress_alg;
 					tmp_file->uncompressed_size = file->n_blocks * BLCKSZ;
+
+					tmp_file->n_headers = file->n_headers;
+					tmp_file->hdr_crc = file->hdr_crc;
 				}
 				else
 					tmp_file->uncompressed_size = tmp_file->write_size;
@@ -1140,8 +1143,11 @@ merge_data_file(parray *parent_chain, pgBackup *full_backup,
 	FILE   *out = NULL;
 	char   *buffer = pgut_malloc(STDIO_BUFSIZE);
 	char    to_fullpath[MAXPGPATH];
+	char    to_fullpath_hdr[MAXPGPATH];
 	char    to_fullpath_tmp1[MAXPGPATH]; /* used for restore */
 	char    to_fullpath_tmp2[MAXPGPATH]; /* used for backup */
+	char    to_fullpath_tmp2_hdr[MAXPGPATH];
+
 
 	/* The next possible optimization is copying "as is" the file
 	 * from intermediate incremental backup, that didn`t changed in
@@ -1152,6 +1158,9 @@ merge_data_file(parray *parent_chain, pgBackup *full_backup,
 	join_path_components(to_fullpath, full_database_dir, tmp_file->rel_path);
 	snprintf(to_fullpath_tmp1, MAXPGPATH, "%s_tmp1", to_fullpath);
 	snprintf(to_fullpath_tmp2, MAXPGPATH, "%s_tmp2", to_fullpath);
+	/* header files */
+	snprintf(to_fullpath_hdr, MAXPGPATH, "%s_hdr", to_fullpath);
+	snprintf(to_fullpath_tmp2_hdr, MAXPGPATH, "%s_hdr", to_fullpath_tmp2);
 
 	/* open temp file */
 	out = fopen(to_fullpath_tmp1, PG_BINARY_W);
@@ -1177,7 +1186,7 @@ merge_data_file(parray *parent_chain, pgBackup *full_backup,
 	 * 2 backups of old versions, were n_blocks is missing.
 	 */
 
-	backup_data_file(NULL, tmp_file, to_fullpath_tmp1, to_fullpath_tmp2,
+	backup_data_file_new(NULL, tmp_file, to_fullpath_tmp1, to_fullpath_tmp2,
 				 InvalidXLogRecPtr, BACKUP_MODE_FULL,
 				 dest_backup->compress_alg, dest_backup->compress_level,
 				 dest_backup->checksum_version, 0, NULL, false);
@@ -1207,10 +1216,25 @@ merge_data_file(parray *parent_chain, pgBackup *full_backup,
 		elog(ERROR, "Cannot sync merge temp file \"%s\": %s",
 			to_fullpath_tmp2, strerror(errno));
 
+	/* sync header file */
+	if (fio_sync(to_fullpath_tmp2, FIO_BACKUP_HOST) != 0)
+		elog(ERROR, "Cannot sync temp header file \"%s\": %s",
+			to_fullpath_tmp2_hdr, strerror(errno));
+
+//<-  CRITICAL SECTION
+
 	/* Do atomic rename from second temp file to destination file */
 	if (rename(to_fullpath_tmp2, to_fullpath) == -1)
 			elog(ERROR, "Could not rename file \"%s\" to \"%s\": %s",
 				 to_fullpath_tmp2, to_fullpath, strerror(errno));
+
+//<-  If we crash here, merge cannot be continued.
+
+	/* Do atomic rename from header file */
+	if (rename(to_fullpath_tmp2_hdr, to_fullpath_hdr) == -1)
+			elog(ERROR, "Could not rename file \"%s\" to \"%s\": %s",
+				 to_fullpath_tmp2, to_fullpath, strerror(errno));
+//<-
 
 	/* drop temp file */
 	unlink(to_fullpath_tmp1);

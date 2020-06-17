@@ -1405,11 +1405,13 @@ static void fio_load_file(int out, char const* path)
  * In case of DELTA mode horizonLsn must be a valid lsn,
  * otherwise it should be set to InvalidXLogRecPtr.
  */
-int fio_send_pages(FILE* out, const char *from_fullpath, pgFile *file, XLogRecPtr horizonLsn,
+int fio_send_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file, XLogRecPtr horizonLsn,
 						   int calg, int clevel, uint32 checksum_version,
 						   datapagemap_t *pagemap, BlockNumber* err_blknum,
 						   char **errormsg, BackupPageHeader2 **headers)
 {
+	FILE *out = NULL;
+	char *out_buf = NULL;
 	struct {
 		fio_header hdr;
 		fio_send_request arg;
@@ -1532,6 +1534,10 @@ int fio_send_pages(FILE* out, const char *from_fullpath, pgFile *file, XLogRecPt
 
 			COMP_FILE_CRC32(true, file->crc, buf, hdr.size);
 
+			/* lazily open backup file */
+			if (!out)
+				out = open_local_file_rw(to_fullpath, &out_buf, STDIO_BUFSIZE);
+
 			if (fio_fwrite(out, buf, hdr.size) != hdr.size)
 			{
 				fio_fclose(out);
@@ -1544,6 +1550,10 @@ int fio_send_pages(FILE* out, const char *from_fullpath, pgFile *file, XLogRecPt
 		else
 			elog(ERROR, "Remote agent returned message of unexpected type: %i", hdr.cop);
 	}
+
+	if (out)
+		fclose(out);
+	pg_free(out_buf);
 
 	return n_blocks_read;
 }

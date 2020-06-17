@@ -192,6 +192,7 @@ typedef struct pgFile
 								 */
 							/* we need int64 here to store '-1' value */
 	pg_crc32 crc;			/* CRC value of the file, regular file only */
+	pg_crc32 hdr_crc;		/* CRC value of header file: name_hdr */
 	char   *rel_path;		/* relative path of the file */
 	char   *linked;			/* path of the linked file */
 	bool	is_datafile;	/* true if the file is PostgreSQL data file */
@@ -585,7 +586,7 @@ typedef struct BackupPageHeader
 typedef struct BackupPageHeader2
 {
 	int32	    block;			 /* block number */
-	int32       pos;
+	int32       pos;             /* position in backup file */
 	int32       compressed_size;
 	XLogRecPtr  lsn;
 	uint16      checksum;
@@ -963,6 +964,11 @@ extern void backup_data_file(ConnectionArgs* conn_arg, pgFile *file,
 								 XLogRecPtr prev_backup_start_lsn, BackupMode backup_mode,
 								 CompressAlg calg, int clevel, uint32 checksum_version,
 								 int ptrack_version_num, const char *ptrack_schema, bool missing_ok);
+extern void backup_data_file_new(ConnectionArgs* conn_arg, pgFile *file,
+								 const char *from_fullpath, const char *to_fullpath,
+								 XLogRecPtr prev_backup_start_lsn, BackupMode backup_mode,
+								 CompressAlg calg, int clevel, uint32 checksum_version,
+								 int ptrack_version_num, const char *ptrack_schema, bool missing_ok);
 extern void backup_non_data_file(pgFile *file, pgFile *prev_file,
 								 const char *from_fullpath, const char *to_fullpath,
 								 BackupMode backup_mode, time_t parent_backup_time,
@@ -993,8 +999,8 @@ extern datapagemap_t *get_lsn_map(const char *fullpath, uint32 checksum_version,
 								  int n_blocks, XLogRecPtr shift_lsn, BlockNumber segmentno);
 extern pid_t check_postmaster(const char *pgdata);
 
-extern bool check_file_pages_new(pgFile *file, const char *fullpath, XLogRecPtr stop_lsn,
-							 uint32 checksum_version, uint32 backup_version);
+extern bool validate_file_pages(pgFile *file, const char *fullpath, XLogRecPtr stop_lsn,
+							    uint32 checksum_version, uint32 backup_version);
 /* parsexlog.c */
 extern bool extractPageMap(const char *archivedir, uint32 wal_seg_size,
 						   XLogRecPtr startpoint, TimeLineID start_tli,
@@ -1076,8 +1082,16 @@ extern XLogRecPtr get_last_ptrack_lsn(PGconn *backup_conn, PGNodeInfo *nodeInfo)
 extern parray * pg_ptrack_get_pagemapset(PGconn *backup_conn, const char *ptrack_schema,
 										 int ptrack_version_num, XLogRecPtr lsn);
 
+/* open local file to writing */
+extern FILE* open_local_file_rw(const char *to_fullpath, char **out_buf, uint32 buf_size);
+
+extern int send_pages(ConnectionArgs* conn_arg, const char *to_fullpath, const char *from_fullpath,
+					  pgFile *file, XLogRecPtr prev_backup_start_lsn, CompressAlg calg, int clevel,
+		   			  uint32 checksum_version, bool use_pagemap, BackupPageHeader2 **headers,
+		   			  BackupMode backup_mode, int ptrack_version_num, const char *ptrack_schema);
+
 /* FIO */
-extern int fio_send_pages(FILE* out, const char *from_fullpath, pgFile *file, XLogRecPtr horizonLsn,
+extern int fio_send_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file, XLogRecPtr horizonLsn,
 						   int calg, int clevel, uint32 checksum_version, datapagemap_t *pagemap,
 						   BlockNumber* err_blknum, char **errormsg, BackupPageHeader2 **headers);
 /* return codes for fio_send_pages */

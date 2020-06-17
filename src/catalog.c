@@ -1906,7 +1906,12 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 			len += sprintf(line+len, ",\"n_blocks\":\"%i\"", file->n_blocks);
 
 		if (file->n_headers > 0)
+		{
 			len += sprintf(line+len, ",\"n_headers\":\"%i\"", file->n_headers);
+			len += sprintf(line+len, ",\"hdr_crc\":\"%u\"", file->hdr_crc);
+
+//			elog(INFO, "CRC INT: %li, CRC UINT: %u", file->crc_hdr, file->crc_hdr);
+		}
 
 		sprintf(line+len, "}\n");
 

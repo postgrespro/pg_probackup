@@ -664,8 +664,8 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool
 
 		for (i = 0; i < parray_num(backup_files_list); i++)
 		{
-			char		to_fullpath[MAXPGPATH];
-			pgFile	   *file = (pgFile *) parray_get(backup_files_list, i);
+			char    to_fullpath[MAXPGPATH];
+			pgFile *file = (pgFile *) parray_get(backup_files_list, i);
 
 			/* TODO: sync directory ? */
 			if (S_ISDIR(file->mode))
@@ -687,7 +687,21 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool
 			}
 
 			if (fio_sync(to_fullpath, FIO_BACKUP_HOST) != 0)
-				elog(ERROR, "Failed to sync file \"%s\": %s", to_fullpath, strerror(errno));
+				elog(ERROR, "Cannot sync file \"%s\": %s", to_fullpath, strerror(errno));
+
+			/* fsync header file */
+			if (file->external_dir_num == 0 &&
+				file->is_datafile && !file->is_cfs &&
+				file->n_headers > 0)
+			{
+				char		to_fullpath_hdr[MAXPGPATH];
+
+				snprintf(to_fullpath_hdr, MAXPGPATH, "%s_hdr", to_fullpath);
+
+				if (fio_sync(to_fullpath, FIO_BACKUP_HOST) != 0)
+					elog(ERROR, "Cannot sync file \"%s\": %s", to_fullpath_hdr, strerror(errno));
+
+			}
 		}
 
 		time(&end_time);
@@ -2131,7 +2145,7 @@ backup_files(void *arg)
 		/* backup file */
 		if (file->is_datafile && !file->is_cfs)
 		{
-			backup_data_file(&(arguments->conn_arg), file, from_fullpath, to_fullpath,
+			backup_data_file_new(&(arguments->conn_arg), file, from_fullpath, to_fullpath,
 								 arguments->prev_start_lsn,
 								 current.backup_mode,
 								 instance_config.compress_alg,
@@ -2146,12 +2160,6 @@ backup_files(void *arg)
 			backup_non_data_file(file, prev_file, from_fullpath, to_fullpath,
 								 current.backup_mode, current.parent_backup, true);
 		}
-
-		/* No point in storing empty, missing or not changed files */
-		if (file->write_size <= 0)
-			unlink(to_fullpath);
-//			elog(ERROR, "Cannot remove file \"%s\": %s", to_fullpath,
-//					strerror(errno));
 
 		if (file->write_size == FILE_NOT_FOUND)
 			continue;
