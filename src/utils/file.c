@@ -1427,9 +1427,6 @@ int fio_send_pages(const char *to_fullpath, const char *from_fullpath, pgFile *f
 	--------------------------------------------------------------
 	*/
 
-//	elog(WARNING, "Size: %lu", sizeof(fio_header));
-//	elog(ERROR, "Size: %lu", MAXALIGN(sizeof(fio_header)));
-
 	req.hdr.cop = FIO_SEND_PAGES;
 
 	if (pagemap)
@@ -1520,7 +1517,7 @@ int fio_send_pages(const char *to_fullpath, const char *from_fullpath, pgFile *f
 			{
 				*headers = pgut_malloc(hdr.size);
 				IO_CHECK(fio_read_all(fio_stdin, *headers, hdr.size), hdr.size);
-				file->n_headers = hdr.size / sizeof(BackupPageHeader2);
+				file->n_headers = (hdr.size / sizeof(BackupPageHeader2)) -1;
 			}
 
 			break;
@@ -1590,7 +1587,7 @@ static void fio_send_pages_impl(int out, char* buf)
 	datapagemap_iterator_t *iter = NULL;
 	/* page headers */
 	int32       hdr_num = -1;
-	int32       hdr_cur_pos = 0;
+	int32       cur_pos_out = 0;
 	BackupPageHeader2 *headers = NULL;
 
 	/* open source file */
@@ -1767,7 +1764,7 @@ static void fio_send_pages_impl(int out, char* buf)
 				memcpy(write_buffer, read_buffer, BLCKSZ);
 				compressed_size = BLCKSZ;
 			}
-			hdr.size = MAXALIGN(compressed_size);
+			hdr.size = compressed_size;
 
 			IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 			IO_CHECK(fio_write_all(out, write_buffer, hdr.size), hdr.size);
@@ -1777,15 +1774,14 @@ static void fio_send_pages_impl(int out, char* buf)
 			if (!headers)
 				headers = (BackupPageHeader2 *) pgut_malloc(sizeof(BackupPageHeader2));
 			else
-				headers = (BackupPageHeader2 *) pgut_realloc(headers, (hdr_num+1 ) * sizeof(BackupPageHeader2));
+				headers = (BackupPageHeader2 *) pgut_realloc(headers, (hdr_num+1) * sizeof(BackupPageHeader2));
 
 			headers[hdr_num].block = blknum;
 			headers[hdr_num].lsn = page_st.lsn;
 			headers[hdr_num].checksum = page_st.checksum;
-			headers[hdr_num].pos = hdr_cur_pos;
-			headers[hdr_num].compressed_size = compressed_size;
+			headers[hdr_num].pos = cur_pos_out;
 
-			hdr_cur_pos += hdr.size;
+			cur_pos_out += compressed_size;
 		}
 
 		/* next block */
@@ -1806,7 +1802,13 @@ eof:
 	hdr.size = 0;
 
 	if (headers)
-		hdr.size = (hdr_num+1) * sizeof(BackupPageHeader2);
+	{
+		hdr.size = (hdr_num+2) * sizeof(BackupPageHeader2);
+
+		/* add one additional header */
+		headers = (BackupPageHeader2 *) pgut_realloc(headers, (hdr_num+2) * sizeof(BackupPageHeader2));
+		headers[hdr_num+1].pos = cur_pos_out;
+	}
 	IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 
 	if (headers)

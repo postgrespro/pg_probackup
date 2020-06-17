@@ -585,10 +585,9 @@ typedef struct BackupPageHeader
 /* 4MB for 1GB file */
 typedef struct BackupPageHeader2
 {
+	XLogRecPtr  lsn;
 	int32	    block;			 /* block number */
 	int32       pos;             /* position in backup file */
-	int32       compressed_size;
-	XLogRecPtr  lsn;
 	uint16      checksum;
 } BackupPageHeader2;
 
