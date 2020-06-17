@@ -1783,7 +1783,7 @@ static void fio_send_pages_impl(int out, char* buf)
 			headers[hdr_num].lsn = page_st.lsn;
 			headers[hdr_num].checksum = page_st.checksum;
 			headers[hdr_num].pos = hdr_cur_pos;
-			headers[hdr_num].compressed_size = hdr.size;
+			headers[hdr_num].compressed_size = compressed_size;
 
 			hdr_cur_pos += hdr.size;
 		}

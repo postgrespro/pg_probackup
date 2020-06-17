@@ -528,7 +528,7 @@ compress_and_backup_page(pgFile *file, BlockNumber blknum,
 	file->write_size += write_buffer_size;
 	file->uncompressed_size += BLCKSZ;
 
-	return write_buffer_size;
+	return compressed_size;
 }
 
 /*
