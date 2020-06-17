@@ -1186,7 +1186,7 @@ merge_data_file(parray *parent_chain, pgBackup *full_backup,
 	 * 2 backups of old versions, were n_blocks is missing.
 	 */
 
-	backup_data_file_new(NULL, tmp_file, to_fullpath_tmp1, to_fullpath_tmp2,
+	backup_data_file(NULL, tmp_file, to_fullpath_tmp1, to_fullpath_tmp2,
 				 InvalidXLogRecPtr, BACKUP_MODE_FULL,
 				 dest_backup->compress_alg, dest_backup->compress_level,
 				 dest_backup->checksum_version, 0, NULL, false);

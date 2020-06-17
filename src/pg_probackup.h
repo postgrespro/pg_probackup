@@ -964,11 +964,6 @@ extern void backup_data_file(ConnectionArgs* conn_arg, pgFile *file,
 								 XLogRecPtr prev_backup_start_lsn, BackupMode backup_mode,
 								 CompressAlg calg, int clevel, uint32 checksum_version,
 								 int ptrack_version_num, const char *ptrack_schema, bool missing_ok);
-extern void backup_data_file_new(ConnectionArgs* conn_arg, pgFile *file,
-								 const char *from_fullpath, const char *to_fullpath,
-								 XLogRecPtr prev_backup_start_lsn, BackupMode backup_mode,
-								 CompressAlg calg, int clevel, uint32 checksum_version,
-								 int ptrack_version_num, const char *ptrack_schema, bool missing_ok);
 extern void backup_non_data_file(pgFile *file, pgFile *prev_file,
 								 const char *from_fullpath, const char *to_fullpath,
 								 BackupMode backup_mode, time_t parent_backup_time,

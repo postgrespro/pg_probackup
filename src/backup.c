@@ -2145,7 +2145,7 @@ backup_files(void *arg)
 		/* backup file */
 		if (file->is_datafile && !file->is_cfs)
 		{
-			backup_data_file_new(&(arguments->conn_arg), file, from_fullpath, to_fullpath,
+			backup_data_file(&(arguments->conn_arg), file, from_fullpath, to_fullpath,
 								 arguments->prev_start_lsn,
 								 current.backup_mode,
 								 instance_config.compress_alg,
