@@ -345,7 +345,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(show_backup["backup-mode"], "FULL")
 
         # Change data
-        pgbench = node.pgbench(options=['-T', '20', '-c', '2', '--no-vacuum'])
+        pgbench = node.pgbench(options=['-T', '20', '-c', '1', '--no-vacuum'])
         pgbench.wait()
 
         # Do uncompressed DELTA backup
@@ -354,7 +354,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
             options=['--stream'])
 
         # Change data
-        pgbench = node.pgbench(options=['-T', '20', '-c', '2', '--no-vacuum'])
+        pgbench = node.pgbench(options=['-T', '20', '-c', '1', '--no-vacuum'])
         pgbench.wait()
 
         # Do compressed PAGE backup
