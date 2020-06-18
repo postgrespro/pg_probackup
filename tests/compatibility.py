@@ -309,6 +309,11 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         self.set_archiving(backup_dir, 'node', node, old_binary=True)
         node.slow_start()
 
+        if node.major_version >= 12:
+            node.safe_psql(
+                "postgres",
+                "CREATE EXTENSION ptrack")
+
         node.pgbench_init(scale=10)
 
         # FULL backup with old binary
@@ -798,6 +803,196 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         self.restore_node(backup_dir, 'node', node_restored, backup_id=page4)
         pgdata_restored = self.pgdata_content(node_restored.data_dir)
         self.compare_pgdata(pgdata4, pgdata_restored)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.expectedFailure
+    # @unittest.skip("skip")
+    def test_backward_compatibility_merge_3(self):
+        """
+        Create node, take FULL and PAGE backups with old binary,
+        merge them with new binary.
+        old binary version =< 2.2.7
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={'autovacuum': 'off'})
+
+        self.init_pb(backup_dir, old_binary=True)
+        self.add_instance(backup_dir, 'node', node, old_binary=True)
+
+        self.set_archiving(backup_dir, 'node', node, old_binary=True)
+        node.slow_start()
+
+        node.pgbench_init(scale=50)
+
+        node.safe_psql(
+            'postgres',
+            'VACUUM pgbench_accounts')
+
+        node_restored = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node_restored'))
+
+        # FULL backup with OLD binary
+        self.backup_node(
+            backup_dir, 'node', node, old_binary=True, options=['--compress'])
+
+        pgbench = node.pgbench(
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            options=["-c", "1", "-T", "10", "--no-vacuum"])
+        pgbench.wait()
+        pgbench.stdout.close()
+
+        # PAGE1 backup with OLD binary
+        page1 = self.backup_node(
+            backup_dir, 'node', node,
+            backup_type='page', old_binary=True, options=['--compress'])
+
+        pgdata1 = self.pgdata_content(node.data_dir)
+
+        node.safe_psql(
+            'postgres',
+            "DELETE from pgbench_accounts where ctid > '(10,1)'")
+
+        # PAGE2 backup with OLD binary
+        page2 = self.backup_node(
+            backup_dir, 'node', node,
+            backup_type='page', old_binary=True, options=['--compress'])
+
+        pgdata2 = self.pgdata_content(node.data_dir)
+
+        # PAGE3 backup with OLD binary
+        page3 = self.backup_node(
+            backup_dir, 'node', node,
+            backup_type='page', old_binary=True, options=['--compress'])
+
+        pgdata3 = self.pgdata_content(node.data_dir)
+
+        pgbench = node.pgbench(
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            options=["-c", "1", "-T", "10", "--no-vacuum"])
+        pgbench.wait()
+        pgbench.stdout.close()
+
+        # PAGE4 backup with NEW binary
+        page4 = self.backup_node(
+            backup_dir, 'node', node, backup_type='page', options=['--compress'])
+        pgdata4 = self.pgdata_content(node.data_dir)
+
+        # merge backups one by one and check data correctness
+        # merge PAGE1
+        self.merge_backup(
+            backup_dir, "node", page1, options=['--log-level-file=VERBOSE'])
+
+        # check data correctness for PAGE1
+        node_restored.cleanup()
+        self.restore_node(
+            backup_dir, 'node', node_restored, backup_id=page1,
+            options=['--log-level-file=VERBOSE'])
+        pgdata_restored = self.pgdata_content(node_restored.data_dir)
+        self.compare_pgdata(pgdata1, pgdata_restored)
+
+        # merge PAGE2
+        self.merge_backup(backup_dir, "node", page2)
+
+        # check data correctness for PAGE2
+        node_restored.cleanup()
+        self.restore_node(backup_dir, 'node', node_restored, backup_id=page2)
+        pgdata_restored = self.pgdata_content(node_restored.data_dir)
+        self.compare_pgdata(pgdata2, pgdata_restored)
+
+        # merge PAGE3
+        self.show_pb(backup_dir, 'node', page3)
+        self.merge_backup(backup_dir, "node", page3)
+        self.show_pb(backup_dir, 'node', page3)
+
+        # check data correctness for PAGE3
+        node_restored.cleanup()
+        self.restore_node(backup_dir, 'node', node_restored, backup_id=page3)
+        pgdata_restored = self.pgdata_content(node_restored.data_dir)
+        self.compare_pgdata(pgdata3, pgdata_restored)
+
+        # merge PAGE4
+        self.merge_backup(backup_dir, "node", page4)
+
+        # check data correctness for PAGE4
+        node_restored.cleanup()
+        self.restore_node(backup_dir, 'node', node_restored, backup_id=page4)
+        pgdata_restored = self.pgdata_content(node_restored.data_dir)
+        self.compare_pgdata(pgdata4, pgdata_restored)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.expectedFailure
+    # @unittest.skip("skip")
+    def test_backward_compatibility_merge_4(self):
+        """
+        Start merge between minor version, crash and retry it.
+        old binary version =< 2.2.7
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={'autovacuum': 'off'})
+
+        self.init_pb(backup_dir, old_binary=True)
+        self.add_instance(backup_dir, 'node', node, old_binary=True)
+
+        self.set_archiving(backup_dir, 'node', node, old_binary=True)
+        node.slow_start()
+
+        node.pgbench_init(scale=20)
+
+        node.safe_psql(
+            'postgres',
+            'VACUUM pgbench_accounts')
+
+        node_restored = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node_restored'))
+
+        # FULL backup with OLD binary
+        self.backup_node(
+            backup_dir, 'node', node, old_binary=True, options=['--compress'])
+
+        pgbench = node.pgbench(
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            options=["-c", "1", "-T", "20", "--no-vacuum"])
+        pgbench.wait()
+        pgbench.stdout.close()
+
+        # PAGE backup with NEW binary
+        page_id = self.backup_node(
+            backup_dir, 'node', node, backup_type='page', options=['--compress'])
+        pgdata = self.pgdata_content(node.data_dir)
+
+        # merge PAGE4
+        gdb = self.merge_backup(backup_dir, "node", page_id, gdb=True)
+
+        gdb.set_breakpoint('rename')
+        gdb.run_until_break()
+        gdb.continue_execution_until_break(1000)
+        gdb._execute('signal SIGKILL')
+
+        self.merge_backup(backup_dir, "node", page_id)
+
+        # check data correctness for PAGE
+        node_restored.cleanup()
+        self.restore_node(backup_dir, 'node', node_restored, backup_id=page_id)
+
+        pgdata_restored = self.pgdata_content(node_restored.data_dir)
+        self.compare_pgdata(pgdata, pgdata_restored)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
