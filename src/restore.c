@@ -1144,7 +1144,7 @@ restore_files(void *arg)
 			arguments->restored_bytes += restore_data_file(arguments->parent_chain,
 														   dest_file, out, to_fullpath,
 														   arguments->use_bitmap, checksum_map,
-														   arguments->shift_lsn, lsn_map);
+														   arguments->shift_lsn, lsn_map, true);
 		}
 		else
 		{

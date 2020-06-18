@@ -25,16 +25,16 @@
 #include "utils/thread.h"
 
 /* Union to ease operations on relation pages */
-typedef union DataPage
+typedef struct DataPage
 {
-	PageHeaderData page_data;
+	BackupPageHeader bph;
 	char		data[BLCKSZ];
 } DataPage;
 
 static BackupPageHeader2* get_data_file_headers(const char *fullpath, pgFile *file, uint32 backup_version);
 static void write_page_headers(BackupPageHeader2 *headers, pgFile *file, const char* to_fullpath);
-static bool get_compressed_page_meta(FILE *in, const char *fullpath, int32 *compressed_size,
-									 BlockNumber *blknum, pg_crc32 *crc, bool use_crc32c);
+static bool get_compressed_page_meta(FILE *in, const char *fullpath, BackupPageHeader* bph,
+									 pg_crc32 *crc, bool use_crc32c);
 
 #ifdef HAVE_LIBZ
 /* Implementation of zlib compression method */
@@ -481,17 +481,15 @@ compress_and_backup_page(pgFile *file, BlockNumber blknum,
 						CompressAlg calg, int clevel,
 						const char *from_fullpath, const char *to_fullpath)
 {
-//	BackupPageHeader header;
-	int         compressed_size;
+	int         compressed_size = 0;
 	size_t		write_buffer_size = 0;
-	char		write_buffer[BLCKSZ];
-	char		compressed_page[BLCKSZ*2]; /* compressed page may require more space than uncompressed */
+	char        write_buffer[BLCKSZ*2];  /* compressed page may require more space than uncompressed */
+	BackupPageHeader* bph = (BackupPageHeader*)write_buffer;
 	const char *errormsg = NULL;
 
-//	header.block = blknum;
-
 	/* Compress the page */
-	compressed_size = do_compress(compressed_page, sizeof(compressed_page),
+	compressed_size = do_compress(write_buffer + sizeof(BackupPageHeader),
+								  sizeof(write_buffer) - sizeof(BackupPageHeader),
 								  page, BLCKSZ, calg, clevel,
 								  &errormsg);
 	/* Something went wrong and errormsg was assigned, throw a warning */
@@ -501,21 +499,16 @@ compress_and_backup_page(pgFile *file, BlockNumber blknum,
 
 	file->compress_alg = calg; /* TODO: wtf? why here? */
 
-	/* The page was successfully compressed. */
-	if (compressed_size > 0 && compressed_size < BLCKSZ)
+	/* compression didn`t worked */
+	if (compressed_size <= 0 || compressed_size >= BLCKSZ)
 	{
-//		memcpy(write_buffer, &header, sizeof(header));
-		memcpy(write_buffer, compressed_page, compressed_size);
-		write_buffer_size = compressed_size;
-	}
-	/* Non-positive value means that compression failed. Write it as is. */
-	else
-	{
+		/* Do not compress page */
+		memcpy(write_buffer + sizeof(BackupPageHeader), page, BLCKSZ);
 		compressed_size = BLCKSZ;
-//		memcpy(write_buffer, &header, sizeof(header));
-		memcpy(write_buffer, page, BLCKSZ);
-		write_buffer_size = compressed_size;
 	}
+	bph->block = blknum;
+	bph->compressed_size = compressed_size;
+	write_buffer_size = compressed_size + sizeof(BackupPageHeader);
 
 	/* Update CRC */
 	COMP_FILE_CRC32(true, *crc, write_buffer, write_buffer_size);
@@ -747,7 +740,7 @@ backup_non_data_file(pgFile *file, pgFile *prev_file,
 size_t
 restore_data_file(parray *parent_chain, pgFile *dest_file, FILE *out,
 				  const char *to_fullpath, bool use_bitmap, PageState *checksum_map,
-				  XLogRecPtr shift_lsn, datapagemap_t *lsn_map)
+				  XLogRecPtr shift_lsn, datapagemap_t *lsn_map, bool is_merge)
 {
 	size_t total_write_len = 0;
 	char  *in_buf = pgut_malloc(STDIO_BUFSIZE);
@@ -825,9 +818,10 @@ restore_data_file(parray *parent_chain, pgFile *dest_file, FILE *out,
 		setvbuf(in, in_buf, _IOFBF, STDIO_BUFSIZE);
 
 		/* get headers for this file */
-		headers = get_data_file_headers(from_fullpath, tmp_file, parse_program_version(backup->program_version));
+		if (!is_merge)
+			headers = get_data_file_headers(from_fullpath, tmp_file, parse_program_version(backup->program_version));
 
-		if (!headers && tmp_file->n_headers > 0)
+		if (!is_merge && !headers && tmp_file->n_headers > 0)
 			elog(ERROR, "Failed to get headers for file \"%s\"", from_fullpath);
 
 		/*
@@ -895,6 +889,7 @@ restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_vers
 	for (;;)
 	{
 		off_t		write_pos;
+		size_t		len;
 		size_t		read_len;
 		DataPage	page;
 		int32		compressed_size = 0;
@@ -918,23 +913,44 @@ restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_vers
 			blknum = headers[n_hdr].block;
 			page_lsn = headers[n_hdr].lsn;
 			page_crc = headers[n_hdr].checksum;
-			/* calculate payload size by comparing current and next page positions */
-			compressed_size = headers[n_hdr+1].pos - headers[n_hdr].pos;
+			/* calculate payload size by comparing current and next page positions,
+			 * page header is not included */
+			compressed_size = headers[n_hdr+1].pos - headers[n_hdr].pos - sizeof(BackupPageHeader);
 
 			Assert(compressed_size > 0);
 			Assert(compressed_size <= BLCKSZ);
 
-			read_len = compressed_size;
+			read_len = compressed_size + sizeof(BackupPageHeader);
 		}
 		else
 		{
-			if (get_compressed_page_meta(in, from_fullpath, &compressed_size,
-										 &blknum, NULL, false))
+			/* We get into this function either when restoring old backup
+			 * or when merging something. Aligh read_len only in restoring
+			 * or merging old backup.
+			 */
+			if (get_compressed_page_meta(in, from_fullpath, &(page).bph, NULL, false))
 			{
 				cur_pos_in += sizeof(BackupPageHeader);
 
 				/* backward compatibility kludge TODO: remove in 3.0 */
-				read_len = MAXALIGN(compressed_size);
+				blknum = page.bph.block;
+				compressed_size = page.bph.compressed_size;
+
+				/* this will backfire when retrying merge of old backups,
+				 * just pray that this will never happen.
+				 */
+				if (backup_version >= 20400)
+					read_len = compressed_size;
+				else
+					read_len = MAXALIGN(compressed_size);
+
+//				elog(INFO, "FILE: %s", from_fullpath);
+//				elog(INFO, "blknum: %i", blknum);
+//
+//				elog(INFO, "POS: %u", cur_pos_in);
+//				elog(INFO, "SIZE: %i", compressed_size);
+//				elog(INFO, "ASIZE: %i", read_len);
+
 			}
 			else
 				break;
@@ -1008,9 +1024,9 @@ restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_vers
 		if (map && datapagemap_is_set(map, blknum))
 		{
 			/* Backward compatibility kludge TODO: remove in 3.0
-			 * skip to the next page for backup withot header file
+			 * go to the next page.
 			 */
-			if (!headers && fseek(in, MAXALIGN(compressed_size), SEEK_CUR) != 0)
+			if (!headers && fseek(in, read_len, SEEK_CUR) != 0)
 				elog(ERROR, "Cannot seek block %u of '%s': %s",
 					blknum, from_fullpath, strerror(errno));
 			continue;
@@ -1027,9 +1043,14 @@ restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_vers
 		}
 
 		/* read a page from file */
-		if (fread(page.data, 1, read_len, in) != read_len)
+		if (headers)
+			len = fread(&page, 1, read_len, in);
+		else
+			len = fread(page.data, 1, read_len, in);
+
+		if (len != read_len)
 			elog(ERROR, "Cannot read block %u file \"%s\": %s",
-				blknum, from_fullpath, strerror(errno));
+						blknum, from_fullpath, strerror(errno));
 
 		cur_pos_in += read_len;
 
@@ -1562,7 +1583,7 @@ validate_file_pages(pgFile *file, const char *fullpath, XLogRecPtr stop_lsn,
 	bool		use_crc32c = backup_version <= 20021 || backup_version >= 20025;
 	BackupPageHeader2 *headers = NULL;
 	int         n_hdr = -1;
-	off_t       cur_pos = 0;
+	off_t       cur_pos_in = 0;
 
 	elog(VERBOSE, "Validate relation blocks for file \"%s\"", fullpath);
 
@@ -1586,6 +1607,7 @@ validate_file_pages(pgFile *file, const char *fullpath, XLogRecPtr stop_lsn,
 	while (true)
 	{
 		int		rc = 0;
+		size_t      len = 0;
 		DataPage	compressed_page; /* used as read buffer */
 		int	        compressed_size = 0;
 		DataPage	page;
@@ -1603,40 +1625,47 @@ validate_file_pages(pgFile *file, const char *fullpath, XLogRecPtr stop_lsn,
 				break;
 
 			blknum = headers[n_hdr].block;
-			/* calculate payload size by comparing current and next page positions */
-			compressed_size = headers[n_hdr+1].pos - headers[n_hdr].pos;
+			/* calculate payload size by comparing current and next page positions,
+			 * page header is not included.
+			 */
+			compressed_size = headers[n_hdr+1].pos - headers[n_hdr].pos - sizeof(BackupPageHeader);
 
 			Assert(compressed_size > 0);
 			Assert(compressed_size <= BLCKSZ);
 
-			if (cur_pos != headers[n_hdr].pos)
+			read_len = sizeof(BackupPageHeader) + compressed_size;
+
+			if (cur_pos_in != headers[n_hdr].pos)
 			{
 				if (fio_fseek(in, headers[n_hdr].pos) < 0)
 					elog(ERROR, "Cannot seek block %u of \"%s\": %s",
 						blknum, fullpath, strerror(errno));
+				else
+					elog(INFO, "Seek to %u", headers[n_hdr].pos);
 
-				cur_pos = headers[n_hdr].pos;
+				cur_pos_in = headers[n_hdr].pos;
 			}
-
-			read_len = compressed_size;
 		}
 		/* old backups rely on header located directly in data file */
 		else
 		{
-			if (!get_compressed_page_meta(in, fullpath, &compressed_size,
-										  &blknum, &crc, use_crc32c))
-			break;
-
-			/* Backward compatibility kludge, TODO: remove in 3.0
-			 * for some reason we padded compressed pages in old versions
-			 */
-			read_len = MAXALIGN(compressed_size);
+			if (get_compressed_page_meta(in, fullpath, &(compressed_page).bph, &crc, use_crc32c))
+			{
+				/* Backward compatibility kludge, TODO: remove in 3.0
+				 * for some reason we padded compressed pages in old versions
+				 */
+				blknum = compressed_page.bph.block;
+				compressed_size = compressed_page.bph.compressed_size;
+				read_len = MAXALIGN(compressed_size);
+			}
+			else
+				break;
 		}
 
 		/* backward compatibility kludge TODO: remove in 3.0 */
 		if (compressed_size == PageIsTruncated)
 		{
-			elog(LOG, "Block %u of \"%s\" is truncated",
+			elog(INFO, "Block %u of \"%s\" is truncated",
 				 blknum, fullpath);
 			continue;
 		}
@@ -1644,7 +1673,17 @@ validate_file_pages(pgFile *file, const char *fullpath, XLogRecPtr stop_lsn,
 		Assert(compressed_size <= BLCKSZ);
 		Assert(compressed_size > 0);
 
-		if (fread(compressed_page.data, 1, read_len, in) != read_len)
+		if (headers)
+			len = fread(&compressed_page, 1, read_len, in);
+		else
+			len = fread(compressed_page.data, 1, read_len, in);
+
+//		elog(INFO, "POS: %u", cur_pos_in);
+//
+//		elog(INFO, "LEN: %i", len);
+//		elog(INFO, "READ_LEN: %i", read_len);
+
+		if (len != read_len)
 		{
 			elog(WARNING, "Cannot read block %u file \"%s\": %s",
 				blknum, fullpath, strerror(errno));
@@ -1652,9 +1691,12 @@ validate_file_pages(pgFile *file, const char *fullpath, XLogRecPtr stop_lsn,
 		}
 
 		/* update current position */
-		cur_pos += read_len;
+		cur_pos_in += read_len;
 
-		COMP_FILE_CRC32(use_crc32c, crc, compressed_page.data, read_len);
+		if (headers)
+			COMP_FILE_CRC32(use_crc32c, crc, &compressed_page, read_len);
+		else
+			COMP_FILE_CRC32(use_crc32c, crc, compressed_page.data, read_len);
 
 		if (compressed_size != BLCKSZ
 			|| page_may_be_compressed(compressed_page.data, file->compress_alg,
@@ -1878,40 +1920,39 @@ get_lsn_map(const char *fullpath, uint32 checksum_version,
 
 /* */
 bool
-get_compressed_page_meta(FILE *in, const char *fullpath, int32 *compressed_size,
-						 BlockNumber *blknum, pg_crc32 *crc, bool use_crc32c)
+get_compressed_page_meta(FILE *in, const char *fullpath, BackupPageHeader* bph,
+						 pg_crc32 *crc, bool use_crc32c)
 {
 
 	/* read BackupPageHeader */
-	BackupPageHeader header;
-	size_t read_len = fread(&header, 1, sizeof(header), in);
+	size_t read_len = fread(bph, 1, sizeof(BackupPageHeader), in);
 	
 	if (ferror(in))
 		elog(ERROR, "Cannot read file \"%s\": %s",
 				fullpath, strerror(errno));
 
-	if (read_len != sizeof(header))
+	if (read_len != sizeof(BackupPageHeader))
 	{
 		if (read_len == 0 && feof(in))
 			return false;		/* EOF found */
 		else if (read_len != 0 && feof(in))
 			elog(ERROR,
-				 "Odd size page found at block %u of \"%s\"",
-				 *blknum, fullpath);
+				 "Odd size page found at offset %lu of \"%s\"",
+				  ftell(in), fullpath);
 		else
-			elog(ERROR, "Cannot read header of block %u of \"%s\": %s",
-				 *blknum, fullpath, strerror(errno));
+			elog(ERROR, "Cannot read header at offset %lu of \"%s\": %s",
+				 ftell(in), fullpath, strerror(errno));
 	}
 
 	if (crc)
-		COMP_FILE_CRC32(use_crc32c, *crc, &header, read_len);
+		COMP_FILE_CRC32(use_crc32c, *crc, bph, read_len);
 
-	if (header.block == 0 && header.compressed_size == 0)
+	if (bph->block == 0 && bph->compressed_size == 0)
 		elog(ERROR, "Empty block in file \"%s\"", fullpath);
 
 
-	*blknum = header.block;
-	*compressed_size = header.compressed_size;
+//	*blknum = header.block;
+//	*compressed_size = header.compressed_size;
 
 //	elog(INFO, "blknum: %i", header.block);
 //	elog(INFO, "size: %i", header.compressed_size);
@@ -1920,7 +1961,7 @@ get_compressed_page_meta(FILE *in, const char *fullpath, int32 *compressed_size,
 //	elog(INFO, "BLKNUM: %i", *blknum);
 //	elog(INFO, "File: %s", fullpath);
 
-	Assert(*compressed_size != 0);
+	Assert(bph->compressed_size != 0);
 	return true;
 
 }
@@ -2034,7 +2075,7 @@ send_pages(ConnectionArgs* conn_arg, const char *to_fullpath, const char *from_f
 			compressed_size = compress_and_backup_page(file, blknum, in, out, &(file->crc),
 														rc, curr_page, calg, clevel,
 														from_fullpath, to_fullpath);
-			cur_pos_out += compressed_size;
+			cur_pos_out += compressed_size + sizeof(BackupPageHeader);
 		}
 
 		n_blocks_read++;

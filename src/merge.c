@@ -464,7 +464,10 @@ merge_chain(parray *parent_chain, pgBackup *full_backup, pgBackup *dest_backup)
 	if (!dest_backup)
 		elog(ERROR, "Destination backup is missing, cannot continue merge");
 
-	elog(INFO, "Merging backup %s with parent chain", base36enc(dest_backup->start_time));
+	if (dest_backup->status == BACKUP_STATUS_MERGING)
+		elog(INFO, "Retry failed merge of backup %s with parent chain", base36enc(dest_backup->start_time));
+	else
+		elog(INFO, "Merging backup %s with parent chain", base36enc(dest_backup->start_time));
 
 	/* sanity */
 	if (full_backup->merge_dest_backup != INVALID_BACKUP_ID &&
@@ -538,6 +541,19 @@ merge_chain(parray *parent_chain, pgBackup *full_backup, pgBackup *dest_backup)
 
 	elog(INFO, "Validate parent chain for backup %s",
 					base36enc(dest_backup->start_time));
+
+	/* forbid merge retry for failed merges between 2.4.0 and any
+	 * older version. Several format changes makes it impossible
+	 * to determine the exact format any speific file is got.
+	 */
+	if (full_backup->status == BACKUP_STATUS_MERGING &&
+		parse_program_version(dest_backup->program_version) >= 20400 &&
+		parse_program_version(full_backup->program_version) < 20400)
+	{
+		elog(ERROR, "Retry of failed merge for backups with different between minor "
+			"versions is forbidden to avoid data corruption because of storage format "
+			"changes introduced in 2.4.0 version, please take a new full backup");
+	}
 
 	/*
 	 * Validate or revalidate all members of parent chain
@@ -1171,7 +1187,7 @@ merge_data_file(parray *parent_chain, pgBackup *full_backup,
 
 	/* restore file into temp file */
 	tmp_file->size = restore_data_file(parent_chain, dest_file, out, to_fullpath_tmp1,
-									   use_bitmap, NULL, InvalidXLogRecPtr, NULL);
+									   use_bitmap, NULL, InvalidXLogRecPtr, NULL, true);
 	if (fclose(out) != 0)
 		elog(ERROR, "Cannot close file \"%s\": %s",
 			 to_fullpath_tmp1, strerror(errno));

@@ -1569,16 +1569,14 @@ static void fio_send_pages_impl(int out, char* buf)
 {
 	FILE        *in = NULL;
 	BlockNumber  blknum = 0;
+	int          current_pos = 0;
 	BlockNumber  n_blocks_read = 0;
 	PageState    page_st;
-//	XLogRecPtr   page_lsn = 0;
-//	uint16       page_crc = 0;
 	char         read_buffer[BLCKSZ+1];
 	char         in_buf[STDIO_BUFSIZE];
 	fio_header   hdr;
 	fio_send_request *req = (fio_send_request*) buf;
 	char             *from_fullpath = (char*) buf + sizeof(fio_send_request);
-	int current_pos = 0;
 	bool with_pagemap = req->bitmapsize > 0 ? true : false;
 	/* error reporting */
 	char *errormsg = NULL;
@@ -1749,22 +1747,27 @@ static void fio_send_pages_impl(int out, char* buf)
 		{
 			int  compressed_size = 0;
 			char write_buffer[BLCKSZ*2];
+			BackupPageHeader* bph = (BackupPageHeader*)write_buffer;
 
 			/* compress page */
 			hdr.cop = FIO_PAGE;
 			hdr.arg = blknum;
 
-			compressed_size = do_compress(write_buffer, sizeof(write_buffer),
-											read_buffer, BLCKSZ, req->calg, req->clevel,
-											NULL);
+			compressed_size = do_compress(write_buffer + sizeof(BackupPageHeader),
+										  sizeof(write_buffer) - sizeof(BackupPageHeader),
+										  read_buffer, BLCKSZ, req->calg, req->clevel,
+										  NULL);
 
 			if (compressed_size <= 0 || compressed_size >= BLCKSZ)
 			{
 				/* Do not compress page */
-				memcpy(write_buffer, read_buffer, BLCKSZ);
+				memcpy(write_buffer + sizeof(BackupPageHeader), read_buffer, BLCKSZ);
 				compressed_size = BLCKSZ;
 			}
-			hdr.size = compressed_size;
+			bph->block = blknum;
+			bph->compressed_size = compressed_size;
+
+			hdr.size = compressed_size + sizeof(BackupPageHeader);
 
 			IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 			IO_CHECK(fio_write_all(out, write_buffer, hdr.size), hdr.size);
@@ -1781,7 +1784,7 @@ static void fio_send_pages_impl(int out, char* buf)
 			headers[hdr_num].checksum = page_st.checksum;
 			headers[hdr_num].pos = cur_pos_out;
 
-			cur_pos_out += compressed_size;
+			cur_pos_out += hdr.size;
 		}
 
 		/* next block */
