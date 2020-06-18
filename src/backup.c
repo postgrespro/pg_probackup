@@ -2161,7 +2161,7 @@ backup_files(void *arg)
 								 arguments->nodeInfo->checksum_version,
 								 arguments->nodeInfo->ptrack_version_num,
 								 arguments->nodeInfo->ptrack_schema,
-								 arguments->hdr_map, true);
+								 arguments->hdr_map, false);
 		}
 		else
 		{

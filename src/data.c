@@ -31,8 +31,6 @@ typedef struct DataPage
 	char		data[BLCKSZ];
 } DataPage;
 
-static BackupPageHeader2* get_data_file_headers(HeaderMap *hdr_map, pgFile *file, uint32 backup_version);
-static void write_page_headers(BackupPageHeader2 *headers, pgFile *file, HeaderMap *hdr_map);
 static bool get_compressed_page_meta(FILE *in, const char *fullpath, BackupPageHeader* bph,
 									 pg_crc32 *crc, bool use_crc32c);
 
@@ -538,7 +536,7 @@ backup_data_file(ConnectionArgs* conn_arg, pgFile *file,
 				 XLogRecPtr prev_backup_start_lsn, BackupMode backup_mode,
 				 CompressAlg calg, int clevel, uint32 checksum_version,
 				 int ptrack_version_num, const char *ptrack_schema,
-				 HeaderMap *hdr_map, bool missing_ok)
+				 HeaderMap *hdr_map, bool is_merge)
 {
 	int         rc;
 	bool        use_pagemap;
@@ -629,7 +627,7 @@ backup_data_file(ConnectionArgs* conn_arg, pgFile *file,
 	/* check for errors */
 	if (rc == FILE_MISSING)
 	{
-		elog(LOG, "File \"%s\" is not found", from_fullpath);
+		elog(is_merge ? ERROR : LOG, "File not found: \"%s\"", from_fullpath);
 		file->write_size = FILE_NOT_FOUND;
 		goto cleanup;
 	}
@@ -685,7 +683,7 @@ cleanup:
 	FIN_FILE_CRC32(true, file->crc);
 
 	/* dump page headers */
-	write_page_headers(headers, file, hdr_map);
+	write_page_headers(headers, file, hdr_map, is_merge);
 
 	pg_free(errmsg);
 	pg_free(file->pagemap.bitmap);
@@ -818,8 +816,12 @@ restore_data_file(parray *parent_chain, pgFile *dest_file, FILE *out,
 		/* set stdio buffering for input data file */
 		setvbuf(in, in_buf, _IOFBF, STDIO_BUFSIZE);
 
+//		elog(INFO, "N_HEADERS: %i", tmp_file->n_headers);
+//		elog(INFO, "File: %s", tmp_file->rel_path);
+//		elog(INFO, "Backup: %s", base36enc(backup->start_time));
+
 		/* get headers for this file */
-		if (use_headers)
+		if (use_headers && tmp_file->n_headers > 0)
 			headers = get_data_file_headers(&(backup->hdr_map), tmp_file,
 											parse_program_version(backup->program_version));
 
@@ -2163,8 +2165,8 @@ get_data_file_headers(HeaderMap *hdr_map, pgFile *file, uint32 backup_version)
 	FIN_FILE_CRC32(true, hdr_crc);
 
 	if (hdr_crc != file->hdr_crc)
-		elog(ERROR, "Header file crc mismatch \"%s\", current: %u, expected: %u",
-			hdr_map->path, hdr_crc, file->hdr_crc);
+		elog(ERROR, "Header map for file \"%s\" crc mismatch \"%s\" offset: %lu, len: %lu, current: %u, expected: %u",
+			file->rel_path, hdr_map->path, file->hdr_off, read_len, hdr_crc, file->hdr_crc);
 
 	if (fclose(in))
 		elog(ERROR, "Cannot close header file \"%s\": %s", hdr_map->path, strerror(errno));
@@ -2173,29 +2175,35 @@ get_data_file_headers(HeaderMap *hdr_map, pgFile *file, uint32 backup_version)
 }
 
 void
-write_page_headers(BackupPageHeader2 *headers, pgFile *file, HeaderMap *hdr_map)
+write_page_headers(BackupPageHeader2 *headers, pgFile *file, HeaderMap *hdr_map, bool is_merge)
 {
-	size_t read_len = 0;
+	size_t  read_len = 0;
+	char   *map_path = NULL;
 
 	if (file->n_headers <= 0)
 		return;
+
+	/* when running merge we must save headers into the temp map */
+	map_path = (is_merge) ? hdr_map->path_tmp : hdr_map->path;
 
 	/* writing to header map must be serialized */
 	pthread_lock(&(hdr_map->mutex)); /* what if we crash while trying to obtain mutex? */
 
 	if (!hdr_map->fp)
 	{
-		hdr_map->fp = fopen(hdr_map->path, PG_BINARY_W);
+		elog(LOG, "Creating page header map \"%s\"", map_path);
+
+		hdr_map->fp = fopen(map_path, PG_BINARY_W);
 		if (hdr_map->fp == NULL)
 			elog(ERROR, "Cannot open header file \"%s\": %s",
-				 hdr_map->path, strerror(errno));
+				 map_path, strerror(errno));
 
 		/* disable buffering for header file */
 		setvbuf(hdr_map->fp, NULL, _IONBF, BUFSIZ);
 
 		/* update file permission */
-		if (chmod(hdr_map->path, FILE_PERMISSION) == -1)
-			elog(ERROR, "Cannot change mode of \"%s\": %s", hdr_map->path,
+		if (chmod(map_path, FILE_PERMISSION) == -1)
+			elog(ERROR, "Cannot change mode of \"%s\": %s", map_path,
 				 strerror(errno));
 
 		file->hdr_off = 0;
@@ -2211,7 +2219,10 @@ write_page_headers(BackupPageHeader2 *headers, pgFile *file, HeaderMap *hdr_map)
 	FIN_FILE_CRC32(true, file->hdr_crc);
 
 	if (fwrite(headers, 1, read_len, hdr_map->fp) != read_len)
-		elog(ERROR, "Cannot write to file \"%s\": %s", hdr_map->path, strerror(errno));
+		elog(ERROR, "Cannot write to file \"%s\": %s", map_path, strerror(errno));
+
+	elog(VERBOSE, "Writing header map for file \"%s\" offset: %lu, len: %lu, crc: %u",
+			file->rel_path, file->hdr_off, read_len, file->hdr_crc);
 
 	pthread_mutex_unlock(&(hdr_map->mutex));
 }

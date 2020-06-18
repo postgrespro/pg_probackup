@@ -474,9 +474,11 @@ catalog_get_backup_list(const char *instance_name, time_t requested_backup_id)
 		backup->database_dir = pgut_malloc(MAXPGPATH);
 		join_path_components(backup->database_dir, backup->root_dir, DATABASE_DIR);
 
-		/* block header map */
+		/* block header map, TODO: move to separate function */
 		backup->hdr_map.path = pgut_malloc(MAXPGPATH);
 		join_path_components(backup->hdr_map.path, backup->database_dir, HEADER_MAP);
+		backup->hdr_map.path_tmp = pgut_malloc(MAXPGPATH);
+		join_path_components(backup->hdr_map.path_tmp, backup->database_dir, HEADER_MAP_TMP);
 		backup->hdr_map.fp = NULL;
 
 		/* TODO: save encoded backup id */
@@ -855,6 +857,8 @@ pgBackupCreateDir(pgBackup *backup)
 	/* block header map */
 	backup->hdr_map.path = pgut_malloc(MAXPGPATH);
 	join_path_components(backup->hdr_map.path, backup->database_dir, HEADER_MAP);
+	backup->hdr_map.path_tmp = pgut_malloc(MAXPGPATH);
+	join_path_components(backup->hdr_map.path_tmp, backup->database_dir, HEADER_MAP_TMP);
 	backup->hdr_map.fp = NULL;
 
 	/* create directories for actual backup files */
@@ -2282,6 +2286,7 @@ pgBackupInit(pgBackup *backup)
 	backup->content_crc = 0;
 
 	backup->hdr_map.path = NULL;
+	backup->hdr_map.path_tmp = NULL;
 	backup->hdr_map.fp = NULL;
 	backup->hdr_map.mutex = (pthread_mutex_t)PTHREAD_MUTEX_INITIALIZER;
 }
@@ -2298,6 +2303,7 @@ pgBackupFree(void *backup)
 	pg_free(b->database_dir);
 	pg_free(b->note);
 	pg_free(b->hdr_map.path);
+	pg_free(b->hdr_map.path_tmp);
 	pg_free(backup);
 }
 

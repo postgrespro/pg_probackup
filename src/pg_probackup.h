@@ -67,6 +67,7 @@ extern const char  *PROGRAM_EMAIL;
 #define EXTERNAL_DIR			"external_directories/externaldir"
 #define DATABASE_MAP			"database_map"
 #define HEADER_MAP  			"block_header_map"
+#define HEADER_MAP_TMP  		"block_header_map_tmp"
 
 /* Timeout defaults */
 #define ARCHIVE_TIMEOUT_DEFAULT		300
@@ -363,6 +364,7 @@ typedef struct PGNodeInfo
 typedef struct HeaderMap
 {
 	char  *path;
+	char  *path_tmp;	/* used only in merge */
 	FILE  *fp;
 	off_t  offset;
 	pthread_mutex_t mutex;
@@ -1014,6 +1016,9 @@ extern pid_t check_postmaster(const char *pgdata);
 
 extern bool validate_file_pages(pgFile *file, const char *fullpath, XLogRecPtr stop_lsn,
 							    uint32 checksum_version, uint32 backup_version, HeaderMap *hdr_map);
+
+extern BackupPageHeader2* get_data_file_headers(HeaderMap *hdr_map, pgFile *file, uint32 backup_version);
+extern void write_page_headers(BackupPageHeader2 *headers, pgFile *file, HeaderMap *hdr_map, bool is_merge);
 /* parsexlog.c */
 extern bool extractPageMap(const char *archivedir, uint32 wal_seg_size,
 						   XLogRecPtr startpoint, TimeLineID start_tli,

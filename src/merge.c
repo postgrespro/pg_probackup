@@ -550,11 +550,11 @@ merge_chain(parray *parent_chain, pgBackup *full_backup, pgBackup *dest_backup)
 	elog(INFO, "Validate parent chain for backup %s",
 					base36enc(dest_backup->start_time));
 
-	/* forbid merge retry for failed merges between 2.4.0 and any
+	/* Forbid merge retry for failed merges between 2.4.0 and any
 	 * older version. Several format changes makes it impossible
 	 * to determine the exact format any speific file is got.
 	 */
-	if (full_backup->status == BACKUP_STATUS_MERGING &&
+	if (is_retry &&
 		parse_program_version(dest_backup->program_version) >= 20400 &&
 		parse_program_version(full_backup->program_version) < 20400)
 	{
@@ -705,6 +705,23 @@ merge_chain(parray *parent_chain, pgBackup *full_backup, pgBackup *dest_backup)
 		elog(ERROR, "Backup files merging failed, time elapsed: %s",
 				pretty_time);
 
+	/* If temp header map descriptor is open, then close it and make rename */
+	if (full_backup->hdr_map.fp)
+	{
+		if (fclose(full_backup->hdr_map.fp))
+			elog(ERROR, "Cannot close file \"%s\"", full_backup->hdr_map.path);
+
+		/* sync new header map to dist */
+		if (fio_sync(full_backup->hdr_map.path_tmp, FIO_BACKUP_HOST) != 0)
+			elog(ERROR, "Cannot sync temp header map \"%s\": %s",
+				full_backup->hdr_map.path_tmp, strerror(errno));
+
+		/* Replace old header map with new one */
+		if (rename(full_backup->hdr_map.path_tmp, full_backup->hdr_map.path) == -1)
+			elog(ERROR, "Could not rename file \"%s\" to \"%s\": %s",
+				 full_backup->hdr_map.path_tmp, full_backup->hdr_map.path, strerror(errno));
+	}
+
 	/*
 	 * Update FULL backup metadata.
 	 * We cannot set backup status to OK just yet,
@@ -846,6 +863,12 @@ merge_rename:
 		pg_free(full_backup->root_dir);
 		full_backup->root_dir = pgut_strdup(destination_path);
 	}
+
+	/* Reinit some path variables */
+	join_path_components(full_backup->database_dir, full_backup->root_dir, DATABASE_DIR);
+	join_path_components(full_backup->hdr_map.path, full_backup->database_dir, HEADER_MAP);
+	join_path_components(full_backup->hdr_map.path_tmp, full_backup->database_dir, HEADER_MAP_TMP);
+	full_backup->hdr_map.fp = NULL;
 
 	/* If we crash here, it will produce full backup in MERGED
 	 * status, located in directory with wrong backup id.
@@ -1033,6 +1056,7 @@ merge_files(void *arg)
 			if (file &&
 				file->n_blocks == dest_file->n_blocks)
 			{
+				BackupPageHeader2 *headers = NULL;
 
 				elog(VERBOSE, "The file didn`t changed since FULL backup, skip merge: \"%s\"",
 								file->rel_path);
@@ -1051,6 +1075,18 @@ merge_files(void *arg)
 				}
 				else
 					tmp_file->uncompressed_size = tmp_file->write_size;
+
+				/* Copy header metadata from old map into a new one */
+				tmp_file->n_headers = file->n_headers;
+				headers = get_data_file_headers(&(arguments->full_backup->hdr_map), file,
+						parse_program_version(arguments->full_backup->program_version));
+
+				/* sanity */
+				if (!headers && file->n_headers > 0)
+					elog(ERROR, "Failed to get headers for file \"%s\"", file->rel_path);
+
+				write_page_headers(headers, tmp_file, &(arguments->full_backup->hdr_map), true);
+				pg_free(headers);
 
 				//TODO: report in_place merge bytes.
 				goto done;
@@ -1205,16 +1241,14 @@ merge_data_file(parray *parent_chain, pgBackup *full_backup,
 	 * 16KB.
 	 * TODO: maybe we should just trust dest_file->n_blocks?
 	 * No, we can`t, because current binary can be used to merge
-	 * 2 backups of old versions, were n_blocks is missing.
+	 * 2 backups of old versions, where n_blocks is missing.
 	 */
 
 	backup_data_file(NULL, tmp_file, to_fullpath_tmp1, to_fullpath_tmp2,
 				 InvalidXLogRecPtr, BACKUP_MODE_FULL,
 				 dest_backup->compress_alg, dest_backup->compress_level,
 				 dest_backup->checksum_version, 0, NULL,
-
-				 /* TODO: add header map */
-				 NULL, false);
+				 &(full_backup->hdr_map), true);
 
 	/* drop restored temp file */
 	if (unlink(to_fullpath_tmp1) == -1)
