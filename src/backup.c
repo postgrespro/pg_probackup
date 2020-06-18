@@ -523,6 +523,7 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool
 		arg->prev_start_lsn = prev_backup_start_lsn;
 		arg->conn_arg.conn = NULL;
 		arg->conn_arg.cancel_conn = NULL;
+		arg->hdr_map = &(current).hdr_map;
 		arg->thread_num = i+1;
 		/* By default there are some error */
 		arg->ret = 1;
@@ -593,6 +594,10 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool
 
 		set_min_recovery_point(pg_control, database_path, current.stop_lsn);
 	}
+
+	/* close block header map */
+	if (current.hdr_map.fp && fclose(current.hdr_map.fp))
+		elog(ERROR, "Cannot close file \"%s\"", current.hdr_map.path);
 
 	/* close ssh session in main thread */
 	fio_disconnect();
@@ -703,6 +708,9 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool
 
 			}
 		}
+
+		if (fio_sync(current.hdr_map.path, FIO_BACKUP_HOST) != 0)
+			elog(ERROR, "Cannot sync file \"%s\": %s", current.hdr_map.path, strerror(errno));
 
 		time(&end_time);
 		pretty_time_interval(difftime(end_time, start_time),
@@ -2153,7 +2161,7 @@ backup_files(void *arg)
 								 arguments->nodeInfo->checksum_version,
 								 arguments->nodeInfo->ptrack_version_num,
 								 arguments->nodeInfo->ptrack_schema,
-								 true);
+								 arguments->hdr_map, true);
 		}
 		else
 		{

@@ -474,6 +474,11 @@ catalog_get_backup_list(const char *instance_name, time_t requested_backup_id)
 		backup->database_dir = pgut_malloc(MAXPGPATH);
 		join_path_components(backup->database_dir, backup->root_dir, DATABASE_DIR);
 
+		/* block header map */
+		backup->hdr_map.path = pgut_malloc(MAXPGPATH);
+		join_path_components(backup->hdr_map.path, backup->database_dir, HEADER_MAP);
+		backup->hdr_map.fp = NULL;
+
 		/* TODO: save encoded backup id */
 		backup->backup_id = backup->start_time;
 		if (requested_backup_id != INVALID_BACKUP_ID
@@ -846,6 +851,11 @@ pgBackupCreateDir(pgBackup *backup)
 
 	backup->database_dir = pgut_malloc(MAXPGPATH);
 	join_path_components(backup->database_dir, backup->root_dir, DATABASE_DIR);
+
+	/* block header map */
+	backup->hdr_map.path = pgut_malloc(MAXPGPATH);
+	join_path_components(backup->hdr_map.path, backup->database_dir, HEADER_MAP);
+	backup->hdr_map.fp = NULL;
 
 	/* create directories for actual backup files */
 	for (i = 0; i < parray_num(subdirs); i++)
@@ -1909,8 +1919,7 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 		{
 			len += sprintf(line+len, ",\"n_headers\":\"%i\"", file->n_headers);
 			len += sprintf(line+len, ",\"hdr_crc\":\"%u\"", file->hdr_crc);
-
-//			elog(INFO, "CRC INT: %li, CRC UINT: %u", file->crc_hdr, file->crc_hdr);
+			len += sprintf(line+len, ",\"hdr_off\":\"%li\"", file->hdr_off);
 		}
 
 		sprintf(line+len, "}\n");
@@ -2272,6 +2281,9 @@ pgBackupInit(pgBackup *backup)
 	backup->note = NULL;
 	backup->content_crc = 0;
 
+	backup->hdr_map.path = NULL;
+	backup->hdr_map.fp = NULL;
+	backup->hdr_map.mutex = (pthread_mutex_t)PTHREAD_MUTEX_INITIALIZER;
 }
 
 /* free pgBackup object */
@@ -2280,12 +2292,13 @@ pgBackupFree(void *backup)
 {
 	pgBackup *b = (pgBackup *) backup;
 
-	pfree(b->primary_conninfo);
-	pfree(b->external_dir_str);
-	pfree(b->root_dir);
-	pfree(b->database_dir);
-	pfree(b->note);
-	pfree(backup);
+	pg_free(b->primary_conninfo);
+	pg_free(b->external_dir_str);
+	pg_free(b->root_dir);
+	pg_free(b->database_dir);
+	pg_free(b->note);
+	pg_free(b->hdr_map.path);
+	pg_free(backup);
 }
 
 /* Compare two pgBackup with their IDs (start time) in ascending order */

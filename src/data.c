@@ -31,8 +31,8 @@ typedef struct DataPage
 	char		data[BLCKSZ];
 } DataPage;
 
-static BackupPageHeader2* get_data_file_headers(const char *fullpath, pgFile *file, uint32 backup_version);
-static void write_page_headers(BackupPageHeader2 *headers, pgFile *file, const char* to_fullpath);
+static BackupPageHeader2* get_data_file_headers(HeaderMap *hdr_map, pgFile *file, uint32 backup_version);
+static void write_page_headers(BackupPageHeader2 *headers, pgFile *file, HeaderMap *hdr_map);
 static bool get_compressed_page_meta(FILE *in, const char *fullpath, BackupPageHeader* bph,
 									 pg_crc32 *crc, bool use_crc32c);
 
@@ -537,7 +537,8 @@ backup_data_file(ConnectionArgs* conn_arg, pgFile *file,
 				 const char *from_fullpath, const char *to_fullpath,
 				 XLogRecPtr prev_backup_start_lsn, BackupMode backup_mode,
 				 CompressAlg calg, int clevel, uint32 checksum_version,
-				 int ptrack_version_num, const char *ptrack_schema, bool missing_ok)
+				 int ptrack_version_num, const char *ptrack_schema,
+				 HeaderMap *hdr_map, bool missing_ok)
 {
 	int         rc;
 	bool        use_pagemap;
@@ -684,7 +685,7 @@ cleanup:
 	FIN_FILE_CRC32(true, file->crc);
 
 	/* dump page headers */
-	write_page_headers(headers, file, to_fullpath);
+	write_page_headers(headers, file, hdr_map);
 
 	pg_free(errmsg);
 	pg_free(file->pagemap.bitmap);
@@ -740,7 +741,7 @@ backup_non_data_file(pgFile *file, pgFile *prev_file,
 size_t
 restore_data_file(parray *parent_chain, pgFile *dest_file, FILE *out,
 				  const char *to_fullpath, bool use_bitmap, PageState *checksum_map,
-				  XLogRecPtr shift_lsn, datapagemap_t *lsn_map, bool is_merge)
+				  XLogRecPtr shift_lsn, datapagemap_t *lsn_map, bool use_headers)
 {
 	size_t total_write_len = 0;
 	char  *in_buf = pgut_malloc(STDIO_BUFSIZE);
@@ -818,10 +819,11 @@ restore_data_file(parray *parent_chain, pgFile *dest_file, FILE *out,
 		setvbuf(in, in_buf, _IOFBF, STDIO_BUFSIZE);
 
 		/* get headers for this file */
-		if (!is_merge)
-			headers = get_data_file_headers(from_fullpath, tmp_file, parse_program_version(backup->program_version));
+		if (use_headers)
+			headers = get_data_file_headers(&(backup->hdr_map), tmp_file,
+											parse_program_version(backup->program_version));
 
-		if (!is_merge && !headers && tmp_file->n_headers > 0)
+		if (use_headers && !headers && tmp_file->n_headers > 0)
 			elog(ERROR, "Failed to get headers for file \"%s\"", from_fullpath);
 
 		/*
@@ -1574,7 +1576,7 @@ check_data_file(ConnectionArgs *arguments, pgFile *file,
 /* Valiate pages of datafile in backup one by one */
 bool
 validate_file_pages(pgFile *file, const char *fullpath, XLogRecPtr stop_lsn,
-				 uint32 checksum_version, uint32 backup_version)
+					uint32 checksum_version, uint32 backup_version, HeaderMap *hdr_map)
 {
 	size_t		read_len = 0;
 	bool		is_valid = true;
@@ -1595,7 +1597,7 @@ validate_file_pages(pgFile *file, const char *fullpath, XLogRecPtr stop_lsn,
 		elog(ERROR, "Cannot open file \"%s\": %s",
 			 fullpath, strerror(errno));
 
-	headers = get_data_file_headers(fullpath, file, backup_version);
+	headers = get_data_file_headers(hdr_map, file, backup_version);
 
 	if (!headers && file->n_headers > 0)
 		elog(ERROR, "Failed to get headers for file \"%s\"", fullpath);
@@ -2120,12 +2122,11 @@ send_pages(ConnectionArgs* conn_arg, const char *to_fullpath, const char *from_f
  * array of headers.
  */
 BackupPageHeader2*
-get_data_file_headers(const char *fullpath, pgFile *file, uint32 backup_version)
+get_data_file_headers(HeaderMap *hdr_map, pgFile *file, uint32 backup_version)
 {
-	int   len;
-	FILE *in = NULL;
+	size_t   read_len = 0;
+	FILE    *in = NULL;
 	pg_crc32 hdr_crc;
-	char  fullpath_hdr[MAXPGPATH];
 	BackupPageHeader2 *headers = NULL;
 
 	if (backup_version < 20400)
@@ -2134,70 +2135,83 @@ get_data_file_headers(const char *fullpath, pgFile *file, uint32 backup_version)
 	if (file->n_headers <= 0)
 		return NULL;
 
-	snprintf(fullpath_hdr, MAXPGPATH, "%s_hdr", fullpath);
-
-	in = fopen(fullpath_hdr, PG_BINARY_R);
+	in = fopen(hdr_map->path, PG_BINARY_R);
 
 	if (!in)
-		elog(ERROR, "Cannot open header file \"%s\": %s", fullpath_hdr, strerror(errno));
+		elog(ERROR, "Cannot open header file \"%s\": %s", hdr_map->path, strerror(errno));
+
+	/* disable buffering */
+	setvbuf(in, NULL, _IONBF, BUFSIZ);
+
+	if (fseek(in, file->hdr_off, SEEK_SET))
+		elog(ERROR, "Cannot seek to position %lu in header map \"%s\": %s",
+			file->hdr_off, hdr_map->path, strerror(errno));
 
 	/*
 	 * the actual number of headers in header file is n+1, last one is a dummy header,
 	 * used for calculation of compressed_size for actual last header.
 	 */
-	len = (file->n_headers+1) * sizeof(BackupPageHeader2);
-	headers = pgut_malloc(len);
+	read_len = (file->n_headers+1) * sizeof(BackupPageHeader2);
+	headers = pgut_malloc(read_len);
 
-	if (fread(headers, 1, len, in) != len)
-		elog(ERROR, "Cannot read header file \"%s\": %s", fullpath_hdr, strerror(errno));
+	if (fread(headers, 1, read_len, in) != read_len)
+		elog(ERROR, "Cannot read header file \"%s\": %s", hdr_map->path, strerror(errno));
 
 	/* validate checksum */
 	INIT_FILE_CRC32(true, hdr_crc);
-	COMP_FILE_CRC32(true, hdr_crc, headers, len);
+	COMP_FILE_CRC32(true, hdr_crc, headers, read_len);
 	FIN_FILE_CRC32(true, hdr_crc);
 
 	if (hdr_crc != file->hdr_crc)
 		elog(ERROR, "Header file crc mismatch \"%s\", current: %u, expected: %u",
-			fullpath_hdr, hdr_crc, file->hdr_crc);
+			hdr_map->path, hdr_crc, file->hdr_crc);
 
 	if (fclose(in))
-		elog(ERROR, "Cannot close header file \"%s\": %s", fullpath_hdr, strerror(errno));
+		elog(ERROR, "Cannot close header file \"%s\": %s", hdr_map->path, strerror(errno));
 
 	return headers;
 }
 
 void
-write_page_headers(BackupPageHeader2 *headers, pgFile *file, const char* to_fullpath)
+write_page_headers(BackupPageHeader2 *headers, pgFile *file, HeaderMap *hdr_map)
 {
-	FILE  *out = NULL;
-	size_t hdr_size = 0;
-	char   to_fullpath_hdr[MAXPGPATH];
+	size_t read_len = 0;
 
 	if (file->n_headers <= 0)
 		return;
 
-	snprintf(to_fullpath_hdr, MAXPGPATH, "%s_hdr", to_fullpath);
+	/* writing to header map must be serialized */
+	pthread_lock(&(hdr_map->mutex)); /* what if we crash while trying to obtain mutex? */
 
-	out = fopen(to_fullpath_hdr, PG_BINARY_W);
-	if (out == NULL)
-		elog(ERROR, "Cannot open header file \"%s\": %s",
-			 to_fullpath, strerror(errno));
-	
-	/* update file permission */
-	if (chmod(to_fullpath_hdr, FILE_PERMISSION) == -1)
-		elog(ERROR, "Cannot change mode of \"%s\": %s", to_fullpath,
-			 strerror(errno));
+	if (!hdr_map->fp)
+	{
+		hdr_map->fp = fopen(hdr_map->path, PG_BINARY_W);
+		if (hdr_map->fp == NULL)
+			elog(ERROR, "Cannot open header file \"%s\": %s",
+				 hdr_map->path, strerror(errno));
 
-	hdr_size = (file->n_headers+1) * sizeof(BackupPageHeader2);
+		/* disable buffering for header file */
+		setvbuf(hdr_map->fp, NULL, _IONBF, BUFSIZ);
+
+		/* update file permission */
+		if (chmod(hdr_map->path, FILE_PERMISSION) == -1)
+			elog(ERROR, "Cannot change mode of \"%s\": %s", hdr_map->path,
+				 strerror(errno));
+
+		file->hdr_off = 0;
+	}
+	else
+		file->hdr_off = ftell(hdr_map->fp); /* TODO: replace by counter */
+
+	read_len = (file->n_headers+1) * sizeof(BackupPageHeader2);
 
 	/* calculate checksums */
 	INIT_FILE_CRC32(true, file->hdr_crc);
-	COMP_FILE_CRC32(true, file->hdr_crc, headers, hdr_size);
+	COMP_FILE_CRC32(true, file->hdr_crc, headers, read_len);
 	FIN_FILE_CRC32(true, file->hdr_crc);
 
-	if (fwrite(headers, 1, hdr_size, out) != hdr_size)
-		elog(ERROR, "Cannot write to file \"%s\": %s", to_fullpath_hdr, strerror(errno));
+	if (fwrite(headers, 1, read_len, hdr_map->fp) != read_len)
+		elog(ERROR, "Cannot write to file \"%s\": %s", hdr_map->path, strerror(errno));
 
-	if (fclose(out))
-		elog(ERROR, "Cannot close file \"%s\": %s", to_fullpath_hdr, strerror(errno));
+	pthread_mutex_unlock(&(hdr_map->mutex));
 }

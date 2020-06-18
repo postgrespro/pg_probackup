@@ -32,6 +32,7 @@ typedef struct
 	BackupMode	backup_mode;
 	parray		*dbOid_exclude_list;
 	const char	*external_prefix;
+	HeaderMap   *hdr_map;
 
 	/*
 	 * Return value from the thread.
@@ -156,6 +157,7 @@ pgBackupValidate(pgBackup *backup, pgRestoreParams *params)
 		arg->checksum_version = backup->checksum_version;
 		arg->backup_version = parse_program_version(backup->program_version);
 		arg->external_prefix = external_prefix;
+		arg->hdr_map = &(backup->hdr_map);
 //		arg->dbOid_exclude_list = dbOid_exclude_list;
 		/* By default there are some error */
 		threads_args[i].ret = 1;
@@ -365,7 +367,8 @@ pgBackupValidateFiles(void *arg)
 			 */
 			if (!validate_file_pages(file, file_fullpath, arguments->stop_lsn,
 								  arguments->checksum_version,
-								  arguments->backup_version))
+								  arguments->backup_version,
+								  arguments->hdr_map))
 				arguments->corrupted = true;
 		}
 	}

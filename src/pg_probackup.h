@@ -37,6 +37,7 @@
 #include "utils/file.h"
 
 #include "datapagemap.h"
+#include "utils/thread.h"
 
 /* pgut client variables and full path */
 extern const char  *PROGRAM_NAME;
@@ -65,6 +66,7 @@ extern const char  *PROGRAM_EMAIL;
 #define PG_TABLESPACE_MAP_FILE "tablespace_map"
 #define EXTERNAL_DIR			"external_directories/externaldir"
 #define DATABASE_MAP			"database_map"
+#define HEADER_MAP  			"block_header_map"
 
 /* Timeout defaults */
 #define ARCHIVE_TIMEOUT_DEFAULT		300
@@ -192,7 +194,6 @@ typedef struct pgFile
 								 */
 							/* we need int64 here to store '-1' value */
 	pg_crc32 crc;			/* CRC value of the file, regular file only */
-	pg_crc32 hdr_crc;		/* CRC value of header file: name_hdr */
 	char   *rel_path;		/* relative path of the file */
 	char   *linked;			/* path of the linked file */
 	bool	is_datafile;	/* true if the file is PostgreSQL data file */
@@ -202,7 +203,6 @@ typedef struct pgFile
 	ForkName   forkName;	/* forkName extracted from path, if applicable */
 	int		segno;			/* Segment number for ptrack */
 	int		n_blocks;		/* number of blocks in the data file in data directory */
-	int		n_headers;		/* number of blocks in the data file in backup */
 	bool	is_cfs;			/* Flag to distinguish files compressed by CFS*/
 	bool	is_database;	/* Flag used strictly by ptrack 1.x backup */
 	int		external_dir_num;	/* Number of external directory. 0 if not external */
@@ -213,6 +213,10 @@ typedef struct pgFile
 										   may take up to 16kB per file */
 	bool			pagemap_isabsent;	/* Used to mark files with unknown state of pagemap,
 										 * i.e. datafiles without _ptrack */
+	/* coordinates in header map */
+	int      n_headers;		/* number of blocks in the data file in backup */
+	pg_crc32 hdr_crc;		/* CRC value of header file: name_hdr */
+	off_t    hdr_off;       /* offset in header map */
 } pgFile;
 
 typedef struct page_map_entry
@@ -355,6 +359,16 @@ typedef struct PGNodeInfo
 
 } PGNodeInfo;
 
+/* structure used for access to block header map */
+typedef struct HeaderMap
+{
+	char  *path;
+	FILE  *fp;
+	off_t  offset;
+	pthread_mutex_t mutex;
+
+} HeaderMap;
+
 typedef struct pgBackup pgBackup;
 
 /* Information about single backup stored in backup.conf */
@@ -432,6 +446,9 @@ struct pgBackup
 	char			*note;
 
 	pg_crc32         content_crc;
+
+	/* mutex used for write access to block header map */
+	HeaderMap       hdr_map;
 };
 
 /* Recovery target for restore and validate subcommands */
@@ -504,6 +521,7 @@ typedef struct
 
 	ConnectionArgs conn_arg;
 	int			thread_num;
+	HeaderMap   *hdr_map;
 
 	/*
 	 * Return value from the thread.
@@ -962,7 +980,8 @@ extern void backup_data_file(ConnectionArgs* conn_arg, pgFile *file,
 								 const char *from_fullpath, const char *to_fullpath,
 								 XLogRecPtr prev_backup_start_lsn, BackupMode backup_mode,
 								 CompressAlg calg, int clevel, uint32 checksum_version,
-								 int ptrack_version_num, const char *ptrack_schema, bool missing_ok);
+								 int ptrack_version_num, const char *ptrack_schema,
+								 HeaderMap *hdr_map, bool missing_ok);
 extern void backup_non_data_file(pgFile *file, pgFile *prev_file,
 								 const char *from_fullpath, const char *to_fullpath,
 								 BackupMode backup_mode, time_t parent_backup_time,
@@ -974,7 +993,7 @@ extern void backup_non_data_file_internal(const char *from_fullpath,
 
 extern size_t restore_data_file(parray *parent_chain, pgFile *dest_file, FILE *out,
 								const char *to_fullpath, bool use_bitmap, PageState *checksum_map,
-								XLogRecPtr shift_lsn, datapagemap_t *lsn_map, bool is_merge);
+								XLogRecPtr shift_lsn, datapagemap_t *lsn_map, bool use_headers);
 extern size_t restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_version,
 										 const char *from_fullpath, const char *to_fullpath, int nblocks,
 										 datapagemap_t *map, PageState *checksum_map, int checksum_version,
@@ -994,7 +1013,7 @@ extern datapagemap_t *get_lsn_map(const char *fullpath, uint32 checksum_version,
 extern pid_t check_postmaster(const char *pgdata);
 
 extern bool validate_file_pages(pgFile *file, const char *fullpath, XLogRecPtr stop_lsn,
-							    uint32 checksum_version, uint32 backup_version);
+							    uint32 checksum_version, uint32 backup_version, HeaderMap *hdr_map);
 /* parsexlog.c */
 extern bool extractPageMap(const char *archivedir, uint32 wal_seg_size,
 						   XLogRecPtr startpoint, TimeLineID start_tli,
