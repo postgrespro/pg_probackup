@@ -115,10 +115,9 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
 
         delta_result_new = node.execute("postgres", "SELECT * FROM t_heap")
         self.assertEqual(delta_result, delta_result_new)
-        node.cleanup()
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname)
+        self.del_test_dir(module_name, fname, [node])
 
     def test_compression_archive_zlib(self):
         """

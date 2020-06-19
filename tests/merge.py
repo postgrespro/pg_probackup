@@ -100,8 +100,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(count1, count2)
 
         # Clean after yourself
-        node.cleanup()
-        self.del_test_dir(module_name, fname)
+        self.del_test_dir(module_name, fname, [node])
 
     def test_merge_compressed_backups(self):
         """
