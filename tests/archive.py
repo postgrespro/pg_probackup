@@ -988,7 +988,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         self.backup_node(backup_dir, 'master', replica)
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname)
+        self.del_test_dir(module_name, fname, nodes=[master, replica])
 
     # @unittest.expectedFailure
     # @unittest.skip("skip")

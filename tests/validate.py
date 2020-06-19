@@ -298,7 +298,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             'Backup STATUS should be "ORPHAN"')
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname)
+        self.del_test_dir(module_name, fname, [node])
 
     # @unittest.skip("skip")
     def test_validate_corrupted_intermediate_backups(self):

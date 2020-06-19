@@ -1068,7 +1068,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
             self.compare_pgdata(pgdata, pgdata_restored)
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname)
+        self.del_test_dir(module_name, fname, nodes=[node])
 
     # @unittest.skip("skip")
     def test_tablespace_handling_1(self):
@@ -1646,7 +1646,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(show_backup['status'], "OK")
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname)
+        self.del_test_dir(module_name, fname, nodes=[node])
 
     # @unittest.skip("skip")
     def test_pg_11_adjusted_wal_segment_size(self):
@@ -1930,7 +1930,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         os.chmod(full_path, 700)
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname)
+        self.del_test_dir(module_name, fname, [node])
 
     # @unittest.skip("skip")
     def test_basic_missing_dir_permissions(self):
@@ -1973,7 +1973,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         os.chmod(full_path, 700)
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname)
+        self.del_test_dir(module_name, fname, [node])
 
     # @unittest.skip("skip")
     def test_backup_with_least_privileges_role(self):
