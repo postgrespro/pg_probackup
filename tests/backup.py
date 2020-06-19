@@ -1387,7 +1387,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         with open(os.path.join(backup_dir, 'log', 'pg_probackup.log')) as f:
             log_content = f.read()
             self.assertTrue(
-                'LOG: File "{0}" is not found'.format(absolute_path) in log_content,
+                'LOG: File not found: "{0}"'.format(absolute_path) in log_content,
                 'File "{0}" should be deleted but it`s not'.format(absolute_path))
 
         node.cleanup()
@@ -1523,7 +1523,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         with open(os.path.join(backup_dir, 'log', 'pg_probackup.log')) as f:
             log_content = f.read()
             self.assertTrue(
-                'LOG: File "{0}" is not found'.format(absolute_path) in log_content,
+                'LOG: File not found: "{0}"'.format(absolute_path) in log_content,
                 'File "{0}" should be deleted but it`s not'.format(absolute_path))
 
         node.cleanup()

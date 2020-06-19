@@ -936,7 +936,7 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
     def test_backward_compatibility_merge_4(self):
         """
         Start merge between minor version, crash and retry it.
-        old binary version =< 2.2.7
+        old binary version =< 2.4.0
         """
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
@@ -982,17 +982,25 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
 
         gdb.set_breakpoint('rename')
         gdb.run_until_break()
-        gdb.continue_execution_until_break(1000)
+        gdb.continue_execution_until_break(500)
         gdb._execute('signal SIGKILL')
 
-        self.merge_backup(backup_dir, "node", page_id)
-
-        # check data correctness for PAGE
-        node_restored.cleanup()
-        self.restore_node(backup_dir, 'node', node_restored, backup_id=page_id)
-
-        pgdata_restored = self.pgdata_content(node_restored.data_dir)
-        self.compare_pgdata(pgdata, pgdata_restored)
+        try:
+            self.merge_backup(backup_dir, "node", page_id)
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because of format changes.\n "
+                "Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                "ERROR: Retry of failed merge for backups with different "
+                "between minor versions is forbidden to avoid data corruption "
+                "because of storage format changes introduced in 2.4.0 version, "
+                "please take a new full backup",
+                e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
