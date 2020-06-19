@@ -1601,7 +1601,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
             options=['--stream', '--slot=slot_1', '--temp-slot'])
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname)
+        self.del_test_dir(module_name, fname, [node])
 
     # @unittest.skip("skip")
     def test_backup_concurrent_drop_table(self):

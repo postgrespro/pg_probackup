@@ -45,39 +45,32 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
             "create table t_heap as select i as id, "
             "md5(i::text) as text, "
             "md5(repeat(i::text,10))::tsvector as tsvector "
-            "from generate_series(0,1024) i;"
-        )
+            "from generate_series(0,1024) i;")
 
         node.safe_psql(
             "postgres",
-            "vacuum t_heap"
-        )
+            "vacuum t_heap")
 
         self.backup_node(backup_dir, 'node', node, options=['--stream'])
 
         node.safe_psql(
             "postgres",
-            "delete from t_heap where ctid >= '(11,0)'"
-        )
+            "delete from t_heap where ctid >= '(11,0)'")
 
         node.safe_psql(
             "postgres",
-            "vacuum t_heap"
-        )
+            "vacuum t_heap")
 
         self.backup_node(
-            backup_dir, 'node', node, backup_type='delta'
-        )
+            backup_dir, 'node', node, backup_type='delta')
 
         self.backup_node(
-            backup_dir, 'node', node, backup_type='delta'
-        )
+            backup_dir, 'node', node, backup_type='delta')
 
         pgdata = self.pgdata_content(node.data_dir)
 
         self.restore_node(
-            backup_dir, 'node', node_restored
-        )
+            backup_dir, 'node', node_restored)
 
         # Physical comparison
         pgdata_restored = self.pgdata_content(node_restored.data_dir)
@@ -87,7 +80,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
         node_restored.slow_start()
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname, [node])
+        self.del_test_dir(module_name, fname, [node, node_restored])
 
     # @unittest.skip("skip")
     def test_delta_vacuum_truncate_1(self):
