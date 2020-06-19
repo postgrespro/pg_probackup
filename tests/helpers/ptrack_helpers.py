@@ -1448,12 +1448,15 @@ class ProbackupTest(object):
     def get_bin_path(self, binary):
         return testgres.get_bin_path(binary)
 
-    def del_test_dir(self, module_name, fname):
+    def del_test_dir(self, module_name, fname, nodes=[]):
         """ Del testdir and optimistically try to del module dir"""
         try:
             testgres.clean_all()
         except:
             pass
+
+        for node in nodes:
+            node.stop()
 
         shutil.rmtree(
             os.path.join(

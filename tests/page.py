@@ -100,7 +100,7 @@ class PageTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(result1, result2)
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname)
+        self.del_test_dir(module_name, fname, [node, node_restored])
 
     # @unittest.skip("skip")
     def test_page_vacuum_truncate_1(self):
