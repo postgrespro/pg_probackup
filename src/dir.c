@@ -250,21 +250,6 @@ delete_file:
 		elog(ERROR, "Cannot remove file \"%s\": %s", full_path,
 			strerror(errno));
 	}
-
-	if (file->n_headers > 0)
-	{
-		char full_path_hdr[MAXPGPATH];
-
-		snprintf(full_path_hdr, MAXPGPATH, "%s_hdr", full_path);
-
-		if (remove(full_path_hdr) == -1)
-		{
-			if (errno == ENOENT)
-				return;
-			elog(ERROR, "Cannot remove file \"%s\": %s", full_path_hdr,
-				strerror(errno));
-		}
-	}
 }
 
 /*

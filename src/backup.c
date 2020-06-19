@@ -596,8 +596,14 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool
 	}
 
 	/* close block header map */
-	if (current.hdr_map.fp && fclose(current.hdr_map.fp))
-		elog(ERROR, "Cannot close file \"%s\"", current.hdr_map.path);
+	if (current.hdr_map.fp)
+	{
+		if (fclose(current.hdr_map.fp))
+			elog(ERROR, "Cannot close file \"%s\"", current.hdr_map.path);
+
+		if (fio_sync(current.hdr_map.path, FIO_BACKUP_HOST) != 0)
+			elog(ERROR, "Cannot sync file \"%s\": %s", current.hdr_map.path, strerror(errno));
+	}
 
 	/* close ssh session in main thread */
 	fio_disconnect();
@@ -693,24 +699,7 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool
 
 			if (fio_sync(to_fullpath, FIO_BACKUP_HOST) != 0)
 				elog(ERROR, "Cannot sync file \"%s\": %s", to_fullpath, strerror(errno));
-
-			/* fsync header file */
-			if (file->external_dir_num == 0 &&
-				file->is_datafile && !file->is_cfs &&
-				file->n_headers > 0)
-			{
-				char		to_fullpath_hdr[MAXPGPATH];
-
-				snprintf(to_fullpath_hdr, MAXPGPATH, "%s_hdr", to_fullpath);
-
-				if (fio_sync(to_fullpath, FIO_BACKUP_HOST) != 0)
-					elog(ERROR, "Cannot sync file \"%s\": %s", to_fullpath_hdr, strerror(errno));
-
-			}
 		}
-
-		if (fio_sync(current.hdr_map.path, FIO_BACKUP_HOST) != 0)
-			elog(ERROR, "Cannot sync file \"%s\": %s", current.hdr_map.path, strerror(errno));
 
 		time(&end_time);
 		pretty_time_interval(difftime(end_time, start_time),
