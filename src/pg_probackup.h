@@ -92,6 +92,7 @@ extern const char  *PROGRAM_EMAIL;
 
 #define ERRMSG_MAX_LEN 2048
 #define CHUNK_SIZE (128 * 1024)
+#define LARGE_CHUNK_SIZE (4 * 1024 * 1024)
 #define OUT_BUF_SIZE (512 * 1024)
 
 /* retry attempts */
@@ -364,11 +365,14 @@ typedef struct PGNodeInfo
 /* structure used for access to block header map */
 typedef struct HeaderMap
 {
-	char  *path;
-	char  *path_tmp;	/* used only in merge */
-	char  *buf;	        /* buffer */
-	FILE  *fp;
-	off_t  offset;
+	char  path[MAXPGPATH];
+	char  path_tmp[MAXPGPATH];	/* used only in merge */
+	char  *r_buf;	    /* buffer */
+	char  *w_buf;	    /* buffer */
+	FILE  *r_fp;        /* descriptor used for reading */
+	FILE  *w_fp;        /* descriptor used for writing */
+	off_t  r_offset;    /* current position in r_fp */
+	off_t  w_offset;    /* current position in w_fp */
 	pthread_mutex_t mutex;
 
 } HeaderMap;
@@ -1021,6 +1025,8 @@ extern bool validate_file_pages(pgFile *file, const char *fullpath, XLogRecPtr s
 
 extern BackupPageHeader2* get_data_file_headers(HeaderMap *hdr_map, pgFile *file, uint32 backup_version);
 extern void write_page_headers(BackupPageHeader2 *headers, pgFile *file, HeaderMap *hdr_map, bool is_merge);
+extern void init_header_map(pgBackup *backup);
+extern void cleanup_header_map(HeaderMap *hdr_map);
 /* parsexlog.c */
 extern bool extractPageMap(const char *archivedir, uint32 wal_seg_size,
 						   XLogRecPtr startpoint, TimeLineID start_tli,

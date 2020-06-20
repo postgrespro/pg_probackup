@@ -706,10 +706,9 @@ merge_chain(parray *parent_chain, pgBackup *full_backup, pgBackup *dest_backup)
 				pretty_time);
 
 	/* If temp header map descriptor is open, then close it and make rename */
-	if (full_backup->hdr_map.fp)
+	if (full_backup->hdr_map.w_fp)
 	{
-		if (fclose(full_backup->hdr_map.fp))
-			elog(ERROR, "Cannot close file \"%s\"", full_backup->hdr_map.path);
+		cleanup_header_map(&(full_backup->hdr_map));
 
 		/* sync new header map to dist */
 		if (fio_sync(full_backup->hdr_map.path_tmp, FIO_BACKUP_HOST) != 0)
@@ -717,13 +716,16 @@ merge_chain(parray *parent_chain, pgBackup *full_backup, pgBackup *dest_backup)
 				full_backup->hdr_map.path_tmp, strerror(errno));
 
 		/* Replace old header map with new one */
-		if (rename(full_backup->hdr_map.path_tmp, full_backup->hdr_map.path) == -1)
+		if (rename(full_backup->hdr_map.path_tmp, full_backup->hdr_map.path))
 			elog(ERROR, "Could not rename file \"%s\" to \"%s\": %s",
 				 full_backup->hdr_map.path_tmp, full_backup->hdr_map.path, strerror(errno));
+	}
 
-		full_backup->hdr_map.fp = NULL;
-		pg_free(full_backup->hdr_map.buf);
-		full_backup->hdr_map.buf = NULL;
+	/* Close page header maps */
+	for (i = parray_num(parent_chain) - 1; i >= 0; i--)
+	{
+		pgBackup   *backup = (pgBackup *) parray_get(parent_chain, i);
+		cleanup_header_map(&(backup->hdr_map));
 	}
 
 	/*
@@ -868,11 +870,8 @@ merge_rename:
 		full_backup->root_dir = pgut_strdup(destination_path);
 	}
 
-	/* Reinit some path variables */
+	/* Reinit path to database_dir */
 	join_path_components(full_backup->database_dir, full_backup->root_dir, DATABASE_DIR);
-	join_path_components(full_backup->hdr_map.path, full_backup->root_dir, HEADER_MAP);
-	join_path_components(full_backup->hdr_map.path_tmp, full_backup->root_dir, HEADER_MAP_TMP);
-	full_backup->hdr_map.fp = NULL;
 
 	/* If we crash here, it will produce full backup in MERGED
 	 * status, located in directory with wrong backup id.

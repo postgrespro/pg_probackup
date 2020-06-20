@@ -505,6 +505,9 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool
 						  instance_config.pgdata, external_dirs, true);
 	write_backup(&current, true);
 
+	/* Init backup page header map */
+	init_header_map(&current);
+
 	/* init thread args with own file lists */
 	threads = (pthread_t *) palloc(sizeof(pthread_t) * num_threads);
 	threads_args = (backup_files_arg *) palloc(sizeof(backup_files_arg)*num_threads);
@@ -595,18 +598,13 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool
 		set_min_recovery_point(pg_control, database_path, current.stop_lsn);
 	}
 
-	/* close block header map */
-	if (current.hdr_map.fp)
+	/* close and sync page header map */
+	if (current.hdr_map.w_fp)
 	{
-		if (fclose(current.hdr_map.fp))
-			elog(ERROR, "Cannot close file \"%s\"", current.hdr_map.path);
+		cleanup_header_map(&(current.hdr_map));
 
 		if (fio_sync(current.hdr_map.path, FIO_BACKUP_HOST) != 0)
 			elog(ERROR, "Cannot sync file \"%s\": %s", current.hdr_map.path, strerror(errno));
-
-		current.hdr_map.fp = NULL;
-		pg_free(current.hdr_map.buf);
-		current.hdr_map.buf = NULL;
 	}
 
 	/* close ssh session in main thread */

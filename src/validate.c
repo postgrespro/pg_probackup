@@ -185,6 +185,7 @@ pgBackupValidate(pgBackup *backup, pgRestoreParams *params)
 	/* cleanup */
 	parray_walk(files, pgFileFree);
 	parray_free(files);
+	cleanup_header_map(&(backup->hdr_map));
 
 	/* Update backup status */
 	if (corrupted)

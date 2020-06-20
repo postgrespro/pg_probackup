@@ -925,6 +925,13 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 		elog(ERROR, "Backup files restoring failed. Transfered bytes: %s, time elapsed: %s",
 			pretty_total_bytes, pretty_time);
 
+	/* Close page header maps */
+	for (i = parray_num(parent_chain) - 1; i >= 0; i--)
+	{
+		pgBackup   *backup = (pgBackup *) parray_get(parent_chain, i);
+		cleanup_header_map(&(backup->hdr_map));
+	}
+
 	if (no_sync)
 		elog(WARNING, "Restored files are not synced to disk");
 	else
