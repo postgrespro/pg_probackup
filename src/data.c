@@ -2130,6 +2130,9 @@ get_data_file_headers(HeaderMap *hdr_map, pgFile *file, uint32 backup_version)
 	FILE    *in = NULL;
 	pg_crc32 hdr_crc;
 	BackupPageHeader2 *headers = NULL;
+	/* header decompression */
+	char   *zheaders = NULL;
+	const char *errormsg = NULL;
 
 	if (backup_version < 20400)
 		return NULL;
@@ -2150,14 +2153,33 @@ get_data_file_headers(HeaderMap *hdr_map, pgFile *file, uint32 backup_version)
 			file->hdr_off, hdr_map->path, strerror(errno));
 
 	/*
-	 * the actual number of headers in header file is n+1, last one is a dummy header,
-	 * used for calculation of compressed_size for actual last header.
+	 * The actual number of headers in header file is n+1, last one is a dummy header,
+	 * used for calculation of read_len for actual last header.
 	 */
 	read_len = (file->n_headers+1) * sizeof(BackupPageHeader2);
-	headers = pgut_malloc(read_len);
 
-	if (fread(headers, 1, read_len, in) != read_len)
-		elog(ERROR, "Cannot read header file \"%s\": %s", hdr_map->path, strerror(errno));
+	/* allocate memory for compressed and uncompressed headers */
+	headers = pgut_malloc(read_len);
+	memset(headers, 0, read_len);
+	zheaders = pgut_malloc(file->hdr_size);
+	memset(zheaders, 0, file->hdr_size);
+
+	if (fread(zheaders, 1, file->hdr_size, in) != file->hdr_size)
+		elog(ERROR, "Cannot read header file at offset: %li len: %i \"%s\": %s",
+			file->hdr_off, file->hdr_size, hdr_map->path, strerror(errno));
+
+//	elog(INFO, "zsize: %i, size: %i", file->hdr_size, read_len);
+
+	if (do_decompress(headers, read_len, zheaders, file->hdr_size,
+				      ZLIB_COMPRESS, &errormsg) != read_len)
+	{
+		if (errormsg)
+			elog(ERROR, "An error occured during metadata decompression for file \"%s\": %s",
+				 file->rel_path, errormsg);
+		else
+			elog(ERROR, "An error occured during metadata decompression for file \"%s\"",
+				 file->rel_path);
+	}
 
 	/* validate checksum */
 	INIT_FILE_CRC32(true, hdr_crc);
@@ -2171,6 +2193,8 @@ get_data_file_headers(HeaderMap *hdr_map, pgFile *file, uint32 backup_version)
 	if (fclose(in))
 		elog(ERROR, "Cannot close header file \"%s\": %s", hdr_map->path, strerror(errno));
 
+	pg_free(zheaders);
+
 	return headers;
 }
 
@@ -2179,6 +2203,10 @@ write_page_headers(BackupPageHeader2 *headers, pgFile *file, HeaderMap *hdr_map,
 {
 	size_t  read_len = 0;
 	char   *map_path = NULL;
+	/* header compression */
+	int     z_len = 0;
+	char   *zheaders = NULL;
+	const char *errormsg = NULL;
 
 	if (file->n_headers <= 0)
 		return;
@@ -2219,11 +2247,34 @@ write_page_headers(BackupPageHeader2 *headers, pgFile *file, HeaderMap *hdr_map,
 	COMP_FILE_CRC32(true, file->hdr_crc, headers, read_len);
 	FIN_FILE_CRC32(true, file->hdr_crc);
 
-	if (fwrite(headers, 1, read_len, hdr_map->fp) != read_len)
+	zheaders = pgut_malloc(read_len*2);
+	memset(zheaders, 0, read_len*2);
+
+	z_len = do_compress(zheaders, read_len*2, headers,
+					   read_len, ZLIB_COMPRESS, 1, &errormsg);
+
+	if (z_len < 0)
+	{
+		if (errormsg)
+			elog(ERROR, "An error occured during compressing metadata for file \"%s\": %s",
+				 file->rel_path, errormsg);
+		else
+			elog(ERROR, "An error occured during compressing metadata for file \"%s\": %i",
+				 file->rel_path, z_len);
+	}
+
+	if (fwrite(zheaders, 1, z_len, hdr_map->fp) != z_len)
 		elog(ERROR, "Cannot write to file \"%s\": %s", map_path, strerror(errno));
 
-	elog(VERBOSE, "Writing header map for file \"%s\" offset: %lu, len: %lu, crc: %u",
-			file->rel_path, file->hdr_off, read_len, file->hdr_crc);
+	elog(VERBOSE, "Writing header map for file \"%s\" offset: %li, len: %i, crc: %u",
+			file->rel_path, file->hdr_off, z_len, file->hdr_crc);
 
+//	elog(INFO, "File: %s, Unzip: %i, zip: %i", file->rel_path, read_len, z_len);
+
+	file->hdr_size = z_len;
+
+	/* End critical section */
 	pthread_mutex_unlock(&(hdr_map->mutex));
+
+	pg_free(zheaders);
 }

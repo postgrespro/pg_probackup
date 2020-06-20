@@ -1552,7 +1552,8 @@ dir_read_file_list(const char *root, const char *external_prefix,
 					n_headers,
 					dbOid,		/* used for partial restore */
 					hdr_crc,
-					hdr_off;
+					hdr_off,
+					hdr_size;
 		pgFile	   *file;
 
 		COMP_FILE_CRC32(true, content_crc, buf, strlen(buf));
@@ -1601,6 +1602,9 @@ dir_read_file_list(const char *root, const char *external_prefix,
 
 		if (get_control_value(buf, "hdr_off", NULL, &hdr_off, false))
 			file->hdr_off = hdr_off;
+
+		if (get_control_value(buf, "hdr_size", NULL, &hdr_size, false))
+			file->hdr_size = (int) hdr_size;
 
 		parray_append(files, file);
 	}

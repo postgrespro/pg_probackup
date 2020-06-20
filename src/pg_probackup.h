@@ -214,10 +214,11 @@ typedef struct pgFile
 										   may take up to 16kB per file */
 	bool			pagemap_isabsent;	/* Used to mark files with unknown state of pagemap,
 										 * i.e. datafiles without _ptrack */
-	/* coordinates in header map */
+	/* Coordinates in header map */
 	int      n_headers;		/* number of blocks in the data file in backup */
 	pg_crc32 hdr_crc;		/* CRC value of header file: name_hdr */
 	off_t    hdr_off;       /* offset in header map */
+	int      hdr_size;       /* offset in header map */
 } pgFile;
 
 typedef struct page_map_entry

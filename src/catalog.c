@@ -1926,6 +1926,7 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 			len += sprintf(line+len, ",\"n_headers\":\"%i\"", file->n_headers);
 			len += sprintf(line+len, ",\"hdr_crc\":\"%u\"", file->hdr_crc);
 			len += sprintf(line+len, ",\"hdr_off\":\"%li\"", file->hdr_off);
+			len += sprintf(line+len, ",\"hdr_size\":\"%i\"", file->hdr_size);
 		}
 
 		sprintf(line+len, "}\n");
