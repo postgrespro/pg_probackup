@@ -603,6 +603,10 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool
 
 		if (fio_sync(current.hdr_map.path, FIO_BACKUP_HOST) != 0)
 			elog(ERROR, "Cannot sync file \"%s\": %s", current.hdr_map.path, strerror(errno));
+
+		current.hdr_map.fp = NULL;
+		pg_free(current.hdr_map.buf);
+		current.hdr_map.buf = NULL;
 	}
 
 	/* close ssh session in main thread */
