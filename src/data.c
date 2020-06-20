@@ -2198,8 +2198,9 @@ write_page_headers(BackupPageHeader2 *headers, pgFile *file, HeaderMap *hdr_map,
 			elog(ERROR, "Cannot open header file \"%s\": %s",
 				 map_path, strerror(errno));
 
-		/* disable buffering for header file */
-		setvbuf(hdr_map->fp, NULL, _IONBF, BUFSIZ);
+		/* enable buffering for header file */
+		hdr_map->buf = pgut_malloc(STDIO_BUFSIZE);
+		setvbuf(hdr_map->fp, hdr_map->buf, _IOFBF, STDIO_BUFSIZE);
 
 		/* update file permission */
 		if (chmod(map_path, FILE_PERMISSION) == -1)

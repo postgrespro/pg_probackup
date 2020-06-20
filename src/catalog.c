@@ -475,11 +475,12 @@ catalog_get_backup_list(const char *instance_name, time_t requested_backup_id)
 		join_path_components(backup->database_dir, backup->root_dir, DATABASE_DIR);
 
 		/* block header map, TODO: move to separate function */
-		backup->hdr_map.path = pgut_malloc(MAXPGPATH);
-		join_path_components(backup->hdr_map.path, backup->database_dir, HEADER_MAP);
-		backup->hdr_map.path_tmp = pgut_malloc(MAXPGPATH);
-		join_path_components(backup->hdr_map.path_tmp, backup->database_dir, HEADER_MAP_TMP);
 		backup->hdr_map.fp = NULL;
+		backup->hdr_map.buf = NULL;
+		backup->hdr_map.path = pgut_malloc(MAXPGPATH);
+		join_path_components(backup->hdr_map.path, backup->root_dir, HEADER_MAP);
+		backup->hdr_map.path_tmp = pgut_malloc(MAXPGPATH);
+		join_path_components(backup->hdr_map.path_tmp, backup->root_dir, HEADER_MAP_TMP);
 
 		/* TODO: save encoded backup id */
 		backup->backup_id = backup->start_time;
@@ -855,11 +856,12 @@ pgBackupCreateDir(pgBackup *backup)
 	join_path_components(backup->database_dir, backup->root_dir, DATABASE_DIR);
 
 	/* block header map */
-	backup->hdr_map.path = pgut_malloc(MAXPGPATH);
-	join_path_components(backup->hdr_map.path, backup->database_dir, HEADER_MAP);
-	backup->hdr_map.path_tmp = pgut_malloc(MAXPGPATH);
-	join_path_components(backup->hdr_map.path_tmp, backup->database_dir, HEADER_MAP_TMP);
 	backup->hdr_map.fp = NULL;
+	backup->hdr_map.buf = NULL;
+	backup->hdr_map.path = pgut_malloc(MAXPGPATH);
+	join_path_components(backup->hdr_map.path, backup->root_dir, HEADER_MAP);
+	backup->hdr_map.path_tmp = pgut_malloc(MAXPGPATH);
+	join_path_components(backup->hdr_map.path_tmp, backup->root_dir, HEADER_MAP_TMP);
 
 	/* create directories for actual backup files */
 	for (i = 0; i < parray_num(subdirs); i++)

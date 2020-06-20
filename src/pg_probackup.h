@@ -365,6 +365,7 @@ typedef struct HeaderMap
 {
 	char  *path;
 	char  *path_tmp;	/* used only in merge */
+	char  *buf;	        /* buffer */
 	FILE  *fp;
 	off_t  offset;
 	pthread_mutex_t mutex;
@@ -449,7 +450,7 @@ struct pgBackup
 
 	pg_crc32         content_crc;
 
-	/* mutex used for write access to block header map */
+	/* map used for access to page headers */
 	HeaderMap       hdr_map;
 };
 

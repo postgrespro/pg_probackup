@@ -720,6 +720,10 @@ merge_chain(parray *parent_chain, pgBackup *full_backup, pgBackup *dest_backup)
 		if (rename(full_backup->hdr_map.path_tmp, full_backup->hdr_map.path) == -1)
 			elog(ERROR, "Could not rename file \"%s\" to \"%s\": %s",
 				 full_backup->hdr_map.path_tmp, full_backup->hdr_map.path, strerror(errno));
+
+		full_backup->hdr_map.fp = NULL;
+		pg_free(full_backup->hdr_map.buf);
+		full_backup->hdr_map.buf = NULL;
 	}
 
 	/*
@@ -866,8 +870,8 @@ merge_rename:
 
 	/* Reinit some path variables */
 	join_path_components(full_backup->database_dir, full_backup->root_dir, DATABASE_DIR);
-	join_path_components(full_backup->hdr_map.path, full_backup->database_dir, HEADER_MAP);
-	join_path_components(full_backup->hdr_map.path_tmp, full_backup->database_dir, HEADER_MAP_TMP);
+	join_path_components(full_backup->hdr_map.path, full_backup->root_dir, HEADER_MAP);
+	join_path_components(full_backup->hdr_map.path_tmp, full_backup->root_dir, HEADER_MAP_TMP);
 	full_backup->hdr_map.fp = NULL;
 
 	/* If we crash here, it will produce full backup in MERGED
