@@ -1046,8 +1046,10 @@ merge_files(void *arg)
 		/*
 		 * In-place merge means that file in FULL backup stays as it is,
 		 * no additional actions are required.
+		 * page header map cannot be trusted when retrying, so no
+		 * in place merge for retry.
 		 */
-		if (in_place)
+		if (in_place && !arguments->is_retry)
 		{
 			pgFile	   **res_file = NULL;
 			pgFile	   *file = NULL;
