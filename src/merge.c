@@ -705,12 +705,12 @@ merge_chain(parray *parent_chain, pgBackup *full_backup, pgBackup *dest_backup)
 		elog(ERROR, "Backup files merging failed, time elapsed: %s",
 				pretty_time);
 
-	/* If temp header map descriptor is open, then close it and make rename */
-	if (full_backup->hdr_map.w_fp)
+	/* If temp header map is open, then close it and make rename */
+	if (full_backup->hdr_map.fp)
 	{
 		cleanup_header_map(&(full_backup->hdr_map));
 
-		/* sync new header map to dist */
+		/* sync new header map to disk */
 		if (fio_sync(full_backup->hdr_map.path_tmp, FIO_BACKUP_HOST) != 0)
 			elog(ERROR, "Cannot sync temp header map \"%s\": %s",
 				full_backup->hdr_map.path_tmp, strerror(errno));

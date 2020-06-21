@@ -66,8 +66,8 @@ extern const char  *PROGRAM_EMAIL;
 #define PG_TABLESPACE_MAP_FILE "tablespace_map"
 #define EXTERNAL_DIR			"external_directories/externaldir"
 #define DATABASE_MAP			"database_map"
-#define HEADER_MAP  			"block_header_map"
-#define HEADER_MAP_TMP  		"block_header_map_tmp"
+#define HEADER_MAP  			"page_header_map"
+#define HEADER_MAP_TMP  		"page_header_map_tmp"
 
 /* Timeout defaults */
 #define ARCHIVE_TIMEOUT_DEFAULT		300
@@ -366,13 +366,10 @@ typedef struct PGNodeInfo
 typedef struct HeaderMap
 {
 	char  path[MAXPGPATH];
-	char  path_tmp[MAXPGPATH];	/* used only in merge */
-	char  *r_buf;	    /* buffer */
-	char  *w_buf;	    /* buffer */
-	FILE  *r_fp;        /* descriptor used for reading */
-	FILE  *w_fp;        /* descriptor used for writing */
-	off_t  r_offset;    /* current position in r_fp */
-	off_t  w_offset;    /* current position in w_fp */
+	char  path_tmp[MAXPGPATH]; /* used only in merge */
+	FILE  *fp;                 /* used only for writing */
+	char  *buf;	               /* buffer */
+	off_t  offset;             /* current position in fp */
 	pthread_mutex_t mutex;
 
 } HeaderMap;

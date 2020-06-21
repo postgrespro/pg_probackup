@@ -599,7 +599,7 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool
 	}
 
 	/* close and sync page header map */
-	if (current.hdr_map.w_fp)
+	if (current.hdr_map.fp)
 	{
 		cleanup_header_map(&(current.hdr_map));
 

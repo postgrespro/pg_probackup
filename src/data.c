@@ -2126,6 +2126,7 @@ send_pages(ConnectionArgs* conn_arg, const char *to_fullpath, const char *from_f
 BackupPageHeader2*
 get_data_file_headers(HeaderMap *hdr_map, pgFile *file, uint32 backup_version)
 {
+	FILE    *in = NULL;
 	size_t   read_len = 0;
 	pg_crc32 hdr_crc;
 	BackupPageHeader2 *headers = NULL;
@@ -2140,35 +2141,15 @@ get_data_file_headers(HeaderMap *hdr_map, pgFile *file, uint32 backup_version)
 	if (file->n_headers <= 0)
 		return NULL;
 
-//	in = fopen(hdr_map->path, PG_BINARY_R);
-//
-//	if (!in)
-//		elog(ERROR, "Cannot open header file \"%s\": %s", hdr_map->path, strerror(errno));
+	/* TODO: consider to make this descriptor thread-specific */
+	in = fopen(hdr_map->path, PG_BINARY_R);
 
-	if (!hdr_map->r_fp)
-	{
-		pthread_lock(&(hdr_map->mutex));
+	if (!in)
+		elog(ERROR, "Cannot open header file \"%s\": %s", hdr_map->path, strerror(errno));
+	/* disable buffering for header file */
+	setvbuf(in, NULL, _IONBF, BUFSIZ);
 
-		/* it is possible for another contender got here first, so double check */
-		if (!hdr_map->r_fp) /* this file will be closed in restore.c and merge.c */
-		{
-			elog(LOG, "Opening page header map \"%s\"", hdr_map->path);
-
-			hdr_map->r_fp = fopen(hdr_map->path, PG_BINARY_R);
-			if (hdr_map->r_fp == NULL)
-				elog(ERROR, "Cannot open header file \"%s\": %s",
-					 hdr_map->path, strerror(errno));
-
-			/* enable buffering for header file */
-			hdr_map->r_buf = pgut_malloc(LARGE_CHUNK_SIZE);
-			setvbuf(hdr_map->r_fp, hdr_map->r_buf, _IOFBF, LARGE_CHUNK_SIZE);
-		}
-
-		/* End critical section */
-		pthread_mutex_unlock(&(hdr_map->mutex));
-	}
-
-	if (fseek(hdr_map->r_fp, file->hdr_off, SEEK_SET))
+	if (fseek(in, file->hdr_off, SEEK_SET))
 		elog(ERROR, "Cannot seek to position %lu in page header map \"%s\": %s",
 			file->hdr_off, hdr_map->path, strerror(errno));
 
@@ -2184,7 +2165,7 @@ get_data_file_headers(HeaderMap *hdr_map, pgFile *file, uint32 backup_version)
 	zheaders = pgut_malloc(file->hdr_size);
 	memset(zheaders, 0, file->hdr_size);
 
-	if (fread(zheaders, 1, file->hdr_size, hdr_map->r_fp) != file->hdr_size)
+	if (fread(zheaders, 1, file->hdr_size, in) != file->hdr_size)
 		elog(ERROR, "Cannot read header file at offset: %li len: %i \"%s\": %s",
 			file->hdr_off, file->hdr_size, hdr_map->path, strerror(errno));
 
@@ -2211,6 +2192,9 @@ get_data_file_headers(HeaderMap *hdr_map, pgFile *file, uint32 backup_version)
 		elog(ERROR, "Header map for file \"%s\" crc mismatch \"%s\" offset: %lu, len: %lu, current: %u, expected: %u",
 			file->rel_path, hdr_map->path, file->hdr_off, read_len, hdr_crc, file->hdr_crc);
 
+	if (fclose(in))
+		elog(ERROR, "Cannot close file \"%s\"", hdr_map->path);
+
 	pg_free(zheaders);
 
 	return headers;
@@ -2231,33 +2215,6 @@ write_page_headers(BackupPageHeader2 *headers, pgFile *file, HeaderMap *hdr_map,
 
 	/* when running merge we must save headers into the temp map */
 	map_path = (is_merge) ? hdr_map->path_tmp : hdr_map->path;
-
-	/* writing to header map must be serialized */
-	pthread_lock(&(hdr_map->mutex)); /* what if we crash while trying to obtain mutex? */
-
-	if (!hdr_map->w_fp)
-	{
-		elog(LOG, "Creating page header map \"%s\"", map_path);
-
-		hdr_map->w_fp = fopen(map_path, PG_BINARY_W);
-		if (hdr_map->w_fp == NULL)
-			elog(ERROR, "Cannot open header file \"%s\": %s",
-				 map_path, strerror(errno));
-
-		/* enable buffering for header file */
-		hdr_map->w_buf = pgut_malloc(LARGE_CHUNK_SIZE);
-		setvbuf(hdr_map->w_fp, hdr_map->w_buf, _IOFBF, LARGE_CHUNK_SIZE);
-
-		/* update file permission */
-		if (chmod(map_path, FILE_PERMISSION) == -1)
-			elog(ERROR, "Cannot change mode of \"%s\": %s", map_path,
-				 strerror(errno));
-
-		file->hdr_off = 0;
-	}
-	else
-		file->hdr_off = ftell(hdr_map->w_fp); /* TODO: replace by counter */
-
 	read_len = (file->n_headers+1) * sizeof(BackupPageHeader2);
 
 	/* calculate checksums */
@@ -2268,8 +2225,35 @@ write_page_headers(BackupPageHeader2 *headers, pgFile *file, HeaderMap *hdr_map,
 	zheaders = pgut_malloc(read_len*2);
 	memset(zheaders, 0, read_len*2);
 
+	/* compress headers */
 	z_len = do_compress(zheaders, read_len*2, headers,
 					   read_len, ZLIB_COMPRESS, 1, &errormsg);
+
+	/* writing to header map must be serialized */
+	pthread_lock(&(hdr_map->mutex)); /* what if we crash while trying to obtain mutex? */
+
+	if (!hdr_map->fp)
+	{
+		elog(LOG, "Creating page header map \"%s\"", map_path);
+
+		hdr_map->fp = fopen(map_path, PG_BINARY_W);
+		if (hdr_map->fp == NULL)
+			elog(ERROR, "Cannot open header file \"%s\": %s",
+				 map_path, strerror(errno));
+
+		/* enable buffering for header file */
+		hdr_map->buf = pgut_malloc(LARGE_CHUNK_SIZE);
+		setvbuf(hdr_map->fp, hdr_map->buf, _IOFBF, LARGE_CHUNK_SIZE);
+
+		/* update file permission */
+		if (chmod(map_path, FILE_PERMISSION) == -1)
+			elog(ERROR, "Cannot change mode of \"%s\": %s", map_path,
+				 strerror(errno));
+
+		file->hdr_off = 0;
+	}
+	else
+		file->hdr_off = hdr_map->offset;
 
 	if (z_len <= 0)
 	{
@@ -2281,15 +2265,14 @@ write_page_headers(BackupPageHeader2 *headers, pgFile *file, HeaderMap *hdr_map,
 				 file->rel_path, z_len);
 	}
 
-	if (fwrite(zheaders, 1, z_len, hdr_map->w_fp) != z_len)
-		elog(ERROR, "Cannot write to file \"%s\": %s", map_path, strerror(errno));
-
-	elog(VERBOSE, "Writing header map for file \"%s\" offset: %li, len: %i, crc: %u",
+	elog(VERBOSE, "Writing headers for file \"%s\" offset: %li, len: %i, crc: %u",
 			file->rel_path, file->hdr_off, z_len, file->hdr_crc);
 
-	elog(INFO, "File: %s, Unzip: %li, zip: %i", file->rel_path, read_len, z_len);
+	if (fwrite(zheaders, 1, z_len, hdr_map->fp) != z_len)
+		elog(ERROR, "Cannot write to file \"%s\": %s", map_path, strerror(errno));
 
-	file->hdr_size = z_len;
+	file->hdr_size = z_len;   /* save the length of compressed headers */
+	hdr_map->offset += z_len; /* update current offset in map */
 
 	/* End critical section */
 	pthread_mutex_unlock(&(hdr_map->mutex));
@@ -2300,10 +2283,8 @@ write_page_headers(BackupPageHeader2 *headers, pgFile *file, HeaderMap *hdr_map,
 void
 init_header_map(pgBackup *backup)
 {
-	backup->hdr_map.r_fp = NULL;
-	backup->hdr_map.w_fp = NULL;
-	backup->hdr_map.r_buf = NULL;
-	backup->hdr_map.w_buf = NULL;
+	backup->hdr_map.fp = NULL;
+	backup->hdr_map.buf = NULL;
 	join_path_components(backup->hdr_map.path, backup->root_dir, HEADER_MAP);
 	join_path_components(backup->hdr_map.path_tmp, backup->root_dir, HEADER_MAP_TMP);
 	backup->hdr_map.mutex = (pthread_mutex_t)PTHREAD_MUTEX_INITIALIZER;
@@ -2312,22 +2293,11 @@ init_header_map(pgBackup *backup)
 void
 cleanup_header_map(HeaderMap *hdr_map)
 {
-
-	/* cleanup read descriptor */
-	if (hdr_map->r_fp && fclose(hdr_map->r_fp))
+	/* cleanup descriptor */
+	if (hdr_map->fp && fclose(hdr_map->fp))
 		elog(ERROR, "Cannot close file \"%s\"", hdr_map->path);
-
-	hdr_map->r_fp = NULL;
-	pg_free(hdr_map->r_buf);
-	hdr_map->r_buf = NULL;
-	hdr_map->r_offset = 0;
-
-	/* cleanup write descriptor */
-	if (hdr_map->w_fp && fclose(hdr_map->w_fp))
-		elog(ERROR, "Cannot close file \"%s\"", hdr_map->path);
-
-	hdr_map->w_fp = NULL;
-	pg_free(hdr_map->w_buf);
-	hdr_map->w_buf = NULL;
-	hdr_map->w_offset = 0;
+	hdr_map->fp = NULL;
+	hdr_map->offset = 0;
+	pg_free(hdr_map->buf);
+	hdr_map->buf = NULL;
 }
