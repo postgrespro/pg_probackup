@@ -2244,7 +2244,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
                     repr(e.message), self.cmd))
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname)
+        self.del_test_dir(module_name, fname, [node])
 
     # @unittest.skip("skip")
     def test_smart_merge(self):
@@ -2304,7 +2304,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
                 logfile_content = f.read()
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname)
+        self.del_test_dir(module_name, fname, [node])
 
     def test_idempotent_merge(self):
         """
@@ -2379,8 +2379,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(
             page_id_2, self.show_pb(backup_dir, 'node')[0]['id'])
 
-
-        self.del_test_dir(module_name, fname)
+        self.del_test_dir(module_name, fname, [node])
 
     def test_merge_correct_inheritance(self):
         """
@@ -2435,7 +2434,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
             page_meta['expire-time'],
             self.show_pb(backup_dir, 'node', page_id)['expire-time'])
 
-        self.del_test_dir(module_name, fname)
+        self.del_test_dir(module_name, fname, [node])
 
     def test_merge_correct_inheritance_1(self):
         """
@@ -2485,7 +2484,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
             'expire-time',
             self.show_pb(backup_dir, 'node', page_id))
 
-        self.del_test_dir(module_name, fname)
+        self.del_test_dir(module_name, fname, [node])
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure
@@ -2602,6 +2601,56 @@ class MergeTest(ProbackupTest, unittest.TestCase):
             options=[
                 '--amcheck',
                 '-d', 'postgres', '-p', str(node_restored.port)])
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname, [node, node_restored])
+
+    # @unittest.skip("skip")
+    # @unittest.expectedFailure
+    def test_merge_page_header_map_retry(self):
+        """
+        page header map cannot be trusted when
+        running retry
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={'autovacuum': 'off'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.slow_start()
+
+        node.pgbench_init(scale=20)
+        self.backup_node(backup_dir, 'node', node, options=['--stream'])
+
+        pgbench = node.pgbench(options=['-T', '10', '-c', '1', '--no-vacuum'])
+        pgbench.wait()
+
+        delta_id = self.backup_node(
+            backup_dir, 'node', node,
+            backup_type='delta', options=['--stream'])
+
+        pgdata = self.pgdata_content(node.data_dir)
+
+        gdb = self.merge_backup(backup_dir, 'node', delta_id, gdb=True)
+
+        # our goal here is to get full backup with merged data files,
+        # but with old page header map
+        gdb.set_breakpoint('cleanup_header_map')
+        gdb.run_until_break()
+        gdb._execute('signal SIGKILL')
+
+        self.merge_backup(backup_dir, 'node', delta_id)
+
+        node.cleanup()
+
+        self.restore_node(backup_dir, 'node', node)
+        pgdata_restored = self.pgdata_content(node.data_dir)
+        self.compare_pgdata(pgdata, pgdata_restored)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
