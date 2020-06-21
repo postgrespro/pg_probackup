@@ -1919,7 +1919,8 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
-            initdb_params=['--data-checksums'])
+            initdb_params=['--data-checksums'],
+            pg_options={'archive_timeout': '10s'})
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -1942,9 +1943,6 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
         replica.slow_start(replica=True)
 
-        # FULL
-        self.backup_node(backup_dir, 'replica', replica, options=['--stream'])
-
         if self.get_version(replica) < 100000:
             pg_receivexlog_path = self.get_bin_path('pg_receivexlog')
         else:
@@ -1965,9 +1963,8 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
                 'Failed to start pg_receivexlog: {0}'.format(
                     pg_receivexlog.communicate()[1]))
 
-        replica.safe_psql(
-            'postgres',
-            'CHECKPOINT')
+        # FULL
+        self.backup_node(backup_dir, 'replica', replica, options=['--stream'])
 
         node.safe_psql(
             "postgres",
@@ -1976,7 +1973,8 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             "from generate_series(0,1000000) i")
 
         # PAGE
-        self.backup_node(backup_dir, 'replica', replica, backup_type='page')
+        self.backup_node(
+            backup_dir, 'replica', replica, backup_type='delta', options=['--stream'])
 
         node.safe_psql(
             "postgres",
@@ -2013,7 +2011,8 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         pg_receivexlog.kill()
-        self.del_test_dir(module_name, fname)
+        self.del_test_dir(
+            module_name, fname, [node, replica, node_restored])
 
     @unittest.skip("skip")
     def test_multi_timeline_recovery_prefetching(self):
