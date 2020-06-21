@@ -3768,6 +3768,202 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
+    # @unittest.expectedFailure
+    # @unittest.skip("skip")
+    def test_validate_corrupt_page_header_map(self):
+        """
+        Check that corruption in page_header_map is detected
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.slow_start()
+
+        ok_1 = self.backup_node(backup_dir, 'node', node, options=['--stream'])
+
+        # FULL backup
+        backup_id = self.backup_node(
+            backup_dir, 'node', node, options=['--stream'])
+
+        ok_2 = self.backup_node(backup_dir, 'node', node, options=['--stream'])
+
+        page_header_map = os.path.join(
+            backup_dir, 'backups', 'node', backup_id, 'page_header_map')
+
+        # Corrupt tablespace_map file in FULL backup
+        with open(page_header_map, "rb+", 0) as f:
+            f.seek(42)
+            f.write(b"blah")
+            f.flush()
+            f.close
+
+        try:
+            self.validate_pb(backup_dir, 'node', backup_id=backup_id)
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because page_header is corrupted.\n "
+                "Output: {0} \n CMD: {1}".format(
+                    self.output, self.cmd))
+        except ProbackupException as e:
+            self.assertTrue(
+                'WARNING: An error occured during metadata decompression' in e.message and
+                'data error' in e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+            self.assertIn("Backup {0} is corrupt".format(backup_id), e.message)
+
+        try:
+            self.validate_pb(backup_dir)
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because page_header is corrupted.\n "
+                "Output: {0} \n CMD: {1}".format(
+                    self.output, self.cmd))
+        except ProbackupException as e:
+            self.assertTrue(
+                'WARNING: An error occured during metadata decompression' in e.message and
+                'data error' in e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+            self.assertIn("INFO: Backup {0} data files are valid".format(ok_1), e.message)
+            self.assertIn("WARNING: Backup {0} data files are corrupted".format(backup_id), e.message)
+            self.assertIn("INFO: Backup {0} data files are valid".format(ok_2), e.message)
+
+            self.assertIn("WARNING: Some backups are not valid", e.message)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname, [node])
+
+    # @unittest.expectedFailure
+    # @unittest.skip("skip")
+    def test_validate_truncated_page_header_map(self):
+        """
+        Check that corruption in page_header_map is detected
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.slow_start()
+
+        ok_1 = self.backup_node(backup_dir, 'node', node, options=['--stream'])
+
+        # FULL backup
+        backup_id = self.backup_node(
+            backup_dir, 'node', node, options=['--stream'])
+
+        ok_2 = self.backup_node(backup_dir, 'node', node, options=['--stream'])
+
+        page_header_map = os.path.join(
+            backup_dir, 'backups', 'node', backup_id, 'page_header_map')
+
+        # truncate page_header_map file
+        with open(page_header_map, "rb+", 0) as f:
+            f.truncate(121)
+            f.flush()
+            f.close
+
+        try:
+            self.validate_pb(backup_dir, 'node', backup_id=backup_id)
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because page_header is corrupted.\n "
+                "Output: {0} \n CMD: {1}".format(
+                    self.output, self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                'ERROR: Backup {0} is corrupt'.format(backup_id), e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        try:
+            self.validate_pb(backup_dir)
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because page_header is corrupted.\n "
+                "Output: {0} \n CMD: {1}".format(
+                    self.output, self.cmd))
+        except ProbackupException as e:
+            self.assertIn("INFO: Backup {0} data files are valid".format(ok_1), e.message)
+            self.assertIn("WARNING: Backup {0} data files are corrupted".format(backup_id), e.message)
+            self.assertIn("INFO: Backup {0} data files are valid".format(ok_2), e.message)
+            self.assertIn("WARNING: Some backups are not valid", e.message)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname, [node])
+
+    # @unittest.expectedFailure
+    # @unittest.skip("skip")
+    def test_validate_missing_page_header_map(self):
+        """
+        Check that corruption in page_header_map is detected
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.slow_start()
+
+        ok_1 = self.backup_node(backup_dir, 'node', node, options=['--stream'])
+
+        # FULL backup
+        backup_id = self.backup_node(
+            backup_dir, 'node', node, options=['--stream'])
+
+        ok_2 = self.backup_node(backup_dir, 'node', node, options=['--stream'])
+
+        page_header_map = os.path.join(
+            backup_dir, 'backups', 'node', backup_id, 'page_header_map')
+
+        # unlink page_header_map file
+        os.remove(page_header_map)
+
+        try:
+            self.validate_pb(backup_dir, 'node', backup_id=backup_id)
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because page_header is corrupted.\n "
+                "Output: {0} \n CMD: {1}".format(
+                    self.output, self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                'ERROR: Backup {0} is corrupt'.format(backup_id), e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        try:
+            self.validate_pb(backup_dir)
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because page_header is corrupted.\n "
+                "Output: {0} \n CMD: {1}".format(
+                    self.output, self.cmd))
+        except ProbackupException as e:
+            self.assertIn("INFO: Backup {0} data files are valid".format(ok_1), e.message)
+            self.assertIn("WARNING: Backup {0} data files are corrupted".format(backup_id), e.message)
+            self.assertIn("INFO: Backup {0} data files are valid".format(ok_2), e.message)
+            self.assertIn("WARNING: Some backups are not valid", e.message)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname, [node])
 
 # validate empty backup list
 # page from future during validate
