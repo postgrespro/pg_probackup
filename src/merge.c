@@ -1082,7 +1082,8 @@ merge_files(void *arg)
 				/* Copy header metadata from old map into a new one */
 				tmp_file->n_headers = file->n_headers;
 				headers = get_data_file_headers(&(arguments->full_backup->hdr_map), file,
-						parse_program_version(arguments->full_backup->program_version));
+						parse_program_version(arguments->full_backup->program_version),
+						true);
 
 				/* sanity */
 				if (!headers && file->n_headers > 0)

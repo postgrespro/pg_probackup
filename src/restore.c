@@ -1144,7 +1144,7 @@ restore_files(void *arg)
 		/* Restore destination file */
 		if (dest_file->is_datafile && !dest_file->is_cfs)
 		{
-			/* enable stdio buffering for local destination non-data file */
+			/* enable stdio buffering for local destination data file */
 			if (!fio_is_remote_file(out))
 				setvbuf(out, out_buf, _IOFBF, STDIO_BUFSIZE);
 			/* Destination file is data file */
@@ -1155,7 +1155,7 @@ restore_files(void *arg)
 		}
 		else
 		{
-			/* disable stdio buffering for local destination data file */
+			/* disable stdio buffering for local destination nonedata file */
 			if (!fio_is_remote_file(out))
 				setvbuf(out, NULL, _IONBF, BUFSIZ);
 			/* Destination file is non-data file */

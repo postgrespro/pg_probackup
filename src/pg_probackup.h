@@ -1020,7 +1020,7 @@ extern pid_t check_postmaster(const char *pgdata);
 extern bool validate_file_pages(pgFile *file, const char *fullpath, XLogRecPtr stop_lsn,
 							    uint32 checksum_version, uint32 backup_version, HeaderMap *hdr_map);
 
-extern BackupPageHeader2* get_data_file_headers(HeaderMap *hdr_map, pgFile *file, uint32 backup_version);
+extern BackupPageHeader2* get_data_file_headers(HeaderMap *hdr_map, pgFile *file, uint32 backup_version, bool strict);
 extern void write_page_headers(BackupPageHeader2 *headers, pgFile *file, HeaderMap *hdr_map, bool is_merge);
 extern void init_header_map(pgBackup *backup);
 extern void cleanup_header_map(HeaderMap *hdr_map);

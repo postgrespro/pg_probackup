@@ -823,10 +823,11 @@ restore_data_file(parray *parent_chain, pgFile *dest_file, FILE *out,
 		/* get headers for this file */
 		if (use_headers && tmp_file->n_headers > 0)
 			headers = get_data_file_headers(&(backup->hdr_map), tmp_file,
-											parse_program_version(backup->program_version));
+											parse_program_version(backup->program_version),
+											true);
 
 		if (use_headers && !headers && tmp_file->n_headers > 0)
-			elog(ERROR, "Failed to get headers for file \"%s\"", from_fullpath);
+			elog(ERROR, "Failed to get page headers for file \"%s\"", from_fullpath);
 
 		/*
 		 * Restore the file.
@@ -1599,10 +1600,13 @@ validate_file_pages(pgFile *file, const char *fullpath, XLogRecPtr stop_lsn,
 		elog(ERROR, "Cannot open file \"%s\": %s",
 			 fullpath, strerror(errno));
 
-	headers = get_data_file_headers(hdr_map, file, backup_version);
+	headers = get_data_file_headers(hdr_map, file, backup_version, false);
 
 	if (!headers && file->n_headers > 0)
-		elog(ERROR, "Failed to get headers for file \"%s\"", fullpath);
+	{
+		elog(WARNING, "Cannot get page headers for file \"%s\"", fullpath);
+		return false;
+	}
 
 	/* calc CRC of backup file */
 	INIT_FILE_CRC32(use_crc32c, crc);
@@ -2124,8 +2128,9 @@ send_pages(ConnectionArgs* conn_arg, const char *to_fullpath, const char *from_f
  * array of headers.
  */
 BackupPageHeader2*
-get_data_file_headers(HeaderMap *hdr_map, pgFile *file, uint32 backup_version)
+get_data_file_headers(HeaderMap *hdr_map, pgFile *file, uint32 backup_version, bool strict)
 {
+	bool     success = false;
 	FILE    *in = NULL;
 	size_t   read_len = 0;
 	pg_crc32 hdr_crc;
@@ -2145,13 +2150,19 @@ get_data_file_headers(HeaderMap *hdr_map, pgFile *file, uint32 backup_version)
 	in = fopen(hdr_map->path, PG_BINARY_R);
 
 	if (!in)
-		elog(ERROR, "Cannot open header file \"%s\": %s", hdr_map->path, strerror(errno));
+	{
+		elog(strict ? ERROR : WARNING, "Cannot open header file \"%s\": %s", hdr_map->path, strerror(errno));
+		return NULL;
+	}
 	/* disable buffering for header file */
 	setvbuf(in, NULL, _IONBF, BUFSIZ);
 
 	if (fseek(in, file->hdr_off, SEEK_SET))
-		elog(ERROR, "Cannot seek to position %lu in page header map \"%s\": %s",
+	{
+		elog(strict ? ERROR : WARNING, "Cannot seek to position %lu in page header map \"%s\": %s",
 			file->hdr_off, hdr_map->path, strerror(errno));
+		goto cleanup;
+	}
 
 	/*
 	 * The actual number of headers in header file is n+1, last one is a dummy header,
@@ -2159,28 +2170,35 @@ get_data_file_headers(HeaderMap *hdr_map, pgFile *file, uint32 backup_version)
 	 */
 	read_len = (file->n_headers+1) * sizeof(BackupPageHeader2);
 
-	/* allocate memory for compressed and uncompressed headers */
-	headers = pgut_malloc(read_len);
-	memset(headers, 0, read_len);
+	/* allocate memory for compressed headers */
 	zheaders = pgut_malloc(file->hdr_size);
 	memset(zheaders, 0, file->hdr_size);
 
 	if (fread(zheaders, 1, file->hdr_size, in) != file->hdr_size)
-		elog(ERROR, "Cannot read header file at offset: %li len: %i \"%s\": %s",
+	{
+		elog(strict ? ERROR : WARNING, "Cannot read header file at offset: %li len: %i \"%s\": %s",
 			file->hdr_off, file->hdr_size, hdr_map->path, strerror(errno));
+		goto cleanup;
+	}
 
 //	elog(INFO, "zsize: %i, size: %i", file->hdr_size, read_len);
+
+	/* allocate memory for uncompressed headers */
+	headers = pgut_malloc(read_len);
+	memset(headers, 0, read_len);
 
 	z_len = do_decompress(headers, read_len, zheaders, file->hdr_size,
 						  ZLIB_COMPRESS, &errormsg);
 	if (z_len <= 0)
 	{
 		if (errormsg)
-			elog(ERROR, "An error occured during metadata decompression for file \"%s\": %s",
+			elog(strict ? ERROR : WARNING, "An error occured during metadata decompression for file \"%s\": %s",
 				 file->rel_path, errormsg);
 		else
-			elog(ERROR, "An error occured during metadata decompression for file \"%s\": %i",
+			elog(strict ? ERROR : WARNING, "An error occured during metadata decompression for file \"%s\": %i",
 				 file->rel_path, z_len);
+
+		goto cleanup;
 	}
 
 	/* validate checksum */
@@ -2189,13 +2207,26 @@ get_data_file_headers(HeaderMap *hdr_map, pgFile *file, uint32 backup_version)
 	FIN_FILE_CRC32(true, hdr_crc);
 
 	if (hdr_crc != file->hdr_crc)
-		elog(ERROR, "Header map for file \"%s\" crc mismatch \"%s\" offset: %lu, len: %lu, current: %u, expected: %u",
+	{
+		elog(strict ? ERROR : WARNING, "Header map for file \"%s\" crc mismatch \"%s\" "
+				"offset: %lu, len: %lu, current: %u, expected: %u",
 			file->rel_path, hdr_map->path, file->hdr_off, read_len, hdr_crc, file->hdr_crc);
+		goto cleanup;
+	}
 
-	if (fclose(in))
-		elog(ERROR, "Cannot close file \"%s\"", hdr_map->path);
+	success = true;
+
+cleanup:
 
 	pg_free(zheaders);
+	if (in && fclose(in))
+		elog(ERROR, "Cannot close file \"%s\"", hdr_map->path);
+
+	if (!success)
+	{
+		pg_free(headers);
+		headers = NULL;
+	}
 
 	return headers;
 }
