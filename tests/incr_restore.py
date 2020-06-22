@@ -12,7 +12,7 @@ import json
 from testgres import QueryException
 
 
-module_name = 'restore'
+module_name = 'incr_restore'
 
 
 class IncrRestoreTest(ProbackupTest, unittest.TestCase):
@@ -967,7 +967,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         print(self.restore_node(
             backup_dir, 'node', node, backup_id=full_id,
             options=[
-                "-j", "4", '--incremental-mode=lsn',
+                "-j", "4", '--incremental-mode=lsn', '--log-level-file=VERBOSE',
                 '--recovery-target=immediate', '--recovery-target-action=pause']))
 
         pgdata_restored = self.pgdata_content(node.data_dir)
@@ -1310,9 +1310,9 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
 
         node.stop()
 
-        print(self.restore_node(
+        self.restore_node(
             backup_dir, 'node', node, backup_id=full_id,
-            options=["-j", "4", '--incremental-mode=checksum']))
+            options=["-j", "4", '--incremental-mode=checksum'])
 
         node.slow_start()
 
@@ -1452,9 +1452,9 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node', node,
             backup_type="delta", options=["-j", "4", "--stream"])
 
-        print(node.safe_psql(
-            'postgres',
-            "select * from page_header(get_raw_page('t1', 0))"))
+#        print(node.safe_psql(
+#            'postgres',
+#            "select * from page_header(get_raw_page('t1', 0))"))
 
         con.commit()
 
@@ -1463,26 +1463,24 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
             'postgres',
             'select * from t1')
 
-        print(node.safe_psql(
-            'postgres',
-            "select * from page_header(get_raw_page('t1', 0))"))
-
-        print("HELLO")
+#        print(node.safe_psql(
+#            'postgres',
+#            "select * from page_header(get_raw_page('t1', 0))"))
 
         con2.commit()
         node.safe_psql(
             'postgres',
             'select * from t1')
 
-        print(node.safe_psql(
-            'postgres',
-            "select * from page_header(get_raw_page('t1', 0))"))
+#        print(node.safe_psql(
+#            'postgres',
+#            "select * from page_header(get_raw_page('t1', 0))"))
 
         node.stop()
 
-        print(self.restore_node(
+        self.restore_node(
             backup_dir, 'node', node, backup_id=full_id,
-            options=["-j", "4", '--incremental-mode=lsn']))
+            options=["-j", "4", '--incremental-mode=lsn'])
 
         node.slow_start()
 
@@ -1494,5 +1492,160 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    # @unittest.expectedFailure
+    def test_incr_restore_zero_size_file_checksum(self):
+        """
+        """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={'autovacuum': 'off'})
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.slow_start()
+
+        fullpath = os.path.join(node.data_dir, 'simple_file')
+        with open(fullpath, "w", 0) as f:
+            f.flush()
+            f.close
+
+        # FULL backup
+        id1 = self.backup_node(
+            backup_dir, 'node', node,
+            options=["-j", "4", "--stream"])
+
+        pgdata1 = self.pgdata_content(node.data_dir)
+
+        with open(fullpath, "rb+", 0) as f:
+            f.seek(9000)
+            f.write(b"bla")
+            f.flush()
+            f.close
+
+        id2 = self.backup_node(
+            backup_dir, 'node', node,
+            backup_type="delta", options=["-j", "4", "--stream"])
+        pgdata2 = self.pgdata_content(node.data_dir)
+
+        with open(fullpath, "w") as f:
+            f.close()
+
+        id3 = self.backup_node(
+            backup_dir, 'node', node,
+            backup_type="delta", options=["-j", "4", "--stream"])
+        pgdata3 = self.pgdata_content(node.data_dir)
+
+        node.stop()
+
+        print(self.restore_node(
+            backup_dir, 'node', node, backup_id=id1,
+            options=["-j", "4", '-I', 'checksum']))
+
+        pgdata_restored = self.pgdata_content(node.data_dir)
+        self.compare_pgdata(pgdata1, pgdata_restored)
+
+        self.restore_node(
+            backup_dir, 'node', node, backup_id=id2,
+            options=["-j", "4", '-I', 'checksum'])
+
+        pgdata_restored = self.pgdata_content(node.data_dir)
+        self.compare_pgdata(pgdata2, pgdata_restored)
+
+        self.restore_node(
+            backup_dir, 'node', node, backup_id=id3,
+            options=["-j", "4", '-I', 'checksum'])
+
+        pgdata_restored = self.pgdata_content(node.data_dir)
+        self.compare_pgdata(pgdata3, pgdata_restored)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    # @unittest.expectedFailure
+    def test_incr_restore_zero_size_file_lsn(self):
+        """
+        """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={'autovacuum': 'off'})
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.slow_start()
+
+        fullpath = os.path.join(node.data_dir, 'simple_file')
+        with open(fullpath, "w", 0) as f:
+            f.flush()
+            f.close
+
+        # FULL backup
+        id1 = self.backup_node(
+            backup_dir, 'node', node,
+            options=["-j", "4", "--stream"])
+
+        pgdata1 = self.pgdata_content(node.data_dir)
+
+        with open(fullpath, "rb+", 0) as f:
+            f.seek(9000)
+            f.write(b"bla")
+            f.flush()
+            f.close
+
+        id2 = self.backup_node(
+            backup_dir, 'node', node,
+            backup_type="delta", options=["-j", "4", "--stream"])
+        pgdata2 = self.pgdata_content(node.data_dir)
+
+        with open(fullpath, "w") as f:
+            f.close()
+
+        id3 = self.backup_node(
+            backup_dir, 'node', node,
+            backup_type="delta", options=["-j", "4", "--stream"])
+        pgdata3 = self.pgdata_content(node.data_dir)
+
+        node.stop()
+
+        print(self.restore_node(
+            backup_dir, 'node', node, backup_id=id1,
+            options=["-j", "4", '-I', 'checksum']))
+
+        pgdata_restored = self.pgdata_content(node.data_dir)
+        self.compare_pgdata(pgdata1, pgdata_restored)
+
+        node.slow_start()
+        node.stop()
+
+        self.restore_node(
+            backup_dir, 'node', node, backup_id=id2,
+            options=["-j", "4", '-I', 'checksum'])
+
+        pgdata_restored = self.pgdata_content(node.data_dir)
+        self.compare_pgdata(pgdata2, pgdata_restored)
+
+        node.slow_start()
+        node.stop()
+
+        self.restore_node(
+            backup_dir, 'node', node, backup_id=id3,
+            options=["-j", "4", '-I', 'checksum'])
+
+        pgdata_restored = self.pgdata_content(node.data_dir)
+        self.compare_pgdata(pgdata3, pgdata_restored)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
 # check that MinRecPoint and BackupStartLsn are correctly used in case of --incrementa-lsn
 # incremental restore + partial restore.
