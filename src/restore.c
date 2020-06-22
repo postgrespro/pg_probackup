@@ -470,8 +470,8 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 					base36enc(dest_backup->start_time),
 					(uint32) (redo.lsn >> 32), (uint32) redo.lsn, redo.tli);
 		else
-			elog(INFO, "Destination directory redo point %X/%X on tli %i is within reach of "
-					"backup %s with Stop LSN %X/%X on tli %i, incremental restore in 'lsn' mode is possible",
+			elog(INFO, "Destination directory redo point %X/%X on tli %i is "
+					"within reach of backup %s with Stop LSN %X/%X on tli %i",
 				(uint32) (redo.lsn >> 32), (uint32) redo.lsn, redo.tli,
 				base36enc(tmp_backup->start_time),
 				(uint32) (tmp_backup->stop_lsn >> 32), (uint32) tmp_backup->stop_lsn,
@@ -1118,11 +1118,20 @@ restore_files(void *arg)
 			}
 		}
 
-		/* open destination file */
-		if (already_exists)
-			out = fio_fopen(to_fullpath, PG_BINARY_R "+", FIO_DB_HOST);
-		else
+		/*
+		 * Open dest file and truncate it to zero, if destination
+		 * file already exists and dest file size is zero, or
+		 * if file do not exist
+		 */
+		if ((already_exists && dest_file->write_size == 0) || !already_exists)
 			out = fio_fopen(to_fullpath, PG_BINARY_W, FIO_DB_HOST);
+		/*
+		 * If file already exists and dest size is not zero,
+		 * then open it for reading and writing.
+		 */
+		else
+			out = fio_fopen(to_fullpath, PG_BINARY_R "+", FIO_DB_HOST);
+
 		if (out == NULL)
 			elog(ERROR, "Cannot open restore target file \"%s\": %s",
 				 to_fullpath, strerror(errno));
@@ -1158,7 +1167,7 @@ restore_files(void *arg)
 			/* disable stdio buffering for local destination nonedata file */
 			if (!fio_is_remote_file(out))
 				setvbuf(out, NULL, _IONBF, BUFSIZ);
-			/* Destination file is non-data file */
+			/* Destination file is nonedata file */
 			arguments->restored_bytes += restore_non_data_file(arguments->parent_chain,
 										arguments->dest_backup, dest_file, out, to_fullpath,
 										already_exists);

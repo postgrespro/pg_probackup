@@ -711,7 +711,7 @@ backup_non_data_file(pgFile *file, pgFile *prev_file,
 	}
 
 	/*
-	 * If non-data file exists in previous backup
+	 * If nonedata file exists in previous backup
 	 * and its mtime is less than parent backup start time ... */
 	if (prev_file && file->exists_in_prev &&
 		file->mtime <= parent_backup_time)
@@ -1136,7 +1136,7 @@ restore_non_data_file_internal(FILE *in, FILE *out, pgFile *file,
 
 		/* check for interrupt */
 		if (interrupted || thread_interrupted)
-			elog(ERROR, "Interrupted during non-data file restore");
+			elog(ERROR, "Interrupted during nonedata file restore");
 
 		read_len = fread(buf, 1, STDIO_BUFSIZE, in);
 
@@ -1165,7 +1165,6 @@ restore_non_data_file(parray *parent_chain, pgBackup *dest_backup,
 					  pgFile *dest_file, FILE *out, const char *to_fullpath,
 					  bool already_exists)
 {
-//	int			i;
 	char		from_root[MAXPGPATH];
 	char		from_fullpath[MAXPGPATH];
 	FILE		*in = NULL;
@@ -1203,14 +1202,19 @@ restore_non_data_file(parray *parent_chain, pgBackup *dest_backup,
 			 */
 			if (!tmp_file)
 			{
-				elog(ERROR, "Failed to locate non-data file \"%s\" in backup %s",
+				elog(ERROR, "Failed to locate nonedata file \"%s\" in backup %s",
 					dest_file->rel_path, base36enc(tmp_backup->start_time));
 				continue;
 			}
 
 			/* Full copy is found and it is null sized, nothing to do here */
 			if (tmp_file->write_size == 0)
+			{
+				/* In case of incremental restore truncate file just to be safe */
+				if (already_exists && fio_ftruncate(out, 0))
+					elog(ERROR, "Cannot truncate file \"%s\": %s", strerror(errno));
 				return 0;
+			}
 
 			/* Full copy is found */
 			if (tmp_file->write_size > 0)
@@ -1222,14 +1226,14 @@ restore_non_data_file(parray *parent_chain, pgBackup *dest_backup,
 
 	/* sanity */
 	if (!tmp_backup)
-		elog(ERROR, "Failed to found a backup containing full copy of non-data file \"%s\"",
+		elog(ERROR, "Failed to locate a backup containing full copy of nonedata file \"%s\"",
 			to_fullpath);
 
 	if (!tmp_file)
-		elog(ERROR, "Failed to locate a full copy of non-data file \"%s\"", to_fullpath);
+		elog(ERROR, "Failed to locate a full copy of nonedata file \"%s\"", to_fullpath);
 
 	if (tmp_file->write_size <= 0)
-		elog(ERROR, "Full copy of non-data file has invalid size. "
+		elog(ERROR, "Full copy of nonedata file has invalid size. "
 				"Metadata corruption in backup %s in file: \"%s\"",
 				base36enc(tmp_backup->start_time), to_fullpath);
 
@@ -1245,6 +1249,10 @@ restore_non_data_file(parray *parent_chain, pgBackup *dest_backup,
 				to_fullpath);
 			return 0;
 		}
+
+		/* Checksum mismatch, truncate file and overwrite it */
+		if (fio_ftruncate(out, 0))
+			elog(ERROR, "Cannot truncate file \"%s\": %s", strerror(errno));
 	}
 
 	if (tmp_file->external_dir_num == 0)
@@ -1264,7 +1272,7 @@ restore_non_data_file(parray *parent_chain, pgBackup *dest_backup,
 		elog(ERROR, "Cannot open backup file \"%s\": %s", from_fullpath,
 			 strerror(errno));
 
-	/* disable stdio buffering for non-data files */
+	/* disable stdio buffering for nonedata files */
 	setvbuf(in, NULL, _IONBF, BUFSIZ);
 
 	/* do actual work */
@@ -1793,7 +1801,7 @@ get_checksum_map(const char *fullpath, uint32 checksum_version,
 	char        in_buf[STDIO_BUFSIZE];
 
 	/* open file */
-	in = fopen(fullpath, PG_BINARY_R);
+	in = fopen(fullpath, "r+");
 	if (!in)
 		elog(ERROR, "Cannot open source file \"%s\": %s", fullpath, strerror(errno));
 
@@ -1864,7 +1872,7 @@ get_lsn_map(const char *fullpath, uint32 checksum_version,
 	Assert(shift_lsn > 0);
 
 	/* open file */
-	in = fopen(fullpath, PG_BINARY_R);
+	in = fopen(fullpath, "r+");
 	if (!in)
 		elog(ERROR, "Cannot open source file \"%s\": %s", fullpath, strerror(errno));
 

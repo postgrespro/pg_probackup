@@ -1342,7 +1342,7 @@ merge_non_data_file(parray *parent_chain, pgBackup *full_backup,
 		 */
 		if (!from_file)
 		{
-			elog(ERROR, "Failed to locate non-data file \"%s\" in backup %s",
+			elog(ERROR, "Failed to locate nonedata file \"%s\" in backup %s",
 				dest_file->rel_path, base36enc(from_backup->start_time));
 			continue;
 		}
@@ -1353,11 +1353,11 @@ merge_non_data_file(parray *parent_chain, pgBackup *full_backup,
 
 	/* sanity */
 	if (!from_backup)
-		elog(ERROR, "Failed to found a backup containing full copy of non-data file \"%s\"",
+		elog(ERROR, "Failed to found a backup containing full copy of nonedata file \"%s\"",
 			dest_file->rel_path);
 
 	if (!from_file)
-		elog(ERROR, "Failed to locate a full copy of non-data file \"%s\"", dest_file->rel_path);
+		elog(ERROR, "Failed to locate a full copy of nonedata file \"%s\"", dest_file->rel_path);
 
 	/* set path to source file */
 	if (from_file->external_dir_num)
