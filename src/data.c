@@ -1792,15 +1792,16 @@ get_checksum_map(const char *fullpath, uint32 checksum_version,
 	char        read_buffer[BLCKSZ];
 	char        in_buf[STDIO_BUFSIZE];
 
-	/* truncate up to blocks */
-	if (truncate(fullpath, n_blocks * BLCKSZ) != 0)
-		elog(ERROR, "Cannot truncate file to blknum %u \"%s\": %s",
-				n_blocks, fullpath, strerror(errno));
-
 	/* open file */
 	in = fopen(fullpath, PG_BINARY_R);
 	if (!in)
 		elog(ERROR, "Cannot open source file \"%s\": %s", fullpath, strerror(errno));
+
+	/* truncate up to blocks */
+	if (ftruncate(fileno(in), n_blocks * BLCKSZ) != 0)
+		elog(ERROR, "Cannot truncate file to blknum %u \"%s\": %s",
+				n_blocks, fullpath, strerror(errno));
+
 	setvbuf(in, in_buf, _IOFBF, STDIO_BUFSIZE);
 
 	/* initialize array of checksums */
@@ -1860,17 +1861,18 @@ get_lsn_map(const char *fullpath, uint32 checksum_version,
 	char            in_buf[STDIO_BUFSIZE];
 	datapagemap_t  *lsn_map = NULL;
 
-	/* truncate up to blocks */
-	if (truncate(fullpath, n_blocks * BLCKSZ) != 0)
-		elog(ERROR, "Cannot truncate file to blknum %u \"%s\": %s",
-				n_blocks, fullpath, strerror(errno));
-
 	Assert(shift_lsn > 0);
 
 	/* open file */
 	in = fopen(fullpath, PG_BINARY_R);
 	if (!in)
 		elog(ERROR, "Cannot open source file \"%s\": %s", fullpath, strerror(errno));
+
+	/* truncate up to blocks */
+	if (ftruncate(fileno(in), n_blocks * BLCKSZ) != 0)
+		elog(ERROR, "Cannot truncate file to blknum %u \"%s\": %s",
+				n_blocks, fullpath, strerror(errno));
+
 	setvbuf(in, in_buf, _IOFBF, STDIO_BUFSIZE);
 
 	lsn_map = pgut_malloc(sizeof(datapagemap_t));
