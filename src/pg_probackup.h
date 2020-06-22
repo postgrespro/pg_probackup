@@ -1110,8 +1110,8 @@ extern FILE* open_local_file_rw(const char *to_fullpath, char **out_buf, uint32 
 
 extern int send_pages(ConnectionArgs* conn_arg, const char *to_fullpath, const char *from_fullpath,
 					  pgFile *file, XLogRecPtr prev_backup_start_lsn, CompressAlg calg, int clevel,
-		   			  uint32 checksum_version, bool use_pagemap, BackupPageHeader2 **headers,
-		   			  BackupMode backup_mode, int ptrack_version_num, const char *ptrack_schema);
+					  uint32 checksum_version, bool use_pagemap, BackupPageHeader2 **headers,
+					  BackupMode backup_mode, int ptrack_version_num, const char *ptrack_schema);
 
 /* FIO */
 extern int fio_send_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file, XLogRecPtr horizonLsn,

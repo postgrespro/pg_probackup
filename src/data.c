@@ -816,10 +816,6 @@ restore_data_file(parray *parent_chain, pgFile *dest_file, FILE *out,
 		/* set stdio buffering for input data file */
 		setvbuf(in, in_buf, _IOFBF, STDIO_BUFSIZE);
 
-//		elog(INFO, "N_HEADERS: %i", tmp_file->n_headers);
-//		elog(INFO, "File: %s", tmp_file->rel_path);
-//		elog(INFO, "Backup: %s", base36enc(backup->start_time));
-
 		/* get headers for this file */
 		if (use_headers && tmp_file->n_headers > 0)
 			headers = get_data_file_headers(&(backup->hdr_map), tmp_file,
@@ -934,7 +930,7 @@ restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_vers
 		else
 		{
 			/* We get into this function either when restoring old backup
-			 * or when merging something. Align read_len only in restoring
+			 * or when merging something. Align read_len only when restoring
 			 * or merging old backups.
 			 */
 			if (get_page_header(in, from_fullpath, &(page).bph, NULL, false))
@@ -1926,10 +1922,9 @@ bool
 get_page_header(FILE *in, const char *fullpath, BackupPageHeader* bph,
 				pg_crc32 *crc, bool use_crc32c)
 {
-
 	/* read BackupPageHeader */
 	size_t read_len = fread(bph, 1, sizeof(BackupPageHeader), in);
-	
+
 	if (ferror(in))
 		elog(ERROR, "Cannot read file \"%s\": %s",
 				fullpath, strerror(errno));
