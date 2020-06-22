@@ -1212,7 +1212,8 @@ restore_non_data_file(parray *parent_chain, pgBackup *dest_backup,
 			{
 				/* In case of incremental restore truncate file just to be safe */
 				if (already_exists && fio_ftruncate(out, 0))
-					elog(ERROR, "Cannot truncate file \"%s\": %s", strerror(errno));
+					elog(ERROR, "Cannot truncate file \"%s\": %s",
+							to_fullpath, strerror(errno));
 				return 0;
 			}
 
@@ -1233,9 +1234,10 @@ restore_non_data_file(parray *parent_chain, pgBackup *dest_backup,
 		elog(ERROR, "Failed to locate a full copy of nonedata file \"%s\"", to_fullpath);
 
 	if (tmp_file->write_size <= 0)
-		elog(ERROR, "Full copy of nonedata file has invalid size. "
+		elog(ERROR, "Full copy of nonedata file has invalid size: %li. "
 				"Metadata corruption in backup %s in file: \"%s\"",
-				base36enc(tmp_backup->start_time), to_fullpath);
+				tmp_file->write_size, base36enc(tmp_backup->start_time),
+				to_fullpath);
 
 	/* incremental restore */
 	if (already_exists)
@@ -1245,14 +1247,15 @@ restore_non_data_file(parray *parent_chain, pgBackup *dest_backup,
 
 		if (file_crc == tmp_file->crc)
 		{
-			elog(VERBOSE, "Remote nonedata file \"%s\" is unchanged, skip restore",
+			elog(VERBOSE, "Already existing nonedata file \"%s\" has the same checksum, skip restore",
 				to_fullpath);
 			return 0;
 		}
 
 		/* Checksum mismatch, truncate file and overwrite it */
 		if (fio_ftruncate(out, 0))
-			elog(ERROR, "Cannot truncate file \"%s\": %s", strerror(errno));
+			elog(ERROR, "Cannot truncate file \"%s\": %s",
+					to_fullpath, strerror(errno));
 	}
 
 	if (tmp_file->external_dir_num == 0)
