@@ -1989,7 +1989,7 @@ send_pages(ConnectionArgs* conn_arg, const char *to_fullpath, const char *from_f
 	FILE *in = NULL;
 	FILE *out = NULL;
 	int   hdr_num = -1;
-	uint  cur_pos_out = 0;
+	off_t  cur_pos_out = 0;
 	char  curr_page[BLCKSZ];
 	int   n_blocks_read = 0;
 	BlockNumber blknum = 0;
