@@ -1041,7 +1041,8 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
             "postgres",
             "vacuum t_heap")
 
-        self.backup_node(backup_dir, 'node', node, old_binary=True)
+        id1 = self.backup_node(backup_dir, 'node', node, old_binary=True)
+        pgdata1 = self.pgdata_content(node.data_dir)
 
         node.safe_psql(
             "postgres",
@@ -1051,8 +1052,9 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
             "postgres",
             "vacuum t_heap")
 
-        self.backup_node(
+        id2 = self.backup_node(
             backup_dir, 'node', node, backup_type='page', old_binary=True)
+        pgdata2 = self.pgdata_content(node.data_dir)
 
         node.safe_psql(
             "postgres",
@@ -1061,23 +1063,49 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
             "md5(repeat(i::text,10))::tsvector as tsvector "
             "from generate_series(0,1) i")
 
-        self.backup_node(
+        id3 = self.backup_node(
             backup_dir, 'node', node, backup_type='page', old_binary=True)
-
-        pgdata = self.pgdata_content(node.data_dir)
+        pgdata3 = self.pgdata_content(node.data_dir)
 
         node_restored = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node_restored'))
         node_restored.cleanup()
 
-        self.restore_node(backup_dir, 'node', node_restored)
+        self.restore_node(
+            backup_dir, 'node', node_restored,
+            data_dir=node_restored.data_dir, backup_id=id1)
 
         # Physical comparison
         pgdata_restored = self.pgdata_content(node_restored.data_dir)
-        self.compare_pgdata(pgdata, pgdata_restored)
+        self.compare_pgdata(pgdata1, pgdata_restored)
 
         self.set_auto_conf(node_restored, {'port': node_restored.port})
         node_restored.slow_start()
+        node_restored.cleanup()
+
+        self.restore_node(
+            backup_dir, 'node', node_restored,
+            data_dir=node_restored.data_dir, backup_id=id2)
+
+        # Physical comparison
+        pgdata_restored = self.pgdata_content(node_restored.data_dir)
+        self.compare_pgdata(pgdata2, pgdata_restored)
+
+        self.set_auto_conf(node_restored, {'port': node_restored.port})
+        node_restored.slow_start()
+        node_restored.cleanup()
+
+        self.restore_node(
+            backup_dir, 'node', node_restored,
+            data_dir=node_restored.data_dir, backup_id=id3)
+
+        # Physical comparison
+        pgdata_restored = self.pgdata_content(node_restored.data_dir)
+        self.compare_pgdata(pgdata3, pgdata_restored)
+
+        self.set_auto_conf(node_restored, {'port': node_restored.port})
+        node_restored.slow_start()
+        node_restored.cleanup()
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -1158,6 +1186,115 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
 
         self.set_auto_conf(node_restored, {'port': node_restored.port})
         node_restored.slow_start()
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_page_vacuum_truncate_compressed_1(self):
+        """
+        make node, create table, take full backup,
+        delete all data, vacuum relation,
+        take page backup, insert some data,
+        take second page backup,
+        restore latest page backup using new binary
+        and check data correctness
+        old binary should be 2.2.x version
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={'autovacuum': 'off'})
+
+        self.init_pb(backup_dir, old_binary=True)
+        self.add_instance(backup_dir, 'node', node, old_binary=True)
+        self.set_archiving(backup_dir, 'node', node, old_binary=True)
+        node.slow_start()
+
+        node.safe_psql(
+            "postgres",
+            "create sequence t_seq; "
+            "create table t_heap as select i as id, "
+            "md5(i::text) as text, "
+            "md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(0,1024) i")
+
+        node.safe_psql(
+            "postgres",
+            "vacuum t_heap")
+
+        id1 = self.backup_node(
+            backup_dir, 'node', node,
+            old_binary=True, options=['--compress'])
+        pgdata1 = self.pgdata_content(node.data_dir)
+
+        node.safe_psql(
+            "postgres",
+            "delete from t_heap")
+
+        node.safe_psql(
+            "postgres",
+            "vacuum t_heap")
+
+        id2 = self.backup_node(
+            backup_dir, 'node', node, backup_type='page',
+            old_binary=True, options=['--compress'])
+        pgdata2 = self.pgdata_content(node.data_dir)
+
+        node.safe_psql(
+            "postgres",
+            "insert into t_heap select i as id, "
+            "md5(i::text) as text, "
+            "md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(0,1) i")
+
+        id3 = self.backup_node(
+            backup_dir, 'node', node, backup_type='page',
+            old_binary=True, options=['--compress'])
+        pgdata3 = self.pgdata_content(node.data_dir)
+
+        node_restored = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node_restored'))
+        node_restored.cleanup()
+
+        self.restore_node(
+            backup_dir, 'node', node_restored,
+            data_dir=node_restored.data_dir, backup_id=id1)
+
+        # Physical comparison
+        pgdata_restored = self.pgdata_content(node_restored.data_dir)
+        self.compare_pgdata(pgdata1, pgdata_restored)
+
+        self.set_auto_conf(node_restored, {'port': node_restored.port})
+        node_restored.slow_start()
+        node_restored.cleanup()
+
+        self.restore_node(
+            backup_dir, 'node', node_restored,
+            data_dir=node_restored.data_dir, backup_id=id2)
+
+        # Physical comparison
+        pgdata_restored = self.pgdata_content(node_restored.data_dir)
+        self.compare_pgdata(pgdata2, pgdata_restored)
+
+        self.set_auto_conf(node_restored, {'port': node_restored.port})
+        node_restored.slow_start()
+        node_restored.cleanup()
+
+        self.restore_node(
+            backup_dir, 'node', node_restored,
+            data_dir=node_restored.data_dir, backup_id=id3)
+
+        # Physical comparison
+        pgdata_restored = self.pgdata_content(node_restored.data_dir)
+        self.compare_pgdata(pgdata3, pgdata_restored)
+
+        self.set_auto_conf(node_restored, {'port': node_restored.port})
+        node_restored.slow_start()
+        node_restored.cleanup()
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
