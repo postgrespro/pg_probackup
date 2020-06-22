@@ -1083,6 +1083,13 @@ GRANT SELECT ON TABLE pg_catalog.pg_database TO backup;
         </listitem>
         <listitem>
           <para>
+            Operating in remote mode requires <application>pg_probackup</application>
+            binary to be installed on both local and remote systems.
+            The versions of local and remote binary must be the same.
+          </para>
+        </listitem>
+        <listitem>
+          <para>
             When started in the remote mode, the main <application>pg_probackup</application> process
             on the local system connects to the remote system via SSH and
             launches one or more agent processes on the remote system, which are called
