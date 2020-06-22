@@ -455,7 +455,7 @@ fio_disconnect(void)
 		hdr.size = 0;
 		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
 		IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
-		Assert(hdr.cop == FIO_SEND_FILE_EOF);
+		Assert(hdr.cop == FIO_DISCONNECTED);
 		SYS_CHECK(close(fio_stdin));
 		SYS_CHECK(close(fio_stdout));
 		fio_stdin = 0;
@@ -1652,7 +1652,8 @@ static void fio_send_pages_impl(int out, char* buf)
 		/* read page, check header and validate checksumms */
 		for (;;)
 		{
-			/* Optimize stdio buffer usage, fseek only when current position
+			/*
+			 * Optimize stdio buffer usage, fseek only when current position
 			 * does not match the position of requested block.
 			 */
 			if (current_pos != blknum*BLCKSZ)
@@ -1665,10 +1666,7 @@ static void fio_send_pages_impl(int out, char* buf)
 
 			read_len = fread(read_buffer, 1, BLCKSZ, in);
 
-			page_st.lsn = InvalidXLogRecPtr;
-			page_st.checksum = 0;
-
-			current_pos += BLCKSZ;
+			current_pos += read_len;
 
 			/* report error */
 			if (ferror(in))
@@ -1741,9 +1739,9 @@ static void fio_send_pages_impl(int out, char* buf)
 		 * As far as unsigned number are always greater or equal than zero,
 		 * there is no sense to add more checks.
 		 */
-		if ((req->horizonLsn == InvalidXLogRecPtr) ||
+		if ((req->horizonLsn == InvalidXLogRecPtr) ||                 /* full, page, ptrack */
 			(page_st.lsn == InvalidXLogRecPtr) ||                     /* zeroed page */
-			(req->horizonLsn > 0 && page_st.lsn >= req->horizonLsn))  /* delta */
+			(req->horizonLsn > 0 && page_st.lsn > req->horizonLsn))   /* delta */
 		{
 			int  compressed_size = 0;
 			char write_buffer[BLCKSZ*2];
@@ -1808,7 +1806,7 @@ eof:
 	{
 		hdr.size = (hdr_num+2) * sizeof(BackupPageHeader2);
 
-		/* add one additional header */
+		/* add dummy header */
 		headers = (BackupPageHeader2 *) pgut_realloc(headers, (hdr_num+2) * sizeof(BackupPageHeader2));
 		headers[hdr_num+1].pos = cur_pos_out;
 	}
@@ -1816,13 +1814,6 @@ eof:
 
 	if (headers)
 		IO_CHECK(fio_write_all(out, headers, hdr.size), hdr.size);
-
-		/* send headers */
-//	hdr.cop = FIO_SEND_FILE_HEADERS;
-//	hdr.arg = hdr_num +1;
-//	hdr.size = hdr.arg * sizeof(BackupPageHeader2);
-//	IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
-//	IO_CHECK(fio_write_all(out, headers, hdr.size), hdr.size);
 
 cleanup:
 	pg_free(map);
@@ -2388,7 +2379,7 @@ static void fio_get_checksum_map_impl(int out, char *buf)
 									req->n_blocks, req->stop_lsn, req->segmentno);
 	hdr.size = req->n_blocks;
 
-	/* send arrays of checksums to main process */
+	/* send array of PageState`s to main process */
 	IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 	if (hdr.size > 0)
 		IO_CHECK(fio_write_all(out, checksum_map, hdr.size * sizeof(PageState)), hdr.size * sizeof(PageState));
@@ -2458,7 +2449,7 @@ static void fio_get_lsn_map_impl(int out, char *buf)
 	else
 		hdr.size = 0;
 
-	/* send arrays of checksums to main process */
+	/* send bitmap to main process */
 	IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 	if (hdr.size > 0)
 		IO_CHECK(fio_write_all(out, lsn_map->bitmap, hdr.size), hdr.size);
@@ -2691,7 +2682,7 @@ void fio_communicate(int in, int out)
 			fio_check_postmaster_impl(out, buf);
 			break;
 		  case FIO_DISCONNECT:
-			hdr.cop = FIO_SEND_FILE_EOF;
+			hdr.cop = FIO_DISCONNECTED;
 			IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 			break;
 		  default:

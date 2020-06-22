@@ -31,8 +31,8 @@ typedef struct DataPage
 	char		data[BLCKSZ];
 } DataPage;
 
-static bool get_compressed_page_meta(FILE *in, const char *fullpath, BackupPageHeader* bph,
-									 pg_crc32 *crc, bool use_crc32c);
+static bool get_page_header(FILE *in, const char *fullpath, BackupPageHeader* bph,
+							pg_crc32 *crc, bool use_crc32c);
 
 #ifdef HAVE_LIBZ
 /* Implementation of zlib compression method */
@@ -861,6 +861,10 @@ restore_data_file(parray *parent_chain, pgFile *dest_file, FILE *out,
  * If "nblocks" is greater than zero, then skip restoring blocks,
  * whose position if greater than "nblocks".
  * If map is NULL, then page bitmap cannot be used for restore optimization
+ * Page bitmap optimize restore of incremental chains, consisting of more than one
+ * backup. We restoring from newest to oldest and page, once restored, marked in map.
+ * When the same page, but in older backup, encountered, we check the map, if it is
+ * marked as already restored, then page is skipped.
  */
 size_t
 restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_version,
@@ -930,10 +934,10 @@ restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_vers
 		else
 		{
 			/* We get into this function either when restoring old backup
-			 * or when merging something. Aligh read_len only in restoring
-			 * or merging old backup.
+			 * or when merging something. Align read_len only in restoring
+			 * or merging old backups.
 			 */
-			if (get_compressed_page_meta(in, from_fullpath, &(page).bph, NULL, false))
+			if (get_page_header(in, from_fullpath, &(page).bph, NULL, false))
 			{
 				cur_pos_in += sizeof(BackupPageHeader);
 
@@ -941,20 +945,18 @@ restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_vers
 				blknum = page.bph.block;
 				compressed_size = page.bph.compressed_size;
 
-				/* this will backfire when retrying merge of old backups,
-				 * just pray that this will never happen.
+				/* this has a potential to backfire when retrying merge of old backups,
+				 * so we just forbid the retrying of failed merges between versions >= 2.4.0 and
+				 * version < 2.4.0
 				 */
 				if (backup_version >= 20400)
 					read_len = compressed_size;
 				else
+					/* For some unknown and possibly dump reason I/O operations
+					 * in versions < 2.4.0 were always aligned to 8 bytes.
+					 * Now we have to deal with backward compatibility.
+					 */
 					read_len = MAXALIGN(compressed_size);
-
-//				elog(INFO, "FILE: %s", from_fullpath);
-//				elog(INFO, "blknum: %i", blknum);
-//
-//				elog(INFO, "POS: %u", cur_pos_in);
-//				elog(INFO, "SIZE: %i", compressed_size);
-//				elog(INFO, "ASIZE: %i", read_len);
 
 			}
 			else
@@ -962,7 +964,7 @@ restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_vers
 		}
 
 		/*
-		 * Backupward compatibility kludge: in the good old days
+		 * Backward compatibility kludge: in the good old days
 		 * n_blocks attribute was available only in DELTA backups.
 		 * File truncate in PAGE and PTRACK happened on the fly when
 		 * special value PageIsTruncated is encountered.
@@ -1006,13 +1008,13 @@ restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_vers
 		if (compressed_size > BLCKSZ)
 			elog(ERROR, "Size of a blknum %i exceed BLCKSZ: %i", blknum, compressed_size);
 
-		/* incremental restore in LSN mode */
+		/* Incremental restore in LSN mode */
 		if (map && lsn_map && datapagemap_is_set(lsn_map, blknum))
 			datapagemap_add(map, blknum);
 
 		if (map && checksum_map && checksum_map[blknum].checksum != 0)
 		{
-//			elog(INFO, "HDR CRC: %u, MAP CRC: %u", page_crc, checksum_map[blknum].checksum);
+			//elog(INFO, "HDR CRC: %u, MAP CRC: %u", page_crc, checksum_map[blknum].checksum);
 			/*
 			 * The heart of incremental restore in CHECKSUM mode
 			 * If page in backup has the same checksum and lsn as
@@ -1110,7 +1112,7 @@ restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_vers
 		write_len += BLCKSZ;
 		cur_pos_out += BLCKSZ; /* update current write position */
 
-		/* Mark page as restored, to avoid reading this page when restoring parent backups */
+		/* Mark page as restored to avoid reading this page when restoring parent backups */
 		if (map)
 			datapagemap_add(map, blknum);
 	}
@@ -1238,7 +1240,7 @@ restore_non_data_file(parray *parent_chain, pgBackup *dest_backup,
 	/* incremental restore */
 	if (already_exists)
 	{
-		/* compare checksumms of remote and local files */
+		/* compare checksums of already existing file and backup file */
 		pg_crc32 file_crc = fio_get_crc32(to_fullpath, FIO_DB_HOST, false);
 
 		if (file_crc == tmp_file->crc)
@@ -1625,7 +1627,7 @@ validate_file_pages(pgFile *file, const char *fullpath, XLogRecPtr stop_lsn,
 		if (interrupted || thread_interrupted)
 			elog(ERROR, "Interrupted during data file validation");
 
-		/* newer backups have headers in separate storage */
+		/* newer backups have page headers in separate storage */
 		if (headers)
 		{
 			n_hdr++;
@@ -1657,7 +1659,7 @@ validate_file_pages(pgFile *file, const char *fullpath, XLogRecPtr stop_lsn,
 		/* old backups rely on header located directly in data file */
 		else
 		{
-			if (get_compressed_page_meta(in, fullpath, &(compressed_page).bph, &crc, use_crc32c))
+			if (get_page_header(in, fullpath, &(compressed_page).bph, &crc, use_crc32c))
 			{
 				/* Backward compatibility kludge, TODO: remove in 3.0
 				 * for some reason we padded compressed pages in old versions
@@ -1685,11 +1687,6 @@ validate_file_pages(pgFile *file, const char *fullpath, XLogRecPtr stop_lsn,
 			len = fread(&compressed_page, 1, read_len, in);
 		else
 			len = fread(compressed_page.data, 1, read_len, in);
-
-//		elog(INFO, "POS: %u", cur_pos_in);
-//
-//		elog(INFO, "LEN: %i", len);
-//		elog(INFO, "READ_LEN: %i", read_len);
 
 		if (len != read_len)
 		{
@@ -1886,10 +1883,7 @@ get_lsn_map(const char *fullpath, uint32 checksum_version,
 	for (blknum = 0; blknum < n_blocks;  blknum++)
 	{
 		size_t read_len = fread(read_buffer, 1, BLCKSZ, in);
-//		page_lsn = InvalidXLogRecPtr;
 		PageState page_st;
-
-//		page_st.lsn = InvalidXLogRecPtr
 
 		/* report error */
 		if (ferror(in))
@@ -1905,7 +1899,8 @@ get_lsn_map(const char *fullpath, uint32 checksum_version,
 				datapagemap_add(lsn_map, blknum);
 		}
 		else
-			elog(ERROR, "Failed to read blknum %u from file \"%s\"", blknum, fullpath);
+			elog(ERROR, "Cannot read block %u from file \"%s\": %s",
+					blknum, fullpath, strerror(errno));
 
 		if (feof(in))
 			break;
@@ -1926,10 +1921,10 @@ get_lsn_map(const char *fullpath, uint32 checksum_version,
 	return lsn_map;
 }
 
-/* */
+/* Every page in data file contains BackupPageHeader, extract it */
 bool
-get_compressed_page_meta(FILE *in, const char *fullpath, BackupPageHeader* bph,
-						 pg_crc32 *crc, bool use_crc32c)
+get_page_header(FILE *in, const char *fullpath, BackupPageHeader* bph,
+				pg_crc32 *crc, bool use_crc32c)
 {
 
 	/* read BackupPageHeader */
@@ -1952,26 +1947,18 @@ get_compressed_page_meta(FILE *in, const char *fullpath, BackupPageHeader* bph,
 				 ftell(in), fullpath, strerror(errno));
 	}
 
+	/* In older versions < 2.4.0, when crc for file was calculated, header was
+	 * not included in crc calculations. Now it is. And now we have
+	 * the problem of backward compatibility for backups of old versions
+	 */
 	if (crc)
 		COMP_FILE_CRC32(use_crc32c, *crc, bph, read_len);
 
 	if (bph->block == 0 && bph->compressed_size == 0)
 		elog(ERROR, "Empty block in file \"%s\"", fullpath);
 
-
-//	*blknum = header.block;
-//	*compressed_size = header.compressed_size;
-
-//	elog(INFO, "blknum: %i", header.block);
-//	elog(INFO, "size: %i", header.compressed_size);
-//	elog(INFO, "size2: %i", *compressed_size);
-//
-//	elog(INFO, "BLKNUM: %i", *blknum);
-//	elog(INFO, "File: %s", fullpath);
-
 	Assert(bph->compressed_size != 0);
 	return true;
-
 }
 
 /* Open local backup file for writing, set permissions and buffering */
@@ -2099,7 +2086,10 @@ send_pages(ConnectionArgs* conn_arg, const char *to_fullpath, const char *from_f
 			blknum++;
 	}
 
-	/* add one additional header */
+	/*
+	 * Add dummy header, so we can later extract the length of last header
+	 * as difference between their offsets.
+	 */
 	if (*headers)
 	{
 		file->n_headers = hdr_num +1;
@@ -2124,8 +2114,11 @@ send_pages(ConnectionArgs* conn_arg, const char *to_fullpath, const char *from_f
 	return n_blocks_read;
 }
 
-/* attempt to open header file, read content and return as
+/*
+ * Attempt to open header file, read content and return as
  * array of headers.
+ * TODO: some access optimizations would be great here:
+ * less fseeks, buffering, descriptor sharing, etc.
  */
 BackupPageHeader2*
 get_data_file_headers(HeaderMap *hdr_map, pgFile *file, uint32 backup_version, bool strict)
@@ -2180,8 +2173,6 @@ get_data_file_headers(HeaderMap *hdr_map, pgFile *file, uint32 backup_version, b
 			file->hdr_off, file->hdr_size, hdr_map->path, strerror(errno));
 		goto cleanup;
 	}
-
-//	elog(INFO, "zsize: %i, size: %i", file->hdr_size, read_len);
 
 	/* allocate memory for uncompressed headers */
 	headers = pgut_malloc(read_len);
@@ -2244,7 +2235,7 @@ write_page_headers(BackupPageHeader2 *headers, pgFile *file, HeaderMap *hdr_map,
 	if (file->n_headers <= 0)
 		return;
 
-	/* when running merge we must save headers into the temp map */
+	/* when running merge we must write headers into temp map */
 	map_path = (is_merge) ? hdr_map->path_tmp : hdr_map->path;
 	read_len = (file->n_headers+1) * sizeof(BackupPageHeader2);
 

@@ -48,6 +48,7 @@ typedef enum
 	FIO_SEND_FILE_HEADERS,
 	/* messages for closing connection */
 	FIO_DISCONNECT,
+	FIO_DISCONNECTED,
 	/* message for compatibility check */
 	FIO_AGENT_VERSION,
 	FIO_LIST_DIR,

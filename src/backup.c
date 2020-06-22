@@ -212,6 +212,7 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool
 						"trying to look up on previous timelines",
 						current.tli);
 
+			/* TODO: use read_timeline_history */
 			tli_list = catalog_get_timelines(&instance_config);
 
 			if (parray_num(tli_list) == 0)
@@ -526,7 +527,7 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool
 		arg->prev_start_lsn = prev_backup_start_lsn;
 		arg->conn_arg.conn = NULL;
 		arg->conn_arg.cancel_conn = NULL;
-		arg->hdr_map = &(current).hdr_map;
+		arg->hdr_map = &(current.hdr_map);
 		arg->thread_num = i+1;
 		/* By default there are some error */
 		arg->ret = 1;

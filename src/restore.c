@@ -345,7 +345,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 		if (params->incremental_mode != INCR_NONE && pgdata_is_empty && tblspaces_are_empty)
 		{
 			elog(INFO, "Destination directory and tablespace directories are empty, "
-					"disabled incremental restore");
+					"disable incremental restore");
 			params->incremental_mode = INCR_NONE;
 		}
 
@@ -699,7 +699,7 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 		parray_qsort(backup->files, pgFileCompareRelPathWithExternal);
 	}
 
-	/* If dest backup version is older than 2.3.0, then bitmap optimization
+	/* If dest backup version is older than 2.4.0, then bitmap optimization
 	 * is impossible to use, because bitmap restore rely on pgFile.n_blocks,
 	 * which is not always available in old backups.
 	 */
@@ -2009,7 +2009,7 @@ check_incremental_compatibility(const char *pgdata, uint64 system_identifier,
 		{
 			elog(WARNING, "Destination directory contains \"backup_control\" file. "
 				"This does NOT mean that you should delete this file and retry, only that "
-				"incremental restore in 'lsn' mode can produce incorrect result, when applied "
+				"incremental restore in 'lsn' mode may produce incorrect result, when applied "
 				"to cluster with pg_control not synchronized with cluster state."
 				"Consider to use incremental restore in 'checksum' mode");
 			success = false;
