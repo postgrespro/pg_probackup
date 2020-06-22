@@ -1732,7 +1732,7 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
           header and checksum in every page and replace only invalid
           pages and those with checksum and LSN not matching with
           corresponding page in backup. This is the simplest,
-          the most fool-proof incremental mode.
+          the most fool-proof incremental mode. Recommended to use by default.
         </para>
       </listitem>
       <listitem>
@@ -1740,7 +1740,7 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
           LSN — read the <replaceable>pg_control</replaceable> in the
           data directory to obtain redo LSN and redo TLI, which allows
           to determine a point in history(shiftpoint), where data directory
-          state shifted from backup chain history. If shiftpoint is not within
+          state shifted from target backup chain history. If shiftpoint is not within
           reach of backup chain history, then restore is aborted.
           If shiftpoint is within reach of backup chain history, then read
           all data files in the data directory, validate header and checksum in
@@ -1755,7 +1755,7 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
           Second, the <replaceable>pg_control</replaceable> file must be
           synched with state of data directory. This condition cannot checked
           at the start of restore, so it is a user responsibility to ensure
-          that pg_control contain valid information. Because of that is not
+          that pg_control contain valid information. Therefore it is not
           recommended to use LSN mode in any situation, where pg_control has
           been tampered with:
           after <replaceable>pg_resetxlog</replaceable> execution,
@@ -1769,7 +1769,13 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
       </listitem>
     </itemizedlist>
 
-        <para>
+      <para>
+        Regardless of chosen incremental mode, pg_probackup will check, that postmaster
+        in given destination directory is not running and <varname>system-identifier</varname> is
+        the same as in the backup.
+      </para>
+
+      <para>
         Suppose you want to return an old master as replica after switchover
         using incremental restore in LSN mode:
       </para>
@@ -1794,12 +1800,12 @@ INFO: Redundant files are removed, time elapsed: 1s
 INFO: Start restoring backup files. PGDATA size: 15GB
 INFO: Backup files are restored. Transfered bytes: 1693MB, time elapsed: 43s
 INFO: Restore incremental ratio (less is better): 11% (1693MB/15GB)
-INFO: Restore of backup QBRHT8 completed.
+INFO: Restore of backup QBRNBP completed.
       </programlisting>
       <note>
         <para>
           Incremental restore is possible only for backups with
-          <literal>program_version</literal> equal or greater than 2.3.0.
+          <literal>program_version</literal> equal or greater than 2.4.0.
         </para>
       </note>
     </refsect3>
