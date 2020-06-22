@@ -705,9 +705,12 @@ extern char		backup_instance_path[MAXPGPATH];
 extern char		arclog_path[MAXPGPATH];
 
 /* common options */
+extern pid_t    my_pid;
+extern __thread int my_thread_num;
 extern int		num_threads;
 extern bool		stream_wal;
 extern bool		progress;
+extern bool     is_archive_cmd; /* true for archive-{get,push} */
 #if PG_VERSION_NUM >= 100000
 /* In pre-10 'replication_slot' is defined in receivelog.h */
 extern char	   *replication_slot;

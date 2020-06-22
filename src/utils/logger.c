@@ -192,6 +192,7 @@ elog_internal(int elevel, bool file_only, const char *message)
 				write_to_stderr;
 	time_t		log_time = (time_t) time(NULL);
 	char		strfbuf[128];
+	char		str_pid[128];
 
 	write_to_file = elevel >= logger_config.log_level_file
 		&& logger_config.log_directory
@@ -208,9 +209,11 @@ elog_internal(int elevel, bool file_only, const char *message)
 	pthread_lock(&log_file_mutex);
 	loggin_in_progress = true;
 
-	if (write_to_file || write_to_error_log)
+	if (write_to_file || write_to_error_log || is_archive_cmd)
 		strftime(strfbuf, sizeof(strfbuf), "%Y-%m-%d %H:%M:%S %Z",
 				 localtime(&log_time));
+
+	snprintf(str_pid, sizeof(str_pid), "[%d]:", my_pid);
 
 	/*
 	 * Write message to log file.
@@ -227,7 +230,8 @@ elog_internal(int elevel, bool file_only, const char *message)
 				open_logfile(&log_file, logger_config.log_filename);
 		}
 
-		fprintf(log_file, "%s: ", strfbuf);
+		fprintf(log_file, "%s ", strfbuf);
+		fprintf(log_file, "%s ", str_pid);
 		write_elevel(log_file, elevel);
 
 		fprintf(log_file, "%s\n", message);
@@ -244,7 +248,8 @@ elog_internal(int elevel, bool file_only, const char *message)
 		if (error_log_file == NULL)
 			open_logfile(&error_log_file, logger_config.error_log_filename);
 
-		fprintf(error_log_file, "%s: ", strfbuf);
+		fprintf(error_log_file, "%s ", strfbuf);
+		fprintf(error_log_file, "%s ", str_pid);
 		write_elevel(error_log_file, elevel);
 
 		fprintf(error_log_file, "%s\n", message);
@@ -257,6 +262,17 @@ elog_internal(int elevel, bool file_only, const char *message)
 	 */
 	if (write_to_stderr)
 	{
+		if (is_archive_cmd)
+		{
+			char		str_thread[64];
+			/* [Issue #213] fix pgbadger parsing */
+			snprintf(str_thread, sizeof(str_thread), "[%d-1]:", my_thread_num);
+
+			fprintf(stderr, "%s ", strfbuf);
+			fprintf(stderr, "%s ", str_pid);
+			fprintf(stderr, "%s ", str_thread);
+		}
+
 		write_elevel(stderr, elevel);
 
 		fprintf(stderr, "%s\n", message);

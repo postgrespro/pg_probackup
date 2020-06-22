@@ -67,6 +67,9 @@ char	   *externaldir = NULL;
 static char *backup_id_string = NULL;
 int			num_threads = 1;
 bool		stream_wal = false;
+bool        is_archive_cmd = false;
+pid_t       my_pid = 0;
+__thread int  my_thread_num = 1;
 bool		progress = false;
 bool		no_sync = false;
 #if PG_VERSION_NUM >= 100000
@@ -294,6 +297,7 @@ main(int argc, char *argv[])
 	/* Get current time */
 	current_time = time(NULL);
 
+	my_pid = getpid();
 	//set_pglocale_pgservice(argv[0], "pgscripts");
 
 #if PG_VERSION_NUM >= 110000
@@ -578,6 +582,7 @@ main(int argc, char *argv[])
 		backup_subcmd == ARCHIVE_PUSH_CMD))
 	{
 		instance_config.logger.log_level_file = LOG_OFF;
+		is_archive_cmd = true;
 	}
 
 
