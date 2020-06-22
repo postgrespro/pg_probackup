@@ -2,12 +2,6 @@
 #include <unistd.h>
 #include <sys/stat.h>
 
-#ifdef WIN32
-#define __thread __declspec(thread)
-#else
-#include <pthread.h>
-#endif
-
 #include "pg_probackup.h"
 #include "file.h"
 #include "storage/checksum.h"

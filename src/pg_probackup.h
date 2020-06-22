@@ -39,6 +39,12 @@
 #include "datapagemap.h"
 #include "utils/thread.h"
 
+#ifdef WIN32
+#define __thread __declspec(thread)
+#else
+#include <pthread.h>
+#endif
+
 /* pgut client variables and full path */
 extern const char  *PROGRAM_NAME;
 extern const char  *PROGRAM_NAME_FULL;
