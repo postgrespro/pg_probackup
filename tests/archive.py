@@ -2242,7 +2242,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         # at this point replica is consistent
         restore_command = self.get_restore_command(backup_dir, 'node', replica)
 
-        restore_command += ' -j 2 --batch-size=10 --log-level-console=VERBOSE'
+        restore_command += ' -j5 --batch-size=10 --log-level-console=VERBOSE'
         #restore_command += ' --batch-size=2 --log-level-console=VERBOSE'
 
         if node.major_version >= 12:

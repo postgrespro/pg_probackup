@@ -1178,7 +1178,7 @@ class ProbackupTest(object):
         if overwrite:
             options['archive_command'] += '--overwrite '
 
-        options['archive_command'] += '--log-level-console=verbose '
+        options['archive_command'] += '--log-level-console=VERBOSE '
         options['archive_command'] += '-j 5 '
         options['archive_command'] += '--batch-size 10 '
         options['archive_command'] += '--no-sync '
