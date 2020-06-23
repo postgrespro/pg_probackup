@@ -31,11 +31,6 @@ typedef struct DataPage
 	char		data[BLCKSZ];
 } DataPage;
 
-typedef struct DataBlock
-{
-	char		data[BLCKSZ];
-} DataBlock;
-
 static bool get_page_header(FILE *in, const char *fullpath, BackupPageHeader* bph,
 							pg_crc32 *crc, bool use_crc32c);
 
@@ -1797,33 +1792,29 @@ validate_file_pages(pgFile *file, const char *fullpath, XLogRecPtr stop_lsn,
 	return is_valid;
 }
 
-/* read local data file and construct map with block checksums
- * bufsize must be divisible by BLCKSZ
- */
+/* read local data file and construct map with block checksums */
 PageState*
 get_checksum_map(const char *fullpath, uint32 checksum_version,
-				 int n_blocks, XLogRecPtr dest_stop_lsn,
-				 BlockNumber segmentno)
+							int n_blocks, XLogRecPtr dest_stop_lsn, BlockNumber segmentno)
 {
 	PageState  *checksum_map = NULL;
 	FILE       *in = NULL;
 	BlockNumber blknum = 0;
-	DataBlock  *read_buffer;
-	int         bufsize = LARGE_CHUNK_SIZE;
+	char        read_buffer[BLCKSZ];
+	char        in_buf[STDIO_BUFSIZE];
+	off_t       cur_pos = 0;
 
 	/* open file */
 	in = fopen(fullpath, "r+");
 	if (!in)
-		elog(ERROR, "Cannot open file \"%s\": %s", fullpath, strerror(errno));
-
-	setvbuf(in, NULL, _IONBF, BUFSIZ);
+		elog(ERROR, "Cannot open source file \"%s\": %s", fullpath, strerror(errno));
 
 	/* truncate up to blocks */
 	if (ftruncate(fileno(in), n_blocks * BLCKSZ) != 0)
 		elog(ERROR, "Cannot truncate file to blknum %u \"%s\": %s",
 				n_blocks, fullpath, strerror(errno));
 
-	read_buffer = pgut_malloc(bufsize);
+	setvbuf(in, in_buf, _IOFBF, STDIO_BUFSIZE);
 
 	/* initialize array of checksums */
 	checksum_map = pgut_malloc(n_blocks * sizeof(PageState));
@@ -1831,15 +1822,21 @@ get_checksum_map(const char *fullpath, uint32 checksum_version,
 
 	for (;;)
 	{
-		int       rc;
-		int       block;
 		PageState page_st;
-		size_t    read_len = 0;
+		size_t read_len = 0;
 
-		if (interrupted)
-			elog(ERROR, "Interrupted during page reading");
+		if (blknum >= n_blocks)
+			break;
 
-		read_len = fread(read_buffer, 1, bufsize, in);
+		if (cur_pos != blknum * BLCKSZ &&
+			fseek(in, blknum * BLCKSZ, SEEK_SET))
+		{
+			elog(ERROR, "Cannot seek to offset %u in file \"%s\": %s",
+				blknum * BLCKSZ, fullpath, strerror(errno));
+		}
+
+		read_len = fread(read_buffer, 1, BLCKSZ, in);
+		cur_pos += read_len;
 
 		/* report error */
 		if (ferror(in))
@@ -1849,36 +1846,33 @@ get_checksum_map(const char *fullpath, uint32 checksum_version,
 		if (read_len == 0 && feof(in))
 			break;
 
-		for (block = 0; block < read_len / BLCKSZ; block++)
+		if (read_len == BLCKSZ)
 		{
-
-			if (blknum >= n_blocks)
-				elog(ERROR, "Concurrent writing to restored cluster detected");
-
-			rc = validate_one_page(read_buffer[block].data, segmentno + blknum,
+			int rc = validate_one_page(read_buffer, segmentno + blknum,
 									   dest_stop_lsn, &page_st,
 									   checksum_version);
 
-			/* we care only about valid pages */
 			if (rc == PAGE_IS_VALID)
 			{
-//				if (checksum_version)
-//					checksum_map[blknum].checksum = ((PageHeader) read_buffer)->pd_checksum;
-//				else
-//					checksum_map[blknum].checksum = page_st.checksum;
+				if (checksum_version)
+					checksum_map[blknum].checksum = ((PageHeader) read_buffer)->pd_checksum;
+				else
+					checksum_map[blknum].checksum = page_st.checksum;
 
-				checksum_map[blknum].checksum = page_st.checksum;
 				checksum_map[blknum].lsn = page_st.lsn;
 			}
 
 			blknum++;
 		}
+		else
+			elog(WARNING, "Odd size read len %lu for blknum %u in file \"%s\"", read_len, blknum, fullpath);
+
+		if (interrupted)
+			elog(ERROR, "Interrupted during page reading");
 	}
 
 	if (in)
 		fclose(in);
-
-	pg_free(read_buffer);
 
 	return checksum_map;
 }
@@ -1899,7 +1893,7 @@ get_lsn_map(const char *fullpath, uint32 checksum_version,
 	/* open file */
 	in = fopen(fullpath, "r+");
 	if (!in)
-		elog(ERROR, "Cannot open file \"%s\": %s", fullpath, strerror(errno));
+		elog(ERROR, "Cannot open source file \"%s\": %s", fullpath, strerror(errno));
 
 	/* truncate up to blocks */
 	if (ftruncate(fileno(in), n_blocks * BLCKSZ) != 0)
