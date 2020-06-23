@@ -80,7 +80,6 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
-
     # @unittest.skip("skip")
     def test_checksum_corruption_detection(self):
         """recovery to target timeline"""
@@ -105,7 +104,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         pgbench.wait()
         pgbench.stdout.close()
 
-        self.backup_node(backup_dir, 'node', node, backup_type='delta')
+        self.backup_node(backup_dir, 'node', node, backup_type='page')
 
         pgbench = node.pgbench(
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
@@ -113,7 +112,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         pgbench.wait()
         pgbench.stdout.close()
 
-        self.backup_node(backup_dir, 'node', node, backup_type='delta')
+        self.backup_node(backup_dir, 'node', node, backup_type='page')
 
         pgbench = node.pgbench(
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
@@ -121,16 +120,14 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         pgbench.wait()
         pgbench.stdout.close()
 
-        backup_id = self.backup_node(backup_dir, 'node', node, backup_type='delta')
+        backup_id = self.backup_node(backup_dir, 'node', node, backup_type='page')
 
         pgdata = self.pgdata_content(node.data_dir)
 
         node.stop()
 
-        # corrupt block
-
         self.restore_node(
-            backup_dir, 'node', node, options=["-j", "4", "--incremental-mode=checksum"])
+            backup_dir, 'node', node, options=["-j", "4", "--incremental-mode=lsn"])
 
         pgdata_restored = self.pgdata_content(node.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
@@ -349,7 +346,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
                     repr(e.message), self.cmd))
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname)
+        self.del_test_dir(module_name, fname, [node])
 
     # @unittest.skip("skip")
     def test_incr_checksum_restore(self):
@@ -438,7 +435,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         self.compare_pgdata(pgdata, pgdata_restored)
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname)
+        self.del_test_dir(module_name, fname, [node, node_1])
 
 
     # @unittest.skip("skip")
@@ -527,7 +524,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         self.compare_pgdata(pgdata, pgdata_restored)
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname)
+        self.del_test_dir(module_name, fname, [node, node_1])
 
     # @unittest.skip("skip")
     def test_incr_lsn_sanity(self):
@@ -596,7 +593,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
                     repr(e.message), self.cmd))
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname)
+        self.del_test_dir(module_name, fname, [node_1])
 
         # @unittest.skip("skip")
     def test_incr_checksum_sanity(self):
@@ -655,7 +652,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         self.compare_pgdata(pgdata, pgdata_restored)
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname)
+        self.del_test_dir(module_name, fname, [node_1])
 
 
         # @unittest.skip("skip")
@@ -1178,7 +1175,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         pgbench.wait()
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname)
+        self.del_test_dir(module_name, fname, [new_master, old_master])
 
     # @unittest.skip("skip")
     def test_make_replica_via_incr_lsn_restore(self):
@@ -1251,7 +1248,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         pgbench.wait()
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname)
+        self.del_test_dir(module_name, fname, [new_master, old_master])
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure
@@ -1492,7 +1489,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
             '1')
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname)
+        self.del_test_dir(module_name, fname, [node])
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure
