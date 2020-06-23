@@ -831,12 +831,13 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 			/* if file does not exists in destination list, then we can safely unlink it */
 			if (parray_bsearch(dest_backup->files, file, pgFileCompareRelPathWithExternal) == NULL)
 			{
-				char		full_file_path[MAXPGPATH];
+				char		fullpath[MAXPGPATH];
 
-				join_path_components(full_file_path, pgdata_path, file->rel_path);
+				join_path_components(fullpath, pgdata_path, file->rel_path);
 
-				fio_pgFileDelete(file, full_file_path);
-				elog(VERBOSE, "Deleted file \"%s\"", full_file_path);
+//				fio_pgFileDelete(file, full_file_path);
+				pgFileDelete(file, fullpath);
+				elog(VERBOSE, "Deleted file \"%s\"", fullpath);
 
 				/* shrink pgdata list */
 				parray_remove(pgdata_files, i);
