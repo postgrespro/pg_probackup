@@ -19,11 +19,12 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     def test_basic_incr_restore(self):
-        """recovery to target timeline"""
+        """incremental restore in CHECKSUM mode"""
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
-            initdb_params=['--data-checksums'])
+            initdb_params=['--data-checksums'],
+            pg_options={'autovacuum': 'off'})
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
@@ -31,7 +32,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         self.set_archiving(backup_dir, 'node', node)
         node.slow_start()
 
-        node.pgbench_init(scale=10)
+        node.pgbench_init(scale=50)
 
         self.backup_node(backup_dir, 'node', node)
 
@@ -69,9 +70,9 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
 
         node.stop()
 
-        self.restore_node(
+        print(self.restore_node(
             backup_dir, 'node', node,
-            options=["-j", "4", "--incremental-mode=checksum"])
+            options=["-j", "4", "--incremental-mode=checksum"]))
 
         pgdata_restored = self.pgdata_content(node.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
