@@ -2492,6 +2492,37 @@ static void fio_check_postmaster_impl(int out, char *buf)
 	IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 }
 
+/*
+ * Delete file pointed by the pgFile.
+ * If the pgFile points directory, the directory must be empty.
+ */
+void
+fio_delete(mode_t mode, const char *fullpath, fio_location location)
+{
+	if (fio_is_remote(location))
+	{
+		fio_header  hdr;
+
+		hdr.cop = FIO_DELETE;
+		hdr.size = strlen(fullpath) + 1;
+		hdr.arg = mode;
+
+		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
+		IO_CHECK(fio_write_all(fio_stdout, fullpath, hdr.size), hdr.size);
+
+	}
+	else
+		pgFileDelete(mode, fullpath);
+}
+
+static void
+fio_delete_impl(mode_t mode, char *buf)
+{
+	char  *fullpath = (char*) buf;
+
+	pgFileDelete(mode, fullpath);
+}
+
 /* Execute commands at remote host */
 void fio_communicate(int in, int out)
 {
@@ -2674,6 +2705,10 @@ void fio_communicate(int in, int out)
 		  case FIO_CHECK_POSTMASTER:
 			/* calculate crc32 for a file */
 			fio_check_postmaster_impl(out, buf);
+			break;
+		  case FIO_DELETE:
+			/* delete file */
+			fio_delete_impl(hdr.arg, buf);
 			break;
 		  case FIO_DISCONNECT:
 			hdr.cop = FIO_DISCONNECTED;

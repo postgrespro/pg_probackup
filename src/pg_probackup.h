@@ -970,7 +970,7 @@ extern pgFile *pgFileNew(const char *path, const char *rel_path,
 						 bool follow_symlink, int external_dir_num,
 						 fio_location location);
 extern pgFile *pgFileInit(const char *rel_path);
-extern void pgFileDelete(pgFile *file, const char *full_path);
+extern void pgFileDelete(mode_t mode, const char *full_path);
 extern void fio_pgFileDelete(pgFile *file, const char *full_path);
 
 extern void pgFileFree(void *file);
@@ -1123,6 +1123,7 @@ extern int send_pages(ConnectionArgs* conn_arg, const char *to_fullpath, const c
 					  BackupMode backup_mode, int ptrack_version_num, const char *ptrack_schema);
 
 /* FIO */
+extern void fio_delete(mode_t mode, const char *fullpath, fio_location location);
 extern int fio_send_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file, XLogRecPtr horizonLsn,
 						   int calg, int clevel, uint32 checksum_version, datapagemap_t *pagemap,
 						   BlockNumber* err_blknum, char **errormsg, BackupPageHeader2 **headers);

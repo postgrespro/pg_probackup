@@ -768,7 +768,7 @@ delete_backup_files(pgBackup *backup)
 			elog(INFO, "Progress: (%zd/%zd). Delete file \"%s\"",
 				 i + 1, num_files, full_path);
 
-		pgFileDelete(file, full_path);
+		pgFileDelete(file->mode, full_path);
 	}
 
 	parray_walk(files, pgFileFree);

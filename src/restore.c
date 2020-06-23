@@ -836,7 +836,7 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 				join_path_components(fullpath, pgdata_path, file->rel_path);
 
 //				fio_pgFileDelete(file, full_file_path);
-				pgFileDelete(file, fullpath);
+				fio_delete(file->mode, fullpath, FIO_DB_HOST);
 				elog(VERBOSE, "Deleted file \"%s\"", fullpath);
 
 				/* shrink pgdata list */

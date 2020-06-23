@@ -225,9 +225,9 @@ pgFileInit(const char *rel_path)
  * If the pgFile points directory, the directory must be empty.
  */
 void
-pgFileDelete(pgFile *file, const char *full_path)
+pgFileDelete(mode_t mode, const char *full_path)
 {
-	if (S_ISDIR(file->mode))
+	if (S_ISDIR(mode))
 	{
 		if (rmdir(full_path) == -1)
 		{
@@ -244,38 +244,6 @@ pgFileDelete(pgFile *file, const char *full_path)
 
 delete_file:
 	if (remove(full_path) == -1)
-	{
-		if (errno == ENOENT)
-			return;
-		elog(ERROR, "Cannot remove file \"%s\": %s", full_path,
-			strerror(errno));
-	}
-}
-
-/*
- * Delete file pointed by the pgFile.
- * If the pgFile points directory, the directory must be empty.
- */
-void
-fio_pgFileDelete(pgFile *file, const char *full_path)
-{
-	if (S_ISDIR(file->mode))
-	{
-		if (fio_unlink(full_path, FIO_DB_HOST) == -1)
-		{
-			if (errno == ENOENT)
-				return;
-			else if (errno == ENOTDIR)	/* could be symbolic link */
-				goto delete_file;
-
-			elog(ERROR, "Cannot remove directory \"%s\": %s",
-				full_path, strerror(errno));
-		}
-		return;
-	}
-
-delete_file:
-	if (fio_unlink(full_path, FIO_DB_HOST) == -1)
 	{
 		if (errno == ENOENT)
 			return;
