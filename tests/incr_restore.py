@@ -808,7 +808,8 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
 
         self.set_config(
             backup_dir, 'node',
-            options=['-E{0}:{1}'.format(external_dir1, external_dir2)])
+            options=['-E{0}{1}{2}'.format(
+                external_dir1, self.EXTERNAL_DIRECTORY_DELIMITER, external_dir2)])
 
         # cmdline option MUST override options in config
         self.backup_node(
@@ -879,7 +880,8 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
 
         self.set_config(
             backup_dir, 'node',
-            options=['-E{0}:{1}'.format(external_dir1, external_dir2)])
+            options=['-E{0}{1}{2}'.format(
+                external_dir1, self.EXTERNAL_DIRECTORY_DELIMITER, external_dir2)])
 
         # cmdline option MUST override options in config
         self.backup_node(
