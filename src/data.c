@@ -1841,7 +1841,7 @@ get_checksum_map(const char *fullpath, uint32 checksum_version,
 //					checksum_map[blknum].checksum = ((PageHeader) read_buffer)->pd_checksum;
 //				else
 //					checksum_map[blknum].checksum = page_st.checksum;
-				checksum_map[blknum].lsn = page_st.checksum;
+				checksum_map[blknum].checksum = page_st.checksum;
 				checksum_map[blknum].lsn = page_st.lsn;
 			}
 		}
