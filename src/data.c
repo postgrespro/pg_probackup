@@ -1030,7 +1030,7 @@ restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_vers
 			 * go to the next page.
 			 */
 			if (!headers && fseek(in, read_len, SEEK_CUR) != 0)
-				elog(ERROR, "Cannot seek block %u of '%s': %s",
+				elog(ERROR, "Cannot seek block %u of \"%s\": %s",
 					blknum, from_fullpath, strerror(errno));
 			continue;
 		}
@@ -1039,7 +1039,7 @@ restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_vers
 			cur_pos_in != headers[n_hdr].pos)
 		{
 			if (fseek(in, headers[n_hdr].pos, SEEK_SET) != 0)
-				elog(ERROR, "Cannot seek to offset %u of '%s': %s",
+				elog(ERROR, "Cannot seek to offset %u of \"%s\": %s",
 					headers[n_hdr].pos, from_fullpath, strerror(errno));
 
 			cur_pos_in = headers[n_hdr].pos;
@@ -1804,7 +1804,7 @@ get_checksum_map(const char *fullpath, uint32 checksum_version,
 	char        in_buf[STDIO_BUFSIZE];
 
 	/* open file */
-	in = fopen(fullpath, "r+");
+	in = fopen(fullpath, "r+b");
 	if (!in)
 		elog(ERROR, "Cannot open source file \"%s\": %s", fullpath, strerror(errno));
 
@@ -1837,11 +1837,11 @@ get_checksum_map(const char *fullpath, uint32 checksum_version,
 
 			if (rc == PAGE_IS_VALID)
 			{
-				if (checksum_version)
-					checksum_map[blknum].checksum = ((PageHeader) read_buffer)->pd_checksum;
-				else
-					checksum_map[blknum].checksum = page_st.checksum;
-
+//				if (checksum_version)
+//					checksum_map[blknum].checksum = ((PageHeader) read_buffer)->pd_checksum;
+//				else
+//					checksum_map[blknum].checksum = page_st.checksum;
+				checksum_map[blknum].lsn = page_st.checksum;
 				checksum_map[blknum].lsn = page_st.lsn;
 			}
 		}
@@ -1875,7 +1875,7 @@ get_lsn_map(const char *fullpath, uint32 checksum_version,
 	Assert(shift_lsn > 0);
 
 	/* open file */
-	in = fopen(fullpath, "r+");
+	in = fopen(fullpath, "r+b");
 	if (!in)
 		elog(ERROR, "Cannot open source file \"%s\": %s", fullpath, strerror(errno));
 
