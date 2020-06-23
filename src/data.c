@@ -1030,7 +1030,7 @@ restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_vers
 			 * go to the next page.
 			 */
 			if (!headers && fseek(in, read_len, SEEK_CUR) != 0)
-				elog(ERROR, "Cannot seek block %u of \"%s\": %s",
+				elog(ERROR, "Cannot seek block %u of '%s': %s",
 					blknum, from_fullpath, strerror(errno));
 			continue;
 		}
@@ -1039,7 +1039,7 @@ restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_vers
 			cur_pos_in != headers[n_hdr].pos)
 		{
 			if (fseek(in, headers[n_hdr].pos, SEEK_SET) != 0)
-				elog(ERROR, "Cannot seek to offset %u of \"%s\": %s",
+				elog(ERROR, "Cannot seek to offset %u of '%s': %s",
 					headers[n_hdr].pos, from_fullpath, strerror(errno));
 
 			cur_pos_in = headers[n_hdr].pos;
@@ -1802,7 +1802,6 @@ get_checksum_map(const char *fullpath, uint32 checksum_version,
 	BlockNumber blknum = 0;
 	char        read_buffer[BLCKSZ];
 	char        in_buf[STDIO_BUFSIZE];
-	off_t       cur_pos = 0;
 
 	/* open file */
 	in = fopen(fullpath, "r+");
@@ -1820,31 +1819,15 @@ get_checksum_map(const char *fullpath, uint32 checksum_version,
 	checksum_map = pgut_malloc(n_blocks * sizeof(PageState));
 	memset(checksum_map, 0, n_blocks * sizeof(PageState));
 
-	for (;;)
+	for (blknum = 0; blknum < n_blocks;  blknum++)
 	{
+		size_t read_len = fread(read_buffer, 1, BLCKSZ, in);
 		PageState page_st;
-		size_t read_len = 0;
-
-		if (blknum >= n_blocks)
-			break;
-
-		if (cur_pos != blknum * BLCKSZ &&
-			fseek(in, blknum * BLCKSZ, SEEK_SET))
-		{
-			elog(ERROR, "Cannot seek to offset %u in file \"%s\": %s",
-				blknum * BLCKSZ, fullpath, strerror(errno));
-		}
-
-		read_len = fread(read_buffer, 1, BLCKSZ, in);
-		cur_pos += read_len;
 
 		/* report error */
 		if (ferror(in))
 			elog(ERROR, "Cannot read block %u of \"%s\": %s",
 					blknum, fullpath, strerror(errno));
-
-		if (read_len == 0 && feof(in))
-			break;
 
 		if (read_len == BLCKSZ)
 		{
@@ -1861,11 +1844,12 @@ get_checksum_map(const char *fullpath, uint32 checksum_version,
 
 				checksum_map[blknum].lsn = page_st.lsn;
 			}
-
-			blknum++;
 		}
 		else
-			elog(WARNING, "Odd size read len %lu for blknum %u in file \"%s\"", read_len, blknum, fullpath);
+			elog(ERROR, "Failed to read blknum %u from file \"%s\"", blknum, fullpath);
+
+		if (feof(in))
+			break;
 
 		if (interrupted)
 			elog(ERROR, "Interrupted during page reading");
