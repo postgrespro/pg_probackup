@@ -743,8 +743,11 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         pgdata = self.pgdata_content(
             node.base_dir, exclude_dirs=['logs'])
 
+        print(self.show_pb(backup_dir, 'node', as_json=False, as_text=True))
+
         # Merge
-        self.merge_backup(backup_dir, 'node', backup_id=backup_id)
+        print(self.merge_backup(backup_dir, 'node', backup_id=backup_id,
+            options=['--log-level-file=VERBOSE']))
 
         # RESTORE
         node.cleanup()

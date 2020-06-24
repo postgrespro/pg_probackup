@@ -1647,5 +1647,344 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
+    def test_incremental_partial_restore_exclude_checksum(self):
+        """"""
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        for i in range(1, 10, 1):
+            node.safe_psql(
+                'postgres',
+                'CREATE database db{0}'.format(i))
+
+        db_list_raw = node.safe_psql(
+            'postgres',
+            'SELECT to_json(a) '
+            'FROM (SELECT oid, datname FROM pg_database) a').rstrip()
+
+        db_list_splitted = db_list_raw.splitlines()
+
+        db_list = {}
+        for line in db_list_splitted:
+            line = json.loads(line)
+            db_list[line['datname']] = line['oid']
+
+        node.pgbench_init(scale=20)
+
+        # FULL backup
+        self.backup_node(backup_dir, 'node', node)
+        pgdata = self.pgdata_content(node.data_dir)
+
+        pgbench = node.pgbench(options=['-T', '10', '-c', '1'])
+        pgbench.wait()
+
+        # PAGE backup
+        backup_id = self.backup_node(backup_dir, 'node', node, backup_type='page')
+
+        # restore FULL backup into second node2
+        node1 = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node1'))
+        node1.cleanup()
+
+        node2 = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node2'))
+        node2.cleanup()
+
+        # restore some data into node2
+        self.restore_node(backup_dir, 'node', node2)
+
+        # partial restore backup into node1
+        self.restore_node(
+            backup_dir, 'node',
+            node1, options=[
+                "--db-exclude=db1",
+                "--db-exclude=db5"])
+
+        pgdata1 = self.pgdata_content(node1.data_dir)
+
+        # partial incremental restore backup into node2
+        print(self.restore_node(
+            backup_dir, 'node',
+            node2, options=[
+                "--db-exclude=db1",
+                "--db-exclude=db5",
+                "-I", "checksum"]))
+
+        pgdata2 = self.pgdata_content(node2.data_dir)
+
+        self.compare_pgdata(pgdata1, pgdata2)
+
+        self.set_auto_conf(node2, {'port': node2.port})
+
+        node2.slow_start()
+
+        node2.safe_psql(
+            'postgres',
+            'select 1')
+
+        try:
+            node2.safe_psql(
+                'db1',
+                'select 1')
+        except QueryException as e:
+            self.assertIn('FATAL', e.message)
+
+        try:
+            node2.safe_psql(
+                'db5',
+                'select 1')
+        except QueryException as e:
+            self.assertIn('FATAL', e.message)
+
+        with open(node2.pg_log_file, 'r') as f:
+            output = f.read()
+
+        self.assertNotIn('PANIC', output)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname, [node, node2])
+
+    def test_incremental_partial_restore_exclude_lsn(self):
+        """"""
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        for i in range(1, 10, 1):
+            node.safe_psql(
+                'postgres',
+                'CREATE database db{0}'.format(i))
+
+        db_list_raw = node.safe_psql(
+            'postgres',
+            'SELECT to_json(a) '
+            'FROM (SELECT oid, datname FROM pg_database) a').rstrip()
+
+        db_list_splitted = db_list_raw.splitlines()
+
+        db_list = {}
+        for line in db_list_splitted:
+            line = json.loads(line)
+            db_list[line['datname']] = line['oid']
+
+        node.pgbench_init(scale=20)
+
+        # FULL backup
+        self.backup_node(backup_dir, 'node', node)
+        pgdata = self.pgdata_content(node.data_dir)
+
+        pgbench = node.pgbench(options=['-T', '10', '-c', '1'])
+        pgbench.wait()
+
+        # PAGE backup
+        backup_id = self.backup_node(backup_dir, 'node', node, backup_type='page')
+
+        node.stop()
+
+        # restore FULL backup into second node2
+        node1 = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node1'))
+        node1.cleanup()
+
+        node2 = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node2'))
+        node2.cleanup()
+
+        # restore some data into node2
+        self.restore_node(backup_dir, 'node', node2)
+
+        # partial restore backup into node1
+        self.restore_node(
+            backup_dir, 'node',
+            node1, options=[
+                "--db-exclude=db1",
+                "--db-exclude=db5"])
+
+        pgdata1 = self.pgdata_content(node1.data_dir)
+
+        # partial incremental restore backup into node2
+        node2.port = node.port
+        node2.slow_start()
+        node2.stop()
+        print(self.restore_node(
+            backup_dir, 'node',
+            node2, options=[
+                "--db-exclude=db1",
+                "--db-exclude=db5",
+                "-I", "lsn"]))
+
+        pgdata2 = self.pgdata_content(node2.data_dir)
+
+        self.compare_pgdata(pgdata1, pgdata2)
+
+        self.set_auto_conf(node2, {'port': node2.port})
+
+        node2.slow_start()
+
+        node2.safe_psql(
+            'postgres',
+            'select 1')
+
+        try:
+            node2.safe_psql(
+                'db1',
+                'select 1')
+        except QueryException as e:
+            self.assertIn('FATAL', e.message)
+
+        try:
+            node2.safe_psql(
+                'db5',
+                'select 1')
+        except QueryException as e:
+            self.assertIn('FATAL', e.message)
+
+        with open(node2.pg_log_file, 'r') as f:
+            output = f.read()
+
+        self.assertNotIn('PANIC', output)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname, [node2])
+
+    def test_incremental_partial_restore_exclude_tablespace_checksum(self):
+        """"""
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # cat_version = node.get_control_data()["Catalog version number"]
+        # version_specific_dir = 'PG_' + node.major_version_str + '_' + cat_version
+
+        # PG_10_201707211
+        # pg_tblspc/33172/PG_9.5_201510051/16386/
+
+        self.create_tblspace_in_node(node, 'somedata')
+
+        node_tablespace = self.get_tblspace_path(node, 'somedata')
+
+        tbl_oid = node.safe_psql(
+            'postgres',
+            "SELECT oid "
+            "FROM pg_tablespace "
+            "WHERE spcname = 'somedata'").rstrip()
+
+        for i in range(1, 10, 1):
+            node.safe_psql(
+                'postgres',
+                'CREATE database db{0} tablespace somedata'.format(i))
+
+        db_list_raw = node.safe_psql(
+            'postgres',
+            'SELECT to_json(a) '
+            'FROM (SELECT oid, datname FROM pg_database) a').rstrip()
+
+        db_list_splitted = db_list_raw.splitlines()
+
+        db_list = {}
+        for line in db_list_splitted:
+            line = json.loads(line)
+            db_list[line['datname']] = line['oid']
+
+        # FULL backup
+        backup_id = self.backup_node(backup_dir, 'node', node)
+
+        # node1
+        node1 = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node1'))
+        node1.cleanup()
+        node1_tablespace = self.get_tblspace_path(node1, 'somedata')
+
+        # node2
+        node2 = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node2'))
+        node2.cleanup()
+        node2_tablespace = self.get_tblspace_path(node2, 'somedata')
+
+        # in node2 restore full backup
+        self.restore_node(
+            backup_dir, 'node',
+            node2, options=[
+                "-T", "{0}={1}".format(
+                    node_tablespace, node2_tablespace)])
+
+        # partial restore into node1
+        self.restore_node(
+            backup_dir, 'node',
+            node1, options=[
+                "--db-exclude=db1",
+                "--db-exclude=db5",
+                "-T", "{0}={1}".format(
+                    node_tablespace, node1_tablespace)])
+
+#        with open(os.path.join(node1_tablespace, "hello"), "w") as f:
+#            f.close()
+        pgdata1 = self.pgdata_content(node1.data_dir)
+
+        # partial incremental restore into node2
+        self.restore_node(
+            backup_dir, 'node',
+            node2, options=[
+                "-I", "checksum",
+                "--db-exclude=db1",
+                "--db-exclude=db5",
+                "-T", "{0}={1}".format(
+                    node_tablespace, node2_tablespace)])
+        pgdata2 = self.pgdata_content(node2.data_dir)
+
+        self.compare_pgdata(pgdata1, pgdata2)
+
+
+        self.set_auto_conf(node2, {'port': node2.port})
+        node2.slow_start()
+
+        node2.safe_psql(
+            'postgres',
+            'select 1')
+
+        try:
+            node2.safe_psql(
+                'db1',
+                'select 1')
+        except QueryException as e:
+            self.assertIn('FATAL', e.message)
+
+        try:
+            node2.safe_psql(
+                'db5',
+                'select 1')
+        except QueryException as e:
+            self.assertIn('FATAL', e.message)
+
+        with open(node2.pg_log_file, 'r') as f:
+            output = f.read()
+
+        self.assertNotIn('PANIC', output)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname, [node2])
+
 # check that MinRecPoint and BackupStartLsn are correctly used in case of --incrementa-lsn
 # incremental restore + partial restore.

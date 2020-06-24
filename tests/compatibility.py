@@ -359,7 +359,10 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         node_restored.cleanup()
         self.restore_node(
             backup_dir, 'node', node_restored,
-            options=["-j", "4", "--recovery-target-action=promote"])
+            options=[
+                "-j", "4",
+                "--recovery-target=latest",
+                "--recovery-target-action=promote"])
 
         if self.paranoia:
             pgdata_restored = self.pgdata_content(node_restored.data_dir)
@@ -384,7 +387,10 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
 
         self.restore_node(
             backup_dir, 'node', node_restored,
-            options=["-j", "4", "--recovery-target-action=promote"])
+            options=[
+                "-j", "4",
+                "--recovery-target=latest",
+                "--recovery-target-action=promote"])
 
         if self.paranoia:
             pgdata_restored = self.pgdata_content(node_restored.data_dir)
@@ -593,7 +599,7 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
 
         self.merge_backup(backup_dir, "node", backup_id)
 
-        print(self.show_pb(backup_dir, as_text=True, as_json=False))
+        self.show_pb(backup_dir, as_text=True, as_json=False)
 
         # restore OLD FULL with new binary
         node_restored = self.make_simple_node(
