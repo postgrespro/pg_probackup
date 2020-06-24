@@ -532,23 +532,19 @@ merge_chain(parray *parent_chain, pgBackup *full_backup, pgBackup *dest_backup)
 	 * If current program version differs from destination backup version,
 	 * then in-place merge is not possible.
 	 */
-	if (parse_program_version(dest_backup->program_version) ==
-		parse_program_version(PROGRAM_VERSION))
+	if ((parse_program_version(full_backup->program_version) ==
+		 parse_program_version(dest_backup->program_version)) &&
+		(parse_program_version(dest_backup->program_version) ==
+		 parse_program_version(PROGRAM_VERSION)))
 		program_version_match = true;
 	else
 		elog(WARNING, "In-place merge is disabled because of program "
-					"versions mismatch: backup %s was produced by version %s, "
-					"but current program version is %s",
-					base36enc(dest_backup->start_time),
-					dest_backup->program_version, PROGRAM_VERSION);
-
-	/* Construct path to database dir: /backup_dir/instance_name/FULL/database */
-	join_path_components(full_database_dir, full_backup->root_dir, DATABASE_DIR);
-	/* Construct path to external dir: /backup_dir/instance_name/FULL/external */
-	join_path_components(full_external_prefix, full_backup->root_dir, EXTERNAL_DIR);
-
-	elog(INFO, "Validate parent chain for backup %s",
-					base36enc(dest_backup->start_time));
+					"versions mismatch. Full backup version: %s, "
+					"destination backup version: %s, "
+					"current program version: %s",
+					full_backup->program_version,
+					dest_backup->program_version,
+					PROGRAM_VERSION);
 
 	/* Forbid merge retry for failed merges between 2.4.0 and any
 	 * older version. Several format changes makes it impossible
@@ -568,6 +564,9 @@ merge_chain(parray *parent_chain, pgBackup *full_backup, pgBackup *dest_backup)
 	 * with sole exception of FULL backup. If it has MERGING status
 	 * then it isn't valid backup until merging is finished.
 	 */
+	elog(INFO, "Validate parent chain for backup %s",
+					base36enc(dest_backup->start_time));
+
 	for (i = parray_num(parent_chain) - 1; i >= 0; i--)
 	{
 		pgBackup   *backup = (pgBackup *) parray_get(parent_chain, i);
@@ -611,6 +610,11 @@ merge_chain(parray *parent_chain, pgBackup *full_backup, pgBackup *dest_backup)
 			write_backup_status(backup, BACKUP_STATUS_MERGING, instance_name, true);
 	}
 
+	/* Construct path to database dir: /backup_dir/instance_name/FULL/database */
+	join_path_components(full_database_dir, full_backup->root_dir, DATABASE_DIR);
+	/* Construct path to external dir: /backup_dir/instance_name/FULL/external */
+	join_path_components(full_external_prefix, full_backup->root_dir, EXTERNAL_DIR);
+
 	/* Create directories */
 	create_data_directories(dest_backup->files, full_database_dir,
 							dest_backup->root_dir, false, false, FIO_BACKUP_HOST);
@@ -627,6 +631,7 @@ merge_chain(parray *parent_chain, pgBackup *full_backup, pgBackup *dest_backup)
 	if (full_externals && dest_externals)
 		reorder_external_dirs(full_backup, full_externals, dest_externals);
 
+	/* bitmap optimization rely on n_blocks, which is generally available since 2.3.0 */
 	if (parse_program_version(dest_backup->program_version) < 20300)
 		use_bitmap = false;
 
@@ -981,7 +986,8 @@ merge_files(void *arg)
 		 * In-place merge is also impossible, if program version of destination
 		 * backup differs from PROGRAM_VERSION
 		 */
-		if (arguments->program_version_match && arguments->compression_match)
+		if (arguments->program_version_match && arguments->compression_match &&
+			!arguments->is_retry)
 		{
 			/*
 			 * Case 1:
@@ -1049,7 +1055,7 @@ merge_files(void *arg)
 		 * page header map cannot be trusted when retrying, so no
 		 * in place merge for retry.
 		 */
-		if (in_place && !arguments->is_retry)
+		if (in_place)
 		{
 			pgFile	   **res_file = NULL;
 			pgFile	   *file = NULL;
