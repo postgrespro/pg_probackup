@@ -2230,6 +2230,8 @@ cleanup:
 	return headers;
 }
 
+/* write headers of all blocks belonging to file to header map and
+ * save its offset and size */
 void
 write_page_headers(BackupPageHeader2 *headers, pgFile *file, HeaderMap *hdr_map, bool is_merge)
 {

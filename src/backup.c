@@ -642,10 +642,15 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool
 			 */
 			pg_free(file->rel_path);
 
+			/* Now it is relative to /backup_dir/backups/instance_name/backup_id/database/ */
 			file->rel_path = pgut_strdup(GetRelativePath(wal_full_path, database_path));
+
 			file->name = last_dir_separator(file->rel_path);
 
-			/* Now it is relative to /backup_dir/backups/instance_name/backup_id/database/ */
+			if (file->name == NULL)
+				file->name = file->rel_path;
+			else
+				file->name++;
 		}
 
 		/* Add xlog files into the list of backed up files */

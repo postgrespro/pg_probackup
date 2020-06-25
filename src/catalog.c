@@ -1880,7 +1880,7 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 			 * Size of WAL files in 'pg_wal' is counted separately
 			 * TODO: in 3.0 add attribute is_walfile
 			 */
-			if (IsXLogFileName(file->name) && (file->external_dir_num == 0))
+			if (IsXLogFileName(file->name) && file->external_dir_num == 0)
 				wal_size_on_disk += file->write_size;
 			else
 			{
