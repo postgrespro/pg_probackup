@@ -10,6 +10,7 @@ The utility is compatible with:
 
 As compared to other backup solutions, `pg_probackup` offers the following benefits that can help you implement different backup strategies and deal with large amounts of data:
 * Incremental backup: page-level incremental backup allows you to save disk space, speed up backup and restore. With three different incremental modes, you can plan the backup strategy in accordance with your data flow.
+* Incremental restore: page-level incremental restore allows you dramatically speed up restore by reusing valid unchanged pages in destination directory.
 * Merge: using this feature allows you to implement "incrementally updated backups" strategy, eliminating the need to do periodical full backups.
 * Validation: automatic data consistency checks and on-demand backup validation without actual data recovery
 * Verification: on-demand verification of PostgreSQL instance with the `checkdb` command.
@@ -54,7 +55,7 @@ Regardless of the chosen backup type, all backups taken with `pg_probackup` supp
 
 ## Current release
 
-[2.3.5](https://github.com/postgrespro/pg_probackup/releases/tag/2.3.5)
+[2.4.1](https://github.com/postgrespro/pg_probackup/releases/tag/2.4.1)
 
 ## Documentation
 
@@ -62,7 +63,7 @@ Documentation can be found at [github](https://postgrespro.github.io/pg_probacku
 
 ## Installation and Setup
 ### Windows Installation
-Installers are available in release **assets**. [Latests](https://github.com/postgrespro/pg_probackup/releases/2.3.5).
+Installers are available in release **assets**. [Latests](https://github.com/postgrespro/pg_probackup/releases/2.4.1).
 
 ### Linux Installation
 #### pg_probackup for vanilla PostgreSQL
