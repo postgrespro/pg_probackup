@@ -53,10 +53,6 @@ Regardless of the chosen backup type, all backups taken with `pg_probackup` supp
 * Remote backup via ssh on Windows currently is not supported.
 * When running remote operations via ssh, remote and local pg_probackup versions must be the same.
 
-## Current release
-
-[2.4.1](https://github.com/postgrespro/pg_probackup/releases/tag/2.4.1)
-
 ## Documentation
 
 Documentation can be found at [github](https://postgrespro.github.io/pg_probackup) and [Postgres Professional documentation](https://postgrespro.com/docs/postgrespro/current/app-pgprobackup)
