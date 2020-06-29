@@ -1124,9 +1124,10 @@ extern int send_pages(ConnectionArgs* conn_arg, const char *to_fullpath, const c
 
 /* FIO */
 extern void fio_delete(mode_t mode, const char *fullpath, fio_location location);
-extern int fio_send_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file, XLogRecPtr horizonLsn,
-						   int calg, int clevel, uint32 checksum_version, datapagemap_t *pagemap,
-						   BlockNumber* err_blknum, char **errormsg, BackupPageHeader2 **headers);
+extern int fio_send_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
+	                      XLogRecPtr horizonLsn, int calg, int clevel, uint32 checksum_version,
+	                      bool use_pagemap, BlockNumber* err_blknum, char **errormsg,
+	                      BackupPageHeader2 **headers);
 /* return codes for fio_send_pages */
 extern int fio_send_file_gz(const char *from_fullpath, const char *to_fullpath, FILE* out, char **errormsg);
 extern int fio_send_file(const char *from_fullpath, const char *to_fullpath, FILE* out,

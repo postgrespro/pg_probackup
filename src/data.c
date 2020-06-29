@@ -618,9 +618,7 @@ backup_data_file(ConnectionArgs* conn_arg, pgFile *file,
 						/* send prev backup START_LSN */
 						backup_mode == BACKUP_MODE_DIFF_DELTA &&
 						file->exists_in_prev ? prev_backup_start_lsn : InvalidXLogRecPtr,
-						calg, clevel, checksum_version,
-						/* send pagemap if any */
-						use_pagemap ? &file->pagemap : NULL,
+						calg, clevel, checksum_version, use_pagemap,
 						&headers, backup_mode, ptrack_version_num, ptrack_schema);
 	}
 

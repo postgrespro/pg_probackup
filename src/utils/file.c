@@ -1399,10 +1399,10 @@ static void fio_load_file(int out, char const* path)
  * In case of DELTA mode horizonLsn must be a valid lsn,
  * otherwise it should be set to InvalidXLogRecPtr.
  */
-int fio_send_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file, XLogRecPtr horizonLsn,
-						   int calg, int clevel, uint32 checksum_version,
-						   datapagemap_t *pagemap, BlockNumber* err_blknum,
-						   char **errormsg, BackupPageHeader2 **headers)
+int fio_send_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
+				   XLogRecPtr horizonLsn, int calg, int clevel, uint32 checksum_version,
+				   bool use_pagemap, BlockNumber* err_blknum, char **errormsg,
+				   BackupPageHeader2 **headers)
 {
 	FILE *out = NULL;
 	char *out_buf = NULL;
@@ -1423,10 +1423,10 @@ int fio_send_pages(const char *to_fullpath, const char *from_fullpath, pgFile *f
 
 	req.hdr.cop = FIO_SEND_PAGES;
 
-	if (pagemap)
+	if (use_pagemap)
 	{
-		req.hdr.size = sizeof(fio_send_request) + pagemap->bitmapsize + strlen(from_fullpath) + 1;
-		req.arg.bitmapsize = pagemap->bitmapsize;
+		req.hdr.size = sizeof(fio_send_request) + (*file).pagemap.bitmapsize + strlen(from_fullpath) + 1;
+		req.arg.bitmapsize = (*file).pagemap.bitmapsize;
 
 		/* TODO: add optimization for the case of pagemap
 		 * containing small number of blocks with big serial numbers:
@@ -1465,8 +1465,8 @@ int fio_send_pages(const char *to_fullpath, const char *from_fullpath, pgFile *f
 	IO_CHECK(fio_write_all(fio_stdout, from_fullpath, req.arg.path_len), req.arg.path_len);
 
 	/* send pagemap if any */
-	if (pagemap)
-		IO_CHECK(fio_write_all(fio_stdout, pagemap->bitmap, pagemap->bitmapsize), pagemap->bitmapsize);
+	if (use_pagemap)
+		IO_CHECK(fio_write_all(fio_stdout, (*file).pagemap.bitmap, (*file).pagemap.bitmapsize), (*file).pagemap.bitmapsize);
 
 	while (true)
 	{
