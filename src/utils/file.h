@@ -12,6 +12,8 @@
 
 typedef enum
 {
+	/* message for compatibility check */
+	FIO_AGENT_VERSION, /* never move this */
 	FIO_OPEN,
 	FIO_CLOSE,
 	FIO_WRITE,
@@ -50,8 +52,6 @@ typedef enum
 	/* messages for closing connection */
 	FIO_DISCONNECT,
 	FIO_DISCONNECTED,
-	/* message for compatibility check */
-	FIO_AGENT_VERSION,
 	FIO_LIST_DIR,
 	FIO_CHECK_POSTMASTER
 } fio_operations;
