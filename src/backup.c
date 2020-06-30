@@ -647,7 +647,7 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool
 
 			file->name = last_dir_separator(file->rel_path);
 
-			if (file->name == NULL)
+			if (file->name == NULL) // TODO: do it in pgFileInit
 				file->name = file->rel_path;
 			else
 				file->name++;
