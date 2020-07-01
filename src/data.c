@@ -607,7 +607,7 @@ backup_data_file(ConnectionArgs* conn_arg, pgFile *file,
 							file->exists_in_prev ? prev_backup_start_lsn : InvalidXLogRecPtr,
 							calg, clevel, checksum_version,
 							/* send pagemap if any */
-							use_pagemap ? &file->pagemap : NULL,
+							use_pagemap,
 							/* variables for error reporting */
 							&err_blknum, &errmsg, &headers);
 	}
