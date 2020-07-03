@@ -90,8 +90,15 @@ rpm -ivh https://repo.postgrespro.ru/pg_probackup/keys/pg_probackup-repo-oraclel
 yum install pg_probackup-{12,11,10,9.6,9.5}
 yum install pg_probackup-{12,11,10,9.6,9.5}-debuginfo
 
-#SRPM Packages
+#SRPM Centos|RHEL|OracleLinux Packages
 yumdownloader --source pg_probackup-{12,11,10,9.6,9.5}
+
+#RPM SUSE|SLES Packages
+zypper install --allow-unsigned-rpm -y http://repo.postgrespro.ru/pg_probackup/keys/pg_probackup-repo-suse.noarch.rpm
+zypper --gpg-auto-import-keys install -y pg_probackup-{12,11,10,9.6,9.5}
+
+#SRPM SUSE|SLES Packages
+zypper si pg_probackup-{12,11,10,9.6,9.5}
 
 #RPM ALT Linux 7
 sudo echo "rpm https://repo.postgrespro.ru/pg_probackup/rpm/latest/altlinux-p7 x86_64 vanilla" > /etc/apt/sources.list.d/pg_probackup.list
