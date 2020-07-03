@@ -96,6 +96,7 @@ yumdownloader --source pg_probackup-{12,11,10,9.6,9.5}
 #RPM SUSE|SLES Packages
 zypper install --allow-unsigned-rpm -y https://repo.postgrespro.ru/pg_probackup/keys/pg_probackup-repo-suse.noarch.rpm
 zypper --gpg-auto-import-keys install -y pg_probackup-{12,11,10,9.6,9.5}
+zypper install pg_probackup-{12,11,10,9.6,9.5}-debuginfo
 
 #SRPM SUSE|SLES Packages
 zypper si pg_probackup-{12,11,10,9.6,9.5}
