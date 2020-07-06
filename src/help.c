@@ -310,6 +310,7 @@ help_backup(void)
 	printf(_("                                   (example: --note='backup before app update to v13.1')\n"));
 
 	printf(_("\n  Logging options:\n"));
+	printf(_("      --color                      color the error and warning console messages\n"));
 	printf(_("      --log-level-console=log-level-console\n"));
 	printf(_("                                   level for console logging (default: info)\n"));
 	printf(_("                                   available options: 'off', 'error', 'warning', 'info', 'log', 'verbose'\n"));
@@ -470,6 +471,7 @@ help_restore(void)
 	printf(_("  -S, --primary-slot-name=slotname replication slot to be used for WAL streaming from the primary server\n"));
 
 	printf(_("\n  Logging options:\n"));
+	printf(_("      --color                      color the error and warning console messages\n"));
 	printf(_("      --log-level-console=log-level-console\n"));
 	printf(_("                                   level for console logging (default: info)\n"));
 	printf(_("                                   available options: 'off', 'error', 'warning', 'info', 'log', 'verbose'\n"));
@@ -536,6 +538,7 @@ help_validate(void)
 	printf(_("      --skip-block-validation      set to validate only file-level checksum\n"));
 
 	printf(_("\n  Logging options:\n"));
+	printf(_("      --color                      color the error and warning console messages\n"));
 	printf(_("      --log-level-console=log-level-console\n"));
 	printf(_("                                   level for console logging (default: info)\n"));
 	printf(_("                                   available options: 'off', 'error', 'warning', 'info', 'log', 'verbose'\n"));
@@ -580,6 +583,7 @@ help_checkdb(void)
 	printf(_("                                   can be used only with '--amcheck' option\n"));
 
 	printf(_("\n  Logging options:\n"));
+	printf(_("      --color                      color the error and warning console messages\n"));
 	printf(_("      --log-level-console=log-level-console\n"));
 	printf(_("                                   level for console logging (default: info)\n"));
 	printf(_("                                   available options: 'off', 'error', 'warning', 'info', 'log', 'verbose'\n"));
@@ -620,7 +624,8 @@ help_show(void)
 	printf(_("      --instance=instance_name     show info about specific instance\n"));
 	printf(_("  -i, --backup-id=backup-id        show info about specific backups\n"));
 	printf(_("      --archive                    show WAL archive information\n"));
-	printf(_("      --format=format              show format=PLAIN|JSON\n\n"));
+	printf(_("      --format=format              show format=PLAIN|JSON\n"));
+	printf(_("      --color                      color the info for plain format\n\n"));
 }
 
 static void
@@ -655,6 +660,7 @@ help_delete(void)
 	printf(_("      --status=backup_status       delete all backups with specified status\n"));
 
 	printf(_("\n  Logging options:\n"));
+	printf(_("      --color                      color the error and warning console messages\n"));
 	printf(_("      --log-level-console=log-level-console\n"));
 	printf(_("                                   level for console logging (default: info)\n"));
 	printf(_("                                   available options: 'off', 'error', 'warning', 'info', 'log', 'verbose'\n"));
@@ -697,6 +703,7 @@ help_merge(void)
 	printf(_("      --progress                   show progress\n"));
 
 	printf(_("\n  Logging options:\n"));
+	printf(_("      --color                      color the error and warning console messages\n"));
 	printf(_("      --log-level-console=log-level-console\n"));
 	printf(_("                                   level for console logging (default: info)\n"));
 	printf(_("                                   available options: 'off', 'error', 'warning', 'info', 'log', 'verbose'\n"));
