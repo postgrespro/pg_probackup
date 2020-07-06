@@ -311,7 +311,8 @@ main(int argc, char *argv[])
 #endif
 
 	/* Initialize ANSI escape codes for Windows */
-	init_console();
+	if (show_color)
+		init_console();
 
 	/*
 	 * Save main thread's tid. It is used call exit() in case of errors.

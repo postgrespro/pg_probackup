@@ -119,22 +119,69 @@ init_logger(const char *root_path, LoggerConfig *config)
 #endif
 }
 
+/* enable ANSI escape codes for Windows if possible */
 void
 init_console(void)
 {
 #if defined WIN32 || defined _WIN32 || defined WIN64 || defined _WIN64
-    HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
-    DWORD dwMode = 0;
-    GetConsoleMode(hOut, &dwMode);
-    dwMode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
-    SetConsoleMode(hOut, dwMode);
+    HANDLE hOut = INVALID_HANDLE_VALUE;
+    HANDLE hErr = INVALID_HANDLE_VALUE;
+    DWORD dwMode_out = 0;
+    DWORD dwMode_err = 0;
 
-    // References:
-    //SetConsoleMode() and ENABLE_VIRTUAL_TERMINAL_PROCESSING?
-    //https://stackoverflow.com/questions/38772468/setconsolemode-and-enable-virtual-terminal-processing
+	hOut = GetStdHandle(STD_OUTPUT_HANDLE);
+	if (hOut == INVALID_HANDLE_VALUE || !hOut)
+	{
+		show_color = false;
+		_dosmaperr(GetLastError());
+		elog(WARNING, "Failed to get terminal stdout handle: %s", strerror(errno));
+		return;
+	}
 
-    // Windows console with ANSI colors handling
-    // https://superuser.com/questions/413073/windows-console-with-ansi-colors-handling
+	hErr = GetStdHandle(STD_ERROR_HANDLE);
+	if (hErr == INVALID_HANDLE_VALUE || !hErr)
+	{
+		show_color = false;
+		_dosmaperr(GetLastError());
+		elog(WARNING, "Failed to get terminal stderror handle: %s", strerror(errno));
+		return;
+	}
+
+	if (!GetConsoleMode(hOut, &dwMode_out))
+	{
+		show_color = false;
+		_dosmaperr(GetLastError());
+		elog(WARNING, "Failed to get console mode for stdout: %s", strerror(errno));
+		return;
+	}
+
+	if (!GetConsoleMode(hErr, &dwMode_err))
+	{
+		show_color = false;
+		_dosmaperr(GetLastError());
+		elog(WARNING, "Failed to get console mode for stderr: %s", strerror(errno));
+		return;
+	}
+
+	/* Add ANSI codes support */
+    dwMode_out |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+    dwMode_err |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+
+    if (!SetConsoleMode(hOut, dwMode_out))
+	{
+		show_color = false;
+		_dosmaperr(GetLastError());
+		elog(WARNING, "Cannot set console mode for stdout: %s", strerror(errno));
+		return;
+	}
+
+	if (!SetConsoleMode(hErr, dwMode_err))
+	{
+		show_color = false;
+		_dosmaperr(GetLastError());
+		elog(WARNING, "Cannot set console mode for stderr: %s", strerror(errno));
+		return;
+	}
 #endif
 }
 
