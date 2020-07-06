@@ -272,10 +272,26 @@ elog_internal(int elevel, bool file_only, const char *message)
 			fprintf(stderr, "%s ", str_pid);
 			fprintf(stderr, "%s ", str_thread);
 		}
+		else if (show_color)
+		{
+			/* color WARNING and ERROR messages */
+			if (elevel == WARNING)
+				fprintf(stderr, "%s", TC_YELLOW_BOLD);
+			else if (elevel == ERROR)
+				fprintf(stderr, "%s", TC_RED_BOLD);
+		}
 
 		write_elevel(stderr, elevel);
 
-		fprintf(stderr, "%s\n", message);
+		/* main payload */
+		fprintf(stderr, "%s", message);
+
+		/* reset color to default */
+		if (show_color && (elevel == WARNING || elevel == ERROR))
+			fprintf(stderr, "%s", TC_RESET);
+
+		fprintf(stderr, "\n");
+
 		fflush(stderr);
 	}
 

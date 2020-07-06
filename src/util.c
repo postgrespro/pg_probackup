@@ -516,6 +516,29 @@ status2str(BackupStatus status)
 	return statusName[status];
 }
 
+const char *
+status2str_color(BackupStatus status)
+{
+	char *status_str = pgut_malloc(20);
+
+	/* UNKNOWN */
+	if (status < BACKUP_STATUS_INVALID || BACKUP_STATUS_CORRUPT < status)
+		snprintf(status_str, 20, "%s%s%s", TC_YELLOW_BOLD, "UNKNOWN", TC_RESET);
+	/* CORRUPT, ERROR and ORPHAN */
+	else if (status == BACKUP_STATUS_CORRUPT || status == BACKUP_STATUS_ERROR ||
+			 status == BACKUP_STATUS_ORPHAN)
+		snprintf(status_str, 20, "%s%s%s", TC_RED_BOLD, statusName[status], TC_RESET);
+	/* MERGING, MERGED, DELETING and DELETED */
+	else if (status == BACKUP_STATUS_MERGING || status == BACKUP_STATUS_MERGED ||
+			 status == BACKUP_STATUS_DELETING || status == BACKUP_STATUS_DELETED)
+		snprintf(status_str, 20, "%s%s%s", TC_YELLOW_BOLD, statusName[status], TC_RESET);
+	else
+		/* OK and DONE */
+		snprintf(status_str, 20, "%s%s%s", TC_GREEN_BOLD, statusName[status], TC_RESET);
+
+	return status_str;
+}
+
 BackupStatus
 str2status(const char *status)
 {
