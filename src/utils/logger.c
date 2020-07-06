@@ -124,10 +124,10 @@ void
 init_console(void)
 {
 #ifdef WIN32
-    HANDLE hOut = INVALID_HANDLE_VALUE;
-    HANDLE hErr = INVALID_HANDLE_VALUE;
-    DWORD dwMode_out = 0;
-    DWORD dwMode_err = 0;
+	HANDLE hOut = INVALID_HANDLE_VALUE;
+	HANDLE hErr = INVALID_HANDLE_VALUE;
+	DWORD dwMode_out = 0;
+	DWORD dwMode_err = 0;
 
 	hOut = GetStdHandle(STD_OUTPUT_HANDLE);
 	if (hOut == INVALID_HANDLE_VALUE || !hOut)
@@ -163,7 +163,7 @@ init_console(void)
 		return;
 	}
 
-    /* Add ANSI codes support */
+	/* Add ANSI codes support */
 	dwMode_out |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
 	dwMode_err |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
 
