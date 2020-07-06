@@ -39,6 +39,10 @@ typedef enum
 	PG_FATAL
 } eLogType;
 
+#ifndef ENABLE_VIRTUAL_TERMINAL_PROCESSING
+#define ENABLE_VIRTUAL_TERMINAL_PROCESSING  0x0004
+#endif
+
 void pg_log(eLogType type, const char *fmt,...) pg_attribute_printf(2, 3);
 
 static void elog_internal(int elevel, bool file_only, const char *message);
@@ -112,6 +116,25 @@ init_logger(const char *root_path, LoggerConfig *config)
 		default:
 			break;
 	};
+#endif
+}
+
+void
+init_console(void)
+{
+#if defined WIN32 || defined _WIN32 || defined WIN64 || defined _WIN64
+    HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
+    DWORD dwMode = 0;
+    GetConsoleMode(hOut, &dwMode);
+    dwMode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+    SetConsoleMode(hOut, dwMode);
+
+    // References:
+    //SetConsoleMode() and ENABLE_VIRTUAL_TERMINAL_PROCESSING?
+    //https://stackoverflow.com/questions/38772468/setconsolemode-and-enable-virtual-terminal-processing
+
+    // Windows console with ANSI colors handling
+    // https://superuser.com/questions/413073/windows-console-with-ansi-colors-handling
 #endif
 }
 

@@ -310,6 +310,9 @@ main(int argc, char *argv[])
 	WalSegSz = 0;
 #endif
 
+	/* Initialize ANSI escape codes for Windows */
+	init_console();
+
 	/*
 	 * Save main thread's tid. It is used call exit() in case of errors.
 	 */
