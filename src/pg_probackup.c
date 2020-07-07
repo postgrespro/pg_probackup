@@ -442,7 +442,7 @@ main(int argc, char *argv[])
 
 	pgut_init();
 
-	/* Initialize ANSI escape codes for Windows */
+	/* Check terminal presense and initialize ANSI escape codes for Windows */
 	if (show_color)
 		init_console();
 

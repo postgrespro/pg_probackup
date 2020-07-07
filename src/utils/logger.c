@@ -119,10 +119,23 @@ init_logger(const char *root_path, LoggerConfig *config)
 #endif
 }
 
-/* enable ANSI escape codes for Windows if possible */
+/*
+ * Check that we are connected to terminal and
+ * enable ANSI escape codes for Windows if possible
+ */
 void
 init_console(void)
 {
+
+	/* no point in tex coloring if we do not connected to terminal */
+	if (isatty(fileno(stderr)) != 1 ||
+		isatty(fileno(stdout)) != 1)
+	{
+		show_color = false;
+		elog(WARNING, "No terminal detected, ignoring '--color' flag");
+		return;
+	}
+
 #ifdef WIN32
 	HANDLE hOut = INVALID_HANDLE_VALUE;
 	HANDLE hErr = INVALID_HANDLE_VALUE;
