@@ -310,10 +310,6 @@ main(int argc, char *argv[])
 	WalSegSz = 0;
 #endif
 
-	/* Initialize ANSI escape codes for Windows */
-	if (show_color)
-		init_console();
-
 	/*
 	 * Save main thread's tid. It is used call exit() in case of errors.
 	 */
@@ -445,6 +441,10 @@ main(int argc, char *argv[])
 	config_get_opt(argc, argv, cmd_options, instance_options);
 
 	pgut_init();
+
+	/* Initialize ANSI escape codes for Windows */
+	if (show_color)
+		init_console();
 
 	if (help_opt)
 		help_command(command_name);

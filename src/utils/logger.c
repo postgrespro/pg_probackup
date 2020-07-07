@@ -123,7 +123,7 @@ init_logger(const char *root_path, LoggerConfig *config)
 void
 init_console(void)
 {
-#if defined WIN32 || defined _WIN32 || defined WIN64 || defined _WIN64
+#ifdef WIN32
     HANDLE hOut = INVALID_HANDLE_VALUE;
     HANDLE hErr = INVALID_HANDLE_VALUE;
     DWORD dwMode_out = 0;
@@ -163,11 +163,11 @@ init_console(void)
 		return;
 	}
 
-	/* Add ANSI codes support */
-    dwMode_out |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
-    dwMode_err |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+    /* Add ANSI codes support */
+	dwMode_out |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+	dwMode_err |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
 
-    if (!SetConsoleMode(hOut, dwMode_out))
+	if (!SetConsoleMode(hOut, dwMode_out))
 	{
 		show_color = false;
 		_dosmaperr(GetLastError());
