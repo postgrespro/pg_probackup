@@ -133,7 +133,7 @@ init_console(void)
 	{
 		show_color = false;
 		_dosmaperr(GetLastError());
-		elog(WARNING, "No terminal detected, ignoring '--color' flag: %s", strerror(errno));
+		elog(WARNING, "No terminal detected, ignoring '--color' flag");
 		return;
 	}
 
