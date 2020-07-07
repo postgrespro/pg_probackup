@@ -127,7 +127,7 @@ help_pg_probackup(void)
 	printf(_("                 [--error-log-filename=error-log-filename]\n"));
 	printf(_("                 [--log-directory=log-directory]\n"));
 	printf(_("                 [--log-rotation-size=log-rotation-size]\n"));
-	printf(_("                 [--log-rotation-age=log-rotation-age]\n"));
+	printf(_("                 [--log-rotation-age=log-rotation-age] [--no-color]\n"));
 	printf(_("                 [--delete-expired] [--delete-wal] [--merge-expired]\n"));
 	printf(_("                 [--retention-redundancy=retention-redundancy]\n"));
 	printf(_("                 [--retention-window=retention-window]\n"));
@@ -188,7 +188,7 @@ help_pg_probackup(void)
 	printf(_("\n  %s show -B backup-path\n"), PROGRAM_NAME);
 	printf(_("                 [--instance=instance_name [-i backup-id]]\n"));
 	printf(_("                 [--format=format] [--archive]\n"));
-	printf(_("                 [--help]\n"));
+	printf(_("                 [--no-color] [--help]\n"));
 
 	printf(_("\n  %s delete -B backup-path --instance=instance_name\n"), PROGRAM_NAME);
 	printf(_("                 [-j num-threads] [--progress]\n"));
@@ -273,7 +273,7 @@ help_backup(void)
 	printf(_("                 [--error-log-filename=error-log-filename]\n"));
 	printf(_("                 [--log-directory=log-directory]\n"));
 	printf(_("                 [--log-rotation-size=log-rotation-size]\n"));
-	printf(_("                 [--log-rotation-age=log-rotation-age]\n"));
+	printf(_("                 [--log-rotation-age=log-rotation-age] [--no-color]\n"));
 	printf(_("                 [--delete-expired] [--delete-wal] [--merge-expired]\n"));
 	printf(_("                 [--retention-redundancy=retention-redundancy]\n"));
 	printf(_("                 [--retention-window=retention-window]\n"));
@@ -310,7 +310,6 @@ help_backup(void)
 	printf(_("                                   (example: --note='backup before app update to v13.1')\n"));
 
 	printf(_("\n  Logging options:\n"));
-	printf(_("      --color                      color the error and warning console messages\n"));
 	printf(_("      --log-level-console=log-level-console\n"));
 	printf(_("                                   level for console logging (default: info)\n"));
 	printf(_("                                   available options: 'off', 'error', 'warning', 'info', 'log', 'verbose'\n"));
@@ -330,6 +329,7 @@ help_backup(void)
 	printf(_("      --log-rotation-age=log-rotation-age\n"));
 	printf(_("                                   rotate logfile if its age exceeds this value; 0 disables; (default: 0)\n"));
 	printf(_("                                   available units: 'ms', 's', 'min', 'h', 'd' (default: min)\n"));
+	printf(_("      --no-color                   disable the coloring of error and warning console messages\n"));
 
 	printf(_("\n  Retention options:\n"));
 	printf(_("      --delete-expired             delete backups expired according to current\n"));
@@ -471,7 +471,6 @@ help_restore(void)
 	printf(_("  -S, --primary-slot-name=slotname replication slot to be used for WAL streaming from the primary server\n"));
 
 	printf(_("\n  Logging options:\n"));
-	printf(_("      --color                      color the error and warning console messages\n"));
 	printf(_("      --log-level-console=log-level-console\n"));
 	printf(_("                                   level for console logging (default: info)\n"));
 	printf(_("                                   available options: 'off', 'error', 'warning', 'info', 'log', 'verbose'\n"));
@@ -491,6 +490,7 @@ help_restore(void)
 	printf(_("      --log-rotation-age=log-rotation-age\n"));
 	printf(_("                                   rotate logfile if its age exceeds this value; 0 disables; (default: 0)\n"));
 	printf(_("                                   available units: 'ms', 's', 'min', 'h', 'd' (default: min)\n"));
+	printf(_("      --no-color                   disable the coloring of error and warning console messages\n"));
 
 	printf(_("\n  Remote options:\n"));
 	printf(_("      --remote-proto=protocol      remote protocol to use\n"));
@@ -538,7 +538,6 @@ help_validate(void)
 	printf(_("      --skip-block-validation      set to validate only file-level checksum\n"));
 
 	printf(_("\n  Logging options:\n"));
-	printf(_("      --color                      color the error and warning console messages\n"));
 	printf(_("      --log-level-console=log-level-console\n"));
 	printf(_("                                   level for console logging (default: info)\n"));
 	printf(_("                                   available options: 'off', 'error', 'warning', 'info', 'log', 'verbose'\n"));
@@ -557,7 +556,8 @@ help_validate(void)
 	printf(_("                                   available units: 'kB', 'MB', 'GB', 'TB' (default: kB)\n"));
 	printf(_("      --log-rotation-age=log-rotation-age\n"));
 	printf(_("                                   rotate logfile if its age exceeds this value; 0 disables; (default: 0)\n"));
-	printf(_("                                   available units: 'ms', 's', 'min', 'h', 'd' (default: min)\n\n"));
+	printf(_("                                   available units: 'ms', 's', 'min', 'h', 'd' (default: min)\n"));
+	printf(_("      --no-color                   disable the coloring of error and warning console messages\n\n"));
 }
 
 static void
@@ -583,7 +583,6 @@ help_checkdb(void)
 	printf(_("                                   can be used only with '--amcheck' option\n"));
 
 	printf(_("\n  Logging options:\n"));
-	printf(_("      --color                      color the error and warning console messages\n"));
 	printf(_("      --log-level-console=log-level-console\n"));
 	printf(_("                                   level for console logging (default: info)\n"));
 	printf(_("                                   available options: 'off', 'error', 'warning', 'info', 'log', 'verbose'\n"));
@@ -603,6 +602,7 @@ help_checkdb(void)
 	printf(_("      --log-rotation-age=log-rotation-age\n"));
 	printf(_("                                   rotate logfile if its age exceeds this value; 0 disables; (default: 0)\n"));
 	printf(_("                                   available units: 'ms', 's', 'min', 'h', 'd' (default: min)\n"));
+	printf(_("      --no-color                   disable the coloring of error and warning console messages\n"));
 
 	printf(_("\n  Connection options:\n"));
 	printf(_("  -U, --pguser=USERNAME            user name to connect as (default: current local user)\n"));
@@ -625,7 +625,7 @@ help_show(void)
 	printf(_("  -i, --backup-id=backup-id        show info about specific backups\n"));
 	printf(_("      --archive                    show WAL archive information\n"));
 	printf(_("      --format=format              show format=PLAIN|JSON\n"));
-	printf(_("      --color                      color the info for plain format\n\n"));
+	printf(_("      --no-color                   disable the coloring for plain format\n\n"));
 }
 
 static void
@@ -660,7 +660,6 @@ help_delete(void)
 	printf(_("      --status=backup_status       delete all backups with specified status\n"));
 
 	printf(_("\n  Logging options:\n"));
-	printf(_("      --color                      color the error and warning console messages\n"));
 	printf(_("      --log-level-console=log-level-console\n"));
 	printf(_("                                   level for console logging (default: info)\n"));
 	printf(_("                                   available options: 'off', 'error', 'warning', 'info', 'log', 'verbose'\n"));
@@ -679,7 +678,8 @@ help_delete(void)
 	printf(_("                                   available units: 'kB', 'MB', 'GB', 'TB' (default: kB)\n"));
 	printf(_("      --log-rotation-age=log-rotation-age\n"));
 	printf(_("                                   rotate logfile if its age exceeds this value; 0 disables; (default: 0)\n"));
-	printf(_("                                   available units: 'ms', 's', 'min', 'h', 'd' (default: min)\n\n"));
+	printf(_("                                   available units: 'ms', 's', 'min', 'h', 'd' (default: min)\n"));
+	printf(_("      --no-color                   disable the coloring of error and warning console messages\n\n"));
 }
 
 static void
@@ -703,7 +703,6 @@ help_merge(void)
 	printf(_("      --progress                   show progress\n"));
 
 	printf(_("\n  Logging options:\n"));
-	printf(_("      --color                      color the error and warning console messages\n"));
 	printf(_("      --log-level-console=log-level-console\n"));
 	printf(_("                                   level for console logging (default: info)\n"));
 	printf(_("                                   available options: 'off', 'error', 'warning', 'info', 'log', 'verbose'\n"));
@@ -722,7 +721,8 @@ help_merge(void)
 	printf(_("                                   available units: 'kB', 'MB', 'GB', 'TB' (default: kB)\n"));
 	printf(_("      --log-rotation-age=log-rotation-age\n"));
 	printf(_("                                   rotate logfile if its age exceeds this value; 0 disables; (default: 0)\n"));
-	printf(_("                                   available units: 'ms', 's', 'min', 'h', 'd' (default: min)\n\n"));
+	printf(_("                                   available units: 'ms', 's', 'min', 'h', 'd' (default: min)\n"));
+	printf(_("      --no-color                   disable the coloring of error and warning console messages\n\n"));
 }
 
 static void

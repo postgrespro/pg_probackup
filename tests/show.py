@@ -559,7 +559,7 @@ class OptionTest(ProbackupTest, unittest.TestCase):
         # FULL
         try:
             self.backup_node(
-                backup_dir, 'node', node, options=['--color', '--archive-timeout=1s'])
+                backup_dir, 'node', node, options=['--archive-timeout=1s'])
             # we should die here because exception is what we expect to happen
             self.assertEqual(
                 1, 0,
