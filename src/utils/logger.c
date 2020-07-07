@@ -128,11 +128,12 @@ init_console(void)
 {
 
 	/* no point in tex coloring if we do not connected to terminal */
-	if (isatty(fileno(stderr)) != 1 ||
-		isatty(fileno(stdout)) != 1)
+	if (!isatty(fileno(stderr)) ||
+		!isatty(fileno(stdout)))
 	{
 		show_color = false;
-		elog(WARNING, "No terminal detected, ignoring '--color' flag");
+		_dosmaperr(GetLastError());
+		elog(WARNING, "No terminal detected, ignoring '--color' flag: %s", strerror(errno));
 		return;
 	}
 
