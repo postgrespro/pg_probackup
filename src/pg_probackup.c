@@ -67,6 +67,7 @@ char	   *externaldir = NULL;
 static char *backup_id_string = NULL;
 int			num_threads = 1;
 bool		stream_wal = false;
+bool 		show_color = false;
 bool        is_archive_cmd = false;
 pid_t       my_pid = 0;
 __thread int  my_thread_num = 1;
@@ -178,6 +179,7 @@ static ConfigOption cmd_options[] =
 	{ 'b', 132, "progress",			&progress,			SOURCE_CMD_STRICT },
 	{ 's', 'i', "backup-id",		&backup_id_string,	SOURCE_CMD_STRICT },
 	{ 'b', 133, "no-sync",			&no_sync,			SOURCE_CMD_STRICT },
+	{ 'b', 134, "color",			&show_color,		SOURCE_CMD_STRICT },
 	/* backup options */
 	{ 'b', 180, "backup-pg-log",	&backup_logs,		SOURCE_CMD_STRICT },
 	{ 'f', 'b', "backup-mode",		opt_backup_mode,	SOURCE_CMD_STRICT },
@@ -439,6 +441,10 @@ main(int argc, char *argv[])
 	config_get_opt(argc, argv, cmd_options, instance_options);
 
 	pgut_init();
+
+	/* Check terminal presense and initialize ANSI escape codes for Windows */
+	if (show_color)
+		init_console();
 
 	if (help_opt)
 		help_command(command_name);

@@ -39,6 +39,10 @@ typedef enum
 	PG_FATAL
 } eLogType;
 
+#ifndef ENABLE_VIRTUAL_TERMINAL_PROCESSING
+#define ENABLE_VIRTUAL_TERMINAL_PROCESSING  0x0004
+#endif
+
 void pg_log(eLogType type, const char *fmt,...) pg_attribute_printf(2, 3);
 
 static void elog_internal(int elevel, bool file_only, const char *message);
@@ -112,6 +116,85 @@ init_logger(const char *root_path, LoggerConfig *config)
 		default:
 			break;
 	};
+#endif
+}
+
+/*
+ * Check that we are connected to terminal and
+ * enable ANSI escape codes for Windows if possible
+ */
+void
+init_console(void)
+{
+
+	/* no point in tex coloring if we do not connected to terminal */
+	if (!isatty(fileno(stderr)) ||
+		!isatty(fileno(stdout)))
+	{
+		show_color = false;
+		elog(WARNING, "No terminal detected, ignoring '--color' flag");
+		return;
+	}
+
+#ifdef WIN32
+	HANDLE hOut = INVALID_HANDLE_VALUE;
+	HANDLE hErr = INVALID_HANDLE_VALUE;
+	DWORD dwMode_out = 0;
+	DWORD dwMode_err = 0;
+
+	hOut = GetStdHandle(STD_OUTPUT_HANDLE);
+	if (hOut == INVALID_HANDLE_VALUE || !hOut)
+	{
+		show_color = false;
+		_dosmaperr(GetLastError());
+		elog(WARNING, "Failed to get terminal stdout handle: %s", strerror(errno));
+		return;
+	}
+
+	hErr = GetStdHandle(STD_ERROR_HANDLE);
+	if (hErr == INVALID_HANDLE_VALUE || !hErr)
+	{
+		show_color = false;
+		_dosmaperr(GetLastError());
+		elog(WARNING, "Failed to get terminal stderror handle: %s", strerror(errno));
+		return;
+	}
+
+	if (!GetConsoleMode(hOut, &dwMode_out))
+	{
+		show_color = false;
+		_dosmaperr(GetLastError());
+		elog(WARNING, "Failed to get console mode for stdout: %s", strerror(errno));
+		return;
+	}
+
+	if (!GetConsoleMode(hErr, &dwMode_err))
+	{
+		show_color = false;
+		_dosmaperr(GetLastError());
+		elog(WARNING, "Failed to get console mode for stderr: %s", strerror(errno));
+		return;
+	}
+
+	/* Add ANSI codes support */
+	dwMode_out |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+	dwMode_err |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+
+	if (!SetConsoleMode(hOut, dwMode_out))
+	{
+		show_color = false;
+		_dosmaperr(GetLastError());
+		elog(WARNING, "Cannot set console mode for stdout: %s", strerror(errno));
+		return;
+	}
+
+	if (!SetConsoleMode(hErr, dwMode_err))
+	{
+		show_color = false;
+		_dosmaperr(GetLastError());
+		elog(WARNING, "Cannot set console mode for stderr: %s", strerror(errno));
+		return;
+	}
 #endif
 }
 
@@ -272,10 +355,26 @@ elog_internal(int elevel, bool file_only, const char *message)
 			fprintf(stderr, "%s ", str_pid);
 			fprintf(stderr, "%s ", str_thread);
 		}
+		else if (show_color)
+		{
+			/* color WARNING and ERROR messages */
+			if (elevel == WARNING)
+				fprintf(stderr, "%s", TC_YELLOW_BOLD);
+			else if (elevel == ERROR)
+				fprintf(stderr, "%s", TC_RED_BOLD);
+		}
 
 		write_elevel(stderr, elevel);
 
-		fprintf(stderr, "%s\n", message);
+		/* main payload */
+		fprintf(stderr, "%s", message);
+
+		/* reset color to default */
+		if (show_color && (elevel == WARNING || elevel == ERROR))
+			fprintf(stderr, "%s", TC_RESET);
+
+		fprintf(stderr, "\n");
+
 		fflush(stderr);
 	}
 

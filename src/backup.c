@@ -843,7 +843,7 @@ do_backup(time_t start_time, pgSetBackupParams *set_backup_params,
 
 	elog(INFO, "Backup start, pg_probackup version: %s, instance: %s, backup ID: %s, backup mode: %s, "
 			"wal mode: %s, remote: %s, compress-algorithm: %s, compress-level: %i",
-			PROGRAM_VERSION, instance_name, base36enc(start_time), pgBackupGetBackupMode(&current),
+			PROGRAM_VERSION, instance_name, base36enc(start_time), pgBackupGetBackupMode(&current, false),
 			current.stream ? "STREAM" : "ARCHIVE", IsSshProtocol()  ? "true" : "false",
 			deparse_compress_alg(current.compress_alg), current.compress_level);
 

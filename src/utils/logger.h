@@ -51,6 +51,7 @@ extern void elog(int elevel, const char *fmt, ...) pg_attribute_printf(2, 3);
 extern void elog_file(int elevel, const char *fmt, ...) pg_attribute_printf(2, 3);
 
 extern void init_logger(const char *root_path, LoggerConfig *config);
+extern void init_console(void);
 
 extern int parse_log_level(const char *level);
 extern const char *deparse_log_level(int level);
