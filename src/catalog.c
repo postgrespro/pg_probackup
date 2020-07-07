@@ -336,12 +336,12 @@ pgBackupGetBackupMode(pgBackup *backup, bool show_color)
 	if (show_color)
 	{
 		/* color the Backup mode */
-		char *mode = pgut_malloc(25); /* leaking memory here */
+		char *mode = pgut_malloc(24); /* leaking memory here */
 
 		if (backup->backup_mode == BACKUP_MODE_FULL)
-			snprintf(mode, 25, "%s%s%s", TC_GREEN_BOLD, backupModes[backup->backup_mode], TC_RESET);
+			snprintf(mode, 24, "%s%s%s", TC_GREEN_BOLD, backupModes[backup->backup_mode], TC_RESET);
 		else
-			snprintf(mode, 25, "%s%s%s", TC_BLUE_BOLD, backupModes[backup->backup_mode], TC_RESET);
+			snprintf(mode, 24, "%s%s%s", TC_BLUE_BOLD, backupModes[backup->backup_mode], TC_RESET);
 
 		return mode;
 	}

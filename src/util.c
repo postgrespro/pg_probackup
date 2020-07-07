@@ -522,7 +522,7 @@ status2str_color(BackupStatus status)
 	char *status_str = pgut_malloc(20);
 
 	/* UNKNOWN */
-	if (status < BACKUP_STATUS_INVALID || BACKUP_STATUS_CORRUPT < status)
+	if (status == BACKUP_STATUS_INVALID)
 		snprintf(status_str, 20, "%s%s%s", TC_YELLOW_BOLD, "UNKNOWN", TC_RESET);
 	/* CORRUPT, ERROR and ORPHAN */
 	else if (status == BACKUP_STATUS_CORRUPT || status == BACKUP_STATUS_ERROR ||
@@ -532,8 +532,8 @@ status2str_color(BackupStatus status)
 	else if (status == BACKUP_STATUS_MERGING || status == BACKUP_STATUS_MERGED ||
 			 status == BACKUP_STATUS_DELETING || status == BACKUP_STATUS_DELETED)
 		snprintf(status_str, 20, "%s%s%s", TC_YELLOW_BOLD, statusName[status], TC_RESET);
+	/* OK and DONE */
 	else
-		/* OK and DONE */
 		snprintf(status_str, 20, "%s%s%s", TC_GREEN_BOLD, statusName[status], TC_RESET);
 
 	return status_str;

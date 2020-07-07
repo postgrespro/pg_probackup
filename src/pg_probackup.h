@@ -111,6 +111,7 @@ extern const char  *PROGRAM_EMAIL;
 #define XRecOffIsNull(xlrp) \
 		((xlrp) % XLOG_BLCKSZ == 0)
 
+/* Text Coloring macro */
 #define TC_LEN 11
 #define TC_RED "\033[0;31m"
 #define TC_RED_BOLD "\033[1;31m"

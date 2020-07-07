@@ -132,7 +132,6 @@ init_console(void)
 		!isatty(fileno(stdout)))
 	{
 		show_color = false;
-		_dosmaperr(GetLastError());
 		elog(WARNING, "No terminal detected, ignoring '--color' flag");
 		return;
 	}
