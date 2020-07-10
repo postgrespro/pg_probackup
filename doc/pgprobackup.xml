@@ -399,7 +399,7 @@ doc/src/sgml/pgprobackup.sgml
       </listitem>
       <listitem>
         <para>
-          On Unix systems, for <productname>PostgreSQL</productname> 10 or higher,
+          On Unix systems, for <productname>PostgreSQL</productname> 10 or lower,
           a backup can be made only by the same OS user that has started the <productname>PostgreSQL</productname>
           server. For example, if <productname>PostgreSQL</productname> server is started by
           user <literal>postgres</literal>, the <literal>backup</literal> command must also be run
