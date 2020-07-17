@@ -261,13 +261,29 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool
 	{
 		XLogRecPtr	ptrack_lsn = get_last_ptrack_lsn(backup_conn, nodeInfo);
 
-		if (ptrack_lsn > prev_backup->start_lsn || ptrack_lsn == InvalidXLogRecPtr)
+		if (nodeInfo->ptrack_version_num < 20)
 		{
-			elog(ERROR, "LSN from ptrack_control %X/%X differs from Start LSN of previous backup %X/%X.\n"
-						"Create new full backup before an incremental one.",
-						(uint32) (ptrack_lsn >> 32), (uint32) (ptrack_lsn),
-						(uint32) (prev_backup->start_lsn >> 32),
-						(uint32) (prev_backup->start_lsn));
+			// backward compatibility kludge: use Stop LSN for ptrack 1.x,
+			if (ptrack_lsn > prev_backup->stop_lsn || ptrack_lsn == InvalidXLogRecPtr)
+			{
+				elog(ERROR, "LSN from ptrack_control %X/%X differs from Stop LSN of previous backup %X/%X.\n"
+							"Create new full backup before an incremental one.",
+							(uint32) (ptrack_lsn >> 32), (uint32) (ptrack_lsn),
+							(uint32) (prev_backup->stop_lsn >> 32),
+							(uint32) (prev_backup->stop_lsn));
+			}
+		}
+		else
+		{
+			// new ptrack is more robust and checks Start LSN
+			if (ptrack_lsn > prev_backup->start_lsn || ptrack_lsn == InvalidXLogRecPtr)
+			{
+				elog(ERROR, "LSN from ptrack_control %X/%X is greater than Start LSN of previous backup %X/%X.\n"
+							"Create new full backup before an incremental one.",
+							(uint32) (ptrack_lsn >> 32), (uint32) (ptrack_lsn),
+							(uint32) (prev_backup->start_lsn >> 32),
+							(uint32) (prev_backup->start_lsn));
+			}
 		}
 	}
 
