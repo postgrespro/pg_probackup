@@ -16,6 +16,87 @@ module_name = 'ptrack'
 class PtrackTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
+    def test_ptrack_eat_my_data(self):
+        """
+        PGPRO-4051
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            ptrack_enable=True,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        if node.major_version >= 12:
+            node.safe_psql(
+                "postgres",
+                "CREATE EXTENSION ptrack")
+
+        node.pgbench_init(scale=50)
+
+        self.backup_node(backup_dir, 'node', node)
+
+        node_restored = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node_restored'))
+
+        pgbench = node.pgbench(options=['-T', '300', '-c', '1', '--no-vacuum'])
+
+        for i in range(10):
+            print("Iteration: {0}".format(i))
+
+            sleep(2)
+
+            self.backup_node(backup_dir, 'node', node, backup_type='ptrack')
+#            pgdata = self.pgdata_content(node.data_dir)
+#
+#            node_restored.cleanup()
+#
+#            self.restore_node(backup_dir, 'node', node_restored)
+#            pgdata_restored = self.pgdata_content(node_restored.data_dir)
+#
+#            self.compare_pgdata(pgdata, pgdata_restored)
+
+        pgbench.terminate()
+        pgbench.wait()
+
+        self.switch_wal_segment(node)
+
+        result = node.safe_psql("postgres", "SELECT * FROM pgbench_accounts")
+
+        node_restored.cleanup()
+        self.restore_node(backup_dir, 'node', node_restored)
+        self.set_auto_conf(
+            node_restored, {'port': node_restored.port})
+
+        node_restored.slow_start()
+
+        balance = node_restored.safe_psql(
+            'postgres',
+            'select (select sum(tbalance) from pgbench_tellers) - '
+            '( select sum(bbalance) from pgbench_branches) + '
+            '( select sum(abalance) from pgbench_accounts ) - '
+            '(select sum(delta) from pgbench_history) as must_be_zero').rstrip()
+
+        self.assertEqual('0', balance)
+
+        # Logical comparison
+        self.assertEqual(
+            result,
+            node_restored.safe_psql(
+                'postgres',
+                'SELECT * FROM pgbench_accounts'),
+            'Data loss')
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
     def test_ptrack_simple(self):
         """make node, make full and ptrack stream backups,"
         " restore them and check data correctness"""
