@@ -4029,7 +4029,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         except ProbackupException as e:
             self.assertTrue(
                 'ERROR: LSN from ptrack_control ' in e.message and
-                'differs from Start LSN of previous backup' in e.message,
+                'is greater than Start LSN of previous backup' in e.message,
                 '\n Unexpected Error Message: {0}\n'
                 ' CMD: {1}'.format(repr(e.message), self.cmd))
 
