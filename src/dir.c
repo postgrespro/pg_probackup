@@ -703,9 +703,9 @@ dir_check_file(pgFile *file, bool backup_logs)
 	{
 		if (strcmp(file->name, "pg_internal.init") == 0)
 			return CHECK_FALSE;
-		/* Do not backup ptrack2.x map files */
-		else if (strcmp(file->name, "ptrack.map") == 0)
-			return CHECK_FALSE;
+		/* Do not backup ptrack2.x temp map files */
+//		else if (strcmp(file->name, "ptrack.map") == 0)
+//			return CHECK_FALSE;
 		else if (strcmp(file->name, "ptrack.map.mmap") == 0)
 			return CHECK_FALSE;
 		else if (strcmp(file->name, "ptrack.map.tmp") == 0)
