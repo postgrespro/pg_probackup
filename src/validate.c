@@ -583,7 +583,7 @@ do_validate_instance(void)
 		/* Validate corresponding WAL files */
 		if (current_backup->status == BACKUP_STATUS_OK)
 			validate_wal(current_backup, arclog_path, 0,
-						 0, 0, base_full_backup->tli,
+						 0, 0, current_backup->tli,
 						 instance_config.xlog_seg_size);
 
 		/*
@@ -680,7 +680,7 @@ do_validate_instance(void)
 
 								/* Revalidation successful, validate corresponding WAL files */
 								validate_wal(backup, arclog_path, 0,
-											 0, 0, current_backup->tli,
+											 0, 0, backup->tli,
 											 instance_config.xlog_seg_size);
 							}
 						}
