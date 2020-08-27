@@ -2689,11 +2689,6 @@ class MergeTest(ProbackupTest, unittest.TestCase):
             'postgres',
             "select pg_relation_filepath('pgbench_accounts')").rstrip()
 
-        pgdata = self.pgdata_content(node.data_dir)
-
-        print(self.show_pb(
-            backup_dir, 'node', as_json=False, as_text=True))
-
         gdb = self.merge_backup(
             backup_dir, "node", delta_id,
             options=['--log-level-file=VERBOSE'], gdb=True)
@@ -2716,6 +2711,64 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         self.assertIn(
             'ERROR: Cannot open backup file "{0}": No such file or directory'.format(file_to_remove),
             logfile_content)
+
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_missing_non_data_file(self):
+        """
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={'autovacuum': 'off'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # FULL backup
+        self.backup_node(backup_dir, 'node', node)
+
+        # DELTA backup
+        delta_id = self.backup_node(backup_dir, 'node', node, backup_type='delta')
+
+        gdb = self.merge_backup(
+            backup_dir, "node", delta_id,
+            options=['--log-level-file=VERBOSE'], gdb=True)
+        gdb.set_breakpoint('merge_files')
+        gdb.run_until_break()
+
+        # remove data file in incremental backup
+        file_to_remove = os.path.join(
+            backup_dir, 'backups',
+            'node', delta_id, 'database', 'backup_label')
+
+        os.remove(file_to_remove)
+
+        gdb.continue_execution_until_error()
+
+        logfile = os.path.join(backup_dir, 'log', 'pg_probackup.log')
+        with open(logfile, 'r') as f:
+                logfile_content = f.read()
+
+        self.assertIn(
+            'ERROR: File "{0}" is not found'.format(file_to_remove),
+            logfile_content)
+
+        self.assertIn(
+            'ERROR: Backup files merging failed',
+            logfile_content)
+
+        self.assertEqual(
+            'MERGING', self.show_pb(backup_dir, 'node')[0]['status'])
+
+        self.assertEqual(
+            'MERGING', self.show_pb(backup_dir, 'node')[1]['status'])
 
         self.del_test_dir(module_name, fname)
 
