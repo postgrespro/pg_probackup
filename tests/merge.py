@@ -2772,5 +2772,62 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
         self.del_test_dir(module_name, fname)
 
+    # @unittest.skip("skip")
+    def test_merge_remote_mode(self):
+        """
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={'autovacuum': 'off'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # FULL backup
+        full_id = self.backup_node(backup_dir, 'node', node)
+
+        # DELTA backup
+        delta_id = self.backup_node(backup_dir, 'node', node, backup_type='delta')
+
+        self.set_config(backup_dir, 'node', options=['--retention-window=1'])
+
+        backups = os.path.join(backup_dir, 'backups', 'node')
+        with open(
+                os.path.join(
+                    backups, full_id, "backup.control"), "a") as conf:
+            conf.write("recovery_time='{:%Y-%m-%d %H:%M:%S}'\n".format(
+                datetime.now() - timedelta(days=5)))
+
+        gdb = self.backup_node(
+            backup_dir, "node", node,
+            options=['--log-level-file=VERBOSE', '--merge-expired'], gdb=True)
+        gdb.set_breakpoint('merge_files')
+        gdb.run_until_break()
+
+        logfile = os.path.join(backup_dir, 'log', 'pg_probackup.log')
+
+        with open(logfile, "rw+") as f:
+            f.truncate()
+
+        gdb.continue_execution_until_exit()
+
+        logfile = os.path.join(backup_dir, 'log', 'pg_probackup.log')
+        with open(logfile, 'r') as f:
+                logfile_content = f.read()
+
+        self.assertNotIn(
+            'SSH', logfile_content)
+
+        self.assertEqual(
+            'OK', self.show_pb(backup_dir, 'node')[0]['status'])
+
+        self.del_test_dir(module_name, fname)
+
 # 1. Need new test with corrupted FULL backup
 # 2. different compression levels
