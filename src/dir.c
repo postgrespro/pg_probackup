@@ -613,8 +613,8 @@ dir_check_file(pgFile *file, bool backup_logs)
 		 */
 		for (i = 0; pgdata_exclude_dir[i]; i++)
 		{
-			/* relative path exclude */
-			if (strcmp(file->rel_path, pgdata_exclude_dir[i]) == 0)
+			/* exclude by dirname */
+			if (strcmp(file->name, pgdata_exclude_dir[i]) == 0)
 			{
 				elog(VERBOSE, "Excluding directory content: %s", file->rel_path);
 				return CHECK_EXCLUDE_FALSE;
