@@ -30,7 +30,11 @@ class ExcludeTest(ProbackupTest, unittest.TestCase):
             'postgres',
             "select oid from pg_database where datname = 'postgres'").rstrip()
 
-        file = os.path.join(node.data_dir, 'base', oid, 'pgsql_tmp7351.16')
+        pgsql_tmp_dir = os.path.join(node.data_dir, 'base', 'pgsql_tmp')
+
+        os.mkdir(pgsql_tmp_dir)
+
+        file = os.path.join(pgsql_tmp_dir, 'pgsql_tmp7351.16')
         with open(file, 'w') as f:
             f.write("HELLO")
             f.flush()
@@ -41,8 +45,13 @@ class ExcludeTest(ProbackupTest, unittest.TestCase):
 
         file = os.path.join(
             backup_dir, 'backups', 'node', full_id,
-            'database', 'base', oid, 'pgsql_tmp7351.16')
-        self.assertFalse(os.path.exists(file))
+            'database', 'base', 'pgsql_tmp', 'pgsql_tmp7351.16')
+
+        self.assertFalse(
+            os.path.exists(file),
+            "File must be excluded: {0}".format(file))
+
+        # TODO check temporary tablespaces
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
