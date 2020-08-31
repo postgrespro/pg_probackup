@@ -3409,3 +3409,73 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
+
+    def test_issue_249(self):
+        """
+        https://github.com/postgrespro/pg_probackup/issues/249
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'],
+            pg_options={'autovacuum': 'off'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        node.safe_psql(
+            'postgres',
+            'CREATE database db1')
+
+        node.pgbench_init(scale=5)
+
+        node.safe_psql(
+            'postgres',
+            'CREATE TABLE t1 as SELECT * from pgbench_accounts where aid > 200000 and aid < 450000')
+
+        node.safe_psql(
+            'postgres',
+            'DELETE from pgbench_accounts where aid > 200000 and aid < 450000')
+
+        node.safe_psql(
+            'postgres',
+            'select * from pgbench_accounts')
+
+        # FULL backup
+        self.backup_node(backup_dir, 'node', node)
+
+        node.safe_psql(
+            'postgres',
+            'INSERT INTO pgbench_accounts SELECT * FROM t1')
+
+        # restore FULL backup
+        node_restored_1 = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node_restored_1'))
+        node_restored_1.cleanup()
+
+        self.restore_node(
+            backup_dir, 'node',
+            node_restored_1, options=["--db-include=db1"])
+
+        self.set_auto_conf(
+            node_restored_1,
+            {'port': node_restored_1.port, 'hot_standby': 'on'})
+
+        node_restored_1.slow_start()
+
+        node_restored_1.safe_psql(
+            'db1',
+            'select 1')
+
+        try:
+            node_restored_1.safe_psql(
+                'postgres',
+                'select 1')
+        except QueryException as e:
+            self.assertIn('FATAL', e.message)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
