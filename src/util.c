@@ -538,33 +538,7 @@ datapagemap_is_set(datapagemap_t *map, BlockNumber blkno)
 	offset = blkno / 8;
 	bitno = blkno % 8;
 
-	/* enlarge or create bitmap if needed */
-	if (map->bitmapsize <= offset)
-	{
-		int			oldsize = map->bitmapsize;
-		int			newsize;
-
-		/*
-		 * The minimum to hold the new bit is offset + 1. But add some
-		 * headroom, so that we don't need to repeatedly enlarge the bitmap in
-		 * the common case that blocks are modified in order, from beginning
-		 * of a relation to the end.
-		 */
-		newsize = offset + 1;
-		newsize += 10;
-
-		map->bitmap = pg_realloc(map->bitmap, newsize);
-
-		/* zero out the newly allocated region */
-		memset(&map->bitmap[oldsize], 0, newsize - oldsize);
-
-		map->bitmapsize = newsize;
-	}
-
-	//datapagemap_print(map);
-
-	/* check the bit */
-	return map->bitmap[offset] & (1 << bitno);
+	return (map->bitmapsize <= offset) ? false : (map->bitmap[offset] & (1 << bitno)) != 0;
 }
 
 /*

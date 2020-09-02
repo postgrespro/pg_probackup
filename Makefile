@@ -7,13 +7,13 @@ OBJS = src/utils/configuration.o src/utils/json.o src/utils/logger.o \
 OBJS += src/archive.o src/backup.o src/catalog.o src/checkdb.o src/configure.o src/data.o \
 	src/delete.o src/dir.o src/fetch.o src/help.o src/init.o src/merge.o \
 	src/parsexlog.o src/ptrack.o src/pg_probackup.o src/restore.o src/show.o src/util.o \
-	src/validate.o
+	src/validate.o src/datapagemap.o
 
 # borrowed files
-OBJS += src/pg_crc.o src/datapagemap.o src/receivelog.o src/streamutil.o \
+OBJS += src/pg_crc.o src/receivelog.o src/streamutil.o \
 	src/xlogreader.o
 
-EXTRA_CLEAN = src/pg_crc.c src/datapagemap.c src/datapagemap.h \
+EXTRA_CLEAN = src/pg_crc.c \
 	src/receivelog.c src/receivelog.h src/streamutil.c src/streamutil.h \
 	src/xlogreader.c src/instr_time.h
 
@@ -34,9 +34,6 @@ ifneq (,$(wildcard $(srchome)/src/bin/pg_basebackup/walmethods.c))
 OBJS += src/walmethods.o
 EXTRA_CLEAN += src/walmethods.c src/walmethods.h
 endif
-ifneq (,$(wildcard $(srchome)/src/bin/pg_rewind/logging.h))
-EXTRA_CLEAN += src/logging.h
-endif
 
 ifdef USE_PGXS
 PG_CONFIG = pg_config
@@ -56,16 +53,9 @@ PG_LIBS_INTERNAL = $(libpq_pgport) ${PTHREAD_CFLAGS}
 src/utils/configuration.o: src/datapagemap.h
 src/archive.o: src/instr_time.h
 src/backup.o: src/receivelog.h src/streamutil.h
-ifneq (,$(wildcard $(srchome)/src/bin/pg_rewind/logging.h))
-src/datapagemap.o: src/logging.h
-endif
 
 src/instr_time.h: $(srchome)/src/include/portability/instr_time.h
 	rm -f $@ && $(LN_S) $(srchome)/src/include/portability/instr_time.h $@
-src/datapagemap.c: $(srchome)/src/bin/pg_rewind/datapagemap.c
-	rm -f $@ && $(LN_S) $(srchome)/src/bin/pg_rewind/datapagemap.c $@
-src/datapagemap.h: $(srchome)/src/bin/pg_rewind/datapagemap.h
-	rm -f $@ && $(LN_S) $(srchome)/src/bin/pg_rewind/datapagemap.h $@
 src/pg_crc.c: $(srchome)/src/backend/utils/hash/pg_crc.c
 	rm -f $@ && $(LN_S) $(srchome)/src/backend/utils/hash/pg_crc.c $@
 src/receivelog.c: $(srchome)/src/bin/pg_basebackup/receivelog.c
@@ -82,8 +72,6 @@ src/streamutil.h: $(srchome)/src/bin/pg_basebackup/streamutil.h
 	rm -f $@ && $(LN_S) $(srchome)/src/bin/pg_basebackup/streamutil.h $@
 src/xlogreader.c: $(srchome)/src/backend/access/transam/xlogreader.c
 	rm -f $@ && $(LN_S) $(srchome)/src/backend/access/transam/xlogreader.c $@
-src/logging.h: $(srchome)/src/bin/pg_rewind/logging.h
-	rm -f $@ && $(LN_S) $(srchome)/src/bin/pg_rewind/logging.h $@
 src/walmethods.c: $(srchome)/src/bin/pg_basebackup/walmethods.c
 	rm -f $@ && $(LN_S) $(srchome)/src/bin/pg_basebackup/walmethods.c $@
 src/walmethods.h: $(srchome)/src/bin/pg_basebackup/walmethods.h
