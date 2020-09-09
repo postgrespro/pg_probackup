@@ -2376,9 +2376,6 @@ process_block_change(ForkNumber forknum, RelFileNode rnode, BlockNumber blkno)
 	 */
 	if (file_item)
 	{
-		if (blkno_inseg > 131072)
-			elog(WARNING, "Detecting big blkno %u", blkno_inseg);
-
 		/* We need critical section only we use more than one threads */
 		if (num_threads > 1)
 			pthread_lock(&backup_pagemap_mutex);
