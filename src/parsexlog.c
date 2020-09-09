@@ -1771,10 +1771,6 @@ extractPageInfo(XLogReaderState *record, XLogReaderData *reader_data,
 		if (forknum != MAIN_FORKNUM)
 			continue;
 
-		if (blkno > 131072)
-			elog(WARNING, "Detecting big blkno %u in record %X/%X",
-				blkno, (uint32) (record->ReadRecPtr >> 32), (uint32) (record->ReadRecPtr));
-
 		process_block_change(forknum, rnode, blkno);
 	}
 }
