@@ -13,6 +13,7 @@
 #include "postgres_fe.h"
 
 #include "datapagemap.h"
+#include "utils/logger.h"
 
 struct datapagemap_iterator
 {
@@ -60,6 +61,9 @@ datapagemap_add(datapagemap_t *map, BlockNumber blkno)
 
 		map->bitmapsize = newsize;
 	}
+
+	if (map->bitmapsize > 16384)
+		elog(WARNING, "Bitmapsize: %u", map->bitmapsize);
 
 	/* Set the bit */
 	map->bitmap[offset] |= (1 << bitno);
