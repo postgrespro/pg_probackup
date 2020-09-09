@@ -2389,7 +2389,10 @@ process_block_change(ForkNumber forknum, RelFileNode rnode, BlockNumber blkno)
 			pthread_mutex_unlock(&backup_pagemap_mutex);
 	}
 
+	if (segno > 0)
+		pg_free(f.rel_path);
 	pg_free(rel_path);
+
 }
 
 /*
