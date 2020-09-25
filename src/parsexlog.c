@@ -553,6 +553,12 @@ read_recovery_info(const char *archivedir, TimeLineID tli, uint32 wal_seg_size,
 		TimestampTz last_time = 0;
 		char	   *errormsg;
 
+#if PG_VERSION_NUM >= 130000
+		if (XLogRecPtrIsInvalid(startpoint))
+			startpoint = SizeOfXLogShortPHD;
+		XLogBeginRead(xlogreader, startpoint);
+#endif
+
 		record = WalReadRecord(xlogreader, startpoint, &errormsg);
 		if (record == NULL)
 		{
@@ -617,6 +623,12 @@ wal_contains_lsn(const char *archivedir, XLogRecPtr target_lsn,
 
 	xlogreader->system_identifier = instance_config.system_identifier;
 
+#if PG_VERSION_NUM >= 130000
+	if (XLogRecPtrIsInvalid(target_lsn))
+		target_lsn = SizeOfXLogShortPHD;
+	XLogBeginRead(xlogreader, target_lsn);
+#endif
+
 	res = WalReadRecord(xlogreader, target_lsn, &errormsg) != NULL;
 	/* Didn't find 'target_lsn' and there is no error, return false */
 
@@ -657,6 +669,12 @@ get_first_record_lsn(const char *archivedir, XLogSegNo	segno,
 
 	/* Set startpoint to 0 in segno */
 	GetXLogRecPtr(segno, 0, wal_seg_size, startpoint);
+
+#if PG_VERSION_NUM >= 130000
+	if (XLogRecPtrIsInvalid(startpoint))
+		startpoint = SizeOfXLogShortPHD;
+	XLogBeginRead(xlogreader, startpoint);
+#endif
 
 	while (attempts <= timeout)
 	{
@@ -711,6 +729,12 @@ get_next_record_lsn(const char *archivedir, XLogSegNo	segno,
 
 	/* Set startpoint to 0 in segno */
 	GetXLogRecPtr(segno, 0, wal_seg_size, startpoint);
+
+#if PG_VERSION_NUM >= 130000
+	if (XLogRecPtrIsInvalid(startpoint))
+		startpoint = SizeOfXLogShortPHD;
+	XLogBeginRead(xlogreader, startpoint);
+#endif
 
 	found = XLogFindNextRecord(xlogreader, startpoint);
 
@@ -824,6 +848,13 @@ get_prior_record_lsn(const char *archivedir, XLogRecPtr start_lsn,
 		XLogRecPtr	found;
 
 		GetXLogRecPtr(segno, 0, wal_seg_size, startpoint);
+
+#if PG_VERSION_NUM >= 130000
+		if (XLogRecPtrIsInvalid(startpoint))
+			startpoint = SizeOfXLogShortPHD;
+		XLogBeginRead(xlogreader, startpoint);
+#endif
+
 		found = XLogFindNextRecord(xlogreader, startpoint);
 
 		if (XLogRecPtrIsInvalid(found))
@@ -1315,6 +1346,12 @@ XLogThreadWorker(void *arg)
 	if (xlogreader == NULL)
 		elog(ERROR, "Thread [%d]: out of memory", reader_data->thread_num);
 	xlogreader->system_identifier = instance_config.system_identifier;
+
+#if PG_VERSION_NUM >= 130000
+	if (XLogRecPtrIsInvalid(thread_arg->startpoint))
+		thread_arg->startpoint = SizeOfXLogShortPHD;
+	XLogBeginRead(xlogreader, thread_arg->startpoint);
+#endif
 
 	found = XLogFindNextRecord(xlogreader, thread_arg->startpoint);
 
@@ -1853,9 +1890,6 @@ static XLogRecord* WalReadRecord(XLogReaderState *xlogreader, XLogRecPtr startpo
 {
 
 #if PG_VERSION_NUM >= 130000
-//	if (XLogRecPtrIsInvalid(startpoint))
-//		startpoint = SizeOfXLogShortPHD;
-	XLogBeginRead(xlogreader, startpoint);
 	return XLogReadRecord(xlogreader, errormsg);
 #else
 	return XLogReadRecord(xlogreader, startpoint, errormsg);
