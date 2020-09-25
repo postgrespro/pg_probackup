@@ -153,7 +153,11 @@ static XLogReaderState* WalReaderAllocate(uint32 wal_seg_size, XLogReaderData *r
 
 static int SimpleXLogPageRead(XLogReaderState *xlogreader,
 				   XLogRecPtr targetPagePtr,
-				   int reqLen, XLogRecPtr targetRecPtr, char *readBuf);
+				   int reqLen, XLogRecPtr targetRecPtr, char *readBuf
+#if PG_VERSION_NUM < 130000
+				   ,TimeLineID *pageTLI
+#endif
+					);
 static XLogReaderState *InitXLogPageRead(XLogReaderData *reader_data,
 										 const char *archivedir,
 										 TimeLineID tli, uint32 segment_size,
@@ -938,7 +942,11 @@ get_gz_error(gzFile gzf)
 /* XLogreader callback function, to read a WAL page */
 static int
 SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
-				   int reqLen, XLogRecPtr targetRecPtr, char *readBuf)
+				   int reqLen, XLogRecPtr targetRecPtr, char *readBuf
+#if PG_VERSION_NUM < 130000
+				   ,TimeLineID *pageTLI
+#endif
+				   )
 {
 	XLogReaderData *reader_data;
 	uint32		targetPageOff;
@@ -1072,7 +1080,9 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 		reader_data->prev_page_off == targetPageOff)
 	{
 		memcpy(readBuf, reader_data->page_buf, XLOG_BLCKSZ);
-//		*pageTLI = reader_data->tli;
+#if PG_VERSION_NUM < 130000
+		*pageTLI = reader_data->tli;
+#endif
 		return XLOG_BLCKSZ;
 	}
 
@@ -1116,7 +1126,9 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 
 	memcpy(reader_data->page_buf, readBuf, XLOG_BLCKSZ);
 	reader_data->prev_page_off = targetPageOff;
-//	*pageTLI = reader_data->tli;
+#if PG_VERSION_NUM < 130000
+	*pageTLI = reader_data->tli;
+#endif
 	return XLOG_BLCKSZ;
 }
 
