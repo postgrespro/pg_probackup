@@ -422,14 +422,13 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool
 	/* Extract information about files in backup_list parsing their names:*/
 	parse_filelist_filenames(backup_files_list, instance_config.pgdata);
 
+	elog(LOG, "Current Start LSN: %X/%X, TLI: %X",
+			(uint32) (current.start_lsn >> 32), (uint32) (current.start_lsn),
+			current.tli);
 	if (current.backup_mode != BACKUP_MODE_FULL)
-	{
-		elog(LOG, "Current tli: %X", current.tli);
-		elog(LOG, "Parent start_lsn: %X/%X",
-			 (uint32) (prev_backup->start_lsn >> 32), (uint32) (prev_backup->start_lsn));
-		elog(LOG, "start_lsn: %X/%X",
-			 (uint32) (current.start_lsn >> 32), (uint32) (current.start_lsn));
-	}
+		elog(LOG, "Parent Start LSN: %X/%X, TLI: %X",
+			 (uint32) (prev_backup->start_lsn >> 32), (uint32) (prev_backup->start_lsn),
+			 prev_backup->tli);
 
 	/*
 	 * Build page mapping in incremental mode.
