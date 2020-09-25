@@ -284,8 +284,8 @@ pg_ptrack_clear(PGconn *backup_conn, int ptrack_version_num)
 		if (strcmp(dbname, "template0") == 0)
 			continue;
 
-		dbOid = atoi(PQgetvalue(res_db, i, 1));
-		tblspcOid = atoi(PQgetvalue(res_db, i, 2));
+		dbOid = atoll(PQgetvalue(res_db, i, 1));
+		tblspcOid = atoll(PQgetvalue(res_db, i, 2));
 
 		tmp_conn = pgut_connect(instance_config.conn_opt.pghost, instance_config.conn_opt.pgport,
 								dbname,

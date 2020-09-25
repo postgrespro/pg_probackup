@@ -1269,7 +1269,7 @@ get_database_map(PGconn *conn)
 		db_map_entry *db_entry = (db_map_entry *) pgut_malloc(sizeof(db_map_entry));
 
 		/* get Oid */
-		db_entry->dbOid = atoi(PQgetvalue(res, i, 0));
+		db_entry->dbOid = atoll(PQgetvalue(res, i, 0));
 
 		/* get datname */
 		datname = PQgetvalue(res, i, 1);
@@ -2644,7 +2644,7 @@ IdentifySystem(StreamThreadArg *stream_thread_arg)
 	}
 
 	stream_conn_sysidentifier_str = PQgetvalue(res, 0, 0);
-	stream_conn_tli = atoi(PQgetvalue(res, 0, 1));
+	stream_conn_tli = atoll(PQgetvalue(res, 0, 1));
 
 	/* Additional sanity, primary for PG 9.5,
 	 * where system id can be obtained only via "IDENTIFY SYSTEM"

@@ -439,7 +439,7 @@ get_index_list(const char *dbname, bool first_db_with_amcheck,
 		char *namespace = NULL;
 
 		/* index oid */
-		ind->indexrelid = atoi(PQgetvalue(res, i, 0));
+		ind->indexrelid = atoll(PQgetvalue(res, i, 0));
 
 		/* index relname */
 		name = PQgetvalue(res, i, 1);
