@@ -371,6 +371,9 @@ class ProbackupTest(object):
             else:
                 options['ptrack_enable'] = 'on'
 
+        if node.major_version >= 13:
+            options['wal_keep_size'] = '200MB'
+
         # set default values
         self.set_auto_conf(node, options)
 
