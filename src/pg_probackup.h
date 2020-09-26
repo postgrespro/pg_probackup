@@ -276,8 +276,8 @@ typedef enum ShowFormat
 #define BYTES_INVALID		(-1) /* file didn`t changed since previous backup, DELTA backup do not rely on it */
 #define FILE_NOT_FOUND		(-2) /* file disappeared during backup */
 #define BLOCKNUM_INVALID	(-1)
-#define PROGRAM_VERSION	"2.4.3"
-#define AGENT_PROTOCOL_VERSION 20403
+#define PROGRAM_VERSION	"2.4.4"
+#define AGENT_PROTOCOL_VERSION 20404
 
 
 typedef struct ConnectionOptions
