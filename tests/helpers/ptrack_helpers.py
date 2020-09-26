@@ -373,6 +373,8 @@ class ProbackupTest(object):
 
         if node.major_version >= 13:
             options['wal_keep_size'] = '200MB'
+        else:
+            options['wal_keep_segments'] = '100'
 
         # set default values
         self.set_auto_conf(node, options)
