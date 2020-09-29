@@ -479,7 +479,7 @@ amcheck_one_index(check_indexes_arg *arguments,
 	params[0] = palloc(64);
 
 	/* first argument is index oid */
-	sprintf(params[0], "%i", ind->indexrelid);
+	sprintf(params[0], "%u", ind->indexrelid);
 	/* second argument is heapallindexed */
 	params[1] = heapallindexed ? "true" : "false";
 
