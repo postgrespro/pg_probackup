@@ -382,6 +382,13 @@ class ProbackupTest(object):
         # Apply given parameters
         self.set_auto_conf(node, pg_options)
 
+        # kludge for testgres
+        # https://github.com/postgrespro/testgres/issues/54
+        # for PG >= 13 remove 'wal_keep_segments' parameter
+        if node.major_version >= 13:
+            self.set_auto_conf(
+                node, {}, 'postgresql.conf', ['wal_keep_segments'])
+
         return node
 
     def create_tblspace_in_node(self, node, tblspc_name, tblspc_path=None, cfs=False):
@@ -1231,7 +1238,9 @@ class ProbackupTest(object):
 
         return restore_command
 
-    def set_auto_conf(self, node, options, config='postgresql.auto.conf'):
+    # rm_options - list of parameter name that should be deleted from current config,
+    # example: ['wal_keep_segments', 'max_wal_size']
+    def set_auto_conf(self, node, options, config='postgresql.auto.conf', rm_options={}):
 
         # parse postgresql.auto.conf
         path = os.path.join(node.data_dir, config)
@@ -1259,6 +1268,11 @@ class ProbackupTest(object):
             var = var.strip()
             var = var.strip('"')
             var = var.strip("'")
+
+            # remove options specified in rm_options list
+            if name in rm_options:
+                continue
+
             current_options[name] = var
 
         for option in options:
