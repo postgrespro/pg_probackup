@@ -3013,7 +3013,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
-    def test_ptrack_truncate_replica(self):
+    def test_basic_ptrack_truncate_replica(self):
         fname = self.id().split('.')[3]
         master = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'master'),
@@ -3121,7 +3121,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         self.compare_pgdata(pgdata, pgdata_restored)
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname)
+        self.del_test_dir(module_name, fname, [master, replica])
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure
