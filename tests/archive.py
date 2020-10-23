@@ -899,6 +899,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             initdb_params=['--data-checksums'],
             pg_options={
                 'checkpoint_timeout': '30s',
+                'autovacuum': 'off',
                 'archive_timeout': '10s'})
 
         replica = self.make_simple_node(
