@@ -3118,7 +3118,9 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         self.restore_node(backup_dir, 'replica', node, data_dir=node.data_dir)
 
         pgdata_restored = self.pgdata_content(node.data_dir)
-        self.compare_pgdata(pgdata, pgdata_restored)
+
+        if self.paranoia:
+            self.compare_pgdata(pgdata, pgdata_restored)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname, [master, replica])
