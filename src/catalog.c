@@ -120,6 +120,13 @@ write_backup_status(pgBackup *backup, BackupStatus status,
 		return;
 	}
 
+	/* overwrite control file only if status has changed */
+	if (backup->status == status)
+	{
+		pgBackupFree(tmp);
+		return;
+	}
+
 	backup->status = status;
 	tmp->status = backup->status;
 	tmp->root_dir = pgut_strdup(backup->root_dir);
