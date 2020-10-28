@@ -190,6 +190,7 @@ pgBackupValidate(pgBackup *backup, pgRestoreParams *params)
 	/* Update backup status */
 	if (corrupted)
 		backup->status = BACKUP_STATUS_CORRUPT;
+
 	write_backup_status(backup, corrupted ? BACKUP_STATUS_CORRUPT :
 											BACKUP_STATUS_OK, instance_name, true);
 
@@ -218,7 +219,6 @@ pgBackupValidate(pgBackup *backup, pgRestoreParams *params)
 			backup->status = BACKUP_STATUS_CORRUPT;
 			write_backup_status(backup, BACKUP_STATUS_CORRUPT, instance_name, true);
 		}
-
 	}
 }
 
