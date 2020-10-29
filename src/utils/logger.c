@@ -92,6 +92,7 @@ init_logger(const char *root_path, LoggerConfig *config)
 #if PG_VERSION_NUM >= 120000
 	/* Setup logging for functions from other modules called by pg_probackup */
 	pg_logging_init(PROGRAM_NAME);
+	errno = 0; /* sometimes pg_logging_init sets errno */
 
 	switch (logger_config.log_level_console)
 	{
