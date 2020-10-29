@@ -349,7 +349,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 
         heap_path = node.safe_psql(
             "postgres",
-            "select pg_relation_filepath('t_heap')").rstrip()
+            "select pg_relation_filepath('t_heap')").decode('utf-8').rstrip()
 
         path = os.path.join(node.data_dir, heap_path)
         with open(path, "rb+", 0) as f:
@@ -416,7 +416,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 
         heap_path = node.safe_psql(
             "postgres",
-            "select pg_relation_filepath('t_heap')").rstrip()
+            "select pg_relation_filepath('t_heap')").decode('utf-8').rstrip()
 
         self.backup_node(
             backup_dir, 'node', node,
@@ -558,7 +558,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 
         heap_path = node.safe_psql(
             "postgres",
-            "select pg_relation_filepath('t_heap')").rstrip()
+            "select pg_relation_filepath('t_heap')").decode('utf-8').rstrip()
 
         self.backup_node(
             backup_dir, 'node', node,
@@ -699,7 +699,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 
         heap_path = node.safe_psql(
             "postgres",
-            "select pg_relation_filepath('t_heap')").rstrip()
+            "select pg_relation_filepath('t_heap')").decode('utf-8').rstrip()
 
         self.backup_node(
             backup_dir, 'node', node,
@@ -840,7 +840,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 
         heap_path = node.safe_psql(
             "postgres",
-            "select pg_relation_filepath('t_heap')").rstrip()
+            "select pg_relation_filepath('t_heap')").decode('utf-8').rstrip()
 
         heap_size = node.safe_psql(
             "postgres",
@@ -922,7 +922,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         relfilenode = node.safe_psql(
             "postgres",
             "select 't_heap1'::regclass::oid"
-            ).rstrip()
+            ).decode('utf-8').rstrip()
 
         list = []
         for root, dirs, files in os.walk(os.path.join(
@@ -1205,11 +1205,11 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 
         relative_path_1 = node.safe_psql(
             "postgres",
-            "select pg_relation_filepath('t_heap_1')").rstrip()
+            "select pg_relation_filepath('t_heap_1')").decode('utf-8').rstrip()
 
         relative_path_2 = node.safe_psql(
             "postgres",
-            "select pg_relation_filepath('t_heap_1')").rstrip()
+            "select pg_relation_filepath('t_heap_1')").decode('utf-8').rstrip()
 
         absolute_path_1 = os.path.join(node.data_dir, relative_path_1)
         absolute_path_2 = os.path.join(node.data_dir, relative_path_2)
@@ -1350,7 +1350,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 
         relative_path = node.safe_psql(
             "postgres",
-            "select pg_relation_filepath('t_heap')").rstrip()
+            "select pg_relation_filepath('t_heap')").decode('utf-8').rstrip()
 
         absolute_path = os.path.join(node.data_dir, relative_path)
 
@@ -1418,7 +1418,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 
         relative_path = node.safe_psql(
             "postgres",
-            "select pg_relation_filepath('t_heap')").rstrip()
+            "select pg_relation_filepath('t_heap')").decode('utf-8').rstrip()
 
         absolute_path = os.path.join(node.data_dir, relative_path)
 
@@ -1443,6 +1443,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 
         # File removed, we can proceed with backup
         gdb.continue_execution_until_exit()
+        gdb.kill()
 
         pgdata = self.pgdata_content(node.data_dir)
 
@@ -1492,7 +1493,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 
         relative_path = node.safe_psql(
             "postgres",
-            "select pg_relation_filepath('t_heap')").rstrip()
+            "select pg_relation_filepath('t_heap')").decode('utf-8').rstrip()
 
         absolute_path = os.path.join(node.data_dir, relative_path)
 
@@ -1637,6 +1638,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 
         gdb.remove_all_breakpoints()
         gdb.continue_execution_until_exit()
+        gdb.kill()
 
         show_backup = self.show_pb(backup_dir, 'node')[0]
 
@@ -1761,6 +1763,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 
         gdb._execute('signal SIGINT')
         gdb.continue_execution_until_error()
+        gdb.kill()
 
         backup_id = self.show_pb(backup_dir, 'node')[0]['id']
 
@@ -1901,7 +1904,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 
         relative_path = node.safe_psql(
             "postgres",
-            "select pg_relation_filepath('pg_class')").rstrip()
+            "select pg_relation_filepath('pg_class')").decode('utf-8').rstrip()
 
         full_path = os.path.join(node.data_dir, relative_path)
 

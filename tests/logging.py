@@ -255,7 +255,7 @@ class LogTest(ProbackupTest, unittest.TestCase):
         self.assertTrue(os.path.isfile(rotation_file_path))
 
         # mangle .rotation file
-        with open(rotation_file_path, "wt", 0) as f:
+        with open(rotation_file_path, "w+b", 0) as f:
             f.write(b"blah")
             f.flush()
             f.close

@@ -2,7 +2,6 @@ import os
 import unittest
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 import subprocess
-from datetime import datetime
 import sys
 from time import sleep
 from datetime import datetime, timedelta
@@ -1986,7 +1985,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         target_name = 'savepoint'
 
-        target_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        target_time = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S %z")
         with node.connect("postgres") as con:
             res = con.execute(
                 "INSERT INTO tbl0005 VALUES ('inserted') RETURNING (xmin)")
@@ -2470,7 +2469,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             'postgres',
             "SELECT oid "
             "FROM pg_tablespace "
-            "WHERE spcname = 'somedata'").rstrip()
+            "WHERE spcname = 'somedata'").decode('utf-8').rstrip()
 
         for i in range(1, 10, 1):
             node.safe_psql(
@@ -2480,7 +2479,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         db_list_raw = node.safe_psql(
             'postgres',
             'SELECT to_json(a) '
-            'FROM (SELECT oid, datname FROM pg_database) a').rstrip()
+            'FROM (SELECT oid, datname FROM pg_database) a').decode('utf-8').rstrip()
 
         db_list_splitted = db_list_raw.splitlines()
 
@@ -3308,7 +3307,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         timeline_id = node.safe_psql(
             'postgres',
-            'select timeline_id from pg_control_checkpoint()').rstrip()
+            'select timeline_id from pg_control_checkpoint()').decode('utf-8').rstrip()
 
         self.assertEqual('2', timeline_id)
 

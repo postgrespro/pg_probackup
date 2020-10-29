@@ -206,7 +206,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
         filepath = node.safe_psql(
             "postgres",
             "select pg_relation_filepath('t_heap')"
-        ).rstrip()
+        ).decode('utf-8').rstrip()
 
         self.backup_node(backup_dir, 'node', node)
 
@@ -708,7 +708,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
         node.safe_psql("postgres", "SELECT * FROM t_heap")
         filepath = node.safe_psql(
             "postgres",
-            "SELECT pg_relation_filepath('t_heap')").rstrip()
+            "SELECT pg_relation_filepath('t_heap')").decode('utf-8').rstrip()
         self.backup_node(
             backup_dir,
             'node',
@@ -1063,7 +1063,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
 
         file_path = node.safe_psql(
             "postgres",
-            "select pg_relation_filepath('pgbench_accounts')").rstrip()
+            "select pg_relation_filepath('pgbench_accounts')").decode('utf-8').rstrip()
 
         node.safe_psql(
             "postgres",

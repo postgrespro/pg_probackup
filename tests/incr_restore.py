@@ -382,7 +382,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
 
         xid = node.safe_psql(
             'postgres',
-            'select txid_current()').rstrip()
+            'select txid_current()').decode('utf-8').rstrip()
 
         # --A-----B--------X
         pgbench = node.pgbench(options=['-T', '30', '-c', '1', '--no-vacuum'])
@@ -472,7 +472,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
 
         xid = node.safe_psql(
             'postgres',
-            'select txid_current()').rstrip()
+            'select txid_current()').decode('utf-8').rstrip()
 
         # --A-----B--------X
         pgbench = node.pgbench(options=['-T', '30', '-c', '1', '--no-vacuum'])
@@ -684,7 +684,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
 
         heap_path = node.safe_psql(
             "postgres",
-            "select pg_relation_filepath('pgbench_accounts')").rstrip()
+            "select pg_relation_filepath('pgbench_accounts')").decode('utf-8').rstrip()
 
         pgbench = node.pgbench(options=['-T', '10', '-c', '1'])
         pgbench.wait()
@@ -742,7 +742,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
 
         heap_path = node.safe_psql(
             "postgres",
-            "select pg_relation_filepath('pgbench_accounts')").rstrip()
+            "select pg_relation_filepath('pgbench_accounts')").decode('utf-8').rstrip()
 
         pgbench = node.pgbench(options=['-T', '10', '-c', '1'])
         pgbench.wait()
@@ -1512,7 +1512,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         node.slow_start()
 
         fullpath = os.path.join(node.data_dir, 'simple_file')
-        with open(fullpath, "w", 0) as f:
+        with open(fullpath, "w+b", 0) as f:
             f.flush()
             f.close
 
@@ -1586,7 +1586,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         node.slow_start()
 
         fullpath = os.path.join(node.data_dir, 'simple_file')
-        with open(fullpath, "w", 0) as f:
+        with open(fullpath, "w+b", 0) as f:
             f.flush()
             f.close
 

@@ -130,13 +130,13 @@ def slow_start(self, replica=False):
     self.start()
     while True:
         try:
-            output = self.safe_psql('template1', query).rstrip()
+            output = self.safe_psql('template1', query).decode("utf-8").rstrip()
 
             if output == 't':
                 break
 
         except testgres.QueryException as e:
-            if 'database system is starting up' in e[0]:
+            if 'database system is starting up' in e.message:
                 continue
             else:
                 raise e
@@ -439,7 +439,8 @@ class ProbackupTest(object):
     def get_md5_per_page_for_fork(self, file, size_in_pages):
         pages_per_segment = {}
         md5_per_page = {}
-        nsegments = size_in_pages/131072
+        size_in_pages = int(size_in_pages)
+        nsegments = int(size_in_pages/131072)
         if size_in_pages % 131072 != 0:
             nsegments = nsegments + 1
 
@@ -1424,7 +1425,7 @@ class ProbackupTest(object):
         """
         if isinstance(node, testgres.PostgresNode):
             if self.version_to_num(
-                node.safe_psql('postgres', 'show server_version')
+                node.safe_psql('postgres', 'show server_version').decode('utf-8')
                     ) >= self.version_to_num('10.0'):
                 node.safe_psql('postgres', 'select pg_switch_wal()')
             else:
@@ -1441,10 +1442,11 @@ class ProbackupTest(object):
 
     def wait_until_replica_catch_with_master(self, master, replica):
 
-        if self.version_to_num(
-                master.safe_psql(
-                    'postgres',
-                    'show server_version')) >= self.version_to_num('10.0'):
+        version = master.safe_psql(
+            'postgres',
+            'show server_version').decode('utf-8').rstrip()
+
+        if self.version_to_num(version) >= self.version_to_num('10.0'):
             master_function = 'pg_catalog.pg_current_wal_lsn()'
             replica_function = 'pg_catalog.pg_last_wal_replay_lsn()'
         else:
@@ -1453,7 +1455,7 @@ class ProbackupTest(object):
 
         lsn = master.safe_psql(
             'postgres',
-            'SELECT {0}'.format(master_function)).rstrip()
+            'SELECT {0}'.format(master_function)).decode('utf-8').rstrip()
 
         # Wait until replica catch up with master
         replica.poll_query_until(
@@ -1527,8 +1529,10 @@ class ProbackupTest(object):
                 file_fullpath = os.path.join(root, file)
                 file_relpath = os.path.relpath(file_fullpath, pgdata)
                 directory_dict['files'][file_relpath] = {'is_datafile': False}
-                directory_dict['files'][file_relpath]['md5'] = hashlib.md5(
-                    open(file_fullpath, 'rb').read()).hexdigest()
+                with open(file_fullpath, 'rb') as f:
+                    directory_dict['files'][file_relpath]['md5'] = hashlib.md5(f.read()).hexdigest()
+#                directory_dict['files'][file_relpath]['md5'] = hashlib.md5(
+#                    f = open(file_fullpath, 'rb').read()).hexdigest()
 
                 # crappy algorithm
                 if file.isdigit():
@@ -1763,6 +1767,10 @@ class GDBobj(ProbackupTest):
                 pass
             else:
                 break
+
+    def kill(self):
+        self.proc.kill()
+        self.proc.wait()
 
     def set_breakpoint(self, location):
 

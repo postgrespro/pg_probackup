@@ -1093,7 +1093,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
         old_path = node.safe_psql(
             "postgres",
-            "select pg_relation_filepath('t_heap')").rstrip()
+            "select pg_relation_filepath('t_heap')").decode('utf-8').rstrip()
 
         # DELTA BACKUP
         self.backup_node(
@@ -1109,7 +1109,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
         new_path = node.safe_psql(
             "postgres",
-            "select pg_relation_filepath('t_heap')").rstrip()
+            "select pg_relation_filepath('t_heap')").decode('utf-8').rstrip()
 
         # DELTA BACKUP
         backup_id_2 = self.backup_node(
@@ -1508,7 +1508,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
         path = node.safe_psql(
             'postgres',
-            "select pg_relation_filepath('pgbench_accounts')").rstrip()
+            "select pg_relation_filepath('pgbench_accounts')").decode('utf-8').rstrip()
 
         fsm_path = path + '_fsm'
 
@@ -1601,7 +1601,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
         path = node.safe_psql(
             'postgres',
-            "select pg_relation_filepath('pgbench_accounts')").rstrip()
+            "select pg_relation_filepath('pgbench_accounts')").decode('utf-8').rstrip()
 
         node.safe_psql(
             'postgres',
@@ -1682,7 +1682,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
         dboid = node.safe_psql(
             "postgres",
-            "select oid from pg_database where datname = 'testdb'").rstrip()
+            "select oid from pg_database where datname = 'testdb'").decode('utf-8').rstrip()
 
         # take FULL backup
         full_id = self.backup_node(
@@ -2687,7 +2687,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
         path = node.safe_psql(
             'postgres',
-            "select pg_relation_filepath('pgbench_accounts')").rstrip()
+            "select pg_relation_filepath('pgbench_accounts')").decode('utf-8').rstrip()
 
         gdb = self.merge_backup(
             backup_dir, "node", delta_id,
@@ -2812,7 +2812,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
         logfile = os.path.join(backup_dir, 'log', 'pg_probackup.log')
 
-        with open(logfile, "rw+") as f:
+        with open(logfile, "w+") as f:
             f.truncate()
 
         gdb.continue_execution_until_exit()
