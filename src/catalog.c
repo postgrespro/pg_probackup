@@ -121,7 +121,7 @@ write_backup_status(pgBackup *backup, BackupStatus status,
 	}
 
 	/* overwrite control file only if status has changed */
-	if (backup->status == status)
+	if (tmp->status == status)
 	{
 		pgBackupFree(tmp);
 		return;
