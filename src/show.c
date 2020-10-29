@@ -101,6 +101,9 @@ do_show(const char *instance_name, time_t requested_backup_id, bool show_archive
 			InstanceConfig *instance = parray_get(instances, i);
 			char backup_instance_path[MAXPGPATH];
 
+			if (interrupted)
+				elog(ERROR, "Interrupted during show");
+
 			sprintf(backup_instance_path, "%s/%s/%s", backup_path, BACKUPS_DIR, instance->name);
 
 			if (show_archive)
