@@ -2394,6 +2394,8 @@ process_block_change(ForkNumber forknum, RelFileNode rnode, BlockNumber blkno)
 /*
  * Stop WAL streaming if current 'xlogpos' exceeds 'stop_backup_lsn', which is
  * set by pg_stop_backup().
+ *
+ * TODO: Add streamed file to file list when segment is finished
  */
 static bool
 stop_streaming(XLogRecPtr xlogpos, uint32 timeline, bool segment_finished)
@@ -2499,7 +2501,11 @@ StreamLog(void *arg)
 		ctl.sysidentifier = NULL;
 
 #if PG_VERSION_NUM >= 100000
-		ctl.walmethod = CreateWalDirectoryMethod(stream_arg->basedir, 0, true);
+		ctl.walmethod = CreateWalDirectoryMethod(
+			stream_arg->basedir,
+//			(instance_config.compress_alg == NONE_COMPRESS) ? 0 : instance_config.compress_level,
+			0,
+			true);
 		ctl.replication_slot = replication_slot;
 		ctl.stop_socket = PGINVALID_SOCKET;
 #if PG_VERSION_NUM >= 100000 && PG_VERSION_NUM < 110000
@@ -2509,6 +2515,8 @@ StreamLog(void *arg)
 		ctl.basedir = (char *) stream_arg->basedir;
 #endif
 
+		ctl.do_sync = false; /* We sync all files at the end of backup */
+//		ctl.mark_done		 /* for future use in s3 */
 		ctl.stream_stop = stop_streaming;
 		ctl.standby_message_timeout = standby_message_timeout;
 		ctl.partial_suffix = NULL;
