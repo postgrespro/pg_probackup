@@ -2508,6 +2508,8 @@ StreamLog(void *arg)
 			true);
 		ctl.replication_slot = replication_slot;
 		ctl.stop_socket = PGINVALID_SOCKET;
+		ctl.do_sync = false; /* We sync all files at the end of backup */
+//		ctl.mark_done        /* for future use in s3 */
 #if PG_VERSION_NUM >= 100000 && PG_VERSION_NUM < 110000
 		ctl.temp_slot = temp_slot;
 #endif
@@ -2515,8 +2517,6 @@ StreamLog(void *arg)
 		ctl.basedir = (char *) stream_arg->basedir;
 #endif
 
-		ctl.do_sync = false; /* We sync all files at the end of backup */
-//		ctl.mark_done		 /* for future use in s3 */
 		ctl.stream_stop = stop_streaming;
 		ctl.standby_message_timeout = standby_message_timeout;
 		ctl.partial_suffix = NULL;
