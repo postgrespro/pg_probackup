@@ -492,10 +492,10 @@ class ProbackupTest(object):
         if os.path.getsize(file) == 0:
             return ptrack_bits_for_fork
         byte_size = os.path.getsize(file + '_ptrack')
-        npages = byte_size/8192
+        npages = int(byte_size/8192)
         if byte_size % 8192 != 0:
             print('Ptrack page is not 8k aligned')
-            sys.exit(1)
+            exit(1)
 
         file = os.open(file + '_ptrack', os.O_RDONLY)
 
