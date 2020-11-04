@@ -89,7 +89,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         xid = node.safe_psql(
             'postgres',
-            'SELECT txid_current()').rstrip()
+            'SELECT txid_current()').decode('utf-8').rstrip()
         pgbench.wait()
 
         self.backup_node(backup_dir, 'node', node, backup_type='ptrack')
@@ -126,7 +126,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             'select (select sum(tbalance) from pgbench_tellers) - '
             '( select sum(bbalance) from pgbench_branches) + '
             '( select sum(abalance) from pgbench_accounts ) - '
-            '(select sum(delta) from pgbench_history) as must_be_zero').rstrip()
+            '(select sum(delta) from pgbench_history) as must_be_zero').decode('utf-8').rstrip()
 
         self.assertEqual('0', balance)
 
@@ -275,7 +275,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             'select (select sum(tbalance) from pgbench_tellers) - '
             '( select sum(bbalance) from pgbench_branches) + '
             '( select sum(abalance) from pgbench_accounts ) - '
-            '(select sum(delta) from pgbench_history) as must_be_zero').rstrip()
+            '(select sum(delta) from pgbench_history) as must_be_zero').decode('utf-8').rstrip()
 
         self.assertEqual('0', balance)
 
@@ -1107,6 +1107,13 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node', ptrack_backup_id)['recovery-time']
         if self.paranoia:
             pgdata = self.pgdata_content(node.data_dir)
+
+        node.safe_psql(
+            "postgres",
+            "insert into t_heap select i as id,"
+            " md5(i::text) as text,"
+            " md5(i::text)::tsvector as tsvector"
+            " from generate_series(200, 300) i")
 
         # Drop Node
         node.cleanup()
