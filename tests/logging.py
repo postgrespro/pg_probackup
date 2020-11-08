@@ -300,3 +300,41 @@ class LogTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
+
+    def test_issue_274(self):
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.slow_start()
+
+        log_dir = os.path.join(backup_dir, "somedir")
+
+        try:
+            self.backup_node(
+                backup_dir, 'node', node, backup_type='page',
+                options=[
+                    '--log-level-console=verbose', '--log-level-file=verbose',
+                    '--log-directory={0}'.format(log_dir), '-j1',
+                    '--log-filename=somelog.txt', '--archive-timeout=5s'])
+        except:
+            pass
+
+        log_file_path = os.path.join(
+            log_dir, 'somelog.txt')
+
+        self.assertTrue(os.path.isfile(log_file_path))
+
+        with open(log_file_path, "r+") as f:
+            log_content = f.read()
+
+        self.assertIn('INFO: command:', log_content)
+        print(log_content)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
