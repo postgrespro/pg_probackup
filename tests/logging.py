@@ -334,7 +334,7 @@ class LogTest(ProbackupTest, unittest.TestCase):
             log_content = f.read()
 
         self.assertIn('INFO: command:', log_content)
-        print(log_content)
+        # print(log_content)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
