@@ -311,19 +311,51 @@ class LogTest(ProbackupTest, unittest.TestCase):
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
         node.slow_start()
+
+        replica = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'replica'))
+        replica.cleanup()
+
+        self.backup_node(backup_dir, 'node', node, options=['--stream'])
+        self.restore_node(backup_dir, 'node', replica)
+
+        # Settings for Replica
+        self.set_replica(node, replica, synchronous=True)
+        self.set_archiving(backup_dir, 'node', replica, replica=True)
+        self.set_auto_conf(replica, {'port': replica.port})
+
+        replica.slow_start(replica=True)
+
+        node.safe_psql(
+            "postgres",
+            "create table t_heap as select i as id, md5(i::text) as text, "
+            "md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(0,45600) i")
 
         log_dir = os.path.join(backup_dir, "somedir")
 
         try:
             self.backup_node(
-                backup_dir, 'node', node, backup_type='page',
+                backup_dir, 'node', replica, backup_type='page',
                 options=[
                     '--log-level-console=verbose', '--log-level-file=verbose',
                     '--log-directory={0}'.format(log_dir), '-j1',
-                    '--log-filename=somelog.txt', '--archive-timeout=5s'])
-        except:
-            pass
+                    '--log-filename=somelog.txt', '--archive-timeout=5s',
+                    '--no-validate', '--log-rotation-size=100KB'])
+            # we should die here because exception is what we expect to happen
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because of archiving timeout"
+                "\n Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                'ERROR: WAL segment',
+                e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
 
         log_file_path = os.path.join(
             log_dir, 'somelog.txt')
@@ -334,7 +366,6 @@ class LogTest(ProbackupTest, unittest.TestCase):
             log_content = f.read()
 
         self.assertIn('INFO: command:', log_content)
-        # print(log_content)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
