@@ -260,10 +260,10 @@ static void
 setMyLocation(void)
 {
 
-#ifdef WIN32
-	if (IsSshProtocol())
-		elog(ERROR, "Currently remote operations on Windows are not supported");
-#endif
+//#ifdef WIN32
+//	if (IsSshProtocol())
+//		elog(ERROR, "Currently remote operations on Windows are not supported");
+//#endif
 
 	MyLocation = IsSshProtocol()
 		? (backup_subcmd == ARCHIVE_PUSH_CMD || backup_subcmd == ARCHIVE_GET_CMD)
