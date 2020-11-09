@@ -202,7 +202,8 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             'select (select sum(tbalance) from pgbench_tellers) - '
             '( select sum(bbalance) from pgbench_branches) + '
             '( select sum(abalance) from pgbench_accounts ) - '
-            '(select sum(delta) from pgbench_history) as must_be_zero').rstrip()
+            '(select sum(delta) from pgbench_history) as must_be_zero').\
+            decode('utf-8').rstrip()
 
         self.assertEqual('0', balance)
 
