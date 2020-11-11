@@ -270,6 +270,9 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool
 	pgBackupGetPath(&current, external_prefix, lengthof(external_prefix),
 					EXTERNAL_DIR);
 
+	/* initialize backup's file list */
+	backup_files_list = parray_new();
+
 	/* start stream replication */
 	if (stream_wal)
 	{
@@ -279,9 +282,6 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool
 		start_WAL_streaming(backup_conn, dst_backup_path, &instance_config.conn_opt,
 							current.start_lsn, current.tli);
 	}
-
-	/* initialize backup list */
-	backup_files_list = parray_new();
 
 	/* list files with the logical path. omit $PGDATA */
 	if (fio_is_remote(FIO_DB_HOST))
@@ -567,52 +567,11 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool
 	/* close ssh session in main thread */
 	fio_disconnect();
 
-	/* Add archived xlog files into the list of files of this backup */
-	if (stream_wal)
-	{
-		parray     *xlog_files_list;
-		char		pg_xlog_path[MAXPGPATH];
-		char		wal_full_path[MAXPGPATH];
+	/*
+	 * Add archived xlog files into the list of files of this backup
+	 * NOTHING TO DO HERE
+	 */
 
-		/* Scan backup PG_XLOG_DIR */
-		xlog_files_list = parray_new();
-		join_path_components(pg_xlog_path, database_path, PG_XLOG_DIR);
-		dir_list_file(xlog_files_list, pg_xlog_path, false, true, false, false, true, 0,
-					  FIO_BACKUP_HOST);
-
-		/* TODO: Drop streamed WAL segments greater than stop_lsn */
-		for (i = 0; i < parray_num(xlog_files_list); i++)
-		{
-			pgFile	   *file = (pgFile *) parray_get(xlog_files_list, i);
-
-			join_path_components(wal_full_path, pg_xlog_path, file->rel_path);
-
-			if (!S_ISREG(file->mode))
-				continue;
-
-			file->crc = pgFileGetCRC(wal_full_path, true, false);
-			file->write_size = file->size;
-
-			/* overwrite rel_path, because now it is relative to
-			 * /backup_dir/backups/instance_name/backup_id/database/pg_xlog/
-			 */
-			pg_free(file->rel_path);
-
-			/* Now it is relative to /backup_dir/backups/instance_name/backup_id/database/ */
-			file->rel_path = pgut_strdup(GetRelativePath(wal_full_path, database_path));
-
-			file->name = last_dir_separator(file->rel_path);
-
-			if (file->name == NULL) // TODO: do it in pgFileInit
-				file->name = file->rel_path;
-			else
-				file->name++;
-		}
-
-		/* Add xlog files into the list of backed up files */
-		parray_concat(backup_files_list, xlog_files_list);
-		parray_free(xlog_files_list);
-	}
 
 	/* write database map to file and add it to control file */
 	if (database_map)
@@ -1920,7 +1879,10 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn,
 
 		if (stream_wal)
 		{
-			wait_WAL_streaming_end();
+			/* This function will also add list of xlog files
+			 * to the passed filelist */
+			if(wait_WAL_streaming_end(backup_files_list))
+				elog(ERROR, "WAL streaming failed");
 
 			pgBackupGetPath2(backup, stream_xlog_path,
 							 lengthof(stream_xlog_path),

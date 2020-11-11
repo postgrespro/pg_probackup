@@ -57,6 +57,8 @@ typedef struct
 static pthread_t stream_thread;
 static StreamThreadArg stream_thread_arg = {"", NULL, 1};
 
+static parray *xlog_files_list = NULL;
+
 static void IdentifySystem(StreamThreadArg *stream_thread_arg);
 static int checkpoint_timeout(PGconn *backup_conn);
 static void *StreamLog(void *arg);
@@ -273,10 +275,38 @@ stop_streaming(XLogRecPtr xlogpos, uint32 timeline, bool segment_finished)
 	/* we assume that we get called once at the end of each segment */
 	if (segment_finished)
     {
+        XLogSegNo xlog_segno;
+        char wal_segment_name[MAXPGPATH];
+        char wal_segment_fullpath[MAXPGPATH];
+        pgFile *file;
+
 		elog(VERBOSE, _("finished segment at %X/%X (timeline %u)"),
 			 (uint32) (xlogpos >> 32), (uint32) xlogpos, timeline);
 
-        /* TODO Add streamed file to file list */
+        /* Add streamed xlog file into the backup's list of files */
+        if (!xlog_files_list)
+            xlog_files_list = parray_new();
+        
+        GetXLogSegNo(xlogpos, xlog_segno, instance_config.xlog_seg_size);
+        GetXLogFileName(wal_segment_name, timeline, xlog_segno,
+                        instance_config.xlog_seg_size);
+
+        join_path_components(wal_segment_fullpath,
+                            stream_thread_arg.basedir, wal_segment_name);
+
+        /*
+            * NOTE We pass wal_segment_name as a relpath, since now we don't have
+            * any subdirs in wal directory structure
+            */
+        file = pgFileNew(wal_segment_fullpath, wal_segment_name, false, 0,
+                                FIO_BACKUP_HOST);
+        file->name = file->rel_path;
+        file->crc = pgFileGetCRC(wal_segment_fullpath, true, false);
+
+        /* Should we recheck it using stat? */
+        file->write_size = instance_config.xlog_seg_size;
+        file->uncompressed_size = instance_config.xlog_seg_size;
+        parray_append(xlog_files_list, file);
     }
 
 	/*
@@ -359,10 +389,12 @@ start_WAL_streaming(PGconn *backup_conn, char *stream_dst_path, ConnectionOption
 }
 
 /* Wait for the completion of stream */
-void
-wait_WAL_streaming_end(void)
+int
+wait_WAL_streaming_end(parray *backup_files_list)
 {
+	parray_concat(backup_files_list, xlog_files_list);
+	parray_free(xlog_files_list);
+
 	pthread_join(stream_thread, NULL);
-	if (stream_thread_arg.ret == 1)
-		elog(ERROR, "WAL streaming failed");
+	return stream_thread_arg.ret;
 }

@@ -1177,6 +1177,5 @@ extern XLogRecPtr stop_backup_lsn;
 extern void start_WAL_streaming(PGconn *backup_conn, char *stream_dst_path,
 							   ConnectionOptions *conn_opt,
 							   XLogRecPtr startpos, TimeLineID starttli);
-extern void wait_WAL_streaming_end(void);
-
+extern int wait_WAL_streaming_end(parray *backup_files_list);
 #endif /* PG_PROBACKUP_H */
