@@ -208,6 +208,25 @@ get_current_timeline_from_control(bool safe)
 	return ControlFile.checkPointCopy.ThisTimeLineID;
 }
 
+void
+get_catchup_from_control(const char *pgdata_path, CatchupParams *catchup)
+{
+	ControlFileData ControlFile;
+	char	   *buffer;
+	size_t		size;
+
+	/* First fetch file... */
+	buffer = slurpFile(pgdata_path, XLOG_CONTROL_FILE, &size, false, FIO_DB_HOST);
+
+	digestControlFile(&ControlFile, buffer, size);
+	pg_free(buffer);
+
+	catchup->lsn = ControlFile.checkPointCopy.redo;
+	catchup->tli = ControlFile.checkPointCopy.ThisTimeLineID;
+
+	// TODO We can save more params to check compatibility of instances
+}
+
 /*
  * Get last check point record ptr from pg_tonrol.
  */

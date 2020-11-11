@@ -44,7 +44,8 @@ typedef enum ProbackupSubcmd
 	SET_CONFIG_CMD,
 	SET_BACKUP_CMD,
 	SHOW_CONFIG_CMD,
-	CHECKDB_CMD
+	CHECKDB_CMD,
+	CATCHUP_CMD
 } ProbackupSubcmd;
 
 
@@ -60,6 +61,9 @@ char		backup_instance_path[MAXPGPATH];
  * $BACKUP_PATH/wal/instance_name
  */
 char		arclog_path[MAXPGPATH] = "";
+
+/* path to the PGDATA of recipient server for catchup  */
+char	*catchup_pgdata_path = NULL;
 
 /* colon separated external directories list ("/path1:/path2") */
 char	   *externaldir = NULL;
@@ -243,6 +247,9 @@ static ConfigOption cmd_options[] =
 	{ 'I', 170, "ttl", &ttl, SOURCE_CMD_STRICT, SOURCE_DEFAULT, 0, OPTION_UNIT_S, option_get_value},
 	{ 's', 171, "expire-time",		&expire_time_string,	SOURCE_CMD_STRICT },
 
+	/* catchup options */
+	{ 's', 172, "catchup-path",		&catchup_pgdata_path,	SOURCE_CMD_STRICT },
+
 	/* options for backward compatibility
 	 * TODO: remove in 3.0.0
 	 */
@@ -268,7 +275,8 @@ setMyLocation(void)
 	MyLocation = IsSshProtocol()
 		? (backup_subcmd == ARCHIVE_PUSH_CMD || backup_subcmd == ARCHIVE_GET_CMD)
 		   ? FIO_DB_HOST
-		   : (backup_subcmd == BACKUP_CMD || backup_subcmd == RESTORE_CMD || backup_subcmd == ADD_INSTANCE_CMD)
+		   : (backup_subcmd == BACKUP_CMD || backup_subcmd == RESTORE_CMD ||
+		      backup_subcmd == ADD_INSTANCE_CMD || backup_subcmd == CATCHUP_CMD)
 		      ? FIO_BACKUP_HOST
 		      : FIO_LOCAL_HOST
 		: FIO_LOCAL_HOST;
@@ -346,6 +354,8 @@ main(int argc, char *argv[])
 			backup_subcmd = SHOW_CONFIG_CMD;
 		else if (strcmp(argv[1], "checkdb") == 0)
 			backup_subcmd = CHECKDB_CMD;
+		else if (strcmp(argv[1], "cathup") == 0)
+			backup_subcmd = CATCHUP_CMD;
 #ifdef WIN32
 		else if (strcmp(argv[1], "ssh") == 0)
 		    launch_ssh(argv);
@@ -443,7 +453,9 @@ main(int argc, char *argv[])
 	if (help_opt)
 		help_command(command_name);
 
-	/* backup_path is required for all pg_probackup commands except help and checkdb */
+	/* backup_path is required for all pg_probackup commands except
+	 * help, checkdb and catchup
+	 */
 	if (backup_path == NULL)
 	{
 		/*
@@ -451,8 +463,10 @@ main(int argc, char *argv[])
 		 * from environment variable
 		 */
 		backup_path = getenv("BACKUP_PATH");
-		if (backup_path == NULL && backup_subcmd != CHECKDB_CMD)
-			elog(ERROR, "required parameter not specified: BACKUP_PATH (-B, --backup-path)");
+
+		if (backup_path == NULL)
+			if (backup_subcmd != CHECKDB_CMD && backup_subcmd != CATCHUP_CMD)
+				elog(ERROR, "required parameter not specified: BACKUP_PATH (-B, --backup-path)");
 	}
 
 	setMyLocation();
@@ -470,15 +484,15 @@ main(int argc, char *argv[])
 	if (backup_path && !is_absolute_path(backup_path))
 		elog(ERROR, "-B, --backup-path must be an absolute path");
 
-
 	/*
 	 * Option --instance is required for all commands except
-	 * init, show, checkdb and validate
+	 * init, show, checkdb, validate and catchup
 	 */
 	if (instance_name == NULL)
 	{
 		if (backup_subcmd != INIT_CMD && backup_subcmd != SHOW_CMD &&
-			backup_subcmd != VALIDATE_CMD && backup_subcmd != CHECKDB_CMD)
+			backup_subcmd != VALIDATE_CMD && backup_subcmd != CHECKDB_CMD &&
+			backup_subcmd != CATCHUP_CMD)
 			elog(ERROR, "required parameter not specified: --instance");
 	}
 	else
@@ -870,6 +884,15 @@ main(int argc, char *argv[])
 			do_checkdb(need_amcheck,
 					   instance_config.conn_opt, instance_config.pgdata);
 			break;
+		case CATCHUP_CMD:
+		{
+			time_t	start_time = time(NULL);
+
+			// If archiving is not set for catchup cluster, use streaming
+			// current.stream = stream_wal;
+			do_catchup(start_time, set_backup_params, catchup_pgdata_path);
+			break;
+		}
 		case NO_CMD:
 			/* Should not happen */
 			elog(ERROR, "Unknown subcommand");

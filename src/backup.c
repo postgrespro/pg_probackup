@@ -724,6 +724,59 @@ pgdata_basic_setup(ConnectionOptions conn_opt, PGNodeInfo *nodeInfo)
 }
 
 /*
+ * regular connection options and instance_config refer the server,
+ * we get info from (donor). We expect it is active and accept connections.
+ * 
+ * 'catchup_pgdata_path' contiains a location of a recepient node PGDATA
+ * Recipient instance must be shut down and contain a valid XLOG_CONTROL_FILE.
+ *
+ */
+int
+do_catchup(time_t start_time, pgSetBackupParams *set_backup_params,
+		   char *catchup_pgdata_path)
+{
+	PGconn		*backup_conn = NULL;
+	PGNodeInfo	nodeInfo;
+	char		pretty_bytes[20];
+	CatchupParams catchupParams;
+
+	/* Initialize PGInfonode */
+	pgNodeInit(&nodeInfo);
+
+	if (!instance_config.pgdata)
+		elog(ERROR, "required parameter not specified: PGDATA "
+						 "(-D, --pgdata)");
+
+	if(!catchup_pgdata_path)
+		elog(ERROR, "required parameter not specified: --catchup-path");
+
+	/* Ensure that catchup_pgdata_path is an absolute path */
+	if (catchup_pgdata_path)
+	{
+		canonicalize_path(catchup_pgdata_path);
+
+		if (!is_absolute_path(catchup_pgdata_path))
+			elog(ERROR, "--catchup-path must be an absolute path");
+	}
+
+	/* TODO Ensure that no instance is currently run on catchup pgdata */
+
+	/* Read catchup params from the .. directory */
+	get_catchup_from_control(catchup_pgdata_path, &catchupParams);
+
+	/*
+	 * Now do a catchup.
+	 *
+	 * From a donor's side it looks almost like an incremental backup,
+	 * with a changed destination.
+	 *
+	 * From a recipient's side it is almost like incremental restore,
+	 * except that we do not touch configuration files.
+	 * TODO: list these files explicitly
+	 */
+}
+
+/*
  * Entry point of pg_probackup BACKUP subcommand.
  */
 int

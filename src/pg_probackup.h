@@ -118,6 +118,13 @@ typedef struct RedoParams
 	uint32      checksum_version;
 } RedoParams;
 
+typedef struct CatchupParams
+{
+	TimeLineID  tli;
+	XLogRecPtr  lsn;
+} CatchupParams;
+
+
 typedef struct PageState
 {
 	uint16  checksum;
@@ -1062,6 +1069,8 @@ extern XLogRecPtr get_next_record_lsn(const char *archivedir, XLogSegNo	segno, T
 /* in util.c */
 extern TimeLineID get_current_timeline(PGconn *conn);
 extern TimeLineID get_current_timeline_from_control(bool safe);
+extern void get_catchup_from_control(const char *pgdata_path,
+									 CatchupParams *catchup);
 extern XLogRecPtr get_checkpoint_location(PGconn *conn);
 extern uint64 get_system_identifier(const char *pgdata_path);
 extern uint64 get_remote_system_identifier(PGconn *conn);
