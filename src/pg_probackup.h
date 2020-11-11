@@ -120,10 +120,12 @@ typedef struct RedoParams
 
 typedef struct CatchupParams
 {
-	TimeLineID  tli;
-	XLogRecPtr  lsn;
 	/* path of the recipient instance pgdata */
 	char 	dest_pgdata_path[MAXPGPATH];
+
+	/* redoLsn of the recipient instance and its timeline */
+	XLogRecPtr  lsn;
+	TimeLineID  tli;
 } CatchupParams;
 
 
