@@ -122,6 +122,8 @@ typedef struct CatchupParams
 {
 	TimeLineID  tli;
 	XLogRecPtr  lsn;
+	/* path of the recipient instance pgdata */
+	char 	dest_pgdata_path[MAXPGPATH];
 } CatchupParams;
 
 
