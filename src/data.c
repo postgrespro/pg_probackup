@@ -726,7 +726,7 @@ backup_non_data_file(pgFile *file, pgFile *prev_file,
 	}
 
 	backup_non_data_file_internal(from_fullpath, FIO_DB_HOST,
-								  to_fullpath, file, true);
+								  to_fullpath, file, missing_ok);
 }
 
 /*

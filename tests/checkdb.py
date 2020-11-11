@@ -259,13 +259,13 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
             node.data_dir,
             node.safe_psql(
                 "db1",
-                "select pg_relation_filepath('pgbench_accounts_pkey')").rstrip())
+                "select pg_relation_filepath('pgbench_accounts_pkey')").decode('utf-8').rstrip())
 
         index_path_2 = os.path.join(
             node.data_dir,
             node.safe_psql(
                 "db2",
-                "select pg_relation_filepath('some_index')").rstrip())
+                "select pg_relation_filepath('some_index')").decode('utf-8').rstrip())
 
         try:
             self.checkdb_node(
@@ -376,7 +376,7 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
 
         heap_path = node.safe_psql(
             "postgres",
-            "select pg_relation_filepath('t_heap')").rstrip()
+            "select pg_relation_filepath('t_heap')").decode('utf-8').rstrip()
 
         # sanity
         try:
@@ -473,14 +473,15 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
         gdb = self.checkdb_node(
             backup_dir, 'node', gdb=True,
             options=[
-                '-d', 'postgres', '-j', '4',
+                '-d', 'postgres', '-j', '2',
                 '--skip-block-validation',
+                '--progress',
                 '--amcheck', '-p', str(node.port)])
 
         gdb.set_breakpoint('amcheck_one_index')
         gdb.run_until_break()
 
-        gdb.continue_execution_until_break(10)
+        gdb.continue_execution_until_break(20)
         gdb.remove_all_breakpoints()
 
         gdb._execute('signal SIGINT')

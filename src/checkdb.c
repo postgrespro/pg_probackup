@@ -292,6 +292,7 @@ check_indexes(void *arg)
 	int			i;
 	check_indexes_arg *arguments = (check_indexes_arg *) arg;
 	int			n_indexes = 0;
+	my_thread_num = arguments->thread_num;
 
 	if (arguments->index_list)
 		n_indexes = parray_num(arguments->index_list);
@@ -439,7 +440,7 @@ get_index_list(const char *dbname, bool first_db_with_amcheck,
 		char *namespace = NULL;
 
 		/* index oid */
-		ind->indexrelid = atoi(PQgetvalue(res, i, 0));
+		ind->indexrelid = atoll(PQgetvalue(res, i, 0));
 
 		/* index relname */
 		name = PQgetvalue(res, i, 1);
@@ -479,7 +480,7 @@ amcheck_one_index(check_indexes_arg *arguments,
 	params[0] = palloc(64);
 
 	/* first argument is index oid */
-	sprintf(params[0], "%i", ind->indexrelid);
+	sprintf(params[0], "%u", ind->indexrelid);
 	/* second argument is heapallindexed */
 	params[1] = heapallindexed ? "true" : "false";
 

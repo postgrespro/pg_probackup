@@ -463,7 +463,7 @@ class SetBackupTest(ProbackupTest, unittest.TestCase):
 
         note = node.safe_psql(
             "postgres",
-            "SELECT repeat('hello', 200)").rstrip()
+            "SELECT repeat('hello', 200)").decode('utf-8').rstrip()
 
         backup_id = self.backup_node(
             backup_dir, 'node', node,

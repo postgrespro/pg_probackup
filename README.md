@@ -6,7 +6,7 @@
 `pg_probackup` is a utility to manage backup and recovery of PostgreSQL database clusters. It is designed to perform periodic backups of the PostgreSQL instance that enable you to restore the server in case of a failure.
 
 The utility is compatible with:
-* PostgreSQL 9.5, 9.6, 10, 11, 12;
+* PostgreSQL 9.5, 9.6, 10, 11, 12, 13;
 
 As compared to other backup solutions, `pg_probackup` offers the following benefits that can help you implement different backup strategies and deal with large amounts of data:
 * Incremental backup: page-level incremental backup allows you to save disk space, speed up backup and restore. With three different incremental modes, you can plan the backup strategy in accordance with your data flow.
@@ -41,8 +41,7 @@ Regardless of the chosen backup type, all backups taken with `pg_probackup` supp
 ## ptrack support
 
 `PTRACK` backup support provided via following options:
-* vanilla PostgreSQL compiled with ptrack patch. Currently there are patches for [PostgreSQL 9.6](https://gist.githubusercontent.com/gsmol/5b615c971dfd461c76ef41a118ff4d97/raw/e471251983f14e980041f43bea7709b8246f4178/ptrack_9.6.6_v1.5.patch) and [PostgreSQL 10](https://gist.githubusercontent.com/gsmol/be8ee2a132b88463821021fd910d960e/raw/de24f9499f4f314a4a3e5fae5ed4edb945964df8/ptrack_10.1_v1.5.patch)
-* vanilla PostgreSQL 12 with [ptrack extension](https://github.com/postgrespro/ptrack)
+* vanilla PostgreSQL 12,13 with [ptrack extension](https://github.com/postgrespro/ptrack)
 * Postgres Pro Standard 9.6, 10, 11, 12
 * Postgres Pro Enterprise 9.6, 10, 11, 12
 
@@ -59,7 +58,7 @@ Documentation can be found at [github](https://postgrespro.github.io/pg_probacku
 
 ## Installation and Setup
 ### Windows Installation
-Installers are available in release **assets**. [Latests](https://github.com/postgrespro/pg_probackup/releases/2.4.1).
+Installers are available in release **assets**. [Latests](https://github.com/postgrespro/pg_probackup/releases/2.4.4).
 
 ### Linux Installation
 #### pg_probackup for vanilla PostgreSQL
@@ -67,57 +66,57 @@ Installers are available in release **assets**. [Latests](https://github.com/pos
 #DEB Ubuntu|Debian Packages
 sudo echo "deb [arch=amd64] https://repo.postgrespro.ru/pg_probackup/deb/ $(lsb_release -cs) main-$(lsb_release -cs)" > /etc/apt/sources.list.d/pg_probackup.list
 sudo wget -O - https://repo.postgrespro.ru/pg_probackup/keys/GPG-KEY-PG_PROBACKUP | sudo apt-key add - && sudo apt-get update
-sudo apt-get install pg-probackup-{12,11,10,9.6,9.5}
-sudo apt-get install pg-probackup-{12,11,10,9.6,9.5}-dbg
+sudo apt-get install pg-probackup-{13,12,11,10,9.6,9.5}
+sudo apt-get install pg-probackup-{13,12,11,10,9.6,9.5}-dbg
 
 #DEB-SRC Packages
 sudo echo "deb-src [arch=amd64] https://repo.postgrespro.ru/pg_probackup/deb/ $(lsb_release -cs) main-$(lsb_release -cs)" >>\
   /etc/apt/sources.list.d/pg_probackup.list && sudo apt-get update
-sudo apt-get source pg-probackup-{12,11,10,9.6,9.5}
+sudo apt-get source pg-probackup-{13,12,11,10,9.6,9.5}
 
 #RPM Centos Packages
 rpm -ivh https://repo.postgrespro.ru/pg_probackup/keys/pg_probackup-repo-centos.noarch.rpm
-yum install pg_probackup-{12,11,10,9.6,9.5}
-yum install pg_probackup-{12,11,10,9.6,9.5}-debuginfo
+yum install pg_probackup-{13,12,11,10,9.6,9.5}
+yum install pg_probackup-{13,12,11,10,9.6,9.5}-debuginfo
 
 #RPM RHEL Packages
 rpm -ivh https://repo.postgrespro.ru/pg_probackup/keys/pg_probackup-repo-rhel.noarch.rpm
-yum install pg_probackup-{12,11,10,9.6,9.5}
-yum install pg_probackup-{12,11,10,9.6,9.5}-debuginfo
+yum install pg_probackup-{13,12,11,10,9.6,9.5}
+yum install pg_probackup-{13,12,11,10,9.6,9.5}-debuginfo
 
 #RPM Oracle Linux Packages
 rpm -ivh https://repo.postgrespro.ru/pg_probackup/keys/pg_probackup-repo-oraclelinux.noarch.rpm
-yum install pg_probackup-{12,11,10,9.6,9.5}
-yum install pg_probackup-{12,11,10,9.6,9.5}-debuginfo
+yum install pg_probackup-{13,12,11,10,9.6,9.5}
+yum install pg_probackup-{13,12,11,10,9.6,9.5}-debuginfo
 
 #SRPM Centos|RHEL|OracleLinux Packages
-yumdownloader --source pg_probackup-{12,11,10,9.6,9.5}
+yumdownloader --source pg_probackup-{13,12,11,10,9.6,9.5}
 
 #RPM SUSE|SLES Packages
 zypper install --allow-unsigned-rpm -y https://repo.postgrespro.ru/pg_probackup/keys/pg_probackup-repo-suse.noarch.rpm
-zypper --gpg-auto-import-keys install -y pg_probackup-{12,11,10,9.6,9.5}
-zypper install pg_probackup-{12,11,10,9.6,9.5}-debuginfo
+zypper --gpg-auto-import-keys install -y pg_probackup-{13,12,11,10,9.6,9.5}
+zypper install pg_probackup-{13,12,11,10,9.6,9.5}-debuginfo
 
 #SRPM SUSE|SLES Packages
-zypper si pg_probackup-{12,11,10,9.6,9.5}
+zypper si pg_probackup-{13,12,11,10,9.6,9.5}
 
 #RPM ALT Linux 7
 sudo echo "rpm https://repo.postgrespro.ru/pg_probackup/rpm/latest/altlinux-p7 x86_64 vanilla" > /etc/apt/sources.list.d/pg_probackup.list
 sudo apt-get update
-sudo apt-get install pg_probackup-{12,11,10,9.6,9.5}
-sudo apt-get install pg_probackup-{12,11,10,9.6,9.5}-debuginfo
+sudo apt-get install pg_probackup-{13,12,11,10,9.6,9.5}
+sudo apt-get install pg_probackup-{13,12,11,10,9.6,9.5}-debuginfo
 
 #RPM ALT Linux 8
 sudo echo "rpm https://repo.postgrespro.ru/pg_probackup/rpm/latest/altlinux-p8 x86_64 vanilla" > /etc/apt/sources.list.d/pg_probackup.list
 sudo apt-get update
-sudo apt-get install pg_probackup-{12,11,10,9.6,9.5}
-sudo apt-get install pg_probackup-{12,11,10,9.6,9.5}-debuginfo
+sudo apt-get install pg_probackup-{13,12,11,10,9.6,9.5}
+sudo apt-get install pg_probackup-{13,12,11,10,9.6,9.5}-debuginfo
 
 #RPM ALT Linux 9
 sudo echo "rpm https://repo.postgrespro.ru/pg_probackup/rpm/latest/altlinux-p9 x86_64 vanilla" > /etc/apt/sources.list.d/pg_probackup.list
 sudo apt-get update
-sudo apt-get install pg_probackup-{12,11,10,9.6,9.5}
-sudo apt-get install pg_probackup-{12,11,10,9.6,9.5}-debuginfo
+sudo apt-get install pg_probackup-{13,12,11,10,9.6,9.5}
+sudo apt-get install pg_probackup-{13,12,11,10,9.6,9.5}-debuginfo
 ```
 
 #### pg_probackup for PostgresPro Standard and Enterprise

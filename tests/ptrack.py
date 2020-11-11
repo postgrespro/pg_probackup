@@ -16,6 +16,282 @@ module_name = 'ptrack'
 class PtrackTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
+    def test_ptrack_stop_pg(self):
+        """
+        create node, take full backup,
+        restart node, check that ptrack backup
+        can be taken
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            ptrack_enable=True,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.slow_start()
+
+        if node.major_version >= 11:
+            node.safe_psql(
+                "postgres",
+                "CREATE EXTENSION ptrack")
+
+        node.pgbench_init(scale=1)
+
+        # FULL backup
+        self.backup_node(backup_dir, 'node', node, options=['--stream'])
+
+        node.stop()
+        node.slow_start()
+
+        self.backup_node(
+            backup_dir, 'node', node,
+            backup_type='ptrack', options=['--stream'])
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+        # @unittest.skip("skip")
+    def test_ptrack_multi_timeline_backup(self):
+        """
+        t2            /------P2
+        t1 ------F---*-----P1
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            ptrack_enable=True,
+            initdb_params=['--data-checksums'],
+            pg_options={'autovacuum': 'off'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        if node.major_version >= 11:
+            node.safe_psql(
+                "postgres",
+                "CREATE EXTENSION ptrack")
+
+        node.pgbench_init(scale=5)
+
+        # FULL backup
+        full_id = self.backup_node(backup_dir, 'node', node)
+
+        pgbench = node.pgbench(options=['-T', '30', '-c', '1', '--no-vacuum'])
+        sleep(15)
+
+        xid = node.safe_psql(
+            'postgres',
+            'SELECT txid_current()').decode('utf-8').rstrip()
+        pgbench.wait()
+
+        self.backup_node(backup_dir, 'node', node, backup_type='ptrack')
+
+        node.cleanup()
+
+        # Restore from full backup to create Timeline 2
+        print(self.restore_node(
+            backup_dir, 'node', node,
+            options=[
+                '--recovery-target-xid={0}'.format(xid),
+                '--recovery-target-action=promote']))
+
+        node.slow_start()
+
+        pgbench = node.pgbench(options=['-T', '10', '-c', '1', '--no-vacuum'])
+        pgbench.wait()
+
+        self.backup_node(backup_dir, 'node', node, backup_type='ptrack')
+
+        pgdata = self.pgdata_content(node.data_dir)
+
+        node.cleanup()
+
+        self.restore_node(backup_dir, 'node', node)
+
+        pgdata_restored = self.pgdata_content(node.data_dir)
+        self.compare_pgdata(pgdata, pgdata_restored)
+
+        node.slow_start()
+
+        balance = node.safe_psql(
+            'postgres',
+            'select (select sum(tbalance) from pgbench_tellers) - '
+            '( select sum(bbalance) from pgbench_branches) + '
+            '( select sum(abalance) from pgbench_accounts ) - '
+            '(select sum(delta) from pgbench_history) as must_be_zero').decode('utf-8').rstrip()
+
+        self.assertEqual('0', balance)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+        # @unittest.skip("skip")
+    def test_ptrack_multi_timeline_backup_1(self):
+        """
+        t2              /------
+        t1 ---F---P1---*
+
+        # delete P1
+        t2              /------P2
+        t1 ---F--------*
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            ptrack_enable=True,
+            initdb_params=['--data-checksums'],
+            pg_options={'autovacuum': 'off'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        if node.major_version >= 11:
+            node.safe_psql(
+                "postgres",
+                "CREATE EXTENSION ptrack")
+
+        node.pgbench_init(scale=5)
+
+        # FULL backup
+        full_id = self.backup_node(backup_dir, 'node', node)
+
+        pgbench = node.pgbench(options=['-T', '10', '-c', '1', '--no-vacuum'])
+        pgbench.wait()
+
+        ptrack_id = self.backup_node(backup_dir, 'node', node, backup_type='ptrack')
+        node.cleanup()
+
+        self.restore_node(backup_dir, 'node', node)
+
+        node.slow_start()
+
+        pgbench = node.pgbench(options=['-T', '10', '-c', '1', '--no-vacuum'])
+        pgbench.wait()
+
+        # delete old PTRACK backup
+        self.delete_pb(backup_dir, 'node', backup_id=ptrack_id)
+
+        # take new PTRACK backup
+        self.backup_node(backup_dir, 'node', node, backup_type='ptrack')
+
+        pgdata = self.pgdata_content(node.data_dir)
+
+        node.cleanup()
+
+        self.restore_node(backup_dir, 'node', node)
+
+        pgdata_restored = self.pgdata_content(node.data_dir)
+        self.compare_pgdata(pgdata, pgdata_restored)
+
+        node.slow_start()
+
+        balance = node.safe_psql(
+            'postgres',
+            'select (select sum(tbalance) from pgbench_tellers) - '
+            '( select sum(bbalance) from pgbench_branches) + '
+            '( select sum(abalance) from pgbench_accounts ) - '
+            '(select sum(delta) from pgbench_history) as must_be_zero').\
+            decode('utf-8').rstrip()
+
+        self.assertEqual('0', balance)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_ptrack_eat_my_data(self):
+        """
+        PGPRO-4051
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            ptrack_enable=True,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        if node.major_version >= 11:
+            node.safe_psql(
+                "postgres",
+                "CREATE EXTENSION ptrack")
+
+        node.pgbench_init(scale=50)
+
+        self.backup_node(backup_dir, 'node', node)
+
+        node_restored = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node_restored'))
+
+        pgbench = node.pgbench(options=['-T', '300', '-c', '1', '--no-vacuum'])
+
+        for i in range(10):
+            print("Iteration: {0}".format(i))
+
+            sleep(2)
+
+            self.backup_node(backup_dir, 'node', node, backup_type='ptrack')
+#            pgdata = self.pgdata_content(node.data_dir)
+#
+#            node_restored.cleanup()
+#
+#            self.restore_node(backup_dir, 'node', node_restored)
+#            pgdata_restored = self.pgdata_content(node_restored.data_dir)
+#
+#            self.compare_pgdata(pgdata, pgdata_restored)
+
+        pgbench.terminate()
+        pgbench.wait()
+
+        self.switch_wal_segment(node)
+
+        result = node.safe_psql("postgres", "SELECT * FROM pgbench_accounts")
+
+        node_restored.cleanup()
+        self.restore_node(backup_dir, 'node', node_restored)
+        self.set_auto_conf(
+            node_restored, {'port': node_restored.port})
+
+        node_restored.slow_start()
+
+        balance = node_restored.safe_psql(
+            'postgres',
+            'select (select sum(tbalance) from pgbench_tellers) - '
+            '( select sum(bbalance) from pgbench_branches) + '
+            '( select sum(abalance) from pgbench_accounts ) - '
+            '(select sum(delta) from pgbench_history) as must_be_zero').decode('utf-8').rstrip()
+
+        self.assertEqual('0', balance)
+
+        # Logical comparison
+        self.assertEqual(
+            result,
+            node_restored.safe_psql(
+                'postgres',
+                'SELECT * FROM pgbench_accounts'),
+            'Data loss')
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
     def test_ptrack_simple(self):
         """make node, make full and ptrack stream backups,"
         " restore them and check data correctness"""
@@ -32,7 +308,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
 
-        if node.major_version >= 12:
+        if node.major_version >= 11:
             node.safe_psql(
                 "postgres",
                 "CREATE EXTENSION ptrack")
@@ -210,7 +486,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
                 "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;"
             )
 
-        if node.major_version < 12:
+        if node.major_version < 11:
             fnames = [
                 'pg_catalog.oideq(oid, oid)',
                 'pg_catalog.ptrack_version()',
@@ -276,7 +552,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
 
-        if node.major_version >= 12:
+        if node.major_version >= 11:
             node.safe_psql(
                 "postgres",
                 "CREATE EXTENSION ptrack")
@@ -327,7 +603,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
 
-        if node.major_version >= 12:
+        if node.major_version >= 11:
             node.safe_psql(
                 "postgres",
                 "CREATE EXTENSION ptrack")
@@ -336,7 +612,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         self.backup_node(backup_dir, 'node', node, options=['--stream'])
 
         # DISABLE PTRACK
-        if node.major_version >= 12:
+        if node.major_version >= 11:
             node.safe_psql('postgres', "alter system set ptrack.map_size to 0")
         else:
             node.safe_psql('postgres', "alter system set ptrack_enable to off")
@@ -344,7 +620,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         node.slow_start()
 
         # ENABLE PTRACK
-        if node.major_version >= 12:
+        if node.major_version >= 11:
             node.safe_psql('postgres', "alter system set ptrack.map_size to '128'")
             node.safe_psql('postgres', "alter system set shared_preload_libraries to 'ptrack'")
         else:
@@ -397,7 +673,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
 
-        if node.major_version >= 12:
+        if node.major_version >= 11:
             node.safe_psql(
                 "postgres",
                 "CREATE EXTENSION ptrack")
@@ -458,7 +734,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         self.create_tblspace_in_node(node, 'somedata')
 
-        if node.major_version >= 12:
+        if node.major_version >= 11:
             node.safe_psql(
                 "postgres",
                 "CREATE EXTENSION ptrack")
@@ -548,7 +824,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         self.create_tblspace_in_node(node, 'somedata')
 
-        if node.major_version >= 12:
+        if node.major_version >= 11:
             node.safe_psql(
                 "postgres",
                 "CREATE EXTENSION ptrack")
@@ -629,7 +905,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
 
-        if node.major_version >= 12:
+        if node.major_version >= 11:
             self.skipTest("skip --- we do not need ptrack_get_block for ptrack 2.*")
             node.safe_psql(
                 "postgres",
@@ -705,7 +981,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
 
-        if node.major_version >= 12:
+        if node.major_version >= 11:
             node.safe_psql(
                 "postgres",
                 "CREATE EXTENSION ptrack")
@@ -798,7 +1074,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         self.set_archiving(backup_dir, 'node', node)
         node.slow_start()
 
-        if node.major_version >= 12:
+        if node.major_version >= 11:
             node.safe_psql(
                 "postgres",
                 "CREATE EXTENSION ptrack")
@@ -832,6 +1108,13 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node', ptrack_backup_id)['recovery-time']
         if self.paranoia:
             pgdata = self.pgdata_content(node.data_dir)
+
+        node.safe_psql(
+            "postgres",
+            "insert into t_heap select i as id,"
+            " md5(i::text) as text,"
+            " md5(i::text)::tsvector as tsvector"
+            " from generate_series(200, 300) i")
 
         # Drop Node
         node.cleanup()
@@ -1134,7 +1417,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
 
-        if node.major_version >= 12:
+        if node.major_version >= 11:
             node.safe_psql(
                 "postgres",
                 "CREATE EXTENSION ptrack")
@@ -1254,7 +1537,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
 
-        if node.major_version >= 12:
+        if node.major_version >= 11:
             node.safe_psql(
                 "postgres",
                 "CREATE EXTENSION ptrack")
@@ -1354,7 +1637,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
 
-        if node.major_version >= 12:
+        if node.major_version >= 11:
             node.safe_psql(
                 "postgres",
                 "CREATE EXTENSION ptrack")
@@ -1448,7 +1731,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
 
-        if node.major_version >= 12:
+        if node.major_version >= 11:
             node.safe_psql(
                 "postgres",
                 "CREATE EXTENSION ptrack")
@@ -1520,7 +1803,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
 
-        if node.major_version >= 12:
+        if node.major_version >= 11:
             node.safe_psql(
                 "postgres",
                 "CREATE EXTENSION ptrack")
@@ -1617,7 +1900,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
 
-        if node.major_version >= 12:
+        if node.major_version >= 11:
             node.safe_psql(
                 "postgres",
                 "CREATE EXTENSION ptrack")
@@ -1735,7 +2018,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
 
-        if node.major_version >= 12:
+        if node.major_version >= 11:
             node.safe_psql(
                 "postgres",
                 "CREATE EXTENSION ptrack")
@@ -1748,7 +2031,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         self.backup_node(backup_dir, 'node', node, options=['--stream'])
 
         # PTRACK STUFF
-        if node.major_version < 12:
+        if node.major_version < 11:
             idx_ptrack = {'type': 'heap'}
             idx_ptrack['path'] = self.get_fork_path(node, 'pgbench_accounts')
             idx_ptrack['old_size'] = self.get_fork_size(node, 'pgbench_accounts')
@@ -1761,7 +2044,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         node.safe_psql("postgres", "checkpoint")
 
-        if node.major_version < 12:
+        if node.major_version < 11:
             idx_ptrack['new_size'] = self.get_fork_size(
                 node,
                 'pgbench_accounts')
@@ -2152,7 +2435,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
 
-        if node.major_version >= 12:
+        if node.major_version >= 11:
             node.safe_psql(
                 "postgres",
                 "CREATE EXTENSION ptrack")
@@ -2179,7 +2462,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         node.safe_psql('postgres', 'vacuum t_heap')
         node.safe_psql('postgres', 'checkpoint')
 
-        if node.major_version < 12:
+        if node.major_version < 11:
             for i in idx_ptrack:
                 # get size of heap and indexes. size calculated in pages
                 idx_ptrack[i]['old_size'] = self.get_fork_size(node, i)
@@ -2197,7 +2480,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         node.safe_psql('postgres', 'checkpoint')
 
         # CHECK PTRACK SANITY
-        if node.major_version < 12:
+        if node.major_version < 11:
             self.check_ptrack_map_sanity(node, idx_ptrack)
 
         # Clean after yourself
@@ -2217,7 +2500,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
 
-        if node.major_version >= 12:
+        if node.major_version >= 11:
             node.safe_psql(
                 "postgres",
                 "CREATE EXTENSION ptrack")
@@ -2258,7 +2541,20 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         node.safe_psql('postgres', 'checkpoint')
 
         # CHECK PTRACK SANITY
-        self.check_ptrack_map_sanity(node, idx_ptrack)
+        if node.major_version < 11:
+            self.check_ptrack_map_sanity(node, idx_ptrack)
+
+        self.backup_node(
+            backup_dir, 'node', node,
+            backup_type='ptrack', options=['-j10', '--stream'])
+
+        pgdata = self.pgdata_content(node.data_dir)
+        node.cleanup()
+
+        self.restore_node(backup_dir, 'node', node)
+
+        pgdata_restored = self.pgdata_content(node.data_dir)
+        self.compare_pgdata(pgdata, pgdata_restored)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -2277,7 +2573,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'master', master)
         master.slow_start()
 
-        if master.major_version >= 12:
+        if master.major_version >= 11:
             master.safe_psql(
                 "postgres",
                 "CREATE EXTENSION ptrack")
@@ -2339,7 +2635,23 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         replica.safe_psql('postgres', 'checkpoint')
 
         # CHECK PTRACK SANITY
-        self.check_ptrack_map_sanity(replica, idx_ptrack)
+        if master.major_version < 11:
+            self.check_ptrack_map_sanity(replica, idx_ptrack)
+
+        self.backup_node(
+            backup_dir, 'replica', replica,
+            backup_type='ptrack', options=['-j10', '--stream'])
+
+        pgdata = self.pgdata_content(replica.data_dir)
+
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'))
+        node.cleanup()
+
+        self.restore_node(backup_dir, 'replica', node)
+
+        pgdata_restored = self.pgdata_content(replica.data_dir)
+        self.compare_pgdata(pgdata, pgdata_restored)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -2357,7 +2669,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'master', master)
         master.slow_start()
 
-        if master.major_version >= 12:
+        if master.major_version >= 11:
             master.safe_psql(
                 "postgres",
                 "CREATE EXTENSION ptrack")
@@ -2417,13 +2729,13 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         master.safe_psql('postgres', 'DELETE FROM t_heap WHERE id%2 = 1')
         master.safe_psql('postgres', 'CLUSTER t_heap USING t_gist')
 
-        if master.major_version < 12:
+        if master.major_version < 11:
             master.safe_psql('postgres', 'CHECKPOINT')
 
         # Sync master and replica
         self.wait_until_replica_catch_with_master(master, replica)
 
-        if master.major_version < 12:
+        if master.major_version < 11:
             replica.safe_psql('postgres', 'CHECKPOINT')
             self.check_ptrack_map_sanity(replica, idx_ptrack)
 
@@ -2465,7 +2777,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
 
-        if node.major_version >= 12:
+        if node.major_version >= 11:
             node.safe_psql(
                 "postgres",
                 "CREATE EXTENSION ptrack")
@@ -2540,15 +2852,14 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             ptrack_enable=True,
-            pg_options={
-                'autovacuum': 'off'})
+            pg_options={'autovacuum': 'off'})
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'master', master)
         master.slow_start()
 
-        if master.major_version >= 12:
+        if master.major_version >= 11:
             master.safe_psql(
                 "postgres",
                 "CREATE EXTENSION ptrack")
@@ -2641,7 +2952,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
 
-        if node.major_version >= 12:
+        if node.major_version >= 11:
             node.safe_psql(
                 "postgres",
                 "CREATE EXTENSION ptrack")
@@ -2657,7 +2968,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             "md5(repeat(i::text,10))::tsvector as tsvector "
             "from generate_series(0,2560) i")
 
-        if node.major_version < 12:
+        if node.major_version < 11:
             for i in idx_ptrack:
                 if idx_ptrack[i]['type'] != 'heap' and idx_ptrack[i]['type'] != 'seq':
                     node.safe_psql(
@@ -2673,7 +2984,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         node.safe_psql('postgres', 'truncate t_heap')
         node.safe_psql('postgres', 'checkpoint')
 
-        if node.major_version < 12:
+        if node.major_version < 11:
             for i in idx_ptrack:
                 # get fork size and calculate it in pages
                 idx_ptrack[i]['old_size'] = self.get_fork_size(node, i)
@@ -2690,7 +3001,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         pgdata = self.pgdata_content(node.data_dir)
 
-        if node.major_version < 12:
+        if node.major_version < 11:
             for i in idx_ptrack:
                 idx_ptrack[i]['ptrack'] = self.get_ptrack_bits_per_page_for_fork(
                     node, idx_ptrack[i]['path'], [idx_ptrack[i]['old_size']])
@@ -2710,7 +3021,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
-    def test_ptrack_truncate_replica(self):
+    def test_basic_ptrack_truncate_replica(self):
         fname = self.id().split('.')[3]
         master = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'master'),
@@ -2720,14 +3031,15 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             pg_options={
                 'max_wal_size': '32MB',
                 'archive_timeout': '10s',
-                'checkpoint_timeout': '30s'})
+                'checkpoint_timeout': '30s',
+                'autovacuum': 'off'})
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'master', master)
         master.slow_start()
 
-        if master.major_version >= 12:
+        if master.major_version >= 11:
             master.safe_psql(
                 "postgres",
                 "CREATE EXTENSION ptrack")
@@ -2765,7 +3077,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         self.wait_until_replica_catch_with_master(master, replica)
         replica.safe_psql('postgres', 'checkpoint')
 
-        if replica.major_version < 12:
+        if replica.major_version < 11:
             for i in idx_ptrack:
                 # get fork size and calculate it in pages
                 idx_ptrack[i]['old_size'] = self.get_fork_size(replica, i)
@@ -2785,7 +3097,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
                 '--master-db=postgres',
                 '--master-port={0}'.format(master.port)])
 
-        if replica.major_version < 12:
+        if replica.major_version < 11:
             for i in idx_ptrack:
                 idx_ptrack[i]['ptrack'] = self.get_ptrack_bits_per_page_for_fork(
                     replica, idx_ptrack[i]['path'], [idx_ptrack[i]['old_size']])
@@ -2795,7 +3107,6 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         # Sync master and replica
         self.wait_until_replica_catch_with_master(master, replica)
-        replica.safe_psql('postgres', 'checkpoint')
 
         self.backup_node(
             backup_dir, 'replica', replica, backup_type='ptrack',
@@ -2815,10 +3126,12 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         self.restore_node(backup_dir, 'replica', node, data_dir=node.data_dir)
 
         pgdata_restored = self.pgdata_content(node.data_dir)
-        self.compare_pgdata(pgdata, pgdata_restored)
+
+        if self.paranoia:
+            self.compare_pgdata(pgdata, pgdata_restored)
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname)
+        self.del_test_dir(module_name, fname, [master, replica])
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure
@@ -2835,7 +3148,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
 
-        if node.major_version >= 12:
+        if node.major_version >= 11:
             node.safe_psql(
                 "postgres",
                 "CREATE EXTENSION ptrack")
@@ -2867,7 +3180,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         self.backup_node(
             backup_dir, 'node', node, options=['-j10', '--stream'])
 
-        if node.major_version < 12:
+        if node.major_version < 11:
             for i in idx_ptrack:
                 # get fork size and calculate it in pages
                 idx_ptrack[i]['old_size'] = self.get_fork_size(node, i)
@@ -2886,7 +3199,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         node.safe_psql('postgres', 'checkpoint')
 
         # CHECK PTRACK SANITY
-        if node.major_version < 12:
+        if node.major_version < 11:
             self.check_ptrack_map_sanity(node, idx_ptrack)
 
         self.backup_node(
@@ -2924,7 +3237,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'master', master)
         master.slow_start()
 
-        if master.major_version >= 12:
+        if master.major_version >= 11:
             master.safe_psql(
                 "postgres",
                 "CREATE EXTENSION ptrack")
@@ -2972,7 +3285,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
                 '--master-port={0}'.format(master.port),
                 '--stream'])
 
-        if replica.major_version < 12:
+        if replica.major_version < 11:
             for i in idx_ptrack:
                 # get fork size and calculate it in pages
                 idx_ptrack[i]['old_size'] = self.get_fork_size(replica, i)
@@ -2995,7 +3308,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         replica.safe_psql('postgres', 'checkpoint')
 
         # CHECK PTRACK SANITY
-        if replica.major_version < 12:
+        if replica.major_version < 11:
             self.check_ptrack_map_sanity(master, idx_ptrack)
 
         self.backup_node(
@@ -3031,7 +3344,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
 
-        if node.major_version >= 12:
+        if node.major_version >= 11:
             node.safe_psql(
                 "postgres",
                 "CREATE EXTENSION ptrack")
@@ -3064,7 +3377,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         node.safe_psql('postgres', 'vacuum freeze t_heap')
         node.safe_psql('postgres', 'checkpoint')
 
-        if node.major_version < 12:
+        if node.major_version < 11:
             for i in idx_ptrack:
                 # get size of heap and indexes. size calculated in pages
                 idx_ptrack[i]['old_size'] = self.get_fork_size(node, i)
@@ -3075,7 +3388,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
                     idx_ptrack[i]['path'], idx_ptrack[i]['old_size'])
 
         # CHECK PTRACK SANITY
-        if node.major_version < 12:
+        if node.major_version < 11:
             self.check_ptrack_map_sanity(node, idx_ptrack)
 
         self.backup_node(
@@ -3110,7 +3423,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'master', master)
         master.slow_start()
 
-        if master.major_version >= 12:
+        if master.major_version >= 11:
             master.safe_psql(
                 "postgres",
                 "CREATE EXTENSION ptrack")
@@ -3159,7 +3472,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
                 '--master-port={0}'.format(master.port),
                 '--stream'])
 
-        if replica.major_version < 12:
+        if replica.major_version < 11:
             for i in idx_ptrack:
                 # get size of heap and indexes. size calculated in pages
                 idx_ptrack[i]['old_size'] = self.get_fork_size(replica, i)
@@ -3177,7 +3490,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         replica.safe_psql('postgres', 'checkpoint')
 
         # CHECK PTRACK SANITY
-        if replica.major_version < 12:
+        if replica.major_version < 11:
             self.check_ptrack_map_sanity(master, idx_ptrack)
 
         self.backup_node(
@@ -3210,7 +3523,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
 
-        if node.major_version >= 12:
+        if node.major_version >= 11:
             node.safe_psql(
                 "postgres",
                 "CREATE EXTENSION ptrack")
@@ -3240,7 +3553,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         self.backup_node(
             backup_dir, 'node', node, options=['-j10', '--stream'])
 
-        if node.major_version < 12:
+        if node.major_version < 11:
             for i in idx_ptrack:
                 # get size of heap and indexes. size calculated in pages
                 idx_ptrack[i]['old_size'] = self.get_fork_size(node, i)
@@ -3254,7 +3567,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         node.safe_psql('postgres', 'checkpoint')
 
         # CHECK PTRACK SANITY
-        if node.major_version < 12:
+        if node.major_version < 11:
             self.check_ptrack_map_sanity(node, idx_ptrack)
 
         self.backup_node(
@@ -3289,7 +3602,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
 
-        if node.major_version >= 12:
+        if node.major_version >= 11:
             node.safe_psql(
                 "postgres",
                 "CREATE EXTENSION ptrack")
@@ -3318,7 +3631,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         self.backup_node(
             backup_dir, 'node', node, options=['-j10', '--stream'])
 
-        if node.major_version < 12:
+        if node.major_version < 11:
             for i in idx_ptrack:
                 # get size of heap and indexes. size calculated in pages
                 idx_ptrack[i]['old_size'] = self.get_fork_size(node, i)
@@ -3332,7 +3645,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         node.safe_psql('postgres', 'vacuum full t_heap')
         node.safe_psql('postgres', 'checkpoint')
 
-        if node.major_version < 12:
+        if node.major_version < 11:
             self.check_ptrack_map_sanity(node, idx_ptrack)
 
         self.backup_node(
@@ -3370,7 +3683,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'master', master)
         master.slow_start()
 
-        if master.major_version >= 12:
+        if master.major_version >= 11:
             master.safe_psql(
                 "postgres",
                 "CREATE EXTENSION ptrack")
@@ -3394,7 +3707,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             "md5(i::text) as text, md5(repeat(i::text,10))::tsvector as "
             "tsvector from generate_series(0,256000) i")
 
-        if master.major_version < 12:
+        if master.major_version < 11:
             for i in idx_ptrack:
                 if idx_ptrack[i]['type'] != 'heap' and idx_ptrack[i]['type'] != 'seq':
                     master.safe_psql(
@@ -3421,7 +3734,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
                 '--master-port={0}'.format(master.port),
                 '--stream'])
 
-        if replica.major_version < 12:
+        if replica.major_version < 11:
             for i in idx_ptrack:
                 # get size of heap and indexes. size calculated in pages
                 idx_ptrack[i]['old_size'] = self.get_fork_size(replica, i)
@@ -3439,7 +3752,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         self.wait_until_replica_catch_with_master(master, replica)
         replica.safe_psql('postgres', 'checkpoint')
 
-        if replica.major_version < 12:
+        if replica.major_version < 11:
             self.check_ptrack_map_sanity(master, idx_ptrack)
 
         self.backup_node(
@@ -3472,7 +3785,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
 
-        if node.major_version >= 12:
+        if node.major_version >= 11:
             node.safe_psql(
                 "postgres",
                 "CREATE EXTENSION ptrack")
@@ -3486,7 +3799,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             "md5(repeat(i::text,10))::tsvector as tsvector "
             "from generate_series(0,2560) i")
 
-        if node.major_version < 12:
+        if node.major_version < 11:
             for i in idx_ptrack:
                 if idx_ptrack[i]['type'] != 'heap' and idx_ptrack[i]['type'] != 'seq':
                     node.safe_psql(
@@ -3499,7 +3812,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         self.backup_node(
             backup_dir, 'node', node, options=['-j10', '--stream'])
 
-        if node.major_version < 12:
+        if node.major_version < 11:
             for i in idx_ptrack:
                 # get size of heap and indexes. size calculated in pages
                 idx_ptrack[i]['old_size'] = self.get_fork_size(node, i)
@@ -3514,7 +3827,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         node.safe_psql('postgres', 'CHECKPOINT')
 
         # CHECK PTRACK SANITY
-        if node.major_version < 12:
+        if node.major_version < 11:
             self.check_ptrack_map_sanity(node, idx_ptrack)
 
         self.backup_node(
@@ -3550,7 +3863,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'master', master)
         master.slow_start()
 
-        if master.major_version >= 12:
+        if master.major_version >= 11:
             master.safe_psql(
                 "postgres",
                 "CREATE EXTENSION ptrack")
@@ -3598,7 +3911,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
                 ]
             )
 
-        if master.major_version < 12:
+        if master.major_version < 11:
             for i in idx_ptrack:
                 # get size of heap and indexes. size calculated in pages
                 idx_ptrack[i]['old_size'] = self.get_fork_size(replica, i)
@@ -3617,7 +3930,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         replica.safe_psql('postgres', 'CHECKPOINT')
 
         # CHECK PTRACK SANITY
-        if master.major_version < 12:
+        if master.major_version < 11:
             self.check_ptrack_map_sanity(master, idx_ptrack)
 
         self.backup_node(
@@ -3810,7 +4123,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
 
-        if node.major_version >= 12:
+        if node.major_version >= 11:
             node.safe_psql(
                 "postgres",
                 "CREATE EXTENSION ptrack")
@@ -3860,7 +4173,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
 
-        if node.major_version >= 12:
+        if node.major_version >= 11:
             node.safe_psql(
                 "postgres",
                 "CREATE EXTENSION ptrack")
@@ -3948,7 +4261,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         except ProbackupException as e:
             self.assertTrue(
                 'ERROR: LSN from ptrack_control ' in e.message and
-                'differs from Start LSN of previous backup' in e.message,
+                'is greater than Start LSN of previous backup' in e.message,
                 '\n Unexpected Error Message: {0}\n'
                 ' CMD: {1}'.format(repr(e.message), self.cmd))
 
@@ -3986,7 +4299,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
 
-        if node.major_version >= 12:
+        if node.major_version >= 11:
             node.safe_psql(
                 "postgres",
                 "CREATE EXTENSION ptrack")

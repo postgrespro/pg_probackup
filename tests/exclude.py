@@ -9,6 +9,54 @@ module_name = 'exclude'
 class ExcludeTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
+    def test_exclude_temp_files(self):
+        """
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'logging_collector': 'on',
+                'log_filename': 'postgresql.log'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.slow_start()
+
+        oid = node.safe_psql(
+            'postgres',
+            "select oid from pg_database where datname = 'postgres'").rstrip()
+
+        pgsql_tmp_dir = os.path.join(node.data_dir, 'base', 'pgsql_tmp')
+
+        os.mkdir(pgsql_tmp_dir)
+
+        file = os.path.join(pgsql_tmp_dir, 'pgsql_tmp7351.16')
+        with open(file, 'w') as f:
+            f.write("HELLO")
+            f.flush()
+            f.close
+
+        full_id = self.backup_node(
+            backup_dir, 'node', node, backup_type='full', options=['--stream'])
+
+        file = os.path.join(
+            backup_dir, 'backups', 'node', full_id,
+            'database', 'base', 'pgsql_tmp', 'pgsql_tmp7351.16')
+
+        self.assertFalse(
+            os.path.exists(file),
+            "File must be excluded: {0}".format(file))
+
+        # TODO check temporary tablespaces
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_exclude_temp_tables(self):
         """
@@ -179,7 +227,7 @@ class ExcludeTest(ProbackupTest, unittest.TestCase):
 
         log_dir = node.safe_psql(
             'postgres',
-            'show log_directory').rstrip()
+            'show log_directory').decode('utf-8').rstrip()
 
         node.cleanup()
 
@@ -216,7 +264,7 @@ class ExcludeTest(ProbackupTest, unittest.TestCase):
 
         log_dir = node.safe_psql(
             'postgres',
-            'show log_directory').rstrip()
+            'show log_directory').decode('utf-8').rstrip()
 
         self.backup_node(
             backup_dir, 'node', node,

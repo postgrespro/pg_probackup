@@ -399,7 +399,7 @@ doc/src/sgml/pgprobackup.sgml
       </listitem>
       <listitem>
         <para>
-          On Unix systems, for <productname>PostgreSQL</productname> 10 or higher,
+          On Unix systems, for <productname>PostgreSQL</productname> 10 or lower,
           a backup can be made only by the same OS user that has started the <productname>PostgreSQL</productname>
           server. For example, if <productname>PostgreSQL</productname> server is started by
           user <literal>postgres</literal>, the <literal>backup</literal> command must also be run
@@ -1161,6 +1161,14 @@ GRANT SELECT ON TABLE pg_catalog.pg_database TO backup;
       PostgreSQL. Links to PTRACK patches can be found
       <ulink url="https://github.com/postgrespro/pg_probackup#ptrack-support">here</ulink>.
     </para>
+    <note>
+     <para>
+      PTRACK versions lower than 2.0 are deprecated. Postgres Pro Standard and Postgres Pro Enterprise
+      versions starting with 11.9.1 contain PTRACK 2.0. Upgrade your server to avoid issues in backups
+      that you will take in future and be sure to take fresh backups of your clusters with the upgraded
+      PTRACK since the backups taken with PTRACK 1.x might be corrupt.
+     </para>
+    </note>
     <para>
       If you are going to use PTRACK backups, complete the following
       additional steps. The role that will perform PTRACK backups
@@ -1168,7 +1176,7 @@ GRANT SELECT ON TABLE pg_catalog.pg_database TO backup;
       access to all the databases of the cluster.
     </para>
     <para>
-    For <productname>PostgreSQL</productname> 12 or higher:
+    For <productname>PostgreSQL</productname> 11 or higher:
     </para>
     <orderedlist>
      <listitem>
@@ -1226,7 +1234,7 @@ GRANT EXECUTE ON FUNCTION pg_ptrack_get_block(oid, oid, oid, bigint) TO backup;
      For older <productname>PostgreSQL</productname> versions,
      PTRACK required taking backups in the exclusive mode
      to provide exclusive access to bitmaps with changed blocks.
-     To set up PTRACK backups for <productname>PostgreSQL</productname> 11
+     To set up PTRACK backups for <productname>PostgreSQL</productname> 10
      or lower, do the following:
     </para>
     <orderedlist>

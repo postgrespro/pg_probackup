@@ -15,6 +15,84 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure
+    def test_replica_switchover(self):
+        """
+        check that archiving on replica works correctly
+        over the course of several switchovers
+        https://www.postgresql.org/message-id/54b059d4-2b48-13a4-6f43-95a087c92367%40postgrespro.ru
+        """
+
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node1 = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node1'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node1', node1)
+
+        node1.slow_start()
+
+        # take full backup and restore it
+        self.backup_node(backup_dir, 'node1', node1, options=['--stream'])
+        node2 = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node2'))
+        node2.cleanup()
+
+        # create replica
+        self.restore_node(backup_dir, 'node1', node2)
+
+        # setup replica
+        self.add_instance(backup_dir, 'node2', node2)
+        self.set_archiving(backup_dir, 'node2', node2, replica=True)
+        self.set_replica(node1, node2, synchronous=False)
+        self.set_auto_conf(node2, {'port': node2.port})
+
+        node2.slow_start(replica=True)
+
+        # generate some data
+        node1.pgbench_init(scale=5)
+
+        # take full backup on replica
+        self.backup_node(backup_dir, 'node2', node2, options=['--stream'])
+
+        # first switchover
+        node1.stop()
+        node2.promote()
+
+        self.set_replica(node2, node1, synchronous=False)
+        node2.reload()
+        node1.slow_start(replica=True)
+
+        # take incremental backup from new master
+        self.backup_node(
+            backup_dir, 'node2', node2,
+            backup_type='delta', options=['--stream'])
+
+        # second switchover
+        node2.stop()
+        node1.promote()
+        self.set_replica(node1, node2, synchronous=False)
+        node1.reload()
+        node2.slow_start(replica=True)
+
+        # generate some more data
+        node1.pgbench_init(scale=5)
+
+        # take incremental backup from replica
+        self.backup_node(
+            backup_dir, 'node2', node2,
+            backup_type='delta', options=['--stream'])
+
+        # https://github.com/postgrespro/pg_probackup/issues/251
+        self.validate_pb(backup_dir)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    # @unittest.expectedFailure
     def test_replica_stream_ptrack_backup(self):
         """
         make node, take full backup, restore it and make replica from it,

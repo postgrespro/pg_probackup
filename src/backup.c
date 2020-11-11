@@ -261,13 +261,29 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool
 	{
 		XLogRecPtr	ptrack_lsn = get_last_ptrack_lsn(backup_conn, nodeInfo);
 
-		if (ptrack_lsn > prev_backup->start_lsn || ptrack_lsn == InvalidXLogRecPtr)
+		if (nodeInfo->ptrack_version_num < 20)
 		{
-			elog(ERROR, "LSN from ptrack_control %X/%X differs from Start LSN of previous backup %X/%X.\n"
-						"Create new full backup before an incremental one.",
-						(uint32) (ptrack_lsn >> 32), (uint32) (ptrack_lsn),
-						(uint32) (prev_backup->start_lsn >> 32),
-						(uint32) (prev_backup->start_lsn));
+			// backward compatibility kludge: use Stop LSN for ptrack 1.x,
+			if (ptrack_lsn > prev_backup->stop_lsn || ptrack_lsn == InvalidXLogRecPtr)
+			{
+				elog(ERROR, "LSN from ptrack_control %X/%X differs from Stop LSN of previous backup %X/%X.\n"
+							"Create new full backup before an incremental one.",
+							(uint32) (ptrack_lsn >> 32), (uint32) (ptrack_lsn),
+							(uint32) (prev_backup->stop_lsn >> 32),
+							(uint32) (prev_backup->stop_lsn));
+			}
+		}
+		else
+		{
+			// new ptrack is more robust and checks Start LSN
+			if (ptrack_lsn > prev_backup->start_lsn || ptrack_lsn == InvalidXLogRecPtr)
+			{
+				elog(ERROR, "LSN from ptrack_control %X/%X is greater than Start LSN of previous backup %X/%X.\n"
+							"Create new full backup before an incremental one.",
+							(uint32) (ptrack_lsn >> 32), (uint32) (ptrack_lsn),
+							(uint32) (prev_backup->start_lsn >> 32),
+							(uint32) (prev_backup->start_lsn));
+			}
 		}
 	}
 
@@ -406,14 +422,13 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool
 	/* Extract information about files in backup_list parsing their names:*/
 	parse_filelist_filenames(backup_files_list, instance_config.pgdata);
 
+	elog(LOG, "Current Start LSN: %X/%X, TLI: %X",
+			(uint32) (current.start_lsn >> 32), (uint32) (current.start_lsn),
+			current.tli);
 	if (current.backup_mode != BACKUP_MODE_FULL)
-	{
-		elog(LOG, "Current tli: %X", current.tli);
-		elog(LOG, "Parent start_lsn: %X/%X",
-			 (uint32) (prev_backup->start_lsn >> 32), (uint32) (prev_backup->start_lsn));
-		elog(LOG, "start_lsn: %X/%X",
-			 (uint32) (current.start_lsn >> 32), (uint32) (current.start_lsn));
-	}
+		elog(LOG, "Parent Start LSN: %X/%X, TLI: %X",
+			 (uint32) (prev_backup->start_lsn >> 32), (uint32) (prev_backup->start_lsn),
+			 prev_backup->tli);
 
 	/*
 	 * Build page mapping in incremental mode.
@@ -1254,7 +1269,7 @@ get_database_map(PGconn *conn)
 		db_map_entry *db_entry = (db_map_entry *) pgut_malloc(sizeof(db_map_entry));
 
 		/* get Oid */
-		db_entry->dbOid = atoi(PQgetvalue(res, i, 0));
+		db_entry->dbOid = atoll(PQgetvalue(res, i, 0));
 
 		/* get datname */
 		datname = PQgetvalue(res, i, 1);
@@ -2370,12 +2385,17 @@ process_block_change(ForkNumber forknum, RelFileNode rnode, BlockNumber blkno)
 			pthread_mutex_unlock(&backup_pagemap_mutex);
 	}
 
+	if (segno > 0)
+		pg_free(f.rel_path);
 	pg_free(rel_path);
+
 }
 
 /*
  * Stop WAL streaming if current 'xlogpos' exceeds 'stop_backup_lsn', which is
  * set by pg_stop_backup().
+ *
+ * TODO: Add streamed file to file list when segment is finished
  */
 static bool
 stop_streaming(XLogRecPtr xlogpos, uint32 timeline, bool segment_finished)
@@ -2481,9 +2501,15 @@ StreamLog(void *arg)
 		ctl.sysidentifier = NULL;
 
 #if PG_VERSION_NUM >= 100000
-		ctl.walmethod = CreateWalDirectoryMethod(stream_arg->basedir, 0, true);
+		ctl.walmethod = CreateWalDirectoryMethod(
+			stream_arg->basedir,
+//			(instance_config.compress_alg == NONE_COMPRESS) ? 0 : instance_config.compress_level,
+			0,
+			true);
 		ctl.replication_slot = replication_slot;
 		ctl.stop_socket = PGINVALID_SOCKET;
+		ctl.do_sync = false; /* We sync all files at the end of backup */
+//		ctl.mark_done        /* for future use in s3 */
 #if PG_VERSION_NUM >= 100000 && PG_VERSION_NUM < 110000
 		ctl.temp_slot = temp_slot;
 #endif
@@ -2626,7 +2652,7 @@ IdentifySystem(StreamThreadArg *stream_thread_arg)
 	}
 
 	stream_conn_sysidentifier_str = PQgetvalue(res, 0, 0);
-	stream_conn_tli = atoi(PQgetvalue(res, 0, 1));
+	stream_conn_tli = atoll(PQgetvalue(res, 0, 1));
 
 	/* Additional sanity, primary for PG 9.5,
 	 * where system id can be obtained only via "IDENTIFY SYSTEM"

@@ -148,10 +148,16 @@ typedef struct
 	int			ret;
 } xlog_thread_arg;
 
+static XLogRecord* WalReadRecord(XLogReaderState *xlogreader, XLogRecPtr startpoint, char **errormsg);
+static XLogReaderState* WalReaderAllocate(uint32 wal_seg_size, XLogReaderData *reader_data);
+
 static int SimpleXLogPageRead(XLogReaderState *xlogreader,
 				   XLogRecPtr targetPagePtr,
-				   int reqLen, XLogRecPtr targetRecPtr, char *readBuf,
-				   TimeLineID *pageTLI);
+				   int reqLen, XLogRecPtr targetRecPtr, char *readBuf
+#if PG_VERSION_NUM < 130000
+				   ,TimeLineID *pageTLI
+#endif
+					);
 static XLogReaderState *InitXLogPageRead(XLogReaderData *reader_data,
 										 const char *archivedir,
 										 TimeLineID tli, uint32 segment_size,
@@ -551,7 +557,13 @@ read_recovery_info(const char *archivedir, TimeLineID tli, uint32 wal_seg_size,
 		TimestampTz last_time = 0;
 		char	   *errormsg;
 
-		record = XLogReadRecord(xlogreader, startpoint, &errormsg);
+#if PG_VERSION_NUM >= 130000
+		if (XLogRecPtrIsInvalid(startpoint))
+			startpoint = SizeOfXLogShortPHD;
+		XLogBeginRead(xlogreader, startpoint);
+#endif
+
+		record = WalReadRecord(xlogreader, startpoint, &errormsg);
 		if (record == NULL)
 		{
 			XLogRecPtr	errptr;
@@ -615,7 +627,13 @@ wal_contains_lsn(const char *archivedir, XLogRecPtr target_lsn,
 
 	xlogreader->system_identifier = instance_config.system_identifier;
 
-	res = XLogReadRecord(xlogreader, target_lsn, &errormsg) != NULL;
+#if PG_VERSION_NUM >= 130000
+	if (XLogRecPtrIsInvalid(target_lsn))
+		target_lsn = SizeOfXLogShortPHD;
+	XLogBeginRead(xlogreader, target_lsn);
+#endif
+
+	res = WalReadRecord(xlogreader, target_lsn, &errormsg) != NULL;
 	/* Didn't find 'target_lsn' and there is no error, return false */
 
 	if (errormsg)
@@ -655,6 +673,12 @@ get_first_record_lsn(const char *archivedir, XLogSegNo	segno,
 
 	/* Set startpoint to 0 in segno */
 	GetXLogRecPtr(segno, 0, wal_seg_size, startpoint);
+
+#if PG_VERSION_NUM >= 130000
+	if (XLogRecPtrIsInvalid(startpoint))
+		startpoint = SizeOfXLogShortPHD;
+	XLogBeginRead(xlogreader, startpoint);
+#endif
 
 	while (attempts <= timeout)
 	{
@@ -710,6 +734,12 @@ get_next_record_lsn(const char *archivedir, XLogSegNo	segno,
 	/* Set startpoint to 0 in segno */
 	GetXLogRecPtr(segno, 0, wal_seg_size, startpoint);
 
+#if PG_VERSION_NUM >= 130000
+	if (XLogRecPtrIsInvalid(startpoint))
+		startpoint = SizeOfXLogShortPHD;
+	XLogBeginRead(xlogreader, startpoint);
+#endif
+
 	found = XLogFindNextRecord(xlogreader, startpoint);
 
 	if (XLogRecPtrIsInvalid(found))
@@ -733,7 +763,7 @@ get_next_record_lsn(const char *archivedir, XLogSegNo	segno,
 		if (interrupted)
 			elog(ERROR, "Interrupted during WAL reading");
 
-		record = XLogReadRecord(xlogreader, startpoint, &errormsg);
+		record = WalReadRecord(xlogreader, startpoint, &errormsg);
 
 		if (record == NULL)
 		{
@@ -822,6 +852,13 @@ get_prior_record_lsn(const char *archivedir, XLogRecPtr start_lsn,
 		XLogRecPtr	found;
 
 		GetXLogRecPtr(segno, 0, wal_seg_size, startpoint);
+
+#if PG_VERSION_NUM >= 130000
+		if (XLogRecPtrIsInvalid(startpoint))
+			startpoint = SizeOfXLogShortPHD;
+		XLogBeginRead(xlogreader, startpoint);
+#endif
+
 		found = XLogFindNextRecord(xlogreader, startpoint);
 
 		if (XLogRecPtrIsInvalid(found))
@@ -846,7 +883,7 @@ get_prior_record_lsn(const char *archivedir, XLogRecPtr start_lsn,
 		if (interrupted)
 			elog(ERROR, "Interrupted during WAL reading");
 
-		record = XLogReadRecord(xlogreader, startpoint, &errormsg);
+		record = WalReadRecord(xlogreader, startpoint, &errormsg);
 		if (record == NULL)
 		{
 			XLogRecPtr	errptr;
@@ -905,8 +942,11 @@ get_gz_error(gzFile gzf)
 /* XLogreader callback function, to read a WAL page */
 static int
 SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
-				   int reqLen, XLogRecPtr targetRecPtr, char *readBuf,
-				   TimeLineID *pageTLI)
+				   int reqLen, XLogRecPtr targetRecPtr, char *readBuf
+#if PG_VERSION_NUM < 130000
+				   ,TimeLineID *pageTLI
+#endif
+				   )
 {
 	XLogReaderData *reader_data;
 	uint32		targetPageOff;
@@ -1040,7 +1080,9 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 		reader_data->prev_page_off == targetPageOff)
 	{
 		memcpy(readBuf, reader_data->page_buf, XLOG_BLCKSZ);
+#if PG_VERSION_NUM < 130000
 		*pageTLI = reader_data->tli;
+#endif
 		return XLOG_BLCKSZ;
 	}
 
@@ -1084,7 +1126,9 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 
 	memcpy(reader_data->page_buf, readBuf, XLOG_BLCKSZ);
 	reader_data->prev_page_off = targetPageOff;
+#if PG_VERSION_NUM < 130000
 	*pageTLI = reader_data->tli;
+#endif
 	return XLOG_BLCKSZ;
 }
 
@@ -1109,12 +1153,7 @@ InitXLogPageRead(XLogReaderData *reader_data, const char *archivedir,
 
 	if (allocate_reader)
 	{
-#if PG_VERSION_NUM >= 110000
-		xlogreader = XLogReaderAllocate(wal_seg_size, &SimpleXLogPageRead,
-										reader_data);
-#else
-		xlogreader = XLogReaderAllocate(&SimpleXLogPageRead, reader_data);
-#endif
+		xlogreader = WalReaderAllocate(wal_seg_size, reader_data);
 		if (xlogreader == NULL)
 			elog(ERROR, "Out of memory");
 		xlogreader->system_identifier = instance_config.system_identifier;
@@ -1314,15 +1353,17 @@ XLogThreadWorker(void *arg)
 	uint32		prev_page_off = 0;
 	bool		need_read = true;
 
-#if PG_VERSION_NUM >= 110000
-	xlogreader = XLogReaderAllocate(wal_seg_size, &SimpleXLogPageRead,
-									reader_data);
-#else
-	xlogreader = XLogReaderAllocate(&SimpleXLogPageRead, reader_data);
-#endif
+	xlogreader = WalReaderAllocate(wal_seg_size, reader_data);
+
 	if (xlogreader == NULL)
 		elog(ERROR, "Thread [%d]: out of memory", reader_data->thread_num);
 	xlogreader->system_identifier = instance_config.system_identifier;
+
+#if PG_VERSION_NUM >= 130000
+	if (XLogRecPtrIsInvalid(thread_arg->startpoint))
+		thread_arg->startpoint = SizeOfXLogShortPHD;
+	XLogBeginRead(xlogreader, thread_arg->startpoint);
+#endif
 
 	found = XLogFindNextRecord(xlogreader, thread_arg->startpoint);
 
@@ -1376,7 +1417,7 @@ XLogThreadWorker(void *arg)
 			!SwitchThreadToNextWal(xlogreader, thread_arg))
 			break;
 
-		record = XLogReadRecord(xlogreader, thread_arg->startpoint, &errormsg);
+		record = WalReadRecord(xlogreader, thread_arg->startpoint, &errormsg);
 
 		if (record == NULL)
 		{
@@ -1857,3 +1898,28 @@ bool validate_wal_segment(TimeLineID tli, XLogSegNo segno, const char *prefetch_
 	return rc;
 }
 
+static XLogRecord* WalReadRecord(XLogReaderState *xlogreader, XLogRecPtr startpoint, char **errormsg)
+{
+
+#if PG_VERSION_NUM >= 130000
+	return XLogReadRecord(xlogreader, errormsg);
+#else
+	return XLogReadRecord(xlogreader, startpoint, errormsg);
+#endif
+
+}
+
+static XLogReaderState* WalReaderAllocate(uint32 wal_seg_size, XLogReaderData *reader_data)
+{
+
+#if PG_VERSION_NUM >= 130000
+	return XLogReaderAllocate(wal_seg_size, NULL,
+								XL_ROUTINE(.page_read = &SimpleXLogPageRead),
+								reader_data);
+#elif PG_VERSION_NUM >= 110000
+	return XLogReaderAllocate(wal_seg_size, &SimpleXLogPageRead,
+								reader_data);
+#else
+	return XLogReaderAllocate(&SimpleXLogPageRead, reader_data);
+#endif
+}

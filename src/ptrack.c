@@ -202,8 +202,20 @@ get_ptrack_version(PGconn *backup_conn, PGNodeInfo *nodeInfo)
 	else if (strcmp(ptrack_version_str, "2.1") == 0)
 		nodeInfo->ptrack_version_num = 21;
 	else
-		elog(WARNING, "Update your ptrack to the version 1.5 or upper. Current version is %s",
+		elog(WARNING, "Update your ptrack to the version 2.1 or upper. Current version is %s",
 			 ptrack_version_str);
+
+	/* ptrack 1.X is buggy, so fall back to DELTA backup strategy for safety */
+	if (nodeInfo->ptrack_version_num >= 15 && nodeInfo->ptrack_version_num < 20)
+	{
+		if (current.backup_mode == BACKUP_MODE_DIFF_PTRACK)
+		{
+			elog(WARNING, "Update your ptrack to the version 2.1 or upper. Current version is %s. "
+						"Fall back to DELTA backup.",
+				ptrack_version_str);
+			current.backup_mode = BACKUP_MODE_DIFF_DELTA;
+		}
+	}
 
 	PQclear(res_db);
 }
@@ -272,8 +284,8 @@ pg_ptrack_clear(PGconn *backup_conn, int ptrack_version_num)
 		if (strcmp(dbname, "template0") == 0)
 			continue;
 
-		dbOid = atoi(PQgetvalue(res_db, i, 1));
-		tblspcOid = atoi(PQgetvalue(res_db, i, 2));
+		dbOid = atoll(PQgetvalue(res_db, i, 1));
+		tblspcOid = atoll(PQgetvalue(res_db, i, 2));
 
 		tmp_conn = pgut_connect(instance_config.conn_opt.pghost, instance_config.conn_opt.pgport,
 								dbname,

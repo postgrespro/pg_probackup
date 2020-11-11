@@ -613,8 +613,8 @@ dir_check_file(pgFile *file, bool backup_logs)
 		 */
 		for (i = 0; pgdata_exclude_dir[i]; i++)
 		{
-			/* relative path exclude */
-			if (strcmp(file->rel_path, pgdata_exclude_dir[i]) == 0)
+			/* exclude by dirname */
+			if (strcmp(file->name, pgdata_exclude_dir[i]) == 0)
 			{
 				elog(VERBOSE, "Excluding directory content: %s", file->rel_path);
 				return CHECK_EXCLUDE_FALSE;
@@ -703,9 +703,9 @@ dir_check_file(pgFile *file, bool backup_logs)
 	{
 		if (strcmp(file->name, "pg_internal.init") == 0)
 			return CHECK_FALSE;
-		/* Do not backup ptrack2.x map files */
-		else if (strcmp(file->name, "ptrack.map") == 0)
-			return CHECK_FALSE;
+		/* Do not backup ptrack2.x temp map files */
+//		else if (strcmp(file->name, "ptrack.map") == 0)
+//			return CHECK_FALSE;
 		else if (strcmp(file->name, "ptrack.map.mmap") == 0)
 			return CHECK_FALSE;
 		else if (strcmp(file->name, "ptrack.map.tmp") == 0)

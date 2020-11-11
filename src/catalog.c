@@ -120,6 +120,13 @@ write_backup_status(pgBackup *backup, BackupStatus status,
 		return;
 	}
 
+	/* overwrite control file only if status has changed */
+	if (tmp->status == status)
+	{
+		pgBackupFree(tmp);
+		return;
+	}
+
 	backup->status = status;
 	tmp->status = backup->status;
 	tmp->root_dir = pgut_strdup(backup->root_dir);
@@ -478,7 +485,7 @@ catalog_get_backup_list(const char *instance_name, time_t requested_backup_id)
 		}
 		else if (strcmp(base36enc(backup->start_time), data_ent->d_name) != 0)
 		{
-			elog(WARNING, "backup ID in control file \"%s\" doesn't match name of the backup folder \"%s\"",
+			elog(VERBOSE, "backup ID in control file \"%s\" doesn't match name of the backup folder \"%s\"",
 				 base36enc(backup->start_time), backup_conf_path);
 		}
 

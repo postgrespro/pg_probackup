@@ -34,7 +34,7 @@ Run ptrack tests:
 
 
 Usage:
- pip install testgres==1.8.2
+ pip install testgres
  export PG_CONFIG=/path/to/pg_config
  python -m unittest [-v] tests[.specific_module][.class.test]
 ```

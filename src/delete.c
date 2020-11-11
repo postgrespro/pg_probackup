@@ -135,6 +135,9 @@ void do_retention(void)
 	backup_deleted = false;
 	backup_merged = false;
 
+	/* For now retention is possible only locally */
+	MyLocation = FIO_LOCAL_HOST;
+
 	/* Get a complete list of backups. */
 	backup_list = catalog_get_backup_list(instance_name, INVALID_BACKUP_ID);
 

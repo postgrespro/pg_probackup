@@ -1881,7 +1881,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         target_xid = node.safe_psql(
             "postgres",
-            "select txid_current()").rstrip()
+            "select txid_current()").decode('utf-8').rstrip()
 
         node.pgbench_init(scale=1)
 
@@ -1917,7 +1917,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         target_xid = node_restored.safe_psql(
             "postgres",
-            "select txid_current()").rstrip()
+            "select txid_current()").decode('utf-8').rstrip()
 
         node_restored.pgbench_init(scale=2)
 
@@ -2003,7 +2003,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         target_xid = node.safe_psql(
             "postgres",
-            "select txid_current()").rstrip()
+            "select txid_current()").decode('utf-8').rstrip()
         node.pgbench_init(scale=5)
 
         # B2 FULL on TLI1
@@ -2011,6 +2011,8 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         node.pgbench_init(scale=4)
         B3 = self.backup_node(backup_dir, 'node', node)
         node.pgbench_init(scale=4)
+
+        self.delete_pb(backup_dir, 'node', options=['--delete-wal'])
 
         # TLI 2
         node_tli2 = self.make_simple_node(
@@ -2034,7 +2036,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         target_xid = node_tli2.safe_psql(
             "postgres",
-            "select txid_current()").rstrip()
+            "select txid_current()").decode('utf-8').rstrip()
         node_tli2.pgbench_init(scale=1)
 
         B4 = self.backup_node(
@@ -2224,7 +2226,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         target_xid = node.safe_psql(
             "postgres",
-            "select txid_current()").rstrip()
+            "select txid_current()").decode('utf-8').rstrip()
         node.pgbench_init(scale=5)
 
         # B2 FULL on TLI1
@@ -2255,7 +2257,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         target_xid = node_tli2.safe_psql(
             "postgres",
-            "select txid_current()").rstrip()
+            "select txid_current()").decode('utf-8').rstrip()
         node_tli2.pgbench_init(scale=1)
 
         B4 = self.backup_node(
@@ -2490,7 +2492,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         target_xid = node.safe_psql(
             "postgres",
-            "select txid_current()").rstrip()
+            "select txid_current()").decode('utf-8').rstrip()
 
         self.switch_wal_segment(node)
 

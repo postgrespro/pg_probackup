@@ -316,7 +316,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             "postgres",
             "SELECT pid "
             "FROM pg_stat_activity "
-            "WHERE application_name = 'pg_probackup'").rstrip()
+            "WHERE application_name = 'pg_probackup'").decode('utf-8').rstrip()
 
         os.environ["PGAPPNAME"] = "pg_probackup"
 
@@ -371,7 +371,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             filename = '000000010000000000000001'
             file = os.path.join(wals_dir, filename)
 
-        with open(file, 'a') as f:
+        with open(file, 'a+b') as f:
             f.write(b"blablablaadssaaaaaaaaaaaaaaa")
             f.flush()
             f.close()
@@ -463,7 +463,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             filename = '000000010000000000000001'
             file = os.path.join(wals_dir, filename)
 
-        with open(file, 'a') as f:
+        with open(file, 'a+b') as f:
             f.write(b"blablablaadssaaaaaaaaaaaaaaa")
             f.flush()
             f.close()
@@ -543,7 +543,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
         xid = node.safe_psql(
             "postgres",
-            "INSERT INTO t1 VALUES (1) RETURNING (xmin)").rstrip()
+            "INSERT INTO t1 VALUES (1) RETURNING (xmin)").decode('utf-8').rstrip()
 
         if self.get_version(node) < 100000:
             filename_orig = node.safe_psql(
@@ -556,6 +556,8 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
                 "SELECT file_name "
                 "FROM pg_walfile_name_offset(pg_current_wal_flush_lsn());").rstrip()
 
+        filename_orig = filename_orig.decode('utf-8')
+
         # form up path to next .part WAL segment
         wals_dir = os.path.join(backup_dir, 'wal', 'node')
         if self.archive_compress:
@@ -566,7 +568,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             file = os.path.join(wals_dir, filename)
 
         # emulate stale .part file
-        with open(file, 'a') as f:
+        with open(file, 'a+b') as f:
             f.write(b"blahblah")
             f.flush()
             f.close()
@@ -633,6 +635,8 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
                 "SELECT file_name "
                 "FROM pg_walfile_name_offset(pg_current_wal_flush_lsn());").rstrip()
 
+        filename_orig = filename_orig.decode('utf-8')
+
         # form up path to next .part WAL segment
         wals_dir = os.path.join(backup_dir, 'wal', 'node')
         if self.archive_compress:
@@ -642,7 +646,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             filename = filename_orig + '.part'
             file = os.path.join(wals_dir, filename)
 
-        with open(file, 'a') as f:
+        with open(file, 'a+b') as f:
             f.write(b"blahblah")
             f.flush()
             f.close()
@@ -650,7 +654,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         self.switch_wal_segment(node)
         sleep(30)
 
-        with open(file, 'a') as f:
+        with open(file, 'a+b') as f:
             f.write(b"blahblahblahblah")
             f.flush()
             f.close()
@@ -904,6 +908,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             initdb_params=['--data-checksums'],
             pg_options={
                 'checkpoint_timeout': '30s',
+                'autovacuum': 'off',
                 'archive_timeout': '10s'})
 
         replica = self.make_simple_node(
@@ -2217,7 +2222,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
-            pg_options={'autovacuum': 'off', 'wal_keep_segments': '200'})
+            pg_options={'autovacuum': 'off'})
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -2382,6 +2387,8 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
                 "SELECT file_name "
                 "FROM pg_walfile_name_offset(pg_current_wal_flush_lsn())").rstrip()
 
+        filename = filename.decode('utf-8')
+
         self.switch_wal_segment(node)
 
         os.rename(
@@ -2403,6 +2410,8 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
                 "postgres",
                 "SELECT file_name "
                 "FROM pg_walfile_name_offset(pg_current_wal_flush_lsn())").rstrip()
+
+        filename = filename.decode('utf-8')
 
         self.switch_wal_segment(node)
 
@@ -2426,6 +2435,8 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
                 "SELECT file_name "
                 "FROM pg_walfile_name_offset(pg_current_wal_flush_lsn())").rstrip()
 
+        filename = filename.decode('utf-8')
+
         self.switch_wal_segment(node)
 
         os.rename(
@@ -2447,6 +2458,8 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
                 "postgres",
                 "SELECT file_name "
                 "FROM pg_walfile_name_offset(pg_current_wal_flush_lsn())").rstrip()
+
+        filename = filename.decode('utf-8')
 
         self.switch_wal_segment(node)
 

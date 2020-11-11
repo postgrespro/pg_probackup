@@ -130,13 +130,13 @@ def slow_start(self, replica=False):
     self.start()
     while True:
         try:
-            output = self.safe_psql('template1', query).rstrip()
+            output = self.safe_psql('template1', query).decode("utf-8").rstrip()
 
             if output == 't':
                 break
 
         except testgres.QueryException as e:
-            if 'database system is starting up' in e[0]:
+            if 'database system is starting up' in e.message:
                 continue
             else:
                 raise e
@@ -365,17 +365,29 @@ class ProbackupTest(object):
             options['max_wal_senders'] = 10
 
         if ptrack_enable:
-            if node.major_version > 11:
+            if node.major_version >= 11:
                 options['ptrack.map_size'] = '128'
                 options['shared_preload_libraries'] = 'ptrack'
             else:
                 options['ptrack_enable'] = 'on'
+
+        if node.major_version >= 13:
+            options['wal_keep_size'] = '200MB'
+        else:
+            options['wal_keep_segments'] = '100'
 
         # set default values
         self.set_auto_conf(node, options)
 
         # Apply given parameters
         self.set_auto_conf(node, pg_options)
+
+        # kludge for testgres
+        # https://github.com/postgrespro/testgres/issues/54
+        # for PG >= 13 remove 'wal_keep_segments' parameter
+        if node.major_version >= 13:
+            self.set_auto_conf(
+                node, {}, 'postgresql.conf', ['wal_keep_segments'])
 
         return node
 
@@ -427,7 +439,8 @@ class ProbackupTest(object):
     def get_md5_per_page_for_fork(self, file, size_in_pages):
         pages_per_segment = {}
         md5_per_page = {}
-        nsegments = size_in_pages/131072
+        size_in_pages = int(size_in_pages)
+        nsegments = int(size_in_pages/131072)
         if size_in_pages % 131072 != 0:
             nsegments = nsegments + 1
 
@@ -479,10 +492,10 @@ class ProbackupTest(object):
         if os.path.getsize(file) == 0:
             return ptrack_bits_for_fork
         byte_size = os.path.getsize(file + '_ptrack')
-        npages = byte_size/8192
+        npages = int(byte_size/8192)
         if byte_size % 8192 != 0:
             print('Ptrack page is not 8k aligned')
-            sys.exit(1)
+            exit(1)
 
         file = os.open(file + '_ptrack', os.O_RDONLY)
 
@@ -1226,7 +1239,9 @@ class ProbackupTest(object):
 
         return restore_command
 
-    def set_auto_conf(self, node, options, config='postgresql.auto.conf'):
+    # rm_options - list of parameter name that should be deleted from current config,
+    # example: ['wal_keep_segments', 'max_wal_size']
+    def set_auto_conf(self, node, options, config='postgresql.auto.conf', rm_options={}):
 
         # parse postgresql.auto.conf
         path = os.path.join(node.data_dir, config)
@@ -1254,6 +1269,11 @@ class ProbackupTest(object):
             var = var.strip()
             var = var.strip('"')
             var = var.strip("'")
+
+            # remove options specified in rm_options list
+            if name in rm_options:
+                continue
+
             current_options[name] = var
 
         for option in options:
@@ -1405,7 +1425,7 @@ class ProbackupTest(object):
         """
         if isinstance(node, testgres.PostgresNode):
             if self.version_to_num(
-                node.safe_psql('postgres', 'show server_version')
+                node.safe_psql('postgres', 'show server_version').decode('utf-8')
                     ) >= self.version_to_num('10.0'):
                 node.safe_psql('postgres', 'select pg_switch_wal()')
             else:
@@ -1422,10 +1442,11 @@ class ProbackupTest(object):
 
     def wait_until_replica_catch_with_master(self, master, replica):
 
-        if self.version_to_num(
-                master.safe_psql(
-                    'postgres',
-                    'show server_version')) >= self.version_to_num('10.0'):
+        version = master.safe_psql(
+            'postgres',
+            'show server_version').decode('utf-8').rstrip()
+
+        if self.version_to_num(version) >= self.version_to_num('10.0'):
             master_function = 'pg_catalog.pg_current_wal_lsn()'
             replica_function = 'pg_catalog.pg_last_wal_replay_lsn()'
         else:
@@ -1434,7 +1455,7 @@ class ProbackupTest(object):
 
         lsn = master.safe_psql(
             'postgres',
-            'SELECT {0}'.format(master_function)).rstrip()
+            'SELECT {0}'.format(master_function)).decode('utf-8').rstrip()
 
         # Wait until replica catch up with master
         replica.poll_query_until(
@@ -1508,8 +1529,10 @@ class ProbackupTest(object):
                 file_fullpath = os.path.join(root, file)
                 file_relpath = os.path.relpath(file_fullpath, pgdata)
                 directory_dict['files'][file_relpath] = {'is_datafile': False}
-                directory_dict['files'][file_relpath]['md5'] = hashlib.md5(
-                    open(file_fullpath, 'rb').read()).hexdigest()
+                with open(file_fullpath, 'rb') as f:
+                    directory_dict['files'][file_relpath]['md5'] = hashlib.md5(f.read()).hexdigest()
+#                directory_dict['files'][file_relpath]['md5'] = hashlib.md5(
+#                    f = open(file_fullpath, 'rb').read()).hexdigest()
 
                 # crappy algorithm
                 if file.isdigit():
@@ -1744,6 +1767,10 @@ class GDBobj(ProbackupTest):
                 pass
             else:
                 break
+
+    def kill(self):
+        self.proc.kill()
+        self.proc.wait()
 
     def set_breakpoint(self, location):
 

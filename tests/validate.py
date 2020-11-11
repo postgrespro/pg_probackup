@@ -34,7 +34,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 
         file_path = node.safe_psql(
             "postgres",
-            "select pg_relation_filepath('pgbench_accounts')").rstrip()
+            "select pg_relation_filepath('pgbench_accounts')").decode('utf-8').rstrip()
 
         node.safe_psql(
             "postgres",
@@ -244,7 +244,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             "from generate_series(0,10000) i")
         file_path = node.safe_psql(
             "postgres",
-            "select pg_relation_filepath('t_heap')").rstrip()
+            "select pg_relation_filepath('t_heap')").decode('utf-8').rstrip()
         # PAGE1
         backup_id_2 = self.backup_node(
             backup_dir, 'node', node, backup_type='page')
@@ -326,7 +326,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             "from generate_series(0,10000) i")
         file_path_t_heap = node.safe_psql(
             "postgres",
-            "select pg_relation_filepath('t_heap')").rstrip()
+            "select pg_relation_filepath('t_heap')").decode('utf-8').rstrip()
         # FULL
         backup_id_1 = self.backup_node(backup_dir, 'node', node)
 
@@ -337,7 +337,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             "from generate_series(0,10000) i")
         file_path_t_heap_1 = node.safe_psql(
             "postgres",
-            "select pg_relation_filepath('t_heap_1')").rstrip()
+            "select pg_relation_filepath('t_heap_1')").decode('utf-8').rstrip()
         # PAGE1
         backup_id_2 = self.backup_node(
             backup_dir, 'node', node, backup_type='page')
@@ -632,7 +632,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             "from generate_series(0,10000) i")
         file_page_2 = node.safe_psql(
             "postgres",
-            "select pg_relation_filepath('t_heap')").rstrip()
+            "select pg_relation_filepath('t_heap')").decode('utf-8').rstrip()
         backup_id_3 = self.backup_node(
             backup_dir, 'node', node, backup_type='page')
 
@@ -662,7 +662,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             "from generate_series(0,10000) i")
         file_page_5 = node.safe_psql(
             "postgres",
-            "select pg_relation_filepath('t_heap1')").rstrip()
+            "select pg_relation_filepath('t_heap1')").decode('utf-8').rstrip()
         backup_id_6 = self.backup_node(
             backup_dir, 'node', node, backup_type='page')
 
@@ -829,7 +829,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             "from generate_series(0,10000) i")
         file_page_2 = node.safe_psql(
             "postgres",
-            "select pg_relation_filepath('t_heap')").rstrip()
+            "select pg_relation_filepath('t_heap')").decode('utf-8').rstrip()
         backup_id_3 = self.backup_node(
             backup_dir, 'node', node, backup_type='page')
 
@@ -853,7 +853,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             "postgres",
             "insert into t_heap select i as id, md5(i::text) as text, "
             "md5(repeat(i::text,10))::tsvector as tsvector "
-            "from generate_series(30001, 30001) i  RETURNING (xmin)").rstrip()
+            "from generate_series(30001, 30001) i  RETURNING (xmin)").decode('utf-8').rstrip()
 
         backup_id_5 = self.backup_node(
             backup_dir, 'node', node, backup_type='page')
@@ -866,7 +866,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             "from generate_series(0,10000) i")
         file_page_5 = node.safe_psql(
             "postgres",
-            "select pg_relation_filepath('t_heap1')").rstrip()
+            "select pg_relation_filepath('t_heap1')").decode('utf-8').rstrip()
         backup_id_6 = self.backup_node(
             backup_dir, 'node', node, backup_type='page')
 
@@ -1015,7 +1015,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             "from generate_series(0,10000) i")
         file_path_t_heap1 = node.safe_psql(
             "postgres",
-            "select pg_relation_filepath('t_heap1')").rstrip()
+            "select pg_relation_filepath('t_heap1')").decode('utf-8').rstrip()
         # PAGE1
         backup_id_2 = self.backup_node(
             backup_dir, 'node', node, backup_type='page')
@@ -1152,7 +1152,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             "from generate_series(0,10000) i")
         file_path_t_heap = node.safe_psql(
             "postgres",
-            "select pg_relation_filepath('t_heap')").rstrip()
+            "select pg_relation_filepath('t_heap')").decode('utf-8').rstrip()
         # FULL1
         backup_id_1 = self.backup_node(backup_dir, 'node', node)
 
@@ -1248,7 +1248,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 
         file_path_t_heap = node.safe_psql(
             "postgres",
-            "select pg_relation_filepath('t_heap')").rstrip()
+            "select pg_relation_filepath('t_heap')").decode('utf-8').rstrip()
         # FULL1
         backup_id_1 = self.backup_node(backup_dir, 'node', node)
 
@@ -1559,11 +1559,11 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         if self.get_version(node) < self.version_to_num('10.0'):
             walfile = node.safe_psql(
                 'postgres',
-                'select pg_xlogfile_name(pg_current_xlog_location())').rstrip()
+                'select pg_xlogfile_name(pg_current_xlog_location())').decode('utf-8').rstrip()
         else:
             walfile = node.safe_psql(
                 'postgres',
-                'select pg_walfile_name(pg_current_wal_lsn())').rstrip()
+                'select pg_walfile_name(pg_current_wal_lsn())').decode('utf-8').rstrip()
 
         if self.archive_compress:
             walfile = walfile + '.gz'
@@ -2640,7 +2640,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 
         heap_path = node.safe_psql(
             "postgres",
-            "select pg_relation_filepath('t_heap')").rstrip()
+            "select pg_relation_filepath('t_heap')").decode('utf-8').rstrip()
         heap_size = node.safe_psql(
             "postgres",
             "select pg_relation_size('t_heap')")
@@ -3746,7 +3746,9 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         with open(control_file, 'r') as f:
             data = f.read();
 
-        data = data.replace(str(pg_version), str(fake_new_pg_version))
+        data = data.replace(
+            "server-version = {0}".format(str(pg_version)),
+            "server-version = {0}".format(str(fake_new_pg_version)))
 
         with open(control_file, 'w') as f:
             f.write(data);

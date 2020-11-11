@@ -35,6 +35,9 @@ bool		interrupted = false;
 bool		in_cleanup = false;
 bool		in_password = false;
 
+/* critical section when adding disconnect callbackups */
+static pthread_mutex_t atexit_callback_disconnect_mutex = PTHREAD_MUTEX_INITIALIZER;
+
 /* Connection routines */
 static void init_cancel_handler(void);
 static void on_before_exec(PGconn *conn, PGcancel *thread_cancel_conn);
@@ -48,6 +51,7 @@ static void pgut_pgfnames_cleanup(char **filenames);
 
 void discard_response(PGconn *conn);
 
+/* Note that atexit handlers always called on the main thread */
 void
 pgut_init(void)
 {
@@ -237,7 +241,9 @@ pgut_connect(const char *host, const char *port,
 
 		if (PQstatus(conn) == CONNECTION_OK)
 		{
+			pthread_lock(&atexit_callback_disconnect_mutex);
 			pgut_atexit_push(pgut_disconnect_callback, conn);
+			pthread_mutex_unlock(&atexit_callback_disconnect_mutex);
 			return conn;
 		}
 
@@ -365,7 +371,10 @@ pgut_disconnect(PGconn *conn)
 {
 	if (conn)
 		PQfinish(conn);
+
+	pthread_lock(&atexit_callback_disconnect_mutex);
 	pgut_atexit_pop(pgut_disconnect_callback, conn);
+	pthread_mutex_unlock(&atexit_callback_disconnect_mutex);
 }
 
 
@@ -840,7 +849,9 @@ call_atexit_callbacks(bool fatal)
 {
 	pgut_atexit_item  *item;
 	pgut_atexit_item  *next;
-	for (item = pgut_atexit_stack; item; item = next){
+
+	for (item = pgut_atexit_stack; item; item = next)
+	{
 		next = item->next;
 		item->callback(fatal, item->userdata);
 	}
