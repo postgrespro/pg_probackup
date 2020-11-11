@@ -251,7 +251,7 @@ StreamLog(void *arg)
 
 /*
  * for ReceiveXlogStream
- * 
+ *
  * The stream_stop callback will be called every time data
  * is received, and whenever a segment is completed. If it returns
  * true, the streaming will stop and the function
@@ -276,30 +276,33 @@ stop_streaming(XLogRecPtr xlogpos, uint32 timeline, bool segment_finished)
 	if (segment_finished)
     {
         XLogSegNo xlog_segno;
-        char wal_segment_name[MAXPGPATH];
+        char wal_segment_name[MAXNAMLEN];
+		char wal_segment_relpath[MAXPGPATH];
         char wal_segment_fullpath[MAXPGPATH];
         pgFile *file;
 
-		elog(VERBOSE, _("finished segment at %X/%X (timeline %u)"),
+		elog(INFO, _("finished segment at %X/%X (timeline %u)"),
 			 (uint32) (xlogpos >> 32), (uint32) xlogpos, timeline);
 
         /* Add streamed xlog file into the backup's list of files */
         if (!xlog_files_list)
             xlog_files_list = parray_new();
-        
+
         GetXLogSegNo(xlogpos, xlog_segno, instance_config.xlog_seg_size);
+
+		/* xlogpos points to the current segment, and we need the finished - previous one */
+		xlog_segno--;
         GetXLogFileName(wal_segment_name, timeline, xlog_segno,
                         instance_config.xlog_seg_size);
 
         join_path_components(wal_segment_fullpath,
                             stream_thread_arg.basedir, wal_segment_name);
 
-        /*
-            * NOTE We pass wal_segment_name as a relpath, since now we don't have
-            * any subdirs in wal directory structure
-            */
-        file = pgFileNew(wal_segment_fullpath, wal_segment_name, false, 0,
-                                FIO_BACKUP_HOST);
+		join_path_components(wal_segment_relpath,
+                            PG_XLOG_DIR, wal_segment_name);
+
+		/* append file to filelist */
+        file = pgFileNew(wal_segment_fullpath, wal_segment_relpath, false, 0, FIO_BACKUP_HOST);
         file->name = file->rel_path;
         file->crc = pgFileGetCRC(wal_segment_fullpath, true, false);
 
