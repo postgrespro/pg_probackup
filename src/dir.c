@@ -1850,3 +1850,92 @@ read_database_map(pgBackup *backup)
 
 	return database_map;
 }
+
+/* create backup directory in $BACKUP_PATH */
+int
+pgBackupCreateDir(pgBackup *backup)
+{
+	int		i;
+	char	path[MAXPGPATH];
+	parray *subdirs = parray_new();
+
+	parray_append(subdirs, pg_strdup(DATABASE_DIR));
+
+	/* Add external dirs containers */
+	if (backup->external_dir_str)
+	{
+		parray *external_list;
+
+		external_list = make_external_directory_list(backup->external_dir_str,
+													 false);
+		for (i = 0; i < parray_num(external_list); i++)
+		{
+			char		temp[MAXPGPATH];
+			/* Numeration of externaldirs starts with 1 */
+			makeExternalDirPathByNum(temp, EXTERNAL_DIR, i+1);
+			parray_append(subdirs, pg_strdup(temp));
+		}
+		free_dir_list(external_list);
+	}
+
+	pgBackupGetPath(backup, path, lengthof(path), NULL);
+
+	if (!dir_is_empty(path, FIO_BACKUP_HOST))
+		elog(ERROR, "backup destination is not empty \"%s\"", path);
+
+	fio_mkdir(path, DIR_PERMISSION, FIO_BACKUP_HOST);
+	backup->root_dir = pgut_strdup(path);
+
+	backup->database_dir = pgut_malloc(MAXPGPATH);
+	join_path_components(backup->database_dir, backup->root_dir, DATABASE_DIR);
+
+	/* block header map */
+	init_header_map(backup);
+
+	/* create directories for actual backup files */
+	for (i = 0; i < parray_num(subdirs); i++)
+	{
+		join_path_components(path, backup->root_dir, parray_get(subdirs, i));
+		fio_mkdir(path, DIR_PERMISSION, FIO_BACKUP_HOST);
+	}
+
+	free_dir_list(subdirs);
+	return 0;
+}
+
+/*
+ * ===== Path construction functions. =====
+ * These functions depend on backup_instance_path global variable
+ */
+
+/*
+ * Construct absolute path of the backup directory.
+ * If subdir is not NULL, it will be appended after the path.
+ */
+void
+pgBackupGetPath(const pgBackup *backup, char *path, size_t len, const char *subdir)
+{
+	pgBackupGetPath2(backup, path, len, subdir, NULL);
+}
+
+/*
+ * Construct absolute path of the backup directory.
+ * Append "subdir1" and "subdir2" to the backup directory.
+ */
+void
+pgBackupGetPath2(const pgBackup *backup, char *path, size_t len,
+				 const char *subdir1, const char *subdir2)
+{
+	/* If "subdir1" is NULL do not check "subdir2" */
+	if (!subdir1)
+		snprintf(path, len, "%s/%s", backup_instance_path,
+				 base36enc(backup->start_time));
+	else if (!subdir2)
+		snprintf(path, len, "%s/%s/%s", backup_instance_path,
+				 base36enc(backup->start_time), subdir1);
+	/* "subdir1" and "subdir2" is not NULL */
+	else
+		snprintf(path, len, "%s/%s/%s/%s", backup_instance_path,
+				 base36enc(backup->start_time), subdir1, subdir2);
+}
+/* ===== Path construction functions (END) ===== */

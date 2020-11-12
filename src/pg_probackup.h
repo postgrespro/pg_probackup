@@ -761,6 +761,10 @@ extern char** commands_args;
 extern const char *pgdata_exclude_dir[];
 
 /* in backup.c */
+extern void pgNodeInit(PGNodeInfo *node);
+extern PGconn *pgdata_basic_setup(ConnectionOptions conn_opt, PGNodeInfo *nodeInfo);
+extern void check_system_identifiers(PGconn *conn, char *pgdata);
+extern void parse_filelist_filenames(parray *files, const char *root);
 extern int do_backup(time_t start_time, pgSetBackupParams *set_backup_params,
 					 bool no_validate, bool no_sync, bool backup_logs);
 extern void do_checkdb(bool need_amcheck, ConnectionOptions conn_opt,
@@ -859,7 +863,6 @@ extern int validate_one_page(Page page, BlockNumber absolute_blkno,
 #define PAGE_LSN_FROM_FUTURE (-6)
 
 /* in catalog.c */
-extern pgBackup *read_backup(const char *root_dir);
 extern void write_backup(pgBackup *backup, bool strict);
 extern void write_backup_status(pgBackup *backup, BackupStatus status,
 								const char *instance_name, bool strict);
@@ -895,7 +898,6 @@ extern void pgBackupGetPath2(const pgBackup *backup, char *path, size_t len,
 							 const char *subdir1, const char *subdir2);
 
 extern int pgBackupCreateDir(pgBackup *backup);
-extern void pgNodeInit(PGNodeInfo *node);
 extern void pgBackupInit(pgBackup *backup);
 extern void pgBackupFree(void *backup);
 extern int pgBackupCompareId(const void *f1, const void *f2);
@@ -1087,10 +1089,6 @@ extern int32  do_decompress(void* dst, size_t dst_size, void const* src, size_t 
 
 extern void pretty_size(int64 size, char *buf, size_t len);
 extern void pretty_time_interval(double time, char *buf, size_t len);
-
-extern PGconn *pgdata_basic_setup(ConnectionOptions conn_opt, PGNodeInfo *nodeInfo);
-extern void check_system_identifiers(PGconn *conn, char *pgdata);
-extern void parse_filelist_filenames(parray *files, const char *root);
 
 /* in ptrack.c */
 extern void make_pagemap_from_ptrack_1(parray* files, PGconn* backup_conn);

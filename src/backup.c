@@ -457,7 +457,7 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool
 	if (prev_backup_filelist)
 		parray_qsort(prev_backup_filelist, pgFileCompareRelPathWithExternal);
 
-	/* write initial backup_content.control file and update backup.control  */
+	/* write initial backup_content.control file and update BACKUP_CONTROL_FILE  */
 	write_backup_filelist(&current, backup_files_list,
 						  instance_config.pgdata, external_dirs, true);
 	write_backup(&current, true);
@@ -659,6 +659,27 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool
 	parray_walk(backup_files_list, pgFileFree);
 	parray_free(backup_files_list);
 	backup_files_list = NULL;
+}
+
+/*
+ * Fill PGNodeInfo struct with default values.
+ */
+void
+pgNodeInit(PGNodeInfo *node)
+{
+	node->block_size = 0;
+	node->wal_block_size = 0;
+	node->checksum_version = 0;
+
+	node->is_superuser = false;
+	node->pgpro_support = false;
+
+	node->server_version = 0;
+	node->server_version_str[0] = '\0';
+
+	node->ptrack_version_num = 0;
+	node->is_ptrack_enable = false;
+	node->ptrack_schema = NULL;
 }
 
 /*
