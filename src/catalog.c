@@ -990,8 +990,26 @@ readBackupControlFile(const char *path)
 		return NULL;
 	}
 
-	/* Initialize paths as soon as we know backup->start_time */
-	pgBackupInitPaths(backup, backup_instance_path, backup->start_time);
+
+	/*
+	 * When we read backup from backup instance, we can't rely on start_time
+	 * to generate paths. So do it manually, using path that we know.
+	 */
+	backup->root_dir = pgut_malloc(MAXPGPATH);
+	strncpy(backup->root_dir, path, MAXPGPATH);
+	/* trim BACKUP_CONTROL_FILE part */
+	get_parent_directory(backup->root_dir);
+
+	backup->backup_name = pgut_strdup(last_dir_separator(backup->root_dir)+1);
+
+	backup->database_dir = pgut_malloc(MAXPGPATH);
+	join_path_components(backup->database_dir, backup->root_dir, DATABASE_DIR);
+
+	backup->xlog_dir = pgut_malloc(MAXPGPATH);
+	join_path_components(backup->xlog_dir, backup->database_dir, PG_XLOG_DIR);
+
+	backup->external_dir = pgut_malloc(MAXPGPATH);
+	join_path_components(backup->external_dir, backup->root_dir, EXTERNAL_DIR);
 
 	if (backup_mode)
 	{
