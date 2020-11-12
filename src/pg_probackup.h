@@ -825,7 +825,6 @@ extern pgRecoveryTarget *parseRecoveryTargetOptions(
 extern parray *get_dbOid_exclude_list(pgBackup *backup, parray *datname_list,
 										PartialRestoreType partial_restore_type);
 
-extern parray *get_backup_filelist(pgBackup *backup, bool strict);
 extern parray *read_timeline_history(const char *arclog_path, TimeLineID targetTLI, bool strict);
 extern bool tliIsPartOfHistory(const parray *timelines, TimeLineID tli);
 
@@ -899,6 +898,9 @@ extern bool lock_backup(pgBackup *backup, bool strict);
 
 extern const char *pgBackupGetBackupMode(pgBackup *backup);
 
+extern bool get_control_value(const char *str, const char *name,
+				  char *value_str, int64 *value_int64, bool is_mandatory);
+extern parray *get_backup_filelist(pgBackup *backup, bool strict);
 extern parray *catalog_get_instance_list(void);
 extern parray *catalog_get_backup_list(const char *instance_name, time_t requested_backup_id);
 extern void catalog_lock_backup_list(parray *backup_list, int from_idx,
@@ -950,9 +952,6 @@ extern CompressAlg parse_compress_alg(const char *arg);
 extern const char* deparse_compress_alg(int alg);
 
 /* in dir.c */
-extern bool
-get_control_value(const char *str, const char *name,
-				  char *value_str, int64 *value_int64, bool is_mandatory);
 extern void dir_list_file(parray *files, const char *root, bool exclude,
 						  bool follow_symlink, bool add_root, bool backup_logs,
 						  bool skip_hidden, int external_dir_num, fio_location location);
@@ -965,10 +964,6 @@ extern void create_data_directories(parray *dest_files,
 										fio_location location,
 										TablespaceList *tablespace_dirs);
 
-extern void print_file_list(FILE *out, const parray *files, const char *root,
-							const char *external_prefix, parray *external_list);
-extern parray *dir_read_file_list(const char *root, const char *external_prefix,
-								  const char *file_txt, fio_location location, pg_crc32 expected_crc);
 extern parray *make_external_directory_list(const char *colon_separated_dirs,
 											TablespaceList *external_remap_list);
 extern void free_dir_list(parray *list);

@@ -983,7 +983,7 @@ compress_init(void)
 	}
 }
 
-/* ===== Functions to parse options ===== */
+/* ===== Functions to parse/deparse pg_probackup options ===== */
 
 /*
  * Split argument into old_dir and new_dir and append to mapping

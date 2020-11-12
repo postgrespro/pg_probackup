@@ -2,6 +2,9 @@
  *
  * json.c: - make json document.
  *
+ * This file contains functions to create and parse json and json-like
+ * files with metadata
+ *
  * Copyright (c) 2018-2019, Postgres Professional
  *
  *-------------------------------------------------------------------------
