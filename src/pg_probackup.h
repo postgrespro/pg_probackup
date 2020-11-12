@@ -1191,4 +1191,10 @@ datapagemap_is_set(datapagemap_t *map, BlockNumber blkno);
 extern void
 datapagemap_print_debug(datapagemap_t *map);
 
+/* in stream.c */
+extern XLogRecPtr stop_backup_lsn;
+extern void start_WAL_streaming(PGconn *backup_conn, char *stream_dst_path,
+							   ConnectionOptions *conn_opt,
+							   XLogRecPtr startpos, TimeLineID starttli);
+extern int wait_WAL_streaming_end(parray *backup_files_list);
 #endif /* PG_PROBACKUP_H */
