@@ -37,7 +37,7 @@ static uint32 stream_stop_timeout = 0;
 /* Time in which we started to wait for streaming end */
 static time_t stream_stop_begin = 0;
 
-const char *progname = "pg_probackup";
+//const char *progname = "pg_probackup";
 
 /* list of files contained in backup */
 static parray *backup_files_list = NULL;
