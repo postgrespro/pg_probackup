@@ -2354,33 +2354,6 @@ pgBackupGetPath2(const pgBackup *backup, char *path, size_t len,
 }
 
 /*
- * independent from global variable backup_instance_path
- * Still depends from backup_path
- */
-void
-pgBackupGetPathInInstance(const char *instance_name,
-				 const pgBackup *backup, char *path, size_t len,
-				 const char *subdir1, const char *subdir2)
-{
-	char		backup_instance_path[MAXPGPATH];
-
-	sprintf(backup_instance_path, "%s/%s/%s",
-				backup_path, BACKUPS_DIR, instance_name);
-
-	/* If "subdir1" is NULL do not check "subdir2" */
-	if (!subdir1)
-		snprintf(path, len, "%s/%s", backup_instance_path,
-				 base36enc(backup->start_time));
-	else if (!subdir2)
-		snprintf(path, len, "%s/%s/%s", backup_instance_path,
-				 base36enc(backup->start_time), subdir1);
-	/* "subdir1" and "subdir2" is not NULL */
-	else
-		snprintf(path, len, "%s/%s/%s/%s", backup_instance_path,
-				 base36enc(backup->start_time), subdir1, subdir2);
-}
-
-/*
  * Check if multiple backups consider target backup to be their direct parent
  */
 bool
@@ -2529,25 +2502,6 @@ is_parent(time_t parent_backup_time, pgBackup *child_backup, bool inclusive)
 	return false;
 }
 
-/*
- * Return backup index number.
- * Note: this index number holds true until new sorting of backup list
- */
-int
-get_backup_index_number(parray *backup_list, pgBackup *backup)
-{
-	int i;
-
-	for (i = 0; i < parray_num(backup_list); i++)
-	{
-		pgBackup   *tmp_backup = (pgBackup *) parray_get(backup_list, i);
-
-		if (tmp_backup->start_time == backup->start_time)
-			return i;
-	}
-	elog(WARNING, "Failed to find backup %s", base36enc(backup->start_time));
-	return -1;
-}
 
 /* On backup_list lookup children of target_backup and append them to append_list */
 void
