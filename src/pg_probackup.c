@@ -2,6 +2,12 @@
  *
  * pg_probackup.c: Backup/Recovery manager for PostgreSQL.
  *
+ * In this file we parse subcommands and options and
+ * call respective internal functions.
+ *
+ * To avoid using global variables in other modules,
+ * pass all options explicitly to the function.
+ *
  * Portions Copyright (c) 2009-2013, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
  * Portions Copyright (c) 2015-2019, Postgres Professional
  *
@@ -106,9 +112,6 @@ IncrRestoreMode incremental_mode = INCR_NONE;
 bool skip_block_validation = false;
 bool skip_external_dirs = false;
 
-/* array for datnames, provided via db-include and db-exclude */
-static parray *datname_exclude_list = NULL;
-static parray *datname_include_list = NULL;
 
 /* checkdb options */
 bool need_amcheck = false;
@@ -160,7 +163,18 @@ static void opt_show_format(ConfigOption *opt, const char *arg);
 
 static void compress_init(void);
 
+static void opt_path_map(ConfigOption *opt, const char *arg,
+						 TablespaceList *list, const char *type);
+static TablespaceList tablespace_dirs = {NULL, NULL};
+static void opt_tablespace_map(ConfigOption *opt, const char *arg);
+
+static TablespaceList external_remap_list = {NULL, NULL};
+static void opt_externaldir_map(ConfigOption *opt, const char *arg);
+
+/* array for datnames, provided via db-include and db-exclude */
+static parray *datname_exclude_list = NULL;
 static void opt_datname_exclude_list(ConfigOption *opt, const char *arg);
+static parray *datname_include_list = NULL;
 static void opt_datname_include_list(ConfigOption *opt, const char *arg);
 
 /*
@@ -721,6 +735,8 @@ main(int argc, char *argv[])
 		restore_params->partial_restore_type = NONE;
 		restore_params->primary_conninfo = primary_conninfo;
 		restore_params->incremental_mode = incremental_mode;
+		restore_params->tablespace_dirs = &tablespace_dirs;
+		restore_params->external_remap_list = &external_remap_list;
 
 		/* handle partial restore parameters */
 		if (datname_exclude_list && datname_include_list)
@@ -965,6 +981,84 @@ compress_init(void)
 		if (instance_config.compress_alg == PGLZ_COMPRESS && num_threads > 1)
 			elog(ERROR, "Multithread backup does not support pglz compression");
 	}
+}
+
+/* ===== Functions to parse options ===== */
+
+/*
+ * Split argument into old_dir and new_dir and append to mapping
+ * list. Also used for externaldir mapping.
+ * 
+ * Copy of function tablespace_list_append() from pg_basebackup.c.
+ */
+static void
+opt_path_map(ConfigOption *opt, const char *arg, TablespaceList *list,
+			 const char *type)
+{
+	TablespaceListCell *cell = pgut_new(TablespaceListCell);
+	char	   *dst;
+	char	   *dst_ptr;
+	const char *arg_ptr;
+
+	memset(cell, 0, sizeof(TablespaceListCell));
+	dst_ptr = dst = cell->old_dir;
+	for (arg_ptr = arg; *arg_ptr; arg_ptr++)
+	{
+		if (dst_ptr - dst >= MAXPGPATH)
+			elog(ERROR, "directory name too long");
+
+		if (*arg_ptr == '\\' && *(arg_ptr + 1) == '=')
+			;					/* skip backslash escaping = */
+		else if (*arg_ptr == '=' && (arg_ptr == arg || *(arg_ptr - 1) != '\\'))
+		{
+			if (*cell->new_dir)
+				elog(ERROR, "multiple \"=\" signs in %s mapping\n", type);
+			else
+				dst = dst_ptr = cell->new_dir;
+		}
+		else
+			*dst_ptr++ = *arg_ptr;
+	}
+
+	if (!*cell->old_dir || !*cell->new_dir)
+		elog(ERROR, "invalid %s mapping format \"%s\", "
+			 "must be \"OLDDIR=NEWDIR\"", type, arg);
+	canonicalize_path(cell->old_dir);
+	canonicalize_path(cell->new_dir);
+
+	/*
+	 * This check isn't absolutely necessary.  But all tablespaces are created
+	 * with absolute directories, so specifying a non-absolute path here would
+	 * just never match, possibly confusing users.  It's also good to be
+	 * consistent with the new_dir check.
+	 */
+	if (!is_absolute_path(cell->old_dir))
+		elog(ERROR, "old directory is not an absolute path in %s mapping: %s\n",
+			 type, cell->old_dir);
+
+	if (!is_absolute_path(cell->new_dir))
+		elog(ERROR, "new directory is not an absolute path in %s mapping: %s\n",
+			 type, cell->new_dir);
+
+	if (list->tail)
+		list->tail->next = cell;
+	else
+		list->head = cell;
+	list->tail = cell;
+}
+
+/* Parse tablespace mapping */
+void
+opt_tablespace_map(ConfigOption *opt, const char *arg)
+{
+	opt_path_map(opt, arg, &tablespace_dirs, "tablespace");
+}
+
+/* Parse external directories mapping */
+void
+opt_externaldir_map(ConfigOption *opt, const char *arg)
+{
+	opt_path_map(opt, arg, &external_remap_list, "external directory");
 }
 
 /* Construct array of datnames, provided by user via db-exclude option */

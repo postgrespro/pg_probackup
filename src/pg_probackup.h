@@ -124,6 +124,20 @@ typedef struct PageState
 	XLogRecPtr  lsn;
 } PageState;
 
+/* Tablespace mapping structures. Also used for externaldir mapping. */
+typedef struct TablespaceListCell
+{
+	struct TablespaceListCell *next;
+	char		old_dir[MAXPGPATH];
+	char		new_dir[MAXPGPATH];
+} TablespaceListCell;
+
+typedef struct TablespaceList
+{
+	TablespaceListCell *head;
+	TablespaceListCell *tail;
+} TablespaceList;
+
 typedef struct db_map_entry
 {
 	Oid dbOid;
@@ -508,6 +522,9 @@ typedef struct pgRestoreParams
 	const char *primary_slot_name;
 	const char *primary_conninfo;
 
+	TablespaceList *tablespace_dirs;
+	TablespaceList *external_remap_list;
+
 	/* options for incremental restore */
 	IncrRestoreMode	incremental_mode;
 	XLogRecPtr shift_lsn;
@@ -818,8 +835,6 @@ extern void merge_backups(pgBackup *backup, pgBackup *next_backup);
 extern void merge_chain(parray *parent_chain,
 						pgBackup *full_backup, pgBackup *dest_backup);
 
-extern parray *read_database_map(pgBackup *backup);
-
 /* in init.c */
 extern int do_init(void);
 extern int do_add_instance(InstanceConfig *instance);
@@ -935,6 +950,9 @@ extern CompressAlg parse_compress_alg(const char *arg);
 extern const char* deparse_compress_alg(int alg);
 
 /* in dir.c */
+extern bool
+get_control_value(const char *str, const char *name,
+				  char *value_str, int64 *value_int64, bool is_mandatory);
 extern void dir_list_file(parray *files, const char *root, bool exclude,
 						  bool follow_symlink, bool add_root, bool backup_logs,
 						  bool skip_hidden, int external_dir_num, fio_location location);
@@ -944,26 +962,15 @@ extern void create_data_directories(parray *dest_files,
 										const char *backup_dir,
 										bool extract_tablespaces,
 										bool incremental,
-										fio_location location);
-
-extern void read_tablespace_map(parray *files, const char *backup_dir);
-extern void opt_tablespace_map(ConfigOption *opt, const char *arg);
-extern void opt_externaldir_map(ConfigOption *opt, const char *arg);
-extern void check_tablespace_mapping(pgBackup *backup, bool incremental, bool *tblspaces_are_empty);
-extern void check_external_dir_mapping(pgBackup *backup, bool incremental);
-extern char *get_external_remap(char *current_dir);
-
-extern void print_database_map(FILE *out, parray *database_list);
-extern void write_database_map(pgBackup *backup, parray *database_list,
-								   parray *backup_file_list);
-extern void db_map_entry_free(void *map);
+										fio_location location,
+										TablespaceList *tablespace_dirs);
 
 extern void print_file_list(FILE *out, const parray *files, const char *root,
 							const char *external_prefix, parray *external_list);
 extern parray *dir_read_file_list(const char *root, const char *external_prefix,
 								  const char *file_txt, fio_location location, pg_crc32 expected_crc);
 extern parray *make_external_directory_list(const char *colon_separated_dirs,
-											bool remap);
+											TablespaceList *external_remap_list);
 extern void free_dir_list(parray *list);
 extern void makeExternalDirPathByNum(char *ret_path, const char *pattern_path,
 									 const int dir_num);
@@ -1184,3 +1191,26 @@ extern void start_WAL_streaming(PGconn *backup_conn, char *stream_dst_path,
 							   XLogRecPtr startpos, TimeLineID starttli);
 extern int wait_WAL_streaming_end(parray *backup_files_list);
 #endif /* PG_PROBACKUP_H */
+
+
+/* in mapping.c */
+extern void read_tablespace_map(parray *files, const char *backup_dir);
+extern void write_tablespace_map(pgBackup *backup, char *tablespace_map,
+                     parray *backup_files_list);
+extern const char * get_tablespace_mapping(const char *dir, TablespaceList tablespace_dirs);
+extern void check_tablespace_mapping(pgBackup *backup, TablespaceList tablespace_dirs,
+					 bool incremental, bool *tblspaces_are_empty);
+
+extern char *get_external_remap(char *current_dir,
+			 TablespaceList external_remap_list);
+extern void check_external_dir_mapping(pgBackup *backup,
+			 TablespaceList external_remap_list, bool incremental);
+
+
+extern void db_map_entry_free(void *map);
+extern parray *get_database_map(PGconn *pg_startbackup_conn);
+extern parray *read_database_map(pgBackup *backup);
+extern void write_database_map(pgBackup *backup, parray *database_map,
+							   parray *backup_file_list);
+extern void write_backup_label(pgBackup *backup, char *backup_label,
+            				   parray *backup_files_list);

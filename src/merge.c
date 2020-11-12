@@ -610,13 +610,13 @@ merge_chain(parray *parent_chain, pgBackup *full_backup, pgBackup *dest_backup)
 
 	/* Create directories */
 	create_data_directories(dest_backup->files, full_backup->database_dir,
-							dest_backup->root_dir, false, false, FIO_BACKUP_HOST);
+							dest_backup->root_dir, false, false, FIO_BACKUP_HOST, NULL);
 
 	/* External directories stuff */
 	if (dest_backup->external_dir_str)
-		dest_externals = make_external_directory_list(dest_backup->external_dir_str, false);
+		dest_externals = make_external_directory_list(dest_backup->external_dir_str, NULL);
 	if (full_backup->external_dir_str)
-		full_externals = make_external_directory_list(full_backup->external_dir_str, false);
+		full_externals = make_external_directory_list(full_backup->external_dir_str, NULL);
 	/*
 	 * Rename external directories in FULL backup (if exists)
 	 * according to numeration of external dirs in destionation backup.

@@ -340,7 +340,8 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 	 */
 	if (params->is_restore)
 	{
-		check_tablespace_mapping(dest_backup, params->incremental_mode != INCR_NONE, &tblspaces_are_empty);
+		check_tablespace_mapping(dest_backup, *(params->tablespace_dirs),
+					 params->incremental_mode != INCR_NONE, &tblspaces_are_empty);
 
 		if (params->incremental_mode != INCR_NONE && pgdata_is_empty && tblspaces_are_empty)
 		{
@@ -351,7 +352,8 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 
 		/* no point in checking external directories if their restore is not requested */
 		if (!params->skip_external_dirs)
-			check_external_dir_mapping(dest_backup, params->incremental_mode != INCR_NONE);
+			check_external_dir_mapping(dest_backup, *(params->external_remap_list),
+									   params->incremental_mode != INCR_NONE);
 	}
 
 	/* At this point we are sure that parent chain is whole
@@ -728,14 +730,16 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 	create_data_directories(dest_files, instance_config.pgdata,
 							dest_backup->root_dir, true,
 							params->incremental_mode != INCR_NONE,
-							FIO_DB_HOST);
+							FIO_DB_HOST,
+							params->tablespace_dirs);
 
 	/*
 	 * Restore dest_backup external directories.
 	 */
 	if (dest_backup->external_dir_str && !params->skip_external_dirs)
 	{
-		external_dirs = make_external_directory_list(dest_backup->external_dir_str, true);
+		external_dirs = make_external_directory_list(dest_backup->external_dir_str,
+								params->external_remap_list);
 
 		if (!external_dirs)
 			elog(ERROR, "Failed to get a list of external directories");

@@ -60,7 +60,6 @@ static XLogRecPtr wait_wal_lsn(XLogRecPtr lsn, bool is_start_lsn, TimeLineID tli
 
 static void check_external_for_tablespaces(parray *external_list,
 										   PGconn *backup_conn);
-static parray *get_database_map(PGconn *pg_startbackup_conn);
 
 /* pgpro specific functions */
 static bool pgpro_support(PGconn *conn);
@@ -122,7 +121,7 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool
 	if(current.external_dir_str)
 	{
 		external_dirs = make_external_directory_list(current.external_dir_str,
-													 false);
+													 NULL);
 		check_external_for_tablespaces(external_dirs, backup_conn);
 	}
 
@@ -1141,65 +1140,7 @@ pgpro_support(PGconn *conn)
 	return false;
 }
 
-/*
- * Fill 'datname to Oid' map
- *
- * This function can fail to get the map for legal reasons, e.g. missing
- * permissions on pg_database during `backup`.
- * As long as user do not use partial restore feature it`s fine.
- *
- * To avoid breaking a backward compatibility don't throw an ERROR,
- * throw a warning instead of an error and return NULL.
- * Caller is responsible for checking the result.
- */
-parray *
-get_database_map(PGconn *conn)
-{
-	PGresult   *res;
-	parray *database_map = NULL;
-	int i;
 
-	/*
-	 * Do not include template0 and template1 to the map
-	 * as default databases that must always be restored.
-	 */
-	res = pgut_execute_extended(conn,
-						  "SELECT oid, datname FROM pg_catalog.pg_database "
-						  "WHERE datname NOT IN ('template1', 'template0')",
-						  0, NULL, true, true);
-
-	/* Don't error out, simply return NULL. See comment above. */
-	if (PQresultStatus(res) != PGRES_TUPLES_OK)
-	{
-		PQclear(res);
-		elog(WARNING, "Failed to get database map: %s",
-			PQerrorMessage(conn));
-
-		return NULL;
-	}
-
-	/* Construct database map */
-	for (i = 0; i < PQntuples(res); i++)
-	{
-		char *datname = NULL;
-		db_map_entry *db_entry = (db_map_entry *) pgut_malloc(sizeof(db_map_entry));
-
-		/* get Oid */
-		db_entry->dbOid = atoll(PQgetvalue(res, i, 0));
-
-		/* get datname */
-		datname = PQgetvalue(res, i, 1);
-		db_entry->datname = pgut_malloc(strlen(datname) + 1);
-		strcpy(db_entry->datname, datname);
-
-		if (database_map == NULL)
-			database_map = parray_new();
-
-		parray_append(database_map, db_entry);
-	}
-
-	return database_map;
-}
 
 /* Check if ptrack is enabled in target instance */
 static bool
@@ -1466,7 +1407,6 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn,
 	FILE		*fp;
 	pgFile		*file;
 	size_t		len;
-	char	   *val = NULL;
 	char	   *stop_backup_query = NULL;
 	bool		stop_lsn_exists = false;
 	XLogRecPtr	stop_backup_lsn_tmp = InvalidXLogRecPtr;
@@ -1780,42 +1720,6 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn,
 		elog(LOG, "stop_lsn: %X/%X",
 			(uint32) (stop_backup_lsn_tmp >> 32), (uint32) (stop_backup_lsn_tmp));
 
-		/* Write backup_label and tablespace_map */
-		if (!exclusive_backup)
-		{
-			Assert(PQnfields(res) >= 4);
-
-			/* Write backup_label */
-			join_path_components(backup_label, backup->database_dir, PG_BACKUP_LABEL_FILE);
-			fp = fio_fopen(backup_label, PG_BINARY_W, FIO_BACKUP_HOST);
-			if (fp == NULL)
-				elog(ERROR, "can't open backup label file \"%s\": %s",
-					 backup_label, strerror(errno));
-
-			len = strlen(PQgetvalue(res, 0, 3));
-			if (fio_fwrite(fp, PQgetvalue(res, 0, 3), len) != len ||
-				fio_fflush(fp) != 0 ||
-				fio_fclose(fp))
-				elog(ERROR, "can't write backup label file \"%s\": %s",
-					 backup_label, strerror(errno));
-
-			/*
-			 * It's vital to check if backup_files_list is initialized,
-			 * because we could get here because the backup was interrupted
-			 */
-			if (backup_files_list)
-			{
-				file = pgFileNew(backup_label, PG_BACKUP_LABEL_FILE, true, 0,
-								 FIO_BACKUP_HOST);
-
-				file->crc = pgFileGetCRC(backup_label, true, false);
-
-				file->write_size = file->size;
-				file->uncompressed_size = file->size;
-				parray_append(backup_files_list, file);
-			}
-		}
-
 		if (sscanf(PQgetvalue(res, 0, 0), XID_FMT, &recovery_xid) != 1)
 			elog(ERROR,
 				 "result of txid_snapshot_xmax() is invalid: %s",
@@ -1825,46 +1729,26 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn,
 				 "result of current_timestamp is invalid: %s",
 				 PQgetvalue(res, 0, 1));
 
-		/* Get content for tablespace_map from stop_backup results
-		 * in case of non-exclusive backup
-		 */
+		/* Write backup_label and tablespace_map */
 		if (!exclusive_backup)
+		{
+			char	   *val = NULL;
+			Assert(PQnfields(res) >= 4);
+
+			val = PQgetvalue(res, 0, 3);
+
+			/* Write tablespace_map */
+			if (val && strlen(val) > 0)
+				write_backup_label(backup, val, backup_files_list);
+
+			val = NULL;
 			val = PQgetvalue(res, 0, 4);
 
-		/* Write tablespace_map */
-		if (!exclusive_backup && val && strlen(val) > 0)
-		{
-			char		tablespace_map[MAXPGPATH];
-
-			join_path_components(tablespace_map, backup->database_dir, PG_TABLESPACE_MAP_FILE);
-			fp = fio_fopen(tablespace_map, PG_BINARY_W, FIO_BACKUP_HOST);
-			if (fp == NULL)
-				elog(ERROR, "can't open tablespace map file \"%s\": %s",
-					 tablespace_map, strerror(errno));
-
-			len = strlen(val);
-			if (fio_fwrite(fp, val, len) != len ||
-				fio_fflush(fp) != 0 ||
-				fio_fclose(fp))
-				elog(ERROR, "can't write tablespace map file \"%s\": %s",
-					 tablespace_map, strerror(errno));
-
-			if (backup_files_list)
-			{
-				file = pgFileNew(tablespace_map, PG_TABLESPACE_MAP_FILE, true, 0,
-								 FIO_BACKUP_HOST);
-				if (S_ISREG(file->mode))
-				{
-					file->crc = pgFileGetCRC(tablespace_map, true, false);
-					file->write_size = file->size;
-				}
-
-				parray_append(backup_files_list, file);
-			}
+			/* Write tablespace_map */
+			if (val && strlen(val) > 0)
+				write_tablespace_map(backup, val, backup_files_list);
 		}
 
-		if (tablespace_map_content)
-			PQclear(tablespace_map_content);
 		PQclear(res);
 	}
 
