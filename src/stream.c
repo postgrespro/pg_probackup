@@ -276,7 +276,7 @@ stop_streaming(XLogRecPtr xlogpos, uint32 timeline, bool segment_finished)
 	if (segment_finished)
     {
         XLogSegNo xlog_segno;
-        char wal_segment_name[MAXNAMLEN];
+        char wal_segment_name[MAXFNAMELEN];
         char wal_segment_relpath[MAXPGPATH];
         char wal_segment_fullpath[MAXPGPATH];
         pgFile *file = NULL;
