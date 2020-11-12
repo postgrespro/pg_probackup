@@ -24,7 +24,7 @@
 #include "utils/thread.h"
 #include "utils/file.h"
 
-const char *progname = "pg_probackup";
+//const char *progname = "pg_probackup";
 
 /* list of files contained in backup */
 static parray *backup_files_list = NULL;
