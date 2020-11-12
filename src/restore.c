@@ -1828,7 +1828,6 @@ get_dbOid_exclude_list(pgBackup *backup, parray *datname_list,
 	parray		*database_map = NULL;
 	parray		*dbOid_exclude_list = NULL;
 	pgFile		*database_map_file = NULL;
-	char		path[MAXPGPATH];
 	char		database_map_path[MAXPGPATH];
 	parray		*files = NULL;
 
@@ -1851,8 +1850,7 @@ get_dbOid_exclude_list(pgBackup *backup, parray *datname_list,
 		elog(ERROR, "Backup %s doesn't contain a database_map, partial restore is impossible.",
 			base36enc(backup->start_time));
 
-	join_path_components(path, backup->root_dir, DATABASE_DIR);
-	join_path_components(database_map_path, path, DATABASE_MAP);
+	join_path_components(database_map_path, backup->database_dir, DATABASE_MAP);
 
 	/* check database_map CRC */
 //	crc = pgFileGetCRC(database_map_path, true, true, NULL, FIO_LOCAL_HOST);

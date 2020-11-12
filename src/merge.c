@@ -436,8 +436,6 @@ merge_chain(parray *parent_chain, pgBackup *full_backup, pgBackup *dest_backup)
 {
 	int			i;
 	char 		*dest_backup_id;
-	char		full_external_prefix[MAXPGPATH];
-	char		full_database_dir[MAXPGPATH];
 	parray		*full_externals = NULL,
 				*dest_externals = NULL;
 
@@ -610,13 +608,8 @@ merge_chain(parray *parent_chain, pgBackup *full_backup, pgBackup *dest_backup)
 			write_backup_status(backup, BACKUP_STATUS_MERGING, instance_name, true);
 	}
 
-	/* Construct path to database dir: /backup_dir/instance_name/FULL/database */
-	join_path_components(full_database_dir, full_backup->root_dir, DATABASE_DIR);
-	/* Construct path to external dir: /backup_dir/instance_name/FULL/external */
-	join_path_components(full_external_prefix, full_backup->root_dir, EXTERNAL_DIR);
-
 	/* Create directories */
-	create_data_directories(dest_backup->files, full_database_dir,
+	create_data_directories(dest_backup->files, full_backup->database_dir,
 							dest_backup->root_dir, false, false, FIO_BACKUP_HOST);
 
 	/* External directories stuff */
@@ -646,7 +639,7 @@ merge_chain(parray *parent_chain, pgBackup *full_backup, pgBackup *dest_backup)
 			char		dirpath[MAXPGPATH];
 			char		new_container[MAXPGPATH];
 
-			makeExternalDirPathByNum(new_container, full_external_prefix,
+			makeExternalDirPathByNum(new_container, full_backup->external_dir,
 									 file->external_dir_num);
 			join_path_components(dirpath, new_container, file->rel_path);
 			dir_create_dir(dirpath, DIR_PERMISSION);
@@ -668,8 +661,8 @@ merge_chain(parray *parent_chain, pgBackup *full_backup, pgBackup *dest_backup)
 		arg->parent_chain = parent_chain;
 		arg->dest_backup = dest_backup;
 		arg->full_backup = full_backup;
-		arg->full_database_dir = full_database_dir;
-		arg->full_external_prefix = full_external_prefix;
+		arg->full_database_dir = full_backup->database_dir;
+		arg->full_external_prefix = full_backup->external_dir;
 
 		arg->compression_match = compression_match;
 		arg->program_version_match = program_version_match;
@@ -784,7 +777,7 @@ merge_chain(parray *parent_chain, pgBackup *full_backup, pgBackup *dest_backup)
 
 	parray_qsort(result_filelist, pgFileCompareRelPathWithExternal);
 
-	write_backup_filelist(full_backup, result_filelist, full_database_dir, NULL, true);
+	write_backup_filelist(full_backup, result_filelist, full_backup->database_dir, NULL, true);
 	write_backup(full_backup, true);
 
 	/* Delete FULL backup files, that do not exists in destination backup
@@ -809,7 +802,7 @@ merge_chain(parray *parent_chain, pgBackup *full_backup, pgBackup *dest_backup)
 			char		full_file_path[MAXPGPATH];
 
 			/* We need full path, file object has relative path */
-			join_path_components(full_file_path, full_database_dir, full_file->rel_path);
+			join_path_components(full_file_path, full_backup->database_dir, full_file->rel_path);
 
 			pgFileDelete(full_file->mode, full_file_path);
 			elog(VERBOSE, "Deleted \"%s\"", full_file_path);
@@ -841,6 +834,8 @@ merge_delete:
 merge_rename:
 	/*
 	 * Rename FULL backup directory to destination backup directory.
+     * FIXME Code below is an ugly hack to reuse various
+	 * backup and restore functions for merge
 	 */
 	if (dest_backup)
 	{
@@ -849,13 +844,21 @@ merge_rename:
 			elog(ERROR, "Could not rename directory \"%s\" to \"%s\": %s",
 				 full_backup->root_dir, dest_backup->root_dir, strerror(errno));
 
-		/* update root_dir after rename */
+		/* update paths after rename */
+		pg_free(full_backup->backup_name);
 		pg_free(full_backup->root_dir);
+		pg_free(full_backup->database_dir);
+		pg_free(full_backup->xlog_dir);
+		pg_free(full_backup->external_dir);
+
+		full_backup->backup_name = pgut_strdup(dest_backup->backup_name);
 		full_backup->root_dir = pgut_strdup(dest_backup->root_dir);
+		full_backup->database_dir = pgut_strdup(dest_backup->database_dir);
+		full_backup->xlog_dir = pgut_strdup(dest_backup->xlog_dir);
+		full_backup->external_dir = pgut_strdup(dest_backup->external_dir);
 	}
 	else
 	{
-		/* Ugly */
 		char 	backups_dir[MAXPGPATH];
 		char 	instance_dir[MAXPGPATH];
 		char 	destination_path[MAXPGPATH];
@@ -870,13 +873,15 @@ merge_rename:
 			elog(ERROR, "Could not rename directory \"%s\" to \"%s\": %s",
 				 full_backup->root_dir, destination_path, strerror(errno));
 
-		/* update root_dir after rename */
+		/* update paths after rename */
+		pg_free(full_backup->backup_name);
 		pg_free(full_backup->root_dir);
-		full_backup->root_dir = pgut_strdup(destination_path);
-	}
+		pg_free(full_backup->database_dir);
+		pg_free(full_backup->xlog_dir);
+		pg_free(full_backup->external_dir);
 
-	/* Reinit path to database_dir */
-	join_path_components(full_backup->database_dir, full_backup->root_dir, DATABASE_DIR);
+		pgBackupInitPaths(full_backup, instance_dir, full_backup->merge_dest_backup);
+	}
 
 	/* If we crash here, it will produce full backup in MERGED
 	 * status, located in directory with wrong backup id.
@@ -1369,19 +1374,15 @@ merge_non_data_file(parray *parent_chain, pgBackup *full_backup,
 	if (from_file->external_dir_num)
 	{
 		char temp[MAXPGPATH];
-		char external_prefix[MAXPGPATH];
-
-		join_path_components(external_prefix, from_backup->root_dir, EXTERNAL_DIR);
-		makeExternalDirPathByNum(temp, external_prefix, dest_file->external_dir_num);
+		makeExternalDirPathByNum(temp, from_backup->external_dir,
+								 dest_file->external_dir_num);
 
 		join_path_components(from_fullpath, temp, from_file->rel_path);
 	}
 	else
-	{
-		char backup_database_dir[MAXPGPATH];
-		join_path_components(backup_database_dir, from_backup->root_dir, DATABASE_DIR);
-		join_path_components(from_fullpath, backup_database_dir, from_file->rel_path);
-	}
+		join_path_components(from_fullpath, from_backup->database_dir,
+							 from_file->rel_path);
+
 
 	/* Copy file to FULL backup directory into temp file */
 	backup_non_data_file(tmp_file, NULL, from_fullpath,

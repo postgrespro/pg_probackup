@@ -95,8 +95,6 @@ static void
 do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool backup_logs)
 {
 	int			i;
-	char		database_path[MAXPGPATH];
-	char		external_prefix[MAXPGPATH]; /* Temp value. Used as template */
 	char		dst_backup_path[MAXPGPATH];
 	char		label[1024];
 	XLogRecPtr	prev_backup_start_lsn = InvalidXLogRecPtr;
@@ -265,21 +263,15 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool
 	/* Update running backup meta with START LSN */
 	write_backup(&current, true);
 
-	pgBackupGetPath(&current, database_path, lengthof(database_path),
-					DATABASE_DIR);
-	pgBackupGetPath(&current, external_prefix, lengthof(external_prefix),
-					EXTERNAL_DIR);
-
 	/* initialize backup's file list */
 	backup_files_list = parray_new();
 
 	/* start stream replication */
 	if (stream_wal)
 	{
-		join_path_components(dst_backup_path, database_path, PG_XLOG_DIR);
-		fio_mkdir(dst_backup_path, DIR_PERMISSION, FIO_BACKUP_HOST);
+		fio_mkdir(current.xlog_dir, DIR_PERMISSION, FIO_BACKUP_HOST);
 
-		start_WAL_streaming(backup_conn, dst_backup_path, &instance_config.conn_opt,
+		start_WAL_streaming(backup_conn, current.xlog_dir, &instance_config.conn_opt,
 							current.start_lsn, current.tli);
 	}
 
@@ -436,12 +428,12 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool
 			if (file->external_dir_num)
 			{
 				char		temp[MAXPGPATH];
-				snprintf(temp, MAXPGPATH, "%s%d", external_prefix,
+				snprintf(temp, MAXPGPATH, "%s%d", current.external_dir,
 						 file->external_dir_num);
 				join_path_components(dirpath, temp, file->rel_path);
 			}
 			else
-				join_path_components(dirpath, database_path, file->rel_path);
+				join_path_components(dirpath, current.database_dir, file->rel_path);
 
 			elog(VERBOSE, "Create directory '%s'", dirpath);
 			fio_mkdir(dirpath, DIR_PERMISSION, FIO_BACKUP_HOST);
@@ -475,8 +467,8 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool
 
 		arg->nodeInfo = nodeInfo;
 		arg->from_root = instance_config.pgdata;
-		arg->to_root = database_path;
-		arg->external_prefix = external_prefix;
+		arg->to_root = current.database_dir;
+		arg->external_prefix = current.external_dir;
 		arg->external_dirs = external_dirs;
 		arg->files_list = backup_files_list;
 		arg->prev_filelist = prev_backup_filelist;
@@ -552,7 +544,7 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool
 			elog(ERROR, "Failed to find file \"%s\" in backup filelist.",
 							XLOG_CONTROL_FILE);
 
-		set_min_recovery_point(pg_control, database_path, current.stop_lsn);
+		set_min_recovery_point(pg_control, current.database_dir, current.stop_lsn);
 	}
 
 	/* close and sync page header map */
@@ -610,12 +602,12 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool
 
 			/* construct fullpath */
 			if (file->external_dir_num == 0)
-				join_path_components(to_fullpath, database_path, file->rel_path);
+				join_path_components(to_fullpath, current.database_dir, file->rel_path);
 			else
 			{
 				char 	external_dst[MAXPGPATH];
 
-				makeExternalDirPathByNum(external_dst, external_prefix,
+				makeExternalDirPathByNum(external_dst, current.external_dir,
 										 file->external_dir_num);
 				join_path_components(to_fullpath, external_dst, file->rel_path);
 			}
@@ -765,6 +757,9 @@ do_backup(time_t start_time, pgSetBackupParams *set_backup_params,
 	/* Update backup status and other metainfo. */
 	current.status = BACKUP_STATUS_RUNNING;
 	current.start_time = start_time;
+
+	/* Initialize paths as soon as we know backup->start_time */
+	pgBackupInitPaths(&current, backup_instance_path, current.start_time);
 
 	StrNCpy(current.program_version, PROGRAM_VERSION,
 			sizeof(current.program_version));
@@ -1289,7 +1284,6 @@ wait_wal_lsn(XLogRecPtr target_lsn, bool is_start_lsn, TimeLineID tli,
 			 int timeout_elevel, bool in_stream_dir)
 {
 	XLogSegNo	targetSegNo;
-	char		pg_wal_dir[MAXPGPATH];
 	char		wal_segment_path[MAXPGPATH],
 			   *wal_segment_dir,
 				wal_segment[MAXFNAMELEN];
@@ -1318,10 +1312,8 @@ wait_wal_lsn(XLogRecPtr target_lsn, bool is_start_lsn, TimeLineID tli,
 	 */
 	if (in_stream_dir)
 	{
-		pgBackupGetPath2(&current, pg_wal_dir, lengthof(pg_wal_dir),
-						 DATABASE_DIR, PG_XLOG_DIR);
-		join_path_components(wal_segment_path, pg_wal_dir, wal_segment);
-		wal_segment_dir = pg_wal_dir;
+		join_path_components(wal_segment_path, current.xlog_dir, wal_segment);
+		wal_segment_dir = current.xlog_dir;
 	}
 	else
 	{
@@ -1470,7 +1462,6 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn,
 	uint32		lsn_lo;
 	//XLogRecPtr	restore_lsn = InvalidXLogRecPtr;
 	int			pg_stop_backup_timeout = 0;
-	char		path[MAXPGPATH];
 	char		backup_label[MAXPGPATH];
 	FILE		*fp;
 	pgFile		*file;
@@ -1692,12 +1683,7 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn,
 			//	 (uint32) (stop_backup_lsn_tmp >> 32), (uint32) (stop_backup_lsn_tmp));
 
 			if (stream_wal)
-			{
-				pgBackupGetPath2(backup, stream_xlog_path,
-								 lengthof(stream_xlog_path),
-								 DATABASE_DIR, PG_XLOG_DIR);
-				xlog_path = stream_xlog_path;
-			}
+				xlog_path = backup->xlog_dir;
 			else
 				xlog_path = arclog_path;
 
@@ -1798,10 +1784,9 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn,
 		if (!exclusive_backup)
 		{
 			Assert(PQnfields(res) >= 4);
-			pgBackupGetPath(backup, path, lengthof(path), DATABASE_DIR);
 
 			/* Write backup_label */
-			join_path_components(backup_label, path, PG_BACKUP_LABEL_FILE);
+			join_path_components(backup_label, backup->database_dir, PG_BACKUP_LABEL_FILE);
 			fp = fio_fopen(backup_label, PG_BINARY_W, FIO_BACKUP_HOST);
 			if (fp == NULL)
 				elog(ERROR, "can't open backup label file \"%s\": %s",
@@ -1851,7 +1836,7 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn,
 		{
 			char		tablespace_map[MAXPGPATH];
 
-			join_path_components(tablespace_map, path, PG_TABLESPACE_MAP_FILE);
+			join_path_components(tablespace_map, backup->database_dir, PG_TABLESPACE_MAP_FILE);
 			fp = fio_fopen(tablespace_map, PG_BINARY_W, FIO_BACKUP_HOST);
 			if (fp == NULL)
 				elog(ERROR, "can't open tablespace map file \"%s\": %s",
@@ -1905,10 +1890,7 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn,
 			if(wait_WAL_streaming_end(backup_files_list))
 				elog(ERROR, "WAL streaming failed");
 
-			pgBackupGetPath2(backup, stream_xlog_path,
-							 lengthof(stream_xlog_path),
-							 DATABASE_DIR, PG_XLOG_DIR);
-			xlog_path = stream_xlog_path;
+			xlog_path = backup->xlog_dir;
 		}
 		else
 			xlog_path = arclog_path;

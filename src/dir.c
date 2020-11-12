@@ -1195,7 +1195,6 @@ check_tablespace_mapping(pgBackup *backup, bool incremental, bool *tblspaces_are
 
 	links = parray_new();
 
-//	pgBackupGetPath(backup, this_backup_path, lengthof(this_backup_path), NULL);
 	read_tablespace_map(links, backup->root_dir);
 	/* Sort links by the path of a linked file*/
 	parray_qsort(links, pgFileCompareLinked);
@@ -1766,8 +1765,7 @@ write_database_map(pgBackup *backup, parray *database_map, parray *backup_files_
 	char		database_dir[MAXPGPATH];
 	char		database_map_path[MAXPGPATH];
 
-	join_path_components(database_dir, backup->root_dir, DATABASE_DIR);
-	join_path_components(database_map_path, database_dir, DATABASE_MAP);
+	join_path_components(database_map_path, backup->database_dir, DATABASE_MAP);
 
 	fp = fio_fopen(database_map_path, PG_BINARY_W, FIO_BACKUP_HOST);
 	if (fp == NULL)
@@ -1801,12 +1799,9 @@ read_database_map(pgBackup *backup)
 	FILE		*fp;
 	parray 		*database_map;
 	char		buf[MAXPGPATH];
-	char		path[MAXPGPATH];
 	char		database_map_path[MAXPGPATH];
 
-//	pgBackupGetPath(backup, path, lengthof(path), DATABASE_DIR);
-	join_path_components(path, backup->root_dir, DATABASE_DIR);
-	join_path_components(database_map_path, path, DATABASE_MAP);
+	join_path_components(database_map_path, backup->database_dir, DATABASE_MAP);
 
 	fp = fio_open_stream(database_map_path, FIO_BACKUP_HOST);
 	if (fp == NULL)
@@ -1878,16 +1873,10 @@ pgBackupCreateDir(pgBackup *backup)
 		free_dir_list(external_list);
 	}
 
-	pgBackupGetPath(backup, path, lengthof(path), NULL);
-
-	if (!dir_is_empty(path, FIO_BACKUP_HOST))
+	if (!dir_is_empty(backup->root_dir, FIO_BACKUP_HOST))
 		elog(ERROR, "backup destination is not empty \"%s\"", path);
 
-	fio_mkdir(path, DIR_PERMISSION, FIO_BACKUP_HOST);
-	backup->root_dir = pgut_strdup(path);
-
-	backup->database_dir = pgut_malloc(MAXPGPATH);
-	join_path_components(backup->database_dir, backup->root_dir, DATABASE_DIR);
+	fio_mkdir(backup->root_dir, DIR_PERMISSION, FIO_BACKUP_HOST);
 
 	/* block header map */
 	init_header_map(backup);
@@ -1902,40 +1891,3 @@ pgBackupCreateDir(pgBackup *backup)
 	free_dir_list(subdirs);
 	return 0;
 }
-
-/*
- * ===== Path construction functions. =====
- * These functions depend on backup_instance_path global variable
- */
-
-/*
- * Construct absolute path of the backup directory.
- * If subdir is not NULL, it will be appended after the path.
- */
-void
-pgBackupGetPath(const pgBackup *backup, char *path, size_t len, const char *subdir)
-{
-	pgBackupGetPath2(backup, path, len, subdir, NULL);
-}
-
-/*
- * Construct absolute path of the backup directory.
- * Append "subdir1" and "subdir2" to the backup directory.
- */
-void
-pgBackupGetPath2(const pgBackup *backup, char *path, size_t len,
-				 const char *subdir1, const char *subdir2)
-{
-	/* If "subdir1" is NULL do not check "subdir2" */
-	if (!subdir1)
-		snprintf(path, len, "%s/%s", backup_instance_path,
-				 base36enc(backup->start_time));
-	else if (!subdir2)
-		snprintf(path, len, "%s/%s/%s", backup_instance_path,
-				 base36enc(backup->start_time), subdir1);
-	/* "subdir1" and "subdir2" is not NULL */
-	else
-		snprintf(path, len, "%s/%s/%s/%s", backup_instance_path,
-				 base36enc(backup->start_time), subdir1, subdir2);
-}
-/* ===== Path construction functions (END) ===== */

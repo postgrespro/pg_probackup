@@ -382,7 +382,7 @@ typedef struct HeaderMap
 
 typedef struct pgBackup pgBackup;
 
-/* Information about single backup stored in backup.conf */
+/* Information about single backup */
 struct pgBackup
 {
 	BackupMode		backup_mode; /* Mode - one of BACKUP_MODE_xxx above*/
@@ -448,10 +448,23 @@ struct pgBackup
 										* in the format suitable for recovery.conf */
 	char			*external_dir_str;	/* List of external directories,
 										 * separated by ':' */
+
+	/*
+	 * backup subdir paths
+	 * initialized via pgBackupInitPaths().
+	 * Use these where possible and avoid generating paths manually,
+	 * to separate storage layer.
+	 */
+	char			*backup_name;	/* string representation of backup_id */
 	char			*root_dir;		/* Full path for root backup directory:
 									   backup_path/instance_name/backup_id */
 	char			*database_dir;	/* Full path to directory with data files:
-									   backup_path/instance_name/backup_id/database */
+									   backup_path/instance_name/backup_id/DATABASE_DIR */
+	char			*xlog_dir;		/* Full path to directory with xlog files inside pg_data
+									   backup_path/instance_name/backup_id/DATABASE_DIR/PG_XLOG_DIR */
+	char			*external_dir;	/* Full path to the external directory:
+									   backup_path/instance_name/backup_id/EXTERNAL_DIR */
+
 	parray			*files;			/* list of files belonging to this backup
 									 * must be populated explicitly */
 	char			*note;
@@ -892,13 +905,10 @@ extern void pgBackupWriteControl(FILE *out, pgBackup *backup);
 extern void write_backup_filelist(pgBackup *backup, parray *files,
 								  const char *root, parray *external_list, bool sync);
 
-extern void pgBackupGetPath(const pgBackup *backup, char *path, size_t len,
-							const char *subdir);
-extern void pgBackupGetPath2(const pgBackup *backup, char *path, size_t len,
-							 const char *subdir1, const char *subdir2);
-
 extern int pgBackupCreateDir(pgBackup *backup);
 extern void pgBackupInit(pgBackup *backup);
+extern void pgBackupInitPaths(pgBackup *backup, char *backup_instance_path,
+							  time_t backup_start_time);
 extern void pgBackupFree(void *backup);
 extern int pgBackupCompareId(const void *f1, const void *f2);
 extern int pgBackupCompareIdDesc(const void *f1, const void *f2);

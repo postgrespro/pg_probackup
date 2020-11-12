@@ -99,10 +99,39 @@ pgBackupFree(void *backup)
 
 	pg_free(b->primary_conninfo);
 	pg_free(b->external_dir_str);
+
+	pg_free(b->backup_name);
 	pg_free(b->root_dir);
 	pg_free(b->database_dir);
+	pg_free(b->xlog_dir);
+	pg_free(b->external_dir);
+
 	pg_free(b->note);
 	pg_free(backup);
+}
+
+/*
+ * Initialize all paths to the backup subdirectories
+ * as soon as we know backup start_time and can generate its name
+ */
+void
+pgBackupInitPaths(pgBackup *backup, char *backup_instance_path, time_t backup_start_time)
+{
+	backup->start_time = backup_start_time;
+
+	backup->backup_name = pgut_strdup(base36enc(backup_start_time));
+
+	backup->root_dir = pgut_malloc(MAXPGPATH);
+	join_path_components(backup->root_dir, backup_instance_path, backup->backup_name);
+
+	backup->database_dir = pgut_malloc(MAXPGPATH);
+	join_path_components(backup->database_dir, backup->root_dir, DATABASE_DIR);
+
+	backup->xlog_dir = pgut_malloc(MAXPGPATH);
+	join_path_components(backup->xlog_dir, backup->database_dir, PG_XLOG_DIR);
+
+	backup->external_dir = pgut_malloc(MAXPGPATH);
+	join_path_components(backup->external_dir, backup->root_dir, EXTERNAL_DIR);
 }
 
 /* Compare two pgBackup with their IDs (start time) in ascending order */
@@ -344,17 +373,16 @@ catalog_get_backup_list(const char *instance_name, time_t requested_backup_id)
 			backup = pgut_new(pgBackup);
 			pgBackupInit(backup);
 			backup->start_time = base36dec(data_ent->d_name);
+
+			/* Initialize paths as soon as we know backup->start_time */
+			pgBackupInitPaths(backup, backup_instance_path, backup->start_time);
+
 		}
 		else if (strcmp(base36enc(backup->start_time), data_ent->d_name) != 0)
 		{
 			elog(VERBOSE, "backup ID in control file \"%s\" doesn't match name of the backup folder \"%s\"",
 				 base36enc(backup->start_time), backup_conf_path);
 		}
-
-		backup->root_dir = pgut_strdup(data_path);
-
-		backup->database_dir = pgut_malloc(MAXPGPATH);
-		join_path_components(backup->database_dir, backup->root_dir, DATABASE_DIR);
 
 		/* Initialize page header map */
 		init_header_map(backup);
@@ -961,6 +989,9 @@ readBackupControlFile(const char *path)
 		pgBackupFree(backup);
 		return NULL;
 	}
+
+	/* Initialize paths as soon as we know backup->start_time */
+	pgBackupInitPaths(backup, backup_instance_path, backup->start_time);
 
 	if (backup_mode)
 	{
