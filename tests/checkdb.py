@@ -618,14 +618,10 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
                 'GRANT EXECUTE ON FUNCTION bt_index_check(regclass, bool) TO backup;'
             )
 
-#        if ProbackupTest.enterprise:
-#            node.safe_psql(
-#                "backupdb",
-#                "GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_edition() TO backup")
-#
-#            node.safe_psql(
-#                "backupdb",
-#                "GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_version() TO backup")
+        if ProbackupTest.enterprise:
+            node.safe_psql(
+                "backupdb",
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_edition() TO backup")
 
         # checkdb
         try:
