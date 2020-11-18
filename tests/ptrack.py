@@ -3031,7 +3031,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             pg_options={
                 'max_wal_size': '32MB',
                 'archive_timeout': '10s',
-                'checkpoint_timeout': '30s',
+                'checkpoint_timeout': '5min',
                 'autovacuum': 'off'})
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
@@ -3129,6 +3129,14 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         if self.paranoia:
             self.compare_pgdata(pgdata, pgdata_restored)
+
+        self.set_auto_conf(node, {'port': node.port})
+
+        node.slow_start()
+
+        node.safe_psql(
+            'postgres',
+            'select 1')
 
         # Clean after yourself
         self.del_test_dir(module_name, fname, [master, replica])
