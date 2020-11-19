@@ -292,7 +292,7 @@ stop_streaming(XLogRecPtr xlogpos, uint32 timeline, bool segment_finished)
 	/* we assume that we get called once at the end of each segment */
 	if (segment_finished)
     {
-        elog(INFO, _("finished segment at %X/%X (timeline %u)"),
+        elog(VERBOSE, _("finished segment at %X/%X (timeline %u)"),
              (uint32) (xlogpos >> 32), (uint32) xlogpos, timeline);
 
         append_wal_segment(xlog_files_list, timeline, xlogpos,
