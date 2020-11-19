@@ -64,9 +64,9 @@ static int checkpoint_timeout(PGconn *backup_conn);
 static void *StreamLog(void *arg);
 static bool stop_streaming(XLogRecPtr xlogpos, uint32 timeline,
                            bool segment_finished);
-static void append_wal_segment(parray *filelist, uint32 timeline,
-                               XLogRecPtr xlogpos, char *basedir,
-                               uint32 xlog_seg_size);
+static void add_walsegment_to_filelist(parray *filelist, uint32 timeline,
+                                       XLogRecPtr xlogpos, char *basedir,
+                                       uint32 xlog_seg_size);
 
 /*
  * Run IDENTIFY_SYSTEM through a given connection and
@@ -244,12 +244,16 @@ StreamLog(void *arg)
 		elog(ERROR, "Problem in receivexlog");
 #endif
 
-    /* sort xlog_files_list */
+    /* be paranoid and sort xlog_files_list,
+     * so if stop_lsn segno is already in the list,
+     * then list must be sorted to detect duplicates.
+     */
     parray_qsort(xlog_files_list, pgFileCompareRelPathWithExternal);
 
-    append_wal_segment(xlog_files_list, stream_arg->starttli,
-                       stop_stream_lsn, (char *) stream_arg->basedir,
-                       instance_config.xlog_seg_size);
+    /* Add the last segment to the list */
+    add_walsegment_to_filelist(xlog_files_list, stream_arg->starttli,
+                               stop_stream_lsn, (char *) stream_arg->basedir,
+                               instance_config.xlog_seg_size);
 
     /*
      * TODO: remove redundant WAL segments
@@ -295,9 +299,9 @@ stop_streaming(XLogRecPtr xlogpos, uint32 timeline, bool segment_finished)
         elog(VERBOSE, _("finished segment at %X/%X (timeline %u)"),
              (uint32) (xlogpos >> 32), (uint32) xlogpos, timeline);
 
-        append_wal_segment(xlog_files_list, timeline, xlogpos,
-                           (char*) stream_thread_arg.basedir,
-                           instance_config.xlog_seg_size);
+        add_walsegment_to_filelist(xlog_files_list, timeline, xlogpos,
+                                   (char*) stream_thread_arg.basedir,
+                                   instance_config.xlog_seg_size);
     }
 
 	/*
@@ -392,19 +396,22 @@ wait_WAL_streaming_end(parray *backup_files_list)
 
 /* Append streamed WAL segment to filelist  */
 void
-append_wal_segment(parray *filelist, uint32 timeline, XLogRecPtr xlogpos, char *basedir, uint32 xlog_seg_size)
+add_walsegment_to_filelist(parray *filelist, uint32 timeline, XLogRecPtr xlogpos, char *basedir, uint32 xlog_seg_size)
 {
 	XLogSegNo xlog_segno;
     char wal_segment_name[MAXFNAMELEN];
     char wal_segment_relpath[MAXPGPATH];
     char wal_segment_fullpath[MAXPGPATH];
     pgFile *file = NULL;
+    pgFile **existing_file = NULL;
 
     GetXLogSegNo(xlogpos, xlog_segno, xlog_seg_size);
 
     /*
-     * xlogpos points to the current segment, and we need the finished - previous one
-     * inless xlogpos points to not 0 offset in segment
+     * When xlogpos points to the zero offset (0/3000000),
+     * it means that previous segment was just successfully streamed.
+     * When xlogpos points to the positive offset,
+     * then current segment is successfully streamed.
      */
     if (WalSegmentOffset(xlogpos, xlog_seg_size) == 0)
         xlog_segno--;
@@ -422,11 +429,16 @@ append_wal_segment(parray *filelist, uint32 timeline, XLogRecPtr xlogpos, char *
      * stop_lsn segment can be added to this list twice, so
      * try not to add duplicates
      */
-    if (parray_bsearch(filelist, file, pgFileCompareRelPathWithExternal))
+
+    existing_file = (pgFile **) parray_bsearch(filelist, file, pgFileCompareRelPathWithExternal);
+
+    if (existing_file)
     {
-        if (!parray_rm(filelist, file, pgFileCompareRelPathWithExternal))
-            elog(ERROR, "Failed to remove duplicate from array of streamed segments: %s",
-                        file->rel_path);
+        (*existing_file)->crc = pgFileGetCRC(wal_segment_fullpath, true, false);
+        (*existing_file)->write_size = xlog_seg_size;
+        (*existing_file)->uncompressed_size = xlog_seg_size;
+
+        return;
     }
 
     /* calculate crc */
@@ -437,6 +449,5 @@ append_wal_segment(parray *filelist, uint32 timeline, XLogRecPtr xlogpos, char *
     file->uncompressed_size = xlog_seg_size;
 
     /* append file to filelist */
-    elog(VERBOSE, "Append WAL segment: \"%s\"", wal_segment_relpath);
     parray_append(filelist, file);
 }

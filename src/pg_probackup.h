@@ -672,7 +672,7 @@ typedef struct BackupPageHeader2
 		XLogFromFileName(fname, tli, logSegNo, wal_segsz_bytes)
 #else
 #define WalSegmentOffset(xlogptr, wal_segsz_bytes) \
-	XLogSegmentOffset(xlogptr)
+	((xlogptr) & ((XLogSegSize) - 1))
 #define GetXLogSegNo(xlrp, logSegNo, wal_segsz_bytes) \
 	XLByteToSeg(xlrp, logSegNo)
 #define GetXLogRecPtr(segno, offset, wal_segsz_bytes, dest) \
