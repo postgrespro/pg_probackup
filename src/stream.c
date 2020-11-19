@@ -290,8 +290,13 @@ stop_streaming(XLogRecPtr xlogpos, uint32 timeline, bool segment_finished)
 
         GetXLogSegNo(xlogpos, xlog_segno, instance_config.xlog_seg_size);
 
-        /* xlogpos points to the current segment, and we need the finished - previous one */
-        xlog_segno--;
+        /*
+		 * xlogpos points to the current segment, and we need the finished - previous one
+		 * inless xlogpos points to not 0 offset in segment
+		 */
+		if (WalSegmentOffset(xlogpos, instance_config.xlog_seg_size) == 0)
+			xlog_segno--;
+
         GetXLogFileName(wal_segment_name, timeline, xlog_segno,
                         instance_config.xlog_seg_size);
 

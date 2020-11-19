@@ -649,6 +649,9 @@ typedef struct BackupPageHeader2
 	 strcmp((fname) + XLOG_FNAME_LEN, ".gz") == 0)
 
 #if PG_VERSION_NUM >= 110000
+
+#define WalSegmentOffset(xlogptr, wal_segsz_bytes) \
+	XLogSegmentOffset(xlogptr, wal_segsz_bytes)
 #define GetXLogSegNo(xlrp, logSegNo, wal_segsz_bytes) \
 	XLByteToSeg(xlrp, logSegNo, wal_segsz_bytes)
 #define GetXLogRecPtr(segno, offset, wal_segsz_bytes, dest) \
@@ -668,6 +671,8 @@ typedef struct BackupPageHeader2
 #define GetXLogFromFileName(fname, tli, logSegNo, wal_segsz_bytes) \
 		XLogFromFileName(fname, tli, logSegNo, wal_segsz_bytes)
 #else
+#define WalSegmentOffset(xlogptr, wal_segsz_bytes) \
+	XLogSegmentOffset(xlogptr)
 #define GetXLogSegNo(xlrp, logSegNo, wal_segsz_bytes) \
 	XLByteToSeg(xlrp, logSegNo)
 #define GetXLogRecPtr(segno, offset, wal_segsz_bytes, dest) \
