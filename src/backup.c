@@ -1382,8 +1382,8 @@ wait_wal_lsn(XLogRecPtr target_lsn, bool is_start_lsn, TimeLineID tli,
 			{
 				XLogRecPtr	res;
 
-				res = get_prior_record_lsn(wal_segment_dir, current.start_lsn, target_lsn, tli,
-									   in_prev_segment, instance_config.xlog_seg_size);
+                res = get_prior_record_lsn(wal_segment_dir, current.start_lsn, target_lsn, tli,
+                                           in_prev_segment, instance_config.xlog_seg_size);
 
 				if (!XLogRecPtrIsInvalid(res))
 				{
