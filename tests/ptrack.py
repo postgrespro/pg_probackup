@@ -3139,7 +3139,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             'select 1')
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname, [master, replica])
+        self.del_test_dir(module_name, fname, [master, replica, node])
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure
