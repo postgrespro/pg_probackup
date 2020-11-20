@@ -131,6 +131,9 @@ write_backup_status(pgBackup *backup, BackupStatus status,
 	tmp->status = backup->status;
 	tmp->root_dir = pgut_strdup(backup->root_dir);
 
+	/* lock backup in exclusive more */
+	lock_backup(tmp, true, true);
+
 	write_backup(tmp, strict);
 
 	pgBackupFree(tmp);
@@ -138,22 +141,33 @@ write_backup_status(pgBackup *backup, BackupStatus status,
 
 /*
  * Create exclusive lockfile in the backup's directory.
+ * non-exclusive lock are placed in separate lock file
+ * Only read only tasks are allowed to take non-exclusive locks.
+ * RO locks do not conflict.
+ * When taking RO lock, a brief exclusive lock is taken.
+ * Pids of read-only processes are appended to separate lock file: BACKUP_RO_LOCK_PIDS
+ * TODO: lock-timeout
  */
 bool
-lock_backup(pgBackup *backup, bool strict)
+lock_backup(pgBackup *backup, bool strict, bool exclusive)
 {
 	char		lock_file[MAXPGPATH];
-	int			fd;
+	char		ro_lock_file[MAXPGPATH];
+	int			fd = 0;
 	char		buffer[MAXPGPATH * 2 + 256];
-	int			ntries;
+	int			ntries = LOCK_TIMEOUT;
+	int         log_freq = ntries / 5;
 	int			len;
 	int			encoded_pid;
 	pid_t		my_pid,
 				my_p_pid;
 
-	join_path_components(lock_file, backup->root_dir, BACKUP_CATALOG_PID);
+	join_path_components(lock_file, backup->root_dir, BACKUP_LOCK_PID);
+	join_path_components(ro_lock_file, backup->root_dir, BACKUP_RO_LOCK_PIDS);
 
 	/*
+	 * TODO: is this stuff with ppid below is relevant for us ?
+	 *
 	 * If the PID in the lockfile is our own PID or our parent's or
 	 * grandparent's PID, then the file must be stale (probably left over from
 	 * a previous system boot cycle).  We need to check this because of the
@@ -188,8 +202,12 @@ lock_backup(pgBackup *backup, bool strict)
 	 * (for example, a non-writable $backup_instance_path directory might cause a failure
 	 * that won't go away).  100 tries seems like plenty.
 	 */
-	for (ntries = 0;; ntries++)
+	do
 	{
+		if (interrupted)
+			elog(ERROR, "Interrupted while locking backup %s",
+						base36enc(backup->start_time));
+
 		/*
 		 * Try to create the lock file --- O_EXCL makes this atomic.
 		 *
@@ -202,14 +220,18 @@ lock_backup(pgBackup *backup, bool strict)
 
 		/*
 		 * Couldn't create the pid file. Probably it already exists.
+		 * If file already exists or we have some permission problem (???),
+		 * then retry;
 		 */
-		if ((errno != EEXIST && errno != EACCES) || ntries > 100)
+//		if ((errno != EEXIST && errno != EACCES))
+		if (errno != EEXIST)
 			elog(ERROR, "Could not create lock file \"%s\": %s",
 				 lock_file, strerror(errno));
 
 		/*
 		 * Read the file to get the old owner's PID.  Note race condition
 		 * here: file might have been deleted since we tried to create it.
+		 * TODO: rewrite to fopen
 		 */
 		fd = fio_open(lock_file, O_RDONLY, FIO_BACKUP_HOST);
 		if (fd < 0)
@@ -223,16 +245,27 @@ lock_backup(pgBackup *backup, bool strict)
 			elog(ERROR, "Could not read lock file \"%s\": %s",
 				 lock_file, strerror(errno));
 		fio_close(fd);
+		fd = 0;
 
+		/*
+		 * It should be possible only as a result of system crash,
+		 * so its hypothetical owner should be dead by now
+		 */
 		if (len == 0)
-			elog(ERROR, "Lock file \"%s\" is empty", lock_file);
+		{
+			elog(WARNING, "Lock file \"%s\" is empty", lock_file);
+			goto grab_lock;
+		}
 
 		buffer[len] = '\0';
 		encoded_pid = atoi(buffer);
 
 		if (encoded_pid <= 0)
-			elog(ERROR, "Bogus data in lock file \"%s\": \"%s\"",
+		{
+			elog(WARNING, "Bogus data in lock file \"%s\": \"%s\"",
 				 lock_file, buffer);
+			goto grab_lock;
+		}
 
 		/*
 		 * Check to see if the other process still exists
@@ -247,9 +280,19 @@ lock_backup(pgBackup *backup, bool strict)
 		{
 			if (kill(encoded_pid, 0) == 0)
 			{
-				elog(WARNING, "Process %d is using backup %s and still is running",
-					 encoded_pid, base36enc(backup->start_time));
-				return false;
+				/* complain every fifth interval */
+				if ((ntries % log_freq) == 0)
+				{
+					elog(WARNING, "Process %d is using backup %s, and is still running",
+						 encoded_pid, base36enc(backup->start_time));
+
+					elog(WARNING, "Waiting %u seconds on lock for backup %s", ntries, base36enc(backup->start_time));
+				}
+
+				sleep(1);
+
+				/* try again */
+				continue;
 			}
 			else
 			{
@@ -262,15 +305,25 @@ lock_backup(pgBackup *backup, bool strict)
 			}
 		}
 
+grab_lock:
 		/*
 		 * Looks like nobody's home.  Unlink the file and try again to create
 		 * it.  Need a loop because of possible race condition against other
 		 * would-be creators.
 		 */
 		if (fio_unlink(lock_file, FIO_BACKUP_HOST) < 0)
+		{
+			if (errno == ENOENT)
+				continue; /* race condition, again */
 			elog(ERROR, "Could not remove old lock file \"%s\": %s",
 				 lock_file, strerror(errno));
-	}
+		}
+
+	} while (ntries--);
+
+	/* Failed to acquire exclusive lock in time */
+	if (fd <= 0)
+		return false;
 
 	/*
 	 * Successfully created the file, now fill it.
@@ -304,7 +357,15 @@ lock_backup(pgBackup *backup, bool strict)
 		fio_close(fd);
 		fio_unlink(lock_file, FIO_BACKUP_HOST);
 		errno = save_errno;
-		elog(ERROR, "Could not write lock file \"%s\": %s",
+
+		/* In lax mode if we failed to grab lock because of 'out of space error',
+		 * then treat backup as locked.
+		 * Only delete command should be run in lax mode.
+		 */
+		if (!strict && errno == ENOSPC)
+			return true;
+
+		elog(ERROR, "Could not flush lock file \"%s\": %s",
 			 lock_file, strerror(errno));
 	}
 	if (fio_close(fd) != 0)
@@ -313,8 +374,162 @@ lock_backup(pgBackup *backup, bool strict)
 
 		fio_unlink(lock_file, FIO_BACKUP_HOST);
 		errno = save_errno;
-		elog(ERROR, "Could not write lock file \"%s\": %s",
+		elog(ERROR, "Could not close lock file \"%s\": %s",
 			 lock_file, strerror(errno));
+	}
+
+	/*
+	 * We have exclusive lock, now there are following scenarios:
+	 *
+	 * 1. If we are for exlusive lock, like when we are running
+	 *    delete or merge, we must check the RO lock list and see if any
+	 *    of the processes listed there are still alive.
+	 * 	  If there are any, then wait lock_timeout time and error out.
+	 *
+	 * 2. If we are here for non-exlusive lock, then write the pid
+	 *    into RO lock list and release the exclusive lock.
+	 */
+	if (exclusive)
+	{
+		FILE *fp = NULL;
+		char  buf[256];
+		pid_t pid;
+		int	  ntries = LOCK_TIMEOUT;
+		int   log_freq = ntries / 5;
+
+		fp = fopen(ro_lock_file, "r");
+		if (fp == NULL && errno != ENOENT)
+			elog(ERROR, "Cannot open \"%s\": %s", ro_lock_file, strerror(errno));
+
+		/* iterate over pids in lock file */
+		while (fp && fgets(buf, sizeof(buf), fp))
+		{
+			pid = atoi(buf);
+			if (pid <= 0)
+			{
+				elog(WARNING, "Bogus data in lock file \"%s\": \"%s\"", ro_lock_file, buf);
+				continue;
+			}
+
+			/* wait until RO lock owners go away */
+			do
+			{
+				if (interrupted)
+					elog(ERROR, "Interrupted while locking backup %s",
+								base36enc(backup->start_time));
+
+				if (pid != my_pid)
+				{
+					if (kill(pid, 0) == 0)
+					{
+						if ((ntries % log_freq) == 0)
+						{
+							elog(WARNING, "Process %d is using backup %s in read only mode, and is still running",
+								 pid, base36enc(backup->start_time));
+
+							elog(WARNING, "Waiting %u seconds on lock for backup %s", ntries,
+								base36enc(backup->start_time));
+						}
+						continue;
+					}
+					else if (errno != ESRCH)
+						elog(ERROR, "Failed to send signal 0 to a process %d: %s",
+							encoded_pid, strerror(errno));
+				}
+
+				/* locker is dead */
+				break;
+
+			} while (ntries--);
+
+			if (ntries <= 0)
+			{
+				elog(WARNING, "Cannot to lock backup %s in exclusive mode, because process %u owns read-only lock",
+						base36enc(backup->start_time), pid);
+				return false;
+			}
+		}
+
+		if (fp && ferror(fp))
+			elog(ERROR, "Failed to read from file: \"%s\"", ro_lock_file);
+
+		if (fp)
+			fclose(fp);
+
+		/* unlink RO lock list */
+		fio_unlink(ro_lock_file, FIO_BACKUP_HOST);
+	}
+	else
+	{
+		FILE *fp_in = NULL;
+		FILE *fp_out = NULL;
+		char  buf[256];
+		char  buf_out[256];
+		char  ro_lock_file_tmp[MAXPGPATH];
+		pid_t pid;
+
+		snprintf(ro_lock_file_tmp, MAXPGPATH, "%s%s", ro_lock_file, "tmp");
+
+		fp_in = fopen(ro_lock_file, "r");
+		fp_out = fopen(ro_lock_file_tmp, "w+");
+
+		/* no lock file exists yet */
+		if (fp_in == NULL && errno != ENOENT)
+			elog(ERROR, "Cannot open \"%s\": %s", ro_lock_file, strerror(errno));
+
+		if (fp_out == NULL)
+			elog(ERROR, "Cannot open \"%s\": %s", ro_lock_file_tmp, strerror(errno));
+
+		while (fp_in && fgets(buf, sizeof(buf), fp_in))
+		{
+			pid = atoi(buf);
+			if (pid <= 0)
+			{
+				elog(WARNING, "Bogus data in lock file \"%s\": \"%s\"", ro_lock_file, buf);
+				continue;
+			}
+
+			if (pid != my_pid)
+			{
+				if (kill(pid, 0) == 0)
+				{
+					/*
+					 * Somebody is still using this backup in RO mode,
+					 * copy this pid into a new file.
+					 */
+					snprintf(buf_out, sizeof(buf_out), "%u\n", pid);
+					fputs(buf_out, fp_out);
+				}
+				else if (errno != ESRCH)
+					elog(ERROR, "Failed to send signal 0 to a process %d: %s",
+						encoded_pid, strerror(errno));
+			}
+		}
+
+		/* add my own pid */
+		snprintf(buf_out, sizeof(buf_out), "%u\n", my_pid);
+		fputs(buf_out, fp_out);
+
+		if (fp_in && ferror(fp_in))
+			elog(ERROR, "Cannot read from pid file: \"%s\"", ro_lock_file);
+
+		if (ferror(fp_out))
+			elog(ERROR, "Cannot write to pid file: \"%s\"", ro_lock_file_tmp);
+
+		if (fp_in)
+			fclose(fp_in);
+		fclose(fp_out);
+
+		if (rename(ro_lock_file_tmp, ro_lock_file) < 0)
+			elog(ERROR, "Cannot rename file \"%s\" to \"%s\": %s",
+					ro_lock_file_tmp, ro_lock_file, strerror(errno));
+
+		/* release exclusive lock */
+		if (fio_unlink(lock_file, FIO_BACKUP_HOST) < 0)
+			elog(ERROR, "Could not remove old lock file \"%s\": %s",
+				 lock_file, strerror(errno));
+
+		return true;
 	}
 
 	/*
@@ -570,7 +785,7 @@ get_backup_filelist(pgBackup *backup, bool strict)
  * Lock list of backups. Function goes in backward direction.
  */
 void
-catalog_lock_backup_list(parray *backup_list, int from_idx, int to_idx, bool strict)
+catalog_lock_backup_list(parray *backup_list, int from_idx, int to_idx, bool strict, bool exclusive)
 {
 	int			start_idx,
 				end_idx;
@@ -585,7 +800,7 @@ catalog_lock_backup_list(parray *backup_list, int from_idx, int to_idx, bool str
 	for (i = start_idx; i >= end_idx; i--)
 	{
 		pgBackup   *backup = (pgBackup *) parray_get(backup_list, i);
-		if (!lock_backup(backup, strict))
+		if (!lock_backup(backup, strict, exclusive))
 			elog(ERROR, "Cannot lock backup %s directory",
 				 base36enc(backup->start_time));
 	}
