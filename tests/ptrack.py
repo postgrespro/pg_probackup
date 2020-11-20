@@ -3108,6 +3108,15 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         # Sync master and replica
         self.wait_until_replica_catch_with_master(master, replica)
 
+        if replica.major_version < 10:
+            replica.safe_psql(
+                "postgres",
+                "select pg_xlog_replay_pause()")
+        else:
+            replica.safe_psql(
+                "postgres",
+                "select pg_wal_replay_pause()")
+
         self.backup_node(
             backup_dir, 'replica', replica, backup_type='ptrack',
             options=[
