@@ -27,6 +27,8 @@ static pgBackup *readBackupControlFile(const char *path);
 static bool exit_hook_registered = false;
 static parray *lock_files = NULL;
 
+static bool lock_backup_internal(pgBackup *backup, bool exclusive);
+
 static timelineInfo *
 timelineInfoNew(TimeLineID tli)
 {
@@ -146,13 +148,12 @@ write_backup_status(pgBackup *backup, BackupStatus status,
  * RO locks do not conflict.
  * When taking RO lock, a brief exclusive lock is taken.
  * Pids of read-only processes are appended to separate lock file: BACKUP_RO_LOCK_PIDS
- * TODO: lock-timeout
+ * TODO: lock-timeout as parameter
  */
 bool
 lock_backup(pgBackup *backup, bool strict, bool exclusive)
 {
 	char		lock_file[MAXPGPATH];
-	char		ro_lock_file[MAXPGPATH];
 	int			fd = 0;
 	char		buffer[MAXPGPATH * 2 + 256];
 	int			ntries = LOCK_TIMEOUT;
@@ -163,7 +164,6 @@ lock_backup(pgBackup *backup, bool strict, bool exclusive)
 				my_p_pid;
 
 	join_path_components(lock_file, backup->root_dir, BACKUP_LOCK_PID);
-	join_path_components(ro_lock_file, backup->root_dir, BACKUP_RO_LOCK_PIDS);
 
 	/*
 	 * TODO: is this stuff with ppid below is relevant for us ?
@@ -384,153 +384,28 @@ grab_lock:
 	 * 1. If we are for exlusive lock, like when we are running
 	 *    delete or merge, we must check the RO lock list and see if any
 	 *    of the processes listed there are still alive.
-	 * 	  If there are any, then wait lock_timeout time and error out.
+	 * 	  If there are any, then wait lock_timeout time and return false.
 	 *
 	 * 2. If we are here for non-exlusive lock, then write the pid
 	 *    into RO lock list and release the exclusive lock.
 	 */
-	if (exclusive)
+
+	if (lock_backup_internal(backup, exclusive))
 	{
-		FILE *fp = NULL;
-		char  buf[256];
-		pid_t pid;
-		int	  ntries = LOCK_TIMEOUT;
-		int   log_freq = ntries / 5;
-
-		fp = fopen(ro_lock_file, "r");
-		if (fp == NULL && errno != ENOENT)
-			elog(ERROR, "Cannot open \"%s\": %s", ro_lock_file, strerror(errno));
-
-		/* iterate over pids in lock file */
-		while (fp && fgets(buf, sizeof(buf), fp))
+		if (!exclusive)
 		{
-			pid = atoi(buf);
-			if (pid <= 0)
-			{
-				elog(WARNING, "Bogus data in lock file \"%s\": \"%s\"", ro_lock_file, buf);
-				continue;
-			}
+			/* release exclusive lock */
+			if (fio_unlink(lock_file, FIO_BACKUP_HOST) < 0)
+				elog(ERROR, "Could not remove old lock file \"%s\": %s",
+					 lock_file, strerror(errno));
 
-			/* wait until RO lock owners go away */
-			do
-			{
-				if (interrupted)
-					elog(ERROR, "Interrupted while locking backup %s",
-								base36enc(backup->start_time));
-
-				if (pid != my_pid)
-				{
-					if (kill(pid, 0) == 0)
-					{
-						if ((ntries % log_freq) == 0)
-						{
-							elog(WARNING, "Process %d is using backup %s in read only mode, and is still running",
-								 pid, base36enc(backup->start_time));
-
-							elog(WARNING, "Waiting %u seconds on lock for backup %s", ntries,
-								base36enc(backup->start_time));
-						}
-						continue;
-					}
-					else if (errno != ESRCH)
-						elog(ERROR, "Failed to send signal 0 to a process %d: %s",
-							encoded_pid, strerror(errno));
-				}
-
-				/* locker is dead */
-				break;
-
-			} while (ntries--);
-
-			if (ntries <= 0)
-			{
-				elog(WARNING, "Cannot to lock backup %s in exclusive mode, because process %u owns read-only lock",
-						base36enc(backup->start_time), pid);
-				return false;
-			}
+            /* we are done */
+			return true;
 		}
-
-		if (fp && ferror(fp))
-			elog(ERROR, "Failed to read from file: \"%s\"", ro_lock_file);
-
-		if (fp)
-			fclose(fp);
-
-		/* unlink RO lock list */
-		fio_unlink(ro_lock_file, FIO_BACKUP_HOST);
 	}
 	else
-	{
-		FILE *fp_in = NULL;
-		FILE *fp_out = NULL;
-		char  buf[256];
-		char  buf_out[256];
-		char  ro_lock_file_tmp[MAXPGPATH];
-		pid_t pid;
+		return false;
 
-		snprintf(ro_lock_file_tmp, MAXPGPATH, "%s%s", ro_lock_file, "tmp");
-
-		fp_in = fopen(ro_lock_file, "r");
-		fp_out = fopen(ro_lock_file_tmp, "w+");
-
-		/* no lock file exists yet */
-		if (fp_in == NULL && errno != ENOENT)
-			elog(ERROR, "Cannot open \"%s\": %s", ro_lock_file, strerror(errno));
-
-		if (fp_out == NULL)
-			elog(ERROR, "Cannot open \"%s\": %s", ro_lock_file_tmp, strerror(errno));
-
-		while (fp_in && fgets(buf, sizeof(buf), fp_in))
-		{
-			pid = atoi(buf);
-			if (pid <= 0)
-			{
-				elog(WARNING, "Bogus data in lock file \"%s\": \"%s\"", ro_lock_file, buf);
-				continue;
-			}
-
-			if (pid != my_pid)
-			{
-				if (kill(pid, 0) == 0)
-				{
-					/*
-					 * Somebody is still using this backup in RO mode,
-					 * copy this pid into a new file.
-					 */
-					snprintf(buf_out, sizeof(buf_out), "%u\n", pid);
-					fputs(buf_out, fp_out);
-				}
-				else if (errno != ESRCH)
-					elog(ERROR, "Failed to send signal 0 to a process %d: %s",
-						encoded_pid, strerror(errno));
-			}
-		}
-
-		/* add my own pid */
-		snprintf(buf_out, sizeof(buf_out), "%u\n", my_pid);
-		fputs(buf_out, fp_out);
-
-		if (fp_in && ferror(fp_in))
-			elog(ERROR, "Cannot read from pid file: \"%s\"", ro_lock_file);
-
-		if (ferror(fp_out))
-			elog(ERROR, "Cannot write to pid file: \"%s\"", ro_lock_file_tmp);
-
-		if (fp_in)
-			fclose(fp_in);
-		fclose(fp_out);
-
-		if (rename(ro_lock_file_tmp, ro_lock_file) < 0)
-			elog(ERROR, "Cannot rename file \"%s\" to \"%s\": %s",
-					ro_lock_file_tmp, ro_lock_file, strerror(errno));
-
-		/* release exclusive lock */
-		if (fio_unlink(lock_file, FIO_BACKUP_HOST) < 0)
-			elog(ERROR, "Could not remove old lock file \"%s\": %s",
-				 lock_file, strerror(errno));
-
-		return true;
-	}
 
 	/*
 	 * Arrange to unlink the lock file(s) at proc_exit.
@@ -547,6 +422,145 @@ grab_lock:
 	parray_append(lock_files, pgut_strdup(lock_file));
 
 	return true;
+}
+
+bool
+lock_backup_internal(pgBackup *backup, bool exclusive)
+{
+    FILE *fp_in = NULL;
+    FILE *fp_out = NULL;
+    char  buf_in[256];
+    pid_t pid;
+    int   ntries = LOCK_TIMEOUT;
+    int   log_freq = ntries / 5;
+    char  ro_lock_file[MAXPGPATH];
+
+    join_path_components(ro_lock_file, backup->root_dir, BACKUP_RO_LOCK_PIDS);
+
+    fp_in = fopen(ro_lock_file, "r");
+    if (fp_in == NULL && errno != ENOENT)
+        elog(ERROR, "Cannot open lock file \"%s\": %s", ro_lock_file, strerror(errno));
+
+    if (exclusive)
+    {
+        /* iterate over pids in lock file */
+        while (fp_in && fgets(buf_in, sizeof(buf_in), fp_in))
+        {
+            pid = atoi(buf_in);
+            if (pid <= 0)
+            {
+                elog(WARNING, "Bogus data in lock file \"%s\": \"%s\"", ro_lock_file, buf_in);
+                continue;
+            }
+
+            /* wait until RO lock owners go away */
+            do
+            {
+                if (interrupted)
+                    elog(ERROR, "Interrupted while locking backup %s",
+                        base36enc(backup->start_time));
+
+                if (pid != my_pid)
+                {
+                    if (kill(pid, 0) == 0)
+                    {
+                        if ((ntries % log_freq) == 0)
+                        {
+                            elog(WARNING, "Process %d is using backup %s in read only mode, and is still running",
+                                    pid, base36enc(backup->start_time));
+
+                            elog(WARNING, "Waiting %u seconds on lock for backup %s", ntries,
+                                    base36enc(backup->start_time));
+                        }
+                        continue;
+                    }
+                    else if (errno != ESRCH)
+                        elog(ERROR, "Failed to send signal 0 to a process %d: %s",
+                                pid, strerror(errno));
+                }
+
+                /* locker is dead */
+                break;
+
+            } while (ntries--);
+
+            if (ntries <= 0)
+            {
+                elog(WARNING, "Cannot to lock backup %s in exclusive mode, because process %u owns read-only lock",
+                        base36enc(backup->start_time), pid);
+                return false;
+            }
+        }
+
+        if (fp_in && ferror(fp_in))
+            elog(ERROR, "Cannot read from lock file: \"%s\"", ro_lock_file);
+
+        if (fp_in)
+            fclose(fp_in);
+
+        /* unlink RO lock list */
+        fio_unlink(ro_lock_file, FIO_BACKUP_HOST);
+    }
+    else
+    {
+        char  buffer[8192]; /*TODO: malloc+realloc */
+        char  ro_lock_file_tmp[MAXPGPATH];
+        int   buffer_len = 0;
+
+        snprintf(ro_lock_file_tmp, MAXPGPATH, "%s%s", ro_lock_file, "tmp");
+
+        while (fp_in && fgets(buf_in, sizeof(buf_in), fp_in))
+        {
+            pid = atoi(buf_in);
+            if (pid <= 0)
+            {
+                elog(WARNING, "Bogus data in lock file \"%s\": \"%s\"", ro_lock_file, buf_in);
+                continue;
+            }
+
+            if (pid != my_pid)
+            {
+                if (kill(pid, 0) == 0)
+                {
+                    /*
+                     * Somebody is still using this backup in RO mode,
+                     * copy this pid into a new file.
+                     */
+                    buffer_len += snprintf(buffer+buffer_len, 4096, "%u\n", pid);
+                }
+                else if (errno != ESRCH)
+                    elog(ERROR, "Failed to send signal 0 to a process %d: %s",
+                            pid, strerror(errno));
+            }
+        }
+
+        /* add my own pid */
+        buffer_len += snprintf(buffer+buffer_len, 4096, "%u\n", my_pid);
+
+        fp_out = fopen(ro_lock_file_tmp, "w");
+        if (fp_out == NULL)
+            elog(ERROR, "Cannot open lock file \"%s\": %s", ro_lock_file_tmp, strerror(errno));
+
+        fwrite(buffer, 1, buffer_len, fp_out);
+
+        /* close pid files */
+        if (fp_in)
+        {
+            if (ferror(fp_in))
+                elog(ERROR, "Cannot read from lock file: \"%s\"", ro_lock_file);
+            fclose(fp_in);
+        }
+
+        if (ferror(fp_out))
+            elog(ERROR, "Cannot write to lock file: \"%s\"", ro_lock_file_tmp);
+        fclose(fp_out);
+
+        if (rename(ro_lock_file_tmp, ro_lock_file) < 0)
+            elog(ERROR, "Cannot rename file \"%s\" to \"%s\": %s",
+                ro_lock_file_tmp, ro_lock_file, strerror(errno));
+    }
+
+    return true;
 }
 
 /*
