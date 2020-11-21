@@ -133,8 +133,10 @@ write_backup_status(pgBackup *backup, BackupStatus status,
 	tmp->status = backup->status;
 	tmp->root_dir = pgut_strdup(backup->root_dir);
 
-	/* lock backup in exclusive more */
-	lock_backup(tmp, true, true);
+    /* lock backup in exclusive mode */
+    if (!lock_backup(tmp, strict, true))
+        elog(ERROR, "Cannot lock backup %s directory",
+                    base36enc(backup->start_time));
 
 	write_backup(tmp, strict);
 
