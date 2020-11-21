@@ -212,9 +212,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         except ProbackupException as e:
             self.assertTrue(
                 "INFO: Validate backups of the instance 'node'" in e.message and
-                "WARNING: Backup file".format(
-                    file) in e.message and
-                "is not found".format(file) in e.message and
+                "WARNING: Backup file" in e.message and "is not found" in e.message and
                 "WARNING: Backup {0} data files are corrupted".format(
                     backup_id) in e.message and
                 "WARNING: Some backups are not valid" in e.message,

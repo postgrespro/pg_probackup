@@ -142,6 +142,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
             initdb_params=['--data-checksums'])
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
@@ -184,6 +185,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'],
+            set_replication=True,
             pg_options={'autovacuum': 'off'})
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
@@ -245,6 +247,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'],
+            set_replication=True,
             pg_options={'autovacuum': 'off'})
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
@@ -1320,7 +1323,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(
             node.safe_psql(
                 'postgres',
-                'select count(*) from t1').rstrip(),
+                'select count(*) from t1').decode('utf-8').rstrip(),
             '1')
 
         # Clean after yourself
@@ -1488,7 +1491,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(
             node.safe_psql(
                 'postgres',
-                'select count(*) from t1').rstrip(),
+                'select count(*) from t1').decode('utf-8').rstrip(),
             '1')
 
         # Clean after yourself

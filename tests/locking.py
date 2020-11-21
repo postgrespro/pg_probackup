@@ -50,7 +50,7 @@ class LockingTest(ProbackupTest, unittest.TestCase):
         backup_id = self.show_pb(backup_dir, 'node')[1]['id']
 
         self.assertIn(
-            "is using backup {0} and still is running".format(backup_id),
+            "is using backup {0}, and is still running".format(backup_id),
             validate_output,
             '\n Unexpected Validate Output: {0}\n'.format(repr(validate_output)))
 
@@ -61,7 +61,8 @@ class LockingTest(ProbackupTest, unittest.TestCase):
             'RUNNING', self.show_pb(backup_dir, 'node')[1]['status'])
 
         # Clean after yourself
-        # self.del_test_dir(module_name, fname)
+        gdb.kill()
+        self.del_test_dir(module_name, fname)
 
     def test_locking_running_validate_2(self):
         """
@@ -303,8 +304,8 @@ class LockingTest(ProbackupTest, unittest.TestCase):
         make node, take full backup, take two page backups,
         launch validate on PAGE1 and stop it in the middle,
         launch restore of PAGE2.
-        Expect restore to fail because validation of
-        intermediate backup is impossible
+        Expect restore to sucseed because read-only locks
+        do not conflict
         """
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
@@ -334,24 +335,13 @@ class LockingTest(ProbackupTest, unittest.TestCase):
 
         node.cleanup()
 
-        try:
-            self.restore_node(backup_dir, 'node', node)
-            self.assertEqual(
-                1, 0,
-                "Expecting Error because restore without whole chain validation "
-                "is prohibited unless --no-validate provided.\n "
-                "Output: {0} \n CMD: {1}".format(
-                    repr(self.output), self.cmd))
-        except ProbackupException as e:
-            self.assertTrue(
-                "ERROR: Cannot lock backup {0} directory\n".format(full_id) in e.message,
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
-                    repr(e.message), self.cmd))
+        self.restore_node(backup_dir, 'node', node)
 
         # Clean after yourself
+        gdb.kill()
         self.del_test_dir(module_name, fname)
 
-    def test_locking_restore_locked_without_validation(self):
+    def test_concurrent_delete_and_restore(self):
         """
         make node, take full backup, take page backup,
         launch validate on FULL and stop it in the middle,
@@ -376,10 +366,11 @@ class LockingTest(ProbackupTest, unittest.TestCase):
         # PAGE1
         restore_id = self.backup_node(backup_dir, 'node', node, backup_type='page')
 
-        gdb = self.validate_pb(
+        gdb = self.delete_pb(
             backup_dir, 'node', backup_id=backup_id, gdb=True)
 
-        gdb.set_breakpoint('pgBackupValidate')
+        # gdb.set_breakpoint('pgFileDelete')
+        gdb.set_breakpoint('delete_backup_files')
         gdb.run_until_break()
 
         node.cleanup()
@@ -397,13 +388,14 @@ class LockingTest(ProbackupTest, unittest.TestCase):
             self.assertTrue(
                 "Backup {0} is used without validation".format(
                     restore_id) in e.message and
-                'is using backup {0} and still is running'.format(
+                'is using backup {0}, and is still running'.format(
                     backup_id) in e.message and
                 'ERROR: Cannot lock backup' in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
         # Clean after yourself
+        gdb.kill()
         self.del_test_dir(module_name, fname)
 
     def test_locking_concurrent_validate_and_backup(self):
@@ -538,3 +530,7 @@ class LockingTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
+
+# TODO:
+# test that concurrent validation and restore are not locking each other
+# check that quick exclusive lock, when taking RO-lock, is really quick
