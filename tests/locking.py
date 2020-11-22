@@ -130,6 +130,7 @@ class LockingTest(ProbackupTest, unittest.TestCase):
             'ERROR', self.show_pb(backup_dir, 'node')[1]['status'])
 
         # Clean after yourself
+        gdb.kill()
         self.del_test_dir(module_name, fname)
 
     def test_locking_running_validate_2_specific_id(self):
@@ -228,6 +229,7 @@ class LockingTest(ProbackupTest, unittest.TestCase):
                     repr(e.message), self.cmd))
 
         # Clean after yourself
+        gdb.kill()
         self.del_test_dir(module_name, fname)
 
     def test_locking_running_3(self):
@@ -297,6 +299,7 @@ class LockingTest(ProbackupTest, unittest.TestCase):
             'ERROR', self.show_pb(backup_dir, 'node')[1]['status'])
 
         # Clean after yourself
+        gdb.kill()
         self.del_test_dir(module_name, fname)
 
     def test_locking_restore_locked(self):
@@ -431,6 +434,7 @@ class LockingTest(ProbackupTest, unittest.TestCase):
         self.backup_node(backup_dir, 'node', node, backup_type='page')
 
         # Clean after yourself
+        gdb.kill()
         self.del_test_dir(module_name, fname)
 
     def test_locking_concurren_restore_and_delete(self):
@@ -475,6 +479,7 @@ class LockingTest(ProbackupTest, unittest.TestCase):
                     repr(e.message), self.cmd))
 
         # Clean after yourself
+        gdb.kill()
         self.del_test_dir(module_name, fname)
 
     def test_backup_directory_name(self):
