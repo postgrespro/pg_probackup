@@ -133,10 +133,9 @@ write_backup_status(pgBackup *backup, BackupStatus status,
 	tmp->status = backup->status;
 	tmp->root_dir = pgut_strdup(backup->root_dir);
 
-    /* lock backup in exclusive mode */
-    if (!lock_backup(tmp, strict, true))
-        elog(ERROR, "Cannot lock backup %s directory",
-                    base36enc(backup->start_time));
+	/* lock backup in exclusive mode */
+	if (!lock_backup(tmp, strict, true))
+		elog(ERROR, "Cannot lock backup %s directory", base36enc(backup->start_time));
 
 	write_backup(tmp, strict);
 
@@ -2024,7 +2023,7 @@ write_backup(pgBackup *backup, bool strict)
 	FILE   *fp = NULL;
 	char    path[MAXPGPATH];
 	char    path_temp[MAXPGPATH];
-	char    buf[4096];
+	char    buf[8192];
 
 	join_path_components(path, backup->root_dir, BACKUP_CONTROL_FILE);
 	snprintf(path_temp, sizeof(path_temp), "%s.tmp", path);
@@ -2042,9 +2041,24 @@ write_backup(pgBackup *backup, bool strict)
 
 	pgBackupWriteControl(fp, backup);
 
+	/* Ignore 'out of space' error in lax mode */
 	if (fflush(fp) != 0)
-		elog(ERROR, "Cannot flush control file \"%s\": %s",
-			 path_temp, strerror(errno));
+	{
+		int elevel = ERROR;
+		int save_errno = errno;
+
+		if (!strict && (errno == ENOSPC))
+			elevel = WARNING;
+
+		elog(elevel, "Cannot flush control file \"%s\": %s",
+				 path_temp, strerror(save_errno));
+
+		if (!strict && (save_errno == ENOSPC))
+		{
+			fclose(fp);
+			return;
+		}
+	}
 
 	if (fsync(fileno(fp)) < 0)
 		elog(ERROR, "Cannot sync control file \"%s\": %s",
