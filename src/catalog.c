@@ -151,6 +151,7 @@ write_backup_status(pgBackup *backup, BackupStatus status,
  * When taking RO lock, a brief exclusive lock is taken.
  * Pids of read-only processes are appended to separate lock file: BACKUP_RO_LOCK_PIDS
  * TODO: lock-timeout as parameter
+ * TODO: add unlock_backup function
  */
 bool
 lock_backup(pgBackup *backup, bool strict, bool exclusive)
@@ -196,8 +197,8 @@ lock_backup(pgBackup *backup, bool strict, bool exclusive)
 			/* we are done */
 			return true;
 		}
-		/* when locking backup in lax exclusive mode, we should wait until
-		 * all RO lockers are go away.
+		/* when locking backup in lax exclusive mode,
+		 * we should wait until all RO locks owners are gone.
 		 */
 		if (!strict && enospc_detected)
 		{
@@ -213,7 +214,6 @@ lock_backup(pgBackup *backup, bool strict, bool exclusive)
 	}
 	else
 		return false;
-
 
 	/*
 	 * Arrange to unlink the lock file(s) at proc_exit.
