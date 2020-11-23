@@ -27,7 +27,8 @@ static pgBackup *readBackupControlFile(const char *path);
 static bool exit_hook_registered = false;
 static parray *lock_files = NULL;
 
-static bool lock_backup_internal(pgBackup *backup, bool exclusive);
+static int lock_backup_exclusive(pgBackup *backup, bool strict);
+static bool lock_backup_read_only(pgBackup *backup, bool exclusive);
 
 static timelineInfo *
 timelineInfoNew(TimeLineID tli)
@@ -154,15 +155,100 @@ write_backup_status(pgBackup *backup, BackupStatus status,
 bool
 lock_backup(pgBackup *backup, bool strict, bool exclusive)
 {
+	int		rc;
+	char	lock_file[MAXPGPATH];
+	bool	enospc_detected = false;
+
+	join_path_components(lock_file, backup->root_dir, BACKUP_LOCK_PID);
+
+	rc = lock_backup_exclusive(backup, strict);
+
+	if (rc == 1)
+		return false;
+	else if (rc == 2)
+	{
+		enospc_detected = true;
+		if (strict)
+			return false;
+	}
+
+	/*
+	 * We have exclusive lock, now there are following scenarios:
+	 *
+	 * 1. If we are for exlusive lock, like when we are running
+	 *    delete or merge, we must check the RO lock list and see if any
+	 *    of the processes listed there are still alive.
+	 *    If there are any, then wait lock_timeout time and return false.
+	 *
+	 * 2. If we are here for non-exlusive lock, then write the pid
+	 *    into RO lock list and release the exclusive lock.
+	 */
+
+	if (lock_backup_read_only(backup, exclusive))
+	{
+		if (!exclusive)
+		{
+			/* release exclusive lock */
+			if (fio_unlink(lock_file, FIO_BACKUP_HOST) < 0)
+				elog(ERROR, "Could not remove old lock file \"%s\": %s",
+					 lock_file, strerror(errno));
+
+			/* we are done */
+			return true;
+		}
+		/* when locking backup in lax exclusive mode, we should wait until
+		 * all RO lockers are go away.
+		 */
+		if (!strict && enospc_detected)
+		{
+			/* We are in lax mode and EONSPC was encountered: once again try to grab exclusive lock,
+			 * because there is a chance that lock_backup_read_only may have freed some space on filesystem.
+			 * If somebody concurrently acquired exclusive lock, then we should give up.
+			 */
+			if (lock_backup_exclusive(backup, strict) == 1)
+				return false;
+
+			return true;
+		}
+	}
+	else
+		return false;
+
+
+	/*
+	 * Arrange to unlink the lock file(s) at proc_exit.
+	 */
+	if (!exit_hook_registered)
+	{
+		atexit(unlink_lock_atexit);
+		exit_hook_registered = true;
+	}
+
+	/* Use parray so that the lock files are unlinked in a loop */
+	if (lock_files == NULL)
+		lock_files = parray_new();
+	parray_append(lock_files, pgut_strdup(lock_file));
+
+	return true;
+}
+
+/* Lock backup in exclusive mode
+ * Result codes:
+ *  0 Success
+ *  1 Failed to acquire lock in lock_timeout time
+ *  2 Failed to acquire lock due to ENOSPC
+ */
+int
+lock_backup_exclusive(pgBackup *backup, bool strict)
+{
 	char		lock_file[MAXPGPATH];
 	int			fd = 0;
 	char		buffer[MAXPGPATH * 2 + 256];
 	int			ntries = LOCK_TIMEOUT;
-	int         log_freq = ntries / 5;
+	int			log_freq = ntries / 5;
 	int			len;
 	int			encoded_pid;
-	pid_t		my_pid,
-				my_p_pid;
+	pid_t 		my_p_pid;
 
 	join_path_components(lock_file, backup->root_dir, BACKUP_LOCK_PID);
 
@@ -186,7 +272,6 @@ lock_backup(pgBackup *backup, bool strict, bool exclusive)
 	 * would surely never launch a competing postmaster or pg_ctl process
 	 * directly.
 	 */
-	my_pid = getpid();
 #ifndef WIN32
 	my_p_pid = getppid();
 #else
@@ -324,7 +409,7 @@ grab_lock:
 
 	/* Failed to acquire exclusive lock in time */
 	if (fd <= 0)
-		return false;
+		return 1;
 
 	/*
 	 * Successfully created the file, now fill it.
@@ -338,100 +423,59 @@ grab_lock:
 
 		fio_close(fd);
 		fio_unlink(lock_file, FIO_BACKUP_HOST);
-		/* if write didn't set errno, assume problem is no disk space */
-		errno = save_errno ? save_errno : ENOSPC;
 
 		/* In lax mode if we failed to grab lock because of 'out of space error',
 		 * then treat backup as locked.
 		 * Only delete command should be run in lax mode.
 		 */
-		if (!strict && errno == ENOSPC)
-			return true;
-
-		elog(ERROR, "Could not write lock file \"%s\": %s",
-			 lock_file, strerror(errno));
+		if (!strict && save_errno == ENOSPC)
+			return 2;
+		else
+			elog(ERROR, "Could not write lock file \"%s\": %s",
+				 lock_file, strerror(save_errno));
 	}
+
 	if (fio_flush(fd) != 0)
 	{
-		int			save_errno = errno;
+		int	save_errno = errno;
 
 		fio_close(fd);
 		fio_unlink(lock_file, FIO_BACKUP_HOST);
-		errno = save_errno;
 
 		/* In lax mode if we failed to grab lock because of 'out of space error',
 		 * then treat backup as locked.
 		 * Only delete command should be run in lax mode.
 		 */
-		if (!strict && errno == ENOSPC)
-			return true;
-
-		elog(ERROR, "Could not flush lock file \"%s\": %s",
-			 lock_file, strerror(errno));
+		if (!strict && save_errno == ENOSPC)
+			return 2;
+		else
+			elog(ERROR, "Could not flush lock file \"%s\": %s",
+					lock_file, strerror(save_errno));
 	}
+
 	if (fio_close(fd) != 0)
 	{
 		int			save_errno = errno;
 
 		fio_unlink(lock_file, FIO_BACKUP_HOST);
-		errno = save_errno;
-		elog(ERROR, "Could not close lock file \"%s\": %s",
-			 lock_file, strerror(errno));
+
+		if (!strict && errno == ENOSPC)
+			return 2;
+		else
+			elog(ERROR, "Could not close lock file \"%s\": %s",
+				 lock_file, strerror(save_errno));
 	}
 
-	/*
-	 * We have exclusive lock, now there are following scenarios:
-	 *
-	 * 1. If we are for exlusive lock, like when we are running
-	 *    delete or merge, we must check the RO lock list and see if any
-	 *    of the processes listed there are still alive.
-	 * 	  If there are any, then wait lock_timeout time and return false.
-	 *
-	 * 2. If we are here for non-exlusive lock, then write the pid
-	 *    into RO lock list and release the exclusive lock.
-	 */
-
-	if (lock_backup_internal(backup, exclusive))
-	{
-		if (!exclusive)
-		{
-			/* release exclusive lock */
-			if (fio_unlink(lock_file, FIO_BACKUP_HOST) < 0)
-				elog(ERROR, "Could not remove old lock file \"%s\": %s",
-					 lock_file, strerror(errno));
-
-            /* we are done */
-			return true;
-		}
-	}
-	else
-		return false;
-
-
-	/*
-	 * Arrange to unlink the lock file(s) at proc_exit.
-	 */
-	if (!exit_hook_registered)
-	{
-		atexit(unlink_lock_atexit);
-		exit_hook_registered = true;
-	}
-
-	/* Use parray so that the lock files are unlinked in a loop */
-	if (lock_files == NULL)
-		lock_files = parray_new();
-	parray_append(lock_files, pgut_strdup(lock_file));
-
-	return true;
+	return 0;
 }
 
 bool
-lock_backup_internal(pgBackup *backup, bool exclusive)
+lock_backup_read_only(pgBackup *backup, bool exclusive)
 {
     FILE *fp_in = NULL;
     FILE *fp_out = NULL;
     char  buf_in[256];
-    pid_t pid;
+    pid_t encoded_pid;
     int   ntries = LOCK_TIMEOUT;
     int   log_freq = ntries / 5;
     char  ro_lock_file[MAXPGPATH];
@@ -447,8 +491,8 @@ lock_backup_internal(pgBackup *backup, bool exclusive)
         /* iterate over pids in lock file */
         while (fp_in && fgets(buf_in, sizeof(buf_in), fp_in))
         {
-            pid = atoi(buf_in);
-            if (pid <= 0)
+            encoded_pid = atoi(buf_in);
+            if (encoded_pid <= 0)
             {
                 elog(WARNING, "Bogus data in lock file \"%s\": \"%s\"", ro_lock_file, buf_in);
                 continue;
@@ -461,23 +505,27 @@ lock_backup_internal(pgBackup *backup, bool exclusive)
                     elog(ERROR, "Interrupted while locking backup %s",
                         base36enc(backup->start_time));
 
-                if (pid != my_pid)
+                if (encoded_pid != my_pid)
                 {
-                    if (kill(pid, 0) == 0)
+                    if (kill(encoded_pid, 0) == 0)
                     {
                         if ((ntries % log_freq) == 0)
                         {
                             elog(WARNING, "Process %d is using backup %s in read only mode, and is still running",
-                                    pid, base36enc(backup->start_time));
+                                    encoded_pid, base36enc(backup->start_time));
 
                             elog(WARNING, "Waiting %u seconds on lock for backup %s", ntries,
                                     base36enc(backup->start_time));
                         }
+
+						sleep(1);
+
+						/* try again */
                         continue;
                     }
                     else if (errno != ESRCH)
                         elog(ERROR, "Failed to send signal 0 to a process %d: %s",
-                                pid, strerror(errno));
+                                encoded_pid, strerror(errno));
                 }
 
                 /* locker is dead */
@@ -488,7 +536,7 @@ lock_backup_internal(pgBackup *backup, bool exclusive)
             if (ntries <= 0)
             {
                 elog(WARNING, "Cannot to lock backup %s in exclusive mode, because process %u owns read-only lock",
-                        base36enc(backup->start_time), pid);
+                        base36enc(backup->start_time), encoded_pid);
                 return false;
             }
         }
@@ -504,7 +552,7 @@ lock_backup_internal(pgBackup *backup, bool exclusive)
     }
     else
     {
-        char  buffer[8192]; /*TODO: malloc+realloc */
+        char  buffer[8192]; /*TODO: should be enough, but maybe malloc+realloc is better ? */
         char  ro_lock_file_tmp[MAXPGPATH];
         int   buffer_len = 0;
 
@@ -512,26 +560,26 @@ lock_backup_internal(pgBackup *backup, bool exclusive)
 
         while (fp_in && fgets(buf_in, sizeof(buf_in), fp_in))
         {
-            pid = atoi(buf_in);
-            if (pid <= 0)
+            encoded_pid = atoi(buf_in);
+            if (encoded_pid <= 0)
             {
                 elog(WARNING, "Bogus data in lock file \"%s\": \"%s\"", ro_lock_file, buf_in);
                 continue;
             }
 
-            if (pid != my_pid)
+            if (encoded_pid != my_pid)
             {
-                if (kill(pid, 0) == 0)
+                if (kill(encoded_pid, 0) == 0)
                 {
                     /*
                      * Somebody is still using this backup in RO mode,
                      * copy this pid into a new file.
                      */
-                    buffer_len += snprintf(buffer+buffer_len, 4096, "%u\n", pid);
+                    buffer_len += snprintf(buffer+buffer_len, 4096, "%u\n", encoded_pid);
                 }
                 else if (errno != ESRCH)
                     elog(ERROR, "Failed to send signal 0 to a process %d: %s",
-                            pid, strerror(errno));
+                            encoded_pid, strerror(errno));
             }
         }
 
