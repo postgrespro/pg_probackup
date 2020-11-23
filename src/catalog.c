@@ -290,6 +290,8 @@ lock_backup_exclusive(pgBackup *backup, bool strict)
 	 */
 	do
 	{
+		FILE *fp = NULL;
+
 		if (interrupted)
 			elog(ERROR, "Interrupted while locking backup %s",
 						base36enc(backup->start_time));
@@ -317,21 +319,20 @@ lock_backup_exclusive(pgBackup *backup, bool strict)
 		/*
 		 * Read the file to get the old owner's PID.  Note race condition
 		 * here: file might have been deleted since we tried to create it.
-		 * TODO: rewrite to fopen
 		 */
-		fd = fio_open(lock_file, O_RDONLY, FIO_BACKUP_HOST);
-		if (fd < 0)
+
+		fp = fopen(lock_file, "r");
+		if (fp == NULL)
 		{
 			if (errno == ENOENT)
-				continue;		/* race condition; try again */
-			elog(ERROR, "Could not open lock file \"%s\": %s",
-				 lock_file, strerror(errno));
+				continue; 	/* race condition; try again */
+			elog(ERROR, "Cannot open lock file \"%s\": %s", lock_file, strerror(errno));
 		}
-		if ((len = fio_read(fd, buffer, sizeof(buffer) - 1)) < 0)
-			elog(ERROR, "Could not read lock file \"%s\": %s",
-				 lock_file, strerror(errno));
-		fio_close(fd);
-		fd = 0;
+
+		len = fread(buffer, 1, sizeof(buffer) - 1, fp);
+		if (ferror(fp))
+			elog(ERROR, "Cannot read from lock file: \"%s\"", lock_file);
+		fclose(fp);
 
 		/*
 		 * It should be possible only as a result of system crash,
@@ -343,7 +344,6 @@ lock_backup_exclusive(pgBackup *backup, bool strict)
 			goto grab_lock;
 		}
 
-		buffer[len] = '\0';
 		encoded_pid = atoi(buffer);
 
 		if (encoded_pid <= 0)
