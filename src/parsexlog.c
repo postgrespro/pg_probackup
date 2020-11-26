@@ -846,7 +846,14 @@ get_prior_record_lsn(const char *archivedir, XLogRecPtr start_lsn,
 	 */
 	GetXLogSegNo(start_lsn, start_segno, wal_seg_size);
 	if (start_segno == segno)
+	{
 		startpoint = start_lsn;
+#if PG_VERSION_NUM >= 130000
+		if (XLogRecPtrIsInvalid(startpoint))
+			startpoint = SizeOfXLogShortPHD;
+		XLogBeginRead(xlogreader, startpoint);
+#endif
+	}
 	else
 	{
 		XLogRecPtr	found;

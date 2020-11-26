@@ -24,7 +24,7 @@
 #include "utils/thread.h"
 #include "utils/file.h"
 
-const char *progname = "pg_probackup";
+//const char *progname = "pg_probackup";
 
 /* list of files contained in backup */
 static parray *backup_files_list = NULL;
@@ -1387,7 +1387,7 @@ wait_wal_lsn(XLogRecPtr target_lsn, bool is_start_lsn, TimeLineID tli,
 				XLogRecPtr	res;
 
 				res = get_prior_record_lsn(wal_segment_dir, current.start_lsn, target_lsn, tli,
-									   in_prev_segment, instance_config.xlog_seg_size);
+										in_prev_segment, instance_config.xlog_seg_size);
 
 				if (!XLogRecPtrIsInvalid(res))
 				{

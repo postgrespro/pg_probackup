@@ -1505,7 +1505,8 @@ class ProbackupTest(object):
             'backup_label', 'tablespace_map', 'recovery.conf',
             'ptrack_control', 'ptrack_init', 'pg_control',
             'probackup_recovery.conf', 'recovery.signal',
-            'standby.signal', 'ptrack.map', 'ptrack.map.mmap'
+            'standby.signal', 'ptrack.map', 'ptrack.map.mmap',
+            'ptrack.map.tmp'
         ]
 
         if exclude_dirs:
