@@ -99,7 +99,8 @@ static pgRecoveryTarget *recovery_target_options = NULL;
 static pgRestoreParams *restore_params = NULL;
 
 time_t current_time = 0;
-bool restore_as_replica = false;
+static bool restore_as_replica = false;
+static bool no_recovery_settings = false;
 bool no_validate = false;
 IncrRestoreMode incremental_mode = INCR_NONE;
 
@@ -206,6 +207,7 @@ static ConfigOption cmd_options[] =
 	{ 'f', 158, "db-include", 		opt_datname_include_list, SOURCE_CMD_STRICT },
 	{ 'f', 159, "db-exclude", 		opt_datname_exclude_list, SOURCE_CMD_STRICT },
 	{ 'b', 'R', "restore-as-replica", &restore_as_replica,	SOURCE_CMD_STRICT },
+	{ 'b', 173, "no-recovery-settings", &no_recovery_settings,	SOURCE_CMD_STRICT },
 	{ 's', 160, "primary-conninfo",	&primary_conninfo,	SOURCE_CMD_STRICT },
 	{ 's', 'S', "primary-slot-name",&replication_slot,	SOURCE_CMD_STRICT },
 	{ 'f', 'I', "incremental-mode", opt_incr_restore_mode,	SOURCE_CMD_STRICT },
@@ -705,6 +707,7 @@ main(int argc, char *argv[])
 		if (force)
 			no_validate = true;
 
+		//TODO Why???
 		if (replication_slot != NULL)
 			restore_as_replica = true;
 
@@ -714,6 +717,18 @@ main(int argc, char *argv[])
 		restore_params->force = force;
 		restore_params->no_validate = no_validate;
 		restore_params->restore_as_replica = restore_as_replica;
+		restore_params->recovery_settings_mode = DEFAULT;
+
+		/* user can explicitly request to not update recovery settings */
+		if (no_recovery_settings)
+		{
+			if (restore_as_replica)
+				elog(ERROR, "You cannot specify '--no-recovery-settings'"
+							" and '--restore-as-replica' together");
+
+			restore_params->recovery_settings_mode = DONTWRITE;
+		}
+
 		restore_params->primary_slot_name = replication_slot;
 		restore_params->skip_block_validation = skip_block_validation;
 		restore_params->skip_external_dirs = skip_external_dirs;

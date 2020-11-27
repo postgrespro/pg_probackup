@@ -51,8 +51,11 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
                 repr(self.output), self.cmd))
 
         # 2 - Test that recovery.conf was created
+        # TODO update test
         if self.get_version(node) >= self.version_to_num('12.0'):
-            recovery_conf = os.path.join(node.data_dir, 'probackup_recovery.conf')
+            recovery_conf = os.path.join(node.data_dir, 'postgresql.auto.conf')
+            with open(recovery_conf, 'r') as f:
+                print(f.read())
         else:
             recovery_conf = os.path.join(node.data_dir, 'recovery.conf')
         self.assertEqual(os.path.isfile(recovery_conf), True)
@@ -1807,8 +1810,11 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         pgdata = self.pgdata_content(node.data_dir)
 
+        # TODO update test
         if self.get_version(node) >= self.version_to_num('12.0'):
-            recovery_conf = os.path.join(node.data_dir, 'probackup_recovery.conf')
+            recovery_conf = os.path.join(node.data_dir, 'postgresql.auto.conf')
+            with open(recovery_conf, 'r') as f:
+                print(f.read())
         else:
             recovery_conf = os.path.join(node.data_dir, 'recovery.conf')
 
@@ -1862,8 +1868,11 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         pgdata = self.pgdata_content(node.data_dir)
 
+        # TODO update test
         if self.get_version(node) >= self.version_to_num('12.0'):
-            recovery_conf = os.path.join(node.data_dir, 'probackup_recovery.conf')
+            recovery_conf = os.path.join(node.data_dir, 'postgresql.auto.conf')
+            with open(recovery_conf, 'r') as f:
+                print(f.read())
         else:
             recovery_conf = os.path.join(node.data_dir, 'recovery.conf')
 
@@ -1911,8 +1920,11 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         # Take FULL
         self.backup_node(backup_dir, 'node', node)
 
+        # TODO update test
         if self.get_version(node) >= self.version_to_num('12.0'):
-            recovery_conf = os.path.join(node.data_dir, 'probackup_recovery.conf')
+            recovery_conf = os.path.join(node.data_dir, 'postgresql.auto.conf')
+            with open(recovery_conf, 'r') as f:
+                print(f.read())
         else:
             recovery_conf = os.path.join(node.data_dir, 'recovery.conf')
 
@@ -1965,8 +1977,11 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         # Take FULL
         self.backup_node(backup_dir, 'node', node)
 
+        # TODO update test
         if self.get_version(node) >= self.version_to_num('12.0'):
-            recovery_conf = os.path.join(node.data_dir, 'probackup_recovery.conf')
+            recovery_conf = os.path.join(node.data_dir, 'postgresql.auto.conf')
+            with open(recovery_conf, 'r') as f:
+                print(f.read())
         else:
             recovery_conf = os.path.join(node.data_dir, 'recovery.conf')
 
@@ -3263,8 +3278,11 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.set_archiving(backup_dir, 'node', node)
         node.slow_start()
 
+        # TODO update test
         if self.get_version(node) >= self.version_to_num('12.0'):
-            recovery_conf = os.path.join(node.data_dir, 'probackup_recovery.conf')
+            recovery_conf = os.path.join(node.data_dir, 'postgresql.auto.conf')
+            with open(recovery_conf, 'r') as f:
+                print(f.read())
         else:
             recovery_conf = os.path.join(node.data_dir, 'recovery.conf')
 
@@ -3351,8 +3369,11 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
                 os.path.isfile(standby_signal),
                 "File '{0}' do not exists".format(standby_signal))
 
+        # TODO update test
         if self.get_version(node) >= self.version_to_num('12.0'):
-            recovery_conf = os.path.join(replica.data_dir, 'probackup_recovery.conf')
+            recovery_conf = os.path.join(node.data_dir, 'postgresql.auto.conf')
+            with open(recovery_conf, 'r') as f:
+                print(f.read())
         else:
             recovery_conf = os.path.join(replica.data_dir, 'recovery.conf')
 

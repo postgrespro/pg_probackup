@@ -144,6 +144,16 @@ typedef enum PartialRestoreType
 	EXCLUDE,
 } PartialRestoreType;
 
+typedef enum RecoverySettingsMode
+{
+	DEFAULT, /* not set */
+	DONTWRITE, /* explicitly forbid to update recovery settings */
+			   //TODO Should we always clean/preserve old recovery settings,
+			   // or make it configurable?
+	PITR_REQUESTED, /* can be set based on other parameters
+	                 * if not explicitly forbidden */
+} RecoverySettingsMode;
+
 typedef enum CompressAlg
 {
 	NOT_DEFINED_COMPRESS = 0,
@@ -489,6 +499,8 @@ typedef struct pgRestoreParams
 	bool	is_restore;
 	bool	no_validate;
 	bool	restore_as_replica;
+	//TODO maybe somehow add restore_as_replica as one of RecoverySettingsModes
+	RecoverySettingsMode recovery_settings_mode;
 	bool	skip_external_dirs;
 	bool	skip_block_validation; //Start using it
 	const char *restore_command;

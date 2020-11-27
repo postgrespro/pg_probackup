@@ -1142,8 +1142,9 @@ class ProbackupTest(object):
         out_dict = {}
 
         if self.get_version(node) >= self.version_to_num('12.0'):
-            recovery_conf_path = os.path.join(
-                node.data_dir, 'probackup_recovery.conf')
+            recovery_conf_path = os.path.join(node.data_dir, 'postgresql.auto.conf')
+            with open(recovery_conf_path, 'r') as f:
+                print(f.read())
         else:
             recovery_conf_path = os.path.join(node.data_dir, 'recovery.conf')
 
