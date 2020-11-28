@@ -96,7 +96,7 @@ extern bool parse_int(const char *value, int *result, int flags,
 					  const char **hintmsg);
 extern bool parse_lsn(const char *value, XLogRecPtr *result);
 
-extern void time2iso(char *buf, size_t len, time_t time);
+extern void time2iso(char *buf, size_t len, time_t time, bool utc);
 
 extern void convert_from_base_unit(int64 base_value, int base_unit,
 								   int64 *value, const char **unit);

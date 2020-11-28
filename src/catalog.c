@@ -472,7 +472,7 @@ catalog_get_backup_list(const char *instance_name, time_t requested_backup_id)
 		}
 		else if (strcmp(base36enc(backup->start_time), data_ent->d_name) != 0)
 		{
-			elog(VERBOSE, "backup ID in control file \"%s\" doesn't match name of the backup folder \"%s\"",
+			elog(WARNING, "backup ID in control file \"%s\" doesn't match name of the backup folder \"%s\"",
 				 base36enc(backup->start_time), backup_conf_path);
 		}
 
@@ -1635,7 +1635,7 @@ pin_backup(pgBackup	*target_backup, pgSetBackupParams *set_backup_params)
 	{
 		char	expire_timestamp[100];
 
-		time2iso(expire_timestamp, lengthof(expire_timestamp), target_backup->expire_time);
+		time2iso(expire_timestamp, lengthof(expire_timestamp), target_backup->expire_time, false);
 		elog(INFO, "Backup %s is pinned until '%s'", base36enc(target_backup->start_time),
 														expire_timestamp);
 	}
@@ -1686,7 +1686,7 @@ add_note(pgBackup *target_backup, char *note)
  * Write information about backup.in to stream "out".
  */
 void
-pgBackupWriteControl(FILE *out, pgBackup *backup)
+pgBackupWriteControl(FILE *out, pgBackup *backup, bool utc)
 {
 	char		timestamp[100];
 
@@ -1718,27 +1718,27 @@ pgBackupWriteControl(FILE *out, pgBackup *backup)
 			(uint32) (backup->stop_lsn >> 32),
 			(uint32) backup->stop_lsn);
 
-	time2iso(timestamp, lengthof(timestamp), backup->start_time);
+	time2iso(timestamp, lengthof(timestamp), backup->start_time, utc);
 	fio_fprintf(out, "start-time = '%s'\n", timestamp);
 	if (backup->merge_time > 0)
 	{
-		time2iso(timestamp, lengthof(timestamp), backup->merge_time);
+		time2iso(timestamp, lengthof(timestamp), backup->merge_time, utc);
 		fio_fprintf(out, "merge-time = '%s'\n", timestamp);
 	}
 	if (backup->end_time > 0)
 	{
-		time2iso(timestamp, lengthof(timestamp), backup->end_time);
+		time2iso(timestamp, lengthof(timestamp), backup->end_time, utc);
 		fio_fprintf(out, "end-time = '%s'\n", timestamp);
 	}
 	fio_fprintf(out, "recovery-xid = " XID_FMT "\n", backup->recovery_xid);
 	if (backup->recovery_time > 0)
 	{
-		time2iso(timestamp, lengthof(timestamp), backup->recovery_time);
+		time2iso(timestamp, lengthof(timestamp), backup->recovery_time, utc);
 		fio_fprintf(out, "recovery-time = '%s'\n", timestamp);
 	}
 	if (backup->expire_time > 0)
 	{
-		time2iso(timestamp, lengthof(timestamp), backup->expire_time);
+		time2iso(timestamp, lengthof(timestamp), backup->expire_time, utc);
 		fio_fprintf(out, "expire-time = '%s'\n", timestamp);
 	}
 
@@ -1809,7 +1809,7 @@ write_backup(pgBackup *backup, bool strict)
 
 	setvbuf(fp, buf, _IOFBF, sizeof(buf));
 
-	pgBackupWriteControl(fp, backup);
+	pgBackupWriteControl(fp, backup, true);
 
 	if (fflush(fp) != 0)
 		elog(ERROR, "Cannot flush control file \"%s\": %s",

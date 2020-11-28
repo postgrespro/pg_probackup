@@ -133,7 +133,7 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool
 		pg_ptrack_clear(backup_conn, nodeInfo->ptrack_version_num);
 
 	/* notify start of backup to PostgreSQL server */
-	time2iso(label, lengthof(label), current.start_time);
+	time2iso(label, lengthof(label), current.start_time, false);
 	strncat(label, " with pg_probackup", lengthof(label) -
 			strlen(" with pg_probackup"));
 
