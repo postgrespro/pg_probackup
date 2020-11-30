@@ -3499,3 +3499,77 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
+
+    def test_pg_12_probackup_recovery_conf_compatibility(self):
+        """
+        https://github.com/postgrespro/pg_probackup/issues/249
+
+        pg_probackup version must be 12 or greater
+        """
+
+        if self.old_probackup_version:
+            if self.version_to_num(self.old_probackup_version) >= self.version_to_num('2.4.5'):
+                return unittest.skip('You need pg_probackup < 2.4.5 for this test')
+
+        if self.pg_config_version < self.version_to_num('12.0'):
+           return unittest.skip('You need PostgreSQL >= 12 for this test')
+
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'],
+            pg_options={'autovacuum': 'off'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # FULL backup
+        self.backup_node(backup_dir, 'node', node, old_binary=True)
+
+        node.pgbench_init(scale=5)
+
+        node.safe_psql(
+            'postgres',
+            'CREATE TABLE t1 as SELECT * from pgbench_accounts where aid > 200000 and aid < 450000')
+
+        time = node.safe_psql(
+            'SELECT current_timestamp(0)::timestamptz;').decode('utf-8').rstrip()
+
+        node.safe_psql(
+            'postgres',
+            'DELETE from pgbench_accounts where aid > 200000 and aid < 450000')
+
+        node.cleanup()
+
+        self.restore_node(
+            backup_dir, 'node',node,
+            options=[
+                    "--recovery-target-time={0}".format(time),
+                    "--recovery-target-action=promote"],
+            old_binary=True)
+
+        node.slow_start()
+
+        self.backup_node(backup_dir, 'node', node, old_binary=True)
+
+        node.pgbench_init(scale=5)
+
+        xid = node.safe_psql(
+            'SELECT txid_current()').decode('utf-8').rstrip()
+        node.pgbench_init(scale=1)
+
+        node.cleanup()
+
+        self.restore_node(
+            backup_dir, 'node',node,
+            options=[
+                    "--recovery-target-xid={0}".format(xid),
+                    "--recovery-target-action=promote"])
+
+        node.slow_start()
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)

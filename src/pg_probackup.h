@@ -146,10 +146,10 @@ typedef enum PartialRestoreType
 
 typedef enum RecoverySettingsMode
 {
-	DEFAULT, /* not set */
-	DONTWRITE, /* explicitly forbid to update recovery settings */
-			   //TODO Should we always clean/preserve old recovery settings,
-			   // or make it configurable?
+	DEFAULT,	/* not set */
+	DONTWRITE,	/* explicitly forbid to update recovery settings */
+				//TODO Should we always clean/preserve old recovery settings,
+				// or make it configurable?
 	PITR_REQUESTED, /* can be set based on other parameters
 	                 * if not explicitly forbidden */
 } RecoverySettingsMode;

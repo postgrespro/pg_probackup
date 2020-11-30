@@ -49,12 +49,12 @@ print_standby_settings_common(FILE *fp, pgBackup *backup, pgRestoreParams *param
 #if PG_VERSION_NUM >= 120000
 static void
 update_recovery_options(pgBackup *backup,
-						pgRestoreParams *params, pgRecoveryTarget *rt);		
+						pgRestoreParams *params, pgRecoveryTarget *rt);
 #else
 static void
 update_recovery_options_before_v12(pgBackup *backup,
 								   pgRestoreParams *params, pgRecoveryTarget *rt);
-#endif	
+#endif
 
 static void create_recovery_conf(time_t backup_id,
 								 pgRecoveryTarget *rt,
@@ -62,7 +62,6 @@ static void create_recovery_conf(time_t backup_id,
 								 pgRestoreParams *params);
 static void *restore_files(void *arg);
 static void set_orphan_status(parray *backups, pgBackup *parent_backup);
-static void pg12_recovery_config(pgBackup *backup, bool add_include);
 
 static void restore_chain(pgBackup *dest_backup, parray *parent_chain,
 						  parray *dbOid_exclude_list, pgRestoreParams *params,
@@ -1229,9 +1228,6 @@ create_recovery_conf(time_t backup_id,
 					 pgBackup *backup,
 					 pgRestoreParams *params)
 {
-	char		path[MAXPGPATH];
-	FILE	   *fp;
-	bool		pitr_requested;
 	bool		target_latest;
 	bool		target_immediate;
 	bool 		restore_command_provided = false;
@@ -1273,7 +1269,6 @@ create_recovery_conf(time_t backup_id,
 
 	/* TODO Do we need to cleanup old settings if not requested? */
 
-
 	elog(LOG, "----------------------------------------");
 
 #if PG_VERSION_NUM >= 120000
@@ -1290,7 +1285,7 @@ print_recovery_settings(FILE *fp, pgBackup *backup,
 							   pgRestoreParams *params, pgRecoveryTarget *rt)
 {
 	char restore_command_guc[16384];
-	fio_fprintf(fp, "\n## recovery settings\n");
+	fio_fprintf(fp, "## recovery settings\n");
 
 	/* If restore_command is provided, use it. Otherwise construct it from scratch. */
 	if (instance_config.restore_command &&
@@ -1346,7 +1341,7 @@ print_recovery_settings(FILE *fp, pgBackup *backup,
 	if (rt->inclusive_specified)
 		fio_fprintf(fp, "recovery_target_inclusive = '%s'\n",
 				rt->target_inclusive ? "true" : "false");
-	
+
 	if (rt->target_tli)
 		fio_fprintf(fp, "recovery_target_timeline = '%u'\n", rt->target_tli);
 	else
@@ -1361,7 +1356,7 @@ print_recovery_settings(FILE *fp, pgBackup *backup,
 			fio_fprintf(fp, "recovery_target_timeline = 'current'\n");
 #endif
 	}
-	
+
 	if (rt->target_action)
 		fio_fprintf(fp, "recovery_target_action = '%s'\n", rt->target_action);
 	else
@@ -1385,6 +1380,7 @@ print_standby_settings_common(FILE *fp, pgBackup *backup, pgRestoreParams *param
 		fio_fprintf(fp, "primary_slot_name = '%s'\n", params->primary_slot_name);
 }
 
+#if PG_VERSION_NUM < 120000
 static void
 update_recovery_options_before_v12(pgBackup *backup,
 								   pgRestoreParams *params, pgRecoveryTarget *rt)
@@ -1420,9 +1416,9 @@ update_recovery_options_before_v12(pgBackup *backup,
 		elog(ERROR, "cannot write file \"%s\": %s", path,
 			 strerror(errno));
 }
+#endif
 
 /*
- * 
  * Read postgresql.auto.conf, clean old recovery options,
  * to avoid unexpected intersections.
  * Write recovery options for this backup.
@@ -1439,7 +1435,6 @@ update_recovery_options(pgBackup *backup,
 	FILE	   *fp;
 	FILE	   *fp_tmp;
 	struct stat st;
-	char 		*buf;
 	char		current_time_str[100];
 	char		fline[16384] = "\0";
 
@@ -1467,12 +1462,18 @@ update_recovery_options(pgBackup *backup,
 	if (fp_tmp == NULL)
 		elog(ERROR, "cannot open \"%s\": %s", postgres_auto_path_tmp, strerror(errno));
 
-
 	while (fgets(fline, lengthof(fline), fp))
 	{
 		char *start, *end;
 		char  line[16384] = "\0";
-		start = end = fline; 
+		start = end = fline;
+
+		/* ignore "include 'probackup_recovery.conf'" directive */
+		if (strstr(fline, "include") &&
+			strstr(fline, "probackup_recovery.conf"))
+		{
+			continue;
+		}
 
 		while( (end = strchr(start, '\n')) )
 		{
