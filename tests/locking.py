@@ -463,7 +463,6 @@ class LockingTest(ProbackupTest, unittest.TestCase):
         gdb.set_breakpoint('create_data_directories')
         gdb.run_until_break()
 
-        # This PAGE backup is expected to be successfull
         try:
             self.delete_pb(backup_dir, 'node', full_id)
             self.assertEqual(

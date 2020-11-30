@@ -151,7 +151,7 @@ write_backup_status(pgBackup *backup, BackupStatus status,
  * Only read only tasks are allowed to take non-exclusive locks.
  * RO locks do not conflict.
  * When taking RO lock, a brief exclusive lock is taken.
- * Pids of read-only processes are appended to separate lock file: BACKUP_RO_LOCK_PIDS
+ * Pids of read-only processes are appended to separate lock file: BACKUP_RO_LOCK_FILE
  * TODO: lock-timeout as parameter
  * TODO: add unlock_backup function
  */
@@ -162,7 +162,7 @@ lock_backup(pgBackup *backup, bool strict, bool exclusive)
 	char	lock_file[MAXPGPATH];
 	bool	enospc_detected = false;
 
-	join_path_components(lock_file, backup->root_dir, BACKUP_LOCK_PID);
+	join_path_components(lock_file, backup->root_dir, BACKUP_LOCK_FILE);
 
 	rc = lock_backup_exclusive(backup, strict);
 
@@ -206,8 +206,9 @@ lock_backup(pgBackup *backup, bool strict, bool exclusive)
 		if (!strict && enospc_detected)
 		{
 			/* We are in lax mode and EONSPC was encountered: once again try to grab exclusive lock,
-			 * because there is a chance that lock_backup_read_only may have freed some space on filesystem.
-			 * If somebody concurrently acquired exclusive lock, then we should give up.
+			 * because there is a chance that lock_backup_read_only may have freed some space on filesystem,
+			 * thanks to unlinking of BACKUP_RO_LOCK_FILE.
+			 * If somebody concurrently acquired exclusive lock first, then we should give up.
 			 */
 			if (lock_backup_exclusive(backup, strict) == 1)
 				return false;
@@ -253,7 +254,7 @@ lock_backup_exclusive(pgBackup *backup, bool strict)
 	int			encoded_pid;
 	pid_t 		my_p_pid;
 
-	join_path_components(lock_file, backup->root_dir, BACKUP_LOCK_PID);
+	join_path_components(lock_file, backup->root_dir, BACKUP_LOCK_FILE);
 
 	/*
 	 * TODO: is this stuff with ppid below is relevant for us ?
@@ -483,7 +484,7 @@ wait_read_only_owners(pgBackup *backup)
     int   log_freq = ntries / 5;
     char  lock_file[MAXPGPATH];
 
-    join_path_components(lock_file, backup->root_dir, BACKUP_RO_LOCK_PIDS);
+    join_path_components(lock_file, backup->root_dir, BACKUP_RO_LOCK_FILE);
 
     fp = fopen(lock_file, "r");
     if (fp == NULL && errno != ENOENT)
@@ -575,7 +576,7 @@ lock_backup_read_only(pgBackup *backup)
 	char  lock_file_tmp[MAXPGPATH];
 	int   buffer_len = 0;
 
-	join_path_components(lock_file, backup->root_dir, BACKUP_RO_LOCK_PIDS);
+	join_path_components(lock_file, backup->root_dir, BACKUP_RO_LOCK_FILE);
 	snprintf(lock_file_tmp, MAXPGPATH, "%s%s", lock_file, "tmp");
 
 	/* open already existing lock files */
@@ -2090,7 +2091,9 @@ pgBackupWriteControl(FILE *out, pgBackup *backup)
 
 /*
  * Save the backup content into BACKUP_CONTROL_FILE.
- * TODO: honor the strict flag
+ * Flag strict allows to ignore "out of space" error
+ * when attempting to lock backup. Only delete is allowed
+ * to use this functionality.
  */
 void
 write_backup(pgBackup *backup, bool strict)
