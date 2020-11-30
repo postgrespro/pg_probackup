@@ -1473,16 +1473,12 @@ time2iso(char *buf, size_t len, time_t time, bool utc)
 	char	   *ptr = buf;
 	char 	   *local_tz = getenv("TZ");
 
-	/* By default we must convert time into local timezone */
+	/* set timezone to UTC if requested */
 	if (utc)
-	{
-		/* set timezone to UTC */
 		setenv("TZ", "UTC", 1);
-	}
 
 	ptm = gmtime(&time);
 	gmt = mktime(ptm);
-
 	ptm = localtime(&time);
 
 	if (utc)
