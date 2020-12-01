@@ -1116,7 +1116,7 @@ class ProbackupTest(object):
 
     def delete_pb(
             self, backup_dir, instance,
-            backup_id=None, options=[], old_binary=False):
+            backup_id=None, options=[], old_binary=False, gdb=False):
         cmd_list = [
             'delete',
             '-B', backup_dir
@@ -1126,7 +1126,7 @@ class ProbackupTest(object):
         if backup_id:
             cmd_list += ['-i', backup_id]
 
-        return self.run_pb(cmd_list + options, old_binary=old_binary)
+        return self.run_pb(cmd_list + options, old_binary=old_binary, gdb=gdb)
 
     def delete_expired(
             self, backup_dir, instance, options=[], old_binary=False):
