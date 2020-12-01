@@ -1920,11 +1920,8 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         # Take FULL
         self.backup_node(backup_dir, 'node', node)
 
-        # TODO update test
         if self.get_version(node) >= self.version_to_num('12.0'):
             recovery_conf = os.path.join(node.data_dir, 'postgresql.auto.conf')
-            with open(recovery_conf, 'r') as f:
-                print(f.read())
         else:
             recovery_conf = os.path.join(node.data_dir, 'recovery.conf')
 
@@ -1936,22 +1933,34 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         #     open(recovery_conf, 'rb').read()).hexdigest()
 
         with open(recovery_conf, 'r') as f:
-            content_1 = f.read()
+            content_1 = ''
+            while True:
+                line = f.readline()
 
-        # restore
+                if not line:
+                    break
+                if line.startswith("#"):
+                    continue
+                content_1 += line
+
         node.cleanup()
-
         self.restore_node(backup_dir, 'node', node, options=['--recovery-target=latest'])
 
         # hash_2 = hashlib.md5(
         #     open(recovery_conf, 'rb').read()).hexdigest()
 
         with open(recovery_conf, 'r') as f:
-            content_2 = f.read()
+            content_2 = ''
+            while True:
+                line = f.readline()
+
+                if not line:
+                    break
+                if line.startswith("#"):
+                    continue
+                content_2 += line
 
         self.assertEqual(content_1, content_2)
-
-        # self.assertEqual(hash_1, hash_2)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -3372,7 +3381,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         # TODO update test
         if self.get_version(node) >= self.version_to_num('12.0'):
-            recovery_conf = os.path.join(node.data_dir, 'postgresql.auto.conf')
+            recovery_conf = os.path.join(replica.data_dir, 'postgresql.auto.conf')
             with open(recovery_conf, 'r') as f:
                 print(f.read())
         else:
@@ -3571,6 +3580,98 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
                     "--recovery-target-action=promote"])
 
         node.slow_start()
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    def test_drop_postgresql_auto_conf(self):
+        """
+        https://github.com/postgrespro/pg_probackup/issues/249
+
+        pg_probackup version must be 12 or greater
+        """
+
+        if self.pg_config_version < self.version_to_num('12.0'):
+           return unittest.skip('You need PostgreSQL >= 12 for this test')
+
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'],
+            pg_options={'autovacuum': 'off'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # FULL backup
+        self.backup_node(backup_dir, 'node', node)
+
+        # drop postgresql.auto.conf
+        auto_path = os.path.join(node.data_dir, "postgresql.auto.conf")
+        os.remove(auto_path)
+
+        self.backup_node(backup_dir, 'node', node, backup_type='page')
+
+        node.cleanup()
+
+        self.restore_node(
+            backup_dir, 'node',node,
+            options=[
+                    "--recovery-target=latest",
+                    "--recovery-target-action=promote"])
+
+        node.slow_start()
+
+        self.assertTrue(os.path.exists(auto_path))
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    def test_truncate_postgresql_auto_conf(self):
+        """
+        https://github.com/postgrespro/pg_probackup/issues/249
+
+        pg_probackup version must be 12 or greater
+        """
+
+        if self.pg_config_version < self.version_to_num('12.0'):
+           return unittest.skip('You need PostgreSQL >= 12 for this test')
+
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'],
+            pg_options={'autovacuum': 'off'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # FULL backup
+        self.backup_node(backup_dir, 'node', node)
+
+        # truncate postgresql.auto.conf
+        auto_path = os.path.join(node.data_dir, "postgresql.auto.conf")
+        with open(auto_path, "w+") as f:
+            f.truncate()
+
+        self.backup_node(backup_dir, 'node', node, backup_type='page')
+
+        node.cleanup()
+
+        self.restore_node(
+            backup_dir, 'node',node,
+            options=[
+                    "--recovery-target=latest",
+                    "--recovery-target-action=promote"])
+        node.slow_start()
+
+        self.assertTrue(os.path.exists(auto_path))
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)

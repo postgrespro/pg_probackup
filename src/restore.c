@@ -1429,7 +1429,11 @@ update_recovery_options(pgBackup *backup,
 	FILE	   *fp_tmp;
 	struct stat st;
 	char		current_time_str[100];
-	char		fline[16384] = "\0";
+	/* postgresql.auto.conf parsing */
+	char		line[16384] = "\0";
+	char	   *buf = NULL;
+	int		    buf_len = 0;
+	int		    buf_len_max = 16384;
 
 	elog(LOG, "update recovery settings in postgresql.auto.conf");
 
@@ -1447,7 +1451,7 @@ update_recovery_options(pgBackup *backup,
 	}
 
 	fp = fio_open_stream(postgres_auto_path, FIO_DB_HOST);
-	if (fp == NULL)
+	if (fp == NULL && errno != ENOENT)
 		elog(ERROR, "cannot open \"%s\": %s", postgres_auto_path, strerror(errno));
 
 	sprintf(postgres_auto_path_tmp, "%s.tmp", postgres_auto_path);
@@ -1455,45 +1459,52 @@ update_recovery_options(pgBackup *backup,
 	if (fp_tmp == NULL)
 		elog(ERROR, "cannot open \"%s\": %s", postgres_auto_path_tmp, strerror(errno));
 
-	while (fgets(fline, lengthof(fline), fp))
+	while (fp && fgets(line, lengthof(line), fp))
 	{
-		char *start, *end;
-		char  line[16384] = "\0";
-		start = end = fline;
-
 		/* ignore "include 'probackup_recovery.conf'" directive */
-		if (strstr(fline, "include") &&
-			strstr(fline, "probackup_recovery.conf"))
+		if (strstr(line, "include") &&
+			strstr(line, "probackup_recovery.conf"))
 		{
 			continue;
 		}
 
-		while( (end = strchr(start, '\n')) )
+		/* ignore already existing recovery options */
+		if (strstr(line, "restore_command") ||
+			strstr(line, "recovery_target"))
 		{
-			strncpy(line, start, end - start + 1);
-			/* copy all rows, except ones that relate to recovery settings */
-			if (!strstr(line, "restore_command") && !strstr(fline, "recovery_target"))
-			{
-				elog(WARNING, "preserve lline: %s", line); //DEBUG
-				fio_fwrite(fp_tmp, line, end - start + 1);
-			}
-			start = end + 1;
+			continue;
 		}
+
+		if (!buf)
+			buf = pgut_malloc(buf_len_max);
+
+		/* avoid buffer overflow */
+		if ((buf_len + strlen(line)) >= buf_len_max)
+		{
+			buf_len_max += (buf_len + strlen(line)) *2;
+			buf = pgut_realloc(buf, buf_len_max);
+		}
+
+		buf_len += snprintf(buf+buf_len, sizeof(line), "%s", line);
 	}
 
+	/* close input postgresql.auto.conf */
+	if (fp)
+		fio_close_stream(fp);
 
-	if (ferror(fp))
-		elog(ERROR, "Failed to read from file: \"%s\"", postgres_auto_path);
+	/* TODO: detect remote error */
+	if (buf_len > 0)
+		fio_fwrite(fp_tmp, buf, buf_len);
 
-	fio_close_stream(fp);
-	fio_close_stream(fp_tmp);
+	if (fio_fflush(fp_tmp) != 0 ||
+		fio_fclose(fp_tmp))
+			elog(ERROR, "Cannot write file \"%s\": %s", postgres_auto_path_tmp,
+				strerror(errno));
+	pg_free(buf);
 
 	if (fio_rename(postgres_auto_path_tmp, postgres_auto_path, FIO_DB_HOST) < 0)
-	{
-		fio_unlink(postgres_auto_path_tmp, FIO_BACKUP_HOST);
 		elog(ERROR, "Cannot rename file \"%s\" to \"%s\": %s",
 					postgres_auto_path_tmp, postgres_auto_path, strerror(errno));
-	}
 
 	if (fio_chmod(postgres_auto_path, FILE_PERMISSION, FIO_DB_HOST) == -1)
 		elog(ERROR, "Cannot change mode of \"%s\": %s", postgres_auto_path, strerror(errno));
