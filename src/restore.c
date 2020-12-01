@@ -1260,8 +1260,6 @@ create_recovery_conf(time_t backup_id,
 		target_immediate || target_latest || restore_command_provided)
 		params->recovery_settings_mode = PITR_REQUESTED;
 
-	/* TODO Do we need to cleanup old settings if not requested? */
-
 	elog(LOG, "----------------------------------------");
 
 #if PG_VERSION_NUM >= 120000
