@@ -79,7 +79,7 @@ extern const char  *PROGRAM_EMAIL;
 /* Timeout defaults */
 #define ARCHIVE_TIMEOUT_DEFAULT		300
 #define REPLICA_TIMEOUT_DEFAULT		300
-#define LOCK_TIMEOUT				10
+#define LOCK_TIMEOUT				30
 
 /* Directory/File permission */
 #define DIR_PERMISSION		(0700)

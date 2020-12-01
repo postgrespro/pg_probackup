@@ -146,14 +146,25 @@ write_backup_status(pgBackup *backup, BackupStatus status,
 }
 
 /*
- * Create exclusive lockfile in the backup's directory.
- * non-exclusive lock are placed in separate lock file
- * Only read only tasks are allowed to take non-exclusive locks.
- * RO locks do not conflict.
+ * Lock backup in either exclusive or non-exclusive (read-only) mode.
+ * "strict" flag allows to ignore "out of space" errors and should be
+ * used only by DELETE command to free disk space on filled up
+ * filesystem.
+ *
+ * Only read only tasks (validate, restore) are allowed to take non-exclusive locks.
+ * Changing backup metadata must be done with exclusive lock.
+ *
+ * Only one process can hold exclusive lock at any time.
+ * Exlusive lock - PID of process, holding the lock - is placed in
+ * lock file: BACKUP_LOCK_FILE.
+ *
+ * Multiple proccess are allowed to take non-exclusive locks simultaneously.
+ * Non-exclusive locks - PIDs of proccesses, holding the lock - are placed in
+ * separate lock file: BACKUP_RO_LOCK_FILE.
  * When taking RO lock, a brief exclusive lock is taken.
- * Pids of read-only processes are appended to separate lock file: BACKUP_RO_LOCK_FILE
+ *
  * TODO: lock-timeout as parameter
- * TODO: add unlock_backup function
+ * TODO: we must think about more fine grain unlock mechanism - separate unlock_backup() function.
  */
 bool
 lock_backup(pgBackup *backup, bool strict, bool exclusive)
