@@ -192,7 +192,7 @@ pgBackupValidate(pgBackup *backup, pgRestoreParams *params)
 		backup->status = BACKUP_STATUS_CORRUPT;
 
 	write_backup_status(backup, corrupted ? BACKUP_STATUS_CORRUPT :
-											BACKUP_STATUS_OK, instance_name, true);
+						BACKUP_STATUS_OK, instance_name, true);
 
 	if (corrupted)
 		elog(WARNING, "Backup %s data files are corrupted", base36enc(backup->start_time));
@@ -570,7 +570,7 @@ do_validate_instance(void)
 			base_full_backup = current_backup;
 
 		/* Do not interrupt, validate the next backup */
-		if (!lock_backup(current_backup, true))
+		if (!lock_backup(current_backup, true, false))
 		{
 			elog(WARNING, "Cannot lock backup %s directory, skip validation",
 				 base36enc(current_backup->start_time));
@@ -665,7 +665,7 @@ do_validate_instance(void)
 						if (backup->status == BACKUP_STATUS_ORPHAN)
 						{
 							/* Do not interrupt, validate the next backup */
-							if (!lock_backup(backup, true))
+							if (!lock_backup(backup, true, false))
 							{
 								elog(WARNING, "Cannot lock backup %s directory, skip validation",
 									 base36enc(backup->start_time));

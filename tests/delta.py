@@ -433,11 +433,11 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
         node.safe_psql("postgres", "checkpoint")
 
         # GET LOGICAL CONTENT FROM NODE
-        result = node.safe_psql("postgres", "select * from pgbench_accounts")
+        result = node.safe_psql("postgres", "select count(*) from pgbench_accounts")
         # delta BACKUP
         self.backup_node(
-            backup_dir, 'node', node, backup_type='delta',
-            options=['--stream'])
+            backup_dir, 'node', node,
+            backup_type='delta', options=['--stream'])
         # GET PHYSICAL CONTENT FROM NODE
         pgdata = self.pgdata_content(node.data_dir)
 
@@ -450,8 +450,10 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
             restored_node, 'somedata_restored')
 
         self.restore_node(
-            backup_dir, 'node', restored_node, options=[
-            "-j", "4", "-T", "{0}={1}".format(tblspc_path, tblspc_path_new)])
+            backup_dir, 'node', restored_node,
+            options=[
+                "-j", "4", "-T", "{0}={1}".format(
+                    tblspc_path, tblspc_path_new)])
 
         # GET PHYSICAL CONTENT FROM NODE_RESTORED
         pgdata_restored = self.pgdata_content(restored_node.data_dir)
@@ -461,7 +463,8 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
         restored_node.slow_start()
 
         result_new = restored_node.safe_psql(
-            "postgres", "select * from pgbench_accounts")
+            "postgres",
+            "select count(*) from pgbench_accounts")
 
         # COMPARE RESTORED FILES
         self.assertEqual(result, result_new, 'data is lost')
