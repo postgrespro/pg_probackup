@@ -705,10 +705,6 @@ main(int argc, char *argv[])
 		if (force)
 			no_validate = true;
 
-		//TODO Why???
-		if (replication_slot != NULL)
-			restore_as_replica = true;
-
 		/* keep all params in one structure */
 		restore_params = pgut_new(pgRestoreParams);
 		restore_params->is_restore = (backup_subcmd == RESTORE_CMD);
