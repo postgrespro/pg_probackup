@@ -291,6 +291,8 @@ typedef enum ShowFormat
 #define PROGRAM_VERSION	"2.4.4"
 #define AGENT_PROTOCOL_VERSION 20404
 
+/* update only when changing storage format */
+#define STORAGE_FORMAT_VERSION "2.4.4"
 
 typedef struct ConnectionOptions
 {
