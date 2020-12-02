@@ -679,7 +679,7 @@ option_get_value(ConfigOption *opt)
 				if (t > 0)
 				{
 					timestamp = palloc(100);
-					time2iso(timestamp, 100, t);
+					time2iso(timestamp, 100, t, false);
 				}
 				else
 					timestamp = palloc0(1 /* just null termination */);
@@ -1111,6 +1111,8 @@ parse_time(const char *value, time_t *result, bool utc_default)
 	struct tm	tm;
 	char		junk[2];
 
+	char 	   *local_tz = getenv("TZ");
+
 	/* tmp = replace( value, !isalnum, ' ' ) */
 	tmp = pgut_malloc(strlen(value) + + 1);
 	len = 0;
@@ -1221,25 +1223,26 @@ parse_time(const char *value, time_t *result, bool utc_default)
 	/* determine whether Daylight Saving Time is in effect */
 	tm.tm_isdst = -1;
 
+	/* set timezone to UTC */
+	setenv("TZ", "UTC", 1);
+
+	/* convert time to utc unix time */
 	*result = mktime(&tm);
+
+	/* return old timezone back if any */
+	if (local_tz)
+		setenv("TZ", local_tz, 1);
+	else
+		unsetenv("TZ");
 
 	/* adjust time zone */
 	if (tz_set || utc_default)
 	{
-		time_t		ltime = time(NULL);
-		struct tm  *ptm = gmtime(&ltime);
-		time_t		gmt = mktime(ptm);
-		time_t		offset;
-
 		/* UTC time */
 		*result -= tz;
-
-		/* Get local time */
-		ptm = localtime(&ltime);
-		offset = ltime - gmt + (ptm->tm_isdst ? 3600 : 0);
-
-		*result += offset;
 	}
+
+	pg_free(local_tz);
 
 	return true;
 }
@@ -1462,14 +1465,32 @@ convert_from_base_unit_u(uint64 base_value, int base_unit,
  * Convert time_t value to ISO-8601 format string. Always set timezone offset.
  */
 void
-time2iso(char *buf, size_t len, time_t time)
+time2iso(char *buf, size_t len, time_t time, bool utc)
 {
-	struct tm  *ptm = gmtime(&time);
-	time_t		gmt = mktime(ptm);
+	struct tm  *ptm = NULL;
+	time_t		gmt;
 	time_t		offset;
 	char	   *ptr = buf;
+	char 	   *local_tz = getenv("TZ");
 
+	/* set timezone to UTC if requested */
+	if (utc)
+		setenv("TZ", "UTC", 1);
+
+	ptm = gmtime(&time);
+	gmt = mktime(ptm);
 	ptm = localtime(&time);
+
+	if (utc)
+	{
+		/* return old timezone back if any */
+		if (local_tz)
+			setenv("TZ", local_tz, 1);
+		else
+			unsetenv("TZ");
+	}
+
+	/* adjust timezone offset */
 	offset = time - gmt + (ptm->tm_isdst ? 3600 : 0);
 
 	strftime(ptr, len, "%Y-%m-%d %H:%M:%S", ptm);
@@ -1485,4 +1506,6 @@ time2iso(char *buf, size_t len, time_t time)
 		snprintf(ptr, len - (ptr - buf), ":%02d",
 				 abs((int) offset % SECS_PER_HOUR) / SECS_PER_MINUTE);
 	}
+
+	pg_free(local_tz);
 }
