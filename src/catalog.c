@@ -2154,7 +2154,7 @@ write_backup(pgBackup *backup, bool strict)
 		elog(ERROR, "Cannot close control file \"%s\": %s",
 			 path_temp, strerror(errno));
 
-	if (fio_fsync(path_temp, FIO_BACKUP_HOST)) < 0)
+	if (fio_sync(path_temp, FIO_BACKUP_HOST) < 0)
 		elog(ERROR, "Cannot sync control file \"%s\": %s",
 			 path_temp, strerror(errno));
 
