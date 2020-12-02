@@ -400,7 +400,7 @@ do_merge(time_t backup_id)
 	parray_append(merge_list, full_backup);
 
 	/* Lock merge chain */
-	catalog_lock_backup_list(merge_list, parray_num(merge_list) - 1, 0, true);
+	catalog_lock_backup_list(merge_list, parray_num(merge_list) - 1, 0, true, true);
 
 	/* do actual merge */
 	merge_chain(merge_list, full_backup, dest_backup);

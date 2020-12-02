@@ -66,7 +66,8 @@ extern const char  *PROGRAM_EMAIL;
 #define PG_GLOBAL_DIR			"global"
 #define BACKUP_CONTROL_FILE		"backup.control"
 #define BACKUP_CATALOG_CONF_FILE	"pg_probackup.conf"
-#define BACKUP_CATALOG_PID		"backup.pid"
+#define BACKUP_LOCK_FILE		"backup.pid"
+#define BACKUP_RO_LOCK_FILE		"backup_ro.pid"
 #define DATABASE_FILE_LIST		"backup_content.control"
 #define PG_BACKUP_LABEL_FILE	"backup_label"
 #define PG_TABLESPACE_MAP_FILE "tablespace_map"
@@ -78,6 +79,7 @@ extern const char  *PROGRAM_EMAIL;
 /* Timeout defaults */
 #define ARCHIVE_TIMEOUT_DEFAULT		300
 #define REPLICA_TIMEOUT_DEFAULT		300
+#define LOCK_TIMEOUT				30
 
 /* Directory/File permission */
 #define DIR_PERMISSION		(0700)
@@ -868,14 +870,14 @@ extern void write_backup(pgBackup *backup, bool strict);
 extern void write_backup_status(pgBackup *backup, BackupStatus status,
 								const char *instance_name, bool strict);
 extern void write_backup_data_bytes(pgBackup *backup);
-extern bool lock_backup(pgBackup *backup, bool strict);
+extern bool lock_backup(pgBackup *backup, bool strict, bool exclusive);
 
 extern const char *pgBackupGetBackupMode(pgBackup *backup);
 
 extern parray *catalog_get_instance_list(void);
 extern parray *catalog_get_backup_list(const char *instance_name, time_t requested_backup_id);
 extern void catalog_lock_backup_list(parray *backup_list, int from_idx,
-									 int to_idx, bool strict);
+									 int to_idx, bool strict, bool exclusive);
 extern pgBackup *catalog_get_last_data_backup(parray *backup_list,
 											  TimeLineID tli,
 											  time_t current_start_time);
