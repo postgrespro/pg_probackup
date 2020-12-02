@@ -394,10 +394,9 @@ struct pgBackup
 	TimeLineID		tli; 		/* timeline of start and stop backup lsns */
 	XLogRecPtr		start_lsn;	/* backup's starting transaction log location */
 	XLogRecPtr		stop_lsn;	/* backup's finishing transaction log location */
-	time_t			start_time;	/* since this moment backup has status
-								 * BACKUP_STATUS_RUNNING */
-	time_t			merge_dest_backup;	/* start_time of incremental backup,
-									 * this backup is merging with.
+	time_t			start_time;	/* UTC time of backup creation */
+	time_t			merge_dest_backup;	/* start_time of incremental backup with
+									 * which this backup is merging with.
 									 * Only available for FULL backups
 									 * with MERGING or MERGED statuses */
 	time_t			merge_time; /* the moment when merge was started or 0 */
@@ -892,7 +891,7 @@ extern void do_set_backup(const char *instance_name, time_t backup_id,
 extern void pin_backup(pgBackup	*target_backup,
 							pgSetBackupParams *set_backup_params);
 extern void add_note(pgBackup *target_backup, char *note);
-extern void pgBackupWriteControl(FILE *out, pgBackup *backup);
+extern void pgBackupWriteControl(FILE *out, pgBackup *backup, bool utc);
 extern void write_backup_filelist(pgBackup *backup, parray *files,
 								  const char *root, parray *external_list, bool sync);
 
@@ -1081,7 +1080,7 @@ extern void set_min_recovery_point(pgFile *file, const char *backup_path,
 extern void copy_pgcontrol_file(const char *from_fullpath, fio_location from_location,
 					const char *to_fullpath, fio_location to_location, pgFile *file);
 
-extern void time2iso(char *buf, size_t len, time_t time);
+extern void time2iso(char *buf, size_t len, time_t time, bool utc);
 extern const char *status2str(BackupStatus status);
 extern BackupStatus str2status(const char *status);
 extern const char *base36enc(long unsigned int value);

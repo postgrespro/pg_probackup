@@ -789,7 +789,7 @@ catalog_get_backup_list(const char *instance_name, time_t requested_backup_id)
 		}
 		else if (strcmp(base36enc(backup->start_time), data_ent->d_name) != 0)
 		{
-			elog(VERBOSE, "backup ID in control file \"%s\" doesn't match name of the backup folder \"%s\"",
+			elog(WARNING, "backup ID in control file \"%s\" doesn't match name of the backup folder \"%s\"",
 				 base36enc(backup->start_time), backup_conf_path);
 		}
 
@@ -1952,7 +1952,7 @@ pin_backup(pgBackup	*target_backup, pgSetBackupParams *set_backup_params)
 	{
 		char	expire_timestamp[100];
 
-		time2iso(expire_timestamp, lengthof(expire_timestamp), target_backup->expire_time);
+		time2iso(expire_timestamp, lengthof(expire_timestamp), target_backup->expire_time, false);
 		elog(INFO, "Backup %s is pinned until '%s'", base36enc(target_backup->start_time),
 														expire_timestamp);
 	}
@@ -2003,7 +2003,7 @@ add_note(pgBackup *target_backup, char *note)
  * Write information about backup.in to stream "out".
  */
 void
-pgBackupWriteControl(FILE *out, pgBackup *backup)
+pgBackupWriteControl(FILE *out, pgBackup *backup, bool utc)
 {
 	char		timestamp[100];
 
@@ -2035,27 +2035,27 @@ pgBackupWriteControl(FILE *out, pgBackup *backup)
 			(uint32) (backup->stop_lsn >> 32),
 			(uint32) backup->stop_lsn);
 
-	time2iso(timestamp, lengthof(timestamp), backup->start_time);
+	time2iso(timestamp, lengthof(timestamp), backup->start_time, utc);
 	fio_fprintf(out, "start-time = '%s'\n", timestamp);
 	if (backup->merge_time > 0)
 	{
-		time2iso(timestamp, lengthof(timestamp), backup->merge_time);
+		time2iso(timestamp, lengthof(timestamp), backup->merge_time, utc);
 		fio_fprintf(out, "merge-time = '%s'\n", timestamp);
 	}
 	if (backup->end_time > 0)
 	{
-		time2iso(timestamp, lengthof(timestamp), backup->end_time);
+		time2iso(timestamp, lengthof(timestamp), backup->end_time, utc);
 		fio_fprintf(out, "end-time = '%s'\n", timestamp);
 	}
 	fio_fprintf(out, "recovery-xid = " XID_FMT "\n", backup->recovery_xid);
 	if (backup->recovery_time > 0)
 	{
-		time2iso(timestamp, lengthof(timestamp), backup->recovery_time);
+		time2iso(timestamp, lengthof(timestamp), backup->recovery_time, utc);
 		fio_fprintf(out, "recovery-time = '%s'\n", timestamp);
 	}
 	if (backup->expire_time > 0)
 	{
-		time2iso(timestamp, lengthof(timestamp), backup->expire_time);
+		time2iso(timestamp, lengthof(timestamp), backup->expire_time, utc);
 		fio_fprintf(out, "expire-time = '%s'\n", timestamp);
 	}
 
@@ -2109,7 +2109,7 @@ pgBackupWriteControl(FILE *out, pgBackup *backup)
 void
 write_backup(pgBackup *backup, bool strict)
 {
-	FILE   *fp_out = NULL;
+	FILE   *fp = NULL;
 	char    path[MAXPGPATH];
 	char    path_temp[MAXPGPATH];
 	char    buf[8192];
@@ -2117,8 +2117,8 @@ write_backup(pgBackup *backup, bool strict)
 	join_path_components(path, backup->root_dir, BACKUP_CONTROL_FILE);
 	snprintf(path_temp, sizeof(path_temp), "%s.tmp", path);
 
-	fp_out = fopen(path_temp, PG_BINARY_W);
-	if (fp_out == NULL)
+	fp = fopen(path_temp, PG_BINARY_W);
+	if (fp == NULL)
 		elog(ERROR, "Cannot open control file \"%s\": %s",
 			 path_temp, strerror(errno));
 
@@ -2126,12 +2126,12 @@ write_backup(pgBackup *backup, bool strict)
 		elog(ERROR, "Cannot change mode of \"%s\": %s", path_temp,
 			 strerror(errno));
 
-	setvbuf(fp_out, buf, _IOFBF, sizeof(buf));
+	setvbuf(fp, buf, _IOFBF, sizeof(buf));
 
-	pgBackupWriteControl(fp_out, backup);
+	pgBackupWriteControl(fp, backup, true);
 
 	/* Ignore 'out of space' error in lax mode */
-	if (fflush(fp_out) != 0)
+	if (fflush(fp) != 0)
 	{
 		int elevel = ERROR;
 		int save_errno = errno;
@@ -2144,17 +2144,18 @@ write_backup(pgBackup *backup, bool strict)
 
 		if (!strict && (save_errno == ENOSPC))
 		{
-			fclose(fp_out);
+			fclose(fp);
+			fio_unlink(path_temp, FIO_BACKUP_HOST);
 			return;
 		}
 	}
 
-	if (fsync(fileno(fp_out)) < 0)
-		elog(ERROR, "Cannot sync control file \"%s\": %s",
+	if (fclose(fp) != 0)
+		elog(ERROR, "Cannot close control file \"%s\": %s",
 			 path_temp, strerror(errno));
 
-	if (fclose(fp_out) != 0)
-		elog(ERROR, "Cannot close control file \"%s\": %s",
+	if (fio_sync(path_temp, FIO_BACKUP_HOST) < 0)
+		elog(ERROR, "Cannot sync control file \"%s\": %s",
 			 path_temp, strerror(errno));
 
 	if (rename(path_temp, path) < 0)

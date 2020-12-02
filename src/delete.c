@@ -316,7 +316,7 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 				(backup->expire_time > current_time))
 			{
 				char		expire_timestamp[100];
-				time2iso(expire_timestamp, lengthof(expire_timestamp), backup->expire_time);
+				time2iso(expire_timestamp, lengthof(expire_timestamp), backup->expire_time, false);
 
 				elog(LOG, "Backup %s is pinned until '%s', retain",
 					base36enc(backup->start_time), expire_timestamp);
@@ -740,7 +740,7 @@ delete_backup_files(pgBackup *backup)
 		return;
 	}
 
-	time2iso(timestamp, lengthof(timestamp), backup->recovery_time);
+	time2iso(timestamp, lengthof(timestamp), backup->recovery_time, false);
 
 	elog(INFO, "Delete: %s %s",
 		 base36enc(backup->start_time), timestamp);

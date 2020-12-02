@@ -643,7 +643,7 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 	time_t		start_time, end_time;
 
 	/* Preparations for actual restoring */
-	time2iso(timestamp, lengthof(timestamp), dest_backup->start_time);
+	time2iso(timestamp, lengthof(timestamp), dest_backup->start_time, false);
 	elog(INFO, "Restoring the database from backup at %s", timestamp);
 
 	dest_files = get_backup_filelist(dest_backup, true);
@@ -1465,7 +1465,7 @@ pg12_recovery_config(pgBackup *backup, bool add_include)
 	{
 		char		current_time_str[100];
 
-		time2iso(current_time_str, lengthof(current_time_str), current_time);
+		time2iso(current_time_str, lengthof(current_time_str), current_time, false);
 
 		snprintf(postgres_auto_path, lengthof(postgres_auto_path),
 					"%s/postgresql.auto.conf", instance_config.pgdata);
