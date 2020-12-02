@@ -1,6 +1,8 @@
 import os
 import unittest
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
+import subprocess
+from time import sleep
 
 
 module_name = 'time_stamp'
@@ -70,5 +72,156 @@ class CheckTimeStamp(ProbackupTest, unittest.TestCase):
         self.backup_node(
             backup_dir, 'node', node, options=['--stream', '-j 2'])
         
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    @unittest.skip("skip")
+    # @unittest.expectedFailure
+    def test_dst_timezone_handling(self):
+        """for manual testing"""
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'],
+            pg_options={'autovacuum': 'off'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        print(subprocess.Popen(
+            ['sudo', 'timedatectl', 'set-timezone', 'US/Detroit'],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE).communicate())
+
+        subprocess.Popen(
+            ['sudo', 'timedatectl', 'set-ntp', 'false'],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE).communicate()
+
+        subprocess.Popen(
+            ['sudo', 'timedatectl', 'set-time', '2020-05-25 12:00:00'],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE).communicate()
+
+        # FULL
+        output = self.backup_node(backup_dir, 'node', node, return_id=False)
+        self.assertNotIn("backup ID in control file", output)
+
+        # move to dst
+        subprocess.Popen(
+            ['sudo', 'timedatectl', 'set-time', '2020-10-25 12:00:00'],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE).communicate()
+
+        # DELTA
+        output = self.backup_node(
+            backup_dir, 'node', node, backup_type='delta', return_id=False)
+        self.assertNotIn("backup ID in control file", output)
+
+        subprocess.Popen(
+            ['sudo', 'timedatectl', 'set-time', '2020-12-01 12:00:00'],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE).communicate()
+
+        # DELTA
+        self.backup_node(backup_dir, 'node', node, backup_type='delta')
+
+        output = self.show_pb(backup_dir, as_json=False, as_text=True)
+        self.assertNotIn("backup ID in control file", output)
+
+        subprocess.Popen(
+            ['sudo', 'timedatectl', 'set-ntp', 'true'],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE).communicate()
+
+        sleep(10)
+
+        self.backup_node(backup_dir, 'node', node, backup_type='delta')
+
+        output = self.show_pb(backup_dir, as_json=False, as_text=True)
+        self.assertNotIn("backup ID in control file", output)
+
+        subprocess.Popen(
+            ['sudo', 'timedatectl', 'set-timezone', 'US/Moscow'],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE).communicate()
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    @unittest.skip("skip")
+    def test_dst_timezone_handling_backward_compatibilty(self):
+        """for manual testing"""
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'],
+            pg_options={'autovacuum': 'off'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        subprocess.Popen(
+            ['sudo', 'timedatectl', 'set-timezone', 'US/Detroit'],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE).communicate()
+
+        subprocess.Popen(
+            ['sudo', 'timedatectl', 'set-ntp', 'false'],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE).communicate()
+
+        subprocess.Popen(
+            ['sudo', 'timedatectl', 'set-time', '2020-05-25 12:00:00'],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE).communicate()
+
+        # FULL
+        self.backup_node(backup_dir, 'node', node, old_binary=True, return_id=False)
+
+        # move to dst
+        subprocess.Popen(
+            ['sudo', 'timedatectl', 'set-time', '2020-10-25 12:00:00'],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE).communicate()
+
+        # DELTA
+        output = self.backup_node(
+            backup_dir, 'node', node, backup_type='delta', old_binary=True, return_id=False)
+
+        subprocess.Popen(
+            ['sudo', 'timedatectl', 'set-time', '2020-12-01 12:00:00'],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE).communicate()
+
+        # DELTA
+        self.backup_node(backup_dir, 'node', node, backup_type='delta')
+
+        output = self.show_pb(backup_dir, as_json=False, as_text=True)
+        self.assertNotIn("backup ID in control file", output)
+
+        subprocess.Popen(
+            ['sudo', 'timedatectl', 'set-ntp', 'true'],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE).communicate()
+
+        sleep(10)
+
+        self.backup_node(backup_dir, 'node', node, backup_type='delta')
+
+        output = self.show_pb(backup_dir, as_json=False, as_text=True)
+        self.assertNotIn("backup ID in control file", output)
+
+        subprocess.Popen(
+            ['sudo', 'timedatectl', 'set-timezone', 'US/Moscow'],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE).communicate()
+
         # Clean after yourself
         self.del_test_dir(module_name, fname)
