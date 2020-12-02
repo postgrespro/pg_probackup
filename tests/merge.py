@@ -1475,7 +1475,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
         self.del_test_dir(module_name, fname)
 
-    @unittest.skip("skip")
+    # @unittest.skip("skip")
     def test_crash_after_opening_backup_control_2(self):
         """
         check that crashing after opening backup_content.control
@@ -1529,8 +1529,8 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         gdb.set_breakpoint('write_backup_filelist')
         gdb.run_until_break()
 
-        gdb.set_breakpoint('sprintf')
-        gdb.continue_execution_until_break(1)
+#        gdb.set_breakpoint('sprintf')
+#        gdb.continue_execution_until_break(1)
 
         gdb._execute('signal SIGKILL')
 
@@ -1567,7 +1567,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
         self.del_test_dir(module_name, fname)
 
-    @unittest.skip("skip")
+    # @unittest.skip("skip")
     def test_losing_file_after_failed_merge(self):
         """
         check that crashing after opening backup_content.control
@@ -1622,8 +1622,8 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         gdb.set_breakpoint('write_backup_filelist')
         gdb.run_until_break()
 
-        gdb.set_breakpoint('sprintf')
-        gdb.continue_execution_until_break(20)
+#        gdb.set_breakpoint('sprintf')
+#        gdb.continue_execution_until_break(20)
 
         gdb._execute('signal SIGKILL')
 
