@@ -4409,6 +4409,10 @@ pg_probackup archive-get -B <replaceable>backup_dir</replaceable> --instance <re
       <listitem>
       <para>
         Specifies the timestamp up to which recovery will proceed.
+        If timezone offset is not specified, local timezone is used.
+      </para>
+      <para>
+       Example: <literal>--recovery-target-time='2020-01-01 00:00:00+03'</literal>
       </para>
       </listitem>
       </varlistentry>
@@ -4595,6 +4599,7 @@ pg_probackup archive-get -B <replaceable>backup_dir</replaceable> --instance <re
       <para>
           Specifies the timestamp up to which the backup will stay
           pinned. Must be an ISO-8601 complaint timestamp.
+          If timezone offset is not specified, local timezone is used.
       </para>
       <para>
        Example: <literal>--expire-time='2020-01-01 00:00:00+03'</literal>
