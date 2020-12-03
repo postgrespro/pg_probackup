@@ -1228,8 +1228,13 @@ parse_time(const char *value, time_t *result, bool utc_default)
 	 * treat it as UTC if requested, otherwise as local timezone
 	 */
 	if (tz_set || utc_default)
+	{
 		/* set timezone to UTC */
 		pgut_setenv("TZ", "UTC");
+#ifdef WIN32
+		tzset();
+#endif
+	}
 
 	/* convert time to utc unix time */
 	*result = mktime(&tm);
@@ -1239,6 +1244,10 @@ parse_time(const char *value, time_t *result, bool utc_default)
 		pgut_setenv("TZ", local_tz);
 	else
 		pgut_unsetenv("TZ");
+
+#ifdef WIN32
+	tzset();
+#endif
 
 	/* adjust time zone */
 	if (tz_set || utc_default)
@@ -1480,7 +1489,12 @@ time2iso(char *buf, size_t len, time_t time, bool utc)
 
 	/* set timezone to UTC if requested */
 	if (utc)
+	{
 		pgut_setenv("TZ", "UTC");
+#ifdef WIN32
+		tzset();
+#endif
+	}
 
 	ptm = gmtime(&time);
 	gmt = mktime(ptm);
@@ -1493,6 +1507,9 @@ time2iso(char *buf, size_t len, time_t time, bool utc)
 			pgut_setenv("TZ", local_tz);
 		else
 			pgut_unsetenv("TZ");
+#ifdef WIN32
+		tzset();
+#endif
 	}
 
 	/* adjust timezone offset */
