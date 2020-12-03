@@ -1158,6 +1158,9 @@ extern void fio_list_dir(parray *files, const char *root, bool exclude, bool fol
 
 extern bool pgut_rmtree(const char *path, bool rmtopdir, bool strict);
 
+extern void pgut_setenv(const char *key, const char *val);
+extern void pgut_unsetenv(const char *key);
+
 extern PageState *fio_get_checksum_map(const char *fullpath, uint32 checksum_version, int n_blocks,
 									XLogRecPtr dest_stop_lsn, BlockNumber segmentno, fio_location location);
 
