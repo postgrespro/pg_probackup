@@ -3492,7 +3492,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         self.set_auto_conf(
             node_restored_1,
-            {'port': node_restored_1.port, 'hot_standby': 'on'})
+            {'port': node_restored_1.port, 'hot_standby': 'off'})
 
         node_restored_1.slow_start()
 
