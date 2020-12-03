@@ -1223,8 +1223,11 @@ parse_time(const char *value, time_t *result, bool utc_default)
 	/* determine whether Daylight Saving Time is in effect */
 	tm.tm_isdst = -1;
 
-	/* if tz is not set, treat it as local timezone */
-	if (tz_set)
+	/*
+	 * If tz is not set,
+	 * treat it as UTC if requested, otherwise as local timezone
+	 */
+	if (tz_set || utc_default)
 		/* set timezone to UTC */
 		setenv("TZ", "UTC", 1);
 
