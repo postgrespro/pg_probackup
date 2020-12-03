@@ -49,7 +49,13 @@ class CheckTimeStamp(ProbackupTest, unittest.TestCase):
             show_backup = show_backup + self.show_pb(backup_dir, 'node')
             i += 1
 
+        print(show_backup[1]['id'])
+        print(show_backup[2]['id'])
+
         self.assertTrue(show_backup[1]['id'] == show_backup[2]['id'], "ERROR: Localtime format using instead of UTC")
+
+        output = self.show_pb(backup_dir, as_json=False, as_text=True)
+        self.assertNotIn("backup ID in control file", output)
 
         node.stop()
         # Clean after yourself
@@ -92,7 +98,7 @@ class CheckTimeStamp(ProbackupTest, unittest.TestCase):
         node.slow_start()
 
         print(subprocess.Popen(
-            ['sudo', 'timedatectl', 'set-timezone', 'US/Detroit'],
+            ['sudo', 'timedatectl', 'set-timezone', 'America/Detroit'],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE).communicate())
 
@@ -168,7 +174,7 @@ class CheckTimeStamp(ProbackupTest, unittest.TestCase):
         node.slow_start()
 
         subprocess.Popen(
-            ['sudo', 'timedatectl', 'set-timezone', 'US/Detroit'],
+            ['sudo', 'timedatectl', 'set-timezone', 'America/Detroit'],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE).communicate()
 
