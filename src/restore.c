@@ -1212,7 +1212,7 @@ done:
 }
 
 /*
- * Create recovery.conf (probackup_recovery.conf in case of PG12)
+ * Create recovery.conf (postgresql.auto.conf in case of PG12)
  * with given recovery target parameters
  */
 static void

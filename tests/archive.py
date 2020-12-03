@@ -1607,7 +1607,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
                 ])
 
         if self.get_version(node) >= self.version_to_num('12.0'):
-            recovery_conf = os.path.join(node.data_dir, 'probackup_recovery.conf')
+            recovery_conf = os.path.join(node.data_dir, 'postgresql.auto.conf')
         else:
             recovery_conf = os.path.join(node.data_dir, 'recovery.conf')
 
@@ -1682,7 +1682,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         self.restore_node(backup_dir, 'node', node)
 
         if self.get_version(node) >= self.version_to_num('12.0'):
-            recovery_conf = os.path.join(node.data_dir, 'probackup_recovery.conf')
+            recovery_conf = os.path.join(node.data_dir, 'postgresql.auto.conf')
         else:
             recovery_conf = os.path.join(node.data_dir, 'recovery.conf')
 
@@ -2096,7 +2096,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
         if node.major_version >= 12:
             node.append_conf(
-                'probackup_recovery.conf', "restore_command = '{0}'".format(restore_command))
+                'postgresql.auto.conf', "restore_command = '{0}'".format(restore_command))
         else:
             node.append_conf(
                 'recovery.conf', "restore_command = '{0}'".format(restore_command))

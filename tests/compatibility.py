@@ -675,7 +675,7 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         # check that in-place is disabled
         self.assertIn(
             "WARNING: In-place merge is disabled "
-            "because of program versions mismatch", output)
+            "because of storage format incompatibility", output)
 
         # restore merged backup
         node_restored = self.make_simple_node(
@@ -1077,7 +1077,7 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         # check that in-place is disabled
         self.assertNotIn(
             "WARNING: In-place merge is disabled "
-            "because of program versions mismatch", output)
+            "because of storage format incompatibility", output)
 
         # restore merged backup
         node_restored = self.make_simple_node(

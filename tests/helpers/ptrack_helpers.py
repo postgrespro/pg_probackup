@@ -1326,10 +1326,6 @@ class ProbackupTest(object):
                 f.close()
 
             config = 'postgresql.auto.conf'
-            probackup_recovery_path = os.path.join(replica.data_dir, 'probackup_recovery.conf')
-            if os.path.exists(probackup_recovery_path):
-                if os.stat(probackup_recovery_path).st_size > 0:
-                    config = 'probackup_recovery.conf'
 
             if not log_shipping:
                 self.set_auto_conf(
@@ -1547,6 +1543,7 @@ class ProbackupTest(object):
                 directory_dict['files'][file_relpath] = {'is_datafile': False}
                 with open(file_fullpath, 'rb') as f:
                     directory_dict['files'][file_relpath]['md5'] = hashlib.md5(f.read()).hexdigest()
+                    f.close()
 #                directory_dict['files'][file_relpath]['md5'] = hashlib.md5(
 #                    f = open(file_fullpath, 'rb').read()).hexdigest()
 
