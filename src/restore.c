@@ -1379,6 +1379,16 @@ update_recovery_options_before_v12(pgBackup *backup,
 	FILE	   *fp;
 	char		path[MAXPGPATH];
 
+	/*
+	 * If PITR is not requested and instance is not restored as replica,
+	 * then recovery.conf should not be created.
+	 */
+	if (params->recovery_settings_mode != PITR_REQUESTED &&
+		!params->restore_as_replica)
+	{
+		return;
+	}
+
 	elog(LOG, "update recovery settings in recovery.conf");
 	snprintf(path, lengthof(path), "%s/recovery.conf", instance_config.pgdata);
 
