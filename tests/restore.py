@@ -3675,3 +3675,62 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_concurrent_restore(self):
+        """"""
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        node.pgbench_init(scale=1)
+
+        # FULL backup
+        self.backup_node(
+            backup_dir, 'node', node,
+            options=['--stream', '--compress'])
+
+        pgbench = node.pgbench(options=['-T', '7', '-c', '1', '--no-vacuum'])
+        pgbench.wait()
+
+        # DELTA backup
+        self.backup_node(
+            backup_dir, 'node', node, backup_type='delta',
+            options=['--stream', '--compress', '--no-validate'])
+
+        pgdata1 = self.pgdata_content(node.data_dir)
+
+        node_restored = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node_restored'))
+
+        node.cleanup()
+        node_restored.cleanup()
+
+        gdb = self.restore_node(
+            backup_dir, 'node', node, options=['--no-validate'], gdb=True)
+
+        gdb.set_breakpoint('restore_data_file')
+        gdb.run_until_break()
+
+        self.restore_node(
+            backup_dir, 'node', node_restored, options=['--no-validate'])
+
+        gdb.remove_all_breakpoints()
+        gdb.continue_execution_until_exit()
+
+        pgdata2 = self.pgdata_content(node.data_dir)
+        pgdata3 = self.pgdata_content(node_restored.data_dir)
+
+        self.compare_pgdata(pgdata1, pgdata2)
+        self.compare_pgdata(pgdata2, pgdata3)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
