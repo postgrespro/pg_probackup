@@ -67,6 +67,8 @@ static bool stop_streaming(XLogRecPtr xlogpos, uint32 timeline,
 static void add_walsegment_to_filelist(parray *filelist, uint32 timeline,
                                        XLogRecPtr xlogpos, char *basedir,
                                        uint32 xlog_seg_size);
+static void add_history_file_to_filelist(parray *filelist, uint32 timeline,
+										 char *basedir);
 
 /*
  * Run IDENTIFY_SYSTEM through a given connection and
@@ -255,6 +257,9 @@ StreamLog(void *arg)
                                stop_stream_lsn, (char *) stream_arg->basedir,
                                instance_config.xlog_seg_size);
 
+    /* append history file to walsegment filelist */
+    add_history_file_to_filelist(xlog_files_list, stream_arg->starttli, (char *) stream_arg->basedir);
+
     /*
      * TODO: remove redundant WAL segments
      * walk pg_wal and remove files with segno greater that of stop_lsn`s segno +1
@@ -398,7 +403,7 @@ wait_WAL_streaming_end(parray *backup_files_list)
 void
 add_walsegment_to_filelist(parray *filelist, uint32 timeline, XLogRecPtr xlogpos, char *basedir, uint32 xlog_seg_size)
 {
-	XLogSegNo xlog_segno;
+    XLogSegNo xlog_segno;
     char wal_segment_name[MAXFNAMELEN];
     char wal_segment_relpath[MAXPGPATH];
     char wal_segment_fullpath[MAXPGPATH];
@@ -447,6 +452,35 @@ add_walsegment_to_filelist(parray *filelist, uint32 timeline, XLogRecPtr xlogpos
     /* Should we recheck it using stat? */
     file->write_size = xlog_seg_size;
     file->uncompressed_size = xlog_seg_size;
+
+    /* append file to filelist */
+    parray_append(filelist, file);
+}
+
+/* Append streamed WAL segment to filelist  */
+void
+add_history_file_to_filelist(parray *filelist, uint32 timeline, char *basedir)
+{
+    char filename[MAXFNAMELEN];
+    char fullpath[MAXPGPATH];
+    char relpath[MAXPGPATH];
+    pgFile *file = NULL;
+
+    /* Timeline 1 does not have a history file */
+    if (timeline == 1)
+        return;
+
+    snprintf(filename, lengthof(filename), "%08X.history", timeline);
+    join_path_components(fullpath, basedir, filename);
+    join_path_components(relpath, PG_XLOG_DIR, filename);
+
+    file = pgFileNew(fullpath, relpath, false, 0, FIO_BACKUP_HOST);
+    file->name = file->rel_path;
+
+    /* calculate crc */
+    file->crc = pgFileGetCRC(fullpath, true, false);
+    file->write_size = file->size;
+    file->uncompressed_size = file->size;
 
     /* append file to filelist */
     parray_append(filelist, file);
