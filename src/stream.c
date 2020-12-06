@@ -427,7 +427,6 @@ add_walsegment_to_filelist(parray *filelist, uint32 timeline, XLogRecPtr xlogpos
     join_path_components(wal_segment_relpath, PG_XLOG_DIR, wal_segment_name);
 
     file = pgFileNew(wal_segment_fullpath, wal_segment_relpath, false, 0, FIO_BACKUP_HOST);
-    file->name = file->rel_path;
 
     /*
      * Check if file is already in the list
@@ -457,7 +456,7 @@ add_walsegment_to_filelist(parray *filelist, uint32 timeline, XLogRecPtr xlogpos
     parray_append(filelist, file);
 }
 
-/* Append streamed WAL segment to filelist  */
+/* Append history file to filelist  */
 void
 add_history_file_to_filelist(parray *filelist, uint32 timeline, char *basedir)
 {
@@ -475,7 +474,6 @@ add_history_file_to_filelist(parray *filelist, uint32 timeline, char *basedir)
     join_path_components(relpath, PG_XLOG_DIR, filename);
 
     file = pgFileNew(fullpath, relpath, false, 0, FIO_BACKUP_HOST);
-    file->name = file->rel_path;
 
     /* calculate crc */
     file->crc = pgFileGetCRC(fullpath, true, false);
