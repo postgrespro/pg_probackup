@@ -1728,6 +1728,81 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
+    # @unittest.skip("skip")
+    def test_replica_via_basebackup(self):
+        """
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={'autovacuum': 'off', 'hot_standby': 'on'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+
+        node.slow_start()
+
+        node.pgbench_init(scale=10)
+
+        #FULL backup
+        full_id = self.backup_node(backup_dir, 'node', node)
+
+        pgbench = node.pgbench(
+            options=['-T', '10', '-c', '1', '--no-vacuum'])
+        pgbench.wait()
+
+        node.cleanup()
+
+        self.restore_node(
+            backup_dir, 'node', node,
+            options=['--recovery-target=latest', '--recovery-target-action=promote'])
+        node.slow_start()
+
+        # Timeline 2
+        # Take stream page backup from instance in timeline2
+        page_id = self.backup_node(
+            backup_dir, 'node', node, backup_type='full', options=['--stream'])
+
+        node.cleanup()
+
+        # restore stream backup
+        self.restore_node(backup_dir, 'node', node)
+
+        xlog_dir = 'pg_wal'
+        if self.get_version(node) < 100000:
+            xlog_dir = 'pg_xlog'
+
+        filepath = os.path.join(node.data_dir, xlog_dir, "00000002.history")
+        self.assertTrue(
+            os.path.exists(filepath),
+            "History file do not exists: {0}".format(filepath))
+
+        node.slow_start()
+
+        # "pg_receivewal --create-slot --slot archive_slot --if-not-exists "
+        # "&& pg_receivewal --synchronous -Z 1 /tmp/wal --slot archive_slot --no-loop"
+        node_restored = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node_restored'))
+        node_restored.cleanup()
+
+        pg_basebackup_path = self.get_bin_path('pg_basebackup')
+
+        self.run_binary(
+            [
+                pg_basebackup_path, '-p', str(node.port), '-h', 'localhost',
+                '-R', '-X', 'stream', '-D', node_restored.data_dir
+            ])
+
+        self.set_auto_conf(node_restored, {'port': node_restored.port})
+        node_restored.slow_start(replica=True)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
 # TODO:
 # null offset STOP LSN and latest record in previous segment is conrecord (manual only)
 # archiving from promoted delayed replica
