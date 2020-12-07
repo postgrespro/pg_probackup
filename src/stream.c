@@ -212,7 +212,7 @@ StreamLog(void *arg)
 			stream_arg->basedir,
 //			(instance_config.compress_alg == NONE_COMPRESS) ? 0 : instance_config.compress_level,
 			0,
-			true);
+			false);
 		ctl.replication_slot = replication_slot;
 		ctl.stop_socket = PGINVALID_SOCKET;
 		ctl.do_sync = false; /* We sync all files at the end of backup */
