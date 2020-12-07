@@ -572,7 +572,6 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool
 	 * NOTHING TO DO HERE
 	 */
 
-
 	/* write database map to file and add it to control file */
 	if (database_map)
 	{
