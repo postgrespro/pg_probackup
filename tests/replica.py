@@ -1764,8 +1764,9 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
         # Timeline 2
         # Take stream page backup from instance in timeline2
-        page_id = self.backup_node(
-            backup_dir, 'node', node, backup_type='full', options=['--stream'])
+        self.backup_node(
+            backup_dir, 'node', node, backup_type='full',
+            options=['--stream', '--log-level-file=verbose'])
 
         node.cleanup()
 
@@ -1783,8 +1784,6 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
         node.slow_start()
 
-        # "pg_receivewal --create-slot --slot archive_slot --if-not-exists "
-        # "&& pg_receivewal --synchronous -Z 1 /tmp/wal --slot archive_slot --no-loop"
         node_restored = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node_restored'))
         node_restored.cleanup()
