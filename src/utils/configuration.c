@@ -490,9 +490,9 @@ config_read_opt(const char *path, ConfigOption options[], int elevel,
 				bool strict, bool missing_ok)
 {
 	FILE   *fp;
-	char	buf[1024];
+	char	buf[4096];
 	char	key[1024];
-	char	value[1024];
+	char	value[2048];
 	int		parsed_options = 0;
 
 	if (!options)
