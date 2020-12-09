@@ -100,7 +100,9 @@ class TimeStamp(ProbackupTest, unittest.TestCase):
         self.backup_node(
             backup_dir, 'node', node, options=['--stream', '-j 2'], env=my_env)
 
-        self.show_pb(backup_dir, 'node', env=my_env)
+        output = self.show_pb(backup_dir, 'node', as_json=False, as_text=True, env=my_env)
+
+        self.assertNotIn("backup ID in control file", output)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
