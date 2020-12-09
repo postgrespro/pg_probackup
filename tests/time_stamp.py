@@ -7,7 +7,7 @@ from time import sleep
 
 module_name = 'time_stamp'
 
-class CheckTimeStamp(ProbackupTest, unittest.TestCase):
+class TimeStamp(ProbackupTest, unittest.TestCase):
 
     def test_start_time_format(self):
         """Test backup ID changing after start-time editing in backup.control.
@@ -78,6 +78,30 @@ class CheckTimeStamp(ProbackupTest, unittest.TestCase):
         self.backup_node(
             backup_dir, 'node', node, options=['--stream', '-j 2'])
         
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    def test_handling_of_TZ_env_variable(self):
+        """Issue #112"""
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir="{0}/{1}/node".format(module_name, fname),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.start()
+
+        my_env = os.environ.copy()
+        my_env["TZ"] = "America/Detroit"
+
+        self.backup_node(
+            backup_dir, 'node', node, options=['--stream', '-j 2'], env=my_env)
+
+        self.show_pb(backup_dir, 'node', env=my_env)
+
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 

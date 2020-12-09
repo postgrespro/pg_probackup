@@ -707,7 +707,7 @@ class ProbackupTest(object):
                     )
                 )
 
-    def run_pb(self, command, asynchronous=False, gdb=False, old_binary=False, return_id=True):
+    def run_pb(self, command, asynchronous=False, gdb=False, old_binary=False, return_id=True, env=None):
         if not self.probackup_old_path and old_binary:
             print('PGPROBACKUPBIN_OLD is not set')
             exit(1)
@@ -716,6 +716,9 @@ class ProbackupTest(object):
             binary_path = self.probackup_old_path
         else:
             binary_path = self.probackup_path
+
+        if not env:
+            env=self.test_env
 
         try:
             self.cmd = [' '.join(map(str, [binary_path] + command))]
@@ -728,13 +731,13 @@ class ProbackupTest(object):
                     self.cmd,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
-                    env=self.test_env
+                    env=env
                 )
             else:
                 self.output = subprocess.check_output(
                     [binary_path] + command,
                     stderr=subprocess.STDOUT,
-                    env=self.test_env
+                    env=env
                     ).decode('utf-8')
                 if command[0] == 'backup' and return_id:
                     # return backup ID
@@ -845,7 +848,8 @@ class ProbackupTest(object):
             self, backup_dir, instance, node, data_dir=False,
             backup_type='full', datname=False, options=[],
             asynchronous=False, gdb=False,
-            old_binary=False, return_id=True, no_remote=False
+            old_binary=False, return_id=True, no_remote=False,
+            env=None
             ):
         if not node and not data_dir:
             print('You must provide ether node or data_dir for backup')
@@ -878,7 +882,7 @@ class ProbackupTest(object):
         if not old_binary:
             cmd_list += ['--no-sync']
 
-        return self.run_pb(cmd_list + options, asynchronous, gdb, old_binary, return_id)
+        return self.run_pb(cmd_list + options, asynchronous, gdb, old_binary, return_id, env=env)
 
     def checkdb_node(
             self, backup_dir=False, instance=False, data_dir=False,
@@ -942,7 +946,8 @@ class ProbackupTest(object):
 
     def show_pb(
             self, backup_dir, instance=None, backup_id=None,
-            options=[], as_text=False, as_json=True, old_binary=False
+            options=[], as_text=False, as_json=True, old_binary=False,
+            env=None
             ):
 
         backup_list = []
@@ -963,7 +968,7 @@ class ProbackupTest(object):
 
         if as_text:
             # You should print it when calling as_text=true
-            return self.run_pb(cmd_list + options, old_binary=old_binary)
+            return self.run_pb(cmd_list + options, old_binary=old_binary, env=env)
 
         # get show result as list of lines
         if as_json:
@@ -988,7 +993,7 @@ class ProbackupTest(object):
             return backup_list
         else:
             show_splitted = self.run_pb(
-                cmd_list + options, old_binary=old_binary).splitlines()
+                cmd_list + options, old_binary=old_binary, env=env).splitlines()
             if instance is not None and backup_id is None:
                 # cut header(ID, Mode, etc) from show as single string
                 header = show_splitted[1:2][0]
