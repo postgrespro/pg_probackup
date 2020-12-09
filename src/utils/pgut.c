@@ -1251,7 +1251,7 @@ pgut_unsetenv(const char *key)
      * leak memory.
      */
 
-    envstr = (char *) malloc(strlen(key) + 2);
+    envstr = (char *) pgut_malloc(strlen(key) + 2);
     if (!envstr)                            /* not much we can do if no memory */
             return;
 

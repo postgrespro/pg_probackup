@@ -1256,8 +1256,6 @@ parse_time(const char *value, time_t *result, bool utc_default)
 		*result -= tz;
 	}
 
-	pg_free(local_tz);
-
 	return true;
 }
 
@@ -1528,6 +1526,4 @@ time2iso(char *buf, size_t len, time_t time, bool utc)
 		snprintf(ptr, len - (ptr - buf), ":%02d",
 				 abs((int) offset % SECS_PER_HOUR) / SECS_PER_MINUTE);
 	}
-
-	pg_free(local_tz);
 }
