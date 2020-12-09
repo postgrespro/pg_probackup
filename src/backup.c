@@ -133,7 +133,7 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool
 		pg_ptrack_clear(backup_conn, nodeInfo->ptrack_version_num);
 
 	/* notify start of backup to PostgreSQL server */
-	time2iso(label, lengthof(label), current.start_time);
+	time2iso(label, lengthof(label), current.start_time, false);
 	strncat(label, " with pg_probackup", lengthof(label) -
 			strlen(" with pg_probackup"));
 
@@ -572,7 +572,6 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool
 	 * NOTHING TO DO HERE
 	 */
 
-
 	/* write database map to file and add it to control file */
 	if (database_map)
 	{
@@ -765,7 +764,7 @@ do_backup(time_t start_time, pgSetBackupParams *set_backup_params,
 	/* Create backup directory and BACKUP_CONTROL_FILE */
 	if (pgBackupCreateDir(&current))
 		elog(ERROR, "Cannot create backup directory");
-	if (!lock_backup(&current, true))
+	if (!lock_backup(&current, true, true))
 		elog(ERROR, "Cannot lock backup %s directory",
 			 base36enc(current.start_time));
 	write_backup(&current, true);
@@ -1383,7 +1382,7 @@ wait_wal_lsn(XLogRecPtr target_lsn, bool is_start_lsn, TimeLineID tli,
 				XLogRecPtr	res;
 
 				res = get_prior_record_lsn(wal_segment_dir, current.start_lsn, target_lsn, tli,
-									   in_prev_segment, instance_config.xlog_seg_size);
+										in_prev_segment, instance_config.xlog_seg_size);
 
 				if (!XLogRecPtrIsInvalid(res))
 				{

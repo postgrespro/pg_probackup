@@ -474,3 +474,36 @@ class SetBackupTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_add_big_note_1(self):
+        """"""
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.slow_start()
+
+        note = node.safe_psql(
+            "postgres",
+            "SELECT repeat('q', 1024)").decode('utf-8').rstrip()
+
+        # FULL
+        backup_id = self.backup_node(backup_dir, 'node', node, options=['--stream'])
+
+        self.set_backup(
+            backup_dir, 'node', backup_id,
+            options=['--note={0}'.format(note)])
+
+        backup_meta = self.show_pb(backup_dir, 'node', backup_id)
+
+        print(backup_meta)
+        self.assertEqual(backup_meta['note'], note)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)

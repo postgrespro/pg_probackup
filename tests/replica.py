@@ -1073,6 +1073,87 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
+    # @unittest.skip("skip")
+    def test_start_stop_lsn_in_the_same_segno(self):
+        """
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        master = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'master'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'autovacuum': 'off',
+                'checkpoint_timeout': '1h',
+                'wal_level': 'replica',
+                'shared_buffers': '128MB'})
+
+        if self.get_version(master) < self.version_to_num('9.6.0'):
+            self.del_test_dir(module_name, fname)
+            return unittest.skip(
+                'Skipped because backup from replica is not supported in PG 9.5')
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'master', master)
+        master.slow_start()
+
+        # freeze bgwriter to get rid of RUNNING XACTS records
+        bgwriter_pid = master.auxiliary_pids[ProcessType.BackgroundWriter][0]
+        gdb_checkpointer = self.gdb_attach(bgwriter_pid)
+
+        self.backup_node(backup_dir, 'master', master, options=['--stream'])
+
+        # Create replica
+        replica = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'replica'))
+        replica.cleanup()
+        self.restore_node(backup_dir, 'master', replica)
+
+        # Settings for Replica
+        self.add_instance(backup_dir, 'replica', replica)
+        self.set_replica(master, replica, synchronous=True)
+
+        replica.slow_start(replica=True)
+
+        self.switch_wal_segment(master)
+        self.switch_wal_segment(master)
+
+        master.safe_psql(
+            'postgres',
+            'CREATE TABLE t1 AS '
+            'SELECT i, repeat(md5(i::text),5006056) AS fat_attr '
+            'FROM generate_series(0,10) i')
+
+        master.safe_psql(
+            'postgres',
+            'CHECKPOINT')
+
+        self.wait_until_replica_catch_with_master(master, replica)
+
+        sleep(60)
+
+        self.backup_node(
+            backup_dir, 'replica', replica,
+            options=[
+                '--archive-timeout=30',
+                '--log-level-console=LOG',
+                '--no-validate',
+                '--stream'],
+            return_id=False)
+
+        self.backup_node(
+            backup_dir, 'replica', replica,
+            options=[
+                '--archive-timeout=30',
+                '--log-level-console=LOG',
+                '--no-validate',
+                '--stream'],
+            return_id=False)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
     @unittest.skip("skip")
     def test_replica_promote_1(self):
         """
@@ -1643,6 +1724,80 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
                 'PostgreSQL instance from the past' in e.message,
                 "\n Unexpected Error Message: {0}\n CMD: {1}".format(
                     repr(e.message), self.cmd))
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_replica_via_basebackup(self):
+        """
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={'autovacuum': 'off', 'hot_standby': 'on'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+
+        node.slow_start()
+
+        node.pgbench_init(scale=10)
+
+        #FULL backup
+        full_id = self.backup_node(backup_dir, 'node', node)
+
+        pgbench = node.pgbench(
+            options=['-T', '10', '-c', '1', '--no-vacuum'])
+        pgbench.wait()
+
+        node.cleanup()
+
+        self.restore_node(
+            backup_dir, 'node', node,
+            options=['--recovery-target=latest', '--recovery-target-action=promote'])
+        node.slow_start()
+
+        # Timeline 2
+        # Take stream page backup from instance in timeline2
+        self.backup_node(
+            backup_dir, 'node', node, backup_type='full',
+            options=['--stream', '--log-level-file=verbose'])
+
+        node.cleanup()
+
+        # restore stream backup
+        self.restore_node(backup_dir, 'node', node)
+
+        xlog_dir = 'pg_wal'
+        if self.get_version(node) < 100000:
+            xlog_dir = 'pg_xlog'
+
+        filepath = os.path.join(node.data_dir, xlog_dir, "00000002.history")
+        self.assertTrue(
+            os.path.exists(filepath),
+            "History file do not exists: {0}".format(filepath))
+
+        node.slow_start()
+
+        node_restored = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node_restored'))
+        node_restored.cleanup()
+
+        pg_basebackup_path = self.get_bin_path('pg_basebackup')
+
+        self.run_binary(
+            [
+                pg_basebackup_path, '-p', str(node.port), '-h', 'localhost',
+                '-R', '-X', 'stream', '-D', node_restored.data_dir
+            ])
+
+        self.set_auto_conf(node_restored, {'port': node_restored.port})
+        node_restored.slow_start(replica=True)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)

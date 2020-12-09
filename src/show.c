@@ -374,12 +374,12 @@ print_backup_json_object(PQExpBuffer buf, pgBackup *backup)
 				(uint32) (backup->stop_lsn >> 32), (uint32) backup->stop_lsn);
 	json_add_value(buf, "stop-lsn", lsn, json_level, true);
 
-	time2iso(timestamp, lengthof(timestamp), backup->start_time);
+	time2iso(timestamp, lengthof(timestamp), backup->start_time, false);
 	json_add_value(buf, "start-time", timestamp, json_level, true);
 
 	if (backup->end_time)
 	{
-		time2iso(timestamp, lengthof(timestamp), backup->end_time);
+		time2iso(timestamp, lengthof(timestamp), backup->end_time, false);
 		json_add_value(buf, "end-time", timestamp, json_level, true);
 	}
 
@@ -388,13 +388,13 @@ print_backup_json_object(PQExpBuffer buf, pgBackup *backup)
 
 	if (backup->recovery_time > 0)
 	{
-		time2iso(timestamp, lengthof(timestamp), backup->recovery_time);
+		time2iso(timestamp, lengthof(timestamp), backup->recovery_time, false);
 		json_add_value(buf, "recovery-time", timestamp, json_level, true);
 	}
 
 	if (backup->expire_time > 0)
 	{
-		time2iso(timestamp, lengthof(timestamp), backup->expire_time);
+		time2iso(timestamp, lengthof(timestamp), backup->expire_time, false);
 		json_add_value(buf, "expire-time", timestamp, json_level, true);
 	}
 
@@ -482,7 +482,7 @@ show_backup(const char *instance_name, time_t requested_backup_id)
 	}
 
 	if (show_format == SHOW_PLAIN)
-		pgBackupWriteControl(stdout, backup);
+		pgBackupWriteControl(stdout, backup, false);
 	else
 		elog(ERROR, "Invalid show format %d", (int) show_format);
 
@@ -550,7 +550,7 @@ show_instance_plain(const char *instance_name, parray *backup_list, bool show_na
 		/* Recovery Time */
 		if (backup->recovery_time != (time_t) 0)
 			time2iso(row->recovery_time, lengthof(row->recovery_time),
-					 backup->recovery_time);
+					 backup->recovery_time, false);
 		else
 			StrNCpy(row->recovery_time, "----", sizeof(row->recovery_time));
 		widths[cur] = Max(widths[cur], strlen(row->recovery_time));

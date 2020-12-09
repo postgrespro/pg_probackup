@@ -1880,6 +1880,14 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
           <literal>template1</literal> databases are always restored.
         </para>
       </note>
+      <note>
+        <para>
+          Due to how recovery works in PostgreSQL < 12 it is advisable to
+          disable <option>hot_standby</option> option, when running partial
+          restore of PostgreSQL cluster of version less than <option>12</option>.
+          Otherwise recovery may fail.
+        </para>
+      </note>
     </refsect3>
   </refsect2>
   <refsect2 id="pbk-performing-point-in-time-pitr-recovery">
@@ -4411,6 +4419,10 @@ pg_probackup archive-get -B <replaceable>backup_dir</replaceable> --instance <re
       <listitem>
       <para>
         Specifies the timestamp up to which recovery will proceed.
+        If timezone offset is not specified, local timezone is used.
+      </para>
+      <para>
+       Example: <literal>--recovery-target-time='2020-01-01 00:00:00+03'</literal>
       </para>
       </listitem>
       </varlistentry>
@@ -4597,6 +4609,7 @@ pg_probackup archive-get -B <replaceable>backup_dir</replaceable> --instance <re
       <para>
           Specifies the timestamp up to which the backup will stay
           pinned. Must be an ISO-8601 complaint timestamp.
+          If timezone offset is not specified, local timezone is used.
       </para>
       <para>
        Example: <literal>--expire-time='2020-01-01 00:00:00+03'</literal>

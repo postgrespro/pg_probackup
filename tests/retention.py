@@ -41,7 +41,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         output_before = self.show_archive(backup_dir, 'node', tli=1)
 
         # Purge backups
-        log = self.delete_expired(
+        self.delete_expired(
             backup_dir, 'node', options=['--expired', '--wal'])
         self.assertEqual(len(self.show_pb(backup_dir, 'node')), 2)
 
@@ -142,13 +142,13 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         node.slow_start()
 
         # take FULL BACKUP
-        backup_id_1 = self.backup_node(backup_dir, 'node', node)
+        self.backup_node(backup_dir, 'node', node)
 
         # Take second FULL BACKUP
-        backup_id_2 = self.backup_node(backup_dir, 'node', node)
+        self.backup_node(backup_dir, 'node', node)
 
         # Take third FULL BACKUP
-        backup_id_3 = self.backup_node(backup_dir, 'node', node)
+        self.backup_node(backup_dir, 'node', node)
 
         backups = os.path.join(backup_dir, 'backups', 'node')
         for backup in os.listdir(backups):
@@ -189,7 +189,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         node.slow_start()
 
         # take FULL BACKUPs
-        backup_id_1 = self.backup_node(backup_dir, 'node', node)
+        self.backup_node(backup_dir, 'node', node)
 
         backup_id_2 = self.backup_node(backup_dir, 'node', node)
 
@@ -444,8 +444,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         # PAGEa1 OK
         # FULLb  OK
         # FULLa  ERROR
-        page_id_b2 = self.backup_node(
-            backup_dir, 'node', node, backup_type='page')
+        self.backup_node(backup_dir, 'node', node, backup_type='page')
 
         # Change PAGEa2 and FULLa status to OK
         self.change_backup_status(backup_dir, 'node', page_id_a2, 'OK')
@@ -632,7 +631,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         node.pgbench_init(scale=5)
 
         # Take FULL BACKUPs
-        backup_id_a = self.backup_node(backup_dir, 'node', node)
+        self.backup_node(backup_dir, 'node', node)
         pgbench = node.pgbench(options=['-t', '20', '-c', '1'])
         pgbench.wait()
 
@@ -663,13 +662,13 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         # PAGEa1 ERROR
         # FULLb  OK
         # FULLa  OK
-        page_id_b1 = self.backup_node(
+        self.backup_node(
             backup_dir, 'node', node, backup_type='page')
 
         pgbench = node.pgbench(options=['-t', '20', '-c', '1'])
         pgbench.wait()
 
-        page_id_b2 = self.backup_node(
+        self.backup_node(
             backup_dir, 'node', node, backup_type='page')
 
         pgbench = node.pgbench(options=['-t', '20', '-c', '1'])
@@ -711,7 +710,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
                 conf.write("recovery_time='{:%Y-%m-%d %H:%M:%S}'\n".format(
                     datetime.now() - timedelta(days=3)))
 
-        output = self.delete_expired(
+        self.delete_expired(
             backup_dir, 'node',
             options=['--retention-window=1', '--expired', '--merge-expired'])
 
@@ -1305,26 +1304,26 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         node.pgbench_init(scale=3)
 
         # Chain A
-        backup_id_a = self.backup_node(backup_dir, 'node', node)
-        page_id_a1 = self.backup_node(
+        self.backup_node(backup_dir, 'node', node)
+        self.backup_node(
             backup_dir, 'node', node, backup_type='page')
 
-        page_id_a2 = self.backup_node(
+        self.backup_node(
             backup_dir, 'node', node, backup_type='page')
 
         # Chain B
-        backup_id_b = self.backup_node(backup_dir, 'node', node)
+        self.backup_node(backup_dir, 'node', node)
 
         pgbench = node.pgbench(options=['-T', '10', '-c', '2'])
         pgbench.wait()
 
-        page_id_b1 = self.backup_node(
+        self.backup_node(
             backup_dir, 'node', node, backup_type='delta')
 
         pgbench = node.pgbench(options=['-T', '10', '-c', '2'])
         pgbench.wait()
 
-        page_id_b2 = self.backup_node(
+        self.backup_node(
             backup_dir, 'node', node, backup_type='page')
 
         pgbench = node.pgbench(options=['-T', '10', '-c', '2'])
@@ -1347,7 +1346,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
                 conf.write("recovery_time='{:%Y-%m-%d %H:%M:%S}'\n".format(
                     datetime.now() - timedelta(days=3)))
 
-        output = self.delete_expired(
+        self.delete_expired(
             backup_dir, 'node',
             options=[
                 '--retention-window=1', '--expired',
@@ -1391,26 +1390,26 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         node.pgbench_init(scale=3)
 
         # Chain A
-        backup_id_a = self.backup_node(backup_dir, 'node', node)
-        page_id_a1 = self.backup_node(
+        self.backup_node(backup_dir, 'node', node)
+        self.backup_node(
             backup_dir, 'node', node, backup_type='page')
 
-        page_id_a2 = self.backup_node(
+        self.backup_node(
             backup_dir, 'node', node, backup_type='page')
 
         # Chain B
-        backup_id_b = self.backup_node(backup_dir, 'node', node)
+        self.backup_node(backup_dir, 'node', node)
 
-        page_id_b1 = self.backup_node(
+        self.backup_node(
             backup_dir, 'node', node, backup_type='delta')
 
-        page_id_b2 = self.backup_node(
+        self.backup_node(
             backup_dir, 'node', node, backup_type='page')
 
         page_id_b3 = self.backup_node(
             backup_dir, 'node', node, backup_type='delta')
 
-        pgdata = self.pgdata_content(node.data_dir)
+        self.pgdata_content(node.data_dir)
 
         # Purge backups
         backups = os.path.join(backup_dir, 'backups', 'node')
@@ -1483,15 +1482,15 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         node.slow_start()
 
         # Take FULL BACKUPs
-        backup_id_a1 = self.backup_node(backup_dir, 'node', node)
-        gdb = self.backup_node(
-            backup_dir, 'node', node, backup_type='page', gdb=True)
+        self.backup_node(backup_dir, 'node', node)
+        self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
 
-        page_id_a3 = self.backup_node(
+        self.backup_node(
             backup_dir, 'node', node, backup_type='page')
 
         # Change FULLb backup status to ERROR
-        self.change_backup_status(backup_dir, 'node', backup_id_b, 'ERROR')
+        # self.change_backup_status(backup_dir, 'node', backup_id_b, 'ERROR')
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -1516,7 +1515,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         node.slow_start()
 
         # Take FULL BACKUP
-        full_id = self.backup_node(backup_dir, 'node', node)
+        self.backup_node(backup_dir, 'node', node)
 
         # Take PAGE BACKUP
         gdb = self.backup_node(
@@ -1528,15 +1527,15 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         gdb._execute('signal SIGINT')
         gdb.continue_execution_until_error()
 
-        page_id = self.show_pb(backup_dir, 'node')[1]['id']
+        self.show_pb(backup_dir, 'node')[1]['id']
 
         # Take DELTA backup
-        delta_id = self.backup_node(
+        self.backup_node(
             backup_dir, 'node', node, backup_type='delta',
             options=['--retention-window=2', '--delete-expired'])
 
         # Take FULL BACKUP
-        full2_id = self.backup_node(backup_dir, 'node', node)
+        self.backup_node(backup_dir, 'node', node)
 
         self.assertEqual(len(self.show_pb(backup_dir, 'node')), 4)
 
@@ -1563,7 +1562,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         node.slow_start()
 
         # Take FULL BACKUP
-        full_id = self.backup_node(backup_dir, 'node', node)
+        self.backup_node(backup_dir, 'node', node)
 
         # Take PAGE BACKUP
         gdb = self.backup_node(
@@ -1574,7 +1573,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         gdb._execute('signal SIGKILL')
         gdb.continue_execution_until_error()
 
-        page_id = self.show_pb(backup_dir, 'node')[1]['id']
+        self.show_pb(backup_dir, 'node')[1]['id']
 
         if self.get_version(node) < 90600:
             node.safe_psql(
@@ -1582,7 +1581,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
                 'SELECT pg_catalog.pg_stop_backup()')
 
         # Take DELTA backup
-        delta_id = self.backup_node(
+        self.backup_node(
             backup_dir, 'node', node, backup_type='delta',
             options=['--retention-window=2', '--delete-expired'])
 
@@ -1630,7 +1629,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         self.backup_node(backup_dir, 'node', node, backup_type="page")
 
         # Purge backups
-        log = self.delete_expired(
+        self.delete_expired(
             backup_dir, 'node', options=['--expired', '--wal'])
         self.assertEqual(len(self.show_pb(backup_dir, 'node')), 2)
 
@@ -1639,7 +1638,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
-    def test_retention_redundancy_overlapping_chains(self):
+    def test_retention_redundancy_overlapping_chains_1(self):
         """"""
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
@@ -1678,7 +1677,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         self.backup_node(backup_dir, 'node', node, backup_type="page")
 
         # Purge backups
-        log = self.delete_expired(
+        self.delete_expired(
             backup_dir, 'node', options=['--expired', '--wal'])
         self.assertEqual(len(self.show_pb(backup_dir, 'node')), 2)
 
@@ -1869,7 +1868,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         # FULL
         node.pgbench_init(scale=1)
-        B1 = self.backup_node(backup_dir, 'node', node)
+        self.backup_node(backup_dir, 'node', node)
 
         # PAGE
         node.pgbench_init(scale=1)
@@ -1885,12 +1884,12 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         node.pgbench_init(scale=1)
 
-        B3 = self.backup_node(
+        self.backup_node(
             backup_dir, 'node', node, backup_type='page')
 
         node.pgbench_init(scale=1)
 
-        B4 = self.backup_node(
+        self.backup_node(
             backup_dir, 'node', node, backup_type='page')
 
         # Timeline 2
@@ -1940,11 +1939,11 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         node_restored.slow_start()
 
         node_restored.pgbench_init(scale=1)
-        B5 = self.backup_node(
+        self.backup_node(
             backup_dir, 'node', node_restored, data_dir=node_restored.data_dir)
 
         node.pgbench_init(scale=1)
-        B6 = self.backup_node(backup_dir, 'node', node)
+        self.backup_node(backup_dir, 'node', node)
 
         lsn = self.show_archive(backup_dir, 'node', tli=2)['switchpoint']
 
@@ -2007,9 +2006,9 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         node.pgbench_init(scale=5)
 
         # B2 FULL on TLI1
-        B2 = self.backup_node(backup_dir, 'node', node)
+        self.backup_node(backup_dir, 'node', node)
         node.pgbench_init(scale=4)
-        B3 = self.backup_node(backup_dir, 'node', node)
+        self.backup_node(backup_dir, 'node', node)
         node.pgbench_init(scale=4)
 
         self.delete_pb(backup_dir, 'node', options=['--delete-wal'])
@@ -2023,7 +2022,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node', node_tli2,
             options=[
                 '--recovery-target-xid={0}'.format(target_xid),
-                '--recovery-target-timeline=1'.format(target_xid),
+                '--recovery-target-timeline=1',
                 '--recovery-target-action=promote'])
 
         self.assertIn(
@@ -2039,11 +2038,11 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
             "select txid_current()").decode('utf-8').rstrip()
         node_tli2.pgbench_init(scale=1)
 
-        B4 = self.backup_node(
+        self.backup_node(
             backup_dir, 'node', node_tli2, data_dir=node_tli2.data_dir)
         node_tli2.pgbench_init(scale=3)
 
-        B5 = self.backup_node(
+        self.backup_node(
             backup_dir, 'node', node_tli2, data_dir=node_tli2.data_dir)
         node_tli2.pgbench_init(scale=1)
         node_tli2.cleanup()
@@ -2086,7 +2085,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         node_tli4.pgbench_init(scale=5)
 
-        B6 = self.backup_node(
+        self.backup_node(
             backup_dir, 'node', node_tli4, data_dir=node_tli4.data_dir)
         node_tli4.pgbench_init(scale=5)
         node_tli4.cleanup()
@@ -2232,7 +2231,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         # B2 FULL on TLI1
         B2 = self.backup_node(backup_dir, 'node', node)
         node.pgbench_init(scale=4)
-        B3 = self.backup_node(backup_dir, 'node', node)
+        self.backup_node(backup_dir, 'node', node)
         node.pgbench_init(scale=4)
 
         # TLI 2
@@ -2244,7 +2243,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node', node_tli2,
             options=[
                 '--recovery-target-xid={0}'.format(target_xid),
-                '--recovery-target-timeline=1'.format(target_xid),
+                '--recovery-target-timeline=1',
                 '--recovery-target-action=promote'])
 
         self.assertIn(
@@ -2264,7 +2263,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node', node_tli2, data_dir=node_tli2.data_dir)
         node_tli2.pgbench_init(scale=3)
 
-        B5 = self.backup_node(
+        self.backup_node(
             backup_dir, 'node', node_tli2, data_dir=node_tli2.data_dir)
         node_tli2.pgbench_init(scale=1)
         node_tli2.cleanup()
@@ -2307,7 +2306,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         node_tli4.pgbench_init(scale=5)
 
-        B6 = self.backup_node(
+        self.backup_node(
             backup_dir, 'node', node_tli4, data_dir=node_tli4.data_dir)
         node_tli4.pgbench_init(scale=5)
         node_tli4.cleanup()

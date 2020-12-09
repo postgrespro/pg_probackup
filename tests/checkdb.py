@@ -210,6 +210,7 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
                 log_file_content)
 
         # Clean after yourself
+        gdb.kill()
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
@@ -495,6 +496,7 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
         self.assertNotIn('connection to client lost', output)
 
         # Clean after yourself
+        gdb.kill()
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
@@ -588,7 +590,7 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
                 'GRANT EXECUTE ON FUNCTION pg_catalog.charne("char", "char") TO backup; '
                 'GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup; '
                 'GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_system() TO backup; '
-                'GRANT EXECUTE ON FUNCTION bt_index_check(regclass) TO backup; '
+#                'GRANT EXECUTE ON FUNCTION bt_index_check(regclass) TO backup; '
                 'GRANT EXECUTE ON FUNCTION bt_index_check(regclass, bool) TO backup;'
             )
         # >= 10
@@ -618,14 +620,10 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
                 'GRANT EXECUTE ON FUNCTION bt_index_check(regclass, bool) TO backup;'
             )
 
-#        if ProbackupTest.enterprise:
-#            node.safe_psql(
-#                "backupdb",
-#                "GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_edition() TO backup")
-#
-#            node.safe_psql(
-#                "backupdb",
-#                "GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_version() TO backup")
+        if ProbackupTest.enterprise:
+            node.safe_psql(
+                "backupdb",
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_edition() TO backup")
 
         # checkdb
         try:
@@ -659,3 +657,6 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
                 e.message,
                 "\n Unexpected Error Message: {0}\n CMD: {1}".format(
                     repr(e.message), self.cmd))
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)

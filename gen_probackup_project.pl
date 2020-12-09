@@ -167,6 +167,7 @@ sub build_pgprobackup
 		'pg_probackup.c',
 		'restore.c',
 		'show.c',
+		'stream.c',
 		'util.c',
 		'validate.c',
 		'checkdb.c',

@@ -58,6 +58,8 @@ merge_non_data_file(parray *parent_chain, pgBackup *full_backup,
 				pgFile *tmp_file, const char *full_database_dir,
 				const char *full_external_prefix);
 
+static bool is_forward_compatible(parray *parent_chain);
+
 /*
  * Implementation of MERGE command.
  *
@@ -400,7 +402,7 @@ do_merge(time_t backup_id)
 	parray_append(merge_list, full_backup);
 
 	/* Lock merge chain */
-	catalog_lock_backup_list(merge_list, parray_num(merge_list) - 1, 0, true);
+	catalog_lock_backup_list(merge_list, parray_num(merge_list) - 1, 0, true, true);
 
 	/* do actual merge */
 	merge_chain(merge_list, full_backup, dest_backup);
@@ -532,19 +534,7 @@ merge_chain(parray *parent_chain, pgBackup *full_backup, pgBackup *dest_backup)
 	 * If current program version differs from destination backup version,
 	 * then in-place merge is not possible.
 	 */
-	if ((parse_program_version(full_backup->program_version) ==
-		 parse_program_version(dest_backup->program_version)) &&
-		(parse_program_version(dest_backup->program_version) ==
-		 parse_program_version(PROGRAM_VERSION)))
-		program_version_match = true;
-	else
-		elog(WARNING, "In-place merge is disabled because of program "
-					"versions mismatch. Full backup version: %s, "
-					"destination backup version: %s, "
-					"current program version: %s",
-					full_backup->program_version,
-					dest_backup->program_version,
-					PROGRAM_VERSION);
+	program_version_match = is_forward_compatible(parent_chain);
 
 	/* Forbid merge retry for failed merges between 2.4.0 and any
 	 * older version. Several format changes makes it impossible
@@ -1397,4 +1387,59 @@ merge_non_data_file(parray *parent_chain, pgBackup *full_backup,
 			elog(ERROR, "Could not rename file \"%s\" to \"%s\": %s",
 				to_fullpath_tmp, to_fullpath, strerror(errno));
 
+}
+
+/*
+ * If file format in incremental chain is compatible
+ * with current storage format.
+ * If not, then in-place merge is not possible.
+ *
+ * Consider the following examples:
+ * STORAGE_FORMAT_VERSION = 2.4.4
+ * 2.3.3 \
+ * 2.3.4  \ disable in-place merge, because
+ * 2.4.1  / current STORAGE_FORMAT_VERSION > 2.3.3
+ * 2.4.3 /
+ *
+ * 2.4.4 \ enable in_place merge, because
+ * 2.4.5 / current STORAGE_FORMAT_VERSION == 2.4.4
+ *
+ * 2.4.5 \ enable in_place merge, because
+ * 2.4.6 / current STORAGE_FORMAT_VERSION < 2.4.5
+ *
+ */
+bool
+is_forward_compatible(parray *parent_chain)
+{
+	int       i;
+	pgBackup *oldest_ver_backup = NULL;
+	uint32    oldest_ver_in_chain = parse_program_version(PROGRAM_VERSION);
+
+	for (i = 0; i < parray_num(parent_chain); i++)
+	{
+		pgBackup *backup = (pgBackup *) parray_get(parent_chain, i);
+		uint32 current_version = parse_program_version(backup->program_version);
+
+		if (!oldest_ver_backup)
+			oldest_ver_backup = backup;
+
+		if (current_version < oldest_ver_in_chain)
+		{
+			oldest_ver_in_chain = current_version;
+			oldest_ver_backup = backup;
+		}
+	}
+
+	if (oldest_ver_in_chain < parse_program_version(STORAGE_FORMAT_VERSION))
+	{
+		elog(WARNING, "In-place merge is disabled because of storage format incompatibility. "
+					"Backup %s storage format version: %s, "
+					"current storage format version: %s",
+					base36enc(oldest_ver_backup->start_time),
+					oldest_ver_backup->program_version,
+					STORAGE_FORMAT_VERSION);
+		return false;
+	}
+
+	return true;
 }

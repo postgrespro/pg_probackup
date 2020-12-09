@@ -1213,3 +1213,61 @@ pgut_rmtree(const char *path, bool rmtopdir, bool strict)
 
 	return result;
 }
+
+/* cross-platform setenv */
+void
+pgut_setenv(const char *key, const char *val)
+{
+#ifdef WIN32
+	char  *envstr = NULL;
+	envstr = psprintf("%s=%s", key, val);
+	putenv(envstr);
+#else
+	setenv(key, val, 1);
+#endif
+}
+
+/* stolen from unsetenv.c */
+void
+pgut_unsetenv(const char *key)
+{
+#ifdef WIN32
+	char  *envstr = NULL;
+
+    if (getenv(key) == NULL)
+            return;                                 /* no work */
+
+    /*
+     * The technique embodied here works if libc follows the Single Unix Spec
+     * and actually uses the storage passed to putenv() to hold the environ
+     * entry.  When we clobber the entry in the second step we are ensuring
+     * that we zap the actual environ member.  However, there are some libc
+     * implementations (notably recent BSDs) that do not obey SUS but copy the
+     * presented string.  This method fails on such platforms.  Hopefully all
+     * such platforms have unsetenv() and thus won't be using this hack. See:
+     * http://www.greenend.org.uk/rjk/2008/putenv.html
+     *
+     * Note that repeatedly setting and unsetting a var using this code will
+     * leak memory.
+     */
+
+    envstr = (char *) pgut_malloc(strlen(key) + 2);
+    if (!envstr)                            /* not much we can do if no memory */
+            return;
+
+    /* Override the existing setting by forcibly defining the var */
+    sprintf(envstr, "%s=", key);
+    putenv(envstr);
+
+    /* Now we can clobber the variable definition this way: */
+    strcpy(envstr, "=");
+
+    /*
+     * This last putenv cleans up if we have multiple zero-length names as a
+     * result of unsetting multiple things.
+     */
+    putenv(envstr);
+#else
+	unsetenv(key);
+#endif
+}

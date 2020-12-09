@@ -490,9 +490,9 @@ config_read_opt(const char *path, ConfigOption options[], int elevel,
 				bool strict, bool missing_ok)
 {
 	FILE   *fp;
-	char	buf[1024];
+	char	buf[4096];
 	char	key[1024];
-	char	value[1024];
+	char	value[2048];
 	int		parsed_options = 0;
 
 	if (!options)
@@ -679,7 +679,7 @@ option_get_value(ConfigOption *opt)
 				if (t > 0)
 				{
 					timestamp = palloc(100);
-					time2iso(timestamp, 100, t);
+					time2iso(timestamp, 100, t, false);
 				}
 				else
 					timestamp = palloc0(1 /* just null termination */);
@@ -1111,6 +1111,8 @@ parse_time(const char *value, time_t *result, bool utc_default)
 	struct tm	tm;
 	char		junk[2];
 
+	char 	   *local_tz = getenv("TZ");
+
 	/* tmp = replace( value, !isalnum, ' ' ) */
 	tmp = pgut_malloc(strlen(value) + + 1);
 	len = 0;
@@ -1221,24 +1223,37 @@ parse_time(const char *value, time_t *result, bool utc_default)
 	/* determine whether Daylight Saving Time is in effect */
 	tm.tm_isdst = -1;
 
+	/*
+	 * If tz is not set,
+	 * treat it as UTC if requested, otherwise as local timezone
+	 */
+	if (tz_set || utc_default)
+	{
+		/* set timezone to UTC */
+		pgut_setenv("TZ", "UTC");
+#ifdef WIN32
+		tzset();
+#endif
+	}
+
+	/* convert time to utc unix time */
 	*result = mktime(&tm);
+
+	/* return old timezone back if any */
+	if (local_tz)
+		pgut_setenv("TZ", local_tz);
+	else
+		pgut_unsetenv("TZ");
+
+#ifdef WIN32
+	tzset();
+#endif
 
 	/* adjust time zone */
 	if (tz_set || utc_default)
 	{
-		time_t		ltime = time(NULL);
-		struct tm  *ptm = gmtime(&ltime);
-		time_t		gmt = mktime(ptm);
-		time_t		offset;
-
 		/* UTC time */
 		*result -= tz;
-
-		/* Get local time */
-		ptm = localtime(&ltime);
-		offset = ltime - gmt + (ptm->tm_isdst ? 3600 : 0);
-
-		*result += offset;
 	}
 
 	return true;
@@ -1462,14 +1477,40 @@ convert_from_base_unit_u(uint64 base_value, int base_unit,
  * Convert time_t value to ISO-8601 format string. Always set timezone offset.
  */
 void
-time2iso(char *buf, size_t len, time_t time)
+time2iso(char *buf, size_t len, time_t time, bool utc)
 {
-	struct tm  *ptm = gmtime(&time);
-	time_t		gmt = mktime(ptm);
+	struct tm  *ptm = NULL;
+	time_t		gmt;
 	time_t		offset;
 	char	   *ptr = buf;
+	char 	   *local_tz = getenv("TZ");
 
+	/* set timezone to UTC if requested */
+	if (utc)
+	{
+		pgut_setenv("TZ", "UTC");
+#ifdef WIN32
+		tzset();
+#endif
+	}
+
+	ptm = gmtime(&time);
+	gmt = mktime(ptm);
 	ptm = localtime(&time);
+
+	if (utc)
+	{
+		/* return old timezone back if any */
+		if (local_tz)
+			pgut_setenv("TZ", local_tz);
+		else
+			pgut_unsetenv("TZ");
+#ifdef WIN32
+		tzset();
+#endif
+	}
+
+	/* adjust timezone offset */
 	offset = time - gmt + (ptm->tm_isdst ? 3600 : 0);
 
 	strftime(ptr, len, "%Y-%m-%d %H:%M:%S", ptm);

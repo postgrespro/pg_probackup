@@ -246,18 +246,6 @@ class ProbackupTest(object):
             print('pg_probackup binary is not found')
             exit(1)
 
-        self.probackup_version = None
-
-        try:
-            self.probackup_version_output = subprocess.check_output(
-                [self.probackup_path, "--version"],
-                stderr=subprocess.STDOUT,
-                ).decode('utf-8')
-        except subprocess.CalledProcessError as e:
-            raise ProbackupException(e.output.decode('utf-8'))
-
-        self.probackup_version = re.search(r"\d+\.\d+\.\d+", self.probackup_version_output).group(0)
-
         if os.name == 'posix':
             self.EXTERNAL_DIRECTORY_DELIMITER = ':'
             os.environ['PATH'] = os.path.dirname(
@@ -279,6 +267,32 @@ class ProbackupTest(object):
             else:
                 if self.verbose:
                     print('PGPROBACKUPBIN_OLD is not an executable file')
+
+        self.probackup_version = None
+        self.old_probackup_version = None
+
+        try:
+            self.probackup_version_output = subprocess.check_output(
+                [self.probackup_path, "--version"],
+                stderr=subprocess.STDOUT,
+                ).decode('utf-8')
+        except subprocess.CalledProcessError as e:
+            raise ProbackupException(e.output.decode('utf-8'))
+
+        if self.probackup_old_path:
+            old_probackup_version_output = subprocess.check_output(
+                [self.probackup_old_path, "--version"],
+                stderr=subprocess.STDOUT,
+                ).decode('utf-8')
+            self.old_probackup_version = re.search(
+                r"\d+\.\d+\.\d+",
+                subprocess.check_output(
+                    [self.probackup_old_path, "--version"],
+                    stderr=subprocess.STDOUT,
+                    ).decode('utf-8')
+                ).group(0)
+
+        self.probackup_version = re.search(r"\d+\.\d+\.\d+", self.probackup_version_output).group(0)
 
         self.remote = False
         self.remote_host = None
@@ -693,7 +707,7 @@ class ProbackupTest(object):
                     )
                 )
 
-    def run_pb(self, command, asynchronous=False, gdb=False, old_binary=False, return_id=True):
+    def run_pb(self, command, asynchronous=False, gdb=False, old_binary=False, return_id=True, env=None):
         if not self.probackup_old_path and old_binary:
             print('PGPROBACKUPBIN_OLD is not set')
             exit(1)
@@ -702,6 +716,9 @@ class ProbackupTest(object):
             binary_path = self.probackup_old_path
         else:
             binary_path = self.probackup_path
+
+        if not env:
+            env=self.test_env
 
         try:
             self.cmd = [' '.join(map(str, [binary_path] + command))]
@@ -714,13 +731,13 @@ class ProbackupTest(object):
                     self.cmd,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
-                    env=self.test_env
+                    env=env
                 )
             else:
                 self.output = subprocess.check_output(
                     [binary_path] + command,
                     stderr=subprocess.STDOUT,
-                    env=self.test_env
+                    env=env
                     ).decode('utf-8')
                 if command[0] == 'backup' and return_id:
                     # return backup ID
@@ -831,7 +848,8 @@ class ProbackupTest(object):
             self, backup_dir, instance, node, data_dir=False,
             backup_type='full', datname=False, options=[],
             asynchronous=False, gdb=False,
-            old_binary=False, return_id=True, no_remote=False
+            old_binary=False, return_id=True, no_remote=False,
+            env=None
             ):
         if not node and not data_dir:
             print('You must provide ether node or data_dir for backup')
@@ -864,7 +882,7 @@ class ProbackupTest(object):
         if not old_binary:
             cmd_list += ['--no-sync']
 
-        return self.run_pb(cmd_list + options, asynchronous, gdb, old_binary, return_id)
+        return self.run_pb(cmd_list + options, asynchronous, gdb, old_binary, return_id, env=env)
 
     def checkdb_node(
             self, backup_dir=False, instance=False, data_dir=False,
@@ -928,7 +946,8 @@ class ProbackupTest(object):
 
     def show_pb(
             self, backup_dir, instance=None, backup_id=None,
-            options=[], as_text=False, as_json=True, old_binary=False
+            options=[], as_text=False, as_json=True, old_binary=False,
+            env=None
             ):
 
         backup_list = []
@@ -949,7 +968,7 @@ class ProbackupTest(object):
 
         if as_text:
             # You should print it when calling as_text=true
-            return self.run_pb(cmd_list + options, old_binary=old_binary)
+            return self.run_pb(cmd_list + options, old_binary=old_binary, env=env)
 
         # get show result as list of lines
         if as_json:
@@ -974,7 +993,7 @@ class ProbackupTest(object):
             return backup_list
         else:
             show_splitted = self.run_pb(
-                cmd_list + options, old_binary=old_binary).splitlines()
+                cmd_list + options, old_binary=old_binary, env=env).splitlines()
             if instance is not None and backup_id is None:
                 # cut header(ID, Mode, etc) from show as single string
                 header = show_splitted[1:2][0]
@@ -1102,7 +1121,7 @@ class ProbackupTest(object):
 
     def delete_pb(
             self, backup_dir, instance,
-            backup_id=None, options=[], old_binary=False):
+            backup_id=None, options=[], old_binary=False, gdb=False):
         cmd_list = [
             'delete',
             '-B', backup_dir
@@ -1112,7 +1131,7 @@ class ProbackupTest(object):
         if backup_id:
             cmd_list += ['-i', backup_id]
 
-        return self.run_pb(cmd_list + options, old_binary=old_binary)
+        return self.run_pb(cmd_list + options, old_binary=old_binary, gdb=gdb)
 
     def delete_expired(
             self, backup_dir, instance, options=[], old_binary=False):
@@ -1142,8 +1161,9 @@ class ProbackupTest(object):
         out_dict = {}
 
         if self.get_version(node) >= self.version_to_num('12.0'):
-            recovery_conf_path = os.path.join(
-                node.data_dir, 'probackup_recovery.conf')
+            recovery_conf_path = os.path.join(node.data_dir, 'postgresql.auto.conf')
+            with open(recovery_conf_path, 'r') as f:
+                print(f.read())
         else:
             recovery_conf_path = os.path.join(node.data_dir, 'recovery.conf')
 
@@ -1311,10 +1331,6 @@ class ProbackupTest(object):
                 f.close()
 
             config = 'postgresql.auto.conf'
-            probackup_recovery_path = os.path.join(replica.data_dir, 'probackup_recovery.conf')
-            if os.path.exists(probackup_recovery_path):
-                if os.stat(probackup_recovery_path).st_size > 0:
-                    config = 'probackup_recovery.conf'
 
             if not log_shipping:
                 self.set_auto_conf(
@@ -1505,7 +1521,8 @@ class ProbackupTest(object):
             'backup_label', 'tablespace_map', 'recovery.conf',
             'ptrack_control', 'ptrack_init', 'pg_control',
             'probackup_recovery.conf', 'recovery.signal',
-            'standby.signal', 'ptrack.map', 'ptrack.map.mmap'
+            'standby.signal', 'ptrack.map', 'ptrack.map.mmap',
+            'ptrack.map.tmp'
         ]
 
         if exclude_dirs:
@@ -1531,6 +1548,7 @@ class ProbackupTest(object):
                 directory_dict['files'][file_relpath] = {'is_datafile': False}
                 with open(file_fullpath, 'rb') as f:
                     directory_dict['files'][file_relpath]['md5'] = hashlib.md5(f.read()).hexdigest()
+                    f.close()
 #                directory_dict['files'][file_relpath]['md5'] = hashlib.md5(
 #                    f = open(file_fullpath, 'rb').read()).hexdigest()
 

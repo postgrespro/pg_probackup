@@ -101,7 +101,7 @@ static pgRecoveryTarget *recovery_target_options = NULL;
 static pgRestoreParams *restore_params = NULL;
 
 time_t current_time = 0;
-bool restore_as_replica = false;
+static bool restore_as_replica = false;
 bool no_validate = false;
 IncrRestoreMode incremental_mode = INCR_NONE;
 
@@ -714,15 +714,14 @@ main(int argc, char *argv[])
 		if (force)
 			no_validate = true;
 
-		if (replication_slot != NULL)
-			restore_as_replica = true;
-
 		/* keep all params in one structure */
 		restore_params = pgut_new(pgRestoreParams);
 		restore_params->is_restore = (backup_subcmd == RESTORE_CMD);
 		restore_params->force = force;
 		restore_params->no_validate = no_validate;
 		restore_params->restore_as_replica = restore_as_replica;
+		restore_params->recovery_settings_mode = DEFAULT;
+
 		restore_params->primary_slot_name = replication_slot;
 		restore_params->skip_block_validation = skip_block_validation;
 		restore_params->skip_external_dirs = skip_external_dirs;
