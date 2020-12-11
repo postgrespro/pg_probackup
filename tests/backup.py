@@ -2917,13 +2917,16 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
 
+        datadir = os.path.join(node.data_dir, '123')
+
         try:
             self.backup_node(
-                backup_dir, 'node', node, options=['--streamblablah', '-j2'])
+                backup_dir, 'node', node,
+                data_dir='{0}'.format(datadir), return_id=False)
         except:
             pass
 
-        self.backup_node(backup_dir, 'node', node, options=['--stream', '-j2'])
+        self.backup_node(backup_dir, 'node', node, options=['--stream'])
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
