@@ -1048,7 +1048,7 @@ int fio_mkdir(char const* path, int mode, fio_location location)
 	}
 	else
 	{
-		return dir_create_dir(path, mode);
+		return dir_create_dir(path, mode, false);
 	}
 }
 
@@ -2648,7 +2648,7 @@ void fio_communicate(int in, int out)
 			break;
 		  case FIO_MKDIR:  /* Create directory */
 			hdr.size = 0;
-			hdr.arg = dir_create_dir(buf, hdr.arg);
+			hdr.arg = dir_create_dir(buf, hdr.arg, false);
 			IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 			break;
 		  case FIO_CHMOD:  /* Change file mode */

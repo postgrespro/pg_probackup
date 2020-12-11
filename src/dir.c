@@ -138,9 +138,13 @@ static TablespaceList external_remap_list = {NULL, NULL};
 
 /*
  * Create directory, also create parent directories if necessary.
+ * In strict mode treat already existing directory as error.
+ * Return values:
+ *  0 - ok
+ * -1 - error (check errno)
  */
 int
-dir_create_dir(const char *dir, mode_t mode)
+dir_create_dir(const char *dir, mode_t mode, bool strict)
 {
 	char		parent[MAXPGPATH];
 
@@ -149,14 +153,14 @@ dir_create_dir(const char *dir, mode_t mode)
 
 	/* Create parent first */
 	if (access(parent, F_OK) == -1)
-		dir_create_dir(parent, mode);
+		dir_create_dir(parent, mode, false);
 
 	/* Create directory */
 	if (mkdir(dir, mode) == -1)
 	{
-		if (errno == EEXIST)	/* already exist */
+		if (errno == EEXIST && !strict)	/* already exist */
 			return 0;
-		elog(ERROR, "cannot create directory \"%s\": %s", dir, strerror(errno));
+		return -1;
 	}
 
 	return 0;
