@@ -2899,3 +2899,31 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_issue_231(self):
+        """
+        https://github.com/postgrespro/pg_probackup/issues/231
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={'autovacuum': 'off'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.slow_start()
+
+        try:
+            self.backup_node(
+                backup_dir, 'node', node, options=['--streamblablah', '-j2'])
+        except:
+            pass
+
+        self.backup_node(backup_dir, 'node', node, options=['--stream', '-j2'])
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
