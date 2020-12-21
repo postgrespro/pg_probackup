@@ -103,7 +103,8 @@ static bool needs_quotes(char const* path)
 	return strchr(path, ' ') != NULL;
 }
 
-bool launch_agent(void)
+bool
+launch_agent(void)
 {
 	char cmd[MAX_CMDLINE_LENGTH];
 	char* ssh_argv[MAX_CMDLINE_OPTIONS];

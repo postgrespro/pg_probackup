@@ -114,7 +114,8 @@ void fio_error(int rc, int size, char const* file, int line)
 }
 
 /* Check if file descriptor is local or remote (created by FIO) */
-static bool fio_is_remote_fd(int fd)
+static bool
+fio_is_remote_fd(int fd)
 {
 	return (fd & FIO_PIPE_MARKER) != 0;
 }
@@ -156,7 +157,8 @@ fio_safestat(const char *path, struct stat *buf)
 #define stat(x, y) fio_safestat(x, y)
 
 /* TODO: use real pread on Linux */
-static ssize_t pread(int fd, void* buf, size_t size, off_t off)
+static ssize_t
+pread(int fd, void* buf, size_t size, off_t off)
 {
 	off_t rc = lseek(fd, off, SEEK_SET);
 	if (rc != off)
@@ -177,7 +179,8 @@ static int remove_file_or_dir(char const* path)
 #endif
 
 /* Check if specified location is local for current node */
-bool fio_is_remote(fio_location location)
+bool
+fio_is_remote(fio_location location)
 {
 	bool is_remote = MyLocation != FIO_LOCAL_HOST
 		&& location != FIO_LOCAL_HOST
@@ -188,7 +191,8 @@ bool fio_is_remote(fio_location location)
 }
 
 /* Check if specified location is local for current node */
-bool fio_is_remote_simple(fio_location location)
+bool
+fio_is_remote_simple(fio_location location)
 {
 	bool is_remote = MyLocation != FIO_LOCAL_HOST
 		&& location != FIO_LOCAL_HOST
@@ -197,7 +201,8 @@ bool fio_is_remote_simple(fio_location location)
 }
 
 /* Try to read specified amount of bytes unless error or EOF are encountered */
-static ssize_t fio_read_all(int fd, void* buf, size_t size)
+static ssize_t
+fio_read_all(int fd, void* buf, size_t size)
 {
 	size_t offs = 0;
 	while (offs < size)
@@ -728,7 +733,8 @@ fio_decompress(void* dst, void const* src, size_t size, int compress_alg)
 }
 
 /* Write data to the file */
-ssize_t fio_fwrite_compressed(FILE* f, void const* buf, size_t size, int compress_alg)
+ssize_t
+fio_fwrite_compressed(FILE* f, void const* buf, size_t size, int compress_alg)
 {
 	if (fio_is_remote_file(f))
 	{
@@ -764,7 +770,8 @@ fio_write_compressed_impl(int fd, void const* buf, size_t size, int compress_alg
 }
 
 /* Read data from stdio file */
-ssize_t fio_fread(FILE* f, void* buf, size_t size)
+ssize_t
+fio_fread(FILE* f, void* buf, size_t size)
 {
 	size_t rc;
 	if (fio_is_remote_file(f))
@@ -774,7 +781,8 @@ ssize_t fio_fread(FILE* f, void* buf, size_t size)
 }
 
 /* Read data from file */
-ssize_t fio_read(int fd, void* buf, size_t size)
+ssize_t
+fio_read(int fd, void* buf, size_t size)
 {
 	if (fio_is_remote_fd(fd))
 	{
@@ -800,7 +808,8 @@ ssize_t fio_read(int fd, void* buf, size_t size)
 }
 
 /* Get information about file */
-int fio_stat(char const* path, struct stat* st, bool follow_symlink, fio_location location)
+int
+fio_stat(char const* path, struct stat* st, bool follow_symlink, fio_location location)
 {
 	if (fio_is_remote(location))
 	{
@@ -833,7 +842,8 @@ int fio_stat(char const* path, struct stat* st, bool follow_symlink, fio_locatio
 }
 
 /* Check presence of the file */
-int fio_access(char const* path, int mode, fio_location location)
+int
+fio_access(char const* path, int mode, fio_location location)
 {
 	if (fio_is_remote(location))
 	{
@@ -864,7 +874,8 @@ int fio_access(char const* path, int mode, fio_location location)
 }
 
 /* Create symbolic link */
-int fio_symlink(char const* target, char const* link_path, bool overwrite, fio_location location)
+int
+fio_symlink(char const* target, char const* link_path, bool overwrite, fio_location location)
 {
 	if (fio_is_remote(location))
 	{
@@ -891,7 +902,8 @@ int fio_symlink(char const* target, char const* link_path, bool overwrite, fio_l
 	}
 }
 
-static void fio_symlink_impl(int out, char *buf, bool overwrite)
+static void
+fio_symlink_impl(int out, char *buf, bool overwrite)
 {
 	char *linked_path = buf;
 	char *link_path = buf + strlen(buf) + 1;
@@ -905,7 +917,8 @@ static void fio_symlink_impl(int out, char *buf, bool overwrite)
 }
 
 /* Rename file */
-int fio_rename(char const* old_path, char const* new_path, fio_location location)
+int
+fio_rename(char const* old_path, char const* new_path, fio_location location)
 {
 	if (fio_is_remote(location))
 	{
@@ -931,7 +944,8 @@ int fio_rename(char const* old_path, char const* new_path, fio_location location
 }
 
 /* Sync file to disk */
-int fio_sync(char const* path, fio_location location)
+int
+fio_sync(char const* path, fio_location location)
 {
 	if (fio_is_remote(location))
 	{
@@ -973,7 +987,8 @@ int fio_sync(char const* path, fio_location location)
 }
 
 /* Get crc32 of file */
-pg_crc32 fio_get_crc32(const char *file_path, fio_location location, bool decompress)
+pg_crc32
+fio_get_crc32(const char *file_path, fio_location location, bool decompress)
 {
 	if (fio_is_remote(location))
 	{
@@ -1004,7 +1019,8 @@ pg_crc32 fio_get_crc32(const char *file_path, fio_location location, bool decomp
 }
 
 /* Remove file */
-int fio_unlink(char const* path, fio_location location)
+int
+fio_unlink(char const* path, fio_location location)
 {
 	if (fio_is_remote(location))
 	{
@@ -1027,7 +1043,8 @@ int fio_unlink(char const* path, fio_location location)
 }
 
 /* Create directory */
-int fio_mkdir(char const* path, int mode, fio_location location)
+int
+fio_mkdir(char const* path, int mode, fio_location location)
 {
 	if (fio_is_remote(location))
 	{
@@ -1053,7 +1070,8 @@ int fio_mkdir(char const* path, int mode, fio_location location)
 }
 
 /* Change file mode */
-int fio_chmod(char const* path, int mode, fio_location location)
+int
+fio_chmod(char const* path, int mode, fio_location location)
 {
 	if (fio_is_remote(location))
 	{
@@ -1317,7 +1335,8 @@ fio_gzclose(gzFile f)
 	}
 }
 
-int fio_gzeof(gzFile f)
+int
+fio_gzeof(gzFile f)
 {
 	if ((size_t)f & FIO_GZ_REMOTE_MARKER)
 	{
@@ -1330,7 +1349,8 @@ int fio_gzeof(gzFile f)
 	}
 }
 
-const char* fio_gzerror(gzFile f, int *errnum)
+const char*
+fio_gzerror(gzFile f, int *errnum)
 {
 	if ((size_t)f & FIO_GZ_REMOTE_MARKER)
 	{
@@ -1345,7 +1365,8 @@ const char* fio_gzerror(gzFile f, int *errnum)
 	}
 }
 
-z_off_t fio_gzseek(gzFile f, z_off_t offset, int whence)
+z_off_t
+fio_gzseek(gzFile f, z_off_t offset, int whence)
 {
 	Assert(!((size_t)f & FIO_GZ_REMOTE_MARKER));
 	return gzseek(f, offset, whence);
@@ -1357,7 +1378,8 @@ z_off_t fio_gzseek(gzFile f, z_off_t offset, int whence)
 /* Send file content
  * Note: it should not be used for large files.
  */
-static void fio_load_file(int out, char const* path)
+static void
+fio_load_file(int out, char const* path)
 {
 	int fd = open(path, O_RDONLY);
 	fio_header hdr;
@@ -1399,7 +1421,8 @@ static void fio_load_file(int out, char const* path)
  * In case of DELTA mode horizonLsn must be a valid lsn,
  * otherwise it should be set to InvalidXLogRecPtr.
  */
-int fio_send_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
+int
+fio_send_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
 				   XLogRecPtr horizonLsn, int calg, int clevel, uint32 checksum_version,
 				   bool use_pagemap, BlockNumber* err_blknum, char **errormsg,
 				   BackupPageHeader2 **headers)
@@ -1415,7 +1438,7 @@ int fio_send_pages(const char *to_fullpath, const char *from_fullpath, pgFile *f
 
 	/* send message with header
 
-	  8bytes       24bytes             var        var
+	  16bytes      24bytes             var        var
 	--------------------------------------------------------------
 	| fio_header | fio_send_request | FILE PATH | BITMAP(if any) |
 	--------------------------------------------------------------
@@ -1549,6 +1572,173 @@ int fio_send_pages(const char *to_fullpath, const char *from_fullpath, pgFile *f
 	return n_blocks_read;
 }
 
+/*
+ * Return number of actually(!) readed blocks, attempts or
+ * half-readed block are not counted.
+ * Return values in case of error:
+ *  FILE_MISSING
+ *  OPEN_FAILED
+ *  READ_ERROR
+ *  PAGE_CORRUPTION
+ *  WRITE_FAILED
+ *
+ * If none of the above, this function return number of blocks
+ * readed by remote agent.
+ *
+ * In case of DELTA mode horizonLsn must be a valid lsn,
+ * otherwise it should be set to InvalidXLogRecPtr.
+ * Взято из fio_send_pages
+ */
+int
+fio_copy_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
+				   XLogRecPtr horizonLsn, int calg, int clevel, uint32 checksum_version,
+				   bool use_pagemap, BlockNumber* err_blknum, char **errormsg,
+				   BackupPageHeader2 **headers)
+{
+	FILE *out = NULL;
+	char *out_buf = NULL;
+	struct {
+		fio_header hdr;
+		fio_send_request arg;
+	} req;
+	BlockNumber	n_blocks_read = 0;
+	BlockNumber blknum = 0;
+
+	/* send message with header
+
+	  16bytes      24bytes             var        var
+	--------------------------------------------------------------
+	| fio_header | fio_send_request | FILE PATH | BITMAP(if any) |
+	--------------------------------------------------------------
+	*/
+
+	req.hdr.cop = FIO_SEND_PAGES;
+
+	if (use_pagemap)
+	{
+		req.hdr.size = sizeof(fio_send_request) + (*file).pagemap.bitmapsize + strlen(from_fullpath) + 1;
+		req.arg.bitmapsize = (*file).pagemap.bitmapsize;
+
+		/* TODO: add optimization for the case of pagemap
+		 * containing small number of blocks with big serial numbers:
+		 * https://github.com/postgrespro/pg_probackup/blob/remote_page_backup/src/utils/file.c#L1211
+		 */
+	}
+	else
+	{
+		req.hdr.size = sizeof(fio_send_request) + strlen(from_fullpath) + 1;
+		req.arg.bitmapsize = 0;
+	}
+
+	req.arg.nblocks = file->size/BLCKSZ;
+	req.arg.segmentno = file->segno * RELSEG_SIZE;
+	req.arg.horizonLsn = horizonLsn;
+	req.arg.checksumVersion = checksum_version;
+	req.arg.calg = calg;
+	req.arg.clevel = clevel;
+	req.arg.path_len = strlen(from_fullpath) + 1;
+
+	file->compress_alg = calg; /* TODO: wtf? why here? */
+
+//<-----
+//	datapagemap_iterator_t *iter;
+//	BlockNumber blkno;
+//	iter = datapagemap_iterate(pagemap);
+//	while (datapagemap_next(iter, &blkno))
+//		elog(INFO, "block %u", blkno);
+//	pg_free(iter);
+//<-----
+
+	/* send header */
+	IO_CHECK(fio_write_all(fio_stdout, &req, sizeof(req)), sizeof(req));
+
+	/* send file path */
+	IO_CHECK(fio_write_all(fio_stdout, from_fullpath, req.arg.path_len), req.arg.path_len);
+
+	/* send pagemap if any */
+	if (use_pagemap)
+		IO_CHECK(fio_write_all(fio_stdout, (*file).pagemap.bitmap, (*file).pagemap.bitmapsize), (*file).pagemap.bitmapsize);
+
+	out = open_local_file_rw(to_fullpath, &out_buf, STDIO_BUFSIZE);
+	while (true)
+	{
+		fio_header hdr;
+		char buf[BLCKSZ + sizeof(BackupPageHeader)];
+		IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
+
+		if (interrupted)
+			elog(ERROR, "Interrupted during page reading");
+
+		if (hdr.cop == FIO_ERROR)
+		{
+			/* FILE_MISSING, OPEN_FAILED and READ_FAILED */
+			if (hdr.size > 0)
+			{
+				IO_CHECK(fio_read_all(fio_stdin, buf, hdr.size), hdr.size);
+				*errormsg = pgut_malloc(hdr.size);
+				snprintf(*errormsg, hdr.size, "%s", buf);
+			}
+
+			return hdr.arg;
+		}
+		else if (hdr.cop == FIO_SEND_FILE_CORRUPTION)
+		{
+			*err_blknum = hdr.arg;
+
+			if (hdr.size > 0)
+			{
+				IO_CHECK(fio_read_all(fio_stdin, buf, hdr.size), hdr.size);
+				*errormsg = pgut_malloc(hdr.size);
+				snprintf(*errormsg, hdr.size, "%s", buf);
+			}
+			return PAGE_CORRUPTION;
+		}
+		else if (hdr.cop == FIO_SEND_FILE_EOF)
+		{
+			/* n_blocks_read reported by EOF */
+			n_blocks_read = hdr.arg;
+
+			/* receive headers if any */
+			if (hdr.size > 0)
+			{
+				*headers = pgut_malloc(hdr.size);
+				IO_CHECK(fio_read_all(fio_stdin, *headers, hdr.size), hdr.size);
+				file->n_headers = (hdr.size / sizeof(BackupPageHeader2)) -1;
+			}
+
+			break;
+		}
+		else if (hdr.cop == FIO_PAGE)
+		{
+			blknum = hdr.arg;
+
+			Assert(hdr.size <= sizeof(buf));
+			IO_CHECK(fio_read_all(fio_stdin, buf, hdr.size), hdr.size);
+
+			COMP_FILE_CRC32(true, file->crc, buf, hdr.size);
+
+			// должен прилетать некомпрессированный блок с заголовком
+			// Вставить assert?
+			if (fio_fwrite(out, buf + sizeof(BackupPageHeader), hdr.size - sizeof(BackupPageHeader)) != BLCKSZ)
+			{
+				fio_fclose(out);
+				*err_blknum = blknum;
+				return WRITE_FAILED;
+			}
+			file->write_size += BLCKSZ;
+			file->uncompressed_size += BLCKSZ;
+		}
+		else
+			elog(ERROR, "Remote agent returned message of unexpected type: %i", hdr.cop);
+	}
+
+	if (out)
+		fclose(out);
+	pg_free(out_buf);
+
+	return n_blocks_read;
+}
+
 /* TODO: read file using large buffer
  * Return codes:
  *  FIO_ERROR:
@@ -1559,7 +1749,8 @@ int fio_send_pages(const char *to_fullpath, const char *from_fullpath, pgFile *f
  *  FIO_SEND_FILE_CORRUPTION
  *  FIO_SEND_FILE_EOF
  */
-static void fio_send_pages_impl(int out, char* buf)
+static void
+fio_send_pages_impl(int out, char* buf)
 {
 	FILE        *in = NULL;
 	BlockNumber  blknum = 0;
@@ -2524,7 +2715,8 @@ fio_delete_impl(mode_t mode, char *buf)
 }
 
 /* Execute commands at remote host */
-void fio_communicate(int in, int out)
+void
+fio_communicate(int in, int out)
 {
 	/*
 	 * Map of file and directory descriptors.

@@ -541,6 +541,32 @@ typedef struct
 	int			ret;
 } backup_files_arg;
 
+typedef struct
+{
+	PGNodeInfo *nodeInfo;
+
+	const char *from_root;
+	const char *to_root;
+	const char *external_prefix;
+
+	parray	   *files_list;
+	parray	   *prev_filelist;
+	/* TODO разобраться */
+	//parray	   *external_dirs;
+	XLogRecPtr	prev_start_lsn;
+	BackupMode	backup_mode;
+
+	ConnectionArgs conn_arg;
+	int			thread_num;
+	HeaderMap   *hdr_map;
+
+	/*
+	 * Return value from the thread.
+	 * 0 means there is no error, 1 - there is an error.
+	 */
+	int			ret;
+} catchup_files_arg;
+
 
 typedef struct timelineInfo timelineInfo;
 
@@ -774,6 +800,10 @@ extern char *pg_ptrack_get_block(ConnectionArgs *arguments,
 								 Oid dbOid, Oid tblsOid, Oid relOid,
 								 BlockNumber blknum, size_t *result_size,
 								 int ptrack_version_num, const char *ptrack_schema);
+
+/* in catchup.c */
+extern int do_catchup(char *source_pgdata, char *dest_pgdata, BackupMode backup_mode, ConnectionOptions conn_opt, bool stream_wal, int num_threads);
+
 /* in restore.c */
 extern int do_restore_or_validate(time_t target_backup_id,
 					  pgRecoveryTarget *rt,
@@ -996,6 +1026,12 @@ extern void backup_data_file(ConnectionArgs* conn_arg, pgFile *file,
 								 CompressAlg calg, int clevel, uint32 checksum_version,
 								 int ptrack_version_num, const char *ptrack_schema,
 								 HeaderMap *hdr_map, bool missing_ok);
+extern void catchup_data_file(ConnectionArgs* conn_arg, pgFile *file,
+								 const char *from_fullpath, const char *to_fullpath,
+								 XLogRecPtr prev_backup_start_lsn, BackupMode backup_mode,
+								 CompressAlg calg, int clevel, uint32 checksum_version,
+								 int ptrack_version_num, const char *ptrack_schema,
+								 HeaderMap *hdr_map, bool missing_ok);
 extern void backup_non_data_file(pgFile *file, pgFile *prev_file,
 								 const char *from_fullpath, const char *to_fullpath,
 								 BackupMode backup_mode, time_t parent_backup_time,
@@ -1069,6 +1105,7 @@ extern uint32 get_data_checksum_version(bool safe);
 extern pg_crc32c get_pgcontrol_checksum(const char *pgdata_path);
 extern uint32 get_xlog_seg_size(char *pgdata_path);
 extern void get_redo(const char *pgdata_path, RedoParams *redo);
+extern XLogRecPtr get_minRecoveryPoint(char *pgdata_path);
 extern void set_min_recovery_point(pgFile *file, const char *backup_path,
 								   XLogRecPtr stop_backup_lsn);
 extern void copy_pgcontrol_file(const char *from_fullpath, fio_location from_location,
@@ -1121,10 +1158,18 @@ extern int send_pages(ConnectionArgs* conn_arg, const char *to_fullpath, const c
 					  pgFile *file, XLogRecPtr prev_backup_start_lsn, CompressAlg calg, int clevel,
 					  uint32 checksum_version, bool use_pagemap, BackupPageHeader2 **headers,
 					  BackupMode backup_mode, int ptrack_version_num, const char *ptrack_schema);
+extern int copy_pages(ConnectionArgs* conn_arg, const char *to_fullpath, const char *from_fullpath,
+					  pgFile *file, XLogRecPtr prev_backup_start_lsn,
+					  uint32 checksum_version, bool use_pagemap,
+					  BackupMode backup_mode, int ptrack_version_num, const char *ptrack_schema);
 
 /* FIO */
 extern void fio_delete(mode_t mode, const char *fullpath, fio_location location);
 extern int fio_send_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
+	                      XLogRecPtr horizonLsn, int calg, int clevel, uint32 checksum_version,
+	                      bool use_pagemap, BlockNumber *err_blknum, char **errormsg,
+	                      BackupPageHeader2 **headers);
+extern int fio_copy_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
 	                      XLogRecPtr horizonLsn, int calg, int clevel, uint32 checksum_version,
 	                      bool use_pagemap, BlockNumber *err_blknum, char **errormsg,
 	                      BackupPageHeader2 **headers);

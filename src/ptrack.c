@@ -638,7 +638,7 @@ pg_ptrack_get_pagemapset(PGconn *backup_conn, const char *ptrack_schema,
 		/* get bytea */
 		pm_entry->pagemap = (char *) PQunescapeBytea((unsigned char *) PQgetvalue(res, i, 1),
 													&pm_entry->pagemapsize);
-
+		/* ну фигово же возвращать NULL вместо pagemapset->used = 0 при пустом списке !! */
 		if (pagemapset == NULL)
 			pagemapset = parray_new();
 
