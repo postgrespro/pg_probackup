@@ -38,7 +38,8 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
 
         # take FULL backup with external directory pointing to a file
         file_path = os.path.join(core_dir, 'file')
-        open(file_path, "w+")
+        with open(file_path, "w+") as f:
+            pass
 
         try:
             self.backup_node(
@@ -1745,7 +1746,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         # create symlink to directory in external directory
         src_file = os.path.join(symlinked_dir, 'postgresql.conf')
         os.mkdir(external_dir)
-        os.chmod(external_dir, 0700)
+        os.chmod(external_dir, 0o0700)
         os.symlink(src_file, file_in_external_dir)
 
         # FULL backup with external directories
@@ -2123,7 +2124,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         # create empty file in external directory
         # open(os.path.join(external_dir, 'file'), 'a').close()
         os.mkdir(external_dir)
-        os.chmod(external_dir, 0700)
+        os.chmod(external_dir, 0o0700)
         with open(os.path.join(external_dir, 'file'), 'w+') as f:
             f.close()
 
@@ -2189,7 +2190,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         # create empty file in external directory
         # open(os.path.join(external_dir, 'file'), 'a').close()
         os.mkdir(external_dir)
-        os.chmod(external_dir, 0700)
+        os.chmod(external_dir, 0o0700)
         with open(os.path.join(external_dir, 'file'), 'w+') as f:
             f.close()
 
@@ -2258,12 +2259,12 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
 
         # create empty file in external directory
         os.mkdir(external_dir_1)
-        os.chmod(external_dir_1, 0700)
+        os.chmod(external_dir_1, 0o0700)
         with open(os.path.join(external_dir_1, 'fileA'), 'w+') as f:
             f.close()
 
         os.mkdir(external_dir_2)
-        os.chmod(external_dir_2, 0700)
+        os.chmod(external_dir_2, 0o0700)
         with open(os.path.join(external_dir_2, 'fileZ'), 'w+') as f:
             f.close()
 
@@ -2340,12 +2341,12 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
 
         # create empty file in external directory
         os.mkdir(external_dir_1)
-        os.chmod(external_dir_1, 0700)
+        os.chmod(external_dir_1, 0o0700)
         with open(os.path.join(external_dir_1, 'fileA'), 'w+') as f:
             f.close()
 
         os.mkdir(external_dir_2)
-        os.chmod(external_dir_2, 0700)
+        os.chmod(external_dir_2, 0o0700)
         with open(os.path.join(external_dir_2, 'fileZ'), 'w+') as f:
             f.close()
 
@@ -2458,7 +2459,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
 
         logfile = os.path.join(backup_dir, 'log', 'pg_probackup.log')
         with open(logfile, 'r') as f:
-                logfile_content = f.read()
+            logfile_content = f.read()
 
         # get delta between FULL and PAGE filelists
         filelist_full = self.get_backup_filelist(

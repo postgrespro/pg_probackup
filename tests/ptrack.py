@@ -89,7 +89,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         xid = node.safe_psql(
             'postgres',
-            'SELECT txid_current()').rstrip()
+            'SELECT txid_current()').decode('utf-8').rstrip()
         pgbench.wait()
 
         self.backup_node(backup_dir, 'node', node, backup_type='ptrack')
@@ -126,7 +126,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             'select (select sum(tbalance) from pgbench_tellers) - '
             '( select sum(bbalance) from pgbench_branches) + '
             '( select sum(abalance) from pgbench_accounts ) - '
-            '(select sum(delta) from pgbench_history) as must_be_zero').rstrip()
+            '(select sum(delta) from pgbench_history) as must_be_zero').decode('utf-8').rstrip()
 
         self.assertEqual('0', balance)
 
@@ -202,7 +202,8 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             'select (select sum(tbalance) from pgbench_tellers) - '
             '( select sum(bbalance) from pgbench_branches) + '
             '( select sum(abalance) from pgbench_accounts ) - '
-            '(select sum(delta) from pgbench_history) as must_be_zero').rstrip()
+            '(select sum(delta) from pgbench_history) as must_be_zero').\
+            decode('utf-8').rstrip()
 
         self.assertEqual('0', balance)
 
@@ -275,7 +276,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             'select (select sum(tbalance) from pgbench_tellers) - '
             '( select sum(bbalance) from pgbench_branches) + '
             '( select sum(abalance) from pgbench_accounts ) - '
-            '(select sum(delta) from pgbench_history) as must_be_zero').rstrip()
+            '(select sum(delta) from pgbench_history) as must_be_zero').decode('utf-8').rstrip()
 
         self.assertEqual('0', balance)
 
@@ -1107,6 +1108,13 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node', ptrack_backup_id)['recovery-time']
         if self.paranoia:
             pgdata = self.pgdata_content(node.data_dir)
+
+        node.safe_psql(
+            "postgres",
+            "insert into t_heap select i as id,"
+            " md5(i::text) as text,"
+            " md5(i::text)::tsvector as tsvector"
+            " from generate_series(200, 300) i")
 
         # Drop Node
         node.cleanup()
@@ -3023,7 +3031,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             pg_options={
                 'max_wal_size': '32MB',
                 'archive_timeout': '10s',
-                'checkpoint_timeout': '30s',
+                'checkpoint_timeout': '5min',
                 'autovacuum': 'off'})
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
@@ -3100,6 +3108,15 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         # Sync master and replica
         self.wait_until_replica_catch_with_master(master, replica)
 
+        if replica.major_version < 10:
+            replica.safe_psql(
+                "postgres",
+                "select pg_xlog_replay_pause()")
+        else:
+            replica.safe_psql(
+                "postgres",
+                "select pg_wal_replay_pause()")
+
         self.backup_node(
             backup_dir, 'replica', replica, backup_type='ptrack',
             options=[
@@ -3118,10 +3135,20 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         self.restore_node(backup_dir, 'replica', node, data_dir=node.data_dir)
 
         pgdata_restored = self.pgdata_content(node.data_dir)
-        self.compare_pgdata(pgdata, pgdata_restored)
+
+        if self.paranoia:
+            self.compare_pgdata(pgdata, pgdata_restored)
+
+        self.set_auto_conf(node, {'port': node.port})
+
+        node.slow_start()
+
+        node.safe_psql(
+            'postgres',
+            'select 1')
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname, [master, replica])
+        self.del_test_dir(module_name, fname, [master, replica, node])
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure

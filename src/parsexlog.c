@@ -480,7 +480,7 @@ validate_wal(pgBackup *backup, const char *archivedir,
 	last_rec.rec_xid = backup->recovery_xid;
 	last_rec.rec_lsn = backup->stop_lsn;
 
-	time2iso(last_timestamp, lengthof(last_timestamp), backup->recovery_time);
+	time2iso(last_timestamp, lengthof(last_timestamp), backup->recovery_time, false);
 
 	if ((TransactionIdIsValid(target_xid) && target_xid == last_rec.rec_xid)
 		|| (target_time != 0 && backup->recovery_time >= target_time)
@@ -493,7 +493,7 @@ validate_wal(pgBackup *backup, const char *archivedir,
 					   InvalidXLogRecPtr, true, validateXLogRecord, &last_rec, true);
 	if (last_rec.rec_time > 0)
 		time2iso(last_timestamp, lengthof(last_timestamp),
-				 timestamptz_to_time_t(last_rec.rec_time));
+				 timestamptz_to_time_t(last_rec.rec_time), false);
 
 	/* There are all needed WAL records */
 	if (all_wal)
@@ -508,7 +508,7 @@ validate_wal(pgBackup *backup, const char *archivedir,
 			 (uint32) (last_rec.rec_lsn >> 32), (uint32) last_rec.rec_lsn);
 
 		if (target_time > 0)
-			time2iso(target_timestamp, lengthof(target_timestamp), target_time);
+			time2iso(target_timestamp, lengthof(target_timestamp), target_time, false);
 		if (TransactionIdIsValid(target_xid) && target_time != 0)
 			elog(ERROR, "Not enough WAL records to time %s and xid " XID_FMT,
 					target_timestamp, target_xid);
@@ -846,7 +846,14 @@ get_prior_record_lsn(const char *archivedir, XLogRecPtr start_lsn,
 	 */
 	GetXLogSegNo(start_lsn, start_segno, wal_seg_size);
 	if (start_segno == segno)
+	{
 		startpoint = start_lsn;
+#if PG_VERSION_NUM >= 130000
+		if (XLogRecPtrIsInvalid(startpoint))
+			startpoint = SizeOfXLogShortPHD;
+		XLogBeginRead(xlogreader, startpoint);
+#endif
+	}
 	else
 	{
 		XLogRecPtr	found;

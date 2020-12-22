@@ -292,6 +292,7 @@ check_indexes(void *arg)
 	int			i;
 	check_indexes_arg *arguments = (check_indexes_arg *) arg;
 	int			n_indexes = 0;
+	my_thread_num = arguments->thread_num;
 
 	if (arguments->index_list)
 		n_indexes = parray_num(arguments->index_list);

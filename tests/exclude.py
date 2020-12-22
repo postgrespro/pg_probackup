@@ -227,7 +227,7 @@ class ExcludeTest(ProbackupTest, unittest.TestCase):
 
         log_dir = node.safe_psql(
             'postgres',
-            'show log_directory').rstrip()
+            'show log_directory').decode('utf-8').rstrip()
 
         node.cleanup()
 
@@ -264,7 +264,7 @@ class ExcludeTest(ProbackupTest, unittest.TestCase):
 
         log_dir = node.safe_psql(
             'postgres',
-            'show log_directory').rstrip()
+            'show log_directory').decode('utf-8').rstrip()
 
         self.backup_node(
             backup_dir, 'node', node,

@@ -48,7 +48,7 @@ static char *get_log_message(const char *fmt, va_list args) pg_attribute_printf(
 
 /* Functions to work with log files */
 static void open_logfile(FILE **file, const char *filename_format);
-static void release_logfile(void);
+static void release_logfile(bool fatal, void *userdata);
 static char *logfile_getname(const char *format, time_t timestamp);
 static FILE *logfile_open(const char *filename, const char *mode);
 
@@ -92,6 +92,7 @@ init_logger(const char *root_path, LoggerConfig *config)
 #if PG_VERSION_NUM >= 120000
 	/* Setup logging for functions from other modules called by pg_probackup */
 	pg_logging_init(PROGRAM_NAME);
+	errno = 0; /* sometimes pg_logging_init sets errno */
 
 	switch (logger_config.log_level_console)
 	{
@@ -223,12 +224,7 @@ elog_internal(int elevel, bool file_only, const char *message)
 	if (write_to_file)
 	{
 		if (log_file == NULL)
-		{
-			if (logger_config.log_filename == NULL)
-				open_logfile(&log_file, LOG_FILENAME_DEFAULT);
-			else
-				open_logfile(&log_file, logger_config.log_filename);
-		}
+			open_logfile(&log_file, logger_config.log_filename ? logger_config.log_filename : LOG_FILENAME_DEFAULT);
 
 		fprintf(log_file, "%s ", strfbuf);
 		fprintf(log_file, "%s ", str_pid);
@@ -698,7 +694,7 @@ logfile_open:
 	 */
 	if (!exit_hook_registered)
 	{
-		atexit(release_logfile);
+		pgut_atexit_push(release_logfile, NULL);
 		exit_hook_registered = true;
 	}
 }
@@ -707,7 +703,7 @@ logfile_open:
  * Closes opened file.
  */
 static void
-release_logfile(void)
+release_logfile(bool fatal, void *userdata)
 {
 	if (log_file)
 	{

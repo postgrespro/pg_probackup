@@ -675,7 +675,7 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         # check that in-place is disabled
         self.assertIn(
             "WARNING: In-place merge is disabled "
-            "because of program versions mismatch", output)
+            "because of storage format incompatibility", output)
 
         # restore merged backup
         node_restored = self.make_simple_node(
@@ -1007,6 +1007,87 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
                 e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.expectedFailure
+    # @unittest.skip("skip")
+    def test_backward_compatibility_merge_5(self):
+        """
+        Create node, take FULL and PAGE backups with old binary,
+        merge them with new binary.
+        old binary version >= STORAGE_FORMAT_VERSION (2.4.4)
+        """
+
+        if self.version_to_num(self.old_probackup_version) < self.version_to_num('2.4.4'):
+            return unittest.skip('OLD pg_probackup binary must be == 2.4.4 for this test')
+
+        self.assertNotEqual(
+            self.version_to_num(self.old_probackup_version),
+            self.version_to_num(self.probackup_version))
+
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={'autovacuum': 'off'})
+
+        self.init_pb(backup_dir, old_binary=True)
+        self.add_instance(backup_dir, 'node', node, old_binary=True)
+
+        self.set_archiving(backup_dir, 'node', node, old_binary=True)
+        node.slow_start()
+
+        node.pgbench_init(scale=20)
+
+        # FULL backup with OLD binary
+        self.backup_node(backup_dir, 'node', node, old_binary=True)
+
+        pgbench = node.pgbench(
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            options=["-c", "1", "-T", "10", "--no-vacuum"])
+        pgbench.wait()
+        pgbench.stdout.close()
+
+        # PAGE1 backup with OLD binary
+        self.backup_node(
+            backup_dir, 'node', node, backup_type='page', old_binary=True)
+
+        node.safe_psql(
+            'postgres',
+            'DELETE from pgbench_accounts')
+
+        node.safe_psql(
+            'postgres',
+            'VACUUM pgbench_accounts')
+
+        # PAGE2 backup with OLD binary
+        backup_id = self.backup_node(
+            backup_dir, 'node', node, backup_type='page', old_binary=True)
+
+        pgdata = self.pgdata_content(node.data_dir)
+
+        # merge chain created by old binary with new binary
+        output = self.merge_backup(backup_dir, "node", backup_id)
+
+        # check that in-place is disabled
+        self.assertNotIn(
+            "WARNING: In-place merge is disabled "
+            "because of storage format incompatibility", output)
+
+        # restore merged backup
+        node_restored = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node_restored'))
+        node_restored.cleanup()
+
+        self.restore_node(backup_dir, 'node', node_restored)
+
+        pgdata_restored = self.pgdata_content(node_restored.data_dir)
+        self.compare_pgdata(pgdata, pgdata_restored)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)

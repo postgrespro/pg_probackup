@@ -58,7 +58,7 @@ class BugTest(ProbackupTest, unittest.TestCase):
         # we need those later
         node.safe_psql(
             "postgres",
-            "CREATE EXTENSION plpythonu")
+            "CREATE EXTENSION plpython3u")
 
         node.safe_psql(
             "postgres",
@@ -174,7 +174,7 @@ for relation in relations:
         found_corruption = True
 if found_corruption:
     plpy.error('Found Corruption')
-$$ LANGUAGE plpythonu;
+$$ LANGUAGE plpython3u;
 '''
 
         # Find blocks from future

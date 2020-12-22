@@ -210,6 +210,7 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
                 log_file_content)
 
         # Clean after yourself
+        gdb.kill()
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
@@ -259,13 +260,13 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
             node.data_dir,
             node.safe_psql(
                 "db1",
-                "select pg_relation_filepath('pgbench_accounts_pkey')").rstrip())
+                "select pg_relation_filepath('pgbench_accounts_pkey')").decode('utf-8').rstrip())
 
         index_path_2 = os.path.join(
             node.data_dir,
             node.safe_psql(
                 "db2",
-                "select pg_relation_filepath('some_index')").rstrip())
+                "select pg_relation_filepath('some_index')").decode('utf-8').rstrip())
 
         try:
             self.checkdb_node(
@@ -376,7 +377,7 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
 
         heap_path = node.safe_psql(
             "postgres",
-            "select pg_relation_filepath('t_heap')").rstrip()
+            "select pg_relation_filepath('t_heap')").decode('utf-8').rstrip()
 
         # sanity
         try:
@@ -473,14 +474,15 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
         gdb = self.checkdb_node(
             backup_dir, 'node', gdb=True,
             options=[
-                '-d', 'postgres', '-j', '4',
+                '-d', 'postgres', '-j', '2',
                 '--skip-block-validation',
+                '--progress',
                 '--amcheck', '-p', str(node.port)])
 
         gdb.set_breakpoint('amcheck_one_index')
         gdb.run_until_break()
 
-        gdb.continue_execution_until_break(10)
+        gdb.continue_execution_until_break(20)
         gdb.remove_all_breakpoints()
 
         gdb._execute('signal SIGINT')
@@ -494,6 +496,7 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
         self.assertNotIn('connection to client lost', output)
 
         # Clean after yourself
+        gdb.kill()
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
@@ -587,7 +590,7 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
                 'GRANT EXECUTE ON FUNCTION pg_catalog.charne("char", "char") TO backup; '
                 'GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup; '
                 'GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_system() TO backup; '
-                'GRANT EXECUTE ON FUNCTION bt_index_check(regclass) TO backup; '
+#                'GRANT EXECUTE ON FUNCTION bt_index_check(regclass) TO backup; '
                 'GRANT EXECUTE ON FUNCTION bt_index_check(regclass, bool) TO backup;'
             )
         # >= 10
@@ -617,14 +620,10 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
                 'GRANT EXECUTE ON FUNCTION bt_index_check(regclass, bool) TO backup;'
             )
 
-#        if ProbackupTest.enterprise:
-#            node.safe_psql(
-#                "backupdb",
-#                "GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_edition() TO backup")
-#
-#            node.safe_psql(
-#                "backupdb",
-#                "GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_version() TO backup")
+        if ProbackupTest.enterprise:
+            node.safe_psql(
+                "backupdb",
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_edition() TO backup")
 
         # checkdb
         try:
@@ -658,3 +657,6 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
                 e.message,
                 "\n Unexpected Error Message: {0}\n CMD: {1}".format(
                     repr(e.message), self.cmd))
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
