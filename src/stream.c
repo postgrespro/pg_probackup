@@ -394,7 +394,8 @@ wait_WAL_streaming_end(parray *backup_files_list)
 {
     pthread_join(stream_thread, NULL);
 
-    parray_concat(backup_files_list, xlog_files_list);
+    if (backup_files_list != NULL)
+        parray_concat(backup_files_list, xlog_files_list);
     parray_free(xlog_files_list);
     return stream_thread_arg.ret;
 }
