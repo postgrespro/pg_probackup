@@ -64,6 +64,11 @@ static int checkpoint_timeout(PGconn *backup_conn);
 static void *StreamLog(void *arg);
 static bool stop_streaming(XLogRecPtr xlogpos, uint32 timeline,
                            bool segment_finished);
+static void add_walsegment_to_filelist(parray *filelist, uint32 timeline,
+                                       XLogRecPtr xlogpos, char *basedir,
+                                       uint32 xlog_seg_size);
+static void add_history_file_to_filelist(parray *filelist, uint32 timeline,
+										 char *basedir);
 
 /*
  * Run IDENTIFY_SYSTEM through a given connection and
@@ -166,6 +171,8 @@ StreamLog(void *arg)
 	 */
 	stream_arg->startpos -= stream_arg->startpos % instance_config.xlog_seg_size;
 
+    xlog_files_list = parray_new();
+
 	/* Initialize timeout */
 	stream_stop_begin = 0;
 
@@ -205,7 +212,7 @@ StreamLog(void *arg)
 			stream_arg->basedir,
 //			(instance_config.compress_alg == NONE_COMPRESS) ? 0 : instance_config.compress_level,
 			0,
-			true);
+			false);
 		ctl.replication_slot = replication_slot;
 		ctl.stop_socket = PGINVALID_SOCKET;
 		ctl.do_sync = false; /* We sync all files at the end of backup */
@@ -238,6 +245,25 @@ StreamLog(void *arg)
 						standby_message_timeout, NULL, false, false) == false)
 		elog(ERROR, "Problem in receivexlog");
 #endif
+
+    /* be paranoid and sort xlog_files_list,
+     * so if stop_lsn segno is already in the list,
+     * then list must be sorted to detect duplicates.
+     */
+    parray_qsort(xlog_files_list, pgFileCompareRelPathWithExternal);
+
+    /* Add the last segment to the list */
+    add_walsegment_to_filelist(xlog_files_list, stream_arg->starttli,
+                               stop_stream_lsn, (char *) stream_arg->basedir,
+                               instance_config.xlog_seg_size);
+
+    /* append history file to walsegment filelist */
+    add_history_file_to_filelist(xlog_files_list, stream_arg->starttli, (char *) stream_arg->basedir);
+
+    /*
+     * TODO: remove redundant WAL segments
+     * walk pg_wal and remove files with segno greater that of stop_lsn`s segno +1
+     */
 
 	elog(LOG, "finished streaming WAL at %X/%X (timeline %u)",
 		 (uint32) (stop_stream_lsn >> 32), (uint32) stop_stream_lsn, stream_arg->starttli);
@@ -275,41 +301,12 @@ stop_streaming(XLogRecPtr xlogpos, uint32 timeline, bool segment_finished)
 	/* we assume that we get called once at the end of each segment */
 	if (segment_finished)
     {
-        XLogSegNo xlog_segno;
-        char wal_segment_name[MAXFNAMELEN];
-        char wal_segment_relpath[MAXPGPATH];
-        char wal_segment_fullpath[MAXPGPATH];
-        pgFile *file = NULL;
-
         elog(VERBOSE, _("finished segment at %X/%X (timeline %u)"),
              (uint32) (xlogpos >> 32), (uint32) xlogpos, timeline);
 
-        /* Add streamed xlog file into the backup's list of files */
-        if (!xlog_files_list)
-            xlog_files_list = parray_new();
-
-        GetXLogSegNo(xlogpos, xlog_segno, instance_config.xlog_seg_size);
-
-        /* xlogpos points to the current segment, and we need the finished - previous one */
-        xlog_segno--;
-        GetXLogFileName(wal_segment_name, timeline, xlog_segno,
-                        instance_config.xlog_seg_size);
-
-        join_path_components(wal_segment_fullpath,
-                            stream_thread_arg.basedir, wal_segment_name);
-
-        join_path_components(wal_segment_relpath,
-                            PG_XLOG_DIR, wal_segment_name);
-
-        /* append file to filelist */
-        file = pgFileNew(wal_segment_fullpath, wal_segment_relpath, false, 0, FIO_BACKUP_HOST);
-        file->name = file->rel_path;
-        file->crc = pgFileGetCRC(wal_segment_fullpath, true, false);
-
-        /* Should we recheck it using stat? */
-        file->write_size = instance_config.xlog_seg_size;
-        file->uncompressed_size = instance_config.xlog_seg_size;
-        parray_append(xlog_files_list, file);
+        add_walsegment_to_filelist(xlog_files_list, timeline, xlogpos,
+                                   (char*) stream_thread_arg.basedir,
+                                   instance_config.xlog_seg_size);
     }
 
 	/*
@@ -395,9 +392,94 @@ start_WAL_streaming(PGconn *backup_conn, char *stream_dst_path, ConnectionOption
 int
 wait_WAL_streaming_end(parray *backup_files_list)
 {
-	parray_concat(backup_files_list, xlog_files_list);
-	parray_free(xlog_files_list);
+    pthread_join(stream_thread, NULL);
 
-	pthread_join(stream_thread, NULL);
-	return stream_thread_arg.ret;
+    parray_concat(backup_files_list, xlog_files_list);
+    parray_free(xlog_files_list);
+    return stream_thread_arg.ret;
+}
+
+/* Append streamed WAL segment to filelist  */
+void
+add_walsegment_to_filelist(parray *filelist, uint32 timeline, XLogRecPtr xlogpos, char *basedir, uint32 xlog_seg_size)
+{
+    XLogSegNo xlog_segno;
+    char wal_segment_name[MAXFNAMELEN];
+    char wal_segment_relpath[MAXPGPATH];
+    char wal_segment_fullpath[MAXPGPATH];
+    pgFile *file = NULL;
+    pgFile **existing_file = NULL;
+
+    GetXLogSegNo(xlogpos, xlog_segno, xlog_seg_size);
+
+    /*
+     * When xlogpos points to the zero offset (0/3000000),
+     * it means that previous segment was just successfully streamed.
+     * When xlogpos points to the positive offset,
+     * then current segment is successfully streamed.
+     */
+    if (WalSegmentOffset(xlogpos, xlog_seg_size) == 0)
+        xlog_segno--;
+
+    GetXLogFileName(wal_segment_name, timeline, xlog_segno, xlog_seg_size);
+
+    join_path_components(wal_segment_fullpath, basedir, wal_segment_name);
+    join_path_components(wal_segment_relpath, PG_XLOG_DIR, wal_segment_name);
+
+    file = pgFileNew(wal_segment_fullpath, wal_segment_relpath, false, 0, FIO_BACKUP_HOST);
+
+    /*
+     * Check if file is already in the list
+     * stop_lsn segment can be added to this list twice, so
+     * try not to add duplicates
+     */
+
+    existing_file = (pgFile **) parray_bsearch(filelist, file, pgFileCompareRelPathWithExternal);
+
+    if (existing_file)
+    {
+        (*existing_file)->crc = pgFileGetCRC(wal_segment_fullpath, true, false);
+        (*existing_file)->write_size = xlog_seg_size;
+        (*existing_file)->uncompressed_size = xlog_seg_size;
+
+        return;
+    }
+
+    /* calculate crc */
+    file->crc = pgFileGetCRC(wal_segment_fullpath, true, false);
+
+    /* Should we recheck it using stat? */
+    file->write_size = xlog_seg_size;
+    file->uncompressed_size = xlog_seg_size;
+
+    /* append file to filelist */
+    parray_append(filelist, file);
+}
+
+/* Append history file to filelist  */
+void
+add_history_file_to_filelist(parray *filelist, uint32 timeline, char *basedir)
+{
+    char filename[MAXFNAMELEN];
+    char fullpath[MAXPGPATH];
+    char relpath[MAXPGPATH];
+    pgFile *file = NULL;
+
+    /* Timeline 1 does not have a history file */
+    if (timeline == 1)
+        return;
+
+    snprintf(filename, lengthof(filename), "%08X.history", timeline);
+    join_path_components(fullpath, basedir, filename);
+    join_path_components(relpath, PG_XLOG_DIR, filename);
+
+    file = pgFileNew(fullpath, relpath, false, 0, FIO_BACKUP_HOST);
+
+    /* calculate crc */
+    file->crc = pgFileGetCRC(fullpath, true, false);
+    file->write_size = file->size;
+    file->uncompressed_size = file->size;
+
+    /* append file to filelist */
+    parray_append(filelist, file);
 }

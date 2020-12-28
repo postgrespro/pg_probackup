@@ -6,7 +6,7 @@ from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 module_name = 'show'
 
 
-class OptionTest(ProbackupTest, unittest.TestCase):
+class ShowTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure

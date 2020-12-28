@@ -89,7 +89,7 @@ do_delete(time_t backup_id)
 	if (!dry_run)
 	{
 		/* Lock marked for delete backups */
-		catalog_lock_backup_list(delete_list, parray_num(delete_list) - 1, 0, false);
+		catalog_lock_backup_list(delete_list, parray_num(delete_list) - 1, 0, false, true);
 
 		/* Delete backups from the end of list */
 		for (i = (int) parray_num(delete_list) - 1; i >= 0; i--)
@@ -316,7 +316,7 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 				(backup->expire_time > current_time))
 			{
 				char		expire_timestamp[100];
-				time2iso(expire_timestamp, lengthof(expire_timestamp), backup->expire_time);
+				time2iso(expire_timestamp, lengthof(expire_timestamp), backup->expire_time, false);
 
 				elog(LOG, "Backup %s is pinned until '%s', retain",
 					base36enc(backup->start_time), expire_timestamp);
@@ -513,7 +513,7 @@ do_retention_merge(parray *backup_list, parray *to_keep_list, parray *to_purge_l
 		parray_rm(to_purge_list, full_backup, pgBackupCompareId);
 
 		/* Lock merge chain */
-		catalog_lock_backup_list(merge_list, parray_num(merge_list) - 1, 0, true);
+		catalog_lock_backup_list(merge_list, parray_num(merge_list) - 1, 0, true, true);
 
 		/* Consider this extreme case */
 		//  PAGEa1    PAGEb1   both valid
@@ -630,7 +630,7 @@ do_retention_purge(parray *to_keep_list, parray *to_purge_list)
 			continue;
 
 		/* Actual purge */
-		if (!lock_backup(delete_backup, false))
+		if (!lock_backup(delete_backup, false, true))
 		{
 			/* If the backup still is used, do not interrupt and go to the next */
 			elog(WARNING, "Cannot lock backup %s directory, skip purging",
@@ -740,7 +740,7 @@ delete_backup_files(pgBackup *backup)
 		return;
 	}
 
-	time2iso(timestamp, lengthof(timestamp), backup->recovery_time);
+	time2iso(timestamp, lengthof(timestamp), backup->recovery_time, false);
 
 	elog(INFO, "Delete: %s %s",
 		 base36enc(backup->start_time), timestamp);
@@ -975,7 +975,7 @@ do_delete_instance(void)
 	/* Delete all backups. */
 	backup_list = catalog_get_backup_list(instance_name, INVALID_BACKUP_ID);
 
-	catalog_lock_backup_list(backup_list, 0, parray_num(backup_list) - 1, true);
+	catalog_lock_backup_list(backup_list, 0, parray_num(backup_list) - 1, true, true);
 
 	for (i = 0; i < parray_num(backup_list); i++)
 	{
@@ -1081,7 +1081,7 @@ do_delete_status(InstanceConfig *instance_config, const char *status)
 		if (backup->stream)
 			size_to_delete += backup->wal_bytes;
 
-		if (!dry_run && lock_backup(backup, false))
+		if (!dry_run && lock_backup(backup, false, true))
 			delete_backup_files(backup);
 
 		n_deleted++;

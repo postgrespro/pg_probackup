@@ -66,7 +66,8 @@ extern const char  *PROGRAM_EMAIL;
 #define PG_GLOBAL_DIR			"global"
 #define BACKUP_CONTROL_FILE		"backup.control"
 #define BACKUP_CATALOG_CONF_FILE	"pg_probackup.conf"
-#define BACKUP_CATALOG_PID		"backup.pid"
+#define BACKUP_LOCK_FILE		"backup.pid"
+#define BACKUP_RO_LOCK_FILE		"backup_ro.pid"
 #define DATABASE_FILE_LIST		"backup_content.control"
 #define PG_BACKUP_LABEL_FILE	"backup_label"
 #define PG_TABLESPACE_MAP_FILE "tablespace_map"
@@ -78,6 +79,7 @@ extern const char  *PROGRAM_EMAIL;
 /* Timeout defaults */
 #define ARCHIVE_TIMEOUT_DEFAULT		300
 #define REPLICA_TIMEOUT_DEFAULT		300
+#define LOCK_TIMEOUT				30
 
 /* Directory/File permission */
 #define DIR_PERMISSION		(0700)
@@ -157,6 +159,16 @@ typedef enum PartialRestoreType
 	INCLUDE,
 	EXCLUDE,
 } PartialRestoreType;
+
+typedef enum RecoverySettingsMode
+{
+	DEFAULT,	/* not set */
+	DONTWRITE,	/* explicitly forbid to update recovery settings */
+				//TODO Should we always clean/preserve old recovery settings,
+				// or make it configurable?
+	PITR_REQUESTED, /* can be set based on other parameters
+	                 * if not explicitly forbidden */
+} RecoverySettingsMode;
 
 typedef enum CompressAlg
 {
@@ -290,9 +302,11 @@ typedef enum ShowFormat
 #define BYTES_INVALID		(-1) /* file didn`t changed since previous backup, DELTA backup do not rely on it */
 #define FILE_NOT_FOUND		(-2) /* file disappeared during backup */
 #define BLOCKNUM_INVALID	(-1)
-#define PROGRAM_VERSION	"2.4.4"
-#define AGENT_PROTOCOL_VERSION 20404
+#define PROGRAM_VERSION	"2.4.8"
+#define AGENT_PROTOCOL_VERSION 20408
 
+/* update only when changing storage format */
+#define STORAGE_FORMAT_VERSION "2.4.4"
 
 typedef struct ConnectionOptions
 {
@@ -406,10 +420,9 @@ struct pgBackup
 	TimeLineID		tli; 		/* timeline of start and stop backup lsns */
 	XLogRecPtr		start_lsn;	/* backup's starting transaction log location */
 	XLogRecPtr		stop_lsn;	/* backup's finishing transaction log location */
-	time_t			start_time;	/* since this moment backup has status
-								 * BACKUP_STATUS_RUNNING */
-	time_t			merge_dest_backup;	/* start_time of incremental backup,
-									 * this backup is merging with.
+	time_t			start_time;	/* UTC time of backup creation */
+	time_t			merge_dest_backup;	/* start_time of incremental backup with
+									 * which this backup is merging with.
 									 * Only available for FULL backups
 									 * with MERGING or MERGED statuses */
 	time_t			merge_time; /* the moment when merge was started or 0 */
@@ -516,6 +529,8 @@ typedef struct pgRestoreParams
 	bool	is_restore;
 	bool	no_validate;
 	bool	restore_as_replica;
+	//TODO maybe somehow add restore_as_replica as one of RecoverySettingsModes
+	RecoverySettingsMode recovery_settings_mode;
 	bool	skip_external_dirs;
 	bool	skip_block_validation; //Start using it
 	const char *restore_command;
@@ -679,6 +694,9 @@ typedef struct BackupPageHeader2
 	 strcmp((fname) + XLOG_FNAME_LEN, ".gz") == 0)
 
 #if PG_VERSION_NUM >= 110000
+
+#define WalSegmentOffset(xlogptr, wal_segsz_bytes) \
+	XLogSegmentOffset(xlogptr, wal_segsz_bytes)
 #define GetXLogSegNo(xlrp, logSegNo, wal_segsz_bytes) \
 	XLByteToSeg(xlrp, logSegNo, wal_segsz_bytes)
 #define GetXLogRecPtr(segno, offset, wal_segsz_bytes, dest) \
@@ -698,6 +716,8 @@ typedef struct BackupPageHeader2
 #define GetXLogFromFileName(fname, tli, logSegNo, wal_segsz_bytes) \
 		XLogFromFileName(fname, tli, logSegNo, wal_segsz_bytes)
 #else
+#define WalSegmentOffset(xlogptr, wal_segsz_bytes) \
+	((xlogptr) & ((XLogSegSize) - 1))
 #define GetXLogSegNo(xlrp, logSegNo, wal_segsz_bytes) \
 	XLByteToSeg(xlrp, logSegNo)
 #define GetXLogRecPtr(segno, offset, wal_segsz_bytes, dest) \
@@ -894,7 +914,7 @@ extern void write_backup(pgBackup *backup, bool strict);
 extern void write_backup_status(pgBackup *backup, BackupStatus status,
 								const char *instance_name, bool strict);
 extern void write_backup_data_bytes(pgBackup *backup);
-extern bool lock_backup(pgBackup *backup, bool strict);
+extern bool lock_backup(pgBackup *backup, bool strict, bool exclusive);
 
 extern const char *pgBackupGetBackupMode(pgBackup *backup);
 
@@ -904,7 +924,7 @@ extern parray *get_backup_filelist(pgBackup *backup, bool strict);
 extern parray *catalog_get_instance_list(void);
 extern parray *catalog_get_backup_list(const char *instance_name, time_t requested_backup_id);
 extern void catalog_lock_backup_list(parray *backup_list, int from_idx,
-									 int to_idx, bool strict);
+									 int to_idx, bool strict, bool exclusive);
 extern pgBackup *catalog_get_last_data_backup(parray *backup_list,
 											  TimeLineID tli,
 											  time_t current_start_time);
@@ -918,7 +938,7 @@ extern void do_set_backup(const char *instance_name, time_t backup_id,
 extern void pin_backup(pgBackup	*target_backup,
 							pgSetBackupParams *set_backup_params);
 extern void add_note(pgBackup *target_backup, char *note);
-extern void pgBackupWriteControl(FILE *out, pgBackup *backup);
+extern void pgBackupWriteControl(FILE *out, pgBackup *backup, bool utc);
 extern void write_backup_filelist(pgBackup *backup, parray *files,
 								  const char *root, parray *external_list, bool sync);
 
@@ -986,8 +1006,8 @@ extern void fio_pgFileDelete(pgFile *file, const char *full_path);
 
 extern void pgFileFree(void *file);
 
-extern pg_crc32 pgFileGetCRC(const char *file_path, bool missing_ok, bool use_crc32c);
-extern pg_crc32 pgFileGetCRCgz(const char *file_path, bool missing_ok, bool use_crc32c);
+extern pg_crc32 pgFileGetCRC(const char *file_path, bool use_crc32c, bool missing_ok);
+extern pg_crc32 pgFileGetCRCgz(const char *file_path, bool use_crc32c, bool missing_ok);
 
 extern int pgFileMapComparePath(const void *f1, const void *f2);
 extern int pgFileCompareName(const void *f1, const void *f2);
@@ -1085,7 +1105,7 @@ extern void set_min_recovery_point(pgFile *file, const char *backup_path,
 extern void copy_pgcontrol_file(const char *from_fullpath, fio_location from_location,
 					const char *to_fullpath, fio_location to_location, pgFile *file);
 
-extern void time2iso(char *buf, size_t len, time_t time);
+extern void time2iso(char *buf, size_t len, time_t time, bool utc);
 extern const char *status2str(BackupStatus status);
 extern BackupStatus str2status(const char *status);
 extern const char *base36enc(long unsigned int value);
@@ -1144,6 +1164,9 @@ extern void fio_list_dir(parray *files, const char *root, bool exclude, bool fol
 						 bool add_root, bool backup_logs, bool skip_hidden, int external_dir_num);
 
 extern bool pgut_rmtree(const char *path, bool rmtopdir, bool strict);
+
+extern void pgut_setenv(const char *key, const char *val);
+extern void pgut_unsetenv(const char *key);
 
 extern PageState *fio_get_checksum_map(const char *fullpath, uint32 checksum_version, int n_blocks,
 									XLogRecPtr dest_stop_lsn, BlockNumber segmentno, fio_location location);

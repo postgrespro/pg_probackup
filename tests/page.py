@@ -393,7 +393,7 @@ class PageTest(ProbackupTest, unittest.TestCase):
         pgbench.wait()
 
         # GET LOGICAL CONTENT FROM NODE
-        result = node.safe_psql("postgres", "select * from pgbench_accounts")
+        result = node.safe_psql("postgres", "select count(*) from pgbench_accounts")
         # PAGE BACKUP
         self.backup_node(backup_dir, 'node', node, backup_type='page')
 
@@ -422,7 +422,7 @@ class PageTest(ProbackupTest, unittest.TestCase):
         restored_node.slow_start()
 
         result_new = restored_node.safe_psql(
-            "postgres", "select * from pgbench_accounts")
+            "postgres", "select count(*) from pgbench_accounts")
 
         # COMPARE RESTORED FILES
         self.assertEqual(result, result_new, 'data is lost')

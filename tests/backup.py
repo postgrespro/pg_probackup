@@ -212,9 +212,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         except ProbackupException as e:
             self.assertTrue(
                 "INFO: Validate backups of the instance 'node'" in e.message and
-                "WARNING: Backup file".format(
-                    file) in e.message and
-                "is not found".format(file) in e.message and
+                "WARNING: Backup file" in e.message and "is not found" in e.message and
                 "WARNING: Backup {0} data files are corrupted".format(
                     backup_id) in e.message and
                 "WARNING: Some backups are not valid" in e.message,
@@ -2898,6 +2896,37 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 
         pgdata_restored = self.pgdata_content(node_restored.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_issue_231(self):
+        """
+        https://github.com/postgrespro/pg_probackup/issues/231
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={'autovacuum': 'off'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.slow_start()
+
+        datadir = os.path.join(node.data_dir, '123')
+
+        try:
+            self.backup_node(
+                backup_dir, 'node', node,
+                data_dir='{0}'.format(datadir), return_id=False)
+        except:
+            pass
+
+        self.backup_node(backup_dir, 'node', node, options=['--stream'])
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
