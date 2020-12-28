@@ -49,8 +49,6 @@ static void *backup_files(void *arg);
 
 static void do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool backup_logs);
 
-static void pg_start_backup(const char *label, bool smooth, pgBackup *backup,
-							PGNodeInfo *nodeInfo, PGconn *conn);
 static void pg_switch_wal(PGconn *conn);
 static void pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn, PGNodeInfo *nodeInfo);
 
@@ -138,7 +136,19 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool
 			strlen(" with pg_probackup"));
 
 	/* Call pg_start_backup function in PostgreSQL connect */
-	pg_start_backup(label, smooth_checkpoint, &current, nodeInfo, backup_conn);
+	current.start_lsn = pg_start_backup(label, smooth_checkpoint, backup_conn);
+
+	if ((!stream_wal || current.backup_mode == BACKUP_MODE_DIFF_PAGE) &&
+		!current.from_replica &&
+		!(nodeInfo->server_version < 90600 &&
+		  !nodeInfo->is_superuser))
+		/*
+		 * Switch to a new WAL segment. It is necessary to get archived WAL
+		 * segment, which includes start LSN of current backup.
+		 * Don`t do this for replica backups and for PG 9.5 if pguser is not superuser
+		 * (because in 9.5 only superuser can switch WAL)
+		 */
+		pg_switch_wal(conn);
 
 	/* Obtain current timeline */
 #if PG_VERSION_NUM >= 90600
@@ -1030,14 +1040,14 @@ confirm_block_size(PGconn *conn, const char *name, int blcksz)
 /*
  * Notify start of backup to PostgreSQL server.
  */
-static void
-pg_start_backup(const char *label, bool smooth, pgBackup *backup,
-				PGNodeInfo *nodeInfo, PGconn *conn)
+XLogRecPtr
+pg_start_backup(const char *label, bool smooth, PGconn *conn)
 {
 	PGresult   *res;
 	const char *params[2];
 	uint32		lsn_hi;
 	uint32		lsn_lo;
+	XLogRecPtr start_lsn;
 
 	params[0] = label;
 
@@ -1064,21 +1074,11 @@ pg_start_backup(const char *label, bool smooth, pgBackup *backup,
 	/* Extract timeline and LSN from results of pg_start_backup() */
 	XLogDataFromLSN(PQgetvalue(res, 0, 0), &lsn_hi, &lsn_lo);
 	/* Calculate LSN */
-	backup->start_lsn = ((uint64) lsn_hi )<< 32 | lsn_lo;
+	start_lsn = ((uint64) lsn_hi )<< 32 | lsn_lo;
 
 	PQclear(res);
 
-	if ((!stream_wal || current.backup_mode == BACKUP_MODE_DIFF_PAGE) &&
-		!backup->from_replica &&
-		!(nodeInfo->server_version < 90600 &&
-		  !nodeInfo->is_superuser))
-		/*
-		 * Switch to a new WAL segment. It is necessary to get archived WAL
-		 * segment, which includes start LSN of current backup.
-		 * Don`t do this for replica backups and for PG 9.5 if pguser is not superuser
-		 * (because in 9.5 only superuser can switch WAL)
-		 */
-		pg_switch_wal(conn);
+	return start_lsn;
 }
 
 /*

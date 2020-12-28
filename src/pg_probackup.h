@@ -821,6 +821,9 @@ extern char *pg_ptrack_get_block(ConnectionArgs *arguments,
 								 BlockNumber blknum, size_t *result_size,
 								 int ptrack_version_num, const char *ptrack_schema);
 
+extern XLogRecPtr pg_start_backup(const char *label, bool smooth, PGconn *conn);
+
+
 /* in catchup.c */
 extern int do_catchup(char *source_pgdata, char *dest_pgdata, BackupMode backup_mode, ConnectionOptions conn_opt, bool stream_wal, int num_threads);
 

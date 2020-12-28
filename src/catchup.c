@@ -2,8 +2,7 @@
  *
  * catchup.c: sync DB cluster
  *
- * Portions Copyright (c) 2009-2013, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
- * Portions Copyright (c) 2015-2020, Postgres Professional
+ * Copyright (c) 2020-2021, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */
@@ -45,8 +44,6 @@ static void catchup_cleanup(bool fatal, void *userdata);
 static void *catchup_files(void *arg);
 
 static void do_catchup_instance(char *source_pgdata, char *dest_pgdata, PGconn *backup_conn, PGNodeInfo *nodeInfo, BackupMode backup_mode, bool no_sync, bool backup_logs);
-
-static void catchup_pg_start_backup(char *label, bool smooth, BackupMode backup_mode, XLogRecPtr *start_lsn, PGNodeInfo *nodeInfo, PGconn *conn);
 
 static void pg_switch_wal(PGconn *conn);
 static void catchup_pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn, PGNodeInfo *nodeInfo, char *dest_pgdata);
@@ -124,7 +121,20 @@ do_catchup_instance(char *source_pgdata, char *dest_pgdata, PGconn *backup_conn,
 			strlen(" with pg_probackup"));
 
 	/* Call pg_start_backup function in PostgreSQL connect */
-	catchup_pg_start_backup(label, smooth_checkpoint, backup_mode, &start_lsn, nodeInfo, backup_conn);
+	start_lsn = pg_start_backup(label, smooth_checkpoint, backup_conn);
+
+	/* TODO !!! */
+	if ((!stream_wal || backup_mode == BACKUP_MODE_DIFF_PAGE) &&
+	/*	!backup->from_replica && */
+		!(nodeInfo->server_version < 90600 &&
+		  !nodeInfo->is_superuser))
+		/*
+		 * Switch to a new WAL segment. It is necessary to get archived WAL
+		 * segment, which includes start LSN of current backup.
+		 * Don`t do this for replica backups and for PG 9.5 if pguser is not superuser
+		 * (because in 9.5 only superuser can switch WAL)
+		 */
+		pg_switch_wal(conn);
 
 	/* Obtain current timeline */
 #if PG_VERSION_NUM >= 90600
@@ -730,61 +740,6 @@ do_catchup(char *source_pgdata, char *dest_pgdata, BackupMode backup_mode, Conne
 	//	do_retention();
 
 	return 0;
-}
-
-/*
- * Notify start of backup to PostgreSQL server.
- */
-static void
-catchup_pg_start_backup(char *label, bool smooth, BackupMode backup_mode, XLogRecPtr *start_lsn,
-				PGNodeInfo *nodeInfo, PGconn *conn)
-{
-	PGresult   *res;
-	const char *params[2];
-	uint32		lsn_hi;
-	uint32		lsn_lo;
-
-	params[0] = label;
-
-	/* 2nd argument is 'fast'*/
-	params[1] = smooth ? "false" : "true";
-	if (!exclusive_backup)
-		res = pgut_execute(conn,
-						   "SELECT pg_catalog.pg_start_backup($1, $2, false)",
-						   2,
-						   params);
-	else
-		res = pgut_execute(conn,
-						   "SELECT pg_catalog.pg_start_backup($1, $2)",
-						   2,
-						   params);
-
-	/*
-	 * Set flag that pg_start_backup() was called. If an error will happen it
-	 * is necessary to call pg_stop_backup() in backup_cleanup().
-	 */
-	backup_in_progress = true;
-	pgut_atexit_push(backup_stopbackup_callback, conn);
-
-	/* Extract timeline and LSN from results of pg_start_backup() */
-	XLogDataFromLSN(PQgetvalue(res, 0, 0), &lsn_hi, &lsn_lo);
-	/* Calculate LSN */
-	*start_lsn = ((uint64) lsn_hi )<< 32 | lsn_lo;
-
-	PQclear(res);
-
-	/* TODO !!! */
-	if ((!stream_wal || backup_mode == BACKUP_MODE_DIFF_PAGE) &&
-	/*	!backup->from_replica && */
-		!(nodeInfo->server_version < 90600 &&
-		  !nodeInfo->is_superuser))
-		/*
-		 * Switch to a new WAL segment. It is necessary to get archived WAL
-		 * segment, which includes start LSN of current backup.
-		 * Don`t do this for replica backups and for PG 9.5 if pguser is not superuser
-		 * (because in 9.5 only superuser can switch WAL)
-		 */
-		pg_switch_wal(conn);
 }
 
 /*
