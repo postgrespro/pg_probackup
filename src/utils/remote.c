@@ -82,6 +82,11 @@ void wait_ssh(void)
 #endif
 }
 
+/*
+ * On windows we launch a new pbk process via 'pg_probackup ssh ...'
+ * so this process would new that it should exec ssh, because
+ * there is no fork on Windows.
+ */
 #ifdef WIN32
 void launch_ssh(char* argv[])
 {

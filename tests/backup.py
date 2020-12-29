@@ -1968,7 +1968,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
-        os.chmod(full_path, 700)
+        os.rmdir(full_path)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname, [node])
@@ -2896,6 +2896,37 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 
         pgdata_restored = self.pgdata_content(node_restored.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_issue_231(self):
+        """
+        https://github.com/postgrespro/pg_probackup/issues/231
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={'autovacuum': 'off'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.slow_start()
+
+        datadir = os.path.join(node.data_dir, '123')
+
+        try:
+            self.backup_node(
+                backup_dir, 'node', node,
+                data_dir='{0}'.format(datadir), return_id=False)
+        except:
+            pass
+
+        self.backup_node(backup_dir, 'node', node, options=['--stream'])
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
