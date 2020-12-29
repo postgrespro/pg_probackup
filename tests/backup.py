@@ -1968,7 +1968,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
-        os.chmod(full_path, 700)
+        os.rmdir(full_path)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname, [node])
