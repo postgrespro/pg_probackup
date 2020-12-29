@@ -27,27 +27,6 @@ const char  *PROGRAM_FULL_PATH = NULL;
 const char  *PROGRAM_URL = "https://github.com/postgrespro/pg_probackup";
 const char  *PROGRAM_EMAIL = "https://github.com/postgrespro/pg_probackup/issues";
 
-typedef enum ProbackupSubcmd
-{
-	NO_CMD = 0,
-	INIT_CMD,
-	ADD_INSTANCE_CMD,
-	DELETE_INSTANCE_CMD,
-	ARCHIVE_PUSH_CMD,
-	ARCHIVE_GET_CMD,
-	BACKUP_CMD,
-	RESTORE_CMD,
-	VALIDATE_CMD,
-	DELETE_CMD,
-	MERGE_CMD,
-	SHOW_CMD,
-	SET_CONFIG_CMD,
-	SET_BACKUP_CMD,
-	SHOW_CONFIG_CMD,
-	CHECKDB_CMD
-} ProbackupSubcmd;
-
-
 /* directory options */
 char	   *backup_path = NULL;
 /*
@@ -67,6 +46,8 @@ char	   *externaldir = NULL;
 static char *backup_id_string = NULL;
 int			num_threads = 1;
 bool		stream_wal = false;
+bool		no_color = false;
+bool 		show_color = true;
 bool        is_archive_cmd = false;
 pid_t       my_pid = 0;
 __thread int  my_thread_num = 1;
@@ -150,7 +131,6 @@ static pgSetBackupParams *set_backup_params = NULL;
 
 /* current settings */
 pgBackup	current;
-static ProbackupSubcmd backup_subcmd = NO_CMD;
 
 static bool help_opt = false;
 
@@ -158,7 +138,7 @@ static void opt_incr_restore_mode(ConfigOption *opt, const char *arg);
 static void opt_backup_mode(ConfigOption *opt, const char *arg);
 static void opt_show_format(ConfigOption *opt, const char *arg);
 
-static void compress_init(void);
+static void compress_init(ProbackupSubcmd const subcmd);
 
 static void opt_datname_exclude_list(ConfigOption *opt, const char *arg);
 static void opt_datname_include_list(ConfigOption *opt, const char *arg);
@@ -178,6 +158,7 @@ static ConfigOption cmd_options[] =
 	{ 'b', 132, "progress",			&progress,			SOURCE_CMD_STRICT },
 	{ 's', 'i', "backup-id",		&backup_id_string,	SOURCE_CMD_STRICT },
 	{ 'b', 133, "no-sync",			&no_sync,			SOURCE_CMD_STRICT },
+	{ 'b', 134, "no-color",			&no_color,			SOURCE_CMD_STRICT },
 	/* backup options */
 	{ 'b', 180, "backup-pg-log",	&backup_logs,		SOURCE_CMD_STRICT },
 	{ 'f', 'b', "backup-mode",		opt_backup_mode,	SOURCE_CMD_STRICT },
@@ -256,34 +237,19 @@ static ConfigOption cmd_options[] =
 	{ 0 }
 };
 
-static void
-setMyLocation(void)
-{
-
-#ifdef WIN32
-	if (IsSshProtocol())
-		elog(ERROR, "Currently remote operations on Windows are not supported");
-#endif
-
-	MyLocation = IsSshProtocol()
-		? (backup_subcmd == ARCHIVE_PUSH_CMD || backup_subcmd == ARCHIVE_GET_CMD)
-		   ? FIO_DB_HOST
-		   : (backup_subcmd == BACKUP_CMD || backup_subcmd == RESTORE_CMD || backup_subcmd == ADD_INSTANCE_CMD)
-		      ? FIO_BACKUP_HOST
-		      : FIO_LOCAL_HOST
-		: FIO_LOCAL_HOST;
-}
-
 /*
  * Entry point of pg_probackup command.
  */
 int
 main(int argc, char *argv[])
 {
-	char	   *command = NULL,
-			   *command_name;
+	char	   *command = NULL;
+	ProbackupSubcmd backup_subcmd = NO_CMD;
 
 	PROGRAM_NAME_FULL = argv[0];
+
+	/* Check terminal presense and initialize ANSI escape codes for Windows */
+	init_console();
 
 	/* Initialize current backup */
 	pgBackupInit(&current);
@@ -316,91 +282,58 @@ main(int argc, char *argv[])
 	/* Parse subcommands and non-subcommand options */
 	if (argc > 1)
 	{
-		if (strcmp(argv[1], "archive-push") == 0)
-			backup_subcmd = ARCHIVE_PUSH_CMD;
-		else if (strcmp(argv[1], "archive-get") == 0)
-			backup_subcmd = ARCHIVE_GET_CMD;
-		else if (strcmp(argv[1], "add-instance") == 0)
-			backup_subcmd = ADD_INSTANCE_CMD;
-		else if (strcmp(argv[1], "del-instance") == 0)
-			backup_subcmd = DELETE_INSTANCE_CMD;
-		else if (strcmp(argv[1], "init") == 0)
-			backup_subcmd = INIT_CMD;
-		else if (strcmp(argv[1], "backup") == 0)
-			backup_subcmd = BACKUP_CMD;
-		else if (strcmp(argv[1], "restore") == 0)
-			backup_subcmd = RESTORE_CMD;
-		else if (strcmp(argv[1], "validate") == 0)
-			backup_subcmd = VALIDATE_CMD;
-		else if (strcmp(argv[1], "delete") == 0)
-			backup_subcmd = DELETE_CMD;
-		else if (strcmp(argv[1], "merge") == 0)
-			backup_subcmd = MERGE_CMD;
-		else if (strcmp(argv[1], "show") == 0)
-			backup_subcmd = SHOW_CMD;
-		else if (strcmp(argv[1], "set-config") == 0)
-			backup_subcmd = SET_CONFIG_CMD;
-		else if (strcmp(argv[1], "set-backup") == 0)
-			backup_subcmd = SET_BACKUP_CMD;
-		else if (strcmp(argv[1], "show-config") == 0)
-			backup_subcmd = SHOW_CONFIG_CMD;
-		else if (strcmp(argv[1], "checkdb") == 0)
-			backup_subcmd = CHECKDB_CMD;
+		backup_subcmd = parse_subcmd(argv[1]);
+		switch(backup_subcmd)
+		{
+			case SSH_CMD:
 #ifdef WIN32
-		else if (strcmp(argv[1], "ssh") == 0)
-		    launch_ssh(argv);
-#endif
-		else if (strcmp(argv[1], "agent") == 0)
-		{
-			/* 'No forward compatibility' sanity:
-			 *   /old/binary  -> ssh execute -> /newer/binary agent version_num
-			 * If we are executed as an agent for older binary, then exit with error
-			 */
-			if (argc > 2)
-			{
-				elog(ERROR, "Version mismatch, pg_probackup binary with version '%s' "
-						"is launched as an agent for pg_probackup binary with version '%s'",
-						PROGRAM_VERSION, argv[2]);
-			}
-			fio_communicate(STDIN_FILENO, STDOUT_FILENO);
-			return 0;
-		}
-		else if (strcmp(argv[1], "--help") == 0 ||
-				 strcmp(argv[1], "-?") == 0 ||
-				 strcmp(argv[1], "help") == 0)
-		{
-			if (argc > 2)
-				help_command(argv[2]);
-			else
-				help_pg_probackup();
-		}
-		else if (strcmp(argv[1], "--version") == 0
-				 || strcmp(argv[1], "version") == 0
-				 || strcmp(argv[1], "-V") == 0)
-		{
-#ifdef PGPRO_VERSION
-			fprintf(stdout, "%s %s (Postgres Pro %s %s)\n",
-					PROGRAM_NAME, PROGRAM_VERSION,
-					PGPRO_VERSION, PGPRO_EDITION);
+				launch_ssh(argv);
+				break;
 #else
-			fprintf(stdout, "%s %s (PostgreSQL %s)\n",
-					PROGRAM_NAME, PROGRAM_VERSION, PG_VERSION);
+				elog(ERROR, "\"ssh\" command implemented only for Windows");
 #endif
-			exit(0);
+			case AGENT_CMD:
+				/* 'No forward compatibility' sanity:
+				 *   /old/binary  -> ssh execute -> /newer/binary agent version_num
+				 * If we are executed as an agent for older binary, then exit with error
+				 */
+				if (argc > 2)
+					elog(ERROR, "Version mismatch, pg_probackup binary with version '%s' "
+							"is launched as an agent for pg_probackup binary with version '%s'",
+							PROGRAM_VERSION, argv[2]);
+				fio_communicate(STDIN_FILENO, STDOUT_FILENO);
+				return 0;
+			case HELP_CMD:
+				if (argc > 2)
+				{
+					/* 'pg_probackup help command' style */
+					help_command(parse_subcmd(argv[2]));
+					exit(0);
+				}
+				else
+				{
+					help_pg_probackup();
+					exit(0);
+				}
+				break;
+			case VERSION_CMD:
+				help_print_version();
+				exit(0);
+			case NO_CMD:
+				elog(ERROR, "Unknown subcommand \"%s\"", argv[1]);
+			default:
+				/* Silence compiler warnings */
+				break;
 		}
-		else
-			elog(ERROR, "Unknown subcommand \"%s\"", argv[1]);
 	}
-
-	if (backup_subcmd == NO_CMD)
-		elog(ERROR, "No subcommand specified");
+	else
+		elog(ERROR, "No subcommand specified. Please run with \"help\" argument to see possible subcommands.");
 
 	/*
 	 * Make command string before getopt_long() will call. It permutes the
 	 * content of argv.
 	 */
 	/* TODO why do we do that only for some commands? */
-	command_name = pstrdup(argv[1]);
 	if (backup_subcmd == BACKUP_CMD ||
 		backup_subcmd == RESTORE_CMD ||
 		backup_subcmd == VALIDATE_CMD ||
@@ -440,10 +373,18 @@ main(int argc, char *argv[])
 
 	pgut_init();
 
-	if (help_opt)
-		help_command(command_name);
+	if (no_color)
+		show_color = false;
 
-	/* backup_path is required for all pg_probackup commands except help and checkdb */
+	if (help_opt)
+	{
+		/* 'pg_probackup command --help' style */
+		help_command(backup_subcmd);
+		exit(0);
+	}
+
+	setMyLocation(backup_subcmd);
+
 	if (backup_path == NULL)
 	{
 		/*
@@ -451,11 +392,7 @@ main(int argc, char *argv[])
 		 * from environment variable
 		 */
 		backup_path = getenv("BACKUP_PATH");
-		if (backup_path == NULL && backup_subcmd != CHECKDB_CMD)
-			elog(ERROR, "required parameter not specified: BACKUP_PATH (-B, --backup-path)");
 	}
-
-	setMyLocation();
 
 	if (backup_path != NULL)
 	{
@@ -465,11 +402,9 @@ main(int argc, char *argv[])
 		if (!is_absolute_path(backup_path))
 			elog(ERROR, "-B, --backup-path must be an absolute path");
 	}
-
-	/* Ensure that backup_path is an absolute path */
-	if (backup_path && !is_absolute_path(backup_path))
-		elog(ERROR, "-B, --backup-path must be an absolute path");
-
+	/* backup_path is required for all pg_probackup commands except help, version and checkdb */
+	if (backup_path == NULL && backup_subcmd != CHECKDB_CMD && backup_subcmd != HELP_CMD && backup_subcmd != VERSION_CMD)
+		elog(ERROR, "required parameter not specified: BACKUP_PATH (-B, --backup-path)");
 
 	/*
 	 * Option --instance is required for all commands except
@@ -565,7 +500,8 @@ main(int argc, char *argv[])
 			else
 				config_read_opt(path, instance_options, ERROR, true, false);
 		}
-		setMyLocation();
+		/* Зачем второй раз устанавливать? */
+		setMyLocation(backup_subcmd);
 	}
 
 	/*
@@ -667,7 +603,7 @@ main(int argc, char *argv[])
 			backup_subcmd != SET_BACKUP_CMD &&
 			backup_subcmd != SHOW_CMD)
 			elog(ERROR, "Cannot use -i (--backup-id) option together with the \"%s\" command",
-				 command_name);
+				 get_subcmd_name(backup_subcmd));
 
 		current.backup_id = base36dec(backup_id_string);
 		if (current.backup_id == 0)
@@ -700,7 +636,7 @@ main(int argc, char *argv[])
 
 		if (force && backup_subcmd != RESTORE_CMD)
 			elog(ERROR, "You cannot specify \"--force\" flag with the \"%s\" command",
-				command_name);
+				get_subcmd_name(backup_subcmd));
 
 		if (force)
 			no_validate = true;
@@ -770,7 +706,7 @@ main(int argc, char *argv[])
 	/* sanity */
 	if (backup_subcmd == VALIDATE_CMD && restore_params->no_validate)
 		elog(ERROR, "You cannot specify \"--no-validate\" option with the \"%s\" command",
-			command_name);
+			get_subcmd_name(backup_subcmd));
 
 	if (num_threads < 1)
 		num_threads = 1;
@@ -778,7 +714,7 @@ main(int argc, char *argv[])
 	if (batch_size < 1)
 		batch_size = 1;
 
-	compress_init();
+	compress_init(backup_subcmd);
 
 	/* do actual operation */
 	switch (backup_subcmd)
@@ -872,6 +808,13 @@ main(int argc, char *argv[])
 		case NO_CMD:
 			/* Should not happen */
 			elog(ERROR, "Unknown subcommand");
+		case SSH_CMD:
+		case AGENT_CMD:
+			/* Может перейти на использование какого-нибудь do_agent() для однобразия? */
+		case HELP_CMD:
+		case VERSION_CMD:
+			/* Silence compiler warnings, these already handled earlier */
+			break;
 	}
 
 	return 0;
@@ -934,13 +877,13 @@ opt_show_format(ConfigOption *opt, const char *arg)
  * Initialize compress and sanity checks for compress.
  */
 static void
-compress_init(void)
+compress_init(ProbackupSubcmd const subcmd)
 {
 	/* Default algorithm is zlib */
 	if (compress_shortcut)
 		instance_config.compress_alg = ZLIB_COMPRESS;
 
-	if (backup_subcmd != SET_CONFIG_CMD)
+	if (subcmd != SET_CONFIG_CMD)
 	{
 		if (instance_config.compress_level != COMPRESS_LEVEL_DEFAULT
 			&& instance_config.compress_alg == NOT_DEFINED_COMPRESS)
@@ -954,7 +897,7 @@ compress_init(void)
 	if (instance_config.compress_alg == ZLIB_COMPRESS && instance_config.compress_level == 0)
 		elog(WARNING, "Compression level 0 will lead to data bloat!");
 
-	if (backup_subcmd == BACKUP_CMD || backup_subcmd == ARCHIVE_PUSH_CMD)
+	if (subcmd == BACKUP_CMD || subcmd == ARCHIVE_PUSH_CMD)
 	{
 #ifndef HAVE_LIBZ
 		if (instance_config.compress_alg == ZLIB_COMPRESS)

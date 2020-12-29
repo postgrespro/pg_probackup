@@ -405,7 +405,7 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 		/* TODO: add ancestor(chain full backup) ID */
 		elog(INFO, "Backup %s, mode: %s, status: %s. Redundancy: %i/%i, Time Window: %ud/%ud. %s",
 				base36enc(backup->start_time),
-				pgBackupGetBackupMode(backup),
+				pgBackupGetBackupMode(backup, false),
 				status2str(backup->status),
 				cur_full_backup_num,
 				instance_config.retention_redundancy,

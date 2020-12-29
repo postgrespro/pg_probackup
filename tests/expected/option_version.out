@@ -1,1 +1,5 @@
+<<<<<<< HEAD
+pg_probackup 2.5.0
+=======
 pg_probackup 2.4.8
+>>>>>>> master

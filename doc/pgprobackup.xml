@@ -3586,7 +3586,7 @@ pg_probackup show-config -B <replaceable>backup_dir</replaceable> --instance <re
       <title>show</title>
       <programlisting>
 pg_probackup show -B <replaceable>backup_dir</replaceable>
-[--help] [--instance <replaceable>instance_name</replaceable> [-i <replaceable>backup_id</replaceable> | --archive]] [--format=plain|json]
+[--help] [--instance <replaceable>instance_name</replaceable> [-i <replaceable>backup_id</replaceable> | --archive]] [--format=plain|json] [--no-color]
 </programlisting>
       <para>
         Shows the contents of the backup catalog. If
@@ -3601,6 +3601,8 @@ pg_probackup show -B <replaceable>backup_dir</replaceable>
         plain text. You can specify the
         <literal>--format=json</literal> option to get the result
         in the <acronym>JSON</acronym> format.
+        If <literal>--no-color</literal> flag is used,
+        then the output is not colored.
       </para>
       <para>
         For details on usage, see the sections
@@ -4628,6 +4630,16 @@ pg_probackup archive-get -B <replaceable>backup_dir</replaceable> --instance <re
       </para>
       <para>
       <variablelist>
+
+      <varlistentry>
+<term><option>--no-color</option></term>
+      <listitem>
+      <para>
+        Disable the coloring for console log messages of <literal>warning</literal> and <literal>error</literal> levels.
+      </para>
+      </listitem>
+      </varlistentry>
+
       <varlistentry>
 <term><option>--log-level-console=<replaceable>log_level</replaceable></option></term>
       <listitem>

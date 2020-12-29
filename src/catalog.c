@@ -655,9 +655,22 @@ lock_backup_read_only(pgBackup *backup)
  * Get backup_mode in string representation.
  */
 const char *
-pgBackupGetBackupMode(pgBackup *backup)
+pgBackupGetBackupMode(pgBackup *backup, bool show_color)
 {
-	return backupModes[backup->backup_mode];
+	if (show_color)
+	{
+		/* color the Backup mode */
+		char *mode = pgut_malloc(24); /* leaking memory here */
+
+		if (backup->backup_mode == BACKUP_MODE_FULL)
+			snprintf(mode, 24, "%s%s%s", TC_GREEN_BOLD, backupModes[backup->backup_mode], TC_RESET);
+		else
+			snprintf(mode, 24, "%s%s%s", TC_BLUE_BOLD, backupModes[backup->backup_mode], TC_RESET);
+
+		return mode;
+	}
+	else
+		return backupModes[backup->backup_mode];
 }
 
 static bool
@@ -2008,7 +2021,7 @@ pgBackupWriteControl(FILE *out, pgBackup *backup, bool utc)
 	char		timestamp[100];
 
 	fio_fprintf(out, "#Configuration\n");
-	fio_fprintf(out, "backup-mode = %s\n", pgBackupGetBackupMode(backup));
+	fio_fprintf(out, "backup-mode = %s\n", pgBackupGetBackupMode(backup, false));
 	fio_fprintf(out, "stream = %s\n", backup->stream ? "true" : "false");
 	fio_fprintf(out, "compress-alg = %s\n",
 			deparse_compress_alg(backup->compress_alg));

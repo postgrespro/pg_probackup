@@ -113,6 +113,22 @@ extern const char  *PROGRAM_EMAIL;
 #define XRecOffIsNull(xlrp) \
 		((xlrp) % XLOG_BLCKSZ == 0)
 
+/* Text Coloring macro */
+#define TC_LEN 11
+#define TC_RED "\033[0;31m"
+#define TC_RED_BOLD "\033[1;31m"
+#define TC_BLUE "\033[0;34m"
+#define TC_BLUE_BOLD "\033[1;34m"
+#define TC_GREEN "\033[0;32m"
+#define TC_GREEN_BOLD "\033[1;32m"
+#define TC_YELLOW "\033[0;33m"
+#define TC_YELLOW_BOLD "\033[1;33m"
+#define TC_MAGENTA "\033[0;35m"
+#define TC_MAGENTA_BOLD "\033[1;35m"
+#define TC_CYAN "\033[0;36m"
+#define TC_CYAN_BOLD "\033[1;36m"
+#define TC_RESET "\033[0m"
+
 typedef struct RedoParams
 {
 	TimeLineID  tli;
@@ -288,11 +304,11 @@ typedef enum ShowFormat
 #define BYTES_INVALID		(-1) /* file didn`t changed since previous backup, DELTA backup do not rely on it */
 #define FILE_NOT_FOUND		(-2) /* file disappeared during backup */
 #define BLOCKNUM_INVALID	(-1)
-#define PROGRAM_VERSION	"2.4.8"
-#define AGENT_PROTOCOL_VERSION 20408
+#define PROGRAM_VERSION	"2.5.0"
+#define AGENT_PROTOCOL_VERSION 20500
 
 /* update only when changing storage format */
-#define STORAGE_FORMAT_VERSION "2.4.4"
+#define STORAGE_FORMAT_VERSION "2.5.0"
 
 typedef struct ConnectionOptions
 {
@@ -735,6 +751,7 @@ extern pid_t    my_pid;
 extern __thread int my_thread_num;
 extern int		num_threads;
 extern bool		stream_wal;
+extern bool		show_color;
 extern bool		progress;
 extern bool     is_archive_cmd; /* true for archive-{get,push} */
 #if PG_VERSION_NUM >= 100000
@@ -859,8 +876,9 @@ extern char *slurpFile(const char *datadir,
 extern char *fetchFile(PGconn *conn, const char *filename, size_t *filesize);
 
 /* in help.c */
+extern void help_print_version(void);
 extern void help_pg_probackup(void);
-extern void help_command(char *command);
+extern void help_command(ProbackupSubcmd const subcmd);
 
 /* in validate.c */
 extern void pgBackupValidate(pgBackup* backup, pgRestoreParams *params);
@@ -886,7 +904,8 @@ extern void write_backup_status(pgBackup *backup, BackupStatus status,
 extern void write_backup_data_bytes(pgBackup *backup);
 extern bool lock_backup(pgBackup *backup, bool strict, bool exclusive);
 
-extern const char *pgBackupGetBackupMode(pgBackup *backup);
+extern const char *pgBackupGetBackupMode(pgBackup *backup, bool show_color);
+extern void pgBackupGetBackupModeColor(pgBackup *backup, char *mode);
 
 extern parray *catalog_get_instance_list(void);
 extern parray *catalog_get_backup_list(const char *instance_name, time_t requested_backup_id);
@@ -1096,6 +1115,7 @@ extern void copy_pgcontrol_file(const char *from_fullpath, fio_location from_loc
 
 extern void time2iso(char *buf, size_t len, time_t time, bool utc);
 extern const char *status2str(BackupStatus status);
+const char *status2str_color(BackupStatus status);
 extern BackupStatus str2status(const char *status);
 extern const char *base36enc(long unsigned int value);
 extern char *base36enc_dup(long unsigned int value);
@@ -1143,6 +1163,7 @@ extern int send_pages(ConnectionArgs* conn_arg, const char *to_fullpath, const c
 					  BackupMode backup_mode, int ptrack_version_num, const char *ptrack_schema);
 
 /* FIO */
+extern void setMyLocation(ProbackupSubcmd const subcmd);
 extern void fio_delete(mode_t mode, const char *fullpath, fio_location location);
 extern int fio_send_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
 	                      XLogRecPtr horizonLsn, int calg, int clevel, uint32 checksum_version,

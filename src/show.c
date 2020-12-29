@@ -324,7 +324,7 @@ print_backup_json_object(PQExpBuffer buf, pgBackup *backup)
 		json_add_value(buf, "parent-backup-id",
 						base36enc(backup->parent_backup), json_level, true);
 
-	json_add_value(buf, "backup-mode", pgBackupGetBackupMode(backup),
+	json_add_value(buf, "backup-mode", pgBackupGetBackupMode(backup, false),
 					json_level, true);
 
 	json_add_value(buf, "wal", backup->stream ? "STREAM": "ARCHIVE",
@@ -557,8 +557,8 @@ show_instance_plain(const char *instance_name, parray *backup_list, bool show_na
 		cur++;
 
 		/* Mode */
-		row->mode = pgBackupGetBackupMode(backup);
-		widths[cur] = Max(widths[cur], strlen(row->mode));
+		row->mode = pgBackupGetBackupMode(backup, show_color);
+		widths[cur] = Max(widths[cur], strlen(row->mode) - (show_color ? TC_LEN : 0));
 		cur++;
 
 		/* WAL mode*/
@@ -631,8 +631,9 @@ show_instance_plain(const char *instance_name, parray *backup_list, bool show_na
 		cur++;
 
 		/* Status */
-		row->status = status2str(backup->status);
-		widths[cur] = Max(widths[cur], strlen(row->status));
+		row->status = show_color ? status2str_color(backup->status) : status2str(backup->status);
+		widths[cur] = Max(widths[cur], strlen(row->status) - (show_color ? TC_LEN : 0));
+
 	}
 
 	for (i = 0; i < SHOW_FIELDS_COUNT; i++)
@@ -682,7 +683,7 @@ show_instance_plain(const char *instance_name, parray *backup_list, bool show_na
 						  row->recovery_time);
 		cur++;
 
-		appendPQExpBuffer(&show_buf, field_formats[cur], widths[cur],
+		appendPQExpBuffer(&show_buf, field_formats[cur], widths[cur] + (show_color ? TC_LEN : 0),
 						  row->mode);
 		cur++;
 
@@ -718,7 +719,7 @@ show_instance_plain(const char *instance_name, parray *backup_list, bool show_na
 						  row->stop_lsn);
 		cur++;
 
-		appendPQExpBuffer(&show_buf, field_formats[cur], widths[cur],
+		appendPQExpBuffer(&show_buf, field_formats[cur], widths[cur] + (show_color ? TC_LEN : 0),
 						  row->status);
 		cur++;
 

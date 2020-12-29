@@ -432,6 +432,11 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             'pg_probackup archive-push completed successfully',
             log_content)
 
+        # btw check that console coloring codes are not slipped into log file
+        self.assertNotIn('[0m', log_content)
+
+        print(log_content)
+
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
