@@ -83,6 +83,24 @@ typedef struct
 #undef fopen(a, b)
 #endif
 
+void
+setMyLocation(ProbackupSubcmd const subcmd)
+{
+
+#ifdef WIN32
+	if (IsSshProtocol())
+		elog(ERROR, "Currently remote operations on Windows are not supported");
+#endif
+
+	MyLocation = IsSshProtocol()
+		? (subcmd == ARCHIVE_PUSH_CMD || subcmd == ARCHIVE_GET_CMD)
+		   ? FIO_DB_HOST
+		   : (subcmd == BACKUP_CMD || subcmd == RESTORE_CMD || subcmd == ADD_INSTANCE_CMD)
+		      ? FIO_BACKUP_HOST
+		      : FIO_LOCAL_HOST
+		: FIO_LOCAL_HOST;
+}
+
 /* Use specified file descriptors as stdin/stdout for FIO functions */
 void fio_redirect(int in, int out, int err)
 {

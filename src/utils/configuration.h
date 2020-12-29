@@ -16,6 +16,31 @@
 
 #define INFINITE_STR		"INFINITE"
 
+/* Order is important, keep it in sync with configuration.c:subcmd_names[] and help.c:help_command() */
+typedef enum ProbackupSubcmd
+{
+	NO_CMD = 0,
+	INIT_CMD,
+	ADD_INSTANCE_CMD,
+	DELETE_INSTANCE_CMD,
+	ARCHIVE_PUSH_CMD,
+	ARCHIVE_GET_CMD,
+	BACKUP_CMD,
+	RESTORE_CMD,
+	VALIDATE_CMD,
+	DELETE_CMD,
+	MERGE_CMD,
+	SHOW_CMD,
+	SET_CONFIG_CMD,
+	SET_BACKUP_CMD,
+	SHOW_CONFIG_CMD,
+	CHECKDB_CMD,
+	SSH_CMD,
+	AGENT_CMD,
+	HELP_CMD,
+	VERSION_CMD
+} ProbackupSubcmd;
+
 typedef enum OptionSource
 {
 	SOURCE_DEFAULT,
@@ -75,6 +100,8 @@ struct ConfigOption
 
 #define OPTION_UNIT					(OPTION_UNIT_MEMORY | OPTION_UNIT_TIME)
 
+extern ProbackupSubcmd parse_subcmd(char const * const subcmd_str);
+extern char const *get_subcmd_name(ProbackupSubcmd const subcmd);
 extern int config_get_opt(int argc, char **argv, ConfigOption cmd_options[],
 						  ConfigOption options[]);
 extern int config_read_opt(const char *path, ConfigOption options[], int elevel,
