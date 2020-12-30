@@ -11,6 +11,7 @@
 #include "pg_probackup.h"
 
 static void help_nocmd(void);
+static void help_internal(void);
 static void help_init(void);
 static void help_backup(void);
 static void help_restore(void);
@@ -27,6 +28,7 @@ static void help_archive_push(void);
 static void help_archive_get(void);
 static void help_checkdb(void);
 static void help_help(void);
+static void help_version(void);
 
 void
 help_print_version(void)
@@ -64,10 +66,10 @@ help_command(ProbackupSubcmd const subcmd)
 		&help_set_backup,
 		&help_show_config,
 		&help_checkdb,
-		&help_nocmd, // SSH_CMD
-		&help_nocmd, // AGENT_CMD
+		&help_internal, // SSH_CMD
+		&help_internal, // AGENT_CMD
 		&help_help,
-		&help_help, // VERSION_CMD
+		&help_version,
 	};
 
 	Assert((int)subcmd < sizeof(help_functions) / sizeof(help_functions[0]));
@@ -77,9 +79,9 @@ help_command(ProbackupSubcmd const subcmd)
 void
 help_pg_probackup(void)
 {
-	printf(_("\n%s - utility to manage backup/recovery of PostgreSQL database.\n\n"), PROGRAM_NAME);
+	printf(_("\n%s - utility to manage backup/recovery of PostgreSQL database.\n"), PROGRAM_NAME);
 
-	printf(_("  %s help [COMMAND]\n"), PROGRAM_NAME);
+	printf(_("\n  %s help [COMMAND]\n"), PROGRAM_NAME);
 
 	printf(_("\n  %s version\n"), PROGRAM_NAME);
 
@@ -256,7 +258,13 @@ help_pg_probackup(void)
 static void
 help_nocmd(void)
 {
-	printf(_("Unknown command. Try pg_probackup help\n"));
+	printf(_("\nUnknown command. Try pg_probackup help\n\n"));
+}
+
+static void
+help_internal(void)
+{
+	printf(_("\nThis command is intended for internal use\n\n"));
 }
 
 static void
@@ -984,5 +992,13 @@ help_archive_get(void)
 static void
 help_help(void)
 {
-	printf(_("No help page required for \"help\" and \"version\" commands. Just try it!\n"));
+	printf(_("\n%s help [command]\n"), PROGRAM_NAME);
+	printf(_("%s command --help\n\n"), PROGRAM_NAME);
+}
+
+static void
+help_version(void)
+{
+	printf(_("\n%s version\n"), PROGRAM_NAME);
+	printf(_("%s --version\n\n"), PROGRAM_NAME);
 }

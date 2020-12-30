@@ -140,7 +140,7 @@ char const *
 get_subcmd_name(ProbackupSubcmd const subcmd)
 {
 	Assert((int)subcmd < sizeof(subcmd_names) / sizeof(subcmd_names[0]));
-        return subcmd_names[(int)subcmd];
+	return subcmd_names[(int)subcmd];
 }
 
 /*
