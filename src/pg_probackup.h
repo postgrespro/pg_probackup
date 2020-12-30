@@ -142,6 +142,20 @@ typedef struct PageState
 	XLogRecPtr  lsn;
 } PageState;
 
+/* Tablespace mapping structures. Also used for externaldir mapping. */
+typedef struct TablespaceListCell
+{
+	struct TablespaceListCell *next;
+	char		old_dir[MAXPGPATH];
+	char		new_dir[MAXPGPATH];
+} TablespaceListCell;
+
+typedef struct TablespaceList
+{
+	TablespaceListCell *head;
+	TablespaceListCell *tail;
+} TablespaceList;
+
 typedef struct db_map_entry
 {
 	Oid dbOid;
@@ -412,7 +426,7 @@ typedef struct HeaderMap
 
 typedef struct pgBackup pgBackup;
 
-/* Information about single backup stored in backup.conf */
+/* Information about single backup */
 struct pgBackup
 {
 	BackupMode		backup_mode; /* Mode - one of BACKUP_MODE_xxx above*/
@@ -477,10 +491,23 @@ struct pgBackup
 										* in the format suitable for recovery.conf */
 	char			*external_dir_str;	/* List of external directories,
 										 * separated by ':' */
+
+	/*
+	 * backup subdir paths
+	 * initialized via pgBackupInitPaths().
+	 * Use these where possible and avoid generating paths manually,
+	 * to separate storage layer.
+	 */
+	char			*backup_name;	/* string representation of backup_id */
 	char			*root_dir;		/* Full path for root backup directory:
 									   backup_path/instance_name/backup_id */
 	char			*database_dir;	/* Full path to directory with data files:
-									   backup_path/instance_name/backup_id/database */
+									   backup_path/instance_name/backup_id/DATABASE_DIR */
+	char			*xlog_dir;		/* Full path to directory with xlog files inside pg_data
+									   backup_path/instance_name/backup_id/DATABASE_DIR/PG_XLOG_DIR */
+	char			*external_dir;	/* Full path to the external directory:
+									   backup_path/instance_name/backup_id/EXTERNAL_DIR */
+
 	parray			*files;			/* list of files belonging to this backup
 									 * must be populated explicitly */
 	char			*note;
@@ -525,6 +552,9 @@ typedef struct pgRestoreParams
 	const char *restore_command;
 	const char *primary_slot_name;
 	const char *primary_conninfo;
+
+	TablespaceList *tablespace_dirs;
+	TablespaceList *external_remap_list;
 
 	/* options for incremental restore */
 	IncrRestoreMode	incremental_mode;
@@ -798,6 +828,10 @@ extern char** commands_args;
 extern const char *pgdata_exclude_dir[];
 
 /* in backup.c */
+extern void pgNodeInit(PGNodeInfo *node);
+extern PGconn *pgdata_basic_setup(ConnectionOptions conn_opt, PGNodeInfo *nodeInfo);
+extern void check_system_identifiers(PGconn *conn, char *pgdata);
+extern void parse_filelist_filenames(parray *files, const char *root);
 extern int do_backup(time_t start_time, pgSetBackupParams *set_backup_params,
 					 bool no_validate, bool no_sync, bool backup_logs);
 extern void do_checkdb(bool need_amcheck, ConnectionOptions conn_opt,
@@ -828,7 +862,6 @@ extern pgRecoveryTarget *parseRecoveryTargetOptions(
 extern parray *get_dbOid_exclude_list(pgBackup *backup, parray *datname_list,
 										PartialRestoreType partial_restore_type);
 
-extern parray *get_backup_filelist(pgBackup *backup, bool strict);
 extern parray *read_timeline_history(const char *arclog_path, TimeLineID targetTLI, bool strict);
 extern bool tliIsPartOfHistory(const parray *timelines, TimeLineID tli);
 
@@ -837,8 +870,6 @@ extern void do_merge(time_t backup_id);
 extern void merge_backups(pgBackup *backup, pgBackup *next_backup);
 extern void merge_chain(parray *parent_chain,
 						pgBackup *full_backup, pgBackup *dest_backup);
-
-extern parray *read_database_map(pgBackup *backup);
 
 /* in init.c */
 extern int do_init(void);
@@ -896,7 +927,6 @@ extern int validate_one_page(Page page, BlockNumber absolute_blkno,
 #define PAGE_LSN_FROM_FUTURE (-6)
 
 /* in catalog.c */
-extern pgBackup *read_backup(const char *root_dir);
 extern void write_backup(pgBackup *backup, bool strict);
 extern void write_backup_status(pgBackup *backup, BackupStatus status,
 								const char *instance_name, bool strict);
@@ -904,8 +934,12 @@ extern void write_backup_data_bytes(pgBackup *backup);
 extern bool lock_backup(pgBackup *backup, bool strict, bool exclusive);
 
 extern const char *pgBackupGetBackupMode(pgBackup *backup, bool show_color);
+//TODO No other mentions of this function. Is it legacy?
 extern void pgBackupGetBackupModeColor(pgBackup *backup, char *mode);
 
+extern bool get_control_value(const char *str, const char *name,
+				  char *value_str, int64 *value_int64, bool is_mandatory);
+extern parray *get_backup_filelist(pgBackup *backup, bool strict);
 extern parray *catalog_get_instance_list(void);
 extern parray *catalog_get_backup_list(const char *instance_name, time_t requested_backup_id);
 extern void catalog_lock_backup_list(parray *backup_list, int from_idx,
@@ -927,16 +961,10 @@ extern void pgBackupWriteControl(FILE *out, pgBackup *backup, bool utc);
 extern void write_backup_filelist(pgBackup *backup, parray *files,
 								  const char *root, parray *external_list, bool sync);
 
-extern void pgBackupGetPath(const pgBackup *backup, char *path, size_t len,
-							const char *subdir);
-extern void pgBackupGetPath2(const pgBackup *backup, char *path, size_t len,
-							 const char *subdir1, const char *subdir2);
-extern void pgBackupGetPathInInstance(const char *instance_name,
-				 const pgBackup *backup, char *path, size_t len,
-				 const char *subdir1, const char *subdir2);
 extern int pgBackupCreateDir(pgBackup *backup);
-extern void pgNodeInit(PGNodeInfo *node);
 extern void pgBackupInit(pgBackup *backup);
+extern void pgBackupInitPaths(pgBackup *backup, char *backup_instance_path,
+							  time_t backup_start_time);
 extern void pgBackupFree(void *backup);
 extern int pgBackupCompareId(const void *f1, const void *f2);
 extern int pgBackupCompareIdDesc(const void *f1, const void *f2);
@@ -951,7 +979,6 @@ extern int scan_parent_chain(pgBackup *current_backup, pgBackup **result_backup)
 
 extern bool is_parent(time_t parent_backup_time, pgBackup *child_backup, bool inclusive);
 extern bool is_prolific(parray *backup_list, pgBackup *target_backup);
-extern int get_backup_index_number(parray *backup_list, pgBackup *backup);
 extern void append_children(parray *backup_list, pgBackup *target_backup, parray *append_list);
 extern bool launch_agent(void);
 extern void launch_ssh(char* argv[]);
@@ -973,26 +1000,11 @@ extern void create_data_directories(parray *dest_files,
 										const char *backup_dir,
 										bool extract_tablespaces,
 										bool incremental,
-										fio_location location);
+										fio_location location,
+										TablespaceList *tablespace_dirs);
 
-extern void read_tablespace_map(parray *files, const char *backup_dir);
-extern void opt_tablespace_map(ConfigOption *opt, const char *arg);
-extern void opt_externaldir_map(ConfigOption *opt, const char *arg);
-extern void check_tablespace_mapping(pgBackup *backup, bool incremental, bool *tblspaces_are_empty);
-extern void check_external_dir_mapping(pgBackup *backup, bool incremental);
-extern char *get_external_remap(char *current_dir);
-
-extern void print_database_map(FILE *out, parray *database_list);
-extern void write_database_map(pgBackup *backup, parray *database_list,
-								   parray *backup_file_list);
-extern void db_map_entry_free(void *map);
-
-extern void print_file_list(FILE *out, const parray *files, const char *root,
-							const char *external_prefix, parray *external_list);
-extern parray *dir_read_file_list(const char *root, const char *external_prefix,
-								  const char *file_txt, fio_location location, pg_crc32 expected_crc);
 extern parray *make_external_directory_list(const char *colon_separated_dirs,
-											bool remap);
+											TablespaceList *external_remap_list);
 extern void free_dir_list(parray *list);
 extern void makeExternalDirPathByNum(char *ret_path, const char *pattern_path,
 									 const int dir_num);
@@ -1130,10 +1142,6 @@ extern int32  do_decompress(void* dst, size_t dst_size, void const* src, size_t 
 extern void pretty_size(int64 size, char *buf, size_t len);
 extern void pretty_time_interval(double time, char *buf, size_t len);
 
-extern PGconn *pgdata_basic_setup(ConnectionOptions conn_opt, PGNodeInfo *nodeInfo);
-extern void check_system_identifiers(PGconn *conn, char *pgdata);
-extern void parse_filelist_filenames(parray *files, const char *root);
-
 /* in ptrack.c */
 extern void make_pagemap_from_ptrack_1(parray* files, PGconn* backup_conn);
 extern void make_pagemap_from_ptrack_2(parray* files, PGconn* backup_conn,
@@ -1221,3 +1229,26 @@ extern void start_WAL_streaming(PGconn *backup_conn, char *stream_dst_path,
 							   XLogRecPtr startpos, TimeLineID starttli);
 extern int wait_WAL_streaming_end(parray *backup_files_list);
 #endif /* PG_PROBACKUP_H */
+
+
+/* in mapping.c */
+extern void read_tablespace_map(parray *files, const char *backup_dir);
+extern void write_tablespace_map(pgBackup *backup, char *tablespace_map,
+                     parray *backup_files_list);
+extern const char * get_tablespace_mapping(const char *dir, TablespaceList tablespace_dirs);
+extern void check_tablespace_mapping(pgBackup *backup, TablespaceList tablespace_dirs,
+					 bool incremental, bool *tblspaces_are_empty);
+
+extern char *get_external_remap(char *current_dir,
+			 TablespaceList external_remap_list);
+extern void check_external_dir_mapping(pgBackup *backup,
+			 TablespaceList external_remap_list, bool incremental);
+
+
+extern void db_map_entry_free(void *map);
+extern parray *get_database_map(PGconn *pg_startbackup_conn);
+extern parray *read_database_map(pgBackup *backup);
+extern void write_database_map(pgBackup *backup, parray *database_map,
+							   parray *backup_file_list);
+extern void write_backup_label(pgBackup *backup, char *backup_label,
+            				   parray *backup_files_list);

@@ -2,6 +2,12 @@
  *
  * dir.c: directory operation utility.
  *
+ * This file contains:
+ *		- pgFile functions;
+ *		- functions to walk directory and collect files list
+ *		- functions to exclude files from backup;
+ *		- postgres specific parsing rules for filenames;
+ *
  * Portions Copyright (c) 2009-2013, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
  * Portions Copyright (c) 2015-2019, Postgres Professional
  *
@@ -93,33 +99,6 @@ static char *pgdata_exclude_files_non_exclusive[] =
 	NULL
 };
 
-/* Tablespace mapping structures */
-
-typedef struct TablespaceListCell
-{
-	struct TablespaceListCell *next;
-	char		old_dir[MAXPGPATH];
-	char		new_dir[MAXPGPATH];
-} TablespaceListCell;
-
-typedef struct TablespaceList
-{
-	TablespaceListCell *head;
-	TablespaceListCell *tail;
-} TablespaceList;
-
-typedef struct TablespaceCreatedListCell
-{
-	struct TablespaceCreatedListCell *next;
-	char		link_name[MAXPGPATH];
-	char		linked_dir[MAXPGPATH];
-} TablespaceCreatedListCell;
-
-typedef struct TablespaceCreatedList
-{
-	TablespaceCreatedListCell *head;
-	TablespaceCreatedListCell *tail;
-} TablespaceCreatedList;
 
 static int pgCompareString(const void *str1, const void *str2);
 
@@ -128,13 +107,7 @@ static char dir_check_file(pgFile *file, bool backup_logs);
 static void dir_list_file_internal(parray *files, pgFile *parent, const char *parent_dir,
 								   bool exclude, bool follow_symlink, bool backup_logs,
 								   bool skip_hidden, int external_dir_num, fio_location location);
-static void opt_path_map(ConfigOption *opt, const char *arg,
-						 TablespaceList *list, const char *type);
 
-/* Tablespace mapping */
-static TablespaceList tablespace_dirs = {NULL, NULL};
-/* Extra directories mapping */
-static TablespaceList external_remap_list = {NULL, NULL};
 
 /*
  * Create directory, also create parent directories if necessary.
@@ -497,16 +470,6 @@ pgCompareOid(const void *f1, const void *f2)
 		return -1;
 	else
 		return 0;}
-
-
-void
-db_map_entry_free(void *entry)
-{
-	db_map_entry *m = (db_map_entry *) entry;
-
-	free(m->datname);
-	free(entry);
-}
 
 /*
  * List files, symbolic links and directories in the directory "root" and add
@@ -881,100 +844,6 @@ dir_list_file_internal(parray *files, pgFile *parent, const char *parent_dir,
 }
 
 /*
- * Retrieve tablespace path, either relocated or original depending on whether
- * -T was passed or not.
- *
- * Copy of function get_tablespace_mapping() from pg_basebackup.c.
- */
-static const char *
-get_tablespace_mapping(const char *dir)
-{
-	TablespaceListCell *cell;
-
-	for (cell = tablespace_dirs.head; cell; cell = cell->next)
-		if (strcmp(dir, cell->old_dir) == 0)
-			return cell->new_dir;
-
-	return dir;
-}
-
-/*
- * Split argument into old_dir and new_dir and append to mapping
- * list.
- *
- * Copy of function tablespace_list_append() from pg_basebackup.c.
- */
-static void
-opt_path_map(ConfigOption *opt, const char *arg, TablespaceList *list,
-			 const char *type)
-{
-	TablespaceListCell *cell = pgut_new(TablespaceListCell);
-	char	   *dst;
-	char	   *dst_ptr;
-	const char *arg_ptr;
-
-	memset(cell, 0, sizeof(TablespaceListCell));
-	dst_ptr = dst = cell->old_dir;
-	for (arg_ptr = arg; *arg_ptr; arg_ptr++)
-	{
-		if (dst_ptr - dst >= MAXPGPATH)
-			elog(ERROR, "directory name too long");
-
-		if (*arg_ptr == '\\' && *(arg_ptr + 1) == '=')
-			;					/* skip backslash escaping = */
-		else if (*arg_ptr == '=' && (arg_ptr == arg || *(arg_ptr - 1) != '\\'))
-		{
-			if (*cell->new_dir)
-				elog(ERROR, "multiple \"=\" signs in %s mapping\n", type);
-			else
-				dst = dst_ptr = cell->new_dir;
-		}
-		else
-			*dst_ptr++ = *arg_ptr;
-	}
-
-	if (!*cell->old_dir || !*cell->new_dir)
-		elog(ERROR, "invalid %s mapping format \"%s\", "
-			 "must be \"OLDDIR=NEWDIR\"", type, arg);
-	canonicalize_path(cell->old_dir);
-	canonicalize_path(cell->new_dir);
-
-	/*
-	 * This check isn't absolutely necessary.  But all tablespaces are created
-	 * with absolute directories, so specifying a non-absolute path here would
-	 * just never match, possibly confusing users.  It's also good to be
-	 * consistent with the new_dir check.
-	 */
-	if (!is_absolute_path(cell->old_dir))
-		elog(ERROR, "old directory is not an absolute path in %s mapping: %s\n",
-			 type, cell->old_dir);
-
-	if (!is_absolute_path(cell->new_dir))
-		elog(ERROR, "new directory is not an absolute path in %s mapping: %s\n",
-			 type, cell->new_dir);
-
-	if (list->tail)
-		list->tail->next = cell;
-	else
-		list->head = cell;
-	list->tail = cell;
-}
-
-/* Parse tablespace mapping */
-void
-opt_tablespace_map(ConfigOption *opt, const char *arg)
-{
-	opt_path_map(opt, arg, &tablespace_dirs, "tablespace");
-}
-
-/* Parse external directories mapping */
-void
-opt_externaldir_map(ConfigOption *opt, const char *arg)
-{
-	opt_path_map(opt, arg, &external_remap_list, "external directory");
-}
-
-/*
  * Create directories from **dest_files** in **data_dir**.
  *
  * If **extract_tablespaces** is true then try to extract tablespace data
@@ -988,10 +857,13 @@ opt_externaldir_map(ConfigOption *opt, const char *arg)
  *
  * TODO: symlink handling. If user located symlink in PG_TBLSPC_DIR, it will
  * be restored as directory.
+ *
+ * TODO move tablespace handling into a separate funtions to make code more readable
  */
 void
 create_data_directories(parray *dest_files, const char *data_dir, const char *backup_dir,
-						bool extract_tablespaces, bool incremental, fio_location location)
+						bool extract_tablespaces, bool incremental, fio_location location,
+						TablespaceList *tablespace_dirs)
 {
 	int			i;
 	parray		*links = NULL;
@@ -1002,6 +874,7 @@ create_data_directories(parray *dest_files, const char *data_dir, const char *ba
 	if (extract_tablespaces)
 	{
 		links = parray_new();
+
 		read_tablespace_map(links, backup_dir);
 		/* Sort links by a link name */
 		parray_qsort(links, pgFileCompareName);
@@ -1081,7 +954,7 @@ create_data_directories(parray *dest_files, const char *data_dir, const char *ba
 				/* got match */
 				if (link)
 				{
-					const char *linked_path = get_tablespace_mapping((*link)->linked);
+					const char *linked_path = get_tablespace_mapping((*link)->linked, *tablespace_dirs);
 
 					if (!is_absolute_path(linked_path))
 							elog(ERROR, "Tablespace directory is not an absolute path: %s\n",
@@ -1117,482 +990,6 @@ create_data_directories(parray *dest_files, const char *data_dir, const char *ba
 		parray_walk(links, pgFileFree);
 		parray_free(links);
 	}
-}
-
-/*
- * Read names of symbolic names of tablespaces with links to directories from
- * tablespace_map or tablespace_map.txt.
- */
-void
-read_tablespace_map(parray *files, const char *backup_dir)
-{
-	FILE	   *fp;
-	char		db_path[MAXPGPATH],
-				map_path[MAXPGPATH];
-	char		buf[MAXPGPATH * 2];
-
-	join_path_components(db_path, backup_dir, DATABASE_DIR);
-	join_path_components(map_path, db_path, PG_TABLESPACE_MAP_FILE);
-
-	/* Exit if database/tablespace_map doesn't exist */
-	if (!fileExists(map_path, FIO_BACKUP_HOST))
-	{
-		elog(LOG, "there is no file tablespace_map");
-		return;
-	}
-
-	fp = fio_open_stream(map_path, FIO_BACKUP_HOST);
-	if (fp == NULL)
-		elog(ERROR, "cannot open \"%s\": %s", map_path, strerror(errno));
-
-	while (fgets(buf, lengthof(buf), fp))
-	{
-		char		link_name[MAXPGPATH],
-					path[MAXPGPATH];
-		pgFile	   *file;
-
-		if (sscanf(buf, "%1023s %1023s", link_name, path) != 2)
-			elog(ERROR, "invalid format found in \"%s\"", map_path);
-
-		file = pgut_new(pgFile);
-		memset(file, 0, sizeof(pgFile));
-
-		/* follow the convention for pgFileFree */
-		file->name = pgut_strdup(link_name);
-		file->linked = pgut_strdup(path);
-		canonicalize_path(file->linked);
-
-		parray_append(files, file);
-	}
-
-	if (ferror(fp))
-			elog(ERROR, "Failed to read from file: \"%s\"", map_path);
-
-	fio_close_stream(fp);
-}
-
-/*
- * Check that all tablespace mapping entries have correct linked directory
- * paths. Linked directories must be empty or do not exist, unless
- * we are running incremental restore, then linked directories can be nonempty.
- *
- * If tablespace-mapping option is supplied, all OLDDIR entries must have
- * entries in tablespace_map file.
- *
- *
- * TODO: maybe when running incremental restore with tablespace remapping, then
- * new tablespace directory MUST be empty? because there is no way
- * we can be sure, that files laying there belong to our instance.
- */
-void
-check_tablespace_mapping(pgBackup *backup, bool incremental, bool *tblspaces_are_empty)
-{
-//	char		this_backup_path[MAXPGPATH];
-	parray	   *links;
-	size_t		i;
-	TablespaceListCell *cell;
-	pgFile	   *tmp_file = pgut_new(pgFile);
-
-	links = parray_new();
-
-//	pgBackupGetPath(backup, this_backup_path, lengthof(this_backup_path), NULL);
-	read_tablespace_map(links, backup->root_dir);
-	/* Sort links by the path of a linked file*/
-	parray_qsort(links, pgFileCompareLinked);
-
-	elog(LOG, "check tablespace directories of backup %s",
-			base36enc(backup->start_time));
-
-	/* 1 - each OLDDIR must have an entry in tablespace_map file (links) */
-	for (cell = tablespace_dirs.head; cell; cell = cell->next)
-	{
-		tmp_file->linked = cell->old_dir;
-
-		if (parray_bsearch(links, tmp_file, pgFileCompareLinked) == NULL)
-			elog(ERROR, "--tablespace-mapping option's old directory "
-				 "doesn't have an entry in tablespace_map file: \"%s\"",
-				 cell->old_dir);
-
-		/* For incremental restore, check that new directory is empty */
-//		if (incremental)
-//		{
-//			if (!is_absolute_path(cell->new_dir))
-//				elog(ERROR, "tablespace directory is not an absolute path: %s\n",
-//					 cell->new_dir);
-//
-//			if (!dir_is_empty(cell->new_dir, FIO_DB_HOST))
-//				elog(ERROR, "restore tablespace destination is not empty: \"%s\"",
-//					 cell->new_dir);
-//		}
-	}
-
-	/* 2 - all linked directories must be empty */
-	for (i = 0; i < parray_num(links); i++)
-	{
-		pgFile	   *link = (pgFile *) parray_get(links, i);
-		const char *linked_path = link->linked;
-		TablespaceListCell *cell;
-
-		for (cell = tablespace_dirs.head; cell; cell = cell->next)
-			if (strcmp(link->linked, cell->old_dir) == 0)
-			{
-				linked_path = cell->new_dir;
-				break;
-			}
-
-		if (!is_absolute_path(linked_path))
-			elog(ERROR, "tablespace directory is not an absolute path: %s\n",
-				 linked_path);
-
-		if (!dir_is_empty(linked_path, FIO_DB_HOST))
-		{
-			if (!incremental)
-				elog(ERROR, "restore tablespace destination is not empty: \"%s\"",
-					 linked_path);
-			*tblspaces_are_empty = false;
-		}
-	}
-
-	free(tmp_file);
-	parray_walk(links, pgFileFree);
-	parray_free(links);
-}
-
-void
-check_external_dir_mapping(pgBackup *backup, bool incremental)
-{
-	TablespaceListCell *cell;
-	parray *external_dirs_to_restore;
-	int		i;
-
-	elog(LOG, "check external directories of backup %s",
-			base36enc(backup->start_time));
-
-	if (!backup->external_dir_str)
-	{
-	 	if (external_remap_list.head)
-			elog(ERROR, "--external-mapping option's old directory doesn't "
-				 "have an entry in list of external directories of current "
-				 "backup: \"%s\"", external_remap_list.head->old_dir);
-		return;
-	}
-
-	external_dirs_to_restore = make_external_directory_list(
-													backup->external_dir_str,
-													false);
-	/* 1 - each OLDDIR must have an entry in external_dirs_to_restore */
-	for (cell = external_remap_list.head; cell; cell = cell->next)
-	{
-		bool		found = false;
-
-		for (i = 0; i < parray_num(external_dirs_to_restore); i++)
-		{
-			char	    *external_dir = parray_get(external_dirs_to_restore, i);
-
-			if (strcmp(cell->old_dir, external_dir) == 0)
-			{
-				/* Swap new dir name with old one, it is used by 2-nd step */
-				parray_set(external_dirs_to_restore, i,
-						   pgut_strdup(cell->new_dir));
-				pfree(external_dir);
-
-				found = true;
-				break;
-			}
-		}
-		if (!found)
-			elog(ERROR, "--external-mapping option's old directory doesn't "
-				 "have an entry in list of external directories of current "
-				 "backup: \"%s\"", cell->old_dir);
-	}
-
-	/* 2 - all linked directories must be empty */
-	for (i = 0; i < parray_num(external_dirs_to_restore); i++)
-	{
-		char	    *external_dir = (char *) parray_get(external_dirs_to_restore,
-														i);
-
-		if (!incremental && !dir_is_empty(external_dir, FIO_DB_HOST))
-			elog(ERROR, "External directory is not empty: \"%s\"",
-				 external_dir);
-	}
-
-	free_dir_list(external_dirs_to_restore);
-}
-
-char *
-get_external_remap(char *current_dir)
-{
-	TablespaceListCell *cell;
-
-	for (cell = external_remap_list.head; cell; cell = cell->next)
-	{
-		char *old_dir = cell->old_dir;
-
-		if (strcmp(old_dir, current_dir) == 0)
-			return cell->new_dir;
-	}
-	return current_dir;
-}
-
-/* Parsing states for get_control_value() */
-#define CONTROL_WAIT_NAME			1
-#define CONTROL_INNAME				2
-#define CONTROL_WAIT_COLON			3
-#define CONTROL_WAIT_VALUE			4
-#define CONTROL_INVALUE				5
-#define CONTROL_WAIT_NEXT_NAME		6
-
-/*
- * Get value from json-like line "str" of backup_content.control file.
- *
- * The line has the following format:
- *   {"name1":"value1", "name2":"value2"}
- *
- * The value will be returned to "value_str" as string if it is not NULL. If it
- * is NULL the value will be returned to "value_int64" as int64.
- *
- * Returns true if the value was found in the line.
- */
-static bool
-get_control_value(const char *str, const char *name,
-				  char *value_str, int64 *value_int64, bool is_mandatory)
-{
-	int			state = CONTROL_WAIT_NAME;
-	char	   *name_ptr = (char *) name;
-	char	   *buf = (char *) str;
-	char		buf_int64[32],	/* Buffer for "value_int64" */
-			   *buf_int64_ptr = buf_int64;
-
-	/* Set default values */
-	if (value_str)
-		*value_str = '\0';
-	else if (value_int64)
-		*value_int64 = 0;
-
-	while (*buf)
-	{
-		switch (state)
-		{
-			case CONTROL_WAIT_NAME:
-				if (*buf == '"')
-					state = CONTROL_INNAME;
-				else if (IsAlpha(*buf))
-					goto bad_format;
-				break;
-			case CONTROL_INNAME:
-				/* Found target field. Parse value. */
-				if (*buf == '"')
-					state = CONTROL_WAIT_COLON;
-				/* Check next field */
-				else if (*buf != *name_ptr)
-				{
-					name_ptr = (char *) name;
-					state = CONTROL_WAIT_NEXT_NAME;
-				}
-				else
-					name_ptr++;
-				break;
-			case CONTROL_WAIT_COLON:
-				if (*buf == ':')
-					state = CONTROL_WAIT_VALUE;
-				else if (!IsSpace(*buf))
-					goto bad_format;
-				break;
-			case CONTROL_WAIT_VALUE:
-				if (*buf == '"')
-				{
-					state = CONTROL_INVALUE;
-					buf_int64_ptr = buf_int64;
-				}
-				else if (IsAlpha(*buf))
-					goto bad_format;
-				break;
-			case CONTROL_INVALUE:
-				/* Value was parsed, exit */
-				if (*buf == '"')
-				{
-					if (value_str)
-					{
-						*value_str = '\0';
-					}
-					else if (value_int64)
-					{
-						/* Length of buf_uint64 should not be greater than 31 */
-						if (buf_int64_ptr - buf_int64 >= 32)
-							elog(ERROR, "field \"%s\" is out of range in the line %s of the file %s",
-								 name, str, DATABASE_FILE_LIST);
-
-						*buf_int64_ptr = '\0';
-						if (!parse_int64(buf_int64, value_int64, 0))
-						{
-							/* We assume that too big value is -1 */
-							if (errno == ERANGE)
-								*value_int64 = BYTES_INVALID;
-							else
-								goto bad_format;
-						}
-					}
-
-					return true;
-				}
-				else
-				{
-					if (value_str)
-					{
-						*value_str = *buf;
-						value_str++;
-					}
-					else
-					{
-						*buf_int64_ptr = *buf;
-						buf_int64_ptr++;
-					}
-				}
-				break;
-			case CONTROL_WAIT_NEXT_NAME:
-				if (*buf == ',')
-					state = CONTROL_WAIT_NAME;
-				break;
-			default:
-				/* Should not happen */
-				break;
-		}
-
-		buf++;
-	}
-
-	/* There is no close quotes */
-	if (state == CONTROL_INNAME || state == CONTROL_INVALUE)
-		goto bad_format;
-
-	/* Did not find target field */
-	if (is_mandatory)
-		elog(ERROR, "field \"%s\" is not found in the line %s of the file %s",
-			 name, str, DATABASE_FILE_LIST);
-	return false;
-
-bad_format:
-	elog(ERROR, "%s file has invalid format in line %s",
-		 DATABASE_FILE_LIST, str);
-	return false;	/* Make compiler happy */
-}
-
-/*
- * Construct parray of pgFile from the backup content list.
- * If root is not NULL, path will be absolute path.
- */
-parray *
-dir_read_file_list(const char *root, const char *external_prefix,
-				   const char *file_txt, fio_location location, pg_crc32 expected_crc)
-{
-	FILE    *fp;
-	parray  *files;
-	char     buf[BLCKSZ];
-	char     stdio_buf[STDIO_BUFSIZE];
-	pg_crc32 content_crc = 0;
-
-	fp = fio_open_stream(file_txt, location);
-	if (fp == NULL)
-		elog(ERROR, "cannot open \"%s\": %s", file_txt, strerror(errno));
-
-	/* enable stdio buffering for local file */
-	if (!fio_is_remote(location))
-		setvbuf(fp, stdio_buf, _IOFBF, STDIO_BUFSIZE);
-
-	files = parray_new();
-
-	INIT_FILE_CRC32(true, content_crc);
-
-	while (fgets(buf, lengthof(buf), fp))
-	{
-		char		path[MAXPGPATH];
-		char		linked[MAXPGPATH];
-		char		compress_alg_string[MAXPGPATH];
-		int64		write_size,
-					mode,		/* bit length of mode_t depends on platforms */
-					is_datafile,
-					is_cfs,
-					external_dir_num,
-					crc,
-					segno,
-					n_blocks,
-					n_headers,
-					dbOid,		/* used for partial restore */
-					hdr_crc,
-					hdr_off,
-					hdr_size;
-		pgFile	   *file;
-
-		COMP_FILE_CRC32(true, content_crc, buf, strlen(buf));
-
-		get_control_value(buf, "path", path, NULL, true);
-		get_control_value(buf, "size", NULL, &write_size, true);
-		get_control_value(buf, "mode", NULL, &mode, true);
-		get_control_value(buf, "is_datafile", NULL, &is_datafile, true);
-		get_control_value(buf, "is_cfs", NULL, &is_cfs, false);
-		get_control_value(buf, "crc", NULL, &crc, true);
-		get_control_value(buf, "compress_alg", compress_alg_string, NULL, false);
-		get_control_value(buf, "external_dir_num", NULL, &external_dir_num, false);
-		get_control_value(buf, "dbOid", NULL, &dbOid, false);
-
-		file = pgFileInit(path);
-		file->write_size = (int64) write_size;
-		file->mode = (mode_t) mode;
-		file->is_datafile = is_datafile ? true : false;
-		file->is_cfs = is_cfs ? true : false;
-		file->crc = (pg_crc32) crc;
-		file->compress_alg = parse_compress_alg(compress_alg_string);
-		file->external_dir_num = external_dir_num;
-		file->dbOid = dbOid ? dbOid : 0;
-
-		/*
-		 * Optional fields
-		 */
-
-		if (get_control_value(buf, "linked", linked, NULL, false) && linked[0])
-		{
-			file->linked = pgut_strdup(linked);
-			canonicalize_path(file->linked);
-		}
-
-		if (get_control_value(buf, "segno", NULL, &segno, false))
-			file->segno = (int) segno;
-
-		if (get_control_value(buf, "n_blocks", NULL, &n_blocks, false))
-			file->n_blocks = (int) n_blocks;
-
-		if (get_control_value(buf, "n_headers", NULL, &n_headers, false))
-			file->n_headers = (int) n_headers;
-
-		if (get_control_value(buf, "hdr_crc", NULL, &hdr_crc, false))
-			file->hdr_crc = (pg_crc32) hdr_crc;
-
-		if (get_control_value(buf, "hdr_off", NULL, &hdr_off, false))
-			file->hdr_off = hdr_off;
-
-		if (get_control_value(buf, "hdr_size", NULL, &hdr_size, false))
-			file->hdr_size = (int) hdr_size;
-
-		parray_append(files, file);
-	}
-
-	FIN_FILE_CRC32(true, content_crc);
-
-	if (ferror(fp))
-		elog(ERROR, "Failed to read from file: \"%s\"", file_txt);
-
-	fio_close_stream(fp);
-
-	if (expected_crc != 0 &&
-		expected_crc != content_crc)
-	{
-		elog(WARNING, "Invalid CRC of backup control file '%s': %u. Expected: %u",
-				file_txt, content_crc, expected_crc);
-		return NULL;
-	}
-
-	return files;
 }
 
 /*
@@ -1665,7 +1062,8 @@ pgFileSize(const char *path)
  * from string like /path1:/path2
  */
 parray *
-make_external_directory_list(const char *colon_separated_dirs, bool remap)
+make_external_directory_list(const char *colon_separated_dirs,
+							 TablespaceList *external_remap_list)
 {
 	char	   *p;
 	parray	   *list = parray_new();
@@ -1685,9 +1083,10 @@ make_external_directory_list(const char *colon_separated_dirs, bool remap)
 		canonicalize_path(external_path);
 		if (is_absolute_path(external_path))
 		{
-			if (remap)
+			if (external_remap_list)
 			{
-				char	   *full_path = get_external_remap(external_path);
+				char	   *full_path = get_external_remap(external_path,
+														  *external_remap_list);
 
 				if (full_path != external_path)
 				{
@@ -1736,117 +1135,49 @@ backup_contains_external(const char *dir, parray *dirs_list)
 	return search_result != NULL;
 }
 
-/*
- * Print database_map
- */
-void
-print_database_map(FILE *out, parray *database_map)
+
+/* create backup directory in $BACKUP_PATH */
+int
+pgBackupCreateDir(pgBackup *backup)
 {
-	int i;
+	int		i;
+	char	path[MAXPGPATH];
+	parray *subdirs = parray_new();
 
-	for (i = 0; i < parray_num(database_map); i++)
+	parray_append(subdirs, pg_strdup(DATABASE_DIR));
+
+	/* Add external dirs containers */
+	if (backup->external_dir_str)
 	{
-		db_map_entry *db_entry = (db_map_entry *) parray_get(database_map, i);
+		parray *external_list;
 
-		fio_fprintf(out, "{\"dbOid\":\"%u\", \"datname\":\"%s\"}\n",
-				db_entry->dbOid, db_entry->datname);
+		external_list = make_external_directory_list(backup->external_dir_str,
+													 NULL);
+		for (i = 0; i < parray_num(external_list); i++)
+		{
+			char		temp[MAXPGPATH];
+			/* Numeration of externaldirs starts with 1 */
+			makeExternalDirPathByNum(temp, EXTERNAL_DIR, i+1);
+			parray_append(subdirs, pg_strdup(temp));
+		}
+		free_dir_list(external_list);
 	}
 
-}
+	if (!dir_is_empty(backup->root_dir, FIO_BACKUP_HOST))
+		elog(ERROR, "backup destination is not empty \"%s\"", path);
 
-/*
- * Create file 'database_map' and add its meta to backup_files_list
- * NULL check for database_map must be done by the caller.
- */
-void
-write_database_map(pgBackup *backup, parray *database_map, parray *backup_files_list)
-{
-	FILE		*fp;
-	pgFile		*file;
-	char		database_dir[MAXPGPATH];
-	char		database_map_path[MAXPGPATH];
+	fio_mkdir(backup->root_dir, DIR_PERMISSION, FIO_BACKUP_HOST);
 
-	join_path_components(database_dir, backup->root_dir, DATABASE_DIR);
-	join_path_components(database_map_path, database_dir, DATABASE_MAP);
+	/* block header map */
+	init_header_map(backup);
 
-	fp = fio_fopen(database_map_path, PG_BINARY_W, FIO_BACKUP_HOST);
-	if (fp == NULL)
-		elog(ERROR, "Cannot open database map \"%s\": %s", database_map_path,
-			 strerror(errno));
-
-	print_database_map(fp, database_map);
-	if (fio_fflush(fp) || fio_fclose(fp))
+	/* create directories for actual backup files */
+	for (i = 0; i < parray_num(subdirs); i++)
 	{
-		fio_unlink(database_map_path, FIO_BACKUP_HOST);
-		elog(ERROR, "Cannot write database map \"%s\": %s",
-			 database_map_path, strerror(errno));
+		join_path_components(path, backup->root_dir, parray_get(subdirs, i));
+		fio_mkdir(path, DIR_PERMISSION, FIO_BACKUP_HOST);
 	}
 
-	/* Add metadata to backup_content.control */
-	file = pgFileNew(database_map_path, DATABASE_MAP, true, 0,
-								 FIO_BACKUP_HOST);
-	file->crc = pgFileGetCRC(database_map_path, true, false);
-	file->write_size = file->size;
-	file->uncompressed_size = file->read_size;
-
-	parray_append(backup_files_list, file);
-}
-
-/*
- * read database map, return NULL if database_map in empty or missing
- */
-parray *
-read_database_map(pgBackup *backup)
-{
-	FILE		*fp;
-	parray 		*database_map;
-	char		buf[MAXPGPATH];
-	char		path[MAXPGPATH];
-	char		database_map_path[MAXPGPATH];
-
-//	pgBackupGetPath(backup, path, lengthof(path), DATABASE_DIR);
-	join_path_components(path, backup->root_dir, DATABASE_DIR);
-	join_path_components(database_map_path, path, DATABASE_MAP);
-
-	fp = fio_open_stream(database_map_path, FIO_BACKUP_HOST);
-	if (fp == NULL)
-	{
-		/* It is NOT ok for database_map to be missing at this point, so
-		 * we should error here.
-		 * It`s a job of the caller to error if database_map is not empty.
-		 */
-		elog(ERROR, "Cannot open \"%s\": %s", database_map_path, strerror(errno));
-	}
-
-	database_map = parray_new();
-
-	while (fgets(buf, lengthof(buf), fp))
-	{
-		char datname[MAXPGPATH];
-		int64 dbOid;
-
-		db_map_entry *db_entry = (db_map_entry *) pgut_malloc(sizeof(db_map_entry));
-
-		get_control_value(buf, "dbOid", NULL, &dbOid, true);
-		get_control_value(buf, "datname", datname, NULL, true);
-
-		db_entry->dbOid = dbOid;
-		db_entry->datname = pgut_strdup(datname);
-
-		parray_append(database_map, db_entry);
-	}
-
-	if (ferror(fp))
-			elog(ERROR, "Failed to read from file: \"%s\"", database_map_path);
-
-	fio_close_stream(fp);
-
-	/* Return NULL if file is empty */
-	if (parray_num(database_map) == 0)
-	{
-		parray_free(database_map);
-		return NULL;
-	}
-
-	return database_map;
+	free_dir_list(subdirs);
+	return 0;
 }

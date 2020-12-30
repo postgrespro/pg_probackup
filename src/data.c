@@ -803,8 +803,7 @@ restore_data_file(parray *parent_chain, pgFile *dest_file, FILE *out,
 		 * At this point we are sure, that something is going to be copied
 		 * Open source file.
 		 */
-		join_path_components(from_root, backup->root_dir, DATABASE_DIR);
-		join_path_components(from_fullpath, from_root, tmp_file->rel_path);
+		join_path_components(from_fullpath, backup->database_dir, tmp_file->rel_path);
 
 		in = fopen(from_fullpath, PG_BINARY_R);
 		if (in == NULL)
@@ -1163,7 +1162,6 @@ restore_non_data_file(parray *parent_chain, pgBackup *dest_backup,
 					  pgFile *dest_file, FILE *out, const char *to_fullpath,
 					  bool already_exists)
 {
-	char		from_root[MAXPGPATH];
 	char		from_fullpath[MAXPGPATH];
 	FILE		*in = NULL;
 
@@ -1257,16 +1255,14 @@ restore_non_data_file(parray *parent_chain, pgBackup *dest_backup,
 	}
 
 	if (tmp_file->external_dir_num == 0)
-		join_path_components(from_root, tmp_backup->root_dir, DATABASE_DIR);
+		join_path_components(from_fullpath, tmp_backup->database_dir, dest_file->rel_path);
 	else
 	{
-		char		external_prefix[MAXPGPATH];
-
-		join_path_components(external_prefix, tmp_backup->root_dir, EXTERNAL_DIR);
-		makeExternalDirPathByNum(from_root, external_prefix, tmp_file->external_dir_num);
+		char		from_root[MAXPGPATH];
+		makeExternalDirPathByNum(from_root, tmp_backup->external_dir,
+								 tmp_file->external_dir_num);
+ 		join_path_components(from_fullpath, from_root, dest_file->rel_path);
 	}
-
-	join_path_components(from_fullpath, from_root, dest_file->rel_path);
 
 	in = fopen(from_fullpath, PG_BINARY_R);
 	if (in == NULL)

@@ -431,16 +431,8 @@ validate_wal(pgBackup *backup, const char *archivedir,
 	 * for recovery to consistent state.
 	 */
 	if (backup->stream)
-	{
-		char	backup_database_dir[MAXPGPATH];
-		char	backup_xlog_path[MAXPGPATH];
-
-		join_path_components(backup_database_dir, backup->root_dir, DATABASE_DIR);
-		join_path_components(backup_xlog_path, backup_database_dir, PG_XLOG_DIR);
-
-		validate_backup_wal_from_start_to_stop(backup, backup_xlog_path, tli,
+		validate_backup_wal_from_start_to_stop(backup, backup->xlog_dir, tli,
 											   wal_seg_size);
-	}
 	else
 		validate_backup_wal_from_start_to_stop(backup, (char *) archivedir, tli,
 											   wal_seg_size);
