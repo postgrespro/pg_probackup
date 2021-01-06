@@ -383,6 +383,7 @@ main(int argc, char *argv[])
 		exit(0);
 	}
 
+	/* set location based on cmdline options only */
 	setMyLocation(backup_subcmd);
 
 	if (backup_path == NULL)
@@ -499,9 +500,14 @@ main(int argc, char *argv[])
 				config_read_opt(path, instance_options, ERROR, true, true);
 			else
 				config_read_opt(path, instance_options, ERROR, true, false);
+
+			/*
+			 * We can determine our location only after reading the configuration file,
+			 * unless we are running arcive-push/archive-get - they are allowed to trust
+			 * cmdline only.
+			 */
+			setMyLocation(backup_subcmd);
 		}
-		/* Зачем второй раз устанавливать? */
-		setMyLocation(backup_subcmd);
 	}
 
 	/*
