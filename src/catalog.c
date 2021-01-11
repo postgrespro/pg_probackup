@@ -23,7 +23,7 @@ static pgBackup* get_closest_backup(timelineInfo *tlinfo);
 static pgBackup* get_oldest_backup(timelineInfo *tlinfo);
 static const char *backupModes[] = {"", "PAGE", "PTRACK", "DELTA", "FULL"};
 static pgBackup *readBackupControlFile(const char *path);
-static time_t create_backup_dir(pgBackup *backup);
+static time_t create_backup_dir(pgBackup *backup, const char *backup_instance_path);
 
 static bool backup_lock_exit_hook_registered = false;
 static parray *lock_files = NULL;
@@ -1139,7 +1139,7 @@ get_multi_timeline_parent(parray *backup_list, parray *tli_list,
 
 /* create backup directory in $BACKUP_PATH */
 void
-pgBackupCreateDir(pgBackup *backup)
+pgBackupCreateDir(pgBackup *backup, const char *backup_instance_path)
 {
 	int		i;
 	parray *subdirs = parray_new();
@@ -1163,7 +1163,7 @@ pgBackupCreateDir(pgBackup *backup)
 		free_dir_list(external_list);
 	}
 
-	backup->backup_id = create_backup_dir(backup);
+	backup->backup_id = create_backup_dir(backup, backup_instance_path);
 
 	if (backup->backup_id == 0)
 		elog(ERROR, "Cannot create backup directory: %s", strerror(errno));
@@ -1187,18 +1187,16 @@ pgBackupCreateDir(pgBackup *backup)
 }
 
 time_t
-create_backup_dir(pgBackup *backup)
+create_backup_dir(pgBackup *backup, const char *backup_instance_path)
 {
-	char	path[MAXPGPATH];
-	int		attempts = 10;
+	int     attempts = 10;
 
 	while (attempts--)
 	{
-		int rc;
+		int    rc;
+		char   path[MAXPGPATH];
 		time_t backup_id = time(NULL);
 
-		/* TODO: remove reliance on global vars */
-//		snprintf(path, MAXPGPATH, "%s/%s", backup_instance_path, base36enc(backup_id));
 		join_path_components(path, backup_instance_path, base36enc(backup_id));
 
 		rc = fio_mkdir(path, DIR_PERMISSION, FIO_BACKUP_HOST);

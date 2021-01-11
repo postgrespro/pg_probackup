@@ -733,7 +733,7 @@ do_backup(pgSetBackupParams *set_backup_params,
 	pgNodeInit(&nodeInfo);
 
 	/* Create backup directory and BACKUP_CONTROL_FILE */
-	pgBackupCreateDir(&current);
+	pgBackupCreateDir(&current, backup_instance_path);
 
 	if (!instance_config.pgdata)
 		elog(ERROR, "required parameter not specified: PGDATA "

@@ -916,7 +916,7 @@ extern void pgBackupGetPath2(const pgBackup *backup, char *path, size_t len,
 extern void pgBackupGetPathInInstance(const char *instance_name,
 				 const pgBackup *backup, char *path, size_t len,
 				 const char *subdir1, const char *subdir2);
-extern void pgBackupCreateDir(pgBackup *backup);
+extern void pgBackupCreateDir(pgBackup *backup, const char *backup_instance_path);
 extern void pgNodeInit(PGNodeInfo *node);
 extern void pgBackupInit(pgBackup *backup);
 extern void pgBackupFree(void *backup);
