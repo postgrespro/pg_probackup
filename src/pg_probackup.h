@@ -876,8 +876,9 @@ extern char *slurpFile(const char *datadir,
 extern char *fetchFile(PGconn *conn, const char *filename, size_t *filesize);
 
 /* in help.c */
+extern void help_print_version(void);
 extern void help_pg_probackup(void);
-extern void help_command(char *command);
+extern void help_command(ProbackupSubcmd const subcmd);
 
 /* in validate.c */
 extern void pgBackupValidate(pgBackup* backup, pgRestoreParams *params);
@@ -1162,6 +1163,7 @@ extern int send_pages(ConnectionArgs* conn_arg, const char *to_fullpath, const c
 					  BackupMode backup_mode, int ptrack_version_num, const char *ptrack_schema);
 
 /* FIO */
+extern void setMyLocation(ProbackupSubcmd const subcmd);
 extern void fio_delete(mode_t mode, const char *fullpath, fio_location location);
 extern int fio_send_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
 	                      XLogRecPtr horizonLsn, int calg, int clevel, uint32 checksum_version,

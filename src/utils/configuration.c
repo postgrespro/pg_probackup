@@ -87,6 +87,62 @@ static const unit_conversion time_unit_conversion_table[] =
 	{""}						/* end of table marker */
 };
 
+/* Order is important, keep it in sync with utils/configuration.h:enum ProbackupSubcmd declaration */
+static char const * const subcmd_names[] =
+{
+	"NO_CMD",
+	"init",
+	"add-instance",
+	"del-instance",
+	"archive-push",
+	"archive-get",
+	"backup",
+	"restore",
+	"validate",
+	"delete",
+	"merge",
+	"show",
+	"set-config",
+	"set-backup",
+	"show-config",
+	"checkdb",
+	"ssh",
+	"agent",
+	"help",
+	"version",
+};
+
+ProbackupSubcmd
+parse_subcmd(char const * const subcmd_str)
+{
+	struct {
+		ProbackupSubcmd id;
+		char *name;
+	}
+	static const subcmd_additional_names[] = {
+		{ HELP_CMD, "--help" },
+		{ HELP_CMD, "-?" },
+		{ VERSION_CMD, "--version" },
+		{ VERSION_CMD, "-V" },
+	};
+
+	int i;
+	for(i = (int)NO_CMD + 1; i < sizeof(subcmd_names) / sizeof(subcmd_names[0]); ++i)
+		if(strcmp(subcmd_str, subcmd_names[i]) == 0)
+			return (ProbackupSubcmd)i;
+	for(i = 0; i < sizeof(subcmd_additional_names) / sizeof(subcmd_additional_names[0]); ++i)
+		if(strcmp(subcmd_str, subcmd_additional_names[i].name) == 0)
+			return subcmd_additional_names[i].id;
+	return NO_CMD;
+}
+
+char const *
+get_subcmd_name(ProbackupSubcmd const subcmd)
+{
+	Assert((int)subcmd < sizeof(subcmd_names) / sizeof(subcmd_names[0]));
+	return subcmd_names[(int)subcmd];
+}
+
 /*
  * Reading functions.
  */
