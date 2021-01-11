@@ -2921,12 +2921,14 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 
         try:
             self.backup_node(
-                backup_dir, 'node', node,
-                data_dir='{0}'.format(datadir), return_id=False)
+                backup_dir, 'node', node, data_dir='{0}'.format(datadir))
         except:
             pass
 
-        self.backup_node(backup_dir, 'node', node, options=['--stream'])
+        out = self.backup_node(backup_dir, 'node', node, options=['--stream'], return_id=False)
+
+        # it is a bit racy
+        self.assertIn("WARNING: Cannot create directory", out)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
