@@ -1137,7 +1137,14 @@ get_multi_timeline_parent(parray *backup_list, parray *tli_list,
 	return NULL;
 }
 
-/* create backup directory in $BACKUP_PATH */
+/* Create backup directory in $BACKUP_PATH
+ * Note, that backup_id attribute is updated,
+ * so it is possible to get diffrent values in
+ * backup->start_time and backup->backup_id.
+ * It may be ok or maybe not, so it's up to the caller
+ * to fix it or let it be.
+ */
+
 void
 pgBackupCreateDir(pgBackup *backup, const char *backup_instance_path)
 {
@@ -1186,6 +1193,10 @@ pgBackupCreateDir(pgBackup *backup, const char *backup_instance_path)
 	free_dir_list(subdirs);
 }
 
+/*
+ * Create root directory for backup,
+ * update pgBackup.root_dir if directory creation was a success
+ */
 time_t
 create_backup_dir(pgBackup *backup, const char *backup_instance_path)
 {
@@ -1199,7 +1210,7 @@ create_backup_dir(pgBackup *backup, const char *backup_instance_path)
 
 		join_path_components(path, backup_instance_path, base36enc(backup_id));
 
-		rc = fio_mkdir(path, DIR_PERMISSION, FIO_BACKUP_HOST);
+		rc = dir_create_dir(path, DIR_PERMISSION, true);
 
 		if (rc == 0)
 		{
@@ -1207,7 +1218,10 @@ create_backup_dir(pgBackup *backup, const char *backup_instance_path)
 			return backup_id;
 		}
 		else
+		{
+			elog(WARNING, "Cannot create directory \"%s\": %s", path, strerror(errno));
 			sleep(1);
+		}
 	}
 
 	return 0;
