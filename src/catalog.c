@@ -1140,7 +1140,7 @@ get_multi_timeline_parent(parray *backup_list, parray *tli_list,
 /* Create backup directory in $BACKUP_PATH
  * Note, that backup_id attribute is updated,
  * so it is possible to get diffrent values in
- * backup->start_time and backup->backup_id.
+ * pgBackup.start_time and pgBackup.backup_id.
  * It may be ok or maybe not, so it's up to the caller
  * to fix it or let it be.
  */
