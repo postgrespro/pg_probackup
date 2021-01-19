@@ -132,6 +132,15 @@ typedef struct db_map_entry
 	char *datname;
 } db_map_entry;
 
+typedef enum DestDirIncrCompatibility
+{
+	POSTMASTER_IS_RUNNING,
+	SYSTEM_ID_MISMATCH,
+	BACKUP_LABEL_EXISTS,
+	DEST_IS_NOT_OK,
+	DEST_OK
+} DestDirIncrCompatibility;
+
 typedef enum IncrRestoreMode
 {
 	INCR_NONE,
@@ -868,6 +877,7 @@ extern int do_validate_all(void);
 extern int validate_one_page(Page page, BlockNumber absolute_blkno,
 							 XLogRecPtr stop_lsn, PageState *page_st,
 							 uint32 checksum_version);
+extern bool validate_tablespace_map(pgBackup *backup);
 
 /* return codes for validate_one_page */
 /* TODO: use enum */
@@ -957,10 +967,10 @@ extern void create_data_directories(parray *dest_files,
 										bool incremental,
 										fio_location location);
 
-extern void read_tablespace_map(parray *files, const char *backup_dir);
+extern void read_tablespace_map(parray *links, const char *backup_dir);
 extern void opt_tablespace_map(ConfigOption *opt, const char *arg);
 extern void opt_externaldir_map(ConfigOption *opt, const char *arg);
-extern void check_tablespace_mapping(pgBackup *backup, bool incremental, bool *tblspaces_are_empty);
+extern int  check_tablespace_mapping(pgBackup *backup, bool incremental, bool force, bool pgdata_is_empty);
 extern void check_external_dir_mapping(pgBackup *backup, bool incremental);
 extern char *get_external_remap(char *current_dir);
 

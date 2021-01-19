@@ -65,9 +65,10 @@ static void set_orphan_status(parray *backups, pgBackup *parent_backup);
 
 static void restore_chain(pgBackup *dest_backup, parray *parent_chain,
 						  parray *dbOid_exclude_list, pgRestoreParams *params,
-						  const char *pgdata_path, bool no_sync);
-static void check_incremental_compatibility(const char *pgdata, uint64 system_identifier,
-											IncrRestoreMode incremental_mode);
+						  const char *pgdata_path, bool no_sync, bool cleanup_pgdata,
+						  bool backup_has_tblspc);
+static DestDirIncrCompatibility check_incremental_compatibility(const char *pgdata, uint64 system_identifier,
+																IncrRestoreMode incremental_mode);
 
 /*
  * Iterate over backup list to find all ancestors of the broken parent_backup
@@ -131,7 +132,8 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 	parray	   *parent_chain = NULL;
 	parray	   *dbOid_exclude_list = NULL;
 	bool        pgdata_is_empty = true;
-	bool        tblspaces_are_empty = true;
+	bool        cleanup_pgdata = false;
+	bool        backup_has_tblspc = true; /* backup contain tablespace */
 	XLogRecPtr  shift_lsn = InvalidXLogRecPtr;
 
 	if (params->is_restore)
@@ -139,25 +141,60 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 		if (instance_config.pgdata == NULL)
 			elog(ERROR,
 				"required parameter not specified: PGDATA (-D, --pgdata)");
+
 		/* Check if restore destination empty */
 		if (!dir_is_empty(instance_config.pgdata, FIO_DB_HOST))
 		{
+			/* if destination directory is empty, then incremental restore may be disabled */
+			pgdata_is_empty = false;
+
 			/* Check that remote system is NOT running and systemd id is the same as ours */
 			if (params->incremental_mode != INCR_NONE)
 			{
+				DestDirIncrCompatibility rc;
+
 				elog(INFO, "Running incremental restore into nonempty directory: \"%s\"",
 					 instance_config.pgdata);
 
-				check_incremental_compatibility(instance_config.pgdata,
-												instance_config.system_identifier,
-												params->incremental_mode);
+				rc = check_incremental_compatibility(instance_config.pgdata,
+													 instance_config.system_identifier,
+													 params->incremental_mode);
+				switch (rc)
+				{
+
+					/* Even with force flag it is unwise to run
+					 * incremental restore over running instance
+					 */
+					case POSTMASTER_IS_RUNNING:
+						elog(ERROR, "Incremental restore is impossible");
+						break;
+
+					/* TODO: check incremental restore into pgdata without pg_control */
+					case SYSTEM_ID_MISMATCH:
+						if (params->incremental_mode != INCR_NONE && params->force)
+						{
+							/* delete the content of remote directory */
+							cleanup_pgdata = true;
+						}
+						else
+							elog(ERROR, "Incremental restore is impossible");
+						break;
+
+					/* a big no-no for lsn-based incremental restore */
+					case BACKUP_LABEL_EXISTS:
+						if (params->incremental_mode == INCR_LSN)
+							elog(ERROR, "Incremental restore is impossible");
+						break;
+
+					/* something is wrong, it is better to just error out */
+					case DEST_IS_NOT_OK:
+						elog(ERROR, "Incremental restore is impossible");
+						break;
+				}
 			}
 			else
 				elog(ERROR, "Restore destination is not empty: \"%s\"",
 					 instance_config.pgdata);
-
-			/* if destination directory is empty, then incremental restore may be disabled */
-			pgdata_is_empty = false;
 		}
 	}
 
@@ -356,9 +393,25 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 	 */
 	if (params->is_restore)
 	{
-		check_tablespace_mapping(dest_backup, params->incremental_mode != INCR_NONE, &tblspaces_are_empty);
+		bool  dest_tblspaces_are_empty = false;
+		int rc = check_tablespace_mapping(dest_backup,
+										  params->incremental_mode != INCR_NONE, params->force,
+										  pgdata_is_empty);
 
-		if (params->incremental_mode != INCR_NONE && pgdata_is_empty && tblspaces_are_empty)
+		/* backup contain no tablespaces */
+		if (rc == 0)
+		{
+			backup_has_tblspc = false;
+			dest_tblspaces_are_empty = true;
+		}
+		/* backup contain some tablespaces and their destination directories are empty */
+		if (rc == 1)
+			dest_tblspaces_are_empty = true;
+		/* backup contain some tablespaces and some of their destination directories are not empty */
+		else if (rc == 2)
+			dest_tblspaces_are_empty = false;
+
+		if (params->incremental_mode != INCR_NONE && !cleanup_pgdata && pgdata_is_empty && dest_tblspaces_are_empty)
 		{
 			elog(INFO, "Destination directory and tablespace directories are empty, "
 					"disable incremental restore");
@@ -366,6 +419,9 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 		}
 
 		/* no point in checking external directories if their restore is not requested */
+		//TODO:
+		//		- make check_external_dir_mapping more like check_tablespace_mapping
+		//		- honor force flag in case of incremental restore just like check_tablespace_mapping
 		if (!params->skip_external_dirs)
 			check_external_dir_mapping(dest_backup, params->incremental_mode != INCR_NONE);
 	}
@@ -610,8 +666,8 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 					 base36enc(dest_backup->start_time),
 					 dest_backup->server_version);
 
-		restore_chain(dest_backup, parent_chain, dbOid_exclude_list,
-							params, instance_config.pgdata, no_sync);
+		restore_chain(dest_backup, parent_chain, dbOid_exclude_list, params,
+					  instance_config.pgdata, no_sync, cleanup_pgdata, backup_has_tblspc);
 
 		//TODO rename and update comment
 		/* Create recovery.conf with given recovery target parameters */
@@ -638,7 +694,8 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 void
 restore_chain(pgBackup *dest_backup, parray *parent_chain,
 			  parray *dbOid_exclude_list, pgRestoreParams *params,
-			  const char *pgdata_path, bool no_sync)
+			  const char *pgdata_path, bool no_sync, bool cleanup_pgdata,
+			  bool backup_has_tblspc)
 {
 	int			i;
 	char		timestamp[100];
@@ -736,7 +793,7 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 	 * Restore dest_backup internal directories.
 	 */
 	create_data_directories(dest_files, instance_config.pgdata,
-							dest_backup->root_dir, true,
+							dest_backup->root_dir, backup_has_tblspc,
 							params->incremental_mode != INCR_NONE,
 							FIO_DB_HOST);
 
@@ -789,18 +846,24 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 	}
 
 	/* Get list of files in destination directory and remove redundant files */
-	if (params->incremental_mode != INCR_NONE)
+	if (params->incremental_mode != INCR_NONE || cleanup_pgdata)
 	{
 		pgdata_files = parray_new();
 
 		elog(INFO, "Extracting the content of destination directory for incremental restore");
 
 		time(&start_time);
-		if (fio_is_remote(FIO_DB_HOST))
-			fio_list_dir(pgdata_files, pgdata_path, false, true, false, false, true, 0);
-		else
-			dir_list_file(pgdata_files, pgdata_path,
-						  false, true, false, false, true, 0, FIO_LOCAL_HOST);
+		fio_list_dir(pgdata_files, pgdata_path, false, true, false, false, true, 0);
+
+		/*
+		 * TODO:
+		 * 1. Currently we are cleaning the tablespaces in check_tablespace_mapping and PGDATA here.
+		 *    It would be great to do all this work in one place.
+		 * 
+		 * 2. In case of tablespace remapping we do not cleanup the old tablespace path,
+		 *    it is just left as it is.
+		 *    Lookup tests.incr_restore.IncrRestoreTest.test_incr_restore_with_tablespace_5
+		 */
 
 		/* get external dirs content */
 		if (external_dirs)
@@ -810,13 +873,8 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 				char *external_path = parray_get(external_dirs, i);
 				parray	*external_files = parray_new();
 
-				if (fio_is_remote(FIO_DB_HOST))
-					fio_list_dir(external_files, external_path,
-								 false, true, false, false, true, i+1);
-				else
-					dir_list_file(external_files, external_path,
-								  false, true, false, false, true, i+1,
-								  FIO_LOCAL_HOST);
+				fio_list_dir(external_files, external_path,
+							 false, true, false, false, true, i+1);
 
 				parray_concat(pgdata_files, external_files);
 				parray_free(external_files);
@@ -836,23 +894,39 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 		time(&start_time);
 		for (i = 0; i < parray_num(pgdata_files); i++)
 		{
-			pgFile	   *file = (pgFile *) parray_get(pgdata_files, i);
+			bool     redundant = true;
+			pgFile	*file = (pgFile *) parray_get(pgdata_files, i);
+
+			if (parray_bsearch(dest_backup->files, file, pgFileCompareRelPathWithExternal))
+				redundant = false;
+
+			/* do not delete the useful internal directories */
+			if (S_ISDIR(file->mode) && !redundant)
+				continue;
 
 			/* if file does not exists in destination list, then we can safely unlink it */
-			if (parray_bsearch(dest_backup->files, file, pgFileCompareRelPathWithExternal) == NULL)
+			if (cleanup_pgdata || redundant)
 			{
 				char		fullpath[MAXPGPATH];
 
 				join_path_components(fullpath, pgdata_path, file->rel_path);
 
-//				fio_pgFileDelete(file, full_file_path);
 				fio_delete(file->mode, fullpath, FIO_DB_HOST);
-				elog(VERBOSE, "Deleted file \"%s\"", fullpath);
+				elog(INFO, "Deleted file \"%s\"", fullpath);
 
 				/* shrink pgdata list */
 				parray_remove(pgdata_files, i);
 				i--;
 			}
+		}
+
+		/* Create directories in cleaned destination */
+		if (cleanup_pgdata)
+		{
+			/* Destination was cleaned up, so it is the regular restore from this point */
+			params->incremental_mode = INCR_NONE;
+			parray_free(pgdata_files);
+			pgdata_files = NULL;
 		}
 
 		time(&end_time);
@@ -2033,35 +2107,25 @@ get_dbOid_exclude_list(pgBackup *backup, parray *datname_list,
 
 /* Check that instance is suitable for incremental restore
  * Depending on type of incremental restore requirements are differs.
+ *
+ * Possible results:
+ *  (-4) POSTMASTER_IS_RUNNING
+ *  (-3) SYSTEM_ID_MISMATCH
+ *  (-2) BACKUP_LABEL_EXISTS
+ *  (-1) DEST_IS_NOT_OK
+ *   (0) DEST_OK
  */
-void
+DestDirIncrCompatibility
 check_incremental_compatibility(const char *pgdata, uint64 system_identifier,
 								IncrRestoreMode incremental_mode)
 {
 	uint64	system_id_pgdata;
+	bool    system_id_match = false;
 	bool    success = true;
+	bool    postmaster_is_up = false;
+	bool    backup_label_exists = false;
 	pid_t   pid;
 	char    backup_label[MAXPGPATH];
-
-	/* slurp pg_control and check that system ID is the same */
-	/* check that instance is not running */
-	/* if lsn_based, check that there is no backup_label files is around AND
-	 * get redo point lsn from destination pg_control.
-
-	 * It is really important to be sure that pg_control is in cohesion with
-	 * data files content, because based on pg_control information we will
-	 * choose a backup suitable for lsn based incremental restore.
-	 */
-
-	system_id_pgdata = get_system_identifier(pgdata);
-
-	if (system_id_pgdata != instance_config.system_identifier)
-	{
-		elog(WARNING, "Backup catalog was initialized for system id %lu, "
-					"but destination directory system id is %lu",
-					system_identifier, system_id_pgdata);
-		success = false;
-	}
 
 	/* check postmaster pid */
 	pid = fio_check_postmaster(pgdata, FIO_DB_HOST);
@@ -2080,7 +2144,27 @@ check_incremental_compatibility(const char *pgdata, uint64 system_identifier,
 		elog(WARNING, "Postmaster with pid %u is running in destination directory \"%s\"",
 			pid, pgdata);
 		success = false;
+		postmaster_is_up = true;
 	}
+
+	/* slurp pg_control and check that system ID is the same
+	 * check that instance is not running
+	 * if lsn_based, check that there is no backup_label files is around AND
+	 * get redo point lsn from destination pg_control.
+
+	 * It is really important to be sure that pg_control is in cohesion with
+	 * data files content, because based on pg_control information we will
+	 * choose a backup suitable for lsn based incremental restore.
+	 */
+
+	system_id_pgdata = get_system_identifier(pgdata);
+
+	if (system_id_pgdata == instance_config.system_identifier)
+		system_id_match = true;
+	else
+		elog(WARNING, "Backup catalog was initialized for system id %lu, "
+					"but destination directory system id is %lu",
+					system_identifier, system_id_pgdata);
 
 	/*
 	 * TODO: maybe there should be some other signs, pointing to pg_control
@@ -2097,9 +2181,27 @@ check_incremental_compatibility(const char *pgdata, uint64 system_identifier,
 				"to cluster with pg_control not synchronized with cluster state."
 				"Consider to use incremental restore in 'checksum' mode");
 			success = false;
+			backup_label_exists = true;
 		}
 	}
 
+	/*
+	 * In force mode it is possible to ignore system id mismatch
+	 * by just wiping the destination directory clean.
+	 */
+
+	if (postmaster_is_up)
+		return POSTMASTER_IS_RUNNING;
+
+	if (!system_id_match)
+		return SYSTEM_ID_MISMATCH;
+
+	if (backup_label_exists)
+		return BACKUP_LABEL_EXISTS;
+
+	/* some other error condition */
 	if (!success)
-		elog(ERROR, "Incremental restore is impossible");
+		return DEST_IS_NOT_OK;
+
+	return DEST_OK;
 }

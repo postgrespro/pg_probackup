@@ -720,6 +720,7 @@ do_retention_wal(bool dry_run)
 /*
  * Delete backup files of the backup and update the status of the backup to
  * BACKUP_STATUS_DELETED.
+ * TODO: delete files on multiple threads
  */
 void
 delete_backup_files(pgBackup *backup)
