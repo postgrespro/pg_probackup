@@ -343,7 +343,6 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
                 "Output: {0} \n CMD: {1}".format(
                     repr(self.output), self.cmd))
         except ProbackupException as e:
-            print(e.message)
             self.assertIn(
                 'ERROR: Remapped tablespace destination is not empty',
                 e.message,
@@ -356,8 +355,6 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
             options=[
                 '--force', '--incremental-mode=checksum',
                 '-T{0}={1}'.format(tblspace, tblspace)])
-
-        print(out)
 
         pgdata_restored = self.pgdata_content(node_1.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
@@ -480,7 +477,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
-    # @unittest.skip("skip")
+    @unittest.skip("skip")
     def test_incr_restore_with_tablespace_5(self):
         """
         More complicated case, we restore backup
@@ -501,9 +498,6 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
 
         self.create_tblspace_in_node(node1, 'tblspace')
         node1.pgbench_init(scale=10, tablespace='tblspace')
-
-#        pgbench = node1.pgbench(options=['-T', '10', '-c', '1', '--no-vacuum'])
-#        pgbench.wait()
 
         # take backup of node1 with tblspace
         self.backup_node(backup_dir, 'node', node1, options=['--stream'])
@@ -532,8 +526,6 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
                 "--incremental-mode=checksum",
                 "-T{0}={1}".format(tblspc1_path, tblspc2_path)])
 
-        print(out)
-
         # check that tblspc1_path is empty
         self.assertFalse(
             os.listdir(tblspc1_path),
@@ -541,8 +533,6 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
 
         pgdata_restored = self.pgdata_content(node1.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
-
-        exit(1)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)

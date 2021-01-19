@@ -2162,8 +2162,8 @@ cleanup:
 
 /* Compile the array of files located on remote machine in directory root */
 static void fio_list_dir_internal(parray *files, const char *root, bool exclude,
-						   bool follow_symlink, bool add_root, bool backup_logs,
-						   bool skip_hidden, int external_dir_num)
+								  bool follow_symlink, bool add_root, bool backup_logs,
+								  bool skip_hidden, int external_dir_num)
 {
 	fio_header hdr;
 	fio_list_dir_request req;
@@ -2319,7 +2319,7 @@ static void fio_list_dir_impl(int out, char* buf)
 	IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 }
 
-/* wrapper for fio_list_dir_internal */
+/* Wrapper for directory listing */
 void fio_list_dir(parray *files, const char *root, bool exclude,
 				  bool follow_symlink, bool add_root, bool backup_logs,
 				  bool skip_hidden, int external_dir_num)

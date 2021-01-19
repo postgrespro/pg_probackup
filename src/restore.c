@@ -912,18 +912,18 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 				join_path_components(fullpath, pgdata_path, file->rel_path);
 
 				fio_delete(file->mode, fullpath, FIO_DB_HOST);
-				elog(INFO, "Deleted file \"%s\"", fullpath);
+				elog(VERBOSE, "Deleted file \"%s\"", fullpath);
 
 				/* shrink pgdata list */
+				pgFileFree(file);
 				parray_remove(pgdata_files, i);
 				i--;
 			}
 		}
 
-		/* Create directories in cleaned destination */
 		if (cleanup_pgdata)
 		{
-			/* Destination was cleaned up, so it is the regular restore from this point */
+			/* Destination PGDATA and tablespaces were cleaned up, so it's the regular restore from this point */
 			params->incremental_mode = INCR_NONE;
 			parray_free(pgdata_files);
 			pgdata_files = NULL;
@@ -2187,7 +2187,7 @@ check_incremental_compatibility(const char *pgdata, uint64 system_identifier,
 
 	/*
 	 * In force mode it is possible to ignore system id mismatch
-	 * by just wiping the destination directory clean.
+	 * by just wiping clean the destination directory.
 	 */
 
 	if (postmaster_is_up)

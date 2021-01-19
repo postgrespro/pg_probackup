@@ -1301,7 +1301,7 @@ check_tablespace_mapping(pgBackup *backup, bool incremental, bool force, bool pg
 
 			else if (pgdata_is_empty && !force)
 				elog(ERROR, "PGDATA is empty, but tablespace destination is not: \"%s\". "
-							"Use \"--force\" flag is you want to automactally clean up the "
+							"Use \"--force\" flag is you want to automatically clean up the "
 							"content of tablespace destination",
 						linked_path);
 
