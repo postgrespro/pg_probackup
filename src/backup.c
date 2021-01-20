@@ -146,15 +146,6 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool
 	current.tli = get_current_timeline_from_control(false);
 #endif
 
-	/* In PAGE mode or in ARCHIVE wal-mode wait for current segment */
-	if (current.backup_mode == BACKUP_MODE_DIFF_PAGE ||!stream_wal)
-		/*
-		 * Do not wait start_lsn for stream backup.
-		 * Because WAL streaming will start after pg_start_backup() in stream
-		 * mode.
-		 */
-		wait_wal_lsn(current.start_lsn, true, current.tli, false, true, ERROR, false);
-
 	/*
 	 * In incremental backup mode ensure that already-validated
 	 * backup on current timeline exists and get its filelist.
@@ -264,10 +255,14 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool
 	/* Update running backup meta with START LSN */
 	write_backup(&current, true);
 
-	join_path_components(external_prefix, current.database_dir, EXTERNAL_DIR);
-
-	/* initialize backup's file list */
-	backup_files_list = parray_new();
+	/* In PAGE mode or in ARCHIVE wal-mode wait for current segment */
+	if (current.backup_mode == BACKUP_MODE_DIFF_PAGE || !stream_wal)
+		/*
+		 * Do not wait start_lsn for stream backup.
+		 * Because WAL streaming will start after pg_start_backup() in stream
+		 * mode.
+		 */
+		wait_wal_lsn(current.start_lsn, true, current.tli, false, true, ERROR, false);
 
 	/* start stream replication */
 	if (stream_wal)
@@ -278,6 +273,10 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool
 		start_WAL_streaming(backup_conn, dst_backup_path, &instance_config.conn_opt,
 							current.start_lsn, current.tli);
 	}
+
+	/* initialize backup's file list */
+	backup_files_list = parray_new();
+	join_path_components(external_prefix, current.database_dir, EXTERNAL_DIR);
 
 	/* list files with the logical path. omit $PGDATA */
 	if (fio_is_remote(FIO_DB_HOST))
