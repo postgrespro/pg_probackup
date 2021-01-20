@@ -136,6 +136,9 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 	bool        backup_has_tblspc = true; /* backup contain tablespace */
 	XLogRecPtr  shift_lsn = InvalidXLogRecPtr;
 
+	if (instance_name == NULL)
+		elog(ERROR, "required parameter not specified: --instance");
+
 	if (params->is_restore)
 	{
 		if (instance_config.pgdata == NULL)
@@ -152,6 +155,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 			if (params->incremental_mode != INCR_NONE)
 			{
 				DestDirIncrCompatibility rc;
+				bool ok_to_go = true;
 
 				elog(INFO, "Running incremental restore into nonempty directory: \"%s\"",
 					 instance_config.pgdata);
@@ -159,47 +163,43 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 				rc = check_incremental_compatibility(instance_config.pgdata,
 													 instance_config.system_identifier,
 													 params->incremental_mode);
-				switch (rc)
+				if (rc == POSTMASTER_IS_RUNNING)
 				{
-
 					/* Even with force flag it is unwise to run
 					 * incremental restore over running instance
 					 */
-					case POSTMASTER_IS_RUNNING:
-						elog(ERROR, "Incremental restore is impossible");
-						break;
-
-					/* TODO: check incremental restore into pgdata without pg_control */
-					case SYSTEM_ID_MISMATCH:
-						if (params->incremental_mode != INCR_NONE && params->force)
-						{
-							/* delete the content of remote directory */
-							cleanup_pgdata = true;
-						}
-						else
-							elog(ERROR, "Incremental restore is impossible");
-						break;
-
-					/* a big no-no for lsn-based incremental restore */
-					case BACKUP_LABEL_EXISTS:
-						if (params->incremental_mode == INCR_LSN)
-							elog(ERROR, "Incremental restore is impossible");
-						break;
-
-					/* something is wrong, it is better to just error out */
-					case DEST_IS_NOT_OK:
-						elog(ERROR, "Incremental restore is impossible");
-						break;
+					ok_to_go = false;
 				}
+				else if (rc == SYSTEM_ID_MISMATCH)
+				{
+					if (params->incremental_mode != INCR_NONE && params->force)
+					{
+						/* the content of remote directory must be cleaned up */
+						cleanup_pgdata = true;
+					}
+					else
+						ok_to_go = false;
+				}
+				else if (rc == BACKUP_LABEL_EXISTS)
+				{
+					/* a big no-no for lsn-based incremental restore */
+					if (params->incremental_mode == INCR_LSN)
+						ok_to_go = false;
+				}
+				else if (rc == DEST_IS_NOT_OK)
+				{
+					/* something is wrong, it is better to just error out */
+					ok_to_go = false;
+				}
+
+				if (!ok_to_go)
+					elog(ERROR, "Incremental restore is impossible");
 			}
 			else
 				elog(ERROR, "Restore destination is not empty: \"%s\"",
 					 instance_config.pgdata);
 		}
 	}
-
-	if (instance_name == NULL)
-		elog(ERROR, "required parameter not specified: --instance");
 
 	elog(LOG, "%s begin.", action);
 
@@ -2114,6 +2114,8 @@ get_dbOid_exclude_list(pgBackup *backup, parray *datname_list,
  *  (-2) BACKUP_LABEL_EXISTS
  *  (-1) DEST_IS_NOT_OK
  *   (0) DEST_OK
+ *
+ * TODO: add PG_CONTROL_IS_MISSING
  */
 DestDirIncrCompatibility
 check_incremental_compatibility(const char *pgdata, uint64 system_identifier,

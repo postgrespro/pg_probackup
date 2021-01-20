@@ -477,6 +477,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
+    # @unittest.expectedFailure
     @unittest.skip("skip")
     def test_incr_restore_with_tablespace_5(self):
         """
