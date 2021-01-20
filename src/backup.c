@@ -95,7 +95,6 @@ static void
 do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool backup_logs)
 {
 	int			i;
-	char		database_path[MAXPGPATH];
 	char		external_prefix[MAXPGPATH]; /* Temp value. Used as template */
 	char		dst_backup_path[MAXPGPATH];
 	char		label[1024];
@@ -265,10 +264,7 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool
 	/* Update running backup meta with START LSN */
 	write_backup(&current, true);
 
-	pgBackupGetPath(&current, database_path, lengthof(database_path),
-					DATABASE_DIR);
-	pgBackupGetPath(&current, external_prefix, lengthof(external_prefix),
-					EXTERNAL_DIR);
+	join_path_components(external_prefix, current.database_dir, EXTERNAL_DIR);
 
 	/* initialize backup's file list */
 	backup_files_list = parray_new();
@@ -276,7 +272,7 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool
 	/* start stream replication */
 	if (stream_wal)
 	{
-		join_path_components(dst_backup_path, database_path, PG_XLOG_DIR);
+		join_path_components(dst_backup_path, current.database_dir, PG_XLOG_DIR);
 		fio_mkdir(dst_backup_path, DIR_PERMISSION, FIO_BACKUP_HOST);
 
 		start_WAL_streaming(backup_conn, dst_backup_path, &instance_config.conn_opt,
@@ -441,7 +437,7 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool
 				join_path_components(dirpath, temp, file->rel_path);
 			}
 			else
-				join_path_components(dirpath, database_path, file->rel_path);
+				join_path_components(dirpath, current.database_dir, file->rel_path);
 
 			elog(VERBOSE, "Create directory '%s'", dirpath);
 			fio_mkdir(dirpath, DIR_PERMISSION, FIO_BACKUP_HOST);
@@ -475,7 +471,7 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool
 
 		arg->nodeInfo = nodeInfo;
 		arg->from_root = instance_config.pgdata;
-		arg->to_root = database_path;
+		arg->to_root = current.database_dir;
 		arg->external_prefix = external_prefix;
 		arg->external_dirs = external_dirs;
 		arg->files_list = backup_files_list;
@@ -552,7 +548,7 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool
 			elog(ERROR, "Failed to find file \"%s\" in backup filelist.",
 							XLOG_CONTROL_FILE);
 
-		set_min_recovery_point(pg_control, database_path, current.stop_lsn);
+		set_min_recovery_point(pg_control, current.database_dir, current.stop_lsn);
 	}
 
 	/* close and sync page header map */
@@ -609,7 +605,7 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool
 
 			/* construct fullpath */
 			if (file->external_dir_num == 0)
-				join_path_components(to_fullpath, database_path, file->rel_path);
+				join_path_components(to_fullpath, current.database_dir, file->rel_path);
 			else
 			{
 				char 	external_dst[MAXPGPATH];
@@ -726,8 +722,8 @@ pgdata_basic_setup(ConnectionOptions conn_opt, PGNodeInfo *nodeInfo)
  * Entry point of pg_probackup BACKUP subcommand.
  */
 int
-do_backup(time_t start_time, pgSetBackupParams *set_backup_params,
-			bool no_validate, bool no_sync, bool backup_logs)
+do_backup(pgSetBackupParams *set_backup_params,
+		  bool no_validate, bool no_sync, bool backup_logs)
 {
 	PGconn		*backup_conn = NULL;
 	PGNodeInfo	nodeInfo;
@@ -736,13 +732,16 @@ do_backup(time_t start_time, pgSetBackupParams *set_backup_params,
 	/* Initialize PGInfonode */
 	pgNodeInit(&nodeInfo);
 
+	/* Create backup directory and BACKUP_CONTROL_FILE */
+	pgBackupCreateDir(&current, backup_instance_path);
+
 	if (!instance_config.pgdata)
 		elog(ERROR, "required parameter not specified: PGDATA "
 						 "(-D, --pgdata)");
 
 	/* Update backup status and other metainfo. */
 	current.status = BACKUP_STATUS_RUNNING;
-	current.start_time = start_time;
+	current.start_time = current.backup_id;
 
 	StrNCpy(current.program_version, PROGRAM_VERSION,
 			sizeof(current.program_version));
@@ -757,16 +756,13 @@ do_backup(time_t start_time, pgSetBackupParams *set_backup_params,
 
 	elog(INFO, "Backup start, pg_probackup version: %s, instance: %s, backup ID: %s, backup mode: %s, "
 			"wal mode: %s, remote: %s, compress-algorithm: %s, compress-level: %i",
-			PROGRAM_VERSION, instance_name, base36enc(start_time), pgBackupGetBackupMode(&current),
+			PROGRAM_VERSION, instance_name, base36enc(current.backup_id), pgBackupGetBackupMode(&current),
 			current.stream ? "STREAM" : "ARCHIVE", IsSshProtocol()  ? "true" : "false",
 			deparse_compress_alg(current.compress_alg), current.compress_level);
 
-	/* Create backup directory and BACKUP_CONTROL_FILE */
-	if (pgBackupCreateDir(&current))
-		elog(ERROR, "Cannot create backup directory");
 	if (!lock_backup(&current, true, true))
 		elog(ERROR, "Cannot lock backup %s directory",
-			 base36enc(current.start_time));
+			 base36enc(current.backup_id));
 	write_backup(&current, true);
 
 	/* set the error processing function for the backup process */
@@ -781,7 +777,7 @@ do_backup(time_t start_time, pgSetBackupParams *set_backup_params,
 	backup_conn = pgdata_basic_setup(instance_config.conn_opt, &nodeInfo);
 
 	if (current.from_replica)
-		elog(INFO, "Backup %s is going to be taken from standby", base36enc(start_time));
+		elog(INFO, "Backup %s is going to be taken from standby", base36enc(current.backup_id));
 
 	/* TODO, print PostgreSQL full version */
 	//elog(INFO, "PostgreSQL version: %s", nodeInfo.server_version_str);

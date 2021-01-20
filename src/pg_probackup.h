@@ -781,7 +781,7 @@ extern char** commands_args;
 extern const char *pgdata_exclude_dir[];
 
 /* in backup.c */
-extern int do_backup(time_t start_time, pgSetBackupParams *set_backup_params,
+extern int do_backup(pgSetBackupParams *set_backup_params,
 					 bool no_validate, bool no_sync, bool backup_logs);
 extern void do_checkdb(bool need_amcheck, ConnectionOptions conn_opt,
 				  char *pgdata);
@@ -916,7 +916,7 @@ extern void pgBackupGetPath2(const pgBackup *backup, char *path, size_t len,
 extern void pgBackupGetPathInInstance(const char *instance_name,
 				 const pgBackup *backup, char *path, size_t len,
 				 const char *subdir1, const char *subdir2);
-extern int pgBackupCreateDir(pgBackup *backup);
+extern void pgBackupCreateDir(pgBackup *backup, const char *backup_instance_path);
 extern void pgNodeInit(PGNodeInfo *node);
 extern void pgBackupInit(pgBackup *backup);
 extern void pgBackupFree(void *backup);
@@ -980,7 +980,7 @@ extern void makeExternalDirPathByNum(char *ret_path, const char *pattern_path,
 									 const int dir_num);
 extern bool backup_contains_external(const char *dir, parray *dirs_list);
 
-extern int dir_create_dir(const char *path, mode_t mode);
+extern int dir_create_dir(const char *path, mode_t mode, bool strict);
 extern bool dir_is_empty(const char *path, fio_location location);
 
 extern bool fileExists(const char *path, fio_location location);
