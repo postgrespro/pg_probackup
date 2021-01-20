@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 import hashlib
 import shutil
 import json
+from shutil import copyfile
 from testgres import QueryException
 
 
@@ -1017,6 +1018,141 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(count[0][0], 4)
         count = node.execute("postgres", "SELECT count(*) FROM tbl1")
         self.assertEqual(count[0][0], 4)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_restore_with_missing_or_corrupted_tablespace_map(self):
+        """restore backup with missing or corrupted tablespace_map"""
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'],
+            pg_options={'autovacuum': 'off'})
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # Create tablespace
+        self.create_tblspace_in_node(node, 'tblspace')
+        node.pgbench_init(scale=1, tablespace='tblspace')
+
+        # Full backup
+        self.backup_node(backup_dir, 'node', node)
+
+        # Change some data
+        pgbench = node.pgbench(options=['-T', '10', '-c', '1', '--no-vacuum'])
+        pgbench.wait()
+
+        # Page backup
+        page_id = self.backup_node(backup_dir, 'node', node, backup_type="page")
+
+        pgdata = self.pgdata_content(node.data_dir)
+
+        node2 = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node2'))
+        node2.cleanup()
+
+        olddir = self.get_tblspace_path(node, 'tblspace')
+        newdir = self.get_tblspace_path(node2, 'tblspace')
+
+        # drop tablespace_map
+        tablespace_map = os.path.join(
+            backup_dir, 'backups', 'node',
+            page_id, 'database', 'tablespace_map')
+
+        tablespace_map_tmp = os.path.join(
+            backup_dir, 'backups', 'node',
+            page_id, 'database', 'tablespace_map_tmp')
+
+        os.rename(tablespace_map, tablespace_map_tmp)
+
+        try:
+            self.restore_node(
+                backup_dir, 'node', node2,
+                options=["-T", "{0}={1}".format(olddir, newdir)])
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because tablespace_map is missing.\n "
+                "Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                'ERROR: Tablespace map is missing: "{0}", '
+                'probably backup {1} is corrupt, validate it'.format(
+                    tablespace_map, page_id),
+                e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        try:
+            self.restore_node(backup_dir, 'node', node2)
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because tablespace_map is missing.\n "
+                "Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                'ERROR: Tablespace map is missing: "{0}", '
+                'probably backup {1} is corrupt, validate it'.format(
+                    tablespace_map, page_id),
+                e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        copyfile(tablespace_map_tmp, tablespace_map)
+
+        with open(tablespace_map, "a") as f:
+            f.write("HELLO\n")
+        
+        print(tablespace_map)
+
+        exit(1)
+
+        try:
+            self.restore_node(
+                backup_dir, 'node', node2,
+                options=["-T", "{0}={1}".format(olddir, newdir)])
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because tablespace_map is corupted.\n "
+                "Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                'ERROR: Invalid CRC of tablespace map file "{0}"'.format(tablespace_map),
+                e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        try:
+            self.restore_node(backup_dir, 'node', node2)
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because tablespace_map is corupted.\n "
+                "Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                'ERROR: Invalid CRC of tablespace map file "{0}"'.format(tablespace_map),
+                e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        # rename it back
+        os.rename(tablespace_map_tmp, tablespace_map)
+
+        print(self.restore_node(
+            backup_dir, 'node', node2,
+            options=["-T", "{0}={1}".format(olddir, newdir)]))
+
+        pgdata_restored = self.pgdata_content(node2.data_dir)
+        self.compare_pgdata(pgdata, pgdata_restored)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
