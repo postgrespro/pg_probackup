@@ -1178,7 +1178,7 @@ read_tablespace_map(parray *links, const char *backup_dir)
  * new tablespace directory MUST be empty, because there is no way
  * we can be sure, that files laying there belong to our instance.
  * But "force" flag allows to ignore this condition, by wiping out
- * the old content on the directory.
+ * the current content on the directory.
  *
  * Exit codes:
  *  (0) backup has no tablespaces
@@ -1259,12 +1259,9 @@ check_tablespace_mapping(pgBackup *backup, bool incremental, bool force, bool pg
 	 * in case of incremental restore with 'force' flag, which required
 	 * of us to drop already existing content of "/somedirectory1".
 	 *
-	 * In case of regular incremental restore we must
-	 * drop the "/somedirectory" directory first.
-	 * TODO: make sure that we do.
-	 *
-	 * In case of "cleanup_pgdata" incremental restore, we
-	 * must drop "/somedirectory" AND "/somedirectory1"
+	 * TODO: Ideally in case of incremental restore we must also
+	 * drop the "/somedirectory" directory first, but currently
+	 * we don`t do that.
 	 */
 
 	/* 2 - all linked directories must be empty */
@@ -1306,9 +1303,8 @@ check_tablespace_mapping(pgBackup *backup, bool incremental, bool force, bool pg
 						linked_path);
 
 			/*
-			 * TODO: compile the list of tblspc Oids to delete later
-			 * UPD: unfortunately, we do not save the tblspc oid of the file
-			 * into filelist.
+			 * TODO: compile the list of tblspc Oids to delete later,
+			 * similar to what we do with database_map.
 			 */
 			else if ((pgdata_is_empty && force) || (remapped && force))
 			{
