@@ -705,6 +705,10 @@ do_validate_instance(void)
  * Validate tablespace_map checksum.
  * Error out in case of checksum mismatch.
  * Return 'false' if there are no tablespaces in backup.
+ *
+ * TODO: it is a bad, that we read the whole filelist just for
+ * the sake of tablespace_map. Probably pgBackup should come with
+ * already filled pgBackup.files
  */
 bool
 validate_tablespace_map(pgBackup *backup)

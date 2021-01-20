@@ -172,11 +172,12 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 				}
 				else if (rc == SYSTEM_ID_MISMATCH)
 				{
+					/*
+					 * In force mode it is possible to ignore system id mismatch
+					 * by just wiping clean the destination directory.
+					 */
 					if (params->incremental_mode != INCR_NONE && params->force)
-					{
-						/* the content of remote directory must be cleaned up */
 						cleanup_pgdata = true;
-					}
 					else
 						ok_to_go = false;
 				}
@@ -2186,11 +2187,6 @@ check_incremental_compatibility(const char *pgdata, uint64 system_identifier,
 			backup_label_exists = true;
 		}
 	}
-
-	/*
-	 * In force mode it is possible to ignore system id mismatch
-	 * by just wiping clean the destination directory.
-	 */
 
 	if (postmaster_is_up)
 		return POSTMASTER_IS_RUNNING;

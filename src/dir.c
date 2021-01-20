@@ -1306,7 +1306,7 @@ check_tablespace_mapping(pgBackup *backup, bool incremental, bool force, bool pg
 			 * TODO: compile the list of tblspc Oids to delete later,
 			 * similar to what we do with database_map.
 			 */
-			else if ((pgdata_is_empty && force) || (remapped && force))
+			else if (force && (pgdata_is_empty || remapped))
 			{
 				// TODO: move this stuff to separate function.
 				char	fullpath[MAXPGPATH];
