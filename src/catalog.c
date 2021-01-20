@@ -1210,6 +1210,7 @@ create_backup_dir(pgBackup *backup, const char *backup_instance_path)
 
 		join_path_components(path, backup_instance_path, base36enc(backup_id));
 
+		/* TODO: add wrapper for remote mode */
 		rc = dir_create_dir(path, DIR_PERMISSION, true);
 
 		if (rc == 0)
