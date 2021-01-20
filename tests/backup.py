@@ -2872,10 +2872,6 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
-#        self.set_archiving(backup_dir, 'node', node)
-
-#        os.rmdir(
-#            os.path.join(backup_dir, "wal", "node"))
 
         node.slow_start()
 
@@ -2905,7 +2901,54 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(
             self.show_pb(backup_dir, 'node')[0]['status'], "ERROR")
 
-        exit(1)
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_issue_290(self):
+        """
+        https://github.com/postgrespro/pg_probackup/issues/290
+        """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'])
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+
+        os.rmdir(
+            os.path.join(backup_dir, "wal", "node"))
+
+        node.slow_start()
+
+        try:
+            self.backup_node(
+                backup_dir, 'node', node,
+                options=['--archive-timeout=10s'])
+            # we should die here because exception is what we expect to happen
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because full backup is missing"
+                "\n Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertNotIn(
+                "INFO: Wait for WAL segment",
+                e.message,
+                "\n Unexpected Error Message: {0}\n CMD: {1}".format(
+                    repr(e.message), self.cmd))
+
+            self.assertIn(
+                "WAL archive directory is not accessible",
+                e.message,
+                "\n Unexpected Error Message: {0}\n CMD: {1}".format(
+                    repr(e.message), self.cmd))
+
+        self.assertEqual(
+            self.show_pb(backup_dir, 'node')[0]['status'], "ERROR")
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)

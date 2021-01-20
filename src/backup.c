@@ -257,12 +257,19 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool
 
 	/* In PAGE mode or in ARCHIVE wal-mode wait for current segment */
 	if (current.backup_mode == BACKUP_MODE_DIFF_PAGE || !stream_wal)
+	{
+		/* Check that archive_dir can be reached */
+		if (fio_access(arclog_path, F_OK, FIO_BACKUP_HOST) != 0)
+			elog(ERROR, "WAL archive directory is not accessible \"%s\": %s",
+				arclog_path, strerror(errno));
+
 		/*
 		 * Do not wait start_lsn for stream backup.
 		 * Because WAL streaming will start after pg_start_backup() in stream
 		 * mode.
 		 */
 		wait_wal_lsn(current.start_lsn, true, current.tli, false, true, ERROR, false);
+	}
 
 	/* start stream replication */
 	if (stream_wal)
