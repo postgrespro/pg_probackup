@@ -1026,7 +1026,9 @@ int fio_unlink(char const* path, fio_location location)
 	}
 }
 
-/* Create directory */
+/* Create directory
+ * TODO: add strict flag
+ */
 int fio_mkdir(char const* path, int mode, fio_location location)
 {
 	if (fio_is_remote(location))

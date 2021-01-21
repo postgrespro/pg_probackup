@@ -283,7 +283,7 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool
 
 	/* initialize backup's file list */
 	backup_files_list = parray_new();
-	join_path_components(external_prefix, current.database_dir, EXTERNAL_DIR);
+	join_path_components(external_prefix, current.root_dir, EXTERNAL_DIR);
 
 	/* list files with the logical path. omit $PGDATA */
 	if (fio_is_remote(FIO_DB_HOST))
@@ -738,6 +738,11 @@ do_backup(pgSetBackupParams *set_backup_params,
 	/* Initialize PGInfonode */
 	pgNodeInit(&nodeInfo);
 
+	/* Save list of external directories */
+	if (instance_config.external_dir_str &&
+		(pg_strcasecmp(instance_config.external_dir_str, "none") != 0))
+		current.external_dir_str = instance_config.external_dir_str;
+
 	/* Create backup directory and BACKUP_CONTROL_FILE */
 	pgBackupCreateDir(&current, backup_instance_path);
 
@@ -754,11 +759,6 @@ do_backup(pgSetBackupParams *set_backup_params,
 
 	current.compress_alg = instance_config.compress_alg;
 	current.compress_level = instance_config.compress_level;
-
-	/* Save list of external directories */
-	if (instance_config.external_dir_str &&
-		(pg_strcasecmp(instance_config.external_dir_str, "none") != 0))
-		current.external_dir_str = instance_config.external_dir_str;
 
 	elog(INFO, "Backup start, pg_probackup version: %s, instance: %s, backup ID: %s, backup mode: %s, "
 			"wal mode: %s, remote: %s, compress-algorithm: %s, compress-level: %i",
