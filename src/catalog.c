@@ -23,6 +23,7 @@ static pgBackup* get_closest_backup(timelineInfo *tlinfo);
 static pgBackup* get_oldest_backup(timelineInfo *tlinfo);
 static const char *backupModes[] = {"", "PAGE", "PTRACK", "DELTA", "FULL"};
 static pgBackup *readBackupControlFile(const char *path);
+static time_t create_backup_dir(pgBackup *backup, const char *backup_instance_path);
 
 static bool backup_lock_exit_hook_registered = false;
 static parray *lock_files = NULL;
@@ -1136,12 +1137,18 @@ get_multi_timeline_parent(parray *backup_list, parray *tli_list,
 	return NULL;
 }
 
-/* create backup directory in $BACKUP_PATH */
-int
-pgBackupCreateDir(pgBackup *backup)
+/* Create backup directory in $BACKUP_PATH
+ * Note, that backup_id attribute is updated,
+ * so it is possible to get diffrent values in
+ * pgBackup.start_time and pgBackup.backup_id.
+ * It may be ok or maybe not, so it's up to the caller
+ * to fix it or let it be.
+ */
+
+void
+pgBackupCreateDir(pgBackup *backup, const char *backup_instance_path)
 {
 	int		i;
-	char	path[MAXPGPATH];
 	parray *subdirs = parray_new();
 
 	parray_append(subdirs, pg_strdup(DATABASE_DIR));
@@ -1163,13 +1170,10 @@ pgBackupCreateDir(pgBackup *backup)
 		free_dir_list(external_list);
 	}
 
-	pgBackupGetPath(backup, path, lengthof(path), NULL);
+	backup->backup_id = create_backup_dir(backup, backup_instance_path);
 
-	if (!dir_is_empty(path, FIO_BACKUP_HOST))
-		elog(ERROR, "backup destination is not empty \"%s\"", path);
-
-	fio_mkdir(path, DIR_PERMISSION, FIO_BACKUP_HOST);
-	backup->root_dir = pgut_strdup(path);
+	if (backup->backup_id == 0)
+		elog(ERROR, "Cannot create backup directory: %s", strerror(errno));
 
 	backup->database_dir = pgut_malloc(MAXPGPATH);
 	join_path_components(backup->database_dir, backup->root_dir, DATABASE_DIR);
@@ -1180,11 +1184,47 @@ pgBackupCreateDir(pgBackup *backup)
 	/* create directories for actual backup files */
 	for (i = 0; i < parray_num(subdirs); i++)
 	{
+		char	path[MAXPGPATH];
+
 		join_path_components(path, backup->root_dir, parray_get(subdirs, i));
 		fio_mkdir(path, DIR_PERMISSION, FIO_BACKUP_HOST);
 	}
 
 	free_dir_list(subdirs);
+}
+
+/*
+ * Create root directory for backup,
+ * update pgBackup.root_dir if directory creation was a success
+ */
+time_t
+create_backup_dir(pgBackup *backup, const char *backup_instance_path)
+{
+	int     attempts = 10;
+
+	while (attempts--)
+	{
+		int    rc;
+		char   path[MAXPGPATH];
+		time_t backup_id = time(NULL);
+
+		join_path_components(path, backup_instance_path, base36enc(backup_id));
+
+		/* TODO: add wrapper for remote mode */
+		rc = dir_create_dir(path, DIR_PERMISSION, true);
+
+		if (rc == 0)
+		{
+			backup->root_dir = pgut_strdup(path);
+			return backup_id;
+		}
+		else
+		{
+			elog(WARNING, "Cannot create directory \"%s\": %s", path, strerror(errno));
+			sleep(1);
+		}
+	}
+
 	return 0;
 }
 

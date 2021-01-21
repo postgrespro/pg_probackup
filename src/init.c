@@ -34,15 +34,15 @@ do_init(void)
 	}
 
 	/* create backup catalog root directory */
-	dir_create_dir(backup_path, DIR_PERMISSION);
+	dir_create_dir(backup_path, DIR_PERMISSION, false);
 
 	/* create backup catalog data directory */
 	join_path_components(path, backup_path, BACKUPS_DIR);
-	dir_create_dir(path, DIR_PERMISSION);
+	dir_create_dir(path, DIR_PERMISSION, false);
 
 	/* create backup catalog wal directory */
 	join_path_components(arclog_path_dir, backup_path, "wal");
-	dir_create_dir(arclog_path_dir, DIR_PERMISSION);
+	dir_create_dir(arclog_path_dir, DIR_PERMISSION, false);
 
 	elog(INFO, "Backup catalog '%s' successfully inited", backup_path);
 	return 0;
@@ -91,8 +91,8 @@ do_add_instance(InstanceConfig *instance)
 				instance->name, instance->arclog_path);
 
 	/* Create directory for data files of this specific instance */
-	dir_create_dir(instance->backup_instance_path, DIR_PERMISSION);
-	dir_create_dir(instance->arclog_path, DIR_PERMISSION);
+	dir_create_dir(instance->backup_instance_path, DIR_PERMISSION, false);
+	dir_create_dir(instance->arclog_path, DIR_PERMISSION, false);
 
 	/*
 	 * Write initial configuration file.

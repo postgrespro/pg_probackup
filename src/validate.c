@@ -48,7 +48,6 @@ typedef struct
 void
 pgBackupValidate(pgBackup *backup, pgRestoreParams *params)
 {
-	char		base_path[MAXPGPATH];
 	char		external_prefix[MAXPGPATH];
 	parray	   *files = NULL;
 	bool		corrupted = false;
@@ -115,7 +114,6 @@ pgBackupValidate(pgBackup *backup, pgRestoreParams *params)
 		backup->backup_mode != BACKUP_MODE_DIFF_DELTA)
 		elog(WARNING, "Invalid backup_mode of backup %s", base36enc(backup->start_time));
 
-	join_path_components(base_path, backup->root_dir, DATABASE_DIR);
 	join_path_components(external_prefix, backup->root_dir, EXTERNAL_DIR);
 	files = get_backup_filelist(backup, false);
 
@@ -149,7 +147,7 @@ pgBackupValidate(pgBackup *backup, pgRestoreParams *params)
 	{
 		validate_files_arg *arg = &(threads_args[i]);
 
-		arg->base_path = base_path;
+		arg->base_path = backup->database_dir;
 		arg->files = files;
 		arg->corrupted = false;
 		arg->backup_mode = backup->backup_mode;

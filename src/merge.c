@@ -639,7 +639,7 @@ merge_chain(parray *parent_chain, pgBackup *full_backup, pgBackup *dest_backup)
 			makeExternalDirPathByNum(new_container, full_external_prefix,
 									 file->external_dir_num);
 			join_path_components(dirpath, new_container, file->rel_path);
-			dir_create_dir(dirpath, DIR_PERMISSION);
+			dir_create_dir(dirpath, DIR_PERMISSION, false);
 		}
 
 		pg_atomic_init_flag(&file->lock);
