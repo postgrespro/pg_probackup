@@ -130,6 +130,7 @@ static void dir_list_file_internal(parray *files, pgFile *parent, const char *pa
 								   bool skip_hidden, int external_dir_num, fio_location location);
 static void opt_path_map(ConfigOption *opt, const char *arg,
 						 TablespaceList *list, const char *type);
+static void cleanup_tablespace(const char *path);
 
 /* Tablespace mapping */
 static TablespaceList tablespace_dirs = {NULL, NULL};
@@ -1090,7 +1091,7 @@ create_data_directories(parray *dest_files, const char *data_dir, const char *ba
 					const char *linked_path = get_tablespace_mapping((*link)->linked);
 
 					if (!is_absolute_path(linked_path))
-							elog(ERROR, "Tablespace directory is not an absolute path: %s\n",
+							elog(ERROR, "Tablespace directory path must be an absolute path: %s\n",
 								 linked_path);
 
 					join_path_components(to_path, data_dir, dir->rel_path);
@@ -1185,9 +1186,9 @@ read_tablespace_map(parray *links, const char *backup_dir)
  * the current content on the directory.
  *
  * Exit codes:
- *  (0) backup has no tablespaces
- *  (1) backup has tablespaces and they are empty
- *  (2) backup has tablespaces and some of them are not empty
+ *  1. backup has no tablespaces
+ *  2. backup has tablespaces and they are empty
+ *  3. backup has tablespaces and some of them are not empty
  */
 int
 check_tablespace_mapping(pgBackup *backup, bool incremental, bool force, bool pgdata_is_empty)
@@ -1214,7 +1215,7 @@ check_tablespace_mapping(pgBackup *backup, bool incremental, bool force, bool pg
 		if (tablespace_dirs.head != NULL)
 			elog(ERROR, "Backup %s has no tablespaceses, nothing to remap "
 					"via \"--tablespace-mapping\" option", base36enc(backup->backup_id));
-		return 0;
+		return NoTblspc;
 	}
 
 	read_tablespace_map(links, backup->root_dir);
@@ -1285,7 +1286,7 @@ check_tablespace_mapping(pgBackup *backup, bool incremental, bool force, bool pg
 			}
 
 		if (!is_absolute_path(linked_path))
-			elog(ERROR, "Tablespace directory is not an absolute path: %s\n",
+			elog(ERROR, "Tablespace directory path must be an absolute path: %s\n",
 				 linked_path);
 
 		if (!dir_is_empty(linked_path, FIO_DB_HOST))
@@ -1312,32 +1313,7 @@ check_tablespace_mapping(pgBackup *backup, bool incremental, bool force, bool pg
 			 */
 			else if (force && (pgdata_is_empty || remapped))
 			{
-				// TODO: move this stuff to separate function.
-				char	fullpath[MAXPGPATH];
-				int i;
-				parray *files = parray_new();
-
-				elog(WARNING, "Cleaning up the content of %s directory: \"%s\"",
-							remapped ? "remapped tablespace" : "tablespace",
-							linked_path);
-
-				fio_list_dir(files, linked_path, false, false, false, false, false, 0);
-
-				/* delete leaf node first */
-				parray_qsort(files, pgFileCompareRelPathWithExternalDesc);
-
-				for (i = 0; i < parray_num(files); i++)
-				{
-					pgFile	   *file = (pgFile *) parray_get(files, i);
-
-					join_path_components(fullpath, linked_path, file->rel_path);
-
-					fio_delete(file->mode, fullpath, FIO_DB_HOST);
-					elog(VERBOSE, "Deleted file \"%s\"", fullpath);
-				}
-
-				parray_walk(files, pgFileFree);
-				parray_free(files);
+				cleanup_tablespace(linked_path);
 				continue;
 			}
 
@@ -1350,11 +1326,12 @@ check_tablespace_mapping(pgBackup *backup, bool incremental, bool force, bool pg
 	parray_free(links);
 
 	if (tblspaces_are_empty)
-		return 1;
-	return 2;
+		return EmptyTblspc;
+
+	return NotEmptyTblspc;
 }
 
-/* Make it consistent with check_tablespace_mapping */
+/* TODO: Make it consistent with check_tablespace_mapping */
 void
 check_external_dir_mapping(pgBackup *backup, bool incremental)
 {
@@ -1948,30 +1925,33 @@ read_database_map(pgBackup *backup)
 	return database_map;
 }
 
-/* use it to cleanup the whole PGDATA or separate tablespaces */
-//void
-//cleanup_dir(const char *path, bool follow_symlink, bool print_time)
-//{
-//	parray *files = parray_new();
-//
-//	fio_list_dir(files, path, false, follow_symlink, false, false, false, 0);
-//
-//	/* delete leaf node first */
-//	parray_qsort(files, pgFileCompareRelPathWithExternalDesc);
-//
-//	for (i = 0; i < num_files; i++)
-//	{
-//		pgFile	   *file = (pgFile *) parray_get(files, i);
-//
-//		join_path_components(full_path, backup->root_dir, file->rel_path);
-//
-//		if (interrupted)
-//			elog(ERROR, "interrupted during directory cleanup");
-//
-//		if (progress)
-//			elog(INFO, "Progress: (%zd/%zd). Delete file \"%s\"",
-//				 i + 1, num_files, full_path);
-//
-//		pgFileDelete(file->mode, full_path);
-//	}
-//}
+/* Use it to cleanup tablespaces */
+void
+cleanup_tablespace(const char *path)
+{
+	int i;
+	char	fullpath[MAXPGPATH];
+	parray *files = parray_new();
+
+	elog(WARNING, "Cleaning up the content of %s directory: \"%s\"",
+				remapped ? "remapped tablespace" : "tablespace",
+				linked_path);
+
+	fio_list_dir(files, linked_path, false, false, false, false, false, 0);
+
+	/* delete leaf node first */
+	parray_qsort(files, pgFileCompareRelPathWithExternalDesc);
+
+	for (i = 0; i < parray_num(files); i++)
+	{
+		pgFile	   *file = (pgFile *) parray_get(files, i);
+
+		join_path_components(fullpath, linked_path, file->rel_path);
+
+		fio_delete(file->mode, fullpath, FIO_DB_HOST);
+		elog(VERBOSE, "Deleted file \"%s\"", fullpath);
+	}
+
+	parray_walk(files, pgFileFree);
+	parray_free(files);
+}

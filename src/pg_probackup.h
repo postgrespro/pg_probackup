@@ -132,6 +132,7 @@ typedef struct db_map_entry
 	char *datname;
 } db_map_entry;
 
+/* State of pgdata in the context of its compatibility for incremental restore  */
 typedef enum DestDirIncrCompatibility
 {
 	POSTMASTER_IS_RUNNING,
@@ -258,6 +259,11 @@ typedef struct page_map_entry
 
 /* Special values of datapagemap_t bitmapsize */
 #define PageBitmapIsEmpty 0		/* Used to mark unchanged datafiles */
+
+/* Return codes for check_tablespace_mapping */
+#define NoTblspc 0
+#define EmptyTblspc 1
+#define NotEmptyTblspc 2
 
 /* Current state of backup */
 typedef enum BackupStatus

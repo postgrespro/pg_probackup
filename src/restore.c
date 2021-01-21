@@ -183,18 +183,29 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 				}
 				else if (rc == BACKUP_LABEL_EXISTS)
 				{
-					/* a big no-no for lsn-based incremental restore */
+					/*
+					 * A big no-no for lsn-based incremental restore
+					 * If there is backup label in PGDATA, then this cluster was probably
+					 * restored from backup, but not started yet. Which means that values
+					 * in pg_control are not synchronized with PGDATA and so we cannot use
+					 * incremental restore in LSN mode, because it is relying on pg_control
+					 * to calculate switchpoint.
+					 */
 					if (params->incremental_mode == INCR_LSN)
 						ok_to_go = false;
 				}
 				else if (rc == DEST_IS_NOT_OK)
 				{
-					/* something is wrong, it is better to just error out */
+					/*
+					 * Something else is wrong. For example, postmaster.pid is mangled,
+					 * so we cannot be sure that postmaster is running or not.
+					 * It is better to just error out.
+					 */
 					ok_to_go = false;
 				}
 
 				if (!ok_to_go)
-					elog(ERROR, "Incremental restore is impossible");
+					elog(ERROR, "Incremental restore is not allowed");
 			}
 			else
 				elog(ERROR, "Restore destination is not empty: \"%s\"",
@@ -394,25 +405,15 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 	 */
 	if (params->is_restore)
 	{
-		bool  dest_tblspaces_are_empty = false;
 		int rc = check_tablespace_mapping(dest_backup,
 										  params->incremental_mode != INCR_NONE, params->force,
 										  pgdata_is_empty);
 
 		/* backup contain no tablespaces */
-		if (rc == 0)
-		{
+		if (rc == NoTblspc)
 			backup_has_tblspc = false;
-			dest_tblspaces_are_empty = true;
-		}
-		/* backup contain some tablespaces and their destination directories are empty */
-		if (rc == 1)
-			dest_tblspaces_are_empty = true;
-		/* backup contain some tablespaces and some of their destination directories are not empty */
-		else if (rc == 2)
-			dest_tblspaces_are_empty = false;
 
-		if (params->incremental_mode != INCR_NONE && !cleanup_pgdata && pgdata_is_empty && dest_tblspaces_are_empty)
+		if (params->incremental_mode != INCR_NONE && !cleanup_pgdata && pgdata_is_empty && (rc != NotEmptyTblspc))
 		{
 			elog(INFO, "Destination directory and tablespace directories are empty, "
 					"disable incremental restore");
@@ -691,6 +692,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 
 /*
  * Restore backup chain.
+ * Flag 'cleanup_pgdata' demands the removing of already existing content in PGDATA.
  */
 void
 restore_chain(pgBackup *dest_backup, parray *parent_chain,
@@ -2108,13 +2110,6 @@ get_dbOid_exclude_list(pgBackup *backup, parray *datname_list,
 
 /* Check that instance is suitable for incremental restore
  * Depending on type of incremental restore requirements are differs.
- *
- * Possible results:
- *  (-4) POSTMASTER_IS_RUNNING
- *  (-3) SYSTEM_ID_MISMATCH
- *  (-2) BACKUP_LABEL_EXISTS
- *  (-1) DEST_IS_NOT_OK
- *   (0) DEST_OK
  *
  * TODO: add PG_CONTROL_IS_MISSING
  */

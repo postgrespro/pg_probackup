@@ -81,8 +81,8 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
-    def test_basic_incr_restore_1(self):
-        """incremental restore in no existing directory"""
+    def test_basic_incr_restore_into_missing_directory(self):
+        """"""
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
