@@ -741,8 +741,6 @@ main(int argc, char *argv[])
 			return do_init();
 		case BACKUP_CMD:
 			{
-				time_t	start_time = time(NULL);
-
 				current.stream = stream_wal;
 
 				/* sanity */
@@ -750,7 +748,7 @@ main(int argc, char *argv[])
 					elog(ERROR, "required parameter not specified: BACKUP_MODE "
 						 "(-b, --backup-mode)");
 
-				return do_backup(start_time, set_backup_params, no_validate, no_sync, backup_logs);
+				return do_backup(set_backup_params, no_validate, no_sync, backup_logs);
 			}
 		case RESTORE_CMD:
 			return do_restore_or_validate(current.backup_id,

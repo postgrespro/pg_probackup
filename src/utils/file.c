@@ -1044,7 +1044,9 @@ int fio_unlink(char const* path, fio_location location)
 	}
 }
 
-/* Create directory */
+/* Create directory
+ * TODO: add strict flag
+ */
 int fio_mkdir(char const* path, int mode, fio_location location)
 {
 	if (fio_is_remote(location))
@@ -1066,7 +1068,7 @@ int fio_mkdir(char const* path, int mode, fio_location location)
 	}
 	else
 	{
-		return dir_create_dir(path, mode);
+		return dir_create_dir(path, mode, false);
 	}
 }
 
@@ -2179,9 +2181,9 @@ cleanup:
 }
 
 /* Compile the array of files located on remote machine in directory root */
-void fio_list_dir(parray *files, const char *root, bool exclude,
-				  bool follow_symlink, bool add_root, bool backup_logs,
-				  bool skip_hidden, int external_dir_num)
+static void fio_list_dir_internal(parray *files, const char *root, bool exclude,
+								  bool follow_symlink, bool add_root, bool backup_logs,
+								  bool skip_hidden, int external_dir_num)
 {
 	fio_header hdr;
 	fio_list_dir_request req;
@@ -2335,6 +2337,19 @@ static void fio_list_dir_impl(int out, char* buf)
 	parray_free(file_files);
 	hdr.cop = FIO_SEND_FILE_EOF;
 	IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
+}
+
+/* Wrapper for directory listing */
+void fio_list_dir(parray *files, const char *root, bool exclude,
+				  bool follow_symlink, bool add_root, bool backup_logs,
+				  bool skip_hidden, int external_dir_num)
+{
+	if (fio_is_remote(FIO_DB_HOST))
+		fio_list_dir_internal(files, root, exclude, follow_symlink, add_root,
+							  backup_logs, skip_hidden, external_dir_num);
+	else
+		dir_list_file(files, root, exclude, follow_symlink, add_root,
+					  backup_logs, skip_hidden, external_dir_num, FIO_LOCAL_HOST);
 }
 
 PageState *
@@ -2666,7 +2681,7 @@ void fio_communicate(int in, int out)
 			break;
 		  case FIO_MKDIR:  /* Create directory */
 			hdr.size = 0;
-			hdr.arg = dir_create_dir(buf, hdr.arg);
+			hdr.arg = dir_create_dir(buf, hdr.arg, false);
 			IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 			break;
 		  case FIO_CHMOD:  /* Change file mode */

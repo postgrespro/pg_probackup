@@ -148,6 +148,16 @@ typedef struct db_map_entry
 	char *datname;
 } db_map_entry;
 
+/* State of pgdata in the context of its compatibility for incremental restore  */
+typedef enum DestDirIncrCompatibility
+{
+	POSTMASTER_IS_RUNNING,
+	SYSTEM_ID_MISMATCH,
+	BACKUP_LABEL_EXISTS,
+	DEST_IS_NOT_OK,
+	DEST_OK
+} DestDirIncrCompatibility;
+
 typedef enum IncrRestoreMode
 {
 	INCR_NONE,
@@ -265,6 +275,11 @@ typedef struct page_map_entry
 
 /* Special values of datapagemap_t bitmapsize */
 #define PageBitmapIsEmpty 0		/* Used to mark unchanged datafiles */
+
+/* Return codes for check_tablespace_mapping */
+#define NoTblspc 0
+#define EmptyTblspc 1
+#define NotEmptyTblspc 2
 
 /* Current state of backup */
 typedef enum BackupStatus
@@ -798,7 +813,7 @@ extern char** commands_args;
 extern const char *pgdata_exclude_dir[];
 
 /* in backup.c */
-extern int do_backup(time_t start_time, pgSetBackupParams *set_backup_params,
+extern int do_backup(pgSetBackupParams *set_backup_params,
 					 bool no_validate, bool no_sync, bool backup_logs);
 extern void do_checkdb(bool need_amcheck, ConnectionOptions conn_opt,
 				  char *pgdata);
@@ -886,6 +901,7 @@ extern int do_validate_all(void);
 extern int validate_one_page(Page page, BlockNumber absolute_blkno,
 							 XLogRecPtr stop_lsn, PageState *page_st,
 							 uint32 checksum_version);
+extern bool validate_tablespace_map(pgBackup *backup);
 
 /* return codes for validate_one_page */
 /* TODO: use enum */
@@ -935,7 +951,7 @@ extern void pgBackupGetPath2(const pgBackup *backup, char *path, size_t len,
 extern void pgBackupGetPathInInstance(const char *instance_name,
 				 const pgBackup *backup, char *path, size_t len,
 				 const char *subdir1, const char *subdir2);
-extern int pgBackupCreateDir(pgBackup *backup);
+extern void pgBackupCreateDir(pgBackup *backup, const char *backup_instance_path);
 extern void pgNodeInit(PGNodeInfo *node);
 extern void pgBackupInit(pgBackup *backup);
 extern void pgBackupFree(void *backup);
@@ -976,10 +992,10 @@ extern void create_data_directories(parray *dest_files,
 										bool incremental,
 										fio_location location);
 
-extern void read_tablespace_map(parray *files, const char *backup_dir);
+extern void read_tablespace_map(parray *links, const char *backup_dir);
 extern void opt_tablespace_map(ConfigOption *opt, const char *arg);
 extern void opt_externaldir_map(ConfigOption *opt, const char *arg);
-extern void check_tablespace_mapping(pgBackup *backup, bool incremental, bool *tblspaces_are_empty);
+extern int  check_tablespace_mapping(pgBackup *backup, bool incremental, bool force, bool pgdata_is_empty);
 extern void check_external_dir_mapping(pgBackup *backup, bool incremental);
 extern char *get_external_remap(char *current_dir);
 
@@ -999,7 +1015,7 @@ extern void makeExternalDirPathByNum(char *ret_path, const char *pattern_path,
 									 const int dir_num);
 extern bool backup_contains_external(const char *dir, parray *dirs_list);
 
-extern int dir_create_dir(const char *path, mode_t mode);
+extern int dir_create_dir(const char *path, mode_t mode, bool strict);
 extern bool dir_is_empty(const char *path, fio_location location);
 
 extern bool fileExists(const char *path, fio_location location);

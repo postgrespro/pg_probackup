@@ -48,7 +48,6 @@ typedef struct
 void
 pgBackupValidate(pgBackup *backup, pgRestoreParams *params)
 {
-	char		base_path[MAXPGPATH];
 	char		external_prefix[MAXPGPATH];
 	parray	   *files = NULL;
 	bool		corrupted = false;
@@ -115,7 +114,6 @@ pgBackupValidate(pgBackup *backup, pgRestoreParams *params)
 		backup->backup_mode != BACKUP_MODE_DIFF_DELTA)
 		elog(WARNING, "Invalid backup_mode of backup %s", base36enc(backup->start_time));
 
-	join_path_components(base_path, backup->root_dir, DATABASE_DIR);
 	join_path_components(external_prefix, backup->root_dir, EXTERNAL_DIR);
 	files = get_backup_filelist(backup, false);
 
@@ -149,7 +147,7 @@ pgBackupValidate(pgBackup *backup, pgRestoreParams *params)
 	{
 		validate_files_arg *arg = &(threads_args[i]);
 
-		arg->base_path = base_path;
+		arg->base_path = backup->database_dir;
 		arg->files = files;
 		arg->corrupted = false;
 		arg->backup_mode = backup->backup_mode;
@@ -699,4 +697,56 @@ do_validate_instance(void)
 	/* cleanup */
 	parray_walk(backups, pgBackupFree);
 	parray_free(backups);
+}
+
+/*
+ * Validate tablespace_map checksum.
+ * Error out in case of checksum mismatch.
+ * Return 'false' if there are no tablespaces in backup.
+ *
+ * TODO: it is a bad, that we read the whole filelist just for
+ * the sake of tablespace_map. Probably pgBackup should come with
+ * already filled pgBackup.files
+ */
+bool
+validate_tablespace_map(pgBackup *backup)
+{
+	char        map_path[MAXPGPATH];
+	pgFile     *dummy = NULL;
+	pgFile    **tablespace_map = NULL;
+	pg_crc32    crc;
+	parray     *files = get_backup_filelist(backup, true);
+
+	parray_qsort(files, pgFileCompareRelPathWithExternal);
+	join_path_components(map_path, backup->database_dir, PG_TABLESPACE_MAP_FILE);
+
+	dummy = pgFileInit(PG_TABLESPACE_MAP_FILE);
+	tablespace_map = (pgFile **) parray_bsearch(files, dummy, pgFileCompareRelPathWithExternal);
+
+	if (!tablespace_map)
+	{
+		elog(LOG, "there is no file tablespace_map");
+		parray_walk(files, pgFileFree);
+		parray_free(files);
+		return false;
+	}
+
+	/* Exit if database/tablespace_map doesn't exist */
+	if (!fileExists(map_path, FIO_BACKUP_HOST))
+		elog(ERROR, "Tablespace map is missing: \"%s\", "
+					"probably backup %s is corrupt, validate it",
+			map_path, base36enc(backup->backup_id));
+
+	/* check tablespace map checksumms */
+	crc = pgFileGetCRC(map_path, true, false);
+
+	if ((*tablespace_map)->crc != crc)
+		elog(ERROR, "Invalid CRC of tablespace map file \"%s\" : %X. Expected %X, "
+					"probably backup %s is corrupt, validate it",
+				map_path, crc, (*tablespace_map)->crc, base36enc(backup->backup_id));
+
+	pgFileFree(dummy);
+	parray_walk(files, pgFileFree);
+	parray_free(files);
+	return true;
 }
