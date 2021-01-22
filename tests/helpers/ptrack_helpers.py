@@ -434,6 +434,35 @@ class ProbackupTest(object):
         #     res[0], 0,
         #     'Failed to create tablespace with cmd: {0}'.format(cmd))
 
+    def drop_tblspace(self, node, tblspc_name):
+        res = node.execute(
+            'postgres',
+            'select exists'
+            " (select 1 from pg_tablespace where spcname = '{0}')".format(
+                tblspc_name)
+            )
+        # Check that tablespace with name 'tblspc_name' do not exists already
+        self.assertTrue(
+            res[0][0],
+            'Tablespace "{0}" do not exists'.format(tblspc_name)
+            )
+
+        rels = node.execute(
+            "postgres",
+            "SELECT relname FROM pg_class c "
+            "LEFT JOIN pg_tablespace t ON c.reltablespace = t.oid "
+            "where c.relkind = 'r' and t.spcname = '{0}'".format(tblspc_name))
+
+        for rel in rels:
+            node.safe_psql(
+                'postgres',
+                "DROP TABLE {0}".format(rel[0]))
+
+        node.safe_psql(
+            'postgres',
+            'DROP TABLESPACE {0}'.format(tblspc_name))
+
+
     def get_tblspace_path(self, node, tblspc_name):
         return os.path.join(node.base_dir, tblspc_name)
 

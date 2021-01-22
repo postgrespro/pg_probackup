@@ -82,7 +82,7 @@ class TimeStamp(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     def test_handling_of_TZ_env_variable(self):
-        """Issue #112"""
+        """Issue #284"""
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir="{0}/{1}/node".format(module_name, fname),

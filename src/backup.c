@@ -286,12 +286,8 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool
 	join_path_components(external_prefix, current.root_dir, EXTERNAL_DIR);
 
 	/* list files with the logical path. omit $PGDATA */
-	if (fio_is_remote(FIO_DB_HOST))
-		fio_list_dir(backup_files_list, instance_config.pgdata,
-					 true, true, false, backup_logs, true, 0);
-	else
-		dir_list_file(backup_files_list, instance_config.pgdata,
-					  true, true, false, backup_logs, true, 0, FIO_LOCAL_HOST);
+	fio_list_dir(backup_files_list, instance_config.pgdata,
+				 true, true, false, backup_logs, true, 0);
 
 	/*
 	 * Get database_map (name to oid) for use in partial restore feature.
