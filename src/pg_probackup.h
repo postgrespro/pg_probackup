@@ -1185,8 +1185,7 @@ extern datapagemap_t *fio_get_lsn_map(const char *fullpath, uint32 checksum_vers
 							fio_location location);
 extern pid_t fio_check_postmaster(const char *pgdata, fio_location location);
 
-extern int32 fio_decompress(void* dst, void const* src, size_t size, int compress_alg);
-extern int32 fio_decompress_silent(void* dst, void const* src, size_t size, int compress_alg, char **errormsg);
+extern int32 fio_decompress(void* dst, void const* src, size_t size, int compress_alg, char **errormsg);
 
 /* return codes for fio_send_pages() and fio_send_file() */
 #define SEND_OK       (0)

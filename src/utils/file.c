@@ -856,7 +856,7 @@ ssize_t fio_fwrite_async_compressed(FILE* f, void const* buf, size_t size, int c
 	{
 		char uncompressed_buf[BLCKSZ];
 		char *errormsg = NULL;
-		int32 uncompressed_size = fio_decompress_silent(uncompressed_buf, buf, size, compress_alg, &errormsg);
+		int32 uncompressed_size = fio_decompress(uncompressed_buf, buf, size, compress_alg, &errormsg);
 
 		if (uncompressed_size < 0)
 			elog(ERROR, "%s", errormsg);
@@ -879,7 +879,7 @@ fio_write_compressed_impl(int fd, void const* buf, size_t size, int compress_alg
 		return;
 
 	/* TODO: We cannot allow error out in fio_decompress */
-	uncompressed_size = fio_decompress_silent(uncompressed_buf, buf, size, compress_alg, &async_errormsg);
+	uncompressed_size = fio_decompress(uncompressed_buf, buf, size, compress_alg, &async_errormsg);
 
 	if (uncompressed_size < 0)
 		return;
