@@ -967,6 +967,7 @@ init_cancel_handler(void)
 	oldhandler = pqsignal(SIGINT, handle_interrupt);
 	pqsignal(SIGQUIT, handle_interrupt);
 	pqsignal(SIGTERM, handle_interrupt);
+	pqsignal(SIGPIPE, handle_interrupt);
 }
 #else							/* WIN32 */
 
