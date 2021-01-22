@@ -1313,6 +1313,8 @@ check_tablespace_mapping(pgBackup *backup, bool incremental, bool force, bool pg
 			 */
 			else if (force && (pgdata_is_empty || remapped))
 			{
+				elog(WARNING, "Cleaning up the content of %s directory: \"%s\"",
+						remapped ? "remapped tablespace" : "tablespace", linked_path);
 				cleanup_tablespace(linked_path);
 				continue;
 			}
@@ -1925,7 +1927,11 @@ read_database_map(pgBackup *backup)
 	return database_map;
 }
 
-/* Use it to cleanup tablespaces */
+/*
+ * Use it to cleanup tablespaces
+ * TODO: Current algorihtm is not very efficient in remote mode,
+ * due to round-trip to delete every file.
+ */
 void
 cleanup_tablespace(const char *path)
 {
@@ -1933,11 +1939,7 @@ cleanup_tablespace(const char *path)
 	char	fullpath[MAXPGPATH];
 	parray *files = parray_new();
 
-	elog(WARNING, "Cleaning up the content of %s directory: \"%s\"",
-				remapped ? "remapped tablespace" : "tablespace",
-				linked_path);
-
-	fio_list_dir(files, linked_path, false, false, false, false, false, 0);
+	fio_list_dir(files, path, false, false, false, false, false, 0);
 
 	/* delete leaf node first */
 	parray_qsort(files, pgFileCompareRelPathWithExternalDesc);
@@ -1946,7 +1948,7 @@ cleanup_tablespace(const char *path)
 	{
 		pgFile	   *file = (pgFile *) parray_get(files, i);
 
-		join_path_components(fullpath, linked_path, file->rel_path);
+		join_path_components(fullpath, path, file->rel_path);
 
 		fio_delete(file->mode, fullpath, FIO_DB_HOST);
 		elog(VERBOSE, "Deleted file \"%s\"", fullpath);
