@@ -291,6 +291,7 @@ main(int argc, char *argv[])
 				break;
 #else
 				elog(ERROR, "\"ssh\" command implemented only for Windows");
+				break;
 #endif
 			case AGENT_CMD:
 				/* 'No forward compatibility' sanity:
