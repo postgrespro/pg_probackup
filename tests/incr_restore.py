@@ -460,7 +460,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
             self.assertIn(
-                'ERROR: Incremental restore is impossible',
+                'ERROR: Incremental restore is not allowed',
                 e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
@@ -692,7 +692,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
             self.assertIn(
-                'ERROR: Incremental restore is impossible',
+                'ERROR: Incremental restore is not allowed',
                 e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
@@ -717,7 +717,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
             self.assertIn(
-                'ERROR: Incremental restore is impossible',
+                'ERROR: Incremental restore is not allowed',
                 e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
