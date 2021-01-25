@@ -878,7 +878,7 @@ fio_write_compressed_impl(int fd, void const* buf, size_t size, int compress_alg
 	if (async_errormsg)
 		return;
 
-	/* TODO: We cannot allow error out in fio_decompress */
+	/* decompress chunk */
 	uncompressed_size = fio_decompress(uncompressed_buf, buf, size, compress_alg, &async_errormsg);
 
 	if (uncompressed_size < 0)
@@ -1294,6 +1294,11 @@ int fio_chmod(char const* path, int mode, fio_location location)
 #define ZLIB_BUFFER_SIZE     (64*1024)
 #define MAX_WBITS            15 /* 32K LZ77 window */
 #define DEF_MEM_LEVEL        8
+/* last bit used to differenciate remote gzFile from local gzFile
+ * TODO: this is insane, we should create our own scructure for this,
+ * not flip some bits in someone's else and hope that it will not break
+ * between zlib versions.
+ */
 #define FIO_GZ_REMOTE_MARKER 1
 
 typedef struct fioGZFile
