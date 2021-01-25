@@ -3978,8 +3978,8 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
         Use with caution.
         When used with <link linkend="pbk-incremental-restore">incremental restore</link> this flag
         allows to replace already existing PGDATA with different system ID. In case of tablespaces,
-        remapped via <literal>--tablespace-mapping</literal> option into not empty directories,
-        the old content of such directories will be deleted.
+        remapped via <literal>--tablespace-mapping</literal> option into non-empty directories,
+        the content of such directories will be deleted.
       </para>
       </listitem>
       </varlistentry>

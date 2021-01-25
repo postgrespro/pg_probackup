@@ -868,7 +868,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
                     repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertIn(
-                'ERROR: restore tablespace destination is not empty:',
+                'ERROR: Restore tablespace destination is not empty:',
                 e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
@@ -891,7 +891,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
                     repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertIn(
-                'ERROR: restore tablespace destination is not empty:',
+                'ERROR: Restore tablespace destination is not empty:',
                 e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
@@ -1109,10 +1109,6 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         with open(tablespace_map, "a") as f:
             f.write("HELLO\n")
-        
-        print(tablespace_map)
-
-        exit(1)
 
         try:
             self.restore_node(
