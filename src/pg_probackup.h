@@ -303,8 +303,8 @@ typedef enum ShowFormat
 #define BYTES_INVALID		(-1) /* file didn`t changed since previous backup, DELTA backup do not rely on it */
 #define FILE_NOT_FOUND		(-2) /* file disappeared during backup */
 #define BLOCKNUM_INVALID	(-1)
-#define PROGRAM_VERSION	"2.4.8"
-#define AGENT_PROTOCOL_VERSION 20408
+#define PROGRAM_VERSION	"2.4.9"
+#define AGENT_PROTOCOL_VERSION 20409
 
 /* update only when changing storage format */
 #define STORAGE_FORMAT_VERSION "2.4.4"
