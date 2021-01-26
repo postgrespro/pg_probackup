@@ -45,3 +45,8 @@ env:
 jobs:
     allow_failures:
         - if: env(MODE) IN (archive, backup, delta, locking, merge, replica, retention, restore)
+
+# Only run CI for master branch commits to limit our travis usage
+branches:
+    only:
+    - master
