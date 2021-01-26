@@ -1084,13 +1084,14 @@ restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_vers
 			cur_pos_out = write_pos;
 		}
 
-		/* If page is compressed and restore is in remote mode, send compressed
-		 * page to the remote side.
+		/*
+		 * If page is compressed and restore is in remote mode,
+		 * send compressed page to the remote side.
 		 */
 		if (is_compressed)
 		{
 			ssize_t rc;
-			rc = fio_fwrite_compressed(out, page.data, compressed_size, file->compress_alg);
+			rc = fio_fwrite_async_compressed(out, page.data, compressed_size, file->compress_alg);
 
 			if (!fio_is_remote_file(out) && rc != BLCKSZ)
 				elog(ERROR, "Cannot write block %u of \"%s\": %s, size: %u",
@@ -1098,7 +1099,7 @@ restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_vers
 		}
 		else
 		{
-			if (fio_fwrite(out, page.data, BLCKSZ) != BLCKSZ)
+			if (fio_fwrite_async(out, page.data, BLCKSZ) != BLCKSZ)
 				elog(ERROR, "Cannot write block %u of \"%s\": %s",
 					 blknum, to_fullpath, strerror(errno));
 		}

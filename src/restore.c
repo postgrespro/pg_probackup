@@ -1109,6 +1109,7 @@ restore_files(void *arg)
 		bool     already_exists = false;
 		PageState      *checksum_map = NULL; /* it should take ~1.5MB at most */
 		datapagemap_t  *lsn_map = NULL;      /* it should take 16kB at most */
+		char           *errmsg = NULL;       /* remote agent error message */
 		pgFile	*dest_file = (pgFile *) parray_get(arguments->dest_files, i);
 
 		/* Directories were created before */
@@ -1262,6 +1263,10 @@ restore_files(void *arg)
 		}
 
 done:
+		/* Writing is asynchronous in case of restore in remote mode, so check the agent status */
+		if (fio_check_error_file(out, &errmsg))
+			elog(ERROR, "Cannot write to the remote file \"%s\": %s", to_fullpath, errmsg);
+
 		/* close file */
 		if (fio_fclose(out) != 0)
 			elog(ERROR, "Cannot close file \"%s\": %s", to_fullpath,

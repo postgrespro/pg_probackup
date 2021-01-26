@@ -421,6 +421,8 @@ push_file_internal_uncompressed(const char *wal_file_name, const char *pg_xlog_d
 	int			partial_try_count = 0;
 	int			partial_file_size = 0;
 	bool		partial_is_stale = true;
+	/* remote agent error message */
+	char       *errmsg = NULL;
 
 	/* from path */
 	join_path_components(from_fullpath, pg_xlog_dir, wal_file_name);
@@ -579,7 +581,7 @@ part_opened:
 						from_fullpath, strerror(errno));
 		}
 
-		if (read_len > 0 && fio_write(out, buf, read_len) != read_len)
+		if (read_len > 0 && fio_write_async(out, buf, read_len) != read_len)
 		{
 			fio_unlink(to_fullpath_part, FIO_BACKUP_HOST);
 			elog(ERROR, "Cannot write to destination temp file \"%s\": %s",
@@ -592,6 +594,14 @@ part_opened:
 
 	/* close source file */
 	fclose(in);
+
+	/* Writing is asynchronous in case of push in remote mode, so check agent status */
+	if (fio_check_error_fd(out, &errmsg))
+	{
+		fio_unlink(to_fullpath_part, FIO_BACKUP_HOST);
+		elog(ERROR, "Cannot write to the remote file \"%s\": %s",
+					to_fullpath_part, errmsg);
+	}
 
 	/* close temp file */
 	if (fio_close(out) != 0)
@@ -652,6 +662,8 @@ push_file_internal_gz(const char *wal_file_name, const char *pg_xlog_dir,
 	int			partial_try_count = 0;
 	int			partial_file_size = 0;
 	bool		partial_is_stale = true;
+	/* remote agent errormsg */
+	char       *errmsg = NULL;
 
 	/* from path */
 	join_path_components(from_fullpath, pg_xlog_dir, wal_file_name);
@@ -804,6 +816,7 @@ part_opened:
 	}
 
 	/* copy content */
+	/* TODO: move to separate function */
 	for (;;)
 	{
 		size_t  read_len = 0;
@@ -831,7 +844,15 @@ part_opened:
 	/* close source file */
 	fclose(in);
 
-	/* close temp file */
+	/* Writing is asynchronous in case of push in remote mode, so check agent status */
+	if (fio_check_error_fd_gz(out, &errmsg))
+	{
+		fio_unlink(to_fullpath_gz_part, FIO_BACKUP_HOST);
+		elog(ERROR, "Cannot write to the remote compressed file \"%s\": %s",
+					to_fullpath_gz_part, errmsg);
+	}
+
+	/* close temp file, TODO: make it synchronous */
 	if (fio_gzclose(out) != 0)
 	{
 		fio_unlink(to_fullpath_gz_part, FIO_BACKUP_HOST);
