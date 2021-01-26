@@ -1145,7 +1145,7 @@ restore_non_data_file_internal(FILE *in, FILE *out, pgFile *file,
 
 		if (read_len > 0)
 		{
-			if (fio_fwrite(out, buf, read_len) != read_len)
+			if (fio_fwrite_async(out, buf, read_len) != read_len)
 				elog(ERROR, "Cannot write to \"%s\": %s", to_fullpath,
 					 strerror(errno));
 		}
