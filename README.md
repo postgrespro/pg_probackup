@@ -56,6 +56,14 @@ Regardless of the chosen backup type, all backups taken with `pg_probackup` supp
 
 Documentation can be found at [github](https://postgrespro.github.io/pg_probackup) and [Postgres Professional documentation](https://postgrespro.com/docs/postgrespro/current/app-pgprobackup)
 
+## Development
+
+* Stable version state can be found under the respective [release tag](https://github.com/postgrespro/pg_probackup/releases).
+* `master` branch contains minor fixes that are planned to the nearest minor release.
+* Upcoming major release is developed in a release branch i.e. `release_2_5`.
+
+For detailed release plans check [Milestones](https://github.com/postgrespro/pg_probackup/milestones)
+
 ## Installation and Setup
 ### Windows Installation
 Installers are available in release **assets**. [Latests](https://github.com/postgrespro/pg_probackup/releases/2.4.4).
@@ -160,7 +168,7 @@ sudo apt-get install pg_probackup-{std,ent}-{12,11,10,9.6}
 sudo apt-get install pg_probackup-{std,ent}-{12,11,10,9.6}-debuginfo
 ```
 
-Once you have `pg_probackup` installed, complete [the setup](https://github.com/postgrespro/pg_probackup/blob/master/Documentation.md#installation-and-setup).
+Once you have `pg_probackup` installed, complete [the setup](https://postgrespro.github.io/pg_probackup/#pbk-install-and-setup).
 
 ## Building from source
 ### Linux
