@@ -1544,7 +1544,7 @@ update_recovery_options(pgBackup *backup,
 	if (st.st_size > 0)
 	{
 		fp = fio_open_stream(postgres_auto_path, FIO_DB_HOST);
-		if (fp == NULL && errno != ENOENT)
+		if (fp == NULL)
 			elog(ERROR, "cannot open \"%s\": %s", postgres_auto_path, strerror(errno));
 	}
 
