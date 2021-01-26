@@ -3649,12 +3649,11 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         pg_probackup version must be 12 or greater
         """
 
-        if self.old_probackup_version:
-            if self.version_to_num(self.old_probackup_version) >= self.version_to_num('2.4.5'):
-                return unittest.skip('You need pg_probackup < 2.4.5 for this test')
-
         if self.pg_config_version < self.version_to_num('12.0'):
            return unittest.skip('You need PostgreSQL >= 12 for this test')
+
+        if self.version_to_num(self.old_probackup_version) >= self.version_to_num('2.4.5'):
+            self.assertTrue(False, 'You need pg_probackup < 2.4.5 for this test')
 
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')

@@ -944,6 +944,10 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         Start merge between minor version, crash and retry it.
         old binary version =< 2.4.0
         """
+        if self.version_to_num(self.old_probackup_version) > self.version_to_num('2.4.0'):
+            self.assertTrue(
+                False, 'You need pg_probackup old_binary =< 2.4.0 for this test')
+
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
@@ -1019,9 +1023,9 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         merge them with new binary.
         old binary version >= STORAGE_FORMAT_VERSION (2.4.4)
         """
-
         if self.version_to_num(self.old_probackup_version) < self.version_to_num('2.4.4'):
-            return unittest.skip('OLD pg_probackup binary must be == 2.4.4 for this test')
+            self.assertTrue(
+                False, 'OLD pg_probackup binary must be >= 2.4.4 for this test')
 
         self.assertNotEqual(
             self.version_to_num(self.old_probackup_version),
