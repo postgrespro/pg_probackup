@@ -1494,7 +1494,7 @@ catalog_get_timelines(InstanceConfig *instance)
 	}
 
 	/* determine which WAL segments must be kept because of wal retention */
-    if (instance->wal_depth <= 0 && instance->wal_window <= 0)
+	if (instance->wal_depth <= 0 && instance->wal_window <= 0)
 		return timelineinfos;
 
 	/*
