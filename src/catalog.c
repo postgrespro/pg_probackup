@@ -1569,10 +1569,6 @@ catalog_get_timelines(InstanceConfig *instance)
             (instance_config.wal_window * 60 * 60 * 24);
         }
 
-        char        logts[100];
-        time2iso(logts, lengthof(logts), days_threshold);
-        elog(LOG, "day_threshold: %s",logts);
-
 		/*
 		 * Iterate backward on backups belonging to this timeline to find
 		 * anchor_backup. NOTE Here we rely on the fact that backups list
