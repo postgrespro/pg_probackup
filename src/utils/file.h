@@ -36,7 +36,7 @@ typedef enum
 	FIO_READDIR,
 	FIO_CLOSEDIR,
 	FIO_PAGE,
-	FIO_WRITE_COMPRESSED,
+	FIO_WRITE_COMPRESSED_ASYNC,
 	FIO_GET_CRC32,
 	/* used for incremental restore */
 	FIO_GET_CHECKSUM_MAP,
@@ -53,7 +53,9 @@ typedef enum
 	FIO_DISCONNECT,
 	FIO_DISCONNECTED,
 	FIO_LIST_DIR,
-	FIO_CHECK_POSTMASTER
+	FIO_CHECK_POSTMASTER,
+	FIO_GET_ASYNC_ERROR,
+	FIO_WRITE_ASYNC
 } fio_operations;
 
 typedef enum
@@ -91,7 +93,11 @@ extern void    fio_communicate(int in, int out);
 extern int     fio_get_agent_version(void);
 extern FILE*   fio_fopen(char const* name, char const* mode, fio_location location);
 extern size_t  fio_fwrite(FILE* f, void const* buf, size_t size);
-extern ssize_t fio_fwrite_compressed(FILE* f, void const* buf, size_t size, int compress_alg);
+extern ssize_t fio_fwrite_async_compressed(FILE* f, void const* buf, size_t size, int compress_alg);
+extern size_t  fio_fwrite_async(FILE* f, void const* buf, size_t size);
+extern int     fio_check_error_file(FILE* f, char **errmsg);
+extern int     fio_check_error_fd(int fd, char **errmsg);
+extern int     fio_check_error_fd_gz(gzFile f, char **errmsg);
 extern ssize_t fio_fread(FILE* f, void* buf, size_t size);
 extern int     fio_pread(FILE* f, void* buf, off_t offs);
 extern int     fio_fprintf(FILE* f, char const* arg, ...) pg_attribute_printf(2, 3);
@@ -104,6 +110,7 @@ extern void    fio_error(int rc, int size, char const* file, int line);
 
 extern int     fio_open(char const* name, int mode, fio_location location);
 extern ssize_t fio_write(int fd, void const* buf, size_t size);
+extern ssize_t fio_write_async(int fd, void const* buf, size_t size);
 extern ssize_t fio_read(int fd, void* buf, size_t size);
 extern int     fio_flush(int fd);
 extern int     fio_seek(int fd, off_t offs);

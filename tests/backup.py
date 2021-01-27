@@ -973,7 +973,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
 
-        self.backup_node(
+        backup_id = self.backup_node(
             backup_dir, 'node', node, backup_type="full",
             options=["-j", "4", "--stream"])
 
@@ -1028,9 +1028,10 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                 "\n Output: {0} \n CMD: {1}".format(
                     repr(self.output), self.cmd))
         except ProbackupException as e:
-            self.assertTrue(
-                'ERROR: --tablespace-mapping option' in e.message and
-                'have an entry in tablespace_map file' in e.message,
+            self.assertIn(
+                'ERROR: Backup {0} has no tablespaceses, '
+                'nothing to remap'.format(backup_id),
+                e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
@@ -1144,7 +1145,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         tblspace1_old_path = self.get_tblspace_path(node, 'tblspace1_old')
         tblspace_new_path = self.get_tblspace_path(node, 'tblspace_new')
 
-        self.backup_node(
+        backup_id = self.backup_node(
             backup_dir, 'node', node, backup_type="full",
             options=["-j", "4", "--stream"])
 
@@ -1166,9 +1167,9 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                 "\n Output: {0} \n CMD: {1}".format(
                     repr(self.output), self.cmd))
         except ProbackupException as e:
-            self.assertTrue(
-                'ERROR: --tablespace-mapping option' in e.message and
-                'have an entry in tablespace_map file' in e.message,
+            self.assertIn(
+                'ERROR: Backup {0} has no tablespaceses, '
+                'nothing to remap'.format(backup_id), e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 

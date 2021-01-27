@@ -1109,6 +1109,7 @@ restore_files(void *arg)
 		bool     already_exists = false;
 		PageState      *checksum_map = NULL; /* it should take ~1.5MB at most */
 		datapagemap_t  *lsn_map = NULL;      /* it should take 16kB at most */
+		char           *errmsg = NULL;       /* remote agent error message */
 		pgFile	*dest_file = (pgFile *) parray_get(arguments->dest_files, i);
 
 		/* Directories were created before */
@@ -1262,6 +1263,10 @@ restore_files(void *arg)
 		}
 
 done:
+		/* Writing is asynchronous in case of restore in remote mode, so check the agent status */
+		if (fio_check_error_file(out, &errmsg))
+			elog(ERROR, "Cannot write to the remote file \"%s\": %s", to_fullpath, errmsg);
+
 		/* close file */
 		if (fio_fclose(out) != 0)
 			elog(ERROR, "Cannot close file \"%s\": %s", to_fullpath,
@@ -1510,8 +1515,8 @@ update_recovery_options(pgBackup *backup,
 	char		postgres_auto_path[MAXPGPATH];
 	char		postgres_auto_path_tmp[MAXPGPATH];
 	char		path[MAXPGPATH];
-	FILE	   *fp;
-	FILE	   *fp_tmp;
+	FILE	   *fp = NULL;
+	FILE	   *fp_tmp = NULL;
 	struct stat st;
 	char		current_time_str[100];
 	/* postgresql.auto.conf parsing */
@@ -1535,9 +1540,13 @@ update_recovery_options(pgBackup *backup,
 				 strerror(errno));
 	}
 
-	fp = fio_open_stream(postgres_auto_path, FIO_DB_HOST);
-	if (fp == NULL && errno != ENOENT)
-		elog(ERROR, "cannot open \"%s\": %s", postgres_auto_path, strerror(errno));
+	/* Kludge for 0-sized postgresql.auto.conf file. TODO: make something more intelligent */
+	if (st.st_size > 0)
+	{
+		fp = fio_open_stream(postgres_auto_path, FIO_DB_HOST);
+		if (fp == NULL)
+			elog(ERROR, "cannot open \"%s\": %s", postgres_auto_path, strerror(errno));
+	}
 
 	sprintf(postgres_auto_path_tmp, "%s.tmp", postgres_auto_path);
 	fp_tmp = fio_fopen(postgres_auto_path_tmp, "w", FIO_DB_HOST);
@@ -1577,9 +1586,11 @@ update_recovery_options(pgBackup *backup,
 	if (fp)
 		fio_close_stream(fp);
 
-	/* TODO: detect remote error */
-	if (buf_len > 0)
-		fio_fwrite(fp_tmp, buf, buf_len);
+	/* Write data to postgresql.auto.conf.tmp */
+	if (buf_len > 0 &&
+		(fio_fwrite(fp_tmp, buf, buf_len) != buf_len))
+			elog(ERROR, "Cannot write to \"%s\": %s",
+					postgres_auto_path_tmp, strerror(errno));
 
 	if (fio_fflush(fp_tmp) != 0 ||
 		fio_fclose(fp_tmp))
