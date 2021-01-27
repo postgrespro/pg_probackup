@@ -66,7 +66,7 @@ For detailed release plans check [Milestones](https://github.com/postgrespro/pg_
 
 ## Installation and Setup
 ### Windows Installation
-Installers are available in release **assets**. [Latests](https://github.com/postgrespro/pg_probackup/releases/2.4.4).
+Installers are available in release **assets**. [Latests](https://github.com/postgrespro/pg_probackup/releases/2.4.9).
 
 ### Linux Installation
 #### pg_probackup for vanilla PostgreSQL
