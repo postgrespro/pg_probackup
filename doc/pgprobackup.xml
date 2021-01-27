@@ -1206,18 +1206,6 @@ CREATE EXTENSION ptrack;
        does not affect PTRACK operation. The maximum allowed value is 1024.
       </para>
      </listitem>
-     <listitem>
-      <para>
-       Grant the right to execute <application>PTRACK</application>
-       functions to the <literal>backup</literal> role
-       in the database used to connect to the cluster:
-      </para>
-      <programlisting>
-GRANT EXECUTE ON FUNCTION pg_ptrack_get_pagemapset(pg_lsn) TO backup;
-GRANT EXECUTE ON FUNCTION pg_ptrack_control_lsn() TO backup;
-GRANT EXECUTE ON FUNCTION pg_ptrack_get_block(oid, oid, oid, bigint) TO backup;
-</programlisting>
-      </listitem>
     </orderedlist>
 
    <note>
@@ -1254,7 +1242,6 @@ GRANT EXECUTE ON FUNCTION pg_ptrack_get_block(oid, oid, oid, bigint) TO backup;
         <programlisting>
 GRANT EXECUTE ON FUNCTION pg_catalog.pg_ptrack_clear() TO backup;
 GRANT EXECUTE ON FUNCTION pg_catalog.pg_ptrack_get_and_clear(oid, oid) TO backup;
-GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup() TO backup;
 </programlisting>
       </listitem>
     </orderedlist>
