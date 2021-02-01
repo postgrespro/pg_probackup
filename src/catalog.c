@@ -357,8 +357,7 @@ lock_backup_exclusive(pgBackup *backup, bool strict)
 		 * - process crash
 		 * - race between writer and reader
 		 *
-		 * Consider empty file to stale after LOCK_STALE_TIMEOUT
-		 * attempts.
+		 * Consider empty file to be stale after LOCK_STALE_TIMEOUT attempts.
 		 *
 		 * TODO: alternatively we can write into temp file (lock_file_%pid),
 		 * rename it and then re-read lock file to make sure,
