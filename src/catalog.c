@@ -205,7 +205,7 @@ lock_backup(pgBackup *backup, bool strict, bool exclusive)
 		{
 			/* release exclusive lock */
 			if (fio_unlink(lock_file, FIO_BACKUP_HOST) < 0)
-				elog(ERROR, "Could not remove old lock file \"%s\": %s",
+				elog(ERROR, "Could not remove exclusive lock file \"%s\": %s",
 					 lock_file, strerror(errno));
 
 			/* we are done */
@@ -261,7 +261,7 @@ lock_backup_exclusive(pgBackup *backup, bool strict)
 	int			fd = 0;
 	char		buffer[MAXPGPATH * 2 + 256];
 	int			ntries = LOCK_TIMEOUT;
-	int			log_freq = ntries / 5;
+	int			empty_tries = LOCK_STALE_TIMEOUT;
 	int			len;
 	int			encoded_pid;
 	pid_t 		my_p_pid;
@@ -351,13 +351,39 @@ lock_backup_exclusive(pgBackup *backup, bool strict)
 		fclose(fp_out);
 
 		/*
-		 * It should be possible only as a result of system crash,
-		 * so its hypothetical owner should be dead by now
+		 * There are several possible reasons for lock file
+		 * to be empty:
+		 * - system crash
+		 * - process crash
+		 * - race between writer and reader
+		 *
+		 * Consider empty file to stale after LOCK_STALE_TIMEOUT
+		 * attempts.
+		 *
+		 * TODO: alternatively we can write into temp file (lock_file_%pid),
+		 * rename it and then re-read lock file to make sure,
+		 * that we are successfully acquired the lock.
 		 */
 		if (len == 0)
 		{
-			elog(WARNING, "Lock file \"%s\" is empty", lock_file);
-			goto grab_lock;
+			if (empty_tries == 0)
+			{
+				elog(WARNING, "Lock file \"%s\" is empty", lock_file);
+				goto grab_lock;
+			}
+
+			if ((empty_tries % LOG_FREQ) == 0)
+				elog(WARNING, "Waiting %u seconds on empty exclusive lock for backup %s",
+						 empty_tries, base36enc(backup->start_time));
+
+			sleep(1);
+			/*
+			 * waiting on empty lock file should not affect
+			 * the timer for concurrent lockers (ntries).
+			 */
+			empty_tries--;
+			ntries++;
+			continue;
 		}
 
 		encoded_pid = atoi(buffer);
@@ -383,12 +409,13 @@ lock_backup_exclusive(pgBackup *backup, bool strict)
 			if (kill(encoded_pid, 0) == 0)
 			{
 				/* complain every fifth interval */
-				if ((ntries % log_freq) == 0)
+				if ((ntries % LOG_FREQ) == 0)
 				{
 					elog(WARNING, "Process %d is using backup %s, and is still running",
 						 encoded_pid, base36enc(backup->start_time));
 
-					elog(WARNING, "Waiting %u seconds on lock for backup %s", ntries, base36enc(backup->start_time));
+					elog(WARNING, "Waiting %u seconds on exclusive lock for backup %s",
+						 ntries, base36enc(backup->start_time));
 				}
 
 				sleep(1);
@@ -435,7 +462,7 @@ grab_lock:
 	errno = 0;
 	if (fio_write(fd, buffer, strlen(buffer)) != strlen(buffer))
 	{
-		int			save_errno = errno;
+		int save_errno = errno;
 
 		fio_close(fd);
 		fio_unlink(lock_file, FIO_BACKUP_HOST);
@@ -453,7 +480,7 @@ grab_lock:
 
 	if (fio_flush(fd) != 0)
 	{
-		int	save_errno = errno;
+		int save_errno = errno;
 
 		fio_close(fd);
 		fio_unlink(lock_file, FIO_BACKUP_HOST);
@@ -471,7 +498,7 @@ grab_lock:
 
 	if (fio_close(fd) != 0)
 	{
-		int			save_errno = errno;
+		int save_errno = errno;
 
 		fio_unlink(lock_file, FIO_BACKUP_HOST);
 
@@ -493,7 +520,6 @@ wait_read_only_owners(pgBackup *backup)
     char  buffer[256];
     pid_t encoded_pid;
     int   ntries = LOCK_TIMEOUT;
-    int   log_freq = ntries / 5;
     char  lock_file[MAXPGPATH];
 
     join_path_components(lock_file, backup->root_dir, BACKUP_RO_LOCK_FILE);
@@ -523,7 +549,7 @@ wait_read_only_owners(pgBackup *backup)
             {
                 if (kill(encoded_pid, 0) == 0)
                 {
-                    if ((ntries % log_freq) == 0)
+                    if ((ntries % LOG_FREQ) == 0)
                     {
                         elog(WARNING, "Process %d is using backup %s in read only mode, and is still running",
                                 encoded_pid, base36enc(backup->start_time));
