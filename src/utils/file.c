@@ -1678,7 +1678,7 @@ int fio_send_pages(const char *to_fullpath, const char *from_fullpath, pgFile *f
 
 	/* send message with header
 
-	  8bytes       24bytes             var        var
+	  16bytes      24bytes             var        var
 	--------------------------------------------------------------
 	| fio_header | fio_send_request | FILE PATH | BITMAP(if any) |
 	--------------------------------------------------------------
