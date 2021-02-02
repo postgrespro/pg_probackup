@@ -74,7 +74,7 @@ else
 fi
 
 # Generate *.gcov files
-# gcov src/*.c src/*.h
+gcov src/*.c src/*.h
 
 # Send coverage stats to Codecov
-# bash <(curl -s https://codecov.io/bash)
+bash <(curl -s https://codecov.io/bash)
