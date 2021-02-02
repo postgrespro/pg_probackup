@@ -876,19 +876,118 @@ err_proc:
 }
 
 /*
- * Create list of backup datafiles.
- * If 'requested_backup_id' is INVALID_BACKUP_ID, exit with error.
- * If valid backup id is passed only matching backup will be added to the list.
- * TODO this function only used once. Is it really needed?
+ * Get list of files in the backup from the DATABASE_FILE_LIST.
  */
 parray *
 get_backup_filelist(pgBackup *backup, bool strict)
 {
 	parray		*files = NULL;
 	char		backup_filelist_path[MAXPGPATH];
+	FILE    *fp;
+	char     buf[BLCKSZ];
+	char     stdio_buf[STDIO_BUFSIZE];
+	pg_crc32 content_crc = 0;
 
 	join_path_components(backup_filelist_path, backup->root_dir, DATABASE_FILE_LIST);
-	files = dir_read_file_list(NULL, NULL, backup_filelist_path, FIO_BACKUP_HOST, backup->content_crc);
+
+	fp = fio_open_stream(backup_filelist_path, FIO_BACKUP_HOST);
+	if (fp == NULL)
+		elog(ERROR, "cannot open \"%s\": %s", backup_filelist_path, strerror(errno));
+
+	/* enable stdio buffering for local file */
+	if (!fio_is_remote(FIO_BACKUP_HOST))
+		setvbuf(fp, stdio_buf, _IOFBF, STDIO_BUFSIZE);
+
+	files = parray_new();
+
+	INIT_FILE_CRC32(true, content_crc);
+
+	while (fgets(buf, lengthof(buf), fp))
+	{
+		char		path[MAXPGPATH];
+		char		linked[MAXPGPATH];
+		char		compress_alg_string[MAXPGPATH];
+		int64		write_size,
+					mode,		/* bit length of mode_t depends on platforms */
+					is_datafile,
+					is_cfs,
+					external_dir_num,
+					crc,
+					segno,
+					n_blocks,
+					n_headers,
+					dbOid,		/* used for partial restore */
+					hdr_crc,
+					hdr_off,
+					hdr_size;
+		pgFile	   *file;
+
+		COMP_FILE_CRC32(true, content_crc, buf, strlen(buf));
+
+		get_control_value(buf, "path", path, NULL, true);
+		get_control_value(buf, "size", NULL, &write_size, true);
+		get_control_value(buf, "mode", NULL, &mode, true);
+		get_control_value(buf, "is_datafile", NULL, &is_datafile, true);
+		get_control_value(buf, "is_cfs", NULL, &is_cfs, false);
+		get_control_value(buf, "crc", NULL, &crc, true);
+		get_control_value(buf, "compress_alg", compress_alg_string, NULL, false);
+		get_control_value(buf, "external_dir_num", NULL, &external_dir_num, false);
+		get_control_value(buf, "dbOid", NULL, &dbOid, false);
+
+		file = pgFileInit(path);
+		file->write_size = (int64) write_size;
+		file->mode = (mode_t) mode;
+		file->is_datafile = is_datafile ? true : false;
+		file->is_cfs = is_cfs ? true : false;
+		file->crc = (pg_crc32) crc;
+		file->compress_alg = parse_compress_alg(compress_alg_string);
+		file->external_dir_num = external_dir_num;
+		file->dbOid = dbOid ? dbOid : 0;
+
+		/*
+		 * Optional fields
+		 */
+		if (get_control_value(buf, "linked", linked, NULL, false) && linked[0])
+		{
+			file->linked = pgut_strdup(linked);
+			canonicalize_path(file->linked);
+		}
+
+		if (get_control_value(buf, "segno", NULL, &segno, false))
+			file->segno = (int) segno;
+
+		if (get_control_value(buf, "n_blocks", NULL, &n_blocks, false))
+			file->n_blocks = (int) n_blocks;
+
+		if (get_control_value(buf, "n_headers", NULL, &n_headers, false))
+			file->n_headers = (int) n_headers;
+
+		if (get_control_value(buf, "hdr_crc", NULL, &hdr_crc, false))
+			file->hdr_crc = (pg_crc32) hdr_crc;
+
+		if (get_control_value(buf, "hdr_off", NULL, &hdr_off, false))
+			file->hdr_off = hdr_off;
+
+		if (get_control_value(buf, "hdr_size", NULL, &hdr_size, false))
+			file->hdr_size = (int) hdr_size;
+
+		parray_append(files, file);
+	}
+
+	FIN_FILE_CRC32(true, content_crc);
+
+	if (ferror(fp))
+		elog(ERROR, "Failed to read from file: \"%s\"", backup_filelist_path);
+
+	fio_close_stream(fp);
+
+	if (backup->content_crc != 0 &&
+		backup->content_crc != content_crc)
+	{
+		elog(WARNING, "Invalid CRC of backup control file '%s': %u. Expected: %u",
+					 backup_filelist_path, content_crc, backup->content_crc);
+		return NULL;
+	}
 
 	/* redundant sanity? */
 	if (!files)

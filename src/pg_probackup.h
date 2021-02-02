@@ -975,6 +975,8 @@ extern CompressAlg parse_compress_alg(const char *arg);
 extern const char* deparse_compress_alg(int alg);
 
 /* in dir.c */
+extern bool get_control_value(const char *str, const char *name,
+				  char *value_str, int64 *value_int64, bool is_mandatory);
 extern void dir_list_file(parray *files, const char *root, bool exclude,
 						  bool follow_symlink, bool add_root, bool backup_logs,
 						  bool skip_hidden, int external_dir_num, fio_location location);
@@ -1000,8 +1002,6 @@ extern void db_map_entry_free(void *map);
 
 extern void print_file_list(FILE *out, const parray *files, const char *root,
 							const char *external_prefix, parray *external_list);
-extern parray *dir_read_file_list(const char *root, const char *external_prefix,
-								  const char *file_txt, fio_location location, pg_crc32 expected_crc);
 extern parray *make_external_directory_list(const char *colon_separated_dirs,
 											bool remap);
 extern void free_dir_list(parray *list);
