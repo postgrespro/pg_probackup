@@ -15,8 +15,8 @@ install:
     - docker-compose build
 
 script:
-    - docker-compose run tests
-    # - docker-compose run $(bash <(curl -s https://codecov.io/env)) tests
+    # - docker-compose run tests
+    - docker-compose run $(bash <(curl -s https://codecov.io/env)) tests
     # - docker run -v $(pwd):/tests --rm centos:7 /tests/travis/backup_restore.sh
 
 notifications:
@@ -45,8 +45,3 @@ env:
 jobs:
     allow_failures:
         - if: env(MODE) IN (archive, backup, delta, locking, merge, replica, retention, restore)
-
-# Only run CI for master branch commits to limit our travis usage
-branches:
-    only:
-    - master

@@ -1,5 +1,6 @@
-[![Build Status](https://travis-ci.com/postgrespro/pg_probackup.svg?branch=master)](https://travis-ci.com/postgrespro/pg_probackup)
+[![Build Status](https://travis-ci.com/alubennikova/pg_probackup.svg?branch=master)](https://travis-ci.com/alubennikova/pg_probackup)
 [![GitHub release](https://img.shields.io/github/v/release/postgrespro/pg_probackup?include_prereleases)](https://github.com/postgrespro/pg_probackup/releases/latest)
+[![codecov](https://codecov.io/gh/alubennikova/pg_probackup/branch/master/graph/badge.svg)](https://codecov.io/gh/alubennikova/pg_probackup)
 
 # pg_probackup
 
