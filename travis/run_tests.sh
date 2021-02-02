@@ -66,7 +66,7 @@ pip install testgres==1.8.2
 
 echo "############### Testing:"
 if [ "$MODE" = "basic" ]; then
-    export PG_PROBACKUP_TEST_BASIC=OFF
+    export PG_PROBACKUP_TEST_BASIC=ON
     python -m unittest -v tests
     python -m unittest -v tests.init
 else
