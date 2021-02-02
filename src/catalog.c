@@ -166,6 +166,9 @@ write_backup_status(pgBackup *backup, BackupStatus status,
  *
  * TODO: lock-timeout as parameter
  * TODO: we must think about more fine grain unlock mechanism - separate unlock_backup() function.
+ * TODO: more accurate naming
+ * -> exclusive lock -> acquire HW_LATCH and wait until all LW_LATCH`es are clear
+ * -> shared lock    -> acquire HW_LATCH, acquire LW_LATCH, release HW_LATCH
  */
 bool
 lock_backup(pgBackup *backup, bool strict, bool exclusive)
@@ -264,45 +267,13 @@ lock_backup_exclusive(pgBackup *backup, bool strict)
 	int			empty_tries = LOCK_STALE_TIMEOUT;
 	int			len;
 	int			encoded_pid;
-	pid_t 		my_p_pid;
 
 	join_path_components(lock_file, backup->root_dir, BACKUP_LOCK_FILE);
 
 	/*
-	 * TODO: is this stuff with ppid below is relevant for us ?
-	 *
-	 * If the PID in the lockfile is our own PID or our parent's or
-	 * grandparent's PID, then the file must be stale (probably left over from
-	 * a previous system boot cycle).  We need to check this because of the
-	 * likelihood that a reboot will assign exactly the same PID as we had in
-	 * the previous reboot, or one that's only one or two counts larger and
-	 * hence the lockfile's PID now refers to an ancestor shell process.  We
-	 * allow pg_ctl to pass down its parent shell PID (our grandparent PID)
-	 * via the environment variable PG_GRANDPARENT_PID; this is so that
-	 * launching the postmaster via pg_ctl can be just as reliable as
-	 * launching it directly.  There is no provision for detecting
-	 * further-removed ancestor processes, but if the init script is written
-	 * carefully then all but the immediate parent shell will be root-owned
-	 * processes and so the kill test will fail with EPERM.  Note that we
-	 * cannot get a false negative this way, because an existing postmaster
-	 * would surely never launch a competing postmaster or pg_ctl process
-	 * directly.
-	 */
-#ifndef WIN32
-	my_p_pid = getppid();
-#else
-
-	/*
-	 * Windows hasn't got getppid(), but doesn't need it since it's not using
-	 * real kill() either...
-	 */
-	my_p_pid = 0;
-#endif
-
-	/*
 	 * We need a loop here because of race conditions.  But don't loop forever
 	 * (for example, a non-writable $backup_instance_path directory might cause a failure
-	 * that won't go away).  100 tries seems like plenty.
+	 * that won't go away).
 	 */
 	do
 	{
@@ -396,14 +367,12 @@ lock_backup_exclusive(pgBackup *backup, bool strict)
 
 		/*
 		 * Check to see if the other process still exists
-		 *
-		 * Per discussion above, my_pid, my_p_pid can be
-		 * ignored as false matches.
-		 *
 		 * Normally kill() will fail with ESRCH if the given PID doesn't
 		 * exist.
 		 */
-		if (encoded_pid != my_pid && encoded_pid != my_p_pid)
+		if (encoded_pid == my_pid)
+			return 0;
+		else
 		{
 			if (kill(encoded_pid, 0) == 0)
 			{
@@ -507,6 +476,10 @@ grab_lock:
 			elog(ERROR, "Could not close lock file \"%s\": %s",
 				 lock_file, strerror(save_errno));
 	}
+
+//	elog(LOG, "Acquired exclusive lock for backup %s after %ds",
+//			base36enc(backup->start_time),
+//			LOCK_TIMEOUT - ntries + LOCK_STALE_TIMEOUT - empty_tries);
 
 	return 0;
 }
