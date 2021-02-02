@@ -166,6 +166,9 @@ write_backup_status(pgBackup *backup, BackupStatus status,
  *
  * TODO: lock-timeout as parameter
  * TODO: we must think about more fine grain unlock mechanism - separate unlock_backup() function.
+ * TODO: more accurate naming
+ * -> exclusive lock -> acquire HW_LATCH and wait until all LW_LATCH`es are clear
+ * -> shared lock    -> acquire HW_LATCH, acquire LW_LATCH, release HW_LATCH
  */
 bool
 lock_backup(pgBackup *backup, bool strict, bool exclusive)
@@ -205,7 +208,7 @@ lock_backup(pgBackup *backup, bool strict, bool exclusive)
 		{
 			/* release exclusive lock */
 			if (fio_unlink(lock_file, FIO_BACKUP_HOST) < 0)
-				elog(ERROR, "Could not remove old lock file \"%s\": %s",
+				elog(ERROR, "Could not remove exclusive lock file \"%s\": %s",
 					 lock_file, strerror(errno));
 
 			/* we are done */
@@ -261,48 +264,16 @@ lock_backup_exclusive(pgBackup *backup, bool strict)
 	int			fd = 0;
 	char		buffer[MAXPGPATH * 2 + 256];
 	int			ntries = LOCK_TIMEOUT;
-	int			log_freq = ntries / 5;
+	int			empty_tries = LOCK_STALE_TIMEOUT;
 	int			len;
 	int			encoded_pid;
-	pid_t 		my_p_pid;
 
 	join_path_components(lock_file, backup->root_dir, BACKUP_LOCK_FILE);
 
 	/*
-	 * TODO: is this stuff with ppid below is relevant for us ?
-	 *
-	 * If the PID in the lockfile is our own PID or our parent's or
-	 * grandparent's PID, then the file must be stale (probably left over from
-	 * a previous system boot cycle).  We need to check this because of the
-	 * likelihood that a reboot will assign exactly the same PID as we had in
-	 * the previous reboot, or one that's only one or two counts larger and
-	 * hence the lockfile's PID now refers to an ancestor shell process.  We
-	 * allow pg_ctl to pass down its parent shell PID (our grandparent PID)
-	 * via the environment variable PG_GRANDPARENT_PID; this is so that
-	 * launching the postmaster via pg_ctl can be just as reliable as
-	 * launching it directly.  There is no provision for detecting
-	 * further-removed ancestor processes, but if the init script is written
-	 * carefully then all but the immediate parent shell will be root-owned
-	 * processes and so the kill test will fail with EPERM.  Note that we
-	 * cannot get a false negative this way, because an existing postmaster
-	 * would surely never launch a competing postmaster or pg_ctl process
-	 * directly.
-	 */
-#ifndef WIN32
-	my_p_pid = getppid();
-#else
-
-	/*
-	 * Windows hasn't got getppid(), but doesn't need it since it's not using
-	 * real kill() either...
-	 */
-	my_p_pid = 0;
-#endif
-
-	/*
 	 * We need a loop here because of race conditions.  But don't loop forever
 	 * (for example, a non-writable $backup_instance_path directory might cause a failure
-	 * that won't go away).  100 tries seems like plenty.
+	 * that won't go away).
 	 */
 	do
 	{
@@ -351,13 +322,38 @@ lock_backup_exclusive(pgBackup *backup, bool strict)
 		fclose(fp_out);
 
 		/*
-		 * It should be possible only as a result of system crash,
-		 * so its hypothetical owner should be dead by now
+		 * There are several possible reasons for lock file
+		 * to be empty:
+		 * - system crash
+		 * - process crash
+		 * - race between writer and reader
+		 *
+		 * Consider empty file to be stale after LOCK_STALE_TIMEOUT attempts.
+		 *
+		 * TODO: alternatively we can write into temp file (lock_file_%pid),
+		 * rename it and then re-read lock file to make sure,
+		 * that we are successfully acquired the lock.
 		 */
 		if (len == 0)
 		{
-			elog(WARNING, "Lock file \"%s\" is empty", lock_file);
-			goto grab_lock;
+			if (empty_tries == 0)
+			{
+				elog(WARNING, "Lock file \"%s\" is empty", lock_file);
+				goto grab_lock;
+			}
+
+			if ((empty_tries % LOG_FREQ) == 0)
+				elog(WARNING, "Waiting %u seconds on empty exclusive lock for backup %s",
+						 empty_tries, base36enc(backup->start_time));
+
+			sleep(1);
+			/*
+			 * waiting on empty lock file should not affect
+			 * the timer for concurrent lockers (ntries).
+			 */
+			empty_tries--;
+			ntries++;
+			continue;
 		}
 
 		encoded_pid = atoi(buffer);
@@ -371,24 +367,23 @@ lock_backup_exclusive(pgBackup *backup, bool strict)
 
 		/*
 		 * Check to see if the other process still exists
-		 *
-		 * Per discussion above, my_pid, my_p_pid can be
-		 * ignored as false matches.
-		 *
 		 * Normally kill() will fail with ESRCH if the given PID doesn't
 		 * exist.
 		 */
-		if (encoded_pid != my_pid && encoded_pid != my_p_pid)
+		if (encoded_pid == my_pid)
+			return 0;
+		else
 		{
 			if (kill(encoded_pid, 0) == 0)
 			{
 				/* complain every fifth interval */
-				if ((ntries % log_freq) == 0)
+				if ((ntries % LOG_FREQ) == 0)
 				{
 					elog(WARNING, "Process %d is using backup %s, and is still running",
 						 encoded_pid, base36enc(backup->start_time));
 
-					elog(WARNING, "Waiting %u seconds on lock for backup %s", ntries, base36enc(backup->start_time));
+					elog(WARNING, "Waiting %u seconds on exclusive lock for backup %s",
+						 ntries, base36enc(backup->start_time));
 				}
 
 				sleep(1);
@@ -435,7 +430,7 @@ grab_lock:
 	errno = 0;
 	if (fio_write(fd, buffer, strlen(buffer)) != strlen(buffer))
 	{
-		int			save_errno = errno;
+		int save_errno = errno;
 
 		fio_close(fd);
 		fio_unlink(lock_file, FIO_BACKUP_HOST);
@@ -453,7 +448,7 @@ grab_lock:
 
 	if (fio_flush(fd) != 0)
 	{
-		int	save_errno = errno;
+		int save_errno = errno;
 
 		fio_close(fd);
 		fio_unlink(lock_file, FIO_BACKUP_HOST);
@@ -471,7 +466,7 @@ grab_lock:
 
 	if (fio_close(fd) != 0)
 	{
-		int			save_errno = errno;
+		int save_errno = errno;
 
 		fio_unlink(lock_file, FIO_BACKUP_HOST);
 
@@ -481,6 +476,10 @@ grab_lock:
 			elog(ERROR, "Could not close lock file \"%s\": %s",
 				 lock_file, strerror(save_errno));
 	}
+
+//	elog(LOG, "Acquired exclusive lock for backup %s after %ds",
+//			base36enc(backup->start_time),
+//			LOCK_TIMEOUT - ntries + LOCK_STALE_TIMEOUT - empty_tries);
 
 	return 0;
 }
@@ -493,7 +492,6 @@ wait_read_only_owners(pgBackup *backup)
     char  buffer[256];
     pid_t encoded_pid;
     int   ntries = LOCK_TIMEOUT;
-    int   log_freq = ntries / 5;
     char  lock_file[MAXPGPATH];
 
     join_path_components(lock_file, backup->root_dir, BACKUP_RO_LOCK_FILE);
@@ -523,7 +521,7 @@ wait_read_only_owners(pgBackup *backup)
             {
                 if (kill(encoded_pid, 0) == 0)
                 {
-                    if ((ntries % log_freq) == 0)
+                    if ((ntries % LOG_FREQ) == 0)
                     {
                         elog(WARNING, "Process %d is using backup %s in read only mode, and is still running",
                                 encoded_pid, base36enc(backup->start_time));

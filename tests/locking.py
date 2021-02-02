@@ -535,6 +535,52 @@ class LockingTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
+    def test_empty_lock_file(self):
+        """
+        https://github.com/postgrespro/pg_probackup/issues/308
+        """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'])
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # Fill with data
+        node.pgbench_init(scale=100)
+
+        # FULL
+        backup_id = self.backup_node(backup_dir, 'node', node)
+
+        lockfile = os.path.join(backup_dir, 'backups', 'node', backup_id, 'backup.pid')
+        with open(lockfile, "w+") as f:
+            f.truncate()
+
+        out = self.validate_pb(backup_dir, 'node', backup_id)
+
+        self.assertIn(
+            "Waiting 30 seconds on empty exclusive lock for backup", out)
+
+#        lockfile = os.path.join(backup_dir, 'backups', 'node', backup_id, 'backup.pid')
+#        with open(lockfile, "w+") as f:
+#            f.truncate()
+#
+#        p1 = self.validate_pb(backup_dir, 'node', backup_id, asynchronous=True,
+#            options=['--log-level-file=LOG', '--log-filename=validate.log'])
+#        sleep(3)
+#        p2 = self.delete_pb(backup_dir, 'node', backup_id, asynchronous=True,
+#            options=['--log-level-file=LOG', '--log-filename=delete.log'])
+#
+#        p1.wait()
+#        p2.wait()
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
 # TODO:
 # test that concurrent validation and restore are not locking each other
 # check that quick exclusive lock, when taking RO-lock, is really quick
