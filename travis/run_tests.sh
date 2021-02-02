@@ -77,4 +77,4 @@ fi
 gcov src/*.c src/*.h
 
 # Send coverage stats to Codecov
-bash <(curl -s https://codecov.io/bash)
+bash <(curl -s https://codecov.io/bash) -t fb9cf24e-be3d-48ef-9e98-2861a1406209
