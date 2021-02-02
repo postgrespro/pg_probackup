@@ -205,7 +205,6 @@ pgBackupValidate(pgBackup *backup, pgRestoreParams *params)
 	{
 		char path[MAXPGPATH];
 
-		//pgBackupGetPath(backup, path, lengthof(path), DATABASE_FILE_LIST);
 		join_path_components(path, backup->root_dir, DATABASE_FILE_LIST);
 
 		if (pgFileSize(path) >= (BLCKSZ*500))

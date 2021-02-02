@@ -1774,7 +1774,7 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn,
 		if (!exclusive_backup)
 		{
 			Assert(PQnfields(res) >= 4);
-			pgBackupGetPath(backup, path, lengthof(path), DATABASE_DIR);
+			pgBackupGetPath2(backup, path, lengthof(path), DATABASE_DIR, NULL);
 
 			/* Write backup_label */
 			join_path_components(backup_label, path, PG_BACKUP_LABEL_FILE);

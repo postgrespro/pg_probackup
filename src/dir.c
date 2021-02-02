@@ -1880,7 +1880,6 @@ read_database_map(pgBackup *backup)
 	char		path[MAXPGPATH];
 	char		database_map_path[MAXPGPATH];
 
-//	pgBackupGetPath(backup, path, lengthof(path), DATABASE_DIR);
 	join_path_components(path, backup->root_dir, DATABASE_DIR);
 	join_path_components(database_map_path, path, DATABASE_MAP);
 

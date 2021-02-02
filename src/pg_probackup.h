@@ -944,8 +944,6 @@ extern void pgBackupWriteControl(FILE *out, pgBackup *backup, bool utc);
 extern void write_backup_filelist(pgBackup *backup, parray *files,
 								  const char *root, parray *external_list, bool sync);
 
-extern void pgBackupGetPath(const pgBackup *backup, char *path, size_t len,
-							const char *subdir);
 extern void pgBackupGetPath2(const pgBackup *backup, char *path, size_t len,
 							 const char *subdir1, const char *subdir2);
 extern void pgBackupCreateDir(pgBackup *backup, const char *backup_instance_path);

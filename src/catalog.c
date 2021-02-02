@@ -2712,16 +2712,6 @@ pgBackupCompareIdDesc(const void *l, const void *r)
 
 /*
  * Construct absolute path of the backup directory.
- * If subdir is not NULL, it will be appended after the path.
- */
-void
-pgBackupGetPath(const pgBackup *backup, char *path, size_t len, const char *subdir)
-{
-	pgBackupGetPath2(backup, path, len, subdir, NULL);
-}
-
-/*
- * Construct absolute path of the backup directory.
  * Append "subdir1" and "subdir2" to the backup directory.
  */
 void
