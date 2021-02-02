@@ -104,7 +104,7 @@ bool		force = false;
 bool		dry_run = false;
 static char *delete_status = NULL;
 /* compression options */
-bool 		compress_shortcut = false;
+static bool 		compress_shortcut = false;
 
 /* other options */
 char	   *instance_name;

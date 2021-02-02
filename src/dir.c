@@ -28,7 +28,7 @@
  * start so they are not included in backups.  The directories themselves are
  * kept and included as empty to preserve access permissions.
  */
-const char *pgdata_exclude_dir[] =
+static const char *pgdata_exclude_dir[] =
 {
 	PG_XLOG_DIR,
 	/*

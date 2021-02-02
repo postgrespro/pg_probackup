@@ -672,16 +672,6 @@ typedef struct BackupPageHeader2
 #define PageIsTruncated -2
 #define PageIsCorrupted -3 /* used by checkdb */
 
-
-/*
- * return pointer that exceeds the length of prefix from character string.
- * ex. str="/xxx/yyy/zzz", prefix="/xxx/yyy", return="zzz".
- *
- * Deprecated. Do not use this in new code.
- */
-#define GetRelativePath(str, prefix) \
-	((strlen(str) <= strlen(prefix)) ? "" : str + strlen(prefix) + 1)
-
 /*
  * Return timeline, xlog ID and record offset from an LSN of the type
  * 0/B000188, usual result from pg_stop_backup() and friends.
@@ -789,9 +779,6 @@ extern bool		delete_expired;
 extern bool		merge_expired;
 extern bool		dry_run;
 
-/* compression options */
-extern bool		compress_shortcut;
-
 /* other options */
 extern char *instance_name;
 
@@ -807,10 +794,6 @@ extern pgBackup current;
 
 /* argv of the process */
 extern char** commands_args;
-
-/* in dir.c */
-/* exclude directory list for $PGDATA file listing */
-extern const char *pgdata_exclude_dir[];
 
 /* in backup.c */
 extern int do_backup(pgSetBackupParams *set_backup_params,
