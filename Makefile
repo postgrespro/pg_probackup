@@ -80,3 +80,10 @@ src/walmethods.h: $(srchome)/src/bin/pg_basebackup/walmethods.h
 ifeq ($(PORTNAME), aix)
 	CC=xlc_r
 endif
+
+
+clean_gcov:
+	find . \
+		-name "*.gcda" -delete -o \
+		-name "*.gcno" -delete -o \
+		-name "*.gcov" -delete

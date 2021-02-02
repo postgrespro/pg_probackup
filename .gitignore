@@ -57,3 +57,7 @@
 # Misc
 .python-version
 .vscode
+
+*.gcda
+*.gcno
+*.gcov
