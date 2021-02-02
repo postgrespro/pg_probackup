@@ -948,9 +948,6 @@ extern void pgBackupGetPath(const pgBackup *backup, char *path, size_t len,
 							const char *subdir);
 extern void pgBackupGetPath2(const pgBackup *backup, char *path, size_t len,
 							 const char *subdir1, const char *subdir2);
-extern void pgBackupGetPathInInstance(const char *instance_name,
-				 const pgBackup *backup, char *path, size_t len,
-				 const char *subdir1, const char *subdir2);
 extern void pgBackupCreateDir(pgBackup *backup, const char *backup_instance_path);
 extern void pgNodeInit(PGNodeInfo *node);
 extern void pgBackupInit(pgBackup *backup);
@@ -968,7 +965,6 @@ extern int scan_parent_chain(pgBackup *current_backup, pgBackup **result_backup)
 
 extern bool is_parent(time_t parent_backup_time, pgBackup *child_backup, bool inclusive);
 extern bool is_prolific(parray *backup_list, pgBackup *target_backup);
-extern int get_backup_index_number(parray *backup_list, pgBackup *backup);
 extern void append_children(parray *backup_list, pgBackup *target_backup, parray *append_list);
 extern bool launch_agent(void);
 extern void launch_ssh(char* argv[]);
