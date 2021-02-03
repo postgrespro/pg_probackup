@@ -7,7 +7,29 @@
  * do_***() function that implements the command.
  *
  * Avoid using global variables in the code.
- * Pass all needed information as funciton arguments.
+ * Pass all needed information as funciton arguments:
+ *
+
+ *
+ * TODO:
+ *
+ * Functions that work with a backup catalog accept catalogState,
+ * which currently only contains pathes to backup catalog subdirectories
+ * + function specific options.
+ * 
+ * Functions that work with an instance accept instanceState argument, which
+ * includes catalogState, instance_name,
+ * info about pgdata associated with the instance,
+ * various instance config options, and list of backups belonging to the instance.
+ * + function specific options.
+ * 
+ * Functions that work with multiple backups in the catalog
+ * accept instanceState and info needed to determine the range of backups to handle.
+ * + function specific options.
+ *
+ * Functions that work with a single backup accept backupState argument,
+ * which includes link to the instanceState, backup_id and backup-specific info.
+ * + function specific options.
  *
  * Portions Copyright (c) 2009-2013, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
  * Portions Copyright (c) 2015-2019, Postgres Professional
@@ -34,6 +56,7 @@ const char  *PROGRAM_FULL_PATH = NULL;
 const char  *PROGRAM_URL = "https://github.com/postgrespro/pg_probackup";
 const char  *PROGRAM_EMAIL = "https://github.com/postgrespro/pg_probackup/issues";
 
+/* ================ catalogState =========== */
 /* directory options */
 /* TODO make it local variable, pass as an argument to all commands that need it.  */
 char	   *backup_path = NULL;
@@ -48,10 +71,13 @@ char		backup_instance_path[MAXPGPATH];
  */
 char		arclog_path[MAXPGPATH] = "";
 
+/* ================ catalogState (END) =========== */
+
+
+
 /* colon separated external directories list ("/path1:/path2") */
 char	   *externaldir = NULL;
 /* common options */
-static char *backup_id_string = NULL;
 int			num_threads = 1;
 bool		stream_wal = false;
 bool		no_color = false;
@@ -114,8 +140,9 @@ static char *delete_status = NULL;
 /* compression options */
 static bool 		compress_shortcut = false;
 
-/* other options */
+/* ================ instanceState =========== */
 char	   *instance_name;
+/* ================ instanceState (END) =========== */
 
 /* archive push options */
 int		batch_size = 1;
@@ -137,8 +164,10 @@ int64 ttl = -1;
 static char *expire_time_string = NULL;
 static pgSetBackupParams *set_backup_params = NULL;
 
-/* current settings */
+/* ================ backupState =========== */
+static char *backup_id_string = NULL;
 pgBackup	current;
+/* ================ backupState (END) =========== */
 
 static bool help_opt = false;
 
