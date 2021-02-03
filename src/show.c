@@ -781,9 +781,9 @@ show_instance_archive(InstanceState *instanceState, InstanceConfig *instance)
 	timelineinfos = catalog_get_timelines(instanceState, instance);
 
 	if (show_format == SHOW_PLAIN)
-		show_archive_plain(instance->name, instance->xlog_seg_size, timelineinfos, true);
+		show_archive_plain(instanceState->instance_name, instance->xlog_seg_size, timelineinfos, true);
 	else if (show_format == SHOW_JSON)
-		show_archive_json(instance->name, instance->xlog_seg_size, timelineinfos);
+		show_archive_json(instanceState->instance_name, instance->xlog_seg_size, timelineinfos);
 	else
 		elog(ERROR, "Invalid show format %d", (int) show_format);
 }

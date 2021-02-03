@@ -339,8 +339,6 @@ init_config(InstanceConfig *config, const char *instance_name)
 {
 	MemSet(config, 0, sizeof(InstanceConfig));
 
-	config->name = pgut_strdup(instance_name);
-
 	/*
 	 * Starting from PostgreSQL 11 WAL segment size may vary. Prior to
 	 * PostgreSQL 10 xlog_seg_size is equal to XLOG_SEG_SIZE.
@@ -591,13 +589,15 @@ readInstanceConfigFile(InstanceState *instanceState)
 
 	init_config(instance, instanceState->instance_name);
 
-	sprintf(instance->backup_instance_path, "%s/%s/%s",
+#ifdef REFACTORE_ME
+	sprintf(instanceState->instance_backup_subdir_path, "%s/%s/%s",
 			instanceState->catalog_state->catalog_path, BACKUPS_DIR, instanceState->instance_name);
-	canonicalize_path(instance->backup_instance_path);
+	canonicalize_path(instanceState->instance_backup_subdir_path);
 
-	sprintf(instance->arclog_path, "%s/%s/%s",
+	sprintf(instanceState->instance_wal_subdir_path, "%s/%s/%s",
 			instanceState->catalog_state->catalog_path, "wal", instanceState->instance_name);
-	canonicalize_path(instance->arclog_path);
+	canonicalize_path(instanceState->instance_wal_subdir_path);
+#endif
 
 	if (fio_access(instanceState->instance_config_path, F_OK, FIO_BACKUP_HOST) != 0)
 	{

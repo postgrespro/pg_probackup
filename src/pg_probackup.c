@@ -470,9 +470,6 @@ main(int argc, char *argv[])
 	}
 	else
 	{
-		/* Set instance name */
-		instance_config.name = pgut_strdup(instance_name);
-
 		instanceState = pgut_new(InstanceState);
 		instanceState->catalog_state = catalogState;
 
@@ -493,19 +490,6 @@ main(int argc, char *argv[])
 	 */
 	if ((backup_path != NULL) && instance_name)
 	{
-		/*
-		 * Fill InstanceConfig structure fields used to generate pathes inside
-		 * the instance's backup catalog.
-		 * TODO continue refactoring to use these fields instead of global vars
-		 */
-		sprintf(instance_config.backup_instance_path, "%s/%s/%s",
-				backup_path, BACKUPS_DIR, instance_name);
-		canonicalize_path(instance_config.backup_instance_path);
-
-		sprintf(instance_config.arclog_path, "%s/%s/%s",
-				backup_path, "wal", instance_name);
-		canonicalize_path(instance_config.arclog_path);
-
 		/*
 		 * Ensure that requested backup instance exists.
 		 * for all commands except init, which doesn't take this parameter,
@@ -780,11 +764,11 @@ main(int argc, char *argv[])
 	switch (backup_subcmd)
 	{
 		case ARCHIVE_PUSH_CMD:
-			do_archive_push(&instance_config, wal_file_path, wal_file_name,
+			do_archive_push(instanceState, &instance_config, wal_file_path, wal_file_name,
 							batch_size, file_overwrite, no_sync, no_ready_rename);
 			break;
 		case ARCHIVE_GET_CMD:
-			do_archive_get(&instance_config, prefetch_dir,
+			do_archive_get(instanceState, &instance_config, prefetch_dir,
 						   wal_file_path, wal_file_name, batch_size, !no_validate_wal);
 			break;
 		case ADD_INSTANCE_CMD:

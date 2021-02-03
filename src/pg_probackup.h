@@ -362,10 +362,6 @@ typedef struct ArchiveOptions
  */
 typedef struct InstanceConfig
 {
-	char		*name;
-	char		arclog_path[MAXPGPATH];
-	char		backup_instance_path[MAXPGPATH];
-
 	uint64		system_identifier;
 	uint32		xlog_seg_size;
 
@@ -872,10 +868,10 @@ extern int do_init(CatalogState *catalogState);
 extern int do_add_instance(InstanceState *instanceState, InstanceConfig *instance);
 
 /* in archive.c */
-extern void do_archive_push(InstanceConfig *instance, char *wal_file_path,
+extern void do_archive_push(InstanceState *instanceState, InstanceConfig *instance, char *wal_file_path,
 						   char *wal_file_name, int batch_size, bool overwrite,
 						   bool no_sync, bool no_ready_rename);
-extern void do_archive_get(InstanceConfig *instance, const char *prefetch_dir_arg, char *wal_file_path,
+extern void do_archive_get(InstanceState *instanceState, InstanceConfig *instance, const char *prefetch_dir_arg, char *wal_file_path,
 						   char *wal_file_name, int batch_size, bool validate_wal);
 
 /* in configure.c */

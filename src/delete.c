@@ -14,7 +14,7 @@
 #include <time.h>
 #include <unistd.h>
 
-static void delete_walfiles_in_tli(XLogRecPtr keep_lsn, timelineInfo *tli,
+static void delete_walfiles_in_tli(InstanceState *instanceState, XLogRecPtr keep_lsn, timelineInfo *tli,
 						uint32 xlog_seg_size, bool dry_run);
 static void do_retention_internal(parray *backup_list, parray *to_keep_list,
 									parray *to_purge_list);
@@ -698,22 +698,22 @@ do_retention_wal(InstanceState *instanceState, bool dry_run)
 		{
 			if (instance_config.wal_depth >= 0 && !(XLogRecPtrIsInvalid(tlinfo->anchor_lsn)))
 			{
-				delete_walfiles_in_tli(tlinfo->anchor_lsn,
+				delete_walfiles_in_tli(instanceState, tlinfo->anchor_lsn,
 								tlinfo, instance_config.xlog_seg_size, dry_run);
 			}
 			else
 			{
-				delete_walfiles_in_tli(tlinfo->oldest_backup->start_lsn,
+				delete_walfiles_in_tli(instanceState, tlinfo->oldest_backup->start_lsn,
 								tlinfo, instance_config.xlog_seg_size, dry_run);
 			}
 		}
 		else
 		{
 			if (instance_config.wal_depth >= 0 && !(XLogRecPtrIsInvalid(tlinfo->anchor_lsn)))
-				delete_walfiles_in_tli(tlinfo->anchor_lsn,
+				delete_walfiles_in_tli(instanceState, tlinfo->anchor_lsn,
 								tlinfo, instance_config.xlog_seg_size, dry_run);
 			else
-				delete_walfiles_in_tli(InvalidXLogRecPtr,
+				delete_walfiles_in_tli(instanceState, InvalidXLogRecPtr,
 								tlinfo, instance_config.xlog_seg_size, dry_run);
 		}
 	}
@@ -806,7 +806,7 @@ delete_backup_files(pgBackup *backup)
  * Q: Maybe we should stop treating partial WAL segments as second-class citizens?
  */
 static void
-delete_walfiles_in_tli(XLogRecPtr keep_lsn, timelineInfo *tlinfo,
+delete_walfiles_in_tli(InstanceState *instanceState, XLogRecPtr keep_lsn, timelineInfo *tlinfo,
 								uint32 xlog_seg_size, bool dry_run)
 {
 	XLogSegNo   FirstToDeleteSegNo;
@@ -931,7 +931,7 @@ delete_walfiles_in_tli(XLogRecPtr keep_lsn, timelineInfo *tlinfo,
 		{
 			char wal_fullpath[MAXPGPATH];
 
-			join_path_components(wal_fullpath, instance_config.arclog_path, wal_file->file.name);
+			join_path_components(wal_fullpath, instanceState->instance_wal_subdir_path, wal_file->file.name);
 
 			/* save segment from purging */
 			if (instance_config.wal_depth >= 0 && wal_file->keep)
@@ -1099,12 +1099,12 @@ do_delete_status(InstanceState *instanceState, InstanceConfig *instance_config, 
 	if (!dry_run && n_deleted > 0)
 		elog(INFO, "Successfully deleted %i %s from instance '%s'",
 			n_deleted, n_deleted == 1 ? "backup" : "backups",
-			instance_config->name);
+			instanceState->instance_name);
 
 
 	if (n_found == 0)
 		elog(WARNING, "Instance '%s' has no backups with status '%s'",
-			instance_config->name, pretty_status);
+			instanceState->instance_name, pretty_status);
 
 	// we don`t do WAL purge here, because it is impossible to correctly handle
 	// dry-run case.
