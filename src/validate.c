@@ -433,9 +433,6 @@ do_validate_all(CatalogState *catalogState, InstanceState *instanceState)
 								catalogState->wal_subdir_path, instanceState->instance_name);
 			join_path_components(instanceState->instance_config_path,
 								 instanceState->instance_backup_subdir_path, BACKUP_CATALOG_CONF_FILE);
-#ifdef REFACTORE_ME
-			sprintf(arclog_path, "%s/%s/%s", catalogState->catalog_path, "wal", instanceState->instance_name);
-#endif
 
 			if (config_read_opt(instanceState->instance_config_path, instance_options, ERROR, false,
 								true) == 0)
@@ -587,7 +584,7 @@ do_validate_instance(InstanceState *instanceState)
 
 		/* Validate corresponding WAL files */
 		if (current_backup->status == BACKUP_STATUS_OK)
-			validate_wal(current_backup, arclog_path, 0,
+			validate_wal(current_backup, instanceState->instance_wal_subdir_path, 0,
 						 0, 0, current_backup->tli,
 						 instance_config.xlog_seg_size);
 
@@ -684,7 +681,7 @@ do_validate_instance(InstanceState *instanceState)
 							{
 
 								/* Revalidation successful, validate corresponding WAL files */
-								validate_wal(backup, arclog_path, 0,
+								validate_wal(backup, instanceState->instance_wal_subdir_path, 0,
 											 0, 0, backup->tli,
 											 instance_config.xlog_seg_size);
 							}

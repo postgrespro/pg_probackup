@@ -262,9 +262,9 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 	if (current.backup_mode == BACKUP_MODE_DIFF_PAGE || !stream_wal)
 	{
 		/* Check that archive_dir can be reached */
-		if (fio_access(arclog_path, F_OK, FIO_BACKUP_HOST) != 0)
+		if (fio_access(instanceState->instance_wal_subdir_path, F_OK, FIO_BACKUP_HOST) != 0)
 			elog(ERROR, "WAL archive directory is not accessible \"%s\": %s",
-				arclog_path, strerror(errno));
+				instanceState->instance_wal_subdir_path, strerror(errno));
 
 		/*
 		 * Do not wait start_lsn for stream backup.
@@ -391,7 +391,8 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 			 * reading WAL segments present in archives up to the point
 			 * where this backup has started.
 			 */
-			pagemap_isok = extractPageMap(arclog_path, instance_config.xlog_seg_size,
+			pagemap_isok = extractPageMap(instanceState->instance_wal_subdir_path,
+						   instance_config.xlog_seg_size,
 						   prev_backup->start_lsn, prev_backup->tli,
 						   current.start_lsn, current.tli, tli_list);
 		}
@@ -1306,8 +1307,8 @@ wait_wal_lsn(InstanceState *instanceState, XLogRecPtr target_lsn, bool is_start_
 	}
 	else
 	{
-		join_path_components(wal_segment_path, arclog_path, wal_segment);
-		wal_segment_dir = arclog_path;
+		join_path_components(wal_segment_path, instanceState->instance_wal_subdir_path, wal_segment);
+		wal_segment_dir = instanceState->instance_wal_subdir_path;
 	}
 
 	/* TODO: remove this in 3.0 (it is a cludge against some old bug with archive_timeout) */
@@ -1682,7 +1683,7 @@ pg_stop_backup(InstanceState *instanceState, pgBackup *backup, PGconn *pg_startb
 				xlog_path = stream_xlog_path;
 			}
 			else
-				xlog_path = arclog_path;
+				xlog_path = instanceState->instance_wal_subdir_path;
 
 			GetXLogSegNo(stop_backup_lsn_tmp, segno, instance_config.xlog_seg_size);
 
@@ -1896,7 +1897,7 @@ pg_stop_backup(InstanceState *instanceState, pgBackup *backup, PGconn *pg_startb
 			xlog_path = stream_xlog_path;
 		}
 		else
-			xlog_path = arclog_path;
+			xlog_path = instanceState->instance_wal_subdir_path;
 
 		backup->stop_lsn = stop_backup_lsn;
 		backup->recovery_xid = recovery_xid;

@@ -989,7 +989,7 @@ do_delete_instance(InstanceState *instanceState)
 	parray_free(backup_list);
 
 	/* Delete all wal files. */
-	pgut_rmtree(arclog_path, false, true);
+	pgut_rmtree(instanceState->instance_wal_subdir_path, false, true);
 
 	/* Delete backup instance config file */
 	if (remove(instanceState->instance_config_path))
@@ -1003,8 +1003,8 @@ do_delete_instance(InstanceState *instanceState)
 		elog(ERROR, "Can't remove \"%s\": %s", instanceState->instance_backup_subdir_path,
 			strerror(errno));
 
-	if (rmdir(arclog_path) != 0)
-		elog(ERROR, "Can't remove \"%s\": %s", arclog_path,
+	if (rmdir(instanceState->instance_wal_subdir_path) != 0)
+		elog(ERROR, "Can't remove \"%s\": %s", instanceState->instance_wal_subdir_path,
 			strerror(errno));
 
 	elog(INFO, "Instance '%s' successfully deleted", instanceState->instance_name);

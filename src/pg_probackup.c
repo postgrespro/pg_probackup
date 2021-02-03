@@ -69,11 +69,6 @@ static char	   *backup_path = NULL;
  * $BACKUP_PATH/backups/instance_name
  */
 static char		backup_instance_path[MAXPGPATH];
-/*
- * path or to the wal files in the backup catalog
- * $BACKUP_PATH/wal/instance_name
- */
-char		arclog_path[MAXPGPATH] = "";
 
 static CatalogState *catalogState = NULL;
 /* ================ catalogState (END) =========== */
@@ -510,7 +505,6 @@ main(int argc, char *argv[])
 		 */
 		sprintf(backup_instance_path, "%s/%s/%s",
 				backup_path, BACKUPS_DIR, instance_name);
-		sprintf(arclog_path, "%s/%s/%s", backup_path, "wal", instance_name);
 
 		/*
 		 * Fill InstanceConfig structure fields used to generate pathes inside

@@ -755,13 +755,6 @@ typedef struct BackupPageHeader2
 
 #define IsSshProtocol() (instance_config.remote.host && strcmp(instance_config.remote.proto, "ssh") == 0)
 
-/* ====== CatalogState ======= */
-
-/* directory options */
-extern char		arclog_path[MAXPGPATH];
-
-/* ====== CatalogState (END) ======= */
-
 /* common options */
 extern pid_t    my_pid;
 extern __thread int my_thread_num;

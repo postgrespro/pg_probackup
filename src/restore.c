@@ -287,7 +287,8 @@ do_restore_or_validate(InstanceState *instanceState, time_t target_backup_id, pg
 
 			//	elog(LOG, "target timeline ID = %u", rt->target_tli);
 				/* Read timeline history files from archives */
-				timelines = read_timeline_history(arclog_path, rt->target_tli, true);
+				timelines = read_timeline_history(instanceState->instance_wal_subdir_path,
+												  rt->target_tli, true);
 
 				if (!satisfy_timeline(timelines, current_backup))
 				{
@@ -489,7 +490,8 @@ do_restore_or_validate(InstanceState *instanceState, time_t target_backup_id, pg
 			elog(ERROR, "Incremental restore in 'lsn' mode require "
 				"data_checksums to be enabled in destination data directory");
 
-		timelines = read_timeline_history(arclog_path, redo.tli, false);
+		timelines = read_timeline_history(instanceState->instance_wal_subdir_path,
+										  redo.tli, false);
 
 		if (!timelines)
 			elog(WARNING, "Failed to get history for redo timeline %i, "
@@ -604,7 +606,7 @@ do_restore_or_validate(InstanceState *instanceState, time_t target_backup_id, pg
 			 * We pass base_full_backup timeline as last argument to this function,
 			 * because it's needed to form the name of xlog file.
 			 */
-			validate_wal(dest_backup, arclog_path, rt->target_time,
+			validate_wal(dest_backup, instanceState->instance_wal_subdir_path, rt->target_time,
 						 rt->target_xid, rt->target_lsn,
 						 dest_backup->tli, instance_config.xlog_seg_size);
 		}
