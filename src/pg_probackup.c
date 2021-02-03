@@ -11,7 +11,7 @@
  *
 
  *
- * TODO:
+ * TODO (see pg_probackup_state.h):
  *
  * Functions that work with a backup catalog accept catalogState,
  * which currently only contains pathes to backup catalog subdirectories
@@ -38,6 +38,7 @@
  */
 
 #include "pg_probackup.h"
+#include "pg_probackup_state.h"
 
 #include "pg_getopt.h"
 #include "streamutil.h"

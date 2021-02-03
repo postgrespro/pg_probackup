@@ -10,6 +10,7 @@
 #ifndef PG_PROBACKUP_H
 #define PG_PROBACKUP_H
 
+
 #include "postgres_fe.h"
 #include "libpq-fe.h"
 #include "libpq-int.h"
@@ -38,6 +39,9 @@
 
 #include "datapagemap.h"
 #include "utils/thread.h"
+
+#include "pg_probackup_state.h"
+
 
 #ifdef WIN32
 #define __thread __declspec(thread)
@@ -755,16 +759,6 @@ extern char	   *backup_path;
 extern char		backup_instance_path[MAXPGPATH];
 extern char		arclog_path[MAXPGPATH];
 
-typedef struct CatalogState
-{
-	/* $BACKUP_PATH */
-	char		catalog_path[MAXPGPATH]; //previously global var backup_path
-	/* $BACKUP_PATH/backups */
-	char		backup_subdir_path[MAXPGPATH];
-	/* $BACKUP_PATH/wal */
-	char		wal_subdir_path[MAXPGPATH]; // previously global var arclog_path
-} CatalogState; 
-
 /* ====== CatalogState (END) ======= */
 
 /* common options */
@@ -797,19 +791,6 @@ extern bool		dry_run;
 
 /* ===== instanceState ===== */
 extern char *instance_name;
-typedef struct InstanceState
-{
-	/* catalog, this instance belongs to */
-	CatalogState *catalog_state;
-
-	char		instance_name[MAXPGPATH]; //previously global var instance_name
-	/* $BACKUP_PATH/backups/instance_name */
-	char		instance_backup_subdir_path[MAXPGPATH];
-	/* $BACKUP_PATH/backups/instance_name */
-	char		instance_wal_subdir_path[MAXPGPATH]; // previously global var arclog_path
-
-	//TODO add config here
-} InstanceState;
 
 /* ===== instanceState (END) ===== */
 
