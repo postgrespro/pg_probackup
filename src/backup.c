@@ -157,7 +157,7 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 		current.backup_mode == BACKUP_MODE_DIFF_DELTA)
 	{
 		/* get list of backups already taken */
-		backup_list = catalog_get_backup_list(instanceState->instance_name, INVALID_BACKUP_ID);
+		backup_list = catalog_get_backup_list(instanceState, INVALID_BACKUP_ID);
 
 		prev_backup = catalog_get_last_data_backup(backup_list, current.tli, current.start_time);
 		if (prev_backup == NULL)
@@ -168,7 +168,7 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 						current.tli);
 
 			/* TODO: use read_timeline_history */
-			tli_list = catalog_get_timelines(&instance_config);
+			tli_list = catalog_get_timelines(instanceState, &instance_config);
 
 			if (parray_num(tli_list) == 0)
 				elog(WARNING, "Cannot find valid backup on previous timelines, "

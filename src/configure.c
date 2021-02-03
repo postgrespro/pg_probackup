@@ -374,7 +374,7 @@ init_config(InstanceConfig *config, const char *instance_name)
  * read instance config from file
  */
 InstanceConfig *
-readInstanceConfigFile(const char *instance_name)
+readInstanceConfigFile(InstanceState *instanceState)
 {
 	char	path[MAXPGPATH];
 	InstanceConfig   *instance = pgut_new(InstanceConfig);
@@ -592,14 +592,14 @@ readInstanceConfigFile(const char *instance_name)
 	};
 
 
-	init_config(instance, instance_name);
+	init_config(instance, instanceState->instance_name);
 
 	sprintf(instance->backup_instance_path, "%s/%s/%s",
-			backup_path, BACKUPS_DIR, instance_name);
+			instanceState->catalog_state->catalog_path, BACKUPS_DIR, instanceState->instance_name);
 	canonicalize_path(instance->backup_instance_path);
 
 	sprintf(instance->arclog_path, "%s/%s/%s",
-			backup_path, "wal", instance_name);
+			instanceState->catalog_state->catalog_path, "wal", instanceState->instance_name);
 	canonicalize_path(instance->arclog_path);
 
 	join_path_components(path, instance->backup_instance_path,

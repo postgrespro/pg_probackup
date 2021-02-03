@@ -758,7 +758,6 @@ typedef struct BackupPageHeader2
 /* ====== CatalogState ======= */
 
 /* directory options */
-extern char	   *backup_path;
 extern char		backup_instance_path[MAXPGPATH];
 extern char		arclog_path[MAXPGPATH];
 
@@ -793,6 +792,21 @@ extern bool		merge_expired;
 extern bool		dry_run;
 
 /* ===== instanceState ===== */
+
+typedef struct InstanceState
+{
+	/* catalog, this instance belongs to */
+	CatalogState *catalog_state;
+
+	char		instance_name[MAXPGPATH]; //previously global var instance_name
+	/* $BACKUP_PATH/backups/instance_name */
+	char		instance_backup_subdir_path[MAXPGPATH];
+	/* $BACKUP_PATH/backups/instance_name */
+	char		instance_wal_subdir_path[MAXPGPATH]; // previously global var arclog_path
+
+	//TODO split into some more meaningdul parts
+    InstanceConfig *config;
+} InstanceState;
 
 /* ===== instanceState (END) ===== */
 
@@ -868,10 +882,10 @@ extern void do_archive_get(InstanceConfig *instance, const char *prefetch_dir_ar
 extern void do_show_config(void);
 extern void do_set_config(bool missing_ok);
 extern void init_config(InstanceConfig *config, const char *instance_name);
-extern InstanceConfig *readInstanceConfigFile(const char *instance_name);
+extern InstanceConfig *readInstanceConfigFile(InstanceState *instanceState);
 
 /* in show.c */
-extern int do_show(char *backup_catalog_path, const char *instance_name,
+extern int do_show(CatalogState *catalogState, InstanceState *instanceState,
 				   time_t requested_backup_id, bool show_archive);
 
 /* in delete.c */
@@ -879,7 +893,8 @@ extern void do_delete(InstanceState *instanceState, time_t backup_id);
 extern void delete_backup_files(pgBackup *backup);
 extern void do_retention(InstanceState *instanceState);
 extern int do_delete_instance(InstanceState *instanceState);
-extern void do_delete_status(InstanceConfig *instance_config, const char *status);
+extern void do_delete_status(InstanceState *instanceState, 
+					InstanceConfig *instance_config, const char *status);
 
 /* in fetch.c */
 extern char *slurpFile(const char *datadir,
@@ -922,8 +937,9 @@ extern bool lock_backup(pgBackup *backup, bool strict, bool exclusive);
 extern const char *pgBackupGetBackupMode(pgBackup *backup, bool show_color);
 extern void pgBackupGetBackupModeColor(pgBackup *backup, char *mode);
 
-extern parray *catalog_get_instance_list(char *backup_catalog_path);
-extern parray *catalog_get_backup_list(const char *instance_name, time_t requested_backup_id);
+extern parray *catalog_get_instance_list(CatalogState *catalogState);
+
+extern parray *catalog_get_backup_list(InstanceState *instanceState, time_t requested_backup_id);
 extern void catalog_lock_backup_list(parray *backup_list, int from_idx,
 									 int to_idx, bool strict, bool exclusive);
 extern pgBackup *catalog_get_last_data_backup(parray *backup_list,
@@ -933,8 +949,8 @@ extern pgBackup *get_multi_timeline_parent(parray *backup_list, parray *tli_list
 	                      TimeLineID current_tli, time_t current_start_time,
 						  InstanceConfig *instance);
 extern void timelineInfoFree(void *tliInfo);
-extern parray *catalog_get_timelines(InstanceConfig *instance);
-extern void do_set_backup(const char *instance_name, time_t backup_id,
+extern parray *catalog_get_timelines(InstanceState *instanceState, InstanceConfig *instance);
+extern void do_set_backup(InstanceState *instanceState, time_t backup_id,
 							pgSetBackupParams *set_backup_params);
 extern void pin_backup(pgBackup	*target_backup,
 							pgSetBackupParams *set_backup_params);

@@ -25,19 +25,6 @@ typedef struct CatalogState
 
 
 /* ===== instanceState ===== */
-typedef struct InstanceState
-{
-	/* catalog, this instance belongs to */
-	CatalogState *catalog_state;
-
-	char		instance_name[MAXPGPATH]; //previously global var instance_name
-	/* $BACKUP_PATH/backups/instance_name */
-	char		instance_backup_subdir_path[MAXPGPATH];
-	/* $BACKUP_PATH/backups/instance_name */
-	char		instance_wal_subdir_path[MAXPGPATH]; // previously global var arclog_path
-
-	//TODO add config here
-} InstanceState;
 
 /* ===== instanceState (END) ===== */
 

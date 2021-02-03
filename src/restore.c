@@ -216,7 +216,7 @@ do_restore_or_validate(InstanceState *instanceState, time_t target_backup_id, pg
 	elog(LOG, "%s begin.", action);
 
 	/* Get list of all backups sorted in order of descending start time */
-	backups = catalog_get_backup_list(instanceState->instance_name, INVALID_BACKUP_ID);
+	backups = catalog_get_backup_list(instanceState, INVALID_BACKUP_ID);
 
 	/* Find backup range we should restore or validate. */
 	while ((i < parray_num(backups)) && !dest_backup)

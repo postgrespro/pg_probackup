@@ -21,7 +21,7 @@ static void do_retention_internal(parray *backup_list, parray *to_keep_list,
 static void do_retention_merge(InstanceState *instanceState, parray *backup_list,
 							   parray *to_keep_list, parray *to_purge_list);
 static void do_retention_purge(parray *to_keep_list, parray *to_purge_list);
-static void do_retention_wal(bool dry_run);
+static void do_retention_wal(InstanceState *instanceState, bool dry_run);
 
 // TODO: more useful messages for dry run.
 static bool backup_deleted = false;   /* At least one backup was deleted */
@@ -39,7 +39,7 @@ do_delete(InstanceState *instanceState, time_t backup_id)
 	char		size_to_delete_pretty[20];
 
 	/* Get complete list of backups */
-	backup_list = catalog_get_backup_list(instanceState->instance_name, INVALID_BACKUP_ID);
+	backup_list = catalog_get_backup_list(instanceState, INVALID_BACKUP_ID);
 
 	delete_list = parray_new();
 
@@ -105,7 +105,7 @@ do_delete(InstanceState *instanceState, time_t backup_id)
 
 	/* Clean WAL segments */
 	if (delete_wal)
-		do_retention_wal(dry_run);
+		do_retention_wal(instanceState, dry_run);
 
 	/* cleanup */
 	parray_free(delete_list);
@@ -139,7 +139,7 @@ void do_retention(InstanceState *instanceState)
 	MyLocation = FIO_LOCAL_HOST;
 
 	/* Get a complete list of backups. */
-	backup_list = catalog_get_backup_list(instanceState->instance_name, INVALID_BACKUP_ID);
+	backup_list = catalog_get_backup_list(instanceState, INVALID_BACKUP_ID);
 
 	if (parray_num(backup_list) == 0)
 		backup_list_is_empty = true;
@@ -179,7 +179,7 @@ void do_retention(InstanceState *instanceState)
 
 	/* TODO: some sort of dry run for delete_wal */
 	if (delete_wal)
-		do_retention_wal(dry_run);
+		do_retention_wal(instanceState, dry_run);
 
 	/* TODO: consider dry-run flag */
 
@@ -653,12 +653,13 @@ do_retention_purge(parray *to_keep_list, parray *to_purge_list)
  * and delete them.
  */
 static void
-do_retention_wal(bool dry_run)
+do_retention_wal(InstanceState *instanceState, bool dry_run)
 {
 	parray 		*tli_list;
 	int i;
 
-	tli_list = catalog_get_timelines(&instance_config);
+	//TODO check that instanceState is not NULL
+	tli_list = catalog_get_timelines(instanceState, &instance_config);
 
 	for (i = 0; i < parray_num(tli_list); i++)
 	{
@@ -975,7 +976,7 @@ do_delete_instance(InstanceState *instanceState)
 
 
 	/* Delete all backups. */
-	backup_list = catalog_get_backup_list(instanceState->instance_name, INVALID_BACKUP_ID);
+	backup_list = catalog_get_backup_list(instanceState, INVALID_BACKUP_ID);
 
 	catalog_lock_backup_list(backup_list, 0, parray_num(backup_list) - 1, true, true);
 
@@ -1015,7 +1016,7 @@ do_delete_instance(InstanceState *instanceState)
 
 /* Delete all backups of given status in instance */
 void
-do_delete_status(InstanceConfig *instance_config, const char *status)
+do_delete_status(InstanceState *instanceState, InstanceConfig *instance_config, const char *status)
 {
 	int         i;
 	parray     *backup_list, *delete_list;
@@ -1038,11 +1039,11 @@ do_delete_status(InstanceConfig *instance_config, const char *status)
 	 */
 	pretty_status = status2str(status_for_delete);
 
-	backup_list = catalog_get_backup_list(instance_config->name, INVALID_BACKUP_ID);
+	backup_list = catalog_get_backup_list(instanceState, INVALID_BACKUP_ID);
 
 	if (parray_num(backup_list) == 0)
 	{
-		elog(WARNING, "Instance '%s' has no backups", instance_config->name);
+		elog(WARNING, "Instance '%s' has no backups", instanceState->instance_name);
 		return;
 	}
 

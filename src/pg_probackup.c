@@ -63,7 +63,7 @@ const char  *PROGRAM_EMAIL = "https://github.com/postgrespro/pg_probackup/issues
 /* ================ catalogState =========== */
 /* directory options */
 /* TODO make it local variable, pass as an argument to all commands that need it.  */
-char	   *backup_path = NULL;
+static char	   *backup_path = NULL;
 /*
  * path or to the data files in the backup catalog
  * $BACKUP_PATH/backups/instance_name
@@ -844,7 +844,7 @@ main(int argc, char *argv[])
 						  restore_params,
 						  no_sync);
 		case SHOW_CMD:
-			return do_show(backup_path, instance_name, current.backup_id, show_archive);
+			return do_show(catalogState, instanceState, current.backup_id, show_archive);
 		case DELETE_CMD:
 			if (delete_expired && backup_id_string)
 				elog(ERROR, "You cannot specify --delete-expired and (-i, --backup-id) options together");
@@ -858,7 +858,7 @@ main(int argc, char *argv[])
 			if (!backup_id_string)
 			{
 				if (delete_status)
-					do_delete_status(&instance_config, delete_status);
+					do_delete_status(instanceState, &instance_config, delete_status);
 				else
 					do_retention(instanceState);
 			}
@@ -877,7 +877,7 @@ main(int argc, char *argv[])
 		case SET_BACKUP_CMD:
 			if (!backup_id_string)
 				elog(ERROR, "You must specify parameter (-i, --backup-id) for 'set-backup' command");
-			do_set_backup(instance_name, current.backup_id, set_backup_params);
+			do_set_backup(instanceState, current.backup_id, set_backup_params);
 			break;
 		case CHECKDB_CMD:
 			do_checkdb(need_amcheck,
