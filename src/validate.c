@@ -382,7 +382,7 @@ pgBackupValidateFiles(void *arg)
  * If --instance option was provided, validate only backups of this instance.
  */
 int
-do_validate_all(void)
+do_validate_all(char *backup_catalog_path)
 {
 	corrupted_backup_found = false;
 	skipped_due_to_lock = false;
@@ -395,7 +395,7 @@ do_validate_all(void)
 		struct dirent *dent;
 
 		/* open directory and list contents */
-		join_path_components(path, backup_path, BACKUPS_DIR);
+		join_path_components(path, backup_catalog_path, BACKUPS_DIR);
 		dir = opendir(path);
 		if (dir == NULL)
 			elog(ERROR, "cannot open directory \"%s\": %s", path, strerror(errno));
@@ -425,8 +425,8 @@ do_validate_all(void)
 			 */
 			instance_name = dent->d_name;
 			sprintf(backup_instance_path, "%s/%s/%s",
-					backup_path, BACKUPS_DIR, instance_name);
-			sprintf(arclog_path, "%s/%s/%s", backup_path, "wal", instance_name);
+					backup_catalog_path, BACKUPS_DIR, instance_name);
+			sprintf(arclog_path, "%s/%s/%s", backup_catalog_path, "wal", instance_name);
 			join_path_components(conf_path, backup_instance_path,
 								 BACKUP_CATALOG_CONF_FILE);
 			if (config_read_opt(conf_path, instance_options, ERROR, false,

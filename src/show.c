@@ -75,7 +75,8 @@ static int32 json_level = 0;
  * Entry point of pg_probackup SHOW subcommand.
  */
 int
-do_show(const char *instance_name, time_t requested_backup_id, bool show_archive)
+do_show(char *backup_catalog_path, const char *instance_name, 
+		time_t requested_backup_id, bool show_archive)
 {
 	int i;
 
@@ -93,7 +94,7 @@ do_show(const char *instance_name, time_t requested_backup_id, bool show_archive
 	 */
 	if (instance_name == NULL)
 	{
-		parray *instances = catalog_get_instance_list();
+		parray *instances = catalog_get_instance_list(backup_catalog_path);
 
 		show_instance_start();
 		for (i = 0; i < parray_num(instances); i++)
@@ -104,7 +105,7 @@ do_show(const char *instance_name, time_t requested_backup_id, bool show_archive
 			if (interrupted)
 				elog(ERROR, "Interrupted during show");
 
-			sprintf(backup_instance_path, "%s/%s/%s", backup_path, BACKUPS_DIR, instance->name);
+			sprintf(backup_instance_path, "%s/%s/%s", backup_catalog_path, BACKUPS_DIR, instance->name);
 
 			if (show_archive)
 				show_instance_archive(instance);

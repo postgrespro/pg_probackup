@@ -692,7 +692,7 @@ IsDir(const char *dirpath, const char *entry, fio_location location)
  * actual config of each instance.
  */
 parray *
-catalog_get_instance_list(void)
+catalog_get_instance_list(char *backup_catalog_path)
 {
 	char		path[MAXPGPATH];
 	DIR		   *dir;
@@ -702,7 +702,7 @@ catalog_get_instance_list(void)
 	instances = parray_new();
 
 	/* open directory and list contents */
-	join_path_components(path, backup_path, BACKUPS_DIR);
+	join_path_components(path, backup_catalog_path, BACKUPS_DIR);
 	dir = opendir(path);
 	if (dir == NULL)
 		elog(ERROR, "Cannot open directory \"%s\": %s",

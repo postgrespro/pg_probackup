@@ -743,7 +743,7 @@ main(int argc, char *argv[])
 						   wal_file_path, wal_file_name, batch_size, !no_validate_wal);
 			break;
 		case ADD_INSTANCE_CMD:
-			return do_add_instance(&instance_config);
+			return do_add_instance(backup_path, &instance_config);
 		case DELETE_INSTANCE_CMD:
 			return do_delete_instance();
 		case INIT_CMD:
@@ -770,7 +770,7 @@ main(int argc, char *argv[])
 				if (datname_exclude_list || datname_include_list)
 					elog(ERROR, "You must specify parameter (-i, --backup-id) for partial validation");
 
-				return do_validate_all();
+				return do_validate_all(backup_path);
 			}
 			else
 				/* PITR validation and, optionally, partial validation */
@@ -779,7 +779,7 @@ main(int argc, char *argv[])
 						  restore_params,
 						  no_sync);
 		case SHOW_CMD:
-			return do_show(instance_name, current.backup_id, show_archive);
+			return do_show(backup_path, instance_name, current.backup_id, show_archive);
 		case DELETE_CMD:
 			if (delete_expired && backup_id_string)
 				elog(ERROR, "You cannot specify --delete-expired and (-i, --backup-id) options together");

@@ -89,7 +89,7 @@ backup_stopbackup_callback(bool fatal, void *userdata)
 
 /*
  * Take a backup of a single postgresql instance.
- * Move files from 'pgdata' to a subdirectory in 'backup_path'.
+ * Move files from 'pgdata' to a subdirectory in backup catalog.
  */
 static void
 do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool backup_logs)

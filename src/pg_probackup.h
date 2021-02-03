@@ -840,7 +840,7 @@ extern parray *read_database_map(pgBackup *backup);
 
 /* in init.c */
 extern int do_init(char *backup_catalog_path);
-extern int do_add_instance(InstanceConfig *instance);
+extern int do_add_instance(char *backup_catalog_path, InstanceConfig *instance);
 
 /* in archive.c */
 extern void do_archive_push(InstanceConfig *instance, char *wal_file_path,
@@ -856,7 +856,8 @@ extern void init_config(InstanceConfig *config, const char *instance_name);
 extern InstanceConfig *readInstanceConfigFile(const char *instance_name);
 
 /* in show.c */
-extern int do_show(const char *instance_name, time_t requested_backup_id, bool show_archive);
+extern int do_show(char *backup_catalog_path, const char *instance_name,
+				   time_t requested_backup_id, bool show_archive);
 
 /* in delete.c */
 extern void do_delete(time_t backup_id);
@@ -880,7 +881,7 @@ extern void help_command(ProbackupSubcmd const subcmd);
 
 /* in validate.c */
 extern void pgBackupValidate(pgBackup* backup, pgRestoreParams *params);
-extern int do_validate_all(void);
+extern int do_validate_all(char *backup_catalog_path);
 extern int validate_one_page(Page page, BlockNumber absolute_blkno,
 							 XLogRecPtr stop_lsn, PageState *page_st,
 							 uint32 checksum_version);
@@ -906,7 +907,7 @@ extern bool lock_backup(pgBackup *backup, bool strict, bool exclusive);
 extern const char *pgBackupGetBackupMode(pgBackup *backup, bool show_color);
 extern void pgBackupGetBackupModeColor(pgBackup *backup, char *mode);
 
-extern parray *catalog_get_instance_list(void);
+extern parray *catalog_get_instance_list(char *backup_catalog_path);
 extern parray *catalog_get_backup_list(const char *instance_name, time_t requested_backup_id);
 extern void catalog_lock_backup_list(parray *backup_list, int from_idx,
 									 int to_idx, bool strict, bool exclusive);

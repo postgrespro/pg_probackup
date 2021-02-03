@@ -49,7 +49,7 @@ do_init(char *backup_catalog_path)
 }
 
 int
-do_add_instance(InstanceConfig *instance)
+do_add_instance(char *backup_catalog_path, InstanceConfig *instance)
 {
 	char		path[MAXPGPATH];
 	char		arclog_path_dir[MAXPGPATH];
@@ -66,14 +66,14 @@ do_add_instance(InstanceConfig *instance)
 	instance->xlog_seg_size = get_xlog_seg_size(instance->pgdata);
 
 	/* Ensure that all root directories already exist */
-	if (access(backup_path, F_OK) != 0)
-		elog(ERROR, "Directory does not exist: '%s'", backup_path);
+	if (access(backup_catalog_path, F_OK) != 0)
+		elog(ERROR, "Directory does not exist: '%s'", backup_catalog_path);
 
-	join_path_components(path, backup_path, BACKUPS_DIR);
+	join_path_components(path, backup_catalog_path, BACKUPS_DIR);
 	if (access(path, F_OK) != 0)
 		elog(ERROR, "Directory does not exist: '%s'", path);
 
-	join_path_components(arclog_path_dir, backup_path, "wal");
+	join_path_components(arclog_path_dir, backup_catalog_path, "wal");
 	if (access(arclog_path_dir, F_OK) != 0)
 		elog(ERROR, "Directory does not exist: '%s'", arclog_path_dir);
 
