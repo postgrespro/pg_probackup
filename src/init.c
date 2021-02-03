@@ -17,34 +17,34 @@
  * Initialize backup catalog.
  */
 int
-do_init(void)
+do_init(char *backup_catalog_path)
 {
 	char		path[MAXPGPATH];
 	char		arclog_path_dir[MAXPGPATH];
 	int			results;
 
-	results = pg_check_dir(backup_path);
+	results = pg_check_dir(backup_catalog_path);
 	if (results == 4)	/* exists and not empty*/
 		elog(ERROR, "backup catalog already exist and it's not empty");
 	else if (results == -1) /*trouble accessing directory*/
 	{
 		int errno_tmp = errno;
 		elog(ERROR, "cannot open backup catalog directory \"%s\": %s",
-			backup_path, strerror(errno_tmp));
+			backup_catalog_path, strerror(errno_tmp));
 	}
 
 	/* create backup catalog root directory */
-	dir_create_dir(backup_path, DIR_PERMISSION, false);
+	dir_create_dir(backup_catalog_path, DIR_PERMISSION, false);
 
 	/* create backup catalog data directory */
-	join_path_components(path, backup_path, BACKUPS_DIR);
+	join_path_components(path, backup_catalog_path, BACKUPS_DIR);
 	dir_create_dir(path, DIR_PERMISSION, false);
 
 	/* create backup catalog wal directory */
-	join_path_components(arclog_path_dir, backup_path, "wal");
+	join_path_components(arclog_path_dir, backup_catalog_path, "wal");
 	dir_create_dir(arclog_path_dir, DIR_PERMISSION, false);
 
-	elog(INFO, "Backup catalog '%s' successfully inited", backup_path);
+	elog(INFO, "Backup catalog '%s' successfully inited", backup_catalog_path);
 	return 0;
 }
 

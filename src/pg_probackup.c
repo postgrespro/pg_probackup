@@ -2,6 +2,13 @@
  *
  * pg_probackup.c: Backup/Recovery manager for PostgreSQL.
  *
+ * This is an entry point for the program.
+ * Parse command name and it's options, verify them and call a
+ * do_***() function that implements the command.
+ *
+ * Avoid using global variables in the code.
+ * Pass all needed information as funciton arguments.
+ *
  * Portions Copyright (c) 2009-2013, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
  * Portions Copyright (c) 2015-2019, Postgres Professional
  *
@@ -28,6 +35,7 @@ const char  *PROGRAM_URL = "https://github.com/postgrespro/pg_probackup";
 const char  *PROGRAM_EMAIL = "https://github.com/postgrespro/pg_probackup/issues";
 
 /* directory options */
+/* TODO make it local variable, pass as an argument to all commands that need it.  */
 char	   *backup_path = NULL;
 /*
  * path or to the data files in the backup catalog
@@ -739,7 +747,7 @@ main(int argc, char *argv[])
 		case DELETE_INSTANCE_CMD:
 			return do_delete_instance();
 		case INIT_CMD:
-			return do_init();
+			return do_init(backup_path);
 		case BACKUP_CMD:
 			{
 				current.stream = stream_wal;

@@ -839,7 +839,7 @@ extern void merge_chain(parray *parent_chain,
 extern parray *read_database_map(pgBackup *backup);
 
 /* in init.c */
-extern int do_init(void);
+extern int do_init(char *backup_catalog_path);
 extern int do_add_instance(InstanceConfig *instance);
 
 /* in archive.c */
