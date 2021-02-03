@@ -19,7 +19,7 @@
  * 
  * Functions that work with an instance accept instanceState argument, which
  * includes catalogState, instance_name,
- * info about pgdata associated with the instance,
+ * info about pgdata associated with the instance (see pgState),
  * various instance config options, and list of backups belonging to the instance.
  * + function specific options.
  * 
@@ -30,6 +30,9 @@
  * Functions that work with a single backup accept backupState argument,
  * which includes link to the instanceState, backup_id and backup-specific info.
  * + function specific options.
+ *
+ * Functions that work with a postgreSQL instance (i.e. checkdb) accept pgState,
+ * which includes info about pgdata directory and connection.
  *
  * Portions Copyright (c) 2009-2013, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
  * Portions Copyright (c) 2015-2019, Postgres Professional
@@ -71,7 +74,6 @@ char		backup_instance_path[MAXPGPATH];
  * $BACKUP_PATH/wal/instance_name
  */
 char		arclog_path[MAXPGPATH] = "";
-
 
 static CatalogState *catalogState = NULL;
 /* ================ catalogState (END) =========== */
