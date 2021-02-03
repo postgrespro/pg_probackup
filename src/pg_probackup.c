@@ -144,7 +144,7 @@ static char *delete_status = NULL;
 static bool 		compress_shortcut = false;
 
 /* ================ instanceState =========== */
-char	   *instance_name;
+static char	   *instance_name;
 
 static InstanceState *instanceState = NULL;
 
@@ -488,9 +488,9 @@ main(int argc, char *argv[])
 
 		strncpy(instanceState->instance_name, instance_name, MAXPGPATH);
 		join_path_components(instanceState->instance_backup_subdir_path,
-							catalogState->backup_subdir_path, instance_name);
+							catalogState->backup_subdir_path, instanceState->instance_name);
 		join_path_components(instanceState->instance_wal_subdir_path,
-							catalogState->wal_subdir_path, instance_name);
+							catalogState->wal_subdir_path, instanceState->instance_name);
 	}
 	/* ===== instanceState (END) ======*/
 

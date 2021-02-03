@@ -405,7 +405,7 @@ do_merge(InstanceState *instanceState, time_t backup_id)
 	catalog_lock_backup_list(merge_list, parray_num(merge_list) - 1, 0, true, true);
 
 	/* do actual merge */
-	merge_chain(merge_list, full_backup, dest_backup);
+	merge_chain(instanceState, merge_list, full_backup, dest_backup);
 
 	pgBackupValidate(full_backup, NULL);
 	if (full_backup->status == BACKUP_STATUS_CORRUPT)
@@ -434,7 +434,8 @@ do_merge(InstanceState *instanceState, time_t backup_id)
  * that chain is ok.
  */
 void
-merge_chain(parray *parent_chain, pgBackup *full_backup, pgBackup *dest_backup)
+merge_chain(InstanceState *instanceState,
+			parray *parent_chain, pgBackup *full_backup, pgBackup *dest_backup)
 {
 	int			i;
 	char 		*dest_backup_id;
@@ -846,13 +847,9 @@ merge_rename:
 	else
 	{
 		/* Ugly */
-		char 	backups_dir[MAXPGPATH];
-		char 	instance_dir[MAXPGPATH];
 		char 	destination_path[MAXPGPATH];
 
-		join_path_components(backups_dir, backup_path, BACKUPS_DIR);
-		join_path_components(instance_dir, backups_dir, instance_name);
-		join_path_components(destination_path, instance_dir,
+		join_path_components(destination_path, instanceState->instance_backup_subdir_path,
 							base36enc(full_backup->merge_dest_backup));
 
 		elog(LOG, "Rename %s to %s", full_backup->root_dir, destination_path);

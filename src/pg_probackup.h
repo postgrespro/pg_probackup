@@ -793,7 +793,6 @@ extern bool		merge_expired;
 extern bool		dry_run;
 
 /* ===== instanceState ===== */
-extern char *instance_name;
 
 /* ===== instanceState (END) ===== */
 
@@ -849,7 +848,7 @@ extern bool tliIsPartOfHistory(const parray *timelines, TimeLineID tli);
 /* in merge.c */
 extern void do_merge(InstanceState *instanceState, time_t backup_id);
 extern void merge_backups(pgBackup *backup, pgBackup *next_backup);
-extern void merge_chain(parray *parent_chain,
+extern void merge_chain(InstanceState *instanceState, parray *parent_chain,
 						pgBackup *full_backup, pgBackup *dest_backup);
 
 extern parray *read_database_map(pgBackup *backup);

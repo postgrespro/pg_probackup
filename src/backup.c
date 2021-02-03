@@ -47,7 +47,8 @@ static void backup_cleanup(bool fatal, void *userdata);
 
 static void *backup_files(void *arg);
 
-static void do_backup_pg(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool backup_logs);
+static void do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
+						 PGNodeInfo *nodeInfo, bool no_sync, bool backup_logs);
 
 static void pg_start_backup(const char *label, bool smooth, pgBackup *backup,
 							PGNodeInfo *nodeInfo, PGconn *conn);
@@ -92,7 +93,8 @@ backup_stopbackup_callback(bool fatal, void *userdata)
  * Move files from 'pgdata' to a subdirectory in backup catalog.
  */
 static void
-do_backup_pg(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool backup_logs)
+do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
+			 PGNodeInfo *nodeInfo, bool no_sync, bool backup_logs)
 {
 	int			i;
 	char		external_prefix[MAXPGPATH]; /* Temp value. Used as template */
@@ -155,7 +157,7 @@ do_backup_pg(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool backu
 		current.backup_mode == BACKUP_MODE_DIFF_DELTA)
 	{
 		/* get list of backups already taken */
-		backup_list = catalog_get_backup_list(instance_name, INVALID_BACKUP_ID);
+		backup_list = catalog_get_backup_list(instanceState->instance_name, INVALID_BACKUP_ID);
 
 		prev_backup = catalog_get_last_data_backup(backup_list, current.tli, current.start_time);
 		if (prev_backup == NULL)
@@ -824,7 +826,7 @@ do_backup(InstanceState *instanceState, pgSetBackupParams *set_backup_params,
 		add_note(&current, set_backup_params->note);
 
 	/* backup data */
-	do_backup_pg(backup_conn, &nodeInfo, no_sync, backup_logs);
+	do_backup_pg(instanceState, backup_conn, &nodeInfo, no_sync, backup_logs);
 	pgut_atexit_pop(backup_cleanup, NULL);
 
 	/* compute size of wal files of this backup stored in the archive */

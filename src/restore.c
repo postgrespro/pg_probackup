@@ -41,22 +41,22 @@ typedef struct
 
 
 static void
-print_recovery_settings(FILE *fp, pgBackup *backup,
+print_recovery_settings(InstanceState *instanceState, FILE *fp, pgBackup *backup,
 							   pgRestoreParams *params, pgRecoveryTarget *rt);
 static void
 print_standby_settings_common(FILE *fp, pgBackup *backup, pgRestoreParams *params);
 
 #if PG_VERSION_NUM >= 120000
 static void
-update_recovery_options(pgBackup *backup,
+update_recovery_options(InstanceState *instanceState, pgBackup *backup,
 						pgRestoreParams *params, pgRecoveryTarget *rt);
 #else
 static void
-update_recovery_options_before_v12(pgBackup *backup,
+update_recovery_options_before_v12(InstanceState *instanceState, pgBackup *backup,
 								   pgRestoreParams *params, pgRecoveryTarget *rt);
 #endif
 
-static void create_recovery_conf(time_t backup_id,
+static void create_recovery_conf(InstanceState *instanceState, time_t backup_id,
 								 pgRecoveryTarget *rt,
 								 pgBackup *backup,
 								 pgRestoreParams *params);
@@ -673,7 +673,7 @@ do_restore_or_validate(InstanceState *instanceState, time_t target_backup_id, pg
 
 		//TODO rename and update comment
 		/* Create recovery.conf with given recovery target parameters */
-		create_recovery_conf(target_backup_id, rt, dest_backup, params);
+		create_recovery_conf(instanceState, target_backup_id, rt, dest_backup, params);
 	}
 
 	/* ssh connection to longer needed */
@@ -1298,7 +1298,7 @@ done:
  * with given recovery target parameters
  */
 static void
-create_recovery_conf(time_t backup_id,
+create_recovery_conf(InstanceState *instanceState, time_t backup_id,
 					 pgRecoveryTarget *rt,
 					 pgBackup *backup,
 					 pgRestoreParams *params)
@@ -1345,16 +1345,16 @@ create_recovery_conf(time_t backup_id,
 	elog(LOG, "----------------------------------------");
 
 #if PG_VERSION_NUM >= 120000
-	update_recovery_options(backup, params, rt);
+	update_recovery_options(instanceState, backup, params, rt);
 #else
-	update_recovery_options_before_v12(backup, params, rt);
+	update_recovery_options_before_v12(instanceState, backup, params, rt);
 #endif
 }
 
 
-/* TODO get rid of using global variables: instance_config, backup_path, instance_name */
+/* TODO get rid of using global variables: instance_config */
 static void
-print_recovery_settings(FILE *fp, pgBackup *backup,
+print_recovery_settings(InstanceState *instanceState, FILE *fp, pgBackup *backup,
 							   pgRestoreParams *params, pgRecoveryTarget *rt)
 {
 	char restore_command_guc[16384];
@@ -1370,7 +1370,8 @@ print_recovery_settings(FILE *fp, pgBackup *backup,
 		sprintf(restore_command_guc, "%s archive-get -B %s --instance %s "
 				"--wal-file-path=%%p --wal-file-name=%%f",
 				PROGRAM_FULL_PATH ? PROGRAM_FULL_PATH : PROGRAM_NAME,
-				backup_path, instance_name);
+				/* TODO What is going on here? Why do we use catalog path as wal-file-path? */
+				instanceState->catalog_state->catalog_path, instanceState->instance_name);
 
 		/* append --remote-* parameters provided via --archive-* settings */
 		if (instance_config.archive.host)
@@ -1455,7 +1456,7 @@ print_standby_settings_common(FILE *fp, pgBackup *backup, pgRestoreParams *param
 
 #if PG_VERSION_NUM < 120000
 static void
-update_recovery_options_before_v12(pgBackup *backup,
+update_recovery_options_before_v12(InstanceState *instanceState, pgBackup *backup,
 								   pgRestoreParams *params, pgRecoveryTarget *rt)
 {
 	FILE	   *fp;
@@ -1486,7 +1487,7 @@ update_recovery_options_before_v12(pgBackup *backup,
 				PROGRAM_VERSION);
 
 	if (params->recovery_settings_mode == PITR_REQUESTED)
-		print_recovery_settings(fp, backup, params, rt);
+		print_recovery_settings(instanceState, fp, backup, params, rt);
 
 	if (params->restore_as_replica)
 	{
@@ -1508,7 +1509,7 @@ update_recovery_options_before_v12(pgBackup *backup,
  */
 #if PG_VERSION_NUM >= 120000
 static void
-update_recovery_options(pgBackup *backup,
+update_recovery_options(InstanceState *instanceState, pgBackup *backup,
 						pgRestoreParams *params, pgRecoveryTarget *rt)
 
 {
@@ -1616,7 +1617,7 @@ update_recovery_options(pgBackup *backup,
 				base36enc(backup->start_time), current_time_str);
 
 		if (params->recovery_settings_mode == PITR_REQUESTED)
-			print_recovery_settings(fp, backup, params, rt);
+			print_recovery_settings(instanceState, fp, backup, params, rt);
 
 		if (params->restore_as_replica)
 			print_standby_settings_common(fp, backup, params);

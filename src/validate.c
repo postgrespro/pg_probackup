@@ -406,7 +406,7 @@ do_validate_all(CatalogState *catalogState, InstanceState *instanceState)
 			char		conf_path[MAXPGPATH];
 			char		child[MAXPGPATH];
 			struct stat	st;
-			InstanceState *instance_state;
+			InstanceState *instanceState;
 			
 
 			/* skip entries point current dir or parent dir */
@@ -425,13 +425,13 @@ do_validate_all(CatalogState *catalogState, InstanceState *instanceState)
 			/*
 			 * Initialize instance configuration.
 			 */
-			instance_state = pgut_new(InstanceState);
+			instanceState = pgut_new(InstanceState);
 			strncpy(instanceState->instance_name, dent->d_name, MAXPGPATH);
 
 			join_path_components(instanceState->instance_backup_subdir_path,
-								catalogState->backup_subdir_path, instance_name);
+								catalogState->backup_subdir_path, instanceState->instance_name);
 			join_path_components(instanceState->instance_wal_subdir_path,
-								catalogState->wal_subdir_path, instance_name);
+								catalogState->wal_subdir_path, instanceState->instance_name);
 
 #ifdef REFACTORE_ME
 			sprintf(backup_instance_path, "%s/%s/%s",

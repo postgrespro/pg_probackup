@@ -18,8 +18,8 @@ static void delete_walfiles_in_tli(XLogRecPtr keep_lsn, timelineInfo *tli,
 						uint32 xlog_seg_size, bool dry_run);
 static void do_retention_internal(parray *backup_list, parray *to_keep_list,
 									parray *to_purge_list);
-static void do_retention_merge(parray *backup_list, parray *to_keep_list,
-									parray *to_purge_list);
+static void do_retention_merge(InstanceState *instanceState, parray *backup_list,
+							   parray *to_keep_list, parray *to_purge_list);
 static void do_retention_purge(parray *to_keep_list, parray *to_purge_list);
 static void do_retention_wal(bool dry_run);
 
@@ -172,7 +172,7 @@ void do_retention(InstanceState *instanceState)
 		do_retention_internal(backup_list, to_keep_list, to_purge_list);
 
 	if (merge_expired && !dry_run && !backup_list_is_empty)
-		do_retention_merge(backup_list, to_keep_list, to_purge_list);
+		do_retention_merge(instanceState, backup_list, to_keep_list, to_purge_list);
 
 	if (delete_expired && !dry_run && !backup_list_is_empty)
 		do_retention_purge(to_keep_list, to_purge_list);
@@ -420,7 +420,8 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 
 /* Merge partially expired incremental chains */
 static void
-do_retention_merge(parray *backup_list, parray *to_keep_list, parray *to_purge_list)
+do_retention_merge(InstanceState *instanceState, parray *backup_list,
+				   parray *to_keep_list, parray *to_purge_list)
 {
 	int i;
 	int j;
@@ -539,7 +540,7 @@ do_retention_merge(parray *backup_list, parray *to_keep_list, parray *to_purge_l
 		 */
 
 		keep_backup = parray_get(merge_list, 0);
-		merge_chain(merge_list, full_backup, keep_backup);
+		merge_chain(instanceState, merge_list, full_backup, keep_backup);
 		backup_merged = true;
 
 		for (j = parray_num(merge_list) - 2; j >= 0; j--)
