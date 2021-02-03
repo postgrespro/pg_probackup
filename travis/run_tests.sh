@@ -64,14 +64,23 @@ python2 -m virtualenv pyenv
 source pyenv/bin/activate
 pip install testgres
 
-echo "############### WHOAMI"
-whoami
-
 echo "############### Testing:"
-if [ "$MODE" = "basic" ]; then
+if   [ "$MODE" = "basic" ]; then
     export PG_PROBACKUP_TEST_BASIC=ON
     python -m unittest -v tests
     python -m unittest -v tests.init
+elif [ "$MODE" = "remote" ]; then
+
+    cat /dev/zero | ssh-keygen -q -N ""
+    sudo apt-get install openssh-server -y
+    sudo mkdir /run/sshd
+    sudo /usr/sbin/sshd -D &
+    cat /home/postgres/.ssh/id_rsa.pub > /home/postgres/.ssh/authorized_keys
+    ssh-keyscan  localhost >> ~/.ssh/known_hosts
+
+    export PG_PROBACKUP_TEST_BASIC=ON
+    export PGPROBACKUP_SSH_REMOTE=ON
+    python -m unittest -v tests
 else
     python -m unittest -v tests.$MODE
 fi
