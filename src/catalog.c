@@ -733,7 +733,8 @@ catalog_get_instance_list(CatalogState *catalogState)
 							catalogState->backup_subdir_path, instanceState->instance_name);
 		join_path_components(instanceState->instance_wal_subdir_path,
 							catalogState->wal_subdir_path, instanceState->instance_name);
-
+		join_path_components(instanceState->instance_config_path,
+							 instanceState->instance_backup_subdir_path, BACKUP_CATALOG_CONF_FILE);
 		parray_append(instances, instanceState);
 	}
 
@@ -2806,27 +2807,6 @@ int
 pgBackupCompareIdDesc(const void *l, const void *r)
 {
 	return -pgBackupCompareId(l, r);
-}
-
-/*
- * Construct absolute path of the backup directory.
- * Append "subdir1" and "subdir2" to the backup directory.
- */
-void
-pgBackupGetPath2(const pgBackup *backup, char *path, size_t len,
-				 const char *subdir1, const char *subdir2)
-{
-	/* If "subdir1" is NULL do not check "subdir2" */
-	if (!subdir1)
-		snprintf(path, len, "%s/%s", backup_instance_path,
-				 base36enc(backup->start_time));
-	else if (!subdir2)
-		snprintf(path, len, "%s/%s/%s", backup_instance_path,
-				 base36enc(backup->start_time), subdir1);
-	/* "subdir1" and "subdir2" is not NULL */
-	else
-		snprintf(path, len, "%s/%s/%s/%s", backup_instance_path,
-				 base36enc(backup->start_time), subdir1, subdir2);
 }
 
 /*

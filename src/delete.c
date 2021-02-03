@@ -972,8 +972,6 @@ do_delete_instance(InstanceState *instanceState)
 {
 	parray		*backup_list;
 	int 		i;
-	char		instance_config_path[MAXPGPATH];
-
 
 	/* Delete all backups. */
 	backup_list = catalog_get_backup_list(instanceState, INVALID_BACKUP_ID);
@@ -994,16 +992,15 @@ do_delete_instance(InstanceState *instanceState)
 	pgut_rmtree(arclog_path, false, true);
 
 	/* Delete backup instance config file */
-	join_path_components(instance_config_path, backup_instance_path, BACKUP_CATALOG_CONF_FILE);
-	if (remove(instance_config_path))
+	if (remove(instanceState->instance_config_path))
 	{
-		elog(ERROR, "Can't remove \"%s\": %s", instance_config_path,
+		elog(ERROR, "Can't remove \"%s\": %s", instanceState->instance_config_path,
 			strerror(errno));
 	}
 
 	/* Delete instance root directories */
-	if (rmdir(backup_instance_path) != 0)
-		elog(ERROR, "Can't remove \"%s\": %s", backup_instance_path,
+	if (rmdir(instanceState->instance_backup_subdir_path) != 0)
+		elog(ERROR, "Can't remove \"%s\": %s", instanceState->instance_backup_subdir_path,
 			strerror(errno));
 
 	if (rmdir(arclog_path) != 0)

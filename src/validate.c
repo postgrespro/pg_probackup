@@ -403,7 +403,6 @@ do_validate_all(CatalogState *catalogState, InstanceState *instanceState)
 		errno = 0;
 		while ((dent = readdir(dir)))
 		{
-			char		conf_path[MAXPGPATH];
 			char		child[MAXPGPATH];
 			struct stat	st;
 			InstanceState *instanceState;
@@ -432,19 +431,16 @@ do_validate_all(CatalogState *catalogState, InstanceState *instanceState)
 								catalogState->backup_subdir_path, instanceState->instance_name);
 			join_path_components(instanceState->instance_wal_subdir_path,
 								catalogState->wal_subdir_path, instanceState->instance_name);
-
+			join_path_components(instanceState->instance_config_path,
+								 instanceState->instance_backup_subdir_path, BACKUP_CATALOG_CONF_FILE);
 #ifdef REFACTORE_ME
-			sprintf(backup_instance_path, "%s/%s/%s",
-					catalogState->catalog_path, BACKUPS_DIR, instanceState->instance_name);
-
 			sprintf(arclog_path, "%s/%s/%s", catalogState->catalog_path, "wal", instanceState->instance_name);
 #endif
-			join_path_components(conf_path, backup_instance_path,
-								 BACKUP_CATALOG_CONF_FILE);
-			if (config_read_opt(conf_path, instance_options, ERROR, false,
+
+			if (config_read_opt(instanceState->instance_config_path, instance_options, ERROR, false,
 								true) == 0)
 			{
-				elog(WARNING, "Configuration file \"%s\" is empty", conf_path);
+				elog(WARNING, "Configuration file \"%s\" is empty", instanceState->instance_config_path);
 				corrupted_backup_found = true;
 				continue;
 			}

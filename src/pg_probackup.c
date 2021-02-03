@@ -68,7 +68,7 @@ static char	   *backup_path = NULL;
  * path or to the data files in the backup catalog
  * $BACKUP_PATH/backups/instance_name
  */
-char		backup_instance_path[MAXPGPATH];
+static char		backup_instance_path[MAXPGPATH];
 /*
  * path or to the wal files in the backup catalog
  * $BACKUP_PATH/wal/instance_name
@@ -491,6 +491,9 @@ main(int argc, char *argv[])
 							catalogState->backup_subdir_path, instanceState->instance_name);
 		join_path_components(instanceState->instance_wal_subdir_path,
 							catalogState->wal_subdir_path, instanceState->instance_name);
+		join_path_components(instanceState->instance_config_path,
+							 instanceState->instance_backup_subdir_path, BACKUP_CATALOG_CONF_FILE);
+
 	}
 	/* ===== instanceState (END) ======*/
 
@@ -872,7 +875,7 @@ main(int argc, char *argv[])
 			do_show_config();
 			break;
 		case SET_CONFIG_CMD:
-			do_set_config(false);
+			do_set_config(instanceState, false);
 			break;
 		case SET_BACKUP_CMD:
 			if (!backup_id_string)

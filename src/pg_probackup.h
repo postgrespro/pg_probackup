@@ -758,7 +758,6 @@ typedef struct BackupPageHeader2
 /* ====== CatalogState ======= */
 
 /* directory options */
-extern char		backup_instance_path[MAXPGPATH];
 extern char		arclog_path[MAXPGPATH];
 
 /* ====== CatalogState (END) ======= */
@@ -801,8 +800,16 @@ typedef struct InstanceState
 	char		instance_name[MAXPGPATH]; //previously global var instance_name
 	/* $BACKUP_PATH/backups/instance_name */
 	char		instance_backup_subdir_path[MAXPGPATH];
+
+	/* $BACKUP_PATH/backups/instance_name/BACKUP_CATALOG_CONF_FILE */
+	char		instance_config_path[MAXPGPATH];
+	
 	/* $BACKUP_PATH/backups/instance_name */
 	char		instance_wal_subdir_path[MAXPGPATH]; // previously global var arclog_path
+
+	/* TODO: Make it more specific */
+	PGconn *conn;
+
 
 	//TODO split into some more meaningdul parts
     InstanceConfig *config;
@@ -880,7 +887,7 @@ extern void do_archive_get(InstanceConfig *instance, const char *prefetch_dir_ar
 
 /* in configure.c */
 extern void do_show_config(void);
-extern void do_set_config(bool missing_ok);
+extern void do_set_config(InstanceState *instanceState, bool missing_ok);
 extern void init_config(InstanceConfig *config, const char *instance_name);
 extern InstanceConfig *readInstanceConfigFile(InstanceState *instanceState);
 
@@ -959,8 +966,7 @@ extern void pgBackupWriteControl(FILE *out, pgBackup *backup, bool utc);
 extern void write_backup_filelist(pgBackup *backup, parray *files,
 								  const char *root, parray *external_list, bool sync);
 
-extern void pgBackupGetPath2(const pgBackup *backup, char *path, size_t len,
-							 const char *subdir1, const char *subdir2);
+
 extern void pgBackupCreateDir(pgBackup *backup, const char *backup_instance_path);
 extern void pgNodeInit(PGNodeInfo *node);
 extern void pgBackupInit(pgBackup *backup);
