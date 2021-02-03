@@ -68,7 +68,7 @@ static bool is_forward_compatible(parray *parent_chain);
  * - Remove unnecessary files, which doesn't exist in the target backup anymore
  */
 void
-do_merge(time_t backup_id)
+do_merge(InstanceState *instanceState, time_t backup_id)
 {
 	parray	   *backups;
 	parray	   *merge_list = parray_new();
@@ -80,13 +80,13 @@ do_merge(time_t backup_id)
 	if (backup_id == INVALID_BACKUP_ID)
 		elog(ERROR, "required parameter is not specified: --backup-id");
 
-	if (instance_name == NULL)
+	if (instanceState == NULL)
 		elog(ERROR, "required parameter is not specified: --instance");
 
 	elog(INFO, "Merge started");
 
 	/* Get list of all backups sorted in order of descending start time */
-	backups = catalog_get_backup_list(instance_name, INVALID_BACKUP_ID);
+	backups = catalog_get_backup_list(instanceState->instance_name, INVALID_BACKUP_ID);
 
 	/* Find destination backup first */
 	for (i = 0; i < parray_num(backups); i++)
@@ -597,7 +597,7 @@ merge_chain(parray *parent_chain, pgBackup *full_backup, pgBackup *dest_backup)
 			write_backup(backup, true);
 		}
 		else
-			write_backup_status(backup, BACKUP_STATUS_MERGING, instance_name, true);
+			write_backup_status(backup, BACKUP_STATUS_MERGING, true);
 	}
 
 	/* Construct path to database dir: /backup_dir/instance_name/FULL/database */

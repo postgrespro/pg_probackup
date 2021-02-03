@@ -16,7 +16,7 @@
 #include "utils/thread.h"
 
 static void *pgBackupValidateFiles(void *arg);
-static void do_validate_instance(void);
+static void do_validate_instance(InstanceState *instanceState);
 
 static bool corrupted_backup_found = false;
 static bool skipped_due_to_lock = false;
@@ -75,7 +75,7 @@ pgBackupValidate(pgBackup *backup, pgRestoreParams *params)
 	{
 		elog(WARNING, "Backup %s has status %s, change it to ERROR and skip validation",
 			 base36enc(backup->start_time), status2str(backup->status));
-		write_backup_status(backup, BACKUP_STATUS_ERROR, instance_name, true);
+		write_backup_status(backup, BACKUP_STATUS_ERROR, true);
 		corrupted_backup_found = true;
 		return;
 	}
@@ -121,7 +121,7 @@ pgBackupValidate(pgBackup *backup, pgRestoreParams *params)
 	{
 		elog(WARNING, "Backup %s file list is corrupted", base36enc(backup->start_time));
 		backup->status = BACKUP_STATUS_CORRUPT;
-		write_backup_status(backup, BACKUP_STATUS_CORRUPT, instance_name, true);
+		write_backup_status(backup, BACKUP_STATUS_CORRUPT, true);
 		return;
 	}
 
@@ -190,7 +190,7 @@ pgBackupValidate(pgBackup *backup, pgRestoreParams *params)
 		backup->status = BACKUP_STATUS_CORRUPT;
 
 	write_backup_status(backup, corrupted ? BACKUP_STATUS_CORRUPT :
-						BACKUP_STATUS_OK, instance_name, true);
+						BACKUP_STATUS_OK, true);
 
 	if (corrupted)
 		elog(WARNING, "Backup %s data files are corrupted", base36enc(backup->start_time));
@@ -214,7 +214,7 @@ pgBackupValidate(pgBackup *backup, pgRestoreParams *params)
 							"https://github.com/postgrespro/pg_probackup/issues/132",
 							base36enc(backup->start_time));
 			backup->status = BACKUP_STATUS_CORRUPT;
-			write_backup_status(backup, BACKUP_STATUS_CORRUPT, instance_name, true);
+			write_backup_status(backup, BACKUP_STATUS_CORRUPT, true);
 		}
 	}
 }
@@ -380,25 +380,25 @@ pgBackupValidateFiles(void *arg)
 /*
  * Validate all backups in the backup catalog.
  * If --instance option was provided, validate only backups of this instance.
+ *
+ * TODO: split into two functions: do_validate_catalog and do_validate_instance.
  */
 int
-do_validate_all(char *backup_catalog_path)
+do_validate_all(CatalogState *catalogState, InstanceState *instanceState)
 {
 	corrupted_backup_found = false;
 	skipped_due_to_lock = false;
 
-	if (instance_name == NULL)
+	if (instanceState == NULL)
 	{
 		/* Show list of instances */
-		char		path[MAXPGPATH];
 		DIR		   *dir;
 		struct dirent *dent;
 
 		/* open directory and list contents */
-		join_path_components(path, backup_catalog_path, BACKUPS_DIR);
-		dir = opendir(path);
+		dir = opendir(catalogState->backup_subdir_path);
 		if (dir == NULL)
-			elog(ERROR, "cannot open directory \"%s\": %s", path, strerror(errno));
+			elog(ERROR, "cannot open directory \"%s\": %s", catalogState->backup_subdir_path, strerror(errno));
 
 		errno = 0;
 		while ((dent = readdir(dir)))
@@ -406,13 +406,15 @@ do_validate_all(char *backup_catalog_path)
 			char		conf_path[MAXPGPATH];
 			char		child[MAXPGPATH];
 			struct stat	st;
+			InstanceState *instance_state;
+			
 
 			/* skip entries point current dir or parent dir */
 			if (strcmp(dent->d_name, ".") == 0 ||
 				strcmp(dent->d_name, "..") == 0)
 				continue;
 
-			join_path_components(child, path, dent->d_name);
+			join_path_components(child, catalogState->backup_subdir_path, dent->d_name);
 
 			if (lstat(child, &st) == -1)
 				elog(ERROR, "cannot stat file \"%s\": %s", child, strerror(errno));
@@ -423,10 +425,20 @@ do_validate_all(char *backup_catalog_path)
 			/*
 			 * Initialize instance configuration.
 			 */
-			instance_name = dent->d_name;
+			instance_state = pgut_new(InstanceState);
+			strncpy(instanceState->instance_name, dent->d_name, MAXPGPATH);
+
+			join_path_components(instanceState->instance_backup_subdir_path,
+								catalogState->backup_subdir_path, instance_name);
+			join_path_components(instanceState->instance_wal_subdir_path,
+								catalogState->wal_subdir_path, instance_name);
+
+#ifdef REFACTORE_ME
 			sprintf(backup_instance_path, "%s/%s/%s",
-					backup_catalog_path, BACKUPS_DIR, instance_name);
-			sprintf(arclog_path, "%s/%s/%s", backup_catalog_path, "wal", instance_name);
+					catalogState->catalog_path, BACKUPS_DIR, instanceState->instance_name);
+
+			sprintf(arclog_path, "%s/%s/%s", catalogState->catalog_path, "wal", instanceState->instance_name);
+#endif
 			join_path_components(conf_path, backup_instance_path,
 								 BACKUP_CATALOG_CONF_FILE);
 			if (config_read_opt(conf_path, instance_options, ERROR, false,
@@ -437,12 +449,12 @@ do_validate_all(char *backup_catalog_path)
 				continue;
 			}
 
-			do_validate_instance();
+			do_validate_instance(instanceState);
 		}
 	}
 	else
 	{
-		do_validate_instance();
+		do_validate_instance(instanceState);
 	}
 
 	/* TODO: Probably we should have different exit code for every condition
@@ -472,17 +484,17 @@ do_validate_all(char *backup_catalog_path)
  * Validate all backups in the given instance of the backup catalog.
  */
 static void
-do_validate_instance(void)
+do_validate_instance(InstanceState *instanceState)
 {
 	int			i;
 	int			j;
 	parray	   *backups;
 	pgBackup   *current_backup = NULL;
 
-	elog(INFO, "Validate backups of the instance '%s'", instance_name);
+	elog(INFO, "Validate backups of the instance '%s'", instanceState->instance_name);
 
 	/* Get list of all backups sorted in order of descending start time */
-	backups = catalog_get_backup_list(instance_name, INVALID_BACKUP_ID);
+	backups = catalog_get_backup_list(instanceState->instance_name, INVALID_BACKUP_ID);
 
 	/* Examine backups one by one and validate them */
 	for (i = 0; i < parray_num(backups); i++)
@@ -512,7 +524,7 @@ do_validate_instance(void)
 				if (current_backup->status == BACKUP_STATUS_OK ||
 					current_backup->status == BACKUP_STATUS_DONE)
 				{
-					write_backup_status(current_backup, BACKUP_STATUS_ORPHAN, instance_name, true);
+					write_backup_status(current_backup, BACKUP_STATUS_ORPHAN, true);
 					elog(WARNING, "Backup %s is orphaned because his parent %s is missing",
 							base36enc(current_backup->start_time),
 							parent_backup_id);
@@ -536,7 +548,7 @@ do_validate_instance(void)
 					if (current_backup->status == BACKUP_STATUS_OK ||
 						current_backup->status == BACKUP_STATUS_DONE)
 					{
-						write_backup_status(current_backup, BACKUP_STATUS_ORPHAN, instance_name, true);
+						write_backup_status(current_backup, BACKUP_STATUS_ORPHAN, true);
 						elog(WARNING, "Backup %s is orphaned because his parent %s has status: %s",
 								base36enc(current_backup->start_time), backup_id,
 								status2str(tmp_backup->status));
@@ -609,7 +621,7 @@ do_validate_instance(void)
 					if (backup->status == BACKUP_STATUS_OK ||
 						backup->status == BACKUP_STATUS_DONE)
 					{
-						write_backup_status(backup, BACKUP_STATUS_ORPHAN, instance_name, true);
+						write_backup_status(backup, BACKUP_STATUS_ORPHAN, true);
 
 						elog(WARNING, "Backup %s is orphaned because his parent %s has status: %s",
 							 base36enc(backup->start_time),

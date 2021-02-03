@@ -47,7 +47,7 @@ static void backup_cleanup(bool fatal, void *userdata);
 
 static void *backup_files(void *arg);
 
-static void do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool backup_logs);
+static void do_backup_pg(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool backup_logs);
 
 static void pg_start_backup(const char *label, bool smooth, pgBackup *backup,
 							PGNodeInfo *nodeInfo, PGconn *conn);
@@ -92,7 +92,7 @@ backup_stopbackup_callback(bool fatal, void *userdata)
  * Move files from 'pgdata' to a subdirectory in backup catalog.
  */
 static void
-do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool backup_logs)
+do_backup_pg(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool backup_logs)
 {
 	int			i;
 	char		external_prefix[MAXPGPATH]; /* Temp value. Used as template */
@@ -724,7 +724,7 @@ pgdata_basic_setup(ConnectionOptions conn_opt, PGNodeInfo *nodeInfo)
  * Entry point of pg_probackup BACKUP subcommand.
  */
 int
-do_backup(pgSetBackupParams *set_backup_params,
+do_backup(InstanceState *instanceState, pgSetBackupParams *set_backup_params,
 		  bool no_validate, bool no_sync, bool backup_logs)
 {
 	PGconn		*backup_conn = NULL;
@@ -740,7 +740,7 @@ do_backup(pgSetBackupParams *set_backup_params,
 		current.external_dir_str = instance_config.external_dir_str;
 
 	/* Create backup directory and BACKUP_CONTROL_FILE */
-	pgBackupCreateDir(&current, backup_instance_path);
+	pgBackupCreateDir(&current, instanceState->instance_backup_subdir_path);
 
 	if (!instance_config.pgdata)
 		elog(ERROR, "required parameter not specified: PGDATA "
@@ -758,7 +758,7 @@ do_backup(pgSetBackupParams *set_backup_params,
 
 	elog(INFO, "Backup start, pg_probackup version: %s, instance: %s, backup ID: %s, backup mode: %s, "
 			"wal mode: %s, remote: %s, compress-algorithm: %s, compress-level: %i",
-			PROGRAM_VERSION, instance_name, base36enc(current.backup_id), pgBackupGetBackupMode(&current, false),
+			PROGRAM_VERSION, instanceState->instance_name, base36enc(current.backup_id), pgBackupGetBackupMode(&current, false),
 			current.stream ? "STREAM" : "ARCHIVE", IsSshProtocol()  ? "true" : "false",
 			deparse_compress_alg(current.compress_alg), current.compress_level);
 
@@ -824,7 +824,7 @@ do_backup(pgSetBackupParams *set_backup_params,
 		add_note(&current, set_backup_params->note);
 
 	/* backup data */
-	do_backup_instance(backup_conn, &nodeInfo, no_sync, backup_logs);
+	do_backup_pg(backup_conn, &nodeInfo, no_sync, backup_logs);
 	pgut_atexit_pop(backup_cleanup, NULL);
 
 	/* compute size of wal files of this backup stored in the archive */
@@ -879,7 +879,7 @@ do_backup(pgSetBackupParams *set_backup_params,
 	 * which are expired according to retention policies
 	 */
 	if (delete_expired || merge_expired || delete_wal)
-		do_retention();
+		do_retention(instanceState);
 
 	return 0;
 }

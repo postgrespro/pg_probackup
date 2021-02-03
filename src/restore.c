@@ -94,7 +94,7 @@ set_orphan_status(parray *backups, pgBackup *parent_backup)
 			if (backup->status == BACKUP_STATUS_OK ||
 				backup->status == BACKUP_STATUS_DONE)
 			{
-				write_backup_status(backup, BACKUP_STATUS_ORPHAN, instance_name, true);
+				write_backup_status(backup, BACKUP_STATUS_ORPHAN, true);
 
 				elog(WARNING,
 					"Backup %s is orphaned because his parent %s has status: %s",
@@ -117,7 +117,7 @@ set_orphan_status(parray *backups, pgBackup *parent_backup)
  * Entry point of pg_probackup RESTORE and VALIDATE subcommands.
  */
 int
-do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
+do_restore_or_validate(InstanceState *instanceState, time_t target_backup_id, pgRecoveryTarget *rt,
 					   pgRestoreParams *params, bool no_sync)
 {
 	int			i = 0;
@@ -136,7 +136,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 	bool        backup_has_tblspc = true; /* backup contain tablespace */
 	XLogRecPtr  shift_lsn = InvalidXLogRecPtr;
 
-	if (instance_name == NULL)
+	if (instanceState == NULL)
 		elog(ERROR, "required parameter not specified: --instance");
 
 	if (params->is_restore)
@@ -216,7 +216,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 	elog(LOG, "%s begin.", action);
 
 	/* Get list of all backups sorted in order of descending start time */
-	backups = catalog_get_backup_list(instance_name, INVALID_BACKUP_ID);
+	backups = catalog_get_backup_list(instanceState->instance_name, INVALID_BACKUP_ID);
 
 	/* Find backup range we should restore or validate. */
 	while ((i < parray_num(backups)) && !dest_backup)
@@ -364,7 +364,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 					if (backup->status == BACKUP_STATUS_OK ||
 						backup->status == BACKUP_STATUS_DONE)
 					{
-						write_backup_status(backup, BACKUP_STATUS_ORPHAN, instance_name, true);
+						write_backup_status(backup, BACKUP_STATUS_ORPHAN, true);
 
 						elog(WARNING, "Backup %s is orphaned because his parent %s is missing",
 								base36enc(backup->start_time), missing_backup_id);

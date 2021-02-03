@@ -29,7 +29,7 @@ static bool backup_merged = false;    /* At least one merge was enacted */
 static bool wal_deleted = false;      /* At least one WAL segments was deleted */
 
 void
-do_delete(time_t backup_id)
+do_delete(InstanceState *instanceState, time_t backup_id)
 {
 	int			i;
 	parray	   *backup_list,
@@ -39,7 +39,7 @@ do_delete(time_t backup_id)
 	char		size_to_delete_pretty[20];
 
 	/* Get complete list of backups */
-	backup_list = catalog_get_backup_list(instance_name, INVALID_BACKUP_ID);
+	backup_list = catalog_get_backup_list(instanceState->instance_name, INVALID_BACKUP_ID);
 
 	delete_list = parray_new();
 
@@ -123,7 +123,7 @@ do_delete(time_t backup_id)
  * which FULL backup should be keeped for redundancy obligation(only valid do),
  * but if invalid backup is not guarded by retention - it is removed
  */
-void do_retention(void)
+void do_retention(InstanceState *instanceState)
 {
 	parray	   *backup_list = NULL;
 	parray	   *to_keep_list = parray_new();
@@ -139,7 +139,7 @@ void do_retention(void)
 	MyLocation = FIO_LOCAL_HOST;
 
 	/* Get a complete list of backups. */
-	backup_list = catalog_get_backup_list(instance_name, INVALID_BACKUP_ID);
+	backup_list = catalog_get_backup_list(instanceState->instance_name, INVALID_BACKUP_ID);
 
 	if (parray_num(backup_list) == 0)
 		backup_list_is_empty = true;
@@ -750,7 +750,7 @@ delete_backup_files(pgBackup *backup)
 	 * Update STATUS to BACKUP_STATUS_DELETING in preparation for the case which
 	 * the error occurs before deleting all backup files.
 	 */
-	write_backup_status(backup, BACKUP_STATUS_DELETING, instance_name, false);
+	write_backup_status(backup, BACKUP_STATUS_DELETING, false);
 
 	/* list files to be deleted */
 	files = parray_new();
@@ -966,7 +966,7 @@ delete_walfiles_in_tli(XLogRecPtr keep_lsn, timelineInfo *tlinfo,
 
 /* Delete all backup files and wal files of given instance. */
 int
-do_delete_instance(void)
+do_delete_instance(InstanceState *instanceState)
 {
 	parray		*backup_list;
 	int 		i;
@@ -974,7 +974,7 @@ do_delete_instance(void)
 
 
 	/* Delete all backups. */
-	backup_list = catalog_get_backup_list(instance_name, INVALID_BACKUP_ID);
+	backup_list = catalog_get_backup_list(instanceState->instance_name, INVALID_BACKUP_ID);
 
 	catalog_lock_backup_list(backup_list, 0, parray_num(backup_list) - 1, true, true);
 
@@ -1008,7 +1008,7 @@ do_delete_instance(void)
 		elog(ERROR, "Can't remove \"%s\": %s", arclog_path,
 			strerror(errno));
 
-	elog(INFO, "Instance '%s' successfully deleted", instance_name);
+	elog(INFO, "Instance '%s' successfully deleted", instanceState->instance_name);
 	return 0;
 }
 

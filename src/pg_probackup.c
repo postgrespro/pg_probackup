@@ -809,7 +809,7 @@ main(int argc, char *argv[])
 		case ADD_INSTANCE_CMD:
 			return do_add_instance(instanceState, &instance_config);
 		case DELETE_INSTANCE_CMD:
-			return do_delete_instance();
+			return do_delete_instance(instanceState);
 		case INIT_CMD:
 			return do_init(catalogState);
 		case BACKUP_CMD:
@@ -821,10 +821,11 @@ main(int argc, char *argv[])
 					elog(ERROR, "required parameter not specified: BACKUP_MODE "
 						 "(-b, --backup-mode)");
 
-				return do_backup(set_backup_params, no_validate, no_sync, backup_logs);
+				return do_backup(instanceState, set_backup_params,
+								 no_validate, no_sync, backup_logs);
 			}
 		case RESTORE_CMD:
-			return do_restore_or_validate(current.backup_id,
+			return do_restore_or_validate(instanceState, current.backup_id,
 							recovery_target_options,
 							restore_params, no_sync);
 		case VALIDATE_CMD:
@@ -834,11 +835,11 @@ main(int argc, char *argv[])
 				if (datname_exclude_list || datname_include_list)
 					elog(ERROR, "You must specify parameter (-i, --backup-id) for partial validation");
 
-				return do_validate_all(backup_path);
+				return do_validate_all(catalogState, instanceState);
 			}
 			else
 				/* PITR validation and, optionally, partial validation */
-				return do_restore_or_validate(current.backup_id,
+				return do_restore_or_validate(instanceState, current.backup_id,
 						  recovery_target_options,
 						  restore_params,
 						  no_sync);
@@ -859,13 +860,13 @@ main(int argc, char *argv[])
 				if (delete_status)
 					do_delete_status(&instance_config, delete_status);
 				else
-					do_retention();
+					do_retention(instanceState);
 			}
 			else
-					do_delete(current.backup_id);
+					do_delete(instanceState, current.backup_id);
 			break;
 		case MERGE_CMD:
-			do_merge(current.backup_id);
+			do_merge(instanceState, current.backup_id);
 			break;
 		case SHOW_CONFIG_CMD:
 			do_show_config();

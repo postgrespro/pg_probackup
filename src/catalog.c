@@ -112,7 +112,7 @@ read_backup(const char *root_dir)
  */
 void
 write_backup_status(pgBackup *backup, BackupStatus status,
-					const char *instance_name, bool strict)
+					bool strict)
 {
 	pgBackup   *tmp;
 

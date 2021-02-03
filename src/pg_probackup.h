@@ -49,6 +49,9 @@
 #include <pthread.h>
 #endif
 
+/* Wrap the code that we're going to delete after refactoring in this define*/
+#define REFACTORE_ME
+
 /* pgut client variables and full path */
 extern const char  *PROGRAM_NAME;
 extern const char  *PROGRAM_NAME_FULL;
@@ -808,7 +811,7 @@ extern pgBackup current;
 extern char** commands_args;
 
 /* in backup.c */
-extern int do_backup(pgSetBackupParams *set_backup_params,
+extern int do_backup(InstanceState *instanceState, pgSetBackupParams *set_backup_params,
 					 bool no_validate, bool no_sync, bool backup_logs);
 extern void do_checkdb(bool need_amcheck, ConnectionOptions conn_opt,
 				  char *pgdata);
@@ -822,7 +825,8 @@ extern char *pg_ptrack_get_block(ConnectionArgs *arguments,
 								 BlockNumber blknum, size_t *result_size,
 								 int ptrack_version_num, const char *ptrack_schema);
 /* in restore.c */
-extern int do_restore_or_validate(time_t target_backup_id,
+extern int do_restore_or_validate(InstanceState *instanceState,
+					  time_t target_backup_id,
 					  pgRecoveryTarget *rt,
 					  pgRestoreParams *params,
 					  bool no_sync);
@@ -843,7 +847,7 @@ extern parray *read_timeline_history(const char *arclog_path, TimeLineID targetT
 extern bool tliIsPartOfHistory(const parray *timelines, TimeLineID tli);
 
 /* in merge.c */
-extern void do_merge(time_t backup_id);
+extern void do_merge(InstanceState *instanceState, time_t backup_id);
 extern void merge_backups(pgBackup *backup, pgBackup *next_backup);
 extern void merge_chain(parray *parent_chain,
 						pgBackup *full_backup, pgBackup *dest_backup);
@@ -872,10 +876,10 @@ extern int do_show(char *backup_catalog_path, const char *instance_name,
 				   time_t requested_backup_id, bool show_archive);
 
 /* in delete.c */
-extern void do_delete(time_t backup_id);
+extern void do_delete(InstanceState *instanceState, time_t backup_id);
 extern void delete_backup_files(pgBackup *backup);
-extern void do_retention(void);
-extern int do_delete_instance(void);
+extern void do_retention(InstanceState *instanceState);
+extern int do_delete_instance(InstanceState *instanceState);
 extern void do_delete_status(InstanceConfig *instance_config, const char *status);
 
 /* in fetch.c */
@@ -893,7 +897,7 @@ extern void help_command(ProbackupSubcmd const subcmd);
 
 /* in validate.c */
 extern void pgBackupValidate(pgBackup* backup, pgRestoreParams *params);
-extern int do_validate_all(char *backup_catalog_path);
+extern int do_validate_all(CatalogState *catalogState, InstanceState *instanceState);
 extern int validate_one_page(Page page, BlockNumber absolute_blkno,
 							 XLogRecPtr stop_lsn, PageState *page_st,
 							 uint32 checksum_version);
@@ -912,7 +916,7 @@ extern bool validate_tablespace_map(pgBackup *backup);
 extern pgBackup *read_backup(const char *root_dir);
 extern void write_backup(pgBackup *backup, bool strict);
 extern void write_backup_status(pgBackup *backup, BackupStatus status,
-								const char *instance_name, bool strict);
+								bool strict);
 extern void write_backup_data_bytes(pgBackup *backup);
 extern bool lock_backup(pgBackup *backup, bool strict, bool exclusive);
 
