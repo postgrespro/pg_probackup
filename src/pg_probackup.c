@@ -64,11 +64,6 @@ const char  *PROGRAM_EMAIL = "https://github.com/postgrespro/pg_probackup/issues
 /* directory options */
 /* TODO make it local variable, pass as an argument to all commands that need it.  */
 static char	   *backup_path = NULL;
-/*
- * path or to the data files in the backup catalog
- * $BACKUP_PATH/backups/instance_name
- */
-static char		backup_instance_path[MAXPGPATH];
 
 static CatalogState *catalogState = NULL;
 /* ================ catalogState (END) =========== */
@@ -499,14 +494,6 @@ main(int argc, char *argv[])
 	if ((backup_path != NULL) && instance_name)
 	{
 		/*
-		 * Fill global variables used to generate pathes inside the instance's
-		 * backup catalog.
-		 * TODO replace global variables with InstanceConfig structure fields
-		 */
-		sprintf(backup_instance_path, "%s/%s/%s",
-				backup_path, BACKUPS_DIR, instance_name);
-
-		/*
 		 * Fill InstanceConfig structure fields used to generate pathes inside
 		 * the instance's backup catalog.
 		 * TODO continue refactoring to use these fields instead of global vars
@@ -530,10 +517,11 @@ main(int argc, char *argv[])
 		{
 			struct stat st;
 
-			if (fio_stat(backup_instance_path, &st, true, FIO_BACKUP_HOST) != 0)
+			if (fio_stat(instanceState->instance_backup_subdir_path,
+						 &st, true, FIO_BACKUP_HOST) != 0)
 			{
 				elog(WARNING, "Failed to access directory \"%s\": %s",
-					backup_instance_path, strerror(errno));
+					instanceState->instance_backup_subdir_path, strerror(errno));
 
 				// TODO: redundant message, should we get rid of it?
 				elog(ERROR, "Instance '%s' does not exist in this backup catalog",
@@ -555,7 +543,6 @@ main(int argc, char *argv[])
 	 */
 	if (instance_name)
 	{
-		char		path[MAXPGPATH];
 		/* Read environment variables */
 		config_get_opt_env(instance_options);
 
@@ -563,13 +550,10 @@ main(int argc, char *argv[])
 		if (backup_subcmd != ADD_INSTANCE_CMD &&
 			backup_subcmd != ARCHIVE_GET_CMD)
 		{
-			join_path_components(path, backup_instance_path,
-								 BACKUP_CATALOG_CONF_FILE);
-
 			if (backup_subcmd == CHECKDB_CMD)
-				config_read_opt(path, instance_options, ERROR, true, true);
+				config_read_opt(instanceState->instance_config_path, instance_options, ERROR, true, true);
 			else
-				config_read_opt(path, instance_options, ERROR, true, false);
+				config_read_opt(instanceState->instance_config_path, instance_options, ERROR, true, false);
 
 			/*
 			 * We can determine our location only after reading the configuration file,
