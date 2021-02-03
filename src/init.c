@@ -17,42 +17,37 @@
  * Initialize backup catalog.
  */
 int
-do_init(char *backup_catalog_path)
+do_init(CatalogState *catalogState)
 {
-	char		path[MAXPGPATH];
-	char		arclog_path_dir[MAXPGPATH];
 	int			results;
 
-	results = pg_check_dir(backup_catalog_path);
+	results = pg_check_dir(catalogState->catalog_path);
+
 	if (results == 4)	/* exists and not empty*/
 		elog(ERROR, "backup catalog already exist and it's not empty");
 	else if (results == -1) /*trouble accessing directory*/
 	{
 		int errno_tmp = errno;
 		elog(ERROR, "cannot open backup catalog directory \"%s\": %s",
-			backup_catalog_path, strerror(errno_tmp));
+			catalogState->catalog_path, strerror(errno_tmp));
 	}
 
 	/* create backup catalog root directory */
-	dir_create_dir(backup_catalog_path, DIR_PERMISSION, false);
+	dir_create_dir(catalogState->catalog_path, DIR_PERMISSION, false);
 
 	/* create backup catalog data directory */
-	join_path_components(path, backup_catalog_path, BACKUPS_DIR);
-	dir_create_dir(path, DIR_PERMISSION, false);
+	dir_create_dir(catalogState->backup_subdir_path, DIR_PERMISSION, false);
 
 	/* create backup catalog wal directory */
-	join_path_components(arclog_path_dir, backup_catalog_path, "wal");
-	dir_create_dir(arclog_path_dir, DIR_PERMISSION, false);
+	dir_create_dir(catalogState->wal_subdir_path, DIR_PERMISSION, false);
 
-	elog(INFO, "Backup catalog '%s' successfully inited", backup_catalog_path);
+	elog(INFO, "Backup catalog '%s' successfully inited", catalogState->catalog_path);
 	return 0;
 }
 
 int
-do_add_instance(char *backup_catalog_path, InstanceConfig *instance)
+do_add_instance(CatalogState *catalogState, InstanceConfig *instance)
 {
-	char		path[MAXPGPATH];
-	char		arclog_path_dir[MAXPGPATH];
 	struct stat st;
 
 	/* PGDATA is always required */
@@ -66,16 +61,15 @@ do_add_instance(char *backup_catalog_path, InstanceConfig *instance)
 	instance->xlog_seg_size = get_xlog_seg_size(instance->pgdata);
 
 	/* Ensure that all root directories already exist */
-	if (access(backup_catalog_path, F_OK) != 0)
-		elog(ERROR, "Directory does not exist: '%s'", backup_catalog_path);
+	/* TODO maybe call do_init() here instead of error?*/
+	if (access(catalogState->catalog_path, F_OK) != 0)
+		elog(ERROR, "Directory does not exist: '%s'", catalogState->catalog_path);
 
-	join_path_components(path, backup_catalog_path, BACKUPS_DIR);
-	if (access(path, F_OK) != 0)
-		elog(ERROR, "Directory does not exist: '%s'", path);
+	if (access(catalogState->backup_subdir_path, F_OK) != 0)
+		elog(ERROR, "Directory does not exist: '%s'", catalogState->backup_subdir_path);
 
-	join_path_components(arclog_path_dir, backup_catalog_path, "wal");
-	if (access(arclog_path_dir, F_OK) != 0)
-		elog(ERROR, "Directory does not exist: '%s'", arclog_path_dir);
+	if (access(catalogState->wal_subdir_path, F_OK) != 0)
+		elog(ERROR, "Directory does not exist: '%s'", catalogState->wal_subdir_path);
 
 	if (stat(instance->backup_instance_path, &st) == 0 && S_ISDIR(st.st_mode))
 		elog(ERROR, "Instance '%s' backup directory already exists: '%s'",

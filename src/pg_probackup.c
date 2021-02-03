@@ -71,9 +71,9 @@ char		backup_instance_path[MAXPGPATH];
  */
 char		arclog_path[MAXPGPATH] = "";
 
+
+static CatalogState *catalogState = NULL;
 /* ================ catalogState (END) =========== */
-
-
 
 /* colon separated external directories list ("/path1:/path2") */
 char	   *externaldir = NULL;
@@ -424,6 +424,7 @@ main(int argc, char *argv[])
 	/* set location based on cmdline options only */
 	setMyLocation(backup_subcmd);
 
+	/* ===== catalogState ======*/
 	if (backup_path == NULL)
 	{
 		/*
@@ -440,10 +441,23 @@ main(int argc, char *argv[])
 		/* Ensure that backup_path is an absolute path */
 		if (!is_absolute_path(backup_path))
 			elog(ERROR, "-B, --backup-path must be an absolute path");
+
+		catalogState = pgut_new(CatalogState);
+		strncpy(catalogState->catalog_path, backup_path, MAXPGPATH);
+		join_path_components(catalogState->backup_subdir_path,
+							catalogState->catalog_path, BACKUPS_DIR);
+		join_path_components(catalogState->wal_subdir_path,
+							catalogState->catalog_path, WAL_SUBDIR);
 	}
+
 	/* backup_path is required for all pg_probackup commands except help, version and checkdb */
-	if (backup_path == NULL && backup_subcmd != CHECKDB_CMD && backup_subcmd != HELP_CMD && backup_subcmd != VERSION_CMD)
+	if (backup_path == NULL &&
+		backup_subcmd != CHECKDB_CMD &&
+		backup_subcmd != HELP_CMD &&
+		backup_subcmd != VERSION_CMD)
 		elog(ERROR, "required parameter not specified: BACKUP_PATH (-B, --backup-path)");
+
+	/* ===== catalogState (END) ======*/
 
 	/*
 	 * Option --instance is required for all commands except
@@ -772,11 +786,11 @@ main(int argc, char *argv[])
 						   wal_file_path, wal_file_name, batch_size, !no_validate_wal);
 			break;
 		case ADD_INSTANCE_CMD:
-			return do_add_instance(backup_path, &instance_config);
+			return do_add_instance(catalogState, &instance_config);
 		case DELETE_INSTANCE_CMD:
 			return do_delete_instance();
 		case INIT_CMD:
-			return do_init(backup_path);
+			return do_init(catalogState);
 		case BACKUP_CMD:
 			{
 				current.stream = stream_wal;

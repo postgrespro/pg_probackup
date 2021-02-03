@@ -55,6 +55,7 @@ extern const char  *PROGRAM_EMAIL;
 /* Directory/File names */
 #define DATABASE_DIR			"database"
 #define BACKUPS_DIR				"backups"
+#define WAL_SUBDIR				"wal"
 #if PG_VERSION_NUM >= 100000
 #define PG_XLOG_DIR				"pg_wal"
 #define PG_LOG_DIR 				"log"
@@ -128,6 +129,7 @@ extern const char  *PROGRAM_EMAIL;
 #define TC_CYAN "\033[0;36m"
 #define TC_CYAN_BOLD "\033[1;36m"
 #define TC_RESET "\033[0m"
+
 
 typedef struct RedoParams
 {
@@ -746,10 +748,24 @@ typedef struct BackupPageHeader2
 
 #define IsSshProtocol() (instance_config.remote.host && strcmp(instance_config.remote.proto, "ssh") == 0)
 
+/* ====== CatalogState ======= */
+
 /* directory options */
 extern char	   *backup_path;
 extern char		backup_instance_path[MAXPGPATH];
 extern char		arclog_path[MAXPGPATH];
+
+typedef struct CatalogState
+{
+	/* $BACKUP_PATH */
+	char		catalog_path[MAXPGPATH]; //previously global var backup_path
+	/* $BACKUP_PATH/backups */
+	char		backup_subdir_path[MAXPGPATH];
+	/* $BACKUP_PATH/wal */
+	char		wal_subdir_path[MAXPGPATH]; // previously global var arclog_path
+} CatalogState; 
+
+/* ====== CatalogState (END) ======= */
 
 /* common options */
 extern pid_t    my_pid;
@@ -839,8 +855,8 @@ extern void merge_chain(parray *parent_chain,
 extern parray *read_database_map(pgBackup *backup);
 
 /* in init.c */
-extern int do_init(char *backup_catalog_path);
-extern int do_add_instance(char *backup_catalog_path, InstanceConfig *instance);
+extern int do_init(CatalogState *catalogState);
+extern int do_add_instance(CatalogState *catalogState, InstanceConfig *instance);
 
 /* in archive.c */
 extern void do_archive_push(InstanceConfig *instance, char *wal_file_path,
