@@ -142,6 +142,9 @@ static bool 		compress_shortcut = false;
 
 /* ================ instanceState =========== */
 char	   *instance_name;
+
+static InstanceState *instanceState = NULL;
+
 /* ================ instanceState (END) =========== */
 
 /* archive push options */
@@ -292,6 +295,7 @@ main(int argc, char *argv[])
 	pgBackupInit(&current);
 
 	/* Initialize current instance configuration */
+	//TODO get git of this global variable craziness
 	init_config(&instance_config, instance_name);
 
 	PROGRAM_NAME = get_progname(argv[0]);
@@ -459,6 +463,8 @@ main(int argc, char *argv[])
 
 	/* ===== catalogState (END) ======*/
 
+	/* ===== instanceState ======*/
+
 	/*
 	 * Option --instance is required for all commands except
 	 * init, show, checkdb and validate
@@ -470,8 +476,20 @@ main(int argc, char *argv[])
 			elog(ERROR, "required parameter not specified: --instance");
 	}
 	else
+	{
 		/* Set instance name */
 		instance_config.name = pgut_strdup(instance_name);
+
+		instanceState = pgut_new(InstanceState);
+		instanceState->catalog_state = catalogState;
+
+		strncpy(instanceState->instance_name, instance_name, MAXPGPATH);
+		join_path_components(instanceState->instance_backup_subdir_path,
+							catalogState->backup_subdir_path, instance_name);
+		join_path_components(instanceState->instance_wal_subdir_path,
+							catalogState->wal_subdir_path, instance_name);
+	}
+	/* ===== instanceState (END) ======*/
 
 	/*
 	 * If --instance option was passed, construct paths for backup data and
@@ -786,7 +804,7 @@ main(int argc, char *argv[])
 						   wal_file_path, wal_file_name, batch_size, !no_validate_wal);
 			break;
 		case ADD_INSTANCE_CMD:
-			return do_add_instance(catalogState, &instance_config);
+			return do_add_instance(instanceState, &instance_config);
 		case DELETE_INSTANCE_CMD:
 			return do_delete_instance();
 		case INIT_CMD:

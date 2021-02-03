@@ -46,9 +46,10 @@ do_init(CatalogState *catalogState)
 }
 
 int
-do_add_instance(CatalogState *catalogState, InstanceConfig *instance)
+do_add_instance(InstanceState *instanceState, InstanceConfig *instance)
 {
 	struct stat st;
+	CatalogState *catalogState = instanceState->catalog_state;
 
 	/* PGDATA is always required */
 	if (instance->pgdata == NULL)
@@ -71,22 +72,22 @@ do_add_instance(CatalogState *catalogState, InstanceConfig *instance)
 	if (access(catalogState->wal_subdir_path, F_OK) != 0)
 		elog(ERROR, "Directory does not exist: '%s'", catalogState->wal_subdir_path);
 
-	if (stat(instance->backup_instance_path, &st) == 0 && S_ISDIR(st.st_mode))
+	if (stat(instanceState->instance_backup_subdir_path, &st) == 0 && S_ISDIR(st.st_mode))
 		elog(ERROR, "Instance '%s' backup directory already exists: '%s'",
-			instance->name, instance->backup_instance_path);
+			instanceState->instance_name, instanceState->instance_backup_subdir_path);
 
 	/*
 	 * Create directory for wal files of this specific instance.
 	 * Existence check is extra paranoid because if we don't have such a
 	 * directory in data dir, we shouldn't have it in wal as well.
 	 */
-	if (stat(instance->arclog_path, &st) == 0 && S_ISDIR(st.st_mode))
+	if (stat(instanceState->instance_wal_subdir_path, &st) == 0 && S_ISDIR(st.st_mode))
 		elog(ERROR, "Instance '%s' WAL archive directory already exists: '%s'",
-				instance->name, instance->arclog_path);
+				instanceState->instance_name, instanceState->instance_wal_subdir_path);
 
 	/* Create directory for data files of this specific instance */
-	dir_create_dir(instance->backup_instance_path, DIR_PERMISSION, false);
-	dir_create_dir(instance->arclog_path, DIR_PERMISSION, false);
+	dir_create_dir(instanceState->instance_backup_subdir_path, DIR_PERMISSION, false);
+	dir_create_dir(instanceState->instance_wal_subdir_path, DIR_PERMISSION, false);
 
 	/*
 	 * Write initial configuration file.

@@ -795,8 +795,23 @@ extern bool		delete_expired;
 extern bool		merge_expired;
 extern bool		dry_run;
 
-/* other options */
+/* ===== instanceState ===== */
 extern char *instance_name;
+typedef struct InstanceState
+{
+	/* catalog, this instance belongs to */
+	CatalogState *catalog_state;
+
+	char		instance_name[MAXPGPATH]; //previously global var instance_name
+	/* $BACKUP_PATH/backups/instance_name */
+	char		instance_backup_subdir_path[MAXPGPATH];
+	/* $BACKUP_PATH/backups/instance_name */
+	char		instance_wal_subdir_path[MAXPGPATH]; // previously global var arclog_path
+
+	//TODO add config here
+} InstanceState;
+
+/* ===== instanceState (END) ===== */
 
 /* show options */
 extern ShowFormat show_format;
@@ -856,7 +871,7 @@ extern parray *read_database_map(pgBackup *backup);
 
 /* in init.c */
 extern int do_init(CatalogState *catalogState);
-extern int do_add_instance(CatalogState *catalogState, InstanceConfig *instance);
+extern int do_add_instance(InstanceState *instanceState, InstanceConfig *instance);
 
 /* in archive.c */
 extern void do_archive_push(InstanceConfig *instance, char *wal_file_path,
