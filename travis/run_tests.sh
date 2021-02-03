@@ -62,7 +62,10 @@ make USE_PGXS=1 top_srcdir=$PG_SRC install
 echo "############### Setting up python env:"
 python2 -m virtualenv pyenv
 source pyenv/bin/activate
-pip install testgres==1.8.2
+pip install testgres
+
+echo "############### WHOAMI"
+whoami
 
 echo "############### Testing:"
 if [ "$MODE" = "basic" ]; then
