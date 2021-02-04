@@ -3,7 +3,7 @@
 #
 # Copyright (c) 2019-2020, Postgres Professional
 #
-
+set -xe
 
 PG_SRC=$PWD/postgres
 
@@ -76,7 +76,8 @@ elif [ "$MODE" = "remote" ]; then
     sudo mkdir /run/sshd
     sudo /usr/sbin/sshd -D &
     cat /home/postgres/.ssh/id_rsa.pub > /home/postgres/.ssh/authorized_keys
-    ssh-keyscan  localhost >> ~/.ssh/known_hosts
+    ssh-keyscan localhost >> ~/.ssh/known_hosts
+    ssh-keyscan 127.0.0.1 >> ~/.ssh/known_hosts
 
     export PG_PROBACKUP_TEST_BASIC=ON
     export PGPROBACKUP_SSH_REMOTE=ON
