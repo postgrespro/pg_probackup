@@ -371,7 +371,7 @@ typedef struct InstanceConfig
 	ConnectionOptions conn_opt;
 	ConnectionOptions master_conn_opt;
 
-	uint32		replica_timeout;
+	uint32		replica_timeout; //Deprecated. Not used anywhere
 
 	/* Wait timeout for WAL segment archiving */
 	uint32		archive_timeout;

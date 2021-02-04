@@ -589,16 +589,6 @@ readInstanceConfigFile(InstanceState *instanceState)
 
 	init_config(instance, instanceState->instance_name);
 
-#ifdef REFACTORE_ME
-	sprintf(instanceState->instance_backup_subdir_path, "%s/%s/%s",
-			instanceState->catalog_state->catalog_path, BACKUPS_DIR, instanceState->instance_name);
-	canonicalize_path(instanceState->instance_backup_subdir_path);
-
-	sprintf(instanceState->instance_wal_subdir_path, "%s/%s/%s",
-			instanceState->catalog_state->catalog_path, "wal", instanceState->instance_name);
-	canonicalize_path(instanceState->instance_wal_subdir_path);
-#endif
-
 	if (fio_access(instanceState->instance_config_path, F_OK, FIO_BACKUP_HOST) != 0)
 	{
 		elog(WARNING, "Control file \"%s\" doesn't exist", instanceState->instance_config_path);
@@ -632,7 +622,6 @@ readInstanceConfigFile(InstanceState *instanceState)
 #endif
 
 	return instance;
-
 }
 
 static void

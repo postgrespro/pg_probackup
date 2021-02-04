@@ -726,7 +726,6 @@ catalog_get_instance_list(CatalogState *catalogState)
 			continue;
 
 		instanceState = pgut_new(InstanceState);
-		instanceState->config = readInstanceConfigFile(instanceState);
 
 		strncpy(instanceState->instance_name, dent->d_name, MAXPGPATH);
 		join_path_components(instanceState->instance_backup_subdir_path,
@@ -735,6 +734,8 @@ catalog_get_instance_list(CatalogState *catalogState)
 							catalogState->wal_subdir_path, instanceState->instance_name);
 		join_path_components(instanceState->instance_config_path,
 							 instanceState->instance_backup_subdir_path, BACKUP_CATALOG_CONF_FILE);
+
+		instanceState->config = readInstanceConfigFile(instanceState);
 		parray_append(instances, instanceState);
 	}
 
