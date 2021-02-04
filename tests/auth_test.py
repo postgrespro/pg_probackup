@@ -34,10 +34,8 @@ class SimpleAuthTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
-            initdb_params=['--data-checksums'],
-            pg_options={
-                'max_wal_senders': '2'}
-            )
+            initdb_params=['--data-checksums'])
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -64,7 +62,15 @@ class SimpleAuthTest(ProbackupTest, unittest.TestCase):
             "GRANT EXECUTE ON FUNCTION"
             " pg_start_backup(text, boolean, boolean) TO backup;")
 
-        time.sleep(1)
+        if self.get_version(node) < 100000:
+            node.safe_psql(
+                'postgres',
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_switch_xlog() TO backup")
+        else:
+            node.safe_psql(
+                'postgres',
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_switch_wal() TO backup")
+
         try:
             self.backup_node(
                 backup_dir, 'node', node, options=['-U', 'backup'])
@@ -83,8 +89,6 @@ class SimpleAuthTest(ProbackupTest, unittest.TestCase):
             "postgres",
             "GRANT EXECUTE ON FUNCTION"
             " pg_create_restore_point(text) TO backup;")
-
-        time.sleep(1)
 
         try:
             self.backup_node(
@@ -129,50 +133,18 @@ class SimpleAuthTest(ProbackupTest, unittest.TestCase):
         node.stop()
         node.slow_start()
 
-        try:
-            self.backup_node(
-                    backup_dir, 'node', node, options=['-U', 'backup'])
-            self.assertEqual(
-                1, 0,
-                "Expecting Error due to missing grant on clearing ptrack_files.")
-        except ProbackupException as e:
-            self.assertIn(
-                "ERROR:  must be superuser or replication role to clear ptrack files\n"
-                "query was: SELECT pg_catalog.pg_ptrack_clear()", e.message,
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
-                    repr(e.message), self.cmd))
-
-        time.sleep(1)
-
-        try:
-            self.backup_node(
-                    backup_dir, 'node', node,
-                    backup_type='ptrack', options=['-U', 'backup'])
-            self.assertEqual(
-                1, 0,
-                "Expecting Error due to missing grant on clearing ptrack_files.")
-        except ProbackupException as e:
-            self.assertIn(
-                "ERROR:  must be superuser or replication role read ptrack files\n"
-                "query was: select pg_catalog.pg_ptrack_control_lsn()", e.message,
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
-                    repr(e.message), self.cmd))
-
         node.safe_psql(
                 "postgres",
                 "ALTER ROLE backup REPLICATION")
 
-        time.sleep(1)
-
         # FULL
         self.backup_node(
-                    backup_dir, 'node', node,
-                    options=['-U', 'backup'])
+            backup_dir, 'node', node, options=['-U', 'backup'])
 
         # PTRACK
-        self.backup_node(
-                    backup_dir, 'node', node,
-                    backup_type='ptrack', options=['-U', 'backup'])
+#        self.backup_node(
+#            backup_dir, 'node', node,
+#            backup_type='ptrack', options=['-U', 'backup'])
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
