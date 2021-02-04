@@ -757,7 +757,7 @@ class ProbackupTest(object):
                 return GDBobj([binary_path] + command, self.verbose)
             if asynchronous:
                 return subprocess.Popen(
-                    self.cmd,
+                    [binary_path] + command,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
                     env=env
@@ -1133,8 +1133,8 @@ class ProbackupTest(object):
             exit(1)
 
     def validate_pb(
-            self, backup_dir, instance=None,
-            backup_id=None, options=[], old_binary=False, gdb=False
+            self, backup_dir, instance=None, backup_id=None,
+            options=[], old_binary=False, gdb=False, asynchronous=False
             ):
 
         cmd_list = [
@@ -1146,11 +1146,11 @@ class ProbackupTest(object):
         if backup_id:
             cmd_list += ['-i', backup_id]
 
-        return self.run_pb(cmd_list + options, old_binary=old_binary, gdb=gdb)
+        return self.run_pb(cmd_list + options, old_binary=old_binary, gdb=gdb, asynchronous=asynchronous)
 
     def delete_pb(
-            self, backup_dir, instance,
-            backup_id=None, options=[], old_binary=False, gdb=False):
+            self, backup_dir, instance, backup_id=None,
+            options=[], old_binary=False, gdb=False, asynchronous=False):
         cmd_list = [
             'delete',
             '-B', backup_dir
@@ -1160,7 +1160,7 @@ class ProbackupTest(object):
         if backup_id:
             cmd_list += ['-i', backup_id]
 
-        return self.run_pb(cmd_list + options, old_binary=old_binary, gdb=gdb)
+        return self.run_pb(cmd_list + options, old_binary=old_binary, gdb=gdb, asynchronous=asynchronous)
 
     def delete_expired(
             self, backup_dir, instance, options=[], old_binary=False):
