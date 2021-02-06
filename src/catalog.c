@@ -199,13 +199,13 @@ lock_backup(pgBackup *backup, bool strict, bool exclusive)
 	/*
 	 * We have exclusive lock, now there are following scenarios:
 	 *
-	 * 1. If we are for exlusive lock, then we must open the RO lock file
+	 * 1. If we are for exlusive lock, then we must open the shared lock file
 	 *    and check if any of the processes listed there are still alive.
 	 *    If some processes are alive and are not going away in lock_timeout,
 	 *    then return false.
 	 *
 	 * 2. If we are here for non-exlusive lock, then write the pid
-	 *    into RO lock list and release the exclusive lock.
+	 *    into shared lock file and release the exclusive lock.
 	 */
 
 	if (exclusive)
@@ -213,35 +213,31 @@ lock_backup(pgBackup *backup, bool strict, bool exclusive)
 	else
 		rc = lock_shared(backup);
 
-	if (rc == 0)
-	{
-		if (!exclusive)
-		{
-			/* release exclusive lock */
-			unlock_exclusive(backup->root_dir);
-			goto lock_done;
-		}
-
-		/* When locking backup in lax exclusive mode,
-		 * we should wait until all RO locks owners are gone.
-		 */
-		if (!strict && enospc_detected)
-		{
-			/* We are in lax mode and EONSPC was encountered: once again try to grab exclusive lock,
-			 * because there is a chance that release of shared lock may have freed some space on filesystem,
-			 * thanks to unlinking of BACKUP_RO_LOCK_FILE.
-			 * If somebody concurrently acquired exclusive lock first, then we should give up.
-			 */
-			if (lock_exclusive(backup->root_dir, base36enc(backup->start_time), strict) == 1)
-				return false;
-
-			return true;
-		}
-	}
-	else
+	if (rc != 0)
 		return false;
 
-lock_done:
+	if (!exclusive)
+	{
+		/* release exclusive lock */
+		unlock_exclusive(backup->root_dir);
+	}
+
+	/* When locking backup in lax exclusive mode,
+	 * we should wait until all shared locks owners are gone.
+	 */
+	if (exclusive && !strict && enospc_detected)
+	{
+		/* We are in lax mode and EONSPC was encountered: once again try to grab exclusive lock,
+		 * because there is a chance that release of shared lock in wait_shared_owners may have
+		 * freed some space on filesystem, thanks to unlinking of BACKUP_RO_LOCK_FILE.
+		 * If somebody concurrently acquired exclusive lock first, then we should give up.
+		 */
+		if (lock_exclusive(backup->root_dir, base36enc(backup->start_time), strict) == 1)
+			return false;
+
+		return true;
+	}
+
 	/*
 	 * Arrange to unlocking at proc_exit.
 	 */
@@ -525,35 +521,37 @@ wait_shared_owners(pgBackup *backup)
             continue;
         }
 
-        /* wait until RO lock owners go away */
+        /* wait until shared lock owners go away */
         do
         {
             if (interrupted)
                 elog(ERROR, "Interrupted while locking backup %s",
                     base36enc(backup->start_time));
 
-            if (encoded_pid != my_pid)
+            if (encoded_pid == my_pid)
+                break;
+
+            /* check if lock owner is still alive */
+            if (kill(encoded_pid, 0) == 0)
             {
-                if (kill(encoded_pid, 0) == 0)
+                /* complain from time to time */
+                if ((ntries % LOG_FREQ) == 0)
                 {
-                    if ((ntries % LOG_FREQ) == 0)
-                    {
-                        elog(WARNING, "Process %d is using backup %s in shared mode, and is still running",
-                                encoded_pid, base36enc(backup->start_time));
+                    elog(WARNING, "Process %d is using backup %s in shared mode, and is still running",
+                            encoded_pid, base36enc(backup->start_time));
 
-                        elog(WARNING, "Waiting %u seconds on lock for backup %s", ntries,
-                                base36enc(backup->start_time));
-                    }
-
-					sleep(1);
-
-					/* try again */
-                    continue;
+                    elog(WARNING, "Waiting %u seconds on lock for backup %s", ntries,
+                            base36enc(backup->start_time));
                 }
-                else if (errno != ESRCH)
-                    elog(ERROR, "Failed to send signal 0 to a process %d: %s",
-                            encoded_pid, strerror(errno));
+
+                sleep(1);
+
+                /* try again */
+                continue;
             }
+            else if (errno != ESRCH)
+                elog(ERROR, "Failed to send signal 0 to a process %d: %s",
+                        encoded_pid, strerror(errno));
 
             /* locker is dead */
             break;
@@ -615,20 +613,20 @@ lock_shared(pgBackup *backup)
 			continue;
 		}
 
-		if (encoded_pid != my_pid)
+		if (encoded_pid == my_pid)
+			continue;
+
+		if (kill(encoded_pid, 0) == 0)
 		{
-			if (kill(encoded_pid, 0) == 0)
-			{
-				/*
-				 * Somebody is still using this backup in RO mode,
-				 * copy this pid into a new file.
-				 */
-				buffer_len += snprintf(buffer+buffer_len, 4096, "%u\n", encoded_pid);
-			}
-			else if (errno != ESRCH)
-				elog(ERROR, "Failed to send signal 0 to a process %d: %s",
-						encoded_pid, strerror(errno));
+			/*
+			 * Somebody is still using this backup in RO mode,
+			 * copy this pid into a new file.
+			 */
+			buffer_len += snprintf(buffer+buffer_len, 4096, "%u\n", encoded_pid);
 		}
+		else if (errno != ESRCH)
+			elog(ERROR, "Failed to send signal 0 to a process %d: %s",
+					encoded_pid, strerror(errno));
     }
 
 	if (fp_in)
