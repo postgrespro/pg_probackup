@@ -500,7 +500,7 @@ grab_lock:
 int
 wait_shared_owners(pgBackup *backup)
 {
-	FILE *fp = NULL;
+    FILE *fp = NULL;
     char  buffer[256];
     pid_t encoded_pid;
     int   ntries = LOCK_TIMEOUT;
@@ -512,7 +512,7 @@ wait_shared_owners(pgBackup *backup)
     if (fp == NULL && errno != ENOENT)
         elog(ERROR, "Cannot open lock file \"%s\": %s", lock_file, strerror(errno));
 
-	/* iterate over pids in lock file */
+    /* iterate over pids in lock file */
     while (fp && fgets(buffer, sizeof(buffer), fp))
     {
         encoded_pid = atoi(buffer);
@@ -558,13 +558,6 @@ wait_shared_owners(pgBackup *backup)
             break;
 
         } while (ntries--);
-
-        if (ntries <= 0)
-        {
-            elog(WARNING, "Cannot to lock backup %s in exclusive mode, because process %u owns shared lock",
-                    base36enc(backup->start_time), encoded_pid);
-            return 1;
-        }
     }
 
     if (fp && ferror(fp))
@@ -573,9 +566,17 @@ wait_shared_owners(pgBackup *backup)
     if (fp)
         fclose(fp);
 
+    /* some shared owners are still alive */
+    if (ntries <= 0)
+    {
+        elog(WARNING, "Cannot to lock backup %s in exclusive mode, because process %u owns shared lock",
+                base36enc(backup->start_time), encoded_pid);
+        return 1;
+    }
+
     /* unlink shared lock file */
     fio_unlink(lock_file, FIO_BACKUP_HOST);
-	return 0;
+    return 0;
 }
 
 /*
@@ -620,7 +621,7 @@ lock_shared(pgBackup *backup)
 		if (kill(encoded_pid, 0) == 0)
 		{
 			/*
-			 * Somebody is still using this backup in RO mode,
+			 * Somebody is still using this backup in shared mode,
 			 * copy this pid into a new file.
 			 */
 			buffer_len += snprintf(buffer+buffer_len, 4096, "%u\n", encoded_pid);
