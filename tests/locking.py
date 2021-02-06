@@ -637,7 +637,3 @@ class LockingTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
-
-# TODO:
-# test that concurrent validation and restore are not locking each other
-# check that quick exclusive lock, when taking RO-lock, is really quick

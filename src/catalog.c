@@ -239,7 +239,7 @@ lock_backup(pgBackup *backup, bool strict, bool exclusive)
 	}
 
 	/*
-	 * Arrange to unlocking at proc_exit.
+	 * Arrange the unlocking at proc_exit.
 	 */
 	if (!backup_lock_exit_hook_registered)
 	{
