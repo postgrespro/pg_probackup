@@ -247,6 +247,7 @@ lock_backup(pgBackup *backup, bool strict, bool exclusive)
 		backup_lock_exit_hook_registered = true;
 	}
 
+	/* save lock metadata for later unlocking */
 	lock = pgut_malloc(sizeof(LockInfo));
 	snprintf(lock->backup_id, 10, "%s", base36enc(backup->backup_id));
 	snprintf(lock->backup_dir, MAXPGPATH, "%s", backup->root_dir);
@@ -668,8 +669,9 @@ unlock_backup(const char *backup_dir, const char *backup_id, bool exclusive)
 		return;
 	}
 
+	/* To remove shared lock, we must briefly obtain exclusive lock, ... */
 	if (lock_exclusive(backup_dir, backup_id, false) != 0)
-		/* leave shared locks as is */
+		/* ... if it's not possible then leave shared lock */
 		return;
 
 	unlock_shared(backup_dir);
@@ -683,13 +685,10 @@ unlock_exclusive(const char *backup_dir)
 
 	join_path_components(lock_file, backup_dir, BACKUP_LOCK_FILE);
 
-	/* TODO Sanity check: read file and check that pid inside is ours */
+	/* TODO Sanity check: maybe we should check, that pid in lock file is my_pid */
 
 	/* unlink pid file */
 	fio_unlink(lock_file, FIO_BACKUP_HOST);
-//	if (fio_unlink(lock_file, FIO_BACKUP_HOST) < 0)
-//		elog(WARNING, "Could not remove exclusive lock file \"%s\": %s",
-//			 lock_file, strerror(errno));
 }
 
 void
