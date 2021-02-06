@@ -381,34 +381,32 @@ lock_exclusive(const char *root_dir, const char *backup_id, bool strict)
 		 */
 		if (encoded_pid == my_pid)
 			return 0;
+
+		if (kill(encoded_pid, 0) == 0)
+		{
+			/* complain every fifth interval */
+			if ((ntries % LOG_FREQ) == 0)
+			{
+				elog(WARNING, "Process %d is using backup %s, and is still running",
+					 encoded_pid, backup_id);
+
+				elog(WARNING, "Waiting %u seconds on exclusive lock for backup %s",
+					 ntries, backup_id);
+			}
+
+			sleep(1);
+
+			/* try again */
+			continue;
+		}
 		else
 		{
-			if (kill(encoded_pid, 0) == 0)
-			{
-				/* complain every fifth interval */
-				if ((ntries % LOG_FREQ) == 0)
-				{
-					elog(WARNING, "Process %d is using backup %s, and is still running",
-						 encoded_pid, backup_id);
-
-					elog(WARNING, "Waiting %u seconds on exclusive lock for backup %s",
-						 ntries, backup_id);
-				}
-
-				sleep(1);
-
-				/* try again */
-				continue;
-			}
+			if (errno == ESRCH)
+				elog(WARNING, "Process %d which used backup %s no longer exists",
+					 encoded_pid, backup_id);
 			else
-			{
-				if (errno == ESRCH)
-					elog(WARNING, "Process %d which used backup %s no longer exists",
-						 encoded_pid, backup_id);
-				else
-					elog(ERROR, "Failed to send signal 0 to a process %d: %s",
-						encoded_pid, strerror(errno));
-			}
+				elog(ERROR, "Failed to send signal 0 to a process %d: %s",
+					encoded_pid, strerror(errno));
 		}
 
 grab_lock:
