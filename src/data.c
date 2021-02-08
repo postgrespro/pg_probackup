@@ -711,8 +711,9 @@ backup_non_data_file(pgFile *file, pgFile *prev_file,
 	/*
 	 * If nonedata file exists in previous backup
 	 * and its mtime is less than parent backup start time ... */
-	if (prev_file && file->exists_in_prev &&
-		file->mtime <= parent_backup_time)
+	if ((pg_strcasecmp(file->name, RELMAPPER_FILENAME) != 0) &&
+		(prev_file && file->exists_in_prev &&
+		 file->mtime <= parent_backup_time))
 	{
 
 		file->crc = fio_get_crc32(from_fullpath, FIO_DB_HOST, false);
