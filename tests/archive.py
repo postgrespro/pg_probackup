@@ -1908,7 +1908,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
         output = self.show_archive(
             backup_dir, 'node', as_json=False, as_text=True,
-            options=['--log-level-console=VERBOSE'])
+            options=['--log-level-console=INFO'])
 
         self.assertNotIn('WARNING', output)
 
@@ -2181,7 +2181,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
         restore_command += ' -j 2 --batch-size=10'
 
-        print(restore_command)
+        # print(restore_command)
 
         if node.major_version >= 12:
             self.set_auto_conf(replica, {'restore_command': restore_command})
@@ -2298,7 +2298,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
                 dst_file = os.path.join(replica.data_dir, wal_dir, 'pbk_prefetch', filename)
                 shutil.copyfile(src_file, dst_file)
 
-            print(dst_file)
+            # print(dst_file)
 
         # corrupt file
         if files[-2].endswith('.gz'):
