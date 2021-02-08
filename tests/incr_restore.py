@@ -10,7 +10,6 @@ import hashlib
 import shutil
 import json
 from testgres import QueryException
-from distutils.dir_util import copy_tree
 
 
 module_name = 'incr_restore'
@@ -2452,4 +2451,3 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
 # check that MinRecPoint and BackupStartLsn are correctly used in case of --incrementa-lsn
-# incremental restore + partial restore.
