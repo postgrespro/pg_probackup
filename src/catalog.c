@@ -194,6 +194,11 @@ lock_backup(pgBackup *backup, bool strict, bool exclusive)
 		enospc_detected = true;
 		if (strict)
 			return false;
+
+		/*
+		 * If we failed to take exclusive lock due to ENOSPC,
+		 * then in lax mode treat such condition as if lock was taken.
+		 */
 	}
 
 	/*
@@ -214,7 +219,14 @@ lock_backup(pgBackup *backup, bool strict, bool exclusive)
 		rc = lock_shared(backup);
 
 	if (rc != 0)
+	{
+		/*
+		 * Failed to grab shared lock or (in case of exclusive mode) shared lock owners
+		 * are not going away in time, release exclusive lock and return in shame.
+		 */
+		unlock_exclusive(backup->root_dir);
 		return false;
+	}
 
 	if (!exclusive)
 	{
@@ -222,12 +234,9 @@ lock_backup(pgBackup *backup, bool strict, bool exclusive)
 		unlock_exclusive(backup->root_dir);
 	}
 
-	/* When locking backup in lax exclusive mode,
-	 * we should wait until all shared locks owners are gone.
-	 */
 	if (exclusive && !strict && enospc_detected)
 	{
-		/* We are in lax mode and EONSPC was encountered: once again try to grab exclusive lock,
+		/* We are in lax exclusive mode and EONSPC was encountered: once again try to grab exclusive lock,
 		 * because there is a chance that release of shared lock in wait_shared_owners may have
 		 * freed some space on filesystem, thanks to unlinking of BACKUP_RO_LOCK_FILE.
 		 * If somebody concurrently acquired exclusive lock first, then we should give up.
