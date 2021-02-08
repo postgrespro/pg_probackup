@@ -2392,7 +2392,9 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname, [node2])
 
     def test_incremental_pg_filenode_map(self):
-        """"""
+        """
+        https://github.com/postgrespro/pg_probackup/issues/320
+        """
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
@@ -2436,64 +2438,13 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
 
         node1.stop()
 
-
         # incremental restore into node1
-        self.restore_node(backup_dir, 'node', node1, options=["-I", "checksum", '--log-level-file=VERBOSE'])
+        self.restore_node(backup_dir, 'node', node1, options=["-I", "checksum"])
 
         self.set_auto_conf(node1, {'port': node1.port})
         node1.slow_start()
 
         node1.safe_psql(
-            'postgres',
-            'select 1')
-
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
-
-    def test_incr_backup_filenode_map(self):
-        """"""
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
-        node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
-            initdb_params=['--data-checksums'])
-
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
-        self.set_archiving(backup_dir, 'node', node)
-        node.slow_start()
-
-        node1 = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node1'),
-            initdb_params=['--data-checksums'])
-        node1.cleanup()
-
-        node.pgbench_init(scale=5)
-
-        # FULL backup
-        backup_id = self.backup_node(backup_dir, 'node', node)
-
-        pgbench = node.pgbench(
-            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-            options=['-T', '10', '-c', '1'])
-
-        backup_id = self.backup_node(backup_dir, 'node', node, backup_type='delta')
-
-        node.safe_psql(
-            'postgres',
-            'reindex index pg_type_oid_index')
-
-        backup_id = self.backup_node(
-            backup_dir, 'node', node, backup_type='delta', options=['--log-level-file=VERBOSE'])
-
-        # incremental restore into node1
-        node.cleanup()
-
-        self.restore_node(backup_dir, 'node', node)
-        node.slow_start()
-
-        node.safe_psql(
             'postgres',
             'select 1')
 
