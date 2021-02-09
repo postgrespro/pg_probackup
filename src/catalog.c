@@ -28,13 +28,13 @@ static time_t create_backup_dir(pgBackup *backup, const char *backup_instance_pa
 static bool backup_lock_exit_hook_registered = false;
 static parray *locks = NULL;
 
-static int lock_exclusive(const char *backup_dir, const char *backup_id, bool strict);
-static int lock_shared(pgBackup *backup);
+static int grab_excl_lock_file(const char *backup_dir, const char *backup_id, bool strict);
+static int grab_shared_lock_file(pgBackup *backup);
 static int wait_shared_owners(pgBackup *backup);
 
 static void unlock_backup(const char *backup_dir, const char *backup_id, bool exclusive);
-static void unlock_exclusive(const char *backup_dir);
-static void unlock_shared(const char *backup_dir);
+static void release_excl_lock_file(const char *backup_dir);
+static void release_shared_lock_file(const char *backup_dir);
 
 typedef struct LockInfo
 {
@@ -170,8 +170,8 @@ write_backup_status(pgBackup *backup, BackupStatus status,
  * separate lock file: BACKUP_RO_LOCK_FILE.
  * When taking shared lock, a brief exclusive lock is taken.
  *
- * -> exclusive -> acquire exclusive lock and wait until all shared are gone, return
- * -> shared    -> acquire exclusive, acquire shared, release exclusive, return
+ * -> exclusive -> grab exclusive lock file and wait until all shared lockers are gone, return
+ * -> shared    -> grab exclusive lock file, grab shared lock file, release exclusive lock file, return
  *
  * TODO: lock-timeout as parameter
  */
@@ -185,7 +185,7 @@ lock_backup(pgBackup *backup, bool strict, bool exclusive)
 
 	join_path_components(lock_file, backup->root_dir, BACKUP_LOCK_FILE);
 
-	rc = lock_exclusive(backup->root_dir, base36enc(backup->start_time), strict);
+	rc = grab_excl_lock_file(backup->root_dir, base36enc(backup->start_time), strict);
 
 	if (rc == 1)
 		return false;
@@ -216,7 +216,7 @@ lock_backup(pgBackup *backup, bool strict, bool exclusive)
 	if (exclusive)
 		rc = wait_shared_owners(backup);
 	else
-		rc = lock_shared(backup);
+		rc = grab_shared_lock_file(backup);
 
 	if (rc != 0)
 	{
@@ -224,14 +224,14 @@ lock_backup(pgBackup *backup, bool strict, bool exclusive)
 		 * Failed to grab shared lock or (in case of exclusive mode) shared lock owners
 		 * are not going away in time, release exclusive lock and return in shame.
 		 */
-		unlock_exclusive(backup->root_dir);
+		release_excl_lock_file(backup->root_dir);
 		return false;
 	}
 
 	if (!exclusive)
 	{
 		/* release exclusive lock */
-		unlock_exclusive(backup->root_dir);
+		release_excl_lock_file(backup->root_dir);
 	}
 
 	if (exclusive && !strict && enospc_detected)
@@ -241,7 +241,7 @@ lock_backup(pgBackup *backup, bool strict, bool exclusive)
 		 * freed some space on filesystem, thanks to unlinking of BACKUP_RO_LOCK_FILE.
 		 * If somebody concurrently acquired exclusive lock first, then we should give up.
 		 */
-		if (lock_exclusive(backup->root_dir, base36enc(backup->start_time), strict) == 1)
+		if (grab_excl_lock_file(backup->root_dir, base36enc(backup->start_time), strict) == 1)
 			return false;
 
 		return true;
@@ -277,7 +277,7 @@ lock_backup(pgBackup *backup, bool strict, bool exclusive)
  *  2 Failed to acquire lock due to ENOSPC
  */
 int
-lock_exclusive(const char *root_dir, const char *backup_id, bool strict)
+grab_excl_lock_file(const char *root_dir, const char *backup_id, bool strict)
 {
 	char		lock_file[MAXPGPATH];
 	int			fd = 0;
@@ -592,7 +592,7 @@ wait_shared_owners(pgBackup *backup)
  * 1 - fail
  */
 int
-lock_shared(pgBackup *backup)
+grab_shared_lock_file(pgBackup *backup)
 {
 	FILE *fp_in = NULL;
 	FILE *fp_out = NULL;
@@ -673,21 +673,21 @@ unlock_backup(const char *backup_dir, const char *backup_id, bool exclusive)
 {
 	if (exclusive)
 	{
-		unlock_exclusive(backup_dir);
+		release_excl_lock_file(backup_dir);
 		return;
 	}
 
 	/* To remove shared lock, we must briefly obtain exclusive lock, ... */
-	if (lock_exclusive(backup_dir, backup_id, false) != 0)
+	if (grab_excl_lock_file(backup_dir, backup_id, false) != 0)
 		/* ... if it's not possible then leave shared lock */
 		return;
 
-	unlock_shared(backup_dir);
-	unlock_exclusive(backup_dir);
+	release_shared_lock_file(backup_dir);
+	release_excl_lock_file(backup_dir);
 }
 
 void
-unlock_exclusive(const char *backup_dir)
+release_excl_lock_file(const char *backup_dir)
 {
 	char  lock_file[MAXPGPATH];
 
@@ -700,7 +700,7 @@ unlock_exclusive(const char *backup_dir)
 }
 
 void
-unlock_shared(const char *backup_dir)
+release_shared_lock_file(const char *backup_dir)
 {
 	FILE *fp_in = NULL;
 	FILE *fp_out = NULL;
