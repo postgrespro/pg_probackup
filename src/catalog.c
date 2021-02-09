@@ -200,13 +200,16 @@ lock_backup(pgBackup *backup, bool strict, bool exclusive)
 		if (strict)
 			return false;
 	}
-	else if (rc == 3 && exclusive)
+	else if (rc == 3)
 	{
 		/*
 		 * If we failed to take exclusive lock due to EROFS,
 		 * then in shared mode treat such condition as if lock was taken.
 		 */
-		return false;
+		if (exclusive)
+			return false;
+		else
+			return true;
 	}
 
 	/*
