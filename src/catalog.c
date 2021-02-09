@@ -294,7 +294,7 @@ grab_excl_lock_file(const char *root_dir, const char *backup_id, bool strict)
 {
 	char		lock_file[MAXPGPATH];
 	int			fd = 0;
-	char		buffer[MAXPGPATH * 2 + 256];
+	char		buffer[256];
 	int			ntries = LOCK_TIMEOUT;
 	int			empty_tries = LOCK_STALE_TIMEOUT;
 	int			len;
