@@ -191,19 +191,22 @@ lock_backup(pgBackup *backup, bool strict, bool exclusive)
 		return false;
 	else if (rc == 2)
 	{
-		enospc_detected = true;
-		if (strict)
-			return false;
-
 		/*
 		 * If we failed to take exclusive lock due to ENOSPC,
 		 * then in lax mode treat such condition as if lock was taken.
 		 */
-	}
-	else if (rc == 3)
-	{
-		if (exclusive)
+
+		enospc_detected = true;
+		if (strict)
 			return false;
+	}
+	else if (rc == 3 && exclusive)
+	{
+		/*
+		 * If we failed to take exclusive lock due to EROFS,
+		 * then in shared mode treat such condition as if lock was taken.
+		 */
+		return false;
 	}
 
 	/*
