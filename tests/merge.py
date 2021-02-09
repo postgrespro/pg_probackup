@@ -2829,5 +2829,57 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
         self.del_test_dir(module_name, fname)
 
+    def test_merge_pg_filenode_map(self):
+        """
+        https://github.com/postgrespro/pg_probackup/issues/320
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        node1 = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node1'),
+            initdb_params=['--data-checksums'])
+        node1.cleanup()
+
+        node.pgbench_init(scale=5)
+
+        # FULL backup
+        self.backup_node(backup_dir, 'node', node)
+
+        pgbench = node.pgbench(
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            options=['-T', '10', '-c', '1'])
+
+        self.backup_node(backup_dir, 'node', node, backup_type='delta')
+
+        node.safe_psql(
+            'postgres',
+            'reindex index pg_type_oid_index')
+
+        backup_id = self.backup_node(
+            backup_dir, 'node', node, backup_type='delta')
+
+        self.merge_backup(backup_dir, 'node', backup_id)
+
+        node.cleanup()
+
+        self.restore_node(backup_dir, 'node', node)
+        node.slow_start()
+
+        node.safe_psql(
+            'postgres',
+            'select 1')
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
 # 1. Need new test with corrupted FULL backup
 # 2. different compression levels
