@@ -200,6 +200,11 @@ lock_backup(pgBackup *backup, bool strict, bool exclusive)
 		 * then in lax mode treat such condition as if lock was taken.
 		 */
 	}
+	else if (rc == 3)
+	{
+		if (exclusive)
+			return false;
+	}
 
 	/*
 	 * We have exclusive lock, now there are following scenarios:
@@ -276,6 +281,7 @@ lock_backup(pgBackup *backup, bool strict, bool exclusive)
  *  0 Success
  *  1 Failed to acquire lock in lock_timeout time
  *  2 Failed to acquire lock due to ENOSPC
+ *  3 Failed to acquire lock due to EROFS
  */
 int
 grab_excl_lock_file(const char *root_dir, const char *backup_id, bool strict)
@@ -311,6 +317,14 @@ grab_excl_lock_file(const char *root_dir, const char *backup_id, bool strict)
 		fd = fio_open(lock_file, O_RDWR | O_CREAT | O_EXCL, FIO_BACKUP_HOST);
 		if (fd >= 0)
 			break;				/* Success; exit the retry loop */
+
+		/* read-only fs is a special case */
+		if (errno == EROFS)
+		{
+			elog(WARNING, "Could not create lock file \"%s\": %s",
+				 lock_file, strerror(errno));
+			return 3;
+		}
 
 		/*
 		 * Couldn't create the pid file. Probably it already exists.
@@ -648,7 +662,12 @@ grab_shared_lock_file(pgBackup *backup)
 
 	fp_out = fopen(lock_file_tmp, "w");
 	if (fp_out == NULL)
+	{
+		if (errno == EROFS)
+			return 0;
+
 		elog(ERROR, "Cannot open temp lock file \"%s\": %s", lock_file_tmp, strerror(errno));
+	}
 
 	/* add my own pid */
 	buffer_len += snprintf(buffer+buffer_len, sizeof(buffer), "%u\n", my_pid);
