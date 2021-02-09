@@ -36,6 +36,11 @@ static void unlock_backup(const char *backup_dir, const char *backup_id, bool ex
 static void release_excl_lock_file(const char *backup_dir);
 static void release_shared_lock_file(const char *backup_dir);
 
+#define LOCK_OK            0
+#define LOCK_FAIL_TIMEOUT  1
+#define LOCK_FAIL_ENOSPC   2
+#define LOCK_FAIL_EROFS    3
+
 typedef struct LockInfo
 {
 	char backup_id[10];
@@ -187,9 +192,9 @@ lock_backup(pgBackup *backup, bool strict, bool exclusive)
 
 	rc = grab_excl_lock_file(backup->root_dir, base36enc(backup->start_time), strict);
 
-	if (rc == 1)
+	if (rc == LOCK_FAIL_TIMEOUT)
 		return false;
-	else if (rc == 2)
+	else if (rc == LOCK_FAIL_ENOSPC)
 	{
 		/*
 		 * If we failed to take exclusive lock due to ENOSPC,
@@ -200,16 +205,13 @@ lock_backup(pgBackup *backup, bool strict, bool exclusive)
 		if (strict)
 			return false;
 	}
-	else if (rc == 3)
+	else if (rc == LOCK_FAIL_EROFS)
 	{
 		/*
 		 * If we failed to take exclusive lock due to EROFS,
 		 * then in shared mode treat such condition as if lock was taken.
 		 */
-		if (exclusive)
-			return false;
-		else
-			return true;
+		return !exclusive;
 	}
 
 	/*
@@ -253,7 +255,7 @@ lock_backup(pgBackup *backup, bool strict, bool exclusive)
 		 * freed some space on filesystem, thanks to unlinking of BACKUP_RO_LOCK_FILE.
 		 * If somebody concurrently acquired exclusive lock file first, then we should give up.
 		 */
-		if (grab_excl_lock_file(backup->root_dir, base36enc(backup->start_time), strict) == 1)
+		if (grab_excl_lock_file(backup->root_dir, base36enc(backup->start_time), strict) == LOCK_FAIL_TIMEOUT)
 			return false;
 
 		return true;
@@ -282,12 +284,13 @@ lock_backup(pgBackup *backup, bool strict, bool exclusive)
 	return true;
 }
 
-/* Lock backup in exclusive mode
+/*
+ * Lock backup in exclusive mode
  * Result codes:
- *  0 Success
- *  1 Failed to acquire lock in lock_timeout time
- *  2 Failed to acquire lock due to ENOSPC
- *  3 Failed to acquire lock due to EROFS
+ *  LOCK_OK           Success
+ *  LOCK_FAIL_TIMEOUT Failed to acquire lock in lock_timeout time
+ *  LOCK_FAIL_ENOSPC  Failed to acquire lock due to ENOSPC
+ *  LOCK_FAIL_EROFS   Failed to acquire lock due to EROFS
  */
 int
 grab_excl_lock_file(const char *root_dir, const char *backup_id, bool strict)
@@ -329,7 +332,7 @@ grab_excl_lock_file(const char *root_dir, const char *backup_id, bool strict)
 		{
 			elog(WARNING, "Could not create lock file \"%s\": %s",
 				 lock_file, strerror(errno));
-			return 3;
+			return LOCK_FAIL_EROFS;
 		}
 
 		/*
@@ -410,7 +413,7 @@ grab_excl_lock_file(const char *root_dir, const char *backup_id, bool strict)
 		 * exist.
 		 */
 		if (encoded_pid == my_pid)
-			return 0;
+			return LOCK_OK;
 
 		if (kill(encoded_pid, 0) == 0)
 		{
@@ -457,7 +460,7 @@ grab_lock:
 
 	/* Failed to acquire exclusive lock in time */
 	if (fd <= 0)
-		return 1;
+		return LOCK_FAIL_TIMEOUT;
 
 	/*
 	 * Successfully created the file, now fill it.
@@ -477,7 +480,7 @@ grab_lock:
 		 * Only delete command should be run in lax mode.
 		 */
 		if (!strict && save_errno == ENOSPC)
-			return 2;
+			return LOCK_FAIL_ENOSPC;
 		else
 			elog(ERROR, "Could not write lock file \"%s\": %s",
 				 lock_file, strerror(save_errno));
@@ -495,7 +498,7 @@ grab_lock:
 		 * Only delete command should be run in lax mode.
 		 */
 		if (!strict && save_errno == ENOSPC)
-			return 2;
+			return LOCK_FAIL_ENOSPC;
 		else
 			elog(ERROR, "Could not flush lock file \"%s\": %s",
 					lock_file, strerror(save_errno));
@@ -508,7 +511,7 @@ grab_lock:
 		fio_unlink(lock_file, FIO_BACKUP_HOST);
 
 		if (!strict && errno == ENOSPC)
-			return 2;
+			return LOCK_FAIL_ENOSPC;
 		else
 			elog(ERROR, "Could not close lock file \"%s\": %s",
 				 lock_file, strerror(save_errno));
@@ -518,7 +521,7 @@ grab_lock:
 //			base36enc(backup->start_time),
 //			LOCK_TIMEOUT - ntries + LOCK_STALE_TIMEOUT - empty_tries);
 
-	return 0;
+	return LOCK_OK;
 }
 
 /* Wait until all shared lock owners are gone
@@ -704,7 +707,7 @@ unlock_backup(const char *backup_dir, const char *backup_id, bool exclusive)
 	}
 
 	/* To remove shared lock, we must briefly obtain exclusive lock, ... */
-	if (grab_excl_lock_file(backup_dir, backup_id, false) != 0)
+	if (grab_excl_lock_file(backup_dir, backup_id, false) != LOCK_OK)
 		/* ... if it's not possible then leave shared lock */
 		return;
 
