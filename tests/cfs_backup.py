@@ -20,9 +20,9 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
         self.node = self.make_simple_node(
             base_dir="{0}/{1}/node".format(module_name, self.fname),
             set_replication=True,
+            ptrack_enable=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'ptrack_enable': 'on',
                 'cfs_encryption': 'off',
                 'max_wal_senders': '2',
                 'shared_buffers': '200MB'
@@ -34,6 +34,11 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
         self.set_archiving(self.backup_dir, 'node', self.node)
 
         self.node.slow_start()
+
+        if self.node.major_version >= 12:
+            self.node.safe_psql(
+                "postgres",
+                "CREATE EXTENSION ptrack")
 
         self.create_tblspace_in_node(self.node, tblspace_name, cfs=True)
 
