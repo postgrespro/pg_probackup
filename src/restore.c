@@ -1543,6 +1543,7 @@ update_recovery_options(pgBackup *backup,
 		if (errno != ENOENT)
 			elog(ERROR, "cannot stat file \"%s\": %s", postgres_auto_path,
 				 strerror(errno));
+		st.st_size = 0;
 	}
 
 	/* Kludge for 0-sized postgresql.auto.conf file. TODO: make something more intelligent */
