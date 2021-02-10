@@ -307,7 +307,10 @@ typedef enum ShowFormat
 #define FILE_NOT_FOUND		(-2) /* file disappeared during backup */
 #define BLOCKNUM_INVALID	(-1)
 #define PROGRAM_VERSION	"2.4.9"
+
+/* update when remote agent API or behaviour changes */
 #define AGENT_PROTOCOL_VERSION 20409
+#define AGENT_PROTOCOL_VERSION_STR "2.4.9"
 
 /* update only when changing storage format */
 #define STORAGE_FORMAT_VERSION "2.4.4"
