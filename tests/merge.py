@@ -7,6 +7,7 @@ from testgres import QueryException
 import shutil
 from datetime import datetime, timedelta
 import time
+import subprocess
 
 module_name = "merge"
 
