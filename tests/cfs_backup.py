@@ -45,13 +45,17 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
         tblspace = self.node.safe_psql(
             "postgres",
             "SELECT * FROM pg_tablespace WHERE spcname='{0}'".format(
-                tblspace_name)
-        )
-        self.assertTrue(
-            tblspace_name in tblspace and "compression=true" in tblspace,
+                tblspace_name))
+
+        self.assertIn(
+            tblspace_name, str(tblspace),
             "ERROR: The tablespace not created "
-            "or it create without compressions"
-        )
+            "or it create without compressions")
+
+        self.assertIn(
+            "compression=true", str(tblspace),
+            "ERROR: The tablespace not created "
+            "or it create without compressions")
 
         self.assertTrue(
             find_by_name(
@@ -743,12 +747,14 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
         # CHECK FULL BACKUP
         self.node.stop()
         self.node.cleanup()
-        shutil.rmtree(
-            self.get_tblspace_path(self.node, tblspace_name),
-            ignore_errors=True)
+        shutil.rmtree(self.get_tblspace_path(self.node, tblspace_name))
         self.restore_node(
-            self.backup_dir, 'node', self.node,
-            backup_id=backup_id_full, options=["-j", "4"])
+            self.backup_dir, 'node', self.node, backup_id=backup_id_full,
+            options=[
+                    "-j", "4",
+                    "--recovery-target=immediate",
+                    "--recovery-target-action=promote"])
+
         self.node.slow_start()
         self.assertEqual(
             full_result,
@@ -762,8 +768,12 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
             self.get_tblspace_path(self.node, tblspace_name),
             ignore_errors=True)
         self.restore_node(
-            self.backup_dir, 'node', self.node,
-            backup_id=backup_id_page, options=["-j", "4"])
+            self.backup_dir, 'node', self.node, backup_id=backup_id_page,
+            options=[
+                    "-j", "4",
+                    "--recovery-target=immediate",
+                    "--recovery-target-action=promote"])
+
         self.node.slow_start()
         self.assertEqual(
             page_result,
@@ -791,8 +801,7 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
             "AS SELECT i AS id, MD5(i::text) AS text, "
             "MD5(repeat(i::text,10))::tsvector AS tsvector "
             "FROM generate_series(0,1005000) i".format(
-                't_heap_1', tblspace_name_1)
-        )
+                't_heap_1', tblspace_name_1))
 
         self.node.safe_psql(
             "postgres",
@@ -800,8 +809,7 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
             "AS SELECT i AS id, MD5(i::text) AS text, "
             "MD5(repeat(i::text,10))::tsvector AS tsvector "
             "FROM generate_series(0,1005000) i".format(
-                't_heap_2', tblspace_name_2)
-        )
+                't_heap_2', tblspace_name_2))
 
         full_result_1 = self.node.safe_psql(
             "postgres", "SELECT * FROM t_heap_1")
@@ -869,21 +877,16 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
 
         # CHECK FULL BACKUP
         self.node.stop()
-        self.node.cleanup()
-        shutil.rmtree(
-            self.get_tblspace_path(self.node, tblspace_name),
-            ignore_errors=True)
-        shutil.rmtree(
-            self.get_tblspace_path(self.node, tblspace_name_1),
-            ignore_errors=True)
-        shutil.rmtree(
-            self.get_tblspace_path(self.node, tblspace_name_2),
-            ignore_errors=True)
 
         self.restore_node(
             self.backup_dir, 'node', self.node,
-            backup_id=backup_id_full, options=["-j", "4"])
+            backup_id=backup_id_full,
+            options=[
+                    "-j", "4", "--incremental-mode=checksum",
+                    "--recovery-target=immediate",
+                    "--recovery-target-action=promote"])
         self.node.slow_start()
+
         self.assertEqual(
             full_result_1,
             self.node.safe_psql("postgres", "SELECT * FROM t_heap_1"),
@@ -895,21 +898,16 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
 
         # CHECK PAGE BACKUP
         self.node.stop()
-        self.node.cleanup()
-        shutil.rmtree(
-            self.get_tblspace_path(self.node, tblspace_name),
-            ignore_errors=True)
-        shutil.rmtree(
-            self.get_tblspace_path(self.node, tblspace_name_1),
-            ignore_errors=True)
-        shutil.rmtree(
-            self.get_tblspace_path(self.node, tblspace_name_2),
-            ignore_errors=True)
 
         self.restore_node(
             self.backup_dir, 'node', self.node,
-            backup_id=backup_id_page, options=["-j", "4"])
+            backup_id=backup_id_page,
+            options=[
+                    "-j", "4", "--incremental-mode=checksum",
+                    "--recovery-target=immediate",
+                    "--recovery-target-action=promote"])
         self.node.slow_start()
+
         self.assertEqual(
             page_result_1,
             self.node.safe_psql("postgres", "SELECT * FROM t_heap_1"),
