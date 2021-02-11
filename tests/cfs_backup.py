@@ -482,7 +482,7 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
         )
 
     # --- Section: Incremental from fill tablespace --- #
-    @unittest.expectedFailure
+    # @unittest.expectedFailure
     # @unittest.skip("skip")
     @unittest.skipUnless(ProbackupTest.enterprise, 'skip')
     def test_fullbackup_after_create_table_ptrack_after_create_table(self):
@@ -546,7 +546,7 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
             )
         )
 
-    @unittest.expectedFailure
+    # @unittest.expectedFailure
     # @unittest.skip("skip")
     @unittest.skipUnless(ProbackupTest.enterprise, 'skip')
     def test_fullbackup_after_create_table_ptrack_after_create_table_stream(self):
@@ -612,7 +612,7 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
             )
         )
 
-    @unittest.expectedFailure
+    # @unittest.expectedFailure
     # @unittest.skip("skip")
     @unittest.skipUnless(ProbackupTest.enterprise, 'skip')
     def test_fullbackup_after_create_table_page_after_create_table(self):
@@ -917,7 +917,7 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
             self.node.safe_psql("postgres", "SELECT * FROM t_heap_2"),
             'Lost data after restore')
 
-    @unittest.expectedFailure
+    # @unittest.expectedFailure
     # @unittest.skip("skip")
     @unittest.skipUnless(ProbackupTest.enterprise, 'skip')
     def test_fullbackup_after_create_table_page_after_create_table_stream(self):

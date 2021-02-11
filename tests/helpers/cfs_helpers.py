@@ -88,4 +88,6 @@ def corrupt_file(filename):
 
 def random_string(n):
     a = string.ascii_letters + string.digits
-    return ''.join([random.choice(a) for i in range(int(n)+1)])
+    random_str = ''.join([random.choice(a) for i in range(int(n)+1)])
+    return str.encode(random_str)
+#    return ''.join([random.choice(a) for i in range(int(n)+1)])
