@@ -1711,6 +1711,9 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure
+    # This test will pass with Enterprise
+    # because it has checksums enabled by default
+    @unittest.skipIf(ProbackupTest.enterprise, 'skip')
     def test_incr_lsn_long_xact_1(self):
         """
         """
