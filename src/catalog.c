@@ -533,7 +533,7 @@ wait_shared_owners(pgBackup *backup)
 {
     FILE *fp = NULL;
     char  buffer[256];
-    pid_t encoded_pid;
+    pid_t encoded_pid = 0;
     int   ntries = LOCK_TIMEOUT;
     char  lock_file[MAXPGPATH];
 
