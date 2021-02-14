@@ -78,7 +78,8 @@ extern const char  *PROGRAM_EMAIL;
 #define BACKUP_RO_LOCK_FILE		"backup_ro.pid"
 #define DATABASE_FILE_LIST		"backup_content.control"
 #define PG_BACKUP_LABEL_FILE	"backup_label"
-#define PG_TABLESPACE_MAP_FILE "tablespace_map"
+#define PG_TABLESPACE_MAP_FILE	"tablespace_map"
+#define RELMAPPER_FILENAME		"pg_filenode.map"
 #define EXTERNAL_DIR			"external_directories/externaldir"
 #define DATABASE_MAP			"database_map"
 #define HEADER_MAP  			"page_header_map"
@@ -331,7 +332,10 @@ typedef enum ShowFormat
 #define FILE_NOT_FOUND		(-2) /* file disappeared during backup */
 #define BLOCKNUM_INVALID	(-1)
 #define PROGRAM_VERSION	"2.5.0"
+
+/* update when remote agent API or behaviour changes */
 #define AGENT_PROTOCOL_VERSION 20500
+#define AGENT_PROTOCOL_VERSION_STR "2.5.0"
 
 /* update only when changing storage format */
 #define STORAGE_FORMAT_VERSION "2.5.0"

@@ -1,7 +1,11 @@
-[см wiki](https://confluence.postgrespro.ru/display/DEV/pg_probackup)
+[see wiki](https://confluence.postgrespro.ru/display/DEV/pg_probackup)
 
 ```
-Note: For now these are works on Linux and "kinda" works on Windows
+Note: For now these tests work on Linux and "kinda" work on Windows
+```
+
+```
+Note: tests require python3 to work properly.
 ```
 
 ```

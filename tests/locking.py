@@ -581,6 +581,59 @@ class LockingTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
-# TODO:
-# test that concurrent validation and restore are not locking each other
-# check that quick exclusive lock, when taking RO-lock, is really quick
+    def test_shared_lock(self):
+        """
+        Make sure that shared lock leaves no files with pids
+        """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'])
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # Fill with data
+        node.pgbench_init(scale=1)
+
+        # FULL
+        backup_id = self.backup_node(backup_dir, 'node', node)
+
+        lockfile_excl = os.path.join(backup_dir, 'backups', 'node', backup_id, 'backup.pid')
+        lockfile_shr = os.path.join(backup_dir, 'backups', 'node', backup_id, 'backup_ro.pid')
+
+        self.validate_pb(backup_dir, 'node', backup_id)
+
+        self.assertFalse(
+            os.path.exists(lockfile_excl),
+            "File should not exist: {0}".format(lockfile_excl))
+
+        self.assertFalse(
+            os.path.exists(lockfile_shr),
+            "File should not exist: {0}".format(lockfile_shr))
+        
+        gdb = self.validate_pb(backup_dir, 'node', backup_id, gdb=True)
+
+        gdb.set_breakpoint('validate_one_page')
+        gdb.run_until_break()
+        gdb.kill()
+
+        self.assertTrue(
+            os.path.exists(lockfile_shr),
+            "File should exist: {0}".format(lockfile_shr))
+        
+        self.validate_pb(backup_dir, 'node', backup_id)
+
+        self.assertFalse(
+            os.path.exists(lockfile_excl),
+            "File should not exist: {0}".format(lockfile_excl))
+
+        self.assertFalse(
+            os.path.exists(lockfile_shr),
+            "File should not exist: {0}".format(lockfile_shr))
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)

@@ -905,6 +905,11 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 			if (parray_bsearch(dest_backup->files, file, pgFileCompareRelPathWithExternal))
 				redundant = false;
 
+			/* pg_filenode.map are always restored, because it's crc cannot be trusted */
+			if (file->external_dir_num == 0 &&
+				pg_strcasecmp(file->name, RELMAPPER_FILENAME) == 0)
+				redundant = true;
+
 			/* do not delete the useful internal directories */
 			if (S_ISDIR(file->mode) && !redundant)
 				continue;
@@ -1541,6 +1546,7 @@ update_recovery_options(InstanceState *instanceState, pgBackup *backup,
 		if (errno != ENOENT)
 			elog(ERROR, "cannot stat file \"%s\": %s", postgres_auto_path,
 				 strerror(errno));
+		st.st_size = 0;
 	}
 
 	/* Kludge for 0-sized postgresql.auto.conf file. TODO: make something more intelligent */

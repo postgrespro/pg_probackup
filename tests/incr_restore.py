@@ -1711,6 +1711,9 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure
+    # This test will pass with Enterprise
+    # because it has checksums enabled by default
+    @unittest.skipIf(ProbackupTest.enterprise, 'skip')
     def test_incr_lsn_long_xact_1(self):
         """
         """
@@ -2390,5 +2393,64 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname, [node2])
 
+    def test_incremental_pg_filenode_map(self):
+        """
+        https://github.com/postgrespro/pg_probackup/issues/320
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        node1 = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node1'),
+            initdb_params=['--data-checksums'])
+        node1.cleanup()
+
+        node.pgbench_init(scale=5)
+
+        # FULL backup
+        backup_id = self.backup_node(backup_dir, 'node', node)
+
+        # in node1 restore full backup
+        self.restore_node(backup_dir, 'node', node1)
+        self.set_auto_conf(node1, {'port': node1.port})
+        node1.slow_start()
+
+        pgbench = node.pgbench(
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            options=['-T', '10', '-c', '1'])
+
+        pgbench = node1.pgbench(
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            options=['-T', '10', '-c', '1'])
+
+        node.safe_psql(
+            'postgres',
+            'reindex index pg_type_oid_index')
+
+        # FULL backup
+        backup_id = self.backup_node(backup_dir, 'node', node)
+
+        node1.stop()
+
+        # incremental restore into node1
+        self.restore_node(backup_dir, 'node', node1, options=["-I", "checksum"])
+
+        self.set_auto_conf(node1, {'port': node1.port})
+        node1.slow_start()
+
+        node1.safe_psql(
+            'postgres',
+            'select 1')
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
 # check that MinRecPoint and BackupStartLsn are correctly used in case of --incrementa-lsn
-# incremental restore + partial restore.
