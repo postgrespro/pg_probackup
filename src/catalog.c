@@ -1581,6 +1581,10 @@ catalog_get_timelines(InstanceConfig *instance)
 			sscanf(file->name, "%08X.history", &tli);
 			timelines = read_timeline_history(arclog_path, tli, true);
 
+			/* History file is empty or corrupted, disregard it */
+			if (!timelines)
+				continue;
+
 			if (!tlinfo || tlinfo->tli != tli)
 			{
 				tlinfo = timelineInfoNew(tli);
