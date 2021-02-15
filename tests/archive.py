@@ -2474,6 +2474,96 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
+    # @unittest.expectedFailure
+    # @unittest.skip("skip")
+    def test_archive_empty_history_file(self):
+        """
+        https://github.com/postgrespro/pg_probackup/issues/326
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'archive_timeout': '30s',
+                'checkpoint_timeout': '30s',
+                'autovacuum': 'off'})
+
+        if self.get_version(node) < self.version_to_num('9.6.0'):
+            self.del_test_dir(module_name, fname)
+            return unittest.skip(
+                'Skipped because backup from replica is not supported in PG 9.5')
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+
+        node.slow_start()
+
+        node.pgbench_init(scale=5)
+
+        # FULL
+        self.backup_node(backup_dir, 'node', node)
+
+        node.pgbench_init(scale=5)
+        node.cleanup()
+
+        self.restore_node(
+            backup_dir, 'node', node,
+            options=[
+                    '--recovery-target=latest',
+                    '--recovery-target-action=promote'])
+
+        # '--recovery-target-timeline=2',
+        # Node in timeline 2
+        node.slow_start()
+
+        node.pgbench_init(scale=5)
+        node.cleanup()
+
+        self.restore_node(
+            backup_dir, 'node', node,
+            options=[
+                    '--recovery-target=latest',
+                    '--recovery-target-timeline=2',
+                    '--recovery-target-action=promote'])
+
+        # Node in timeline 3
+        node.slow_start()
+
+        node.pgbench_init(scale=5)
+        node.cleanup()
+
+        self.restore_node(
+            backup_dir, 'node', node,
+            options=[
+                    '--recovery-target=latest',
+                    '--recovery-target-timeline=3',
+                    '--recovery-target-action=promote'])
+
+        # Node in timeline 4
+        node.slow_start()
+        node.pgbench_init(scale=1)
+
+        # Truncate history files
+        for tli in range(2, 4):
+            file = os.path.join(
+                backup_dir, 'wal', 'node', '0000000{0}.history'.format(tli))
+            with open(file, "w+") as f:
+                f.truncate()
+
+        show = self.show_archive(backup_dir, 'node')
+
+        timelines = show['timelines']
+
+        # check that all timelines are ok
+        for timeline in replica_timelines:
+            print(timeline)
+
+        self.del_test_dir(module_name, fname)
+
 # TODO test with multiple not archived segments.
 # TODO corrupted file in archive.
 
