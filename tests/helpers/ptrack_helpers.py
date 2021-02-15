@@ -1541,13 +1541,6 @@ class ProbackupTest(object):
             ),
             ignore_errors=True
         )
-<<<<<<< HEAD
-=======
-        try:
-            shutil.rmtree(os.path.join(self.tmp_path, module_name), ignore_errors=True)
-        except:
-            pass
->>>>>>> 7f1d12b457f54ddebc0b6f65a1124e7f75dd50ae
 
     def pgdata_content(self, pgdata, ignore_ptrack=True, exclude_dirs=None):
         """ return dict with directory content. "
