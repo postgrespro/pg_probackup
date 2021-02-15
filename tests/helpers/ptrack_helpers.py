@@ -145,6 +145,7 @@ def slow_start(self, replica=False):
 class ProbackupTest(object):
     # Class attributes
     enterprise = is_enterprise()
+    nodes = []
 
     def __init__(self, *args, **kwargs):
         super(ProbackupTest, self).__init__(*args, **kwargs)
@@ -402,7 +403,7 @@ class ProbackupTest(object):
         if node.major_version >= 13:
             self.set_auto_conf(
                 node, {}, 'postgresql.conf', ['wal_keep_segments'])
-
+        self.nodes.append(node)
         return node
 
     def create_tblspace_in_node(self, node, tblspc_name, tblspc_path=None, cfs=False):
@@ -1521,21 +1522,25 @@ class ProbackupTest(object):
         except:
             pass
 
-        for node in nodes:
-            node.stop()
+        if not nodes:
+            nodes = self.nodes
+        for node in list(nodes):
+            try: 
+                if node.status() == 0:
+                    node.stop()
+            except:
+                raise 
+            finally:
+                if node in self.nodes:
+                    self.nodes.remove(node)
 
         shutil.rmtree(
             os.path.join(
                 self.tmp_path,
-                module_name,
-                fname
+                module_name
             ),
             ignore_errors=True
         )
-        try:
-            os.rmdir(os.path.join(self.tmp_path, module_name))
-        except:
-            pass
 
     def pgdata_content(self, pgdata, ignore_ptrack=True, exclude_dirs=None):
         """ return dict with directory content. "
