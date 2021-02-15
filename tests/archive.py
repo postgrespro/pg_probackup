@@ -2485,23 +2485,13 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
-            initdb_params=['--data-checksums'],
-            pg_options={
-                'archive_timeout': '30s',
-                'checkpoint_timeout': '30s',
-                'autovacuum': 'off'})
-
-        if self.get_version(node) < self.version_to_num('9.6.0'):
-            self.del_test_dir(module_name, fname)
-            return unittest.skip(
-                'Skipped because backup from replica is not supported in PG 9.5')
+            initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
 
         node.slow_start()
-
         node.pgbench_init(scale=5)
 
         # FULL
@@ -2516,7 +2506,6 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
                     '--recovery-target=latest',
                     '--recovery-target-action=promote'])
 
-        # '--recovery-target-timeline=2',
         # Node in timeline 2
         node.slow_start()
 
@@ -2545,22 +2534,35 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
         # Node in timeline 4
         node.slow_start()
-        node.pgbench_init(scale=1)
+        node.pgbench_init(scale=5)
 
         # Truncate history files
-        for tli in range(2, 4):
+        for tli in range(2, 5):
             file = os.path.join(
                 backup_dir, 'wal', 'node', '0000000{0}.history'.format(tli))
             with open(file, "w+") as f:
                 f.truncate()
 
-        show = self.show_archive(backup_dir, 'node')
+        timelines = self.show_archive(backup_dir, 'node', options=['--log-level-file=INFO'])
 
-        timelines = show['timelines']
+        # check that all timelines has zero switchpoint
+        for timeline in timelines:
+            self.assertEqual(timeline['switchpoint'], '0/0')
 
-        # check that all timelines are ok
-        for timeline in replica_timelines:
-            print(timeline)
+        log_file = os.path.join(backup_dir, 'log', 'pg_probackup.log')
+        with open(log_file, 'r') as f:
+            log_content = f.read()
+        wal_dir = os.path.join(backup_dir, 'wal', 'node')
+
+        self.assertIn(
+            'WARNING: History file is corrupted: "{0}"'.format(os.path.join(wal_dir, '00000002.history')),
+            log_content)
+        self.assertIn(
+            'WARNING: History file is corrupted: "{0}"'.format(os.path.join(wal_dir, '00000003.history')),
+            log_content)
+        self.assertIn(
+            'WARNING: History file is corrupted: "{0}"'.format(os.path.join(wal_dir, '00000004.history')),
+            log_content)
 
         self.del_test_dir(module_name, fname)
 
