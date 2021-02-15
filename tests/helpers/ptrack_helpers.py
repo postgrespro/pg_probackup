@@ -1528,8 +1528,7 @@ class ProbackupTest(object):
             try: 
                 if node.status() == 0:
                     node.stop()
-            except Exception as e:
-                print("Error stop node ", e)
+            except:
                 raise 
             finally:
                 if node in self.nodes:
