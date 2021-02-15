@@ -1528,23 +1528,20 @@ class ProbackupTest(object):
             try: 
                 if node.status() == 0:
                     node.stop()
-            except:
-                pass
-            if node in self.nodes:
-                self.nodes.remove(node)
+            except Exception as e:
+                print("Error stop node ", e)
+                raise 
+            finally:
+                if node in self.nodes:
+                    self.nodes.remove(node)
 
         shutil.rmtree(
             os.path.join(
                 self.tmp_path,
-                module_name,
-                fname
+                module_name
             ),
             ignore_errors=True
         )
-        try:
-            os.rmdir(os.path.join(self.tmp_path, module_name))
-        except:
-            pass
 
     def pgdata_content(self, pgdata, ignore_ptrack=True, exclude_dirs=None):
         """ return dict with directory content. "
