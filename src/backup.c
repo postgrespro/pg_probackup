@@ -165,8 +165,10 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool
 						"trying to look up on previous timelines",
 						current.tli);
 
-			/* TODO: use read_timeline_history */
-			tli_list = catalog_get_timelines(&instance_config);
+			tli_list = get_history_streaming(&instance_config.conn_opt, current.tli, backup_list);
+			if (!tli_list)
+				/* fallback to using archive */
+				tli_list = catalog_get_timelines(&instance_config);
 
 			if (parray_num(tli_list) == 0)
 				elog(WARNING, "Cannot find valid backup on previous timelines, "

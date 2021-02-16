@@ -48,7 +48,7 @@ typedef struct LockInfo
 	bool exclusive;
 } LockInfo;
 
-static timelineInfo *
+timelineInfo *
 timelineInfoNew(TimeLineID tli)
 {
 	timelineInfo *tlinfo = (timelineInfo *) pgut_malloc(sizeof(timelineInfo));
@@ -74,7 +74,8 @@ timelineInfoFree(void *tliInfo)
 
 	if (tli->backups)
 	{
-		parray_walk(tli->backups, pgBackupFree);
+		/* backups themselves should freed separately  */
+//		parray_walk(tli->backups, pgBackupFree);
 		parray_free(tli->backups);
 	}
 

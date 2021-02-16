@@ -891,6 +891,8 @@ extern int validate_one_page(Page page, BlockNumber absolute_blkno,
 							 uint32 checksum_version);
 extern bool validate_tablespace_map(pgBackup *backup);
 
+extern parray* get_history_streaming(ConnectionOptions *conn_opt, TimeLineID tli, parray *backup_list);
+
 /* return codes for validate_one_page */
 /* TODO: use enum */
 #define PAGE_IS_VALID (-1)
@@ -920,6 +922,7 @@ extern pgBackup *catalog_get_last_data_backup(parray *backup_list,
 extern pgBackup *get_multi_timeline_parent(parray *backup_list, parray *tli_list,
 	                      TimeLineID current_tli, time_t current_start_time,
 						  InstanceConfig *instance);
+extern timelineInfo *timelineInfoNew(TimeLineID tli);
 extern void timelineInfoFree(void *tliInfo);
 extern parray *catalog_get_timelines(InstanceConfig *instance);
 extern void do_set_backup(const char *instance_name, time_t backup_id,
