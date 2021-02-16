@@ -1,5 +1,6 @@
 # you need os for unittest to work
 import os
+import gc
 from sys import exit, argv, version_info
 import subprocess
 import shutil
@@ -1515,29 +1516,24 @@ class ProbackupTest(object):
     def get_bin_path(self, binary):
         return testgres.get_bin_path(binary)
 
+    def clean_all(self):
+        for o in gc.get_referrers(testgres.PostgresNode):
+            if o.__class__ is testgres.PostgresNode:
+                o.cleanup()
+
     def del_test_dir(self, module_name, fname, nodes=[]):
         """ Del testdir and optimistically try to del module dir"""
         try:
-            testgres.clean_all()
-        except:
-            pass
-
-        if not nodes:
-            nodes = self.nodes
-        for node in list(nodes):
-            try: 
-                if node.status() == 0:
-                    node.stop()
-            except:
-                raise 
-            finally:
-                if node in self.nodes:
-                    self.nodes.remove(node)
+            self.clean_all()
+        except Exception as e:
+            raise e
 
         shutil.rmtree(
             os.path.join(
                 self.tmp_path,
-                module_name
+                module_name,
+                fname,
+                "backup"
             ),
             ignore_errors=True
         )
