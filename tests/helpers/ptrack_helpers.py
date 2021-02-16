@@ -146,7 +146,6 @@ def slow_start(self, replica=False):
 class ProbackupTest(object):
     # Class attributes
     enterprise = is_enterprise()
-    nodes = []
 
     def __init__(self, *args, **kwargs):
         super(ProbackupTest, self).__init__(*args, **kwargs)
@@ -404,7 +403,6 @@ class ProbackupTest(object):
         if node.major_version >= 13:
             self.set_auto_conf(
                 node, {}, 'postgresql.conf', ['wal_keep_segments'])
-        self.nodes.append(node)
         return node
 
     def create_tblspace_in_node(self, node, tblspc_name, tblspc_path=None, cfs=False):
