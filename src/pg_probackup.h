@@ -784,6 +784,10 @@ extern bool		compress_shortcut;
 /* other options */
 extern char *instance_name;
 
+/* temp merge options */
+extern bool merge_no_validate;
+extern bool merge_no_sync;
+
 /* show options */
 extern ShowFormat show_format;
 
