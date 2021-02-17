@@ -2567,11 +2567,51 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         print(self.backup_node(
             backup_dir, 'node', node, backup_type='delta',
-            options=['--retention-redundancy=2', '--delete-expired', '--log-level-console=VERBOSE'],
+            options=['--retention-redundancy=2', '--delete-expired'],
             return_id=False))
 
         self.assertTrue(
             self.show_pb(backup_dir, 'node')[1]['status'],
             'RUNNING')
+
+        self.backup_node(backup_dir, 'node', node)
+
+        gdb = self.backup_node(backup_dir, 'node', node, gdb=True)
+        gdb.set_breakpoint('backup_data_file')
+        gdb.run_until_break()
+        gdb.kill()
+
+        gdb = self.backup_node(backup_dir, 'node', node, gdb=True)
+        gdb.set_breakpoint('backup_data_file')
+        gdb.run_until_break()
+        gdb.kill()
+
+        self.backup_node(backup_dir, 'node', node)
+
+        gdb = self.backup_node(backup_dir, 'node', node, gdb=True)
+        gdb.set_breakpoint('backup_data_file')
+        gdb.run_until_break()
+        gdb.kill()
+
+        out = self.backup_node(
+            backup_dir, 'node', node, backup_type='delta',
+            options=['--retention-redundancy=2', '--delete-expired'],
+            return_id=False)
+
+        self.assertTrue(
+            self.show_pb(backup_dir, 'node')[0]['status'],
+            'OK')
+
+        self.assertTrue(
+            self.show_pb(backup_dir, 'node')[1]['status'],
+            'RUNNING')
+
+        self.assertTrue(
+            self.show_pb(backup_dir, 'node')[2]['status'],
+            'OK')
+
+        self.assertEqual(
+            len(self.show_pb(backup_dir, 'node')),
+            6)
 
         self.del_test_dir(module_name, fname, [node])
