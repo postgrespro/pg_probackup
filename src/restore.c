@@ -1782,9 +1782,9 @@ read_timeline_history(const char *arclog_path, TimeLineID targetTLI, bool strict
 		elog(ERROR, "Timeline IDs must be less than child timeline's ID.");
 
 	/* History file is empty or corrupted */
-	if (parray_num(result) == 0)
+	if (parray_num(result) == 0 && targetTLI != 1)
 	{
-		elog(WARNING, "History file is corrupted: \"%s\"", path);
+		elog(WARNING, "History file is corrupted or missing: \"%s\"", path);
 		pg_free(result);
 		return NULL;
 	}
