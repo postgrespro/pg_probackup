@@ -229,20 +229,20 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 
 			if (backup->backup_mode == BACKUP_MODE_FULL)
 			{
-				/* Consider only valid FULL backups for Redundancy fulfillment */
-				if (backup->status == BACKUP_STATUS_OK ||
-					backup->status == BACKUP_STATUS_DONE)
-				{
-					n_full_backups++;
-				}
-
 				/* Add every FULL backup that satisfy Redundancy policy to separate list */
-				if (n_full_backups <= instance_config.retention_redundancy)
+				if (n_full_backups < instance_config.retention_redundancy)
 				{
 					if (!redundancy_full_backup_list)
 						redundancy_full_backup_list = parray_new();
 
 					parray_append(redundancy_full_backup_list, backup);
+				}
+
+				/* Consider only valid FULL backups for Redundancy fulfillment */
+				if (backup->status == BACKUP_STATUS_OK ||
+					backup->status == BACKUP_STATUS_DONE)
+				{
+					n_full_backups++;
 				}
 			}
 		}
