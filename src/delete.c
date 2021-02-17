@@ -745,7 +745,10 @@ delete_backup_files(pgBackup *backup)
 		return;
 	}
 
-	time2iso(timestamp, lengthof(timestamp), backup->recovery_time, false);
+	if (backup->recovery_time)
+		time2iso(timestamp, lengthof(timestamp), backup->recovery_time, false);
+	else
+		time2iso(timestamp, lengthof(timestamp), backup->start_time, false);
 
 	elog(INFO, "Delete: %s %s",
 		 base36enc(backup->start_time), timestamp);
