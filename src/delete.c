@@ -227,13 +227,14 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 		{
 			pgBackup   *backup = (pgBackup *) parray_get(backup_list, i);
 
-			/* Consider only valid FULL backups for Redundancy */
-			if (instance_config.retention_redundancy > 0 &&
-				backup->backup_mode == BACKUP_MODE_FULL &&
-				(backup->status == BACKUP_STATUS_OK ||
-					backup->status == BACKUP_STATUS_DONE))
+			if (backup->backup_mode == BACKUP_MODE_FULL)
 			{
-				n_full_backups++;
+				/* Consider only valid FULL backups for Redundancy fulfillment */
+				if (backup->status == BACKUP_STATUS_OK ||
+					backup->status == BACKUP_STATUS_DONE)
+				{
+					n_full_backups++;
+				}
 
 				/* Add every FULL backup that satisfy Redundancy policy to separate list */
 				if (n_full_backups <= instance_config.retention_redundancy)
@@ -413,7 +414,10 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 				pinning_window ? pinning_window : instance_config.retention_window,
 				action);
 
-		if (backup->backup_mode == BACKUP_MODE_FULL)
+		/* Only valid full backups are count to something */
+		if (backup->backup_mode == BACKUP_MODE_FULL &&
+			(backup->status == BACKUP_STATUS_OK ||
+			 backup->status == BACKUP_STATUS_DONE))
 				cur_full_backup_num++;
 	}
 }
