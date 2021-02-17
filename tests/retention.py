@@ -2536,3 +2536,42 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         self.validate_pb(backup_dir, 'node')
 
         self.del_test_dir(module_name, fname, [node])
+
+    def test_concurrent_running_full_backup(self):
+        """
+        https://github.com/postgrespro/pg_probackup/issues/328
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # FULL
+        self.backup_node(backup_dir, 'node', node)
+
+        gdb = self.backup_node(backup_dir, 'node', node, gdb=True)
+        gdb.set_breakpoint('backup_data_file')
+        gdb.run_until_break()
+        gdb.kill()
+
+        self.assertTrue(
+            self.show_pb(backup_dir, 'node')[0]['status'],
+            'RUNNING')
+
+        print(self.backup_node(
+            backup_dir, 'node', node, backup_type='delta',
+            options=['--retention-redundancy=2', '--delete-expired', '--log-level-console=VERBOSE'],
+            return_id=False))
+
+        self.assertTrue(
+            self.show_pb(backup_dir, 'node')[1]['status'],
+            'RUNNING')
+
+        self.del_test_dir(module_name, fname, [node])
