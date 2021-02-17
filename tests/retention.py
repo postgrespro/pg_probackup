@@ -2565,10 +2565,9 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
             self.show_pb(backup_dir, 'node')[0]['status'],
             'RUNNING')
 
-        print(self.backup_node(
+        self.backup_node(
             backup_dir, 'node', node, backup_type='delta',
-            options=['--retention-redundancy=2', '--delete-expired'],
-            return_id=False))
+            options=['--retention-redundancy=2', '--delete-expired'])
 
         self.assertTrue(
             self.show_pb(backup_dir, 'node')[1]['status'],
@@ -2593,7 +2592,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         gdb.run_until_break()
         gdb.kill()
 
-        out = self.backup_node(
+        self.backup_node(
             backup_dir, 'node', node, backup_type='delta',
             options=['--retention-redundancy=2', '--delete-expired'],
             return_id=False)
