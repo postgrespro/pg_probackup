@@ -1521,17 +1521,14 @@ class ProbackupTest(object):
 
     def del_test_dir(self, module_name, fname, nodes=[]):
         """ Del testdir and optimistically try to del module dir"""
-        try:
-            self.clean_all()
-        except Exception as e:
-            raise e
+
+        self.clean_all()
 
         shutil.rmtree(
             os.path.join(
                 self.tmp_path,
                 module_name,
-                fname,
-                "backup"
+                fname
             ),
             ignore_errors=True
         )
