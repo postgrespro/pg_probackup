@@ -1519,7 +1519,7 @@ class ProbackupTest(object):
             if o.__class__ is testgres.PostgresNode:
                 o.cleanup()
 
-    def del_test_dir(self, module_name, fname, nodes=[]):
+    def del_test_dir(self, module_name, fname):
         """ Del testdir and optimistically try to del module dir"""
 
         self.clean_all()

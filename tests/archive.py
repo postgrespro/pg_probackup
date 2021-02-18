@@ -981,7 +981,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         self.backup_node(backup_dir, 'master', replica)
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname, nodes=[master, replica])
+        self.del_test_dir(module_name, fname)
 
     # @unittest.expectedFailure
     # @unittest.skip("skip")
@@ -2016,8 +2016,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         pg_receivexlog.kill()
-        self.del_test_dir(
-            module_name, fname, [node, replica, node_restored])
+        self.del_test_dir(module_name, fname)
 
     @unittest.skip("skip")
     def test_multi_timeline_recovery_prefetching(self):
