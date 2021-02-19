@@ -1202,8 +1202,9 @@ CREATE EXTENSION ptrack;
        together, which leads to false-positive results when tracking changed
        blocks and increases the incremental backup size as unchanged blocks
        can also be copied into the incremental backup.
-       Setting <varname>ptrack.map_size</varname> to a higher value
-       does not affect PTRACK operation. The maximum allowed value is 1024.
+       Setting <varname>ptrack.map_size</varname> to a higher value does not
+       affect PTRACK operation, but it is not recommended to set this parameter
+       to a value higher than 1024.
       </para>
      </listitem>
     </orderedlist>
