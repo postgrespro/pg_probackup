@@ -2473,6 +2473,98 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
+    # @unittest.expectedFailure
+    # @unittest.skip("skip")
+    def test_archive_empty_history_file(self):
+        """
+        https://github.com/postgrespro/pg_probackup/issues/326
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+
+        node.slow_start()
+        node.pgbench_init(scale=5)
+
+        # FULL
+        self.backup_node(backup_dir, 'node', node)
+
+        node.pgbench_init(scale=5)
+        node.cleanup()
+
+        self.restore_node(
+            backup_dir, 'node', node,
+            options=[
+                    '--recovery-target=latest',
+                    '--recovery-target-action=promote'])
+
+        # Node in timeline 2
+        node.slow_start()
+
+        node.pgbench_init(scale=5)
+        node.cleanup()
+
+        self.restore_node(
+            backup_dir, 'node', node,
+            options=[
+                    '--recovery-target=latest',
+                    '--recovery-target-timeline=2',
+                    '--recovery-target-action=promote'])
+
+        # Node in timeline 3
+        node.slow_start()
+
+        node.pgbench_init(scale=5)
+        node.cleanup()
+
+        self.restore_node(
+            backup_dir, 'node', node,
+            options=[
+                    '--recovery-target=latest',
+                    '--recovery-target-timeline=3',
+                    '--recovery-target-action=promote'])
+
+        # Node in timeline 4
+        node.slow_start()
+        node.pgbench_init(scale=5)
+
+        # Truncate history files
+        for tli in range(2, 5):
+            file = os.path.join(
+                backup_dir, 'wal', 'node', '0000000{0}.history'.format(tli))
+            with open(file, "w+") as f:
+                f.truncate()
+
+        timelines = self.show_archive(backup_dir, 'node', options=['--log-level-file=INFO'])
+
+        # check that all timelines has zero switchpoint
+        for timeline in timelines:
+            self.assertEqual(timeline['switchpoint'], '0/0')
+
+        log_file = os.path.join(backup_dir, 'log', 'pg_probackup.log')
+        with open(log_file, 'r') as f:
+            log_content = f.read()
+        wal_dir = os.path.join(backup_dir, 'wal', 'node')
+
+        self.assertIn(
+            'WARNING: History file is corrupted: "{0}"'.format(os.path.join(wal_dir, '00000002.history')),
+            log_content)
+        self.assertIn(
+            'WARNING: History file is corrupted: "{0}"'.format(os.path.join(wal_dir, '00000003.history')),
+            log_content)
+        self.assertIn(
+            'WARNING: History file is corrupted: "{0}"'.format(os.path.join(wal_dir, '00000004.history')),
+            log_content)
+
+        self.del_test_dir(module_name, fname)
+
 # TODO test with multiple not archived segments.
 # TODO corrupted file in archive.
 

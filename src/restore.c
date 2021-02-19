@@ -289,6 +289,9 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 				/* Read timeline history files from archives */
 				timelines = read_timeline_history(arclog_path, rt->target_tli, true);
 
+				if (!timelines)
+					elog(ERROR, "Failed to get history file for target timeline %i", rt->target_tli);
+
 				if (!satisfy_timeline(timelines, current_backup))
 				{
 					if (target_backup_id != INVALID_BACKUP_ID)
@@ -1777,6 +1780,14 @@ read_timeline_history(const char *arclog_path, TimeLineID targetTLI, bool strict
 
 	if (last_timeline && targetTLI <= last_timeline->tli)
 		elog(ERROR, "Timeline IDs must be less than child timeline's ID.");
+
+	/* History file is empty or corrupted */
+	if (parray_num(result) == 0 && targetTLI != 1)
+	{
+		elog(WARNING, "History file is corrupted or missing: \"%s\"", path);
+		pg_free(result);
+		return NULL;
+	}
 
 	/* append target timeline */
 	entry = pgut_new(TimeLineHistoryEntry);

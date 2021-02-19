@@ -227,21 +227,22 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 		{
 			pgBackup   *backup = (pgBackup *) parray_get(backup_list, i);
 
-			/* Consider only valid FULL backups for Redundancy */
-			if (instance_config.retention_redundancy > 0 &&
-				backup->backup_mode == BACKUP_MODE_FULL &&
-				(backup->status == BACKUP_STATUS_OK ||
-					backup->status == BACKUP_STATUS_DONE))
+			if (backup->backup_mode == BACKUP_MODE_FULL)
 			{
-				n_full_backups++;
-
 				/* Add every FULL backup that satisfy Redundancy policy to separate list */
-				if (n_full_backups <= instance_config.retention_redundancy)
+				if (n_full_backups < instance_config.retention_redundancy)
 				{
 					if (!redundancy_full_backup_list)
 						redundancy_full_backup_list = parray_new();
 
 					parray_append(redundancy_full_backup_list, backup);
+				}
+
+				/* Consider only valid FULL backups for Redundancy fulfillment */
+				if (backup->status == BACKUP_STATUS_OK ||
+					backup->status == BACKUP_STATUS_DONE)
+				{
+					n_full_backups++;
 				}
 			}
 		}
@@ -413,7 +414,10 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 				pinning_window ? pinning_window : instance_config.retention_window,
 				action);
 
-		if (backup->backup_mode == BACKUP_MODE_FULL)
+		/* Only valid full backups are count to something */
+		if (backup->backup_mode == BACKUP_MODE_FULL &&
+			(backup->status == BACKUP_STATUS_OK ||
+			 backup->status == BACKUP_STATUS_DONE))
 				cur_full_backup_num++;
 	}
 }
@@ -741,7 +745,10 @@ delete_backup_files(pgBackup *backup)
 		return;
 	}
 
-	time2iso(timestamp, lengthof(timestamp), backup->recovery_time, false);
+	if (backup->recovery_time)
+		time2iso(timestamp, lengthof(timestamp), backup->recovery_time, false);
+	else
+		time2iso(timestamp, lengthof(timestamp), backup->start_time, false);
 
 	elog(INFO, "Delete: %s %s",
 		 base36enc(backup->start_time), timestamp);

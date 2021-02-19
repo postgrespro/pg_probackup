@@ -533,7 +533,7 @@ wait_shared_owners(pgBackup *backup)
 {
     FILE *fp = NULL;
     char  buffer[256];
-    pid_t encoded_pid;
+    pid_t encoded_pid = 0;
     int   ntries = LOCK_TIMEOUT;
     char  lock_file[MAXPGPATH];
 
@@ -1580,6 +1580,10 @@ catalog_get_timelines(InstanceConfig *instance)
 
 			sscanf(file->name, "%08X.history", &tli);
 			timelines = read_timeline_history(arclog_path, tli, true);
+
+			/* History file is empty or corrupted, disregard it */
+			if (!timelines)
+				continue;
 
 			if (!tlinfo || tlinfo->tli != tli)
 			{
