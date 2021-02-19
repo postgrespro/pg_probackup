@@ -418,7 +418,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             options=['--archive-timeout=30s', '--stream'])
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname, [master, replica])
+        self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def test_take_backup_from_delayed_replica(self):

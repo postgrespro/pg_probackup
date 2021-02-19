@@ -1,5 +1,6 @@
 # you need os for unittest to work
 import os
+import gc
 from sys import exit, argv, version_info
 import subprocess
 import shutil
@@ -402,7 +403,6 @@ class ProbackupTest(object):
         if node.major_version >= 13:
             self.set_auto_conf(
                 node, {}, 'postgresql.conf', ['wal_keep_segments'])
-
         return node
 
     def create_tblspace_in_node(self, node, tblspc_name, tblspc_path=None, cfs=False):
@@ -1514,15 +1514,15 @@ class ProbackupTest(object):
     def get_bin_path(self, binary):
         return testgres.get_bin_path(binary)
 
-    def del_test_dir(self, module_name, fname, nodes=[]):
-        """ Del testdir and optimistically try to del module dir"""
-        try:
-            testgres.clean_all()
-        except:
-            pass
+    def clean_all(self):
+        for o in gc.get_referrers(testgres.PostgresNode):
+            if o.__class__ is testgres.PostgresNode:
+                o.cleanup()
 
-        for node in nodes:
-            node.stop()
+    def del_test_dir(self, module_name, fname):
+        """ Del testdir and optimistically try to del module dir"""
+
+        self.clean_all()
 
         shutil.rmtree(
             os.path.join(
@@ -1532,10 +1532,6 @@ class ProbackupTest(object):
             ),
             ignore_errors=True
         )
-        try:
-            os.rmdir(os.path.join(self.tmp_path, module_name))
-        except:
-            pass
 
     def pgdata_content(self, pgdata, ignore_ptrack=True, exclude_dirs=None):
         """ return dict with directory content. "

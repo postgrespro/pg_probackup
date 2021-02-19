@@ -720,7 +720,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
                     repr(e.message), self.cmd))
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname, [node])
+        self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def test_incr_checksum_restore(self):
@@ -809,7 +809,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         self.compare_pgdata(pgdata, pgdata_restored)
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname, [node, node_1])
+        self.del_test_dir(module_name, fname)
 
 
     # @unittest.skip("skip")
@@ -898,7 +898,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         self.compare_pgdata(pgdata, pgdata_restored)
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname, [node, node_1])
+        self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def test_incr_lsn_sanity(self):
@@ -967,7 +967,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
                     repr(e.message), self.cmd))
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname, [node_1])
+        self.del_test_dir(module_name, fname)
 
         # @unittest.skip("skip")
     def test_incr_checksum_sanity(self):
@@ -1026,7 +1026,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         self.compare_pgdata(pgdata, pgdata_restored)
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname, [node_1])
+        self.del_test_dir(module_name, fname)
 
 
         # @unittest.skip("skip")
@@ -1561,7 +1561,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         pgbench.wait()
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname, [new_master, old_master])
+        self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def test_make_replica_via_incr_lsn_restore(self):
@@ -1634,7 +1634,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         pgbench.wait()
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname, [new_master, old_master])
+        self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure
@@ -1878,7 +1878,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
             '1')
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname, [node])
+        self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure
@@ -2137,7 +2137,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         self.assertNotIn('PANIC', output)
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname, [node, node2])
+        self.del_test_dir(module_name, fname)
 
     def test_incremental_partial_restore_exclude_lsn(self):
         """"""
@@ -2247,7 +2247,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         self.assertNotIn('PANIC', output)
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname, [node2])
+        self.del_test_dir(module_name, fname)
 
     def test_incremental_partial_restore_exclude_tablespace_checksum(self):
         """"""
@@ -2391,7 +2391,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         self.assertNotIn('PANIC', output)
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname, [node2])
+        self.del_test_dir(module_name, fname)
 
     def test_incremental_pg_filenode_map(self):
         """

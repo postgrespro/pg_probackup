@@ -80,7 +80,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
         node_restored.slow_start()
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname, [node, node_restored])
+        self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def test_delta_vacuum_truncate_1(self):
