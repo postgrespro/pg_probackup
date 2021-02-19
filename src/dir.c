@@ -762,7 +762,10 @@ dir_check_file(pgFile *file, bool backup_logs)
 				len = strlen(file->name);
 				/* reloid.cfm */
 				if (len > 3 && strcmp(file->name + len - 3, "cfm") == 0)
+				{
+					file->forkName = cfm;
 					return CHECK_TRUE;
+				}
 
 				sscanf_res = sscanf(file->name, "%u.%d.%s", &(file->relOid),
 									&(file->segno), suffix);

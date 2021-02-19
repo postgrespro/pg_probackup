@@ -55,7 +55,9 @@ typedef enum
 	FIO_LIST_DIR,
 	FIO_CHECK_POSTMASTER,
 	FIO_GET_ASYNC_ERROR,
-	FIO_WRITE_ASYNC
+	FIO_WRITE_ASYNC,
+	/* used for cfm optimization */
+	FIO_NON_ZERO_SIZE
 } fio_operations;
 
 typedef enum
@@ -133,6 +135,9 @@ extern struct dirent * fio_readdir(DIR *dirp);
 extern int     fio_closedir(DIR *dirp);
 extern FILE*   fio_open_stream(char const* name, fio_location location);
 extern int     fio_close_stream(FILE* f);
+
+extern int fio_find_non_zero_size(char const* path, struct stat* st, bool remote);
+
 
 #ifdef HAVE_LIBZ
 extern gzFile  fio_gzopen(char const* path, char const* mode, int level, fio_location location);

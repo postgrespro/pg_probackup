@@ -1357,6 +1357,9 @@ backup_non_data_file_internal(const char *from_fullpath,
 	/* backup local file */
 	else
 	{
+		struct stat statbuf;
+		ssize_t 	cfm_non_zero_size = 0;
+
 		/* open source file for read */
 		in = fopen(from_fullpath, PG_BINARY_R);
 		if (in == NULL)
@@ -1385,6 +1388,12 @@ backup_non_data_file_internal(const char *from_fullpath,
 		/* allocate 64kB buffer */
 		buf = pgut_malloc(CHUNK_SIZE);
 
+		if (file->forkName == cfm)
+		{
+			fio_find_non_zero_size(from_fullpath, &statbuf, false);
+			cfm_non_zero_size = statbuf.st_size;
+		}
+
 		/* copy content and calc CRC */
 		for (;;)
 		{
@@ -1404,6 +1413,10 @@ backup_non_data_file_internal(const char *from_fullpath,
 				COMP_FILE_CRC32(true, file->crc, buf, read_len);
 				file->read_size += read_len;
 			}
+
+			if (file->forkName == cfm &&
+				file->read_size >= cfm_non_zero_size)
+				break;
 
 			if (feof(in))
 				break;

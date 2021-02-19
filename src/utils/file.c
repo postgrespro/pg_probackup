@@ -1044,6 +1044,86 @@ int fio_stat(char const* path, struct stat* st, bool follow_symlink, fio_locatio
 	}
 }
 
+/*
+ * Calculate size of the file without trailing spaces in the end.
+ * Save result in statbuf->st_size.
+ *
+ * It is used to avoid sending trailing zeros in CFS map files.
+ */
+static int getFileNonZeroSize(const char *path, struct stat *statbuf)
+{
+	char buf[BLCKSZ];
+	uint64* word = (uint64*)buf;
+	pgoff_t size;
+	int i;
+	FILE *fp;
+
+	stat(path, statbuf);
+	size = statbuf->st_size;
+
+	fp = fopen(path, PG_BINARY_R);
+
+	while (size > BLCKSZ && fseek(fp, size-BLCKSZ, SEEK_SET) == 0)
+	{
+		int rc = fread(buf, 1, BLCKSZ, fp);
+
+		if (rc != BLCKSZ)
+			break;
+
+		for (i = 0; i < BLCKSZ/8; i++)
+		{
+			if (word[i] != 0)
+				goto stop;
+		}
+		size -= BLCKSZ;
+	}
+ stop:
+
+	statbuf->st_size = size;
+	fclose(fp);
+
+	//TODO handle possible errors
+	return 0;
+}
+
+/*
+ * This function is wrapper for both local and remote calls.
+ *
+ * Calculate size of the file without trailing spaces in the end.
+ * Return result via statbuf->st_size.
+ */
+int fio_find_non_zero_size(char const* path, struct stat* st, bool remote)
+{
+	if (remote)
+	{
+		fio_header hdr;
+		size_t path_len = strlen(path) + 1;
+
+		hdr.cop = FIO_NON_ZERO_SIZE;
+		hdr.arg = 0;
+		hdr.handle = -1;
+		hdr.size = path_len;
+
+		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
+		IO_CHECK(fio_write_all(fio_stdout, path, path_len), path_len);
+
+		IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
+		Assert(hdr.cop == FIO_NON_ZERO_SIZE);
+		IO_CHECK(fio_read_all(fio_stdin, st, sizeof(*st)), sizeof(*st));
+
+		if (hdr.arg != 0)
+		{
+			errno = hdr.arg;
+			return -1;
+		}
+		return 0;
+	}
+	else
+	{
+		return getFileNonZeroSize(path, st);
+	}
+}
+
 /* Check presence of the file */
 int fio_access(char const* path, int mode, fio_location location)
 {
@@ -2085,6 +2165,7 @@ int fio_send_file_gz(const char *from_fullpath, const char *to_fullpath, FILE* o
 	z_stream *strm = NULL;
 
 	hdr.cop = FIO_SEND_FILE;
+	hdr.arg = 0; //read till EOF
 	hdr.size = path_len;
 
 //	elog(VERBOSE, "Thread [%d]: Attempting to open remote compressed WAL file '%s'",
@@ -2223,6 +2304,7 @@ cleanup:
 	return exit_code;
 }
 
+
 /* Receive chunks of data and write them to destination file.
  * Return codes:
  *   SEND_OK       (0)
@@ -2242,7 +2324,19 @@ int fio_send_file(const char *from_fullpath, const char *to_fullpath, FILE* out,
 	size_t path_len = strlen(from_fullpath) + 1;
 	char *buf = pgut_malloc(CHUNK_SIZE);    /* buffer */
 
+	struct stat statbuf;
+	ssize_t	cfm_non_zero_size = 0;
+
+
+	if (file && file->forkName == cfm)
+	{
+		if (fio_find_non_zero_size(from_fullpath, &statbuf, true) != 0)
+			elog(ERROR, "fio_find_non_zero_size failed");
+		cfm_non_zero_size = statbuf.st_size;
+	}
+
 	hdr.cop = FIO_SEND_FILE;
+	hdr.arg = cfm_non_zero_size; //read till this length
 	hdr.size = path_len;
 
 //	elog(VERBOSE, "Thread [%d]: Attempting to open remote WAL file '%s'",
@@ -2314,13 +2408,19 @@ int fio_send_file(const char *from_fullpath, const char *to_fullpath, FILE* out,
  *  FIO_PAGE
  *  FIO_SEND_FILE_EOF
  *
+ * If we only want to read a part of the file, pass len_wanted argument.
+ * Currently we do not differentiate exit codes and return with FIO_SEND_FILE_EOF
+ * when expected amount of bytes was send.
+ *
+ * len_wanted == 0 means read till the end of file.
  */
-static void fio_send_file_impl(int out, char const* path)
+static void fio_send_file_impl(int out, char const* path, size_t len_wanted)
 {
 	FILE      *fp;
 	fio_header hdr;
 	char      *buf = pgut_malloc(CHUNK_SIZE);
 	size_t	   read_len = 0;
+	size_t	   real_send_len = 0;
 	char      *errormsg = NULL;
 
 	/* open source file for read */
@@ -2388,6 +2488,10 @@ static void fio_send_file_impl(int out, char const* path)
 			IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 			IO_CHECK(fio_write_all(out, buf, read_len), read_len);
 		}
+
+		real_send_len += read_len;
+		if (len_wanted && real_send_len >= len_wanted)
+			break; //TODO pass real_send_len somewhere
 
 		if (feof(fp))
 			break;
@@ -2543,6 +2647,7 @@ static void fio_list_dir_impl(int out, char* buf)
 			fio_file.linked_len = 0;
 
 		hdr.cop = FIO_SEND_FILE;
+		hdr.arg = 0; //read till EOF
 		hdr.size = strlen(file->rel_path) + 1;
 
 		/* send rel_path first */
@@ -2931,7 +3036,7 @@ void fio_communicate(int in, int out)
 			fio_send_pages_impl(out, buf);
 			break;
 		  case FIO_SEND_FILE:
-			fio_send_file_impl(out, buf);
+			fio_send_file_impl(out, buf, hdr.arg);
 			break;
 		  case FIO_SYNC:
 			/* open file and fsync it */
@@ -2979,6 +3084,14 @@ void fio_communicate(int in, int out)
 			break;
 		  case FIO_GET_ASYNC_ERROR:
 			fio_get_async_error_impl(out);
+			break;
+		 case FIO_NON_ZERO_SIZE: /* Get non-zero length of the file in specified path.
+		 						  * Currently used for cfm optimization */
+			hdr.size = sizeof(st);
+			rc = getFileNonZeroSize(buf, &st);
+			hdr.arg = rc < 0 ? errno : 0;
+			IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
+			IO_CHECK(fio_write_all(out, &st, sizeof(st)), sizeof(st));
 			break;
 		  default:
 			Assert(false);
