@@ -217,6 +217,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
+    @unittest.skipUnless(ProbackupTest.gdb, 'skip')
     def test_pgpro434_3(self):
         """
         Check pg_stop_backup_timeout, needed backup_timeout
@@ -279,6 +280,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
+    @unittest.skipUnless(ProbackupTest.gdb, 'skip')
     def test_pgpro434_4(self):
         """
         Check pg_stop_backup_timeout, libpq-timeout requested.
@@ -1458,6 +1460,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.expectedFailure
     # @unittest.skip("skip")
+    @unittest.skipUnless(ProbackupTest.archive_compression, "skip")
     def test_archive_catalog_1(self):
         """
         double segment - compressed and not
@@ -1514,6 +1517,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.expectedFailure
     # @unittest.skip("skip")
+    @unittest.skipUnless(ProbackupTest.archive_compression, "skip")
     def test_archive_catalog_2(self):
         """
         double segment - compressed and not

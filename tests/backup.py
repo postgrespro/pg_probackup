@@ -1178,6 +1178,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
+    @unittest.skipUnless(ProbackupTest.gdb, 'skip')
     def test_drop_rel_during_full_backup(self):
         """"""
         fname = self.id().split('.')[3]
@@ -1259,6 +1260,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     @unittest.skip("skip")
+    @unittest.skipUnless(ProbackupTest.gdb, 'skip')
     def test_drop_db_during_full_backup(self):
         """"""
         fname = self.id().split('.')[3]
@@ -1327,6 +1329,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
+    @unittest.skipUnless(ProbackupTest.gdb, 'skip')
     def test_drop_rel_during_backup_delta(self):
         """"""
         fname = self.id().split('.')[3]
@@ -1396,6 +1399,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
+    @unittest.skipUnless(ProbackupTest.gdb, 'skip')
     def test_drop_rel_during_backup_page(self):
         """"""
         fname = self.id().split('.')[3]
@@ -1463,6 +1467,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
+    @unittest.skipUnless(ProbackupTest.gdb, 'skip')
     def test_drop_rel_during_backup_ptrack(self):
         """"""
         if not self.ptrack:
@@ -1602,6 +1607,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
+    @unittest.skipUnless(ProbackupTest.gdb, 'skip')
     def test_backup_concurrent_drop_table(self):
         """"""
         fname = self.id().split('.')[3]
@@ -1737,6 +1743,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
+    @unittest.skipUnless(ProbackupTest.gdb, 'skip')
     def test_sigint_handling(self):
         """"""
         fname = self.id().split('.')[3]
@@ -1776,6 +1783,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
+    @unittest.skipUnless(ProbackupTest.gdb, 'skip')
     def test_sigterm_handling(self):
         """"""
         fname = self.id().split('.')[3]
@@ -1814,6 +1822,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
+    @unittest.skipUnless(ProbackupTest.gdb, 'skip')
     def test_sigquit_handling(self):
         """"""
         fname = self.id().split('.')[3]

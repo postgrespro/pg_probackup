@@ -15,6 +15,7 @@ module_name = 'checkdb'
 class CheckdbTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
+    @unittest.skipUnless(ProbackupTest.gdb, 'skip')
     def test_checkdb_amcheck_only_sanity(self):
         """"""
         fname = self.id().split('.')[3]
@@ -448,6 +449,7 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
+    @unittest.skipUnless(ProbackupTest.gdb, 'skip')
     def test_checkdb_sigint_handling(self):
         """"""
         fname = self.id().split('.')[3]

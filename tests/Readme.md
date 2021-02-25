@@ -36,6 +36,11 @@ Run suit of basic simple tests:
 Run ptrack tests:
  export PG_PROBACKUP_PTRACK=ON
 
+Run CFS tests:
+ export PG_PROBACKUP_CFS=ON
+
+Run gdb tests:
+ export PG_PROBACKUP_GDB=ON
 
 Usage:
  pip install testgres

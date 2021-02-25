@@ -105,6 +105,17 @@ def is_enterprise():
     else:
         return False
 
+def is_gdb():
+    if 'PG_PROBACKUP_GDB' in os.environ:
+        return os.environ['PG_PROBACKUP_GDB'] == 'ON'
+    else:
+        return False
+
+def is_archive_compression():
+    if 'ARCHIVE_COMPRESSION' in os.environ:
+        return os.environ['ARCHIVE_COMPRESSION'] == 'ON'
+    else:
+        return False
 
 class ProbackupException(Exception):
     def __init__(self, message, cmd):
@@ -146,6 +157,8 @@ def slow_start(self, replica=False):
 class ProbackupTest(object):
     # Class attributes
     enterprise = is_enterprise()
+    gdb = is_gdb()
+    archive_compression = is_archive_compression()
 
     def __init__(self, *args, **kwargs):
         super(ProbackupTest, self).__init__(*args, **kwargs)

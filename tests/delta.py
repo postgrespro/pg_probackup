@@ -476,6 +476,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
+    @unittest.skipUnless(ProbackupTest.gdb, 'skip')
     def test_delta_vacuum_full(self):
         """
         make node, make full and delta stream backups,

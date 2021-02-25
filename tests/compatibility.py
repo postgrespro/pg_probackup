@@ -939,6 +939,7 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.expectedFailure
     # @unittest.skip("skip")
+    @unittest.skipUnless(ProbackupTest.gdb, 'skip')
     def test_backward_compatibility_merge_4(self):
         """
         Start merge between minor version, crash and retry it.
