@@ -992,6 +992,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
+    @unittest.skipUnless(ProbackupTest.gdb, 'skip')
     def test_continue_failed_merge(self):
         """
         Check that failed MERGE can be continued
@@ -1068,6 +1069,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
+    @unittest.skipUnless(ProbackupTest.gdb, 'skip')
     def test_continue_failed_merge_with_corrupted_delta_backup(self):
         """
         Fail merge via gdb, corrupt DELTA backup, try to continue merge
@@ -1165,6 +1167,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
+    @unittest.skipUnless(ProbackupTest.gdb, 'skip')
     def test_continue_failed_merge_2(self):
         """
         Check that failed MERGE on delete can be continued
@@ -1235,6 +1238,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
+    @unittest.skipUnless(ProbackupTest.gdb, 'skip')
     def test_continue_failed_merge_3(self):
         """
         Check that failed MERGE cannot be continued if intermediate
@@ -1425,6 +1429,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
         self.del_test_dir(module_name, fname)
 
+    @unittest.skipUnless(ProbackupTest.gdb, 'skip')
     def test_crash_after_opening_backup_control_1(self):
         """
         check that crashing after opening backup.control
@@ -1477,6 +1482,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
+    @unittest.skipUnless(ProbackupTest.gdb, 'skip')
     def test_crash_after_opening_backup_control_2(self):
         """
         check that crashing after opening backup_content.control
@@ -1569,6 +1575,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
+    @unittest.skipUnless(ProbackupTest.gdb, 'skip')
     def test_losing_file_after_failed_merge(self):
         """
         check that crashing after opening backup_content.control
