@@ -298,7 +298,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             'Backup STATUS should be "ORPHAN"')
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname, [node])
+        self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def test_validate_corrupted_intermediate_backups(self):
@@ -3843,7 +3843,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             self.assertIn("WARNING: Some backups are not valid", e.message)
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname, [node])
+        self.del_test_dir(module_name, fname)
 
     # @unittest.expectedFailure
     # @unittest.skip("skip")
@@ -3906,7 +3906,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             self.assertIn("WARNING: Some backups are not valid", e.message)
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname, [node])
+        self.del_test_dir(module_name, fname)
 
     # @unittest.expectedFailure
     # @unittest.skip("skip")
@@ -3966,7 +3966,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             self.assertIn("WARNING: Some backups are not valid", e.message)
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname, [node])
+        self.del_test_dir(module_name, fname)
 
 # validate empty backup list
 # page from future during validate

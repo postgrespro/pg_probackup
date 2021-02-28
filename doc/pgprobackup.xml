@@ -155,7 +155,7 @@ doc/src/sgml/pgprobackup.sgml
    recovery of <productname>PostgreSQL</productname> database clusters.
    It is designed to perform periodic backups of the <productname>PostgreSQL</productname> 
    instance that enable you to restore the server in case of a failure.
-   <application>pg_probackup</application> supports <productname>PostgreSQL</productname> 9.5 or higher.
+   <application>pg_probackup</application> supports PostgreSQL 9.5 or higher.
   </para>
 
 <itemizedlist spacing="compact">
@@ -389,7 +389,7 @@ doc/src/sgml/pgprobackup.sgml
     <itemizedlist spacing="compact">
       <listitem>
         <para>
-          <application>pg_probackup</application> only supports <productname>PostgreSQL</productname>  9.5 and higher.
+          <application>pg_probackup</application> only supports PostgreSQL 9.5 and higher.
         </para>
       </listitem>
       <listitem>
@@ -410,7 +410,7 @@ doc/src/sgml/pgprobackup.sgml
       </listitem>
       <listitem>
         <para>
-          For PostgreSQL 9.5, functions
+          For <productname>PostgreSQL</productname> 9.5, functions
           <function>pg_create_restore_point(text)</function> and
           <function>pg_switch_xlog()</function> can be executed only if
           the backup role is a superuser, so backup of a
@@ -599,7 +599,7 @@ pg_probackup add-instance -B <replaceable>backup_dir</replaceable> -D <replaceab
       connection</emphasis> to the <productname>PostgreSQL</productname> server:
     </para>
     <para>
-      For PostgreSQL 9.5:
+      For <productname>PostgreSQL</productname> 9.5:
     </para>
     <programlisting>
 BEGIN;
@@ -1202,8 +1202,9 @@ CREATE EXTENSION ptrack;
        together, which leads to false-positive results when tracking changed
        blocks and increases the incremental backup size as unchanged blocks
        can also be copied into the incremental backup.
-       Setting <varname>ptrack.map_size</varname> to a higher value
-       does not affect PTRACK operation. The maximum allowed value is 1024.
+       Setting <varname>ptrack.map_size</varname> to a higher value does not
+       affect PTRACK operation, but it is not recommended to set this parameter
+       to a value higher than 1024.
       </para>
      </listitem>
     </orderedlist>
@@ -1711,7 +1712,7 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
       <para>
         The speed of restore from backup can be significantly improved
         by replacing only invalid and changed pages in already
-        existing PostgreSQL data directory using
+        existing <productname>PostgreSQL</productname> data directory using
         <link linkend="pbk-incremental-restore-options">incremental
         restore options</link> with the <xref linkend="pbk-restore"/>
         command.
@@ -1874,11 +1875,11 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
       </note>
       <note>
         <para>
-          Due to recovery specifics of PostgreSQL versions earlier than 12,
+          Due to recovery specifics of <productname>PostgreSQL</productname> versions earlier than 12,
           it is advisable that you set the
           <ulink url="https://postgrespro.com/docs/postgresql/current/runtime-config-replication.html#GUC-HOT-STANDBY">hot_standby</ulink>
           parameter to <literal>off</literal> when running partial
-          restore of a PostgreSQL cluster of version earlier than 12.
+          restore of a <productname>PostgreSQL</productname> cluster of version earlier than 12.
           Otherwise the recovery may fail.
         </para>
       </note>
