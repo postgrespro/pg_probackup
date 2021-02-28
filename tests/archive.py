@@ -1052,9 +1052,16 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         pgbench.wait()
         pgbench.stdout.close()
 
+        with open(os.path.join(master.logs_dir, 'postgresql.log'), 'r') as f:
+            log_content = f.read()
+        self.assertNotIn('different checksum', log_content)
+
+        with open(os.path.join(replica.logs_dir, 'postgresql.log'), 'r') as f:
+            log_content = f.read()
+        self.assertNotIn('different checksum', log_content)
+
         with open(os.path.join(replica1.logs_dir, 'postgresql.log'), 'r') as f:
             log_content = f.read()
-
         self.assertNotIn('different checksum', log_content)
 
         # Clean after yourself
