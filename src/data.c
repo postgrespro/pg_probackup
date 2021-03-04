@@ -2280,8 +2280,8 @@ write_page_headers(BackupPageHeader2 *headers, pgFile *file, HeaderMap *hdr_map,
 				 map_path, strerror(errno));
 
 		/* enable buffering for header file */
-		hdr_map->buf = pgut_malloc(LARGE_CHUNK_SIZE);
-		setvbuf(hdr_map->fp, hdr_map->buf, _IOFBF, LARGE_CHUNK_SIZE);
+		//hdr_map->buf = pgut_malloc(LARGE_CHUNK_SIZE);
+		setvbuf(hdr_map->fp, hdr_map->buf, _IONBF, LARGE_CHUNK_SIZE);
 
 		/* update file permission */
 		if (chmod(map_path, FILE_PERMISSION) == -1)
