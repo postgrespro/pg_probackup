@@ -2110,10 +2110,16 @@ send_pages(ConnectionArgs* conn_arg, const char *to_fullpath, const char *from_f
 		elog(ERROR, "Cannot close the source file \"%s\": %s",
 			 to_fullpath, strerror(errno));
 
-	/* close local output file */
-	if (out && fclose(out))
-		elog(ERROR, "Cannot close the backup file \"%s\": %s",
-			 to_fullpath, strerror(errno));
+	/* flush and close the local output file */
+	if (out)
+	{
+		if (fflush(out) != 0)
+			elog(ERROR, "Cannot flush the backup file \"%s\": %s",
+				 to_fullpath, strerror(errno));
+		if (fclose(out) != 0)
+			elog(ERROR, "Cannot close the backup file \"%s\": %s",
+				 to_fullpath, strerror(errno));
+	}
 
 	pg_free(iter);
 	pg_free(in_buf);
@@ -2268,7 +2274,7 @@ write_page_headers(BackupPageHeader2 *headers, pgFile *file, HeaderMap *hdr_map,
 	{
 		elog(LOG, "Creating page header map \"%s\"", map_path);
 
-		hdr_map->fp = fopen(map_path, PG_BINARY_W);
+		hdr_map->fp = fopen(map_path, "a");
 		if (hdr_map->fp == NULL)
 			elog(ERROR, "Cannot open header file \"%s\": %s",
 				 map_path, strerror(errno));
