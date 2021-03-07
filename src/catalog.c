@@ -972,17 +972,11 @@ catalog_get_backup_list(const char *instance_name, time_t requested_backup_id)
 			continue;
 		}
 		parray_append(backups, backup);
-
-		if (errno && errno != ENOENT)
-		{
-			elog(WARNING, "cannot read data directory \"%s\": %s",
-				 data_ent->d_name, strerror(errno));
-			goto err_proc;
-		}
 	}
+
 	if (errno)
 	{
-		elog(WARNING, "cannot read backup root directory \"%s\": %s",
+		elog(WARNING, "Cannot read backup root directory \"%s\": %s",
 			backup_instance_path, strerror(errno));
 		goto err_proc;
 	}
