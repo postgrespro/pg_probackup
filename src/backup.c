@@ -1572,7 +1572,12 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn,
 	 */
 	if (pg_stop_backup_is_sent && !in_cleanup)
 	{
+		int timeout = ARCHIVE_TIMEOUT_DEFAULT;
 		res = NULL;
+
+		/* kludge against some old bug in archive_timeout. TODO: remove in 3.0.0 */
+		if (instance_config.archive_timeout > 0)
+			timeout = instance_config.archive_timeout;
 
 		while (1)
 		{
@@ -1598,11 +1603,10 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn,
 				 * If postgres haven't answered in archive_timeout seconds,
 				 * send an interrupt.
 				 */
-				if (pg_stop_backup_timeout > instance_config.archive_timeout)
+				if (pg_stop_backup_timeout > timeout)
 				{
 					pgut_cancel(conn);
-					elog(ERROR, "pg_stop_backup doesn't answer in %d seconds, cancel it",
-						 instance_config.archive_timeout);
+					elog(ERROR, "pg_stop_backup doesn't answer in %d seconds, cancel it", timeout);
 				}
 			}
 			else
