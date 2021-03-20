@@ -983,6 +983,90 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
+
+    # @unittest.expectedFailure
+    # @unittest.skip("skip")
+    def test_concurrent_archiving(self):
+        """
+        Concurrent archiving from master, replica and cascade replica
+        https://github.com/postgrespro/pg_probackup/issues/327
+
+        For PG >= 11 it is expected to pass this test
+        """
+
+        if self.pg_config_version < self.version_to_num('11.0'):
+            return unittest.skip('You need PostgreSQL >= 11 for this test')
+
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        master = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'master'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={'autovacuum': 'off'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', master)
+        self.set_archiving(backup_dir, 'node', master, replica=True)
+        master.slow_start()
+
+        master.pgbench_init(scale=10)
+
+        # TAKE FULL ARCHIVE BACKUP FROM MASTER
+        self.backup_node(backup_dir, 'node', master)
+
+        # Settings for Replica
+        replica = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'replica'))
+        replica.cleanup()
+        self.restore_node(backup_dir, 'node', replica)
+
+        self.set_replica(master, replica, synchronous=True)
+        self.set_archiving(backup_dir, 'node', replica, replica=True)
+        self.set_auto_conf(replica, {'port': replica.port})
+        replica.slow_start(replica=True)
+
+        # create cascade replicas
+        replica1 = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'replica1'))
+        replica1.cleanup()
+
+        # Settings for casaced replica
+        self.restore_node(backup_dir, 'node', replica1)
+        self.set_replica(replica, replica1, synchronous=False)
+        self.set_auto_conf(replica1, {'port': replica1.port})
+        replica1.slow_start(replica=True)
+
+        # Take full backup from master
+        self.backup_node(backup_dir, 'node', master)
+
+        pgbench = master.pgbench(
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            options=['-T', '30', '-c', '1'])
+
+        # Take several incremental backups from master
+        self.backup_node(backup_dir, 'node', master, backup_type='page', options=['--no-validate'])
+
+        self.backup_node(backup_dir, 'node', master, backup_type='page', options=['--no-validate'])
+
+        pgbench.wait()
+        pgbench.stdout.close()
+
+        with open(os.path.join(master.logs_dir, 'postgresql.log'), 'r') as f:
+            log_content = f.read()
+        self.assertNotIn('different checksum', log_content)
+
+        with open(os.path.join(replica.logs_dir, 'postgresql.log'), 'r') as f:
+            log_content = f.read()
+        self.assertNotIn('different checksum', log_content)
+
+        with open(os.path.join(replica1.logs_dir, 'postgresql.log'), 'r') as f:
+            log_content = f.read()
+        self.assertNotIn('different checksum', log_content)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
     # @unittest.expectedFailure
     # @unittest.skip("skip")
     def test_archive_pg_receivexlog(self):
