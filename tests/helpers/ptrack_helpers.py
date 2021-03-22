@@ -1757,6 +1757,7 @@ class GdbException(Exception):
 class GDBobj(ProbackupTest):
     def __init__(self, cmd, verbose, attach=False):
         self.verbose = verbose
+        self.output = ''
 
         # Check gdb presense
         try:
@@ -1801,7 +1802,8 @@ class GDBobj(ProbackupTest):
         # discard data from pipe,
         # is there a way to do it a less derpy way?
         while True:
-            line = self.proc.stdout.readline()
+#            line = self.proc.stdout.readline()
+            line = self.get_line()
 
             if 'No such process' in line:
                 raise GdbException(line)
@@ -1810,6 +1812,12 @@ class GDBobj(ProbackupTest):
                 pass
             else:
                 break
+
+    def get_line(self):
+        line = self.proc.stdout.readline()
+#        self.output += repr(line) + '\n'
+        self.output += line
+        return line
 
     def kill(self):
         self.proc.kill()
@@ -1932,10 +1940,8 @@ class GDBobj(ProbackupTest):
             'Failed to continue execution until break.\n')
 
     def stopped_in_breakpoint(self):
-        output = []
         while True:
-            line = self.proc.stdout.readline()
-            output += [line]
+            line = self.get_line()
             if self.verbose:
                 print(line)
             if line.startswith('*stopped,reason="breakpoint-hit"'):
@@ -1952,7 +1958,7 @@ class GDBobj(ProbackupTest):
 
         # look for command we just send
         while True:
-            line = self.proc.stdout.readline()
+            line = self.get_line()
             if self.verbose:
                 print(repr(line))
 
@@ -1962,7 +1968,7 @@ class GDBobj(ProbackupTest):
                 break
 
         while True:
-            line = self.proc.stdout.readline()
+            line = self.get_line()
             output += [line]
             if self.verbose:
                 print(repr(line))
