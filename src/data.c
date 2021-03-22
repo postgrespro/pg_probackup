@@ -2268,7 +2268,7 @@ write_page_headers(BackupPageHeader2 *headers, pgFile *file, HeaderMap *hdr_map,
 	{
 		elog(LOG, "Creating page header map \"%s\"", map_path);
 
-		hdr_map->fp = fopen(map_path, PG_BINARY_W);
+		hdr_map->fp = fopen(map_path, 'a');
 		if (hdr_map->fp == NULL)
 			elog(ERROR, "Cannot open header file \"%s\": %s",
 				 map_path, strerror(errno));
