@@ -2365,7 +2365,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
-    @unittest.skip("skip")
+    # @unittest.skip("skip")
     def test_backup_with_less_privileges_role(self):
         """
         check permissions correctness from documentation:
@@ -3076,6 +3076,83 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         node.safe_psql(
             'postgres',
             'select 1')
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+
+
+    # @unittest.skip("skip")
+    def test_missing_wal_segment(self):
+        """"""
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            ptrack_enable=self.ptrack,
+            initdb_params=['--data-checksums'],
+            pg_options={'archive_timeout': '30s'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        node.pgbench_init(scale=10)
+
+        node.safe_psql(
+            'postgres',
+            'CREATE DATABASE backupdb')
+
+        # get segments in pg_wal, sort then and remove all but the latest
+        pg_wal_dir = os.path.join(node.data_dir, 'pg_wal')
+
+        if node.major_version >= 10:
+            pg_wal_dir = os.path.join(node.data_dir, 'pg_wal')
+        else:
+            pg_wal_dir = os.path.join(node.data_dir, 'pg_xlog')
+
+        # Full backup in streaming mode
+        gdb = self.backup_node(
+            backup_dir, 'node', node, datname='backupdb',
+            options=['--stream', '--log-level-file=INFO'], gdb=True)
+
+        # break at streaming start
+        gdb.set_breakpoint('start_WAL_streaming')
+        gdb.run_until_break()
+
+        # generate some more data
+        node.pgbench_init(scale=3)
+
+        # remove redundant WAL segments in pg_wal
+        files = os.listdir(pg_wal_dir)
+        files.sort(reverse=True)
+
+        # leave first two files in list
+        del files[:2]
+        for filename in files:
+            os.remove(os.path.join(pg_wal_dir, filename))
+
+        gdb.continue_execution_until_exit()
+
+        self.assertIn(
+            'unexpected termination of replication stream: ERROR:  requested WAL segment',
+            gdb.output)
+
+        self.assertIn(
+            'has already been removed',
+            gdb.output)
+
+        self.assertIn(
+            'ERROR: Interrupted during waiting for WAL streaming',
+            gdb.output)
+
+        self.assertIn(
+            'WARNING: backup in progress, stop backup',
+            gdb.output)
+        
+        # TODO: check the same for PAGE backup
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
