@@ -1799,10 +1799,7 @@ class GDBobj(ProbackupTest):
         )
         self.gdb_pid = self.proc.pid
 
-        # discard data from pipe,
-        # is there a way to do it a less derpy way?
         while True:
-#            line = self.proc.stdout.readline()
             line = self.get_line()
 
             if 'No such process' in line:
@@ -1815,7 +1812,6 @@ class GDBobj(ProbackupTest):
 
     def get_line(self):
         line = self.proc.stdout.readline()
-#        self.output += repr(line) + '\n'
         self.output += line
         return line
 
