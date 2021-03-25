@@ -721,6 +721,8 @@ validate_tablespace_map(pgBackup *backup)
 	pgFile    **tablespace_map = NULL;
 	pg_crc32    crc;
 	parray     *files = get_backup_filelist(backup, true);
+	bool        use_crc32c = parse_program_version(backup->program_version) <= 20021 ||
+                             parse_program_version(backup->program_version) >= 20025;
 
 	parray_qsort(files, pgFileCompareRelPathWithExternal);
 	join_path_components(map_path, backup->database_dir, PG_TABLESPACE_MAP_FILE);
@@ -743,7 +745,7 @@ validate_tablespace_map(pgBackup *backup)
 			map_path, base36enc(backup->backup_id));
 
 	/* check tablespace map checksumms */
-	crc = pgFileGetCRC(map_path, true, false);
+	crc = pgFileGetCRC(map_path, use_crc32c, false);
 
 	if ((*tablespace_map)->crc != crc)
 		elog(ERROR, "Invalid CRC of tablespace map file \"%s\" : %X. Expected %X, "

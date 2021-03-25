@@ -208,6 +208,8 @@ do { \
 		FIN_TRADITIONAL_CRC32(crc); \
 } while (0)
 
+#define pg_off_t unsigned long long
+
 
 /* Information about single file (or dir) in backup */
 typedef struct pgFile
@@ -249,8 +251,8 @@ typedef struct pgFile
 	/* Coordinates in header map */
 	int      n_headers;		/* number of blocks in the data file in backup */
 	pg_crc32 hdr_crc;		/* CRC value of header file: name_hdr */
-	off_t    hdr_off;       /* offset in header map */
-	int      hdr_size;       /* offset in header map */
+	pg_off_t hdr_off;       /* offset in header map */
+	int      hdr_size;      /* length of headers */
 } pgFile;
 
 typedef struct page_map_entry
@@ -306,7 +308,7 @@ typedef enum ShowFormat
 #define BYTES_INVALID		(-1) /* file didn`t changed since previous backup, DELTA backup do not rely on it */
 #define FILE_NOT_FOUND		(-2) /* file disappeared during backup */
 #define BLOCKNUM_INVALID	(-1)
-#define PROGRAM_VERSION	"2.4.10"
+#define PROGRAM_VERSION	"2.4.11"
 
 /* update when remote agent API or behaviour changes */
 #define AGENT_PROTOCOL_VERSION 20409
@@ -406,11 +408,11 @@ typedef struct PGNodeInfo
 /* structure used for access to block header map */
 typedef struct HeaderMap
 {
-	char  path[MAXPGPATH];
-	char  path_tmp[MAXPGPATH]; /* used only in merge */
-	FILE  *fp;                 /* used only for writing */
-	char  *buf;	               /* buffer */
-	off_t  offset;             /* current position in fp */
+	char     path[MAXPGPATH];
+	char     path_tmp[MAXPGPATH]; /* used only in merge */
+	FILE    *fp;                  /* used only for writing */
+	char    *buf;                 /* buffer */
+	pg_off_t offset;              /* current position in fp */
 	pthread_mutex_t mutex;
 
 } HeaderMap;
@@ -895,6 +897,8 @@ extern int validate_one_page(Page page, BlockNumber absolute_blkno,
 							 uint32 checksum_version);
 extern bool validate_tablespace_map(pgBackup *backup);
 
+extern parray* get_history_streaming(ConnectionOptions *conn_opt, TimeLineID tli, parray *backup_list);
+
 /* return codes for validate_one_page */
 /* TODO: use enum */
 #define PAGE_IS_VALID (-1)
@@ -924,6 +928,7 @@ extern pgBackup *catalog_get_last_data_backup(parray *backup_list,
 extern pgBackup *get_multi_timeline_parent(parray *backup_list, parray *tli_list,
 	                      TimeLineID current_tli, time_t current_start_time,
 						  InstanceConfig *instance);
+extern timelineInfo *timelineInfoNew(TimeLineID tli);
 extern void timelineInfoFree(void *tliInfo);
 extern parray *catalog_get_timelines(InstanceConfig *instance);
 extern void do_set_backup(const char *instance_name, time_t backup_id,

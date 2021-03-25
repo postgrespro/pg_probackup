@@ -56,7 +56,7 @@ static void pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn, PGNode
 
 static XLogRecPtr wait_wal_lsn(XLogRecPtr lsn, bool is_start_lsn, TimeLineID tli,
 								bool in_prev_segment, bool segment_only,
-								int timeout_elevel, bool in_stream_dir);
+								int timeout_elevel, bool in_stream_dir, pgBackup *backup);
 
 static void check_external_for_tablespaces(parray *external_list,
 										   PGconn *backup_conn);
@@ -165,8 +165,10 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool
 						"trying to look up on previous timelines",
 						current.tli);
 
-			/* TODO: use read_timeline_history */
-			tli_list = catalog_get_timelines(&instance_config);
+			tli_list = get_history_streaming(&instance_config.conn_opt, current.tli, backup_list);
+			if (!tli_list)
+				/* fallback to using archive */
+				tli_list = catalog_get_timelines(&instance_config);
 
 			if (parray_num(tli_list) == 0)
 				elog(WARNING, "Cannot find valid backup on previous timelines, "
@@ -268,7 +270,7 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool
 		 * Because WAL streaming will start after pg_start_backup() in stream
 		 * mode.
 		 */
-		wait_wal_lsn(current.start_lsn, true, current.tli, false, true, ERROR, false);
+		wait_wal_lsn(current.start_lsn, true, current.tli, false, true, ERROR, false, &current);
 	}
 
 	/* start stream replication */
@@ -279,6 +281,12 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool
 
 		start_WAL_streaming(backup_conn, dst_backup_path, &instance_config.conn_opt,
 							current.start_lsn, current.tli);
+
+		/* Make sure that WAL streaming is working
+		 * PAGE backup in stream mode is waited twice, first for
+		 * segment in WAL archive and then for streamed segment
+		 */
+		wait_wal_lsn(current.start_lsn, true, current.tli, false, true, ERROR, true, &current);
 	}
 
 	/* initialize backup's file list */
@@ -1262,7 +1270,7 @@ pg_is_superuser(PGconn *conn)
 static XLogRecPtr
 wait_wal_lsn(XLogRecPtr target_lsn, bool is_start_lsn, TimeLineID tli,
 			 bool in_prev_segment, bool segment_only,
-			 int timeout_elevel, bool in_stream_dir)
+			 int timeout_elevel, bool in_stream_dir, pgBackup *backup)
 {
 	XLogSegNo	targetSegNo;
 	char		pg_wal_dir[MAXPGPATH];
@@ -1294,15 +1302,14 @@ wait_wal_lsn(XLogRecPtr target_lsn, bool is_start_lsn, TimeLineID tli,
 	 */
 	if (in_stream_dir)
 	{
-		pgBackupGetPath2(&current, pg_wal_dir, lengthof(pg_wal_dir),
-						 DATABASE_DIR, PG_XLOG_DIR);
+		join_path_components(pg_wal_dir, backup->database_dir, PG_XLOG_DIR);
 		join_path_components(wal_segment_path, pg_wal_dir, wal_segment);
 		wal_segment_dir = pg_wal_dir;
 	}
 	else
 	{
 		join_path_components(wal_segment_path, arclog_path, wal_segment);
-		wal_segment_dir = arclog_path;
+		wal_segment_dir = arclog_path; /* global var */
 	}
 
 	/* TODO: remove this in 3.0 (it is a cludge against some old bug with archive_timeout) */
@@ -1394,7 +1401,7 @@ wait_wal_lsn(XLogRecPtr target_lsn, bool is_start_lsn, TimeLineID tli,
 
 		sleep(1);
 		if (interrupted)
-			elog(ERROR, "Interrupted during waiting for WAL archiving");
+			elog(ERROR, "Interrupted during waiting for WAL %s", in_stream_dir ? "streaming" : "archiving");
 		try_count++;
 
 		/* Inform user if WAL segment is absent in first attempt */
@@ -1418,9 +1425,10 @@ wait_wal_lsn(XLogRecPtr target_lsn, bool is_start_lsn, TimeLineID tli,
 		{
 			if (file_exists)
 				elog(timeout_elevel, "WAL segment %s was %s, "
-					 "but target LSN %X/%X could not be archived in %d seconds",
+					 "but target LSN %X/%X could not be %s in %d seconds",
 					 wal_segment, wal_delivery_str,
-					 (uint32) (target_lsn >> 32), (uint32) target_lsn, timeout);
+					 (uint32) (target_lsn >> 32), (uint32) target_lsn,
+					 wal_delivery_str, timeout);
 			/* If WAL segment doesn't exist or we wait for previous segment */
 			else
 				elog(timeout_elevel,
@@ -1572,7 +1580,12 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn,
 	 */
 	if (pg_stop_backup_is_sent && !in_cleanup)
 	{
+		int timeout = ARCHIVE_TIMEOUT_DEFAULT;
 		res = NULL;
+
+		/* kludge against some old bug in archive_timeout. TODO: remove in 3.0.0 */
+		if (instance_config.archive_timeout > 0)
+			timeout = instance_config.archive_timeout;
 
 		while (1)
 		{
@@ -1598,11 +1611,10 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn,
 				 * If postgres haven't answered in archive_timeout seconds,
 				 * send an interrupt.
 				 */
-				if (pg_stop_backup_timeout > instance_config.archive_timeout)
+				if (pg_stop_backup_timeout > timeout)
 				{
 					pgut_cancel(conn);
-					elog(ERROR, "pg_stop_backup doesn't answer in %d seconds, cancel it",
-						 instance_config.archive_timeout);
+					elog(ERROR, "pg_stop_backup doesn't answer in %d seconds, cancel it", timeout);
 				}
 			}
 			else
@@ -1701,7 +1713,7 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn,
 			{
 				/* Wait for segment with current stop_lsn, it is ok for it to never arrive */
 				wait_wal_lsn(stop_backup_lsn_tmp, false, backup->tli,
-							 false, true, WARNING, stream_wal);
+							 false, true, WARNING, stream_wal, backup);
 
 				/* Get the first record in segment with current stop_lsn */
 				lsn_tmp = get_first_record_lsn(xlog_path, segno, backup->tli,
@@ -1729,7 +1741,7 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn,
 					 * because previous record can be the contrecord.
 					 */
 					lsn_tmp = wait_wal_lsn(stop_backup_lsn_tmp, false, backup->tli,
-											true, false, ERROR, stream_wal);
+											true, false, ERROR, stream_wal, backup);
 
 					/* sanity */
 					if (!XRecOffIsValid(lsn_tmp) || XLogRecPtrIsInvalid(lsn_tmp))
@@ -1743,7 +1755,7 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn,
 			{
 				/* Wait for segment with current stop_lsn */
 				wait_wal_lsn(stop_backup_lsn_tmp, false, backup->tli,
-							 false, true, ERROR, stream_wal);
+							 false, true, ERROR, stream_wal, backup);
 
 				/* Get the next closest record in segment with current stop_lsn */
 				lsn_tmp = get_next_record_lsn(xlog_path, segno, backup->tli,
@@ -1872,7 +1884,7 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn,
 		 */
 		if (!stop_lsn_exists)
 			stop_backup_lsn = wait_wal_lsn(stop_backup_lsn_tmp, false, backup->tli,
-											false, false, ERROR, stream_wal);
+											false, false, ERROR, stream_wal, backup);
 
 		if (stream_wal)
 		{
