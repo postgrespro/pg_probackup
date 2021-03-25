@@ -3080,8 +3080,6 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
-
-
     # @unittest.skip("skip")
     def test_missing_wal_segment(self):
         """"""
@@ -3153,6 +3151,265 @@ class BackupTest(ProbackupTest, unittest.TestCase):
             gdb.output)
         
         # TODO: check the same for PAGE backup
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_missing_replication_permission(self):
+        """"""
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            ptrack_enable=self.ptrack,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+#        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # FULL backup
+        self.backup_node(backup_dir, 'node', node, options=['--stream'])
+
+        # Create replica
+        replica = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'replica'))
+        replica.cleanup()
+        self.restore_node(backup_dir, 'node', replica)
+
+        # Settings for Replica
+        self.set_replica(node, replica)
+        replica.slow_start(replica=True)
+
+        node.safe_psql(
+            'postgres',
+            'CREATE DATABASE backupdb')
+
+        # PG 9.5
+        if self.get_version(node) < 90600:
+            node.safe_psql(
+                'backupdb',
+                "CREATE ROLE backup WITH LOGIN; "
+                "GRANT CONNECT ON DATABASE backupdb to backup; "
+                "GRANT USAGE ON SCHEMA pg_catalog TO backup; "
+                "GRANT SELECT ON TABLE pg_catalog.pg_proc TO backup; "
+                "GRANT SELECT ON TABLE pg_catalog.pg_extension TO backup; "
+                "GRANT SELECT ON TABLE pg_catalog.pg_database TO backup; " # for partial restore, checkdb and ptrack
+                "GRANT EXECUTE ON FUNCTION pg_catalog.nameeq(name, name) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.textout(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.timestamptz(timestamp with time zone, integer) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;")
+        # PG 9.6
+        elif self.get_version(node) > 90600 and self.get_version(node) < 100000:
+            node.safe_psql(
+                'backupdb',
+                "CREATE ROLE backup WITH LOGIN; "
+                "GRANT CONNECT ON DATABASE backupdb to backup; "
+                "GRANT USAGE ON SCHEMA pg_catalog TO backup; "
+                "GRANT SELECT ON TABLE pg_catalog.pg_extension TO backup; "
+                "GRANT SELECT ON TABLE pg_catalog.pg_proc TO backup; "
+                "GRANT SELECT ON TABLE pg_catalog.pg_database TO backup; " # for partial restore, checkdb and ptrack
+                "GRANT EXECUTE ON FUNCTION pg_catalog.nameeq(name, name) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.textout(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.timestamptz(timestamp with time zone, integer) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_system() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean, boolean) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup(boolean) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_create_restore_point(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_switch_xlog() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_last_xlog_replay_location() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;")
+        # >= 10
+        else:
+            node.safe_psql(
+                'backupdb',
+                "CREATE ROLE backup WITH LOGIN; "
+                "GRANT CONNECT ON DATABASE backupdb to backup; "
+                "GRANT USAGE ON SCHEMA pg_catalog TO backup; "
+                "GRANT SELECT ON TABLE pg_catalog.pg_extension TO backup; "
+                "GRANT SELECT ON TABLE pg_catalog.pg_proc TO backup; "
+                "GRANT SELECT ON TABLE pg_catalog.pg_extension TO backup; "
+                "GRANT SELECT ON TABLE pg_catalog.pg_database TO backup; " # for partial restore, checkdb and ptrack
+                "GRANT EXECUTE ON FUNCTION pg_catalog.nameeq(name, name) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_system() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean, boolean) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup(boolean, boolean) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_create_restore_point(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_switch_wal() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_last_wal_replay_lsn() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;"
+            )
+
+        if ProbackupTest.enterprise:
+            node.safe_psql(
+                "backupdb",
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_edition() TO backup")
+
+            node.safe_psql(
+                "backupdb",
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_version() TO backup")
+        
+        sleep(2)
+        replica.promote()
+
+        # Delta backup        
+        try:
+            self.backup_node(
+                backup_dir, 'node', replica, backup_type='delta',
+                data_dir=replica.data_dir, datname='backupdb', options=['--stream', '-U', 'backup'])
+            # we should die here because exception is what we expect to happen
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because incremental backup should not be possible "
+                "\n Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                "FATAL:  must be superuser or replication role to start walsender",
+                e.message,
+                "\n Unexpected Error Message: {0}\n CMD: {1}".format(
+                    repr(e.message), self.cmd))
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_missing_replication_permission_1(self):
+        """"""
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            ptrack_enable=self.ptrack,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # FULL backup
+        self.backup_node(backup_dir, 'node', node, options=['--stream'])
+
+        # Create replica
+        replica = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'replica'))
+        replica.cleanup()
+        self.restore_node(backup_dir, 'node', replica)
+
+        # Settings for Replica
+        self.set_replica(node, replica)
+        replica.slow_start(replica=True)
+
+        node.safe_psql(
+            'postgres',
+            'CREATE DATABASE backupdb')
+
+        # PG 9.5
+        if self.get_version(node) < 90600:
+            node.safe_psql(
+                'backupdb',
+                "CREATE ROLE backup WITH LOGIN; "
+                "GRANT CONNECT ON DATABASE backupdb to backup; "
+                "GRANT USAGE ON SCHEMA pg_catalog TO backup; "
+                "GRANT SELECT ON TABLE pg_catalog.pg_proc TO backup; "
+                "GRANT SELECT ON TABLE pg_catalog.pg_extension TO backup; "
+                "GRANT SELECT ON TABLE pg_catalog.pg_database TO backup; " # for partial restore, checkdb and ptrack
+                "GRANT EXECUTE ON FUNCTION pg_catalog.nameeq(name, name) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.textout(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.timestamptz(timestamp with time zone, integer) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;")
+        # PG 9.6
+        elif self.get_version(node) > 90600 and self.get_version(node) < 100000:
+            node.safe_psql(
+                'backupdb',
+                "CREATE ROLE backup WITH LOGIN; "
+                "GRANT CONNECT ON DATABASE backupdb to backup; "
+                "GRANT USAGE ON SCHEMA pg_catalog TO backup; "
+                "GRANT SELECT ON TABLE pg_catalog.pg_extension TO backup; "
+                "GRANT SELECT ON TABLE pg_catalog.pg_proc TO backup; "
+                "GRANT SELECT ON TABLE pg_catalog.pg_database TO backup; " # for partial restore, checkdb and ptrack
+                "GRANT EXECUTE ON FUNCTION pg_catalog.nameeq(name, name) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.textout(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.timestamptz(timestamp with time zone, integer) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_system() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean, boolean) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup(boolean) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_create_restore_point(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_switch_xlog() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_last_xlog_replay_location() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;")
+        # >= 10
+        else:
+            node.safe_psql(
+                'backupdb',
+                "CREATE ROLE backup WITH LOGIN; "
+                "GRANT CONNECT ON DATABASE backupdb to backup; "
+                "GRANT USAGE ON SCHEMA pg_catalog TO backup; "
+                "GRANT SELECT ON TABLE pg_catalog.pg_extension TO backup; "
+                "GRANT SELECT ON TABLE pg_catalog.pg_proc TO backup; "
+                "GRANT SELECT ON TABLE pg_catalog.pg_extension TO backup; "
+                "GRANT SELECT ON TABLE pg_catalog.pg_database TO backup; " # for partial restore, checkdb and ptrack
+                "GRANT EXECUTE ON FUNCTION pg_catalog.nameeq(name, name) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_system() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean, boolean) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup(boolean, boolean) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_create_restore_point(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_switch_wal() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_last_wal_replay_lsn() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;"
+            )
+
+        if ProbackupTest.enterprise:
+            node.safe_psql(
+                "backupdb",
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_edition() TO backup")
+
+            node.safe_psql(
+                "backupdb",
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_version() TO backup")
+
+        replica.promote()
+
+        # PAGE
+        output = self.backup_node(
+            backup_dir, 'node', replica, backup_type='page',
+            data_dir=replica.data_dir, datname='backupdb', options=['-U', 'backup'],
+            return_id=False)
+        
+        self.assertIn(
+            'WARNING: Valid backup on current timeline 2 is not found, trying to look up on previous timelines',
+            output)
+        
+        self.assertIn(
+            'WARNING: could not connect to database backupdb: FATAL:  must be superuser or replication role to start walsender',
+            output)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
