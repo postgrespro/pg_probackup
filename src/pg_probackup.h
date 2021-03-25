@@ -208,6 +208,8 @@ do { \
 		FIN_TRADITIONAL_CRC32(crc); \
 } while (0)
 
+#define pg_off_t unsigned long long
+
 
 /* Information about single file (or dir) in backup */
 typedef struct pgFile
@@ -249,8 +251,8 @@ typedef struct pgFile
 	/* Coordinates in header map */
 	int      n_headers;		/* number of blocks in the data file in backup */
 	pg_crc32 hdr_crc;		/* CRC value of header file: name_hdr */
-	off_t    hdr_off;       /* offset in header map */
-	int      hdr_size;       /* offset in header map */
+	pg_off_t hdr_off;       /* offset in header map */
+	int      hdr_size;      /* length of headers */
 } pgFile;
 
 typedef struct page_map_entry
@@ -406,11 +408,11 @@ typedef struct PGNodeInfo
 /* structure used for access to block header map */
 typedef struct HeaderMap
 {
-	char  path[MAXPGPATH];
-	char  path_tmp[MAXPGPATH]; /* used only in merge */
-	FILE  *fp;                 /* used only for writing */
-	char  *buf;	               /* buffer */
-	off_t  offset;             /* current position in fp */
+	char     path[MAXPGPATH];
+	char     path_tmp[MAXPGPATH]; /* used only in merge */
+	FILE    *fp;                  /* used only for writing */
+	char    *buf;                 /* buffer */
+	pg_off_t offset;              /* current position in fp */
 	pthread_mutex_t mutex;
 
 } HeaderMap;
