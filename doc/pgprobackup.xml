@@ -4108,7 +4108,7 @@ pg_probackup validate -B <replaceable>backup_dir</replaceable>
       <title>merge</title>
       <programlisting>
 pg_probackup merge -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> -i <replaceable>backup_id</replaceable>
-[--help] [-j <replaceable>num_threads</replaceable>] [--progress]
+[--help] [-j <replaceable>num_threads</replaceable>] [--progress] [--no-validate] [--no-sync]
 [<replaceable>logging_options</replaceable>]
 </programlisting>
       <para>
@@ -4119,6 +4119,30 @@ pg_probackup merge -B <replaceable>backup_dir</replaceable> --instance <replacea
         between them. Once the merge is complete, the full backup takes in all
         the merged data, and the incremental backups are removed as redundant.
       </para>
+
+      <para>
+      <variablelist>
+        <varlistentry>
+        <term><option>--no-validate</option></term>
+        <listitem>
+        <para>
+          Skips automatic validation before and after merge.
+        </para>
+        </listitem>
+        </varlistentry>
+        <varlistentry>
+        <term><option>--no-sync</option></term>
+        <listitem>
+        <para>
+          Do not sync merged files to disk. You can use this flag to speed
+          up the merge process. Using this flag can result in data
+          corruption in case of operating system or hardware crash.
+        </para>
+        </listitem>
+        </varlistentry>
+      </variablelist>
+      </para>
+
       <para>
         For details, see the section
         <link linkend="pbk-merging-backups">Merging Backups</link>.
@@ -4131,13 +4155,38 @@ pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replace
 [--help] [-j <replaceable>num_threads</replaceable>] [--progress]
 [--retention-redundancy=<replaceable>redundancy</replaceable>][--retention-window=<replaceable>window</replaceable>][--wal-depth=<replaceable>wal_depth</replaceable>] [--delete-wal]
 {-i <replaceable>backup_id</replaceable> | --delete-expired [--merge-expired] | --merge-expired | --status=backup_status}
-[--dry-run] [<replaceable>logging_options</replaceable>]
+[--dry-run] [--no-validate] [--no-sync] [<replaceable>logging_options</replaceable>]
 </programlisting>
       <para>
         Deletes backup with specified <replaceable>backup_id</replaceable>
         or launches the retention purge of backups and archived WAL
         that do not satisfy the current retention policies.
       </para>
+
+      <para>
+      <variablelist>
+        <varlistentry>
+        <term><option>--no-validate</option></term>
+        <listitem>
+        <para>
+          Skips automatic validation before and after retention merge.
+        </para>
+        </listitem>
+        </varlistentry>
+
+        <varlistentry>
+        <term><option>--no-sync</option></term>
+        <listitem>
+        <para>
+          Do not sync merged files to disk. You can use this flag to speed
+          up the retention merge process. Using this flag can result in data
+          corruption in case of operating system or hardware crash.
+        </para>
+        </listitem>
+        </varlistentry>
+      </variablelist>
+      </para>
+
       <para>
         For details, see the sections
         <link linkend="pbk-deleting-backups">Deleting Backups</link>,
