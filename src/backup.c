@@ -887,7 +887,7 @@ do_backup(pgSetBackupParams *set_backup_params,
 	 * which are expired according to retention policies
 	 */
 	if (delete_expired || merge_expired || delete_wal)
-		do_retention();
+		do_retention(no_validate, no_sync);
 
 	return 0;
 }

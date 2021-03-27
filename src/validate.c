@@ -129,9 +129,6 @@ pgBackupValidate(pgBackup *backup, pgRestoreParams *params)
 //		dbOid_exclude_list = get_dbOid_exclude_list(backup, files, params->partial_db_list,
 //														params->partial_restore_type);
 
-	if (merge_no_validate)
-		goto skip_validation;
-
 	/* setup threads */
 	for (i = 0; i < parray_num(files); i++)
 	{
@@ -182,8 +179,6 @@ pgBackupValidate(pgBackup *backup, pgRestoreParams *params)
 
 	pfree(threads);
 	pfree(threads_args);
-
-skip_validation:
 
 	/* cleanup */
 	parray_walk(files, pgFileFree);

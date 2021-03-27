@@ -1169,9 +1169,6 @@ int fio_sync(char const* path, fio_location location)
 	{
 		int fd;
 
-		if (merge_no_sync)
-			return 0;
-
 		fd = open(path, O_WRONLY | PG_BINARY, FILE_PERMISSIONS);
 		if (fd < 0)
 			return -1;

@@ -128,10 +128,6 @@ bool 		compress_shortcut = false;
 /* other options */
 char	   *instance_name;
 
-/* TODO: quick hack */
-bool merge_no_validate = false;
-bool merge_no_sync = false;
-
 /* archive push options */
 int		batch_size = 1;
 static char *wal_file_path;
@@ -834,8 +830,6 @@ main(int argc, char *argv[])
 		case SHOW_CMD:
 			return do_show(instance_name, current.backup_id, show_archive);
 		case DELETE_CMD:
-			merge_no_validate = no_validate;
-			merge_no_sync = no_sync;
 
 			if (delete_expired && backup_id_string)
 				elog(ERROR, "You cannot specify --delete-expired and (-i, --backup-id) options together");
@@ -851,15 +845,13 @@ main(int argc, char *argv[])
 				if (delete_status)
 					do_delete_status(&instance_config, delete_status);
 				else
-					do_retention();
+					do_retention(no_validate, no_sync);
 			}
 			else
 					do_delete(current.backup_id);
 			break;
 		case MERGE_CMD:
-			merge_no_validate = no_validate;
-			merge_no_sync = no_sync;
-			do_merge(current.backup_id);
+			do_merge(current.backup_id, no_validate, no_sync);
 			break;
 		case SHOW_CONFIG_CMD:
 			do_show_config();

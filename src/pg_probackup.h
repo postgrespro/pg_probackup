@@ -786,10 +786,6 @@ extern bool		compress_shortcut;
 /* other options */
 extern char *instance_name;
 
-/* temp merge options */
-extern bool merge_no_validate;
-extern bool merge_no_sync;
-
 /* show options */
 extern ShowFormat show_format;
 
@@ -843,10 +839,10 @@ extern parray *read_timeline_history(const char *arclog_path, TimeLineID targetT
 extern bool tliIsPartOfHistory(const parray *timelines, TimeLineID tli);
 
 /* in merge.c */
-extern void do_merge(time_t backup_id);
+extern void do_merge(time_t backup_id, bool no_validate, bool no_sync);
 extern void merge_backups(pgBackup *backup, pgBackup *next_backup);
-extern void merge_chain(parray *parent_chain,
-						pgBackup *full_backup, pgBackup *dest_backup);
+extern void merge_chain(parray *parent_chain, pgBackup *full_backup, pgBackup *dest_backup,
+						bool no_validate, bool no_sync);
 
 extern parray *read_database_map(pgBackup *backup);
 
@@ -873,7 +869,7 @@ extern int do_show(const char *instance_name, time_t requested_backup_id, bool s
 /* in delete.c */
 extern void do_delete(time_t backup_id);
 extern void delete_backup_files(pgBackup *backup);
-extern void do_retention(void);
+extern void do_retention(bool no_validate, bool no_sync);
 extern int do_delete_instance(void);
 extern void do_delete_status(InstanceConfig *instance_config, const char *status);
 
