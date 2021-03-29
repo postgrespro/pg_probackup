@@ -2156,7 +2156,7 @@ get_data_file_headers(HeaderMap *hdr_map, pgFile *file, uint32 backup_version, b
 		return NULL;
 	}
 	/* disable buffering for header file */
-	setvbuf(in, NULL, _IONBF, BUFSIZ);
+	setvbuf(in, NULL, _IONBF, 0);
 
 	if (fseek(in, file->hdr_off, SEEK_SET))
 	{
