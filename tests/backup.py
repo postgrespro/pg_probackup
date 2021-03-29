@@ -4,7 +4,7 @@ from time import sleep
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 import shutil
 from distutils.dir_util import copy_tree
-from testgres import ProcessType
+from testgres import ProcessType, QueryException
 import subprocess
 
 
@@ -1576,7 +1576,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'max_wal_size': '40MB'})
+                'max_wal_size': '40MB', 'default_transaction_read_only': 'on'})
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -3410,6 +3410,54 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.assertIn(
             'WARNING: could not connect to database backupdb: FATAL:  must be superuser or replication role to start walsender',
             output)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_basic_backup_default_transaction_read_only(self):
+        """"""
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={'default_transaction_read_only': 'on'})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        try:
+            node.safe_psql(
+                'postgres',
+                'create temp table t1()')
+        # we should die here because exception is what we expect to happen
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because incremental backup should not be possible "
+                "\n Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except QueryException as e:
+            self.assertIn(
+                "cannot execute CREATE TABLE in a read-only transaction",
+                e.message,
+                "\n Unexpected Error Message: {0}\n CMD: {1}".format(
+                    repr(e.message), self.cmd))
+
+        # FULL backup
+        self.backup_node(
+            backup_dir, 'node', node,
+            options=['--stream', '--temp-slot'])
+
+        # DELTA backup
+        self.backup_node(
+            backup_dir, 'node', node, backup_type='delta', options=['--stream'])
+
+        # PAGE backup
+        self.backup_node(backup_dir, 'node', node, backup_type='page')
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)

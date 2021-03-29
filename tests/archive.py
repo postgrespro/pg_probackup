@@ -2638,13 +2638,13 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         wal_dir = os.path.join(backup_dir, 'wal', 'node')
 
         self.assertIn(
-            'WARNING: History file is corrupted: "{0}"'.format(os.path.join(wal_dir, '00000002.history')),
+            'WARNING: History file is corrupted or missing: "{0}"'.format(os.path.join(wal_dir, '00000002.history')),
             log_content)
         self.assertIn(
-            'WARNING: History file is corrupted: "{0}"'.format(os.path.join(wal_dir, '00000003.history')),
+            'WARNING: History file is corrupted or missing: "{0}"'.format(os.path.join(wal_dir, '00000003.history')),
             log_content)
         self.assertIn(
-            'WARNING: History file is corrupted: "{0}"'.format(os.path.join(wal_dir, '00000004.history')),
+            'WARNING: History file is corrupted or missing: "{0}"'.format(os.path.join(wal_dir, '00000004.history')),
             log_content)
 
         self.del_test_dir(module_name, fname)
