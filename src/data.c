@@ -2158,7 +2158,7 @@ get_data_file_headers(HeaderMap *hdr_map, pgFile *file, uint32 backup_version, b
 	/* disable buffering for header file */
 	setvbuf(in, NULL, _IONBF, 0);
 
-	if (fseek(in, file->hdr_off, SEEK_SET))
+	if (fseeko(in, file->hdr_off, SEEK_SET))
 	{
 		elog(strict ? ERROR : WARNING, "Cannot seek to position %llu in page header map \"%s\": %s",
 			file->hdr_off, hdr_map->path, strerror(errno));
