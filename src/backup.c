@@ -1044,6 +1044,8 @@ pg_start_backup(const char *label, bool smooth, pgBackup *backup,
 
 	params[0] = label;
 
+	elog(INFO, "wait for pg_start_backup()");
+
 	/* 2nd argument is 'fast'*/
 	params[1] = smooth ? "false" : "true";
 	if (!exclusive_backup)
