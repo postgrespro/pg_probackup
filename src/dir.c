@@ -1153,7 +1153,7 @@ read_tablespace_map(parray *links, const char *backup_dir)
 					path[MAXPGPATH];
 		pgFile	   *file;
 
-		if (sscanf(buf, "%1023s %1023s", link_name, path) != 2)
+		if (sscanf(buf, "%s %n", link_name, path) != 2)
 			elog(ERROR, "invalid format found in \"%s\"", map_path);
 
 		file = pgut_new(pgFile);
@@ -1279,13 +1279,19 @@ check_tablespace_mapping(pgBackup *backup, bool incremental, bool force, bool pg
 		TablespaceListCell *cell;
 		bool remapped = false;
 
+		elog(INFO, "Linked path: \"%s\"", linked_path);
+
 		for (cell = tablespace_dirs.head; cell; cell = cell->next)
+		{
+			elog(INFO, "Remap dir: \"%s\"", cell->old_dir);
+
 			if (strcmp(link->linked, cell->old_dir) == 0)
 			{
 				linked_path = cell->new_dir;
 				remapped = true;
 				break;
 			}
+		}
 
 		if (!is_absolute_path(linked_path))
 			elog(ERROR, "Tablespace directory path must be an absolute path: %s\n",
