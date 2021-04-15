@@ -1160,11 +1160,9 @@ read_tablespace_map(parray *links, const char *backup_dir)
 
 		path = buf + n;
 
-		/* remove '\n' */
+		/* Remove newline character at the end of string  */
 		i = strlen(path) - 1;
 		path[i] = '\0';
-
-		elog(INFO, "STR: '%s'", path);
 
 		file = pgut_new(pgFile);
 		memset(file, 0, sizeof(pgFile));
@@ -1289,12 +1287,8 @@ check_tablespace_mapping(pgBackup *backup, bool incremental, bool force, bool pg
 		TablespaceListCell *cell;
 		bool remapped = false;
 
-		elog(INFO, "Linked path: \"%s\"", linked_path);
-
 		for (cell = tablespace_dirs.head; cell; cell = cell->next)
 		{
-			elog(INFO, "Remap dir: \"%s\"", cell->old_dir);
-
 			if (strcmp(link->linked, cell->old_dir) == 0)
 			{
 				linked_path = cell->new_dir;
@@ -1302,6 +1296,11 @@ check_tablespace_mapping(pgBackup *backup, bool incremental, bool force, bool pg
 				break;
 			}
 		}
+
+		if (remapped)
+			elog(INFO, "Tablespace %s will be remapped from \"%s\" to \"%s\"", link->name, cell->old_dir, cell->new_dir);
+		else
+			elog(INFO, "Tablespace %s will be restored using old path \"%s\"", link->name, linked_path);
 
 		if (!is_absolute_path(linked_path))
 			elog(ERROR, "Tablespace directory path must be an absolute path: %s\n",
