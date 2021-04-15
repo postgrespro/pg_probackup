@@ -1150,11 +1150,21 @@ read_tablespace_map(parray *links, const char *backup_dir)
 	while (fgets(buf, lengthof(buf), fp))
 	{
 		char        link_name[MAXPGPATH];
-		char        path[MAXPGPATH];
+		char       *path;
+		int         n = 0;
 		pgFile     *file;
+		int         i = 0;
 
-		if (sscanf(buf, "%s %s", link_name, path) != 2)
+		if (sscanf(buf, "%s %n", link_name, &n) != 1)
 			elog(ERROR, "invalid format found in \"%s\"", map_path);
+
+		path = buf + n;
+
+		/* remove '\n' */
+		i = strlen(path) - 1;
+		path[i] = '\0';
+
+		elog(INFO, "STR: '%s'", path);
 
 		file = pgut_new(pgFile);
 		memset(file, 0, sizeof(pgFile));
