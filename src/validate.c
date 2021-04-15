@@ -709,7 +709,7 @@ do_validate_instance(void)
  * already filled pgBackup.files
  */
 bool
-validate_tablespace_map(pgBackup *backup)
+validate_tablespace_map(pgBackup *backup, bool no_validate)
 {
 	char        map_path[MAXPGPATH];
 	pgFile     *dummy = NULL;
@@ -740,12 +740,15 @@ validate_tablespace_map(pgBackup *backup)
 			map_path, base36enc(backup->backup_id));
 
 	/* check tablespace map checksumms */
-	crc = pgFileGetCRC(map_path, use_crc32c, false);
+	if (!no_validate)
+	{
+		crc = pgFileGetCRC(map_path, use_crc32c, false);
 
-	if ((*tablespace_map)->crc != crc)
-		elog(ERROR, "Invalid CRC of tablespace map file \"%s\" : %X. Expected %X, "
-					"probably backup %s is corrupt, validate it",
-				map_path, crc, (*tablespace_map)->crc, base36enc(backup->backup_id));
+		if ((*tablespace_map)->crc != crc)
+			elog(ERROR, "Invalid CRC of tablespace map file \"%s\" : %X. Expected %X, "
+						"probably backup %s is corrupt, validate it",
+					map_path, crc, (*tablespace_map)->crc, base36enc(backup->backup_id));
+	}
 
 	pgFileFree(dummy);
 	parray_walk(files, pgFileFree);

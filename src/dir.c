@@ -1116,6 +1116,8 @@ create_data_directories(parray *dest_files, const char *data_dir, const char *ba
 		elog(VERBOSE, "Create directory \"%s\"", dir->rel_path);
 
 		join_path_components(to_path, data_dir, dir->rel_path);
+
+		// TODO check exit code
 		fio_mkdir(to_path, dir->mode, location);
 	}
 
@@ -1191,7 +1193,7 @@ read_tablespace_map(parray *links, const char *backup_dir)
  *  3. backup has tablespaces and some of them are not empty
  */
 int
-check_tablespace_mapping(pgBackup *backup, bool incremental, bool force, bool pgdata_is_empty)
+check_tablespace_mapping(pgBackup *backup, bool incremental, bool force, bool pgdata_is_empty, bool no_validate)
 {
 	parray	   *links = parray_new();
 	size_t		i;
@@ -1205,7 +1207,7 @@ check_tablespace_mapping(pgBackup *backup, bool incremental, bool force, bool pg
 	/* validate tablespace map,
 	 * if there are no tablespaces, then there is nothing left to do
 	 */
-	if (!validate_tablespace_map(backup))
+	if (!validate_tablespace_map(backup, no_validate))
 	{
 		/*
 		 * Sanity check
