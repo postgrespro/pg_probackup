@@ -1375,7 +1375,7 @@ print_recovery_settings(FILE *fp, pgBackup *backup,
 	else
 	{
 		/* default cmdline, ok for local restore */
-		sprintf(restore_command_guc, "%s archive-get -B %s --instance %s "
+		sprintf(restore_command_guc, "\"%s\" archive-get -B \"%s\" --instance \"%s\" "
 				"--wal-file-path=%%p --wal-file-name=%%f",
 				PROGRAM_FULL_PATH ? PROGRAM_FULL_PATH : PROGRAM_NAME,
 				backup_path, instance_name);

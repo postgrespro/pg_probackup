@@ -1715,7 +1715,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             recovery_content = f.read()
 
         self.assertIn(
-            "restore_command = '{0} archive-get -B {1} --instance {2} "
+            "restore_command = '\"{0}\" archive-get -B \"{1}\" --instance \"{2}\" "
             "--wal-file-path=%p --wal-file-name=%f --remote-host=localhost "
             "--remote-port=22 --remote-user={3}'".format(
                 self.probackup_path, backup_dir, 'node', self.user),
@@ -1782,7 +1782,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         self.restore_node(
             backup_dir, 'node', node,
             options=[
-                '--restore-command=none'.format(wal_dir),
+                '--restore-command=none',
                 '--archive-host=localhost1',
                 '--archive-port=23',
                 '--archive-user={0}'.format(self.user)
@@ -1792,7 +1792,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             recovery_content = f.read()
 
         self.assertIn(
-            "restore_command = '{0} archive-get -B {1} --instance {2} "
+            "restore_command = '\"{0}\" archive-get -B \"{1}\" --instance \"{2}\" "
             "--wal-file-path=%p --wal-file-name=%f --remote-host=localhost1 "
             "--remote-port=23 --remote-user={3}'".format(
                 self.probackup_path, backup_dir, 'node', self.user),
