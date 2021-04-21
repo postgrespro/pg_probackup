@@ -3968,6 +3968,71 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
+    # @unittest.expectedFailure
+    # @unittest.skip("skip")
+    def test_no_validate_tablespace_map(self):
+        """
+        Check that --no-validate is propagated to tablespace_map
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.slow_start()
+
+        self.create_tblspace_in_node(node, 'external_dir')
+
+        node.safe_psql(
+            'postgres',
+            'CREATE TABLE t_heap(a int) TABLESPACE "external_dir"')
+
+        tblspace_new = self.get_tblspace_path(node, 'external_dir_new')
+
+        oid = node.safe_psql(
+            'postgres',
+            "select oid from pg_tablespace where spcname = 'external_dir'").decode('utf-8').rstrip()
+
+        # FULL backup
+        backup_id = self.backup_node(
+            backup_dir, 'node', node, options=['--stream'])
+
+        pgdata = self.pgdata_content(node.data_dir)
+
+        tablespace_map = os.path.join(
+            backup_dir, 'backups', 'node',
+            backup_id, 'database', 'tablespace_map')
+
+        # overwrite tablespace_map file
+        with open(tablespace_map, "w") as f:
+            f.write("{0} {1}".format(oid, tblspace_new))
+            f.close
+
+        node.cleanup()
+
+        self.restore_node(backup_dir, 'node', node, options=['--no-validate'])
+
+        pgdata_restored = self.pgdata_content(node.data_dir)
+        self.compare_pgdata(pgdata, pgdata_restored)
+
+        # check that tablespace restore as symlink
+        tablespace_link = os.path.join(node.data_dir, 'pg_tblspc', oid)
+        self.assertTrue(
+            os.path.islink(tablespace_link),
+            "'%s' is not a symlink" % tablespace_link)
+
+        self.assertEqual(
+            os.readlink(tablespace_link),
+            tblspace_new,
+            "Symlink '{0}' do not points to '{1}'".format(tablespace_link, tblspace_new))
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
 # validate empty backup list
 # page from future during validate
 # page from future during backup
