@@ -1160,9 +1160,10 @@ read_tablespace_map(parray *links, const char *backup_dir)
 
 		path = buf + n;
 
-		/* Remove newline character at the end of string  */
-		i = strlen(path) - 1;
-		path[i] = '\0';
+		/* Remove newline character at the end of string if any  */
+		i = strcspn(path, "\n");
+		if (strlen(path) > i)
+			path[i] = '\0';
 
 		file = pgut_new(pgFile);
 		memset(file, 0, sizeof(pgFile));
