@@ -1660,23 +1660,9 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
         # failing, because without archving, it is impossible to
         # take multi-timeline backup.
-        try:
-            self.backup_node(
-                backup_dir, 'replica', replica,
-                backup_type='delta', options=['--stream'])
-            # we should die here because exception is what we expect to happen
-            self.assertEqual(
-                1, 0,
-                "Expecting Error because of timeline switch "
-                "\n Output: {0} \n CMD: {1}".format(
-                    repr(self.output), self.cmd))
-        except ProbackupException as e:
-            self.assertTrue(
-                'WARNING: Cannot find valid backup on previous timelines, '
-                'WAL archive is not available' in e.message and
-                'ERROR: Create new full backup before an incremental one' in e.message,
-                "\n Unexpected Error Message: {0}\n CMD: {1}".format(
-                    repr(e.message), self.cmd))
+        self.backup_node(
+            backup_dir, 'replica', replica,
+            backup_type='delta', options=['--stream'])
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
