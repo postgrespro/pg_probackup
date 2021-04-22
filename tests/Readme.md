@@ -38,6 +38,7 @@ Run ptrack tests:
 
 
 Usage:
+ sudo echo 0 > /proc/sys/kernel/yama/ptrace_scope
  pip install testgres
  export PG_CONFIG=/path/to/pg_config
  python -m unittest [-v] tests[.specific_module][.class.test]
