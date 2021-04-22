@@ -1290,6 +1290,8 @@ RunXLogThreads(const char *archivedir, time_t target_time,
 		if (thread_args[i].ret == 1)
 			result = false;
 	}
+	thread_interrupted = false;
+	interrupted = false;
 
 	/* Release threads here, use thread_args only below */
 	pfree(threads);
