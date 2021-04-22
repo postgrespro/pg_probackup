@@ -1704,7 +1704,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         try:
             self.backup_node(
                 backup_dir, 'node', node,
-                backup_type='page', options=['--archive-timeout=0s'])
+                backup_type='page', options=['-U', 'wrong_name'])
         except ProbackupException as e:
             pass
 
@@ -1716,7 +1716,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         try:
             self.backup_node(
                 backup_dir, 'node', node,
-                backup_type='delta', options=['--archive-timeout=0s'])
+                backup_type='delta', options=['-U', 'wrong_name'])
         except ProbackupException as e:
             pass
 
@@ -1728,7 +1728,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         try:
             self.backup_node(
                 backup_dir, 'node', node,
-                backup_type='delta', options=['--archive-timeout=0s'])
+                backup_type='delta', options=['-U', 'wrong_name'])
         except ProbackupException as e:
             pass
 
