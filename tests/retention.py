@@ -1712,7 +1712,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
                     repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertTrue(
-                "WARNING: Valid backup on current timeline 1 is not found" in e.message and
+                "WARNING: Valid full backup on current timeline 1 is not found" in e.message and
                 "ERROR: Create new full backup before an incremental one" in e.message,
                 "\n Unexpected Error Message: {0}\n CMD: {1}".format(
                     repr(e.message), self.cmd))

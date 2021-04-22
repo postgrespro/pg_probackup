@@ -149,12 +149,10 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                     repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertTrue(
-                "WARNING: Valid backup on current timeline 1 is not found" in e.message and
+                "WARNING: Valid full backup on current timeline 1 is not found" in e.message and
                 "ERROR: Create new full backup before an incremental one" in e.message,
                 "\n Unexpected Error Message: {0}\n CMD: {1}".format(
                     repr(e.message), self.cmd))
-
-        sleep(1)
 
         try:
             self.backup_node(backup_dir, 'node', node, backup_type="ptrack")
@@ -166,7 +164,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                     repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertTrue(
-                "WARNING: Valid backup on current timeline 1 is not found" in e.message and
+                "WARNING: Valid full backup on current timeline 1 is not found" in e.message and
                 "ERROR: Create new full backup before an incremental one" in e.message,
                 "\n Unexpected Error Message: {0}\n CMD: {1}".format(
                     repr(e.message), self.cmd))
@@ -230,7 +228,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                     repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertTrue(
-                "WARNING: Valid backup on current timeline 1 is not found" in e.message and
+                "WARNING: Valid full backup on current timeline 1 is not found" in e.message and
                 "ERROR: Create new full backup before an incremental one" in e.message,
                 "\n Unexpected Error Message: {0}\n CMD: {1}".format(
                     repr(e.message), self.cmd))
@@ -2352,7 +2350,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                     repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertTrue(
-                'WARNING: Valid backup on current timeline 1 is not found' in e.message and
+                'WARNING: Valid full backup on current timeline 1 is not found' in e.message and
                 'ERROR: Create new full backup before an incremental one' in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
@@ -3404,7 +3402,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
             return_id=False)
         
         self.assertIn(
-            'WARNING: Valid backup on current timeline 2 is not found, trying to look up on previous timelines',
+            'WARNING: Valid full backup on current timeline 2 is not found, trying to look up on previous timelines',
             output)
         
         self.assertIn(
