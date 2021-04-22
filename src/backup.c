@@ -161,14 +161,17 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool
 		if (prev_backup == NULL)
 		{
 			/* try to setup multi-timeline backup chain */
-			elog(WARNING, "Valid backup on current timeline %u is not found, "
+			elog(WARNING, "Valid full backup on current timeline %u is not found, "
 						"trying to look up on previous timelines",
 						current.tli);
 
 			tli_list = get_history_streaming(&instance_config.conn_opt, current.tli, backup_list);
 			if (!tli_list)
+			{
+				elog(WARNING, "Failed to obtain current timeline history file via replication protocol");
 				/* fallback to using archive */
 				tli_list = catalog_get_timelines(&instance_config);
+			}
 
 			if (parray_num(tli_list) == 0)
 				elog(WARNING, "Cannot find valid backup on previous timelines, "
