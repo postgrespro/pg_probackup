@@ -1291,7 +1291,10 @@ RunXLogThreads(const char *archivedir, time_t target_time,
 			result = false;
 	}
 	thread_interrupted = false;
-	interrupted = false;
+
+//  TODO: we must detect difference between actual error (failed to read WAL) and interrupt signal
+//	if (interrupted)
+//		elog(ERROR, "Interrupted during WAL parsing");
 
 	/* Release threads here, use thread_args only below */
 	pfree(threads);
