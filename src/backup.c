@@ -1405,7 +1405,7 @@ wait_wal_lsn(XLogRecPtr target_lsn, bool is_start_lsn, TimeLineID tli,
 		}
 
 		sleep(1);
-		if (interrupted)
+		if (interrupted || thread_interrupted)
 			elog(ERROR, "Interrupted during waiting for WAL %s", in_stream_dir ? "streaming" : "archiving");
 		try_count++;
 

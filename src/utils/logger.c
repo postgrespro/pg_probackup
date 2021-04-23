@@ -169,7 +169,6 @@ exit_if_necessary(int elevel)
 		{
 			/* Interrupt other possible routines */
 			thread_interrupted = true;
-			interrupted = true;
 #ifdef WIN32
 			ExitThread(elevel);
 #else

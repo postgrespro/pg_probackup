@@ -233,7 +233,10 @@ StreamLog(void *arg)
 		ctl.mark_done = false;
 
 		if(ReceiveXlogStream(stream_arg->conn, &ctl) == false)
+		{
+			interrupted = true;
 			elog(ERROR, "Problem in receivexlog");
+		}
 
 #if PG_VERSION_NUM >= 100000
 		if (!ctl.walmethod->finish())
@@ -245,7 +248,10 @@ StreamLog(void *arg)
 	if(ReceiveXlogStream(stream_arg->conn, stream_arg->startpos, stream_arg->starttli,
 						NULL, (char *) stream_arg->basedir, stop_streaming,
 						standby_message_timeout, NULL, false, false) == false)
+	{
+		interrupted = true;
 		elog(ERROR, "Problem in receivexlog");
+	}
 #endif
 
     /* be paranoid and sort xlog_files_list,

@@ -1851,7 +1851,7 @@ get_checksum_map(const char *fullpath, uint32 checksum_version,
 		if (feof(in))
 			break;
 
-		if (interrupted)
+		if (interrupted || thread_interrupted)
 			elog(ERROR, "Interrupted during page reading");
 	}
 
@@ -1914,7 +1914,7 @@ get_lsn_map(const char *fullpath, uint32 checksum_version,
 		if (feof(in))
 			break;
 
-		if (interrupted)
+		if (interrupted || thread_interrupted)
 			elog(ERROR, "Interrupted during page reading");
 	}
 

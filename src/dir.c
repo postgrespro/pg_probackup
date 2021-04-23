@@ -781,6 +781,8 @@ dir_check_file(pgFile *file, bool backup_logs)
  * List files in parent->path directory.  If "exclude" is true do not add into
  * "files" files from pgdata_exclude_files and directories from
  * pgdata_exclude_dir.
+ *
+ * TODO: should we check for interrupt here ?
  */
 static void
 dir_list_file_internal(parray *files, pgFile *parent, const char *parent_dir,
