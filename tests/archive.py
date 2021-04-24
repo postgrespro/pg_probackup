@@ -2090,11 +2090,11 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
         result = node.safe_psql(
             "postgres",
-            "select sum(id) from t_heap")
+            "select sum(id) from t_heap").decode('utf-8').rstrip()
 
         result_new = node_restored.safe_psql(
             "postgres",
-            "select sum(id) from t_heap")
+            "select sum(id) from t_heap").decode('utf-8').rstrip()
 
         self.assertEqual(result, result_new)
 
