@@ -142,6 +142,7 @@ def slow_start(self, replica=False):
             else:
                 raise e
 
+        sleep(1)
 
 class ProbackupTest(object):
     # Class attributes
