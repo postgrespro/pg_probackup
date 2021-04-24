@@ -2032,8 +2032,10 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         replica.slow_start(replica=True)
 
         if self.get_version(replica) < 100000:
+            app_name = 'pg_receivexlog'
             pg_receivexlog_path = self.get_bin_path('pg_receivexlog')
         else:
+            app_name = 'pg_receivewal'
             pg_receivexlog_path = self.get_bin_path('pg_receivewal')
 
         cmdline = [
@@ -2079,6 +2081,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             node_restored.data_dir, options=['--recovery-target=latest', '--recovery-target-action=promote'])
         self.set_auto_conf(node_restored, {'port': node_restored.port})
         self.set_auto_conf(node_restored, {'hot_standby': 'off'})
+        self.set_auto_conf(node_restored, {'synchronous_standby_names': app_name})
 
         # it will set node_restored as warm standby.
 #        with open(os.path.join(node_restored.data_dir, "standby.signal"), 'w') as f:
