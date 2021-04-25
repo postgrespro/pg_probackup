@@ -2015,23 +2015,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
         node.slow_start()
 
-        self.backup_node(backup_dir, 'node', node, options=['--stream'])
-
-        replica = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'replica'))
-        replica.cleanup()
-
-        self.restore_node(
-            backup_dir, 'node', replica, replica.data_dir, options=['-R'])
-        self.set_auto_conf(replica, {'port': replica.port})
-        self.set_replica(node, replica)
-
-        self.add_instance(backup_dir, 'replica', replica)
-        # self.set_archiving(backup_dir, 'replica', replica, replica=True)
-
-        replica.slow_start(replica=True)
-
-        if self.get_version(replica) < 100000:
+        if self.get_version(node) < 100000:
             app_name = 'pg_receivexlog'
             pg_receivexlog_path = self.get_bin_path('pg_receivexlog')
         else:
@@ -2039,8 +2023,8 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             pg_receivexlog_path = self.get_bin_path('pg_receivewal')
 
         cmdline = [
-            pg_receivexlog_path, '-p', str(replica.port), '--synchronous',
-            '-D', os.path.join(backup_dir, 'wal', 'replica')]
+            pg_receivexlog_path, '-p', str(node.port), '--synchronous',
+            '-D', os.path.join(backup_dir, 'wal', 'node')]
 
         if self.archive_compress and node.major_version >= 10:
             cmdline += ['-Z', '1']
@@ -2053,8 +2037,12 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
                 'Failed to start pg_receivexlog: {0}'.format(
                     pg_receivexlog.communicate()[1]))
 
+        self.set_auto_conf(node, {'synchronous_standby_names': app_name})
+        self.set_auto_conf(node, {'synchronous_commit': 'on'})
+        node.reload()
+
         # FULL
-        self.backup_node(backup_dir, 'replica', replica, options=['--stream'])
+        self.backup_node(backup_dir, 'node', node, options=['--stream'])
 
         node.safe_psql(
             "postgres",
@@ -2064,7 +2052,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
         # PAGE
         self.backup_node(
-            backup_dir, 'replica', replica, backup_type='delta', options=['--stream'])
+            backup_dir, 'node', node, backup_type='page', options=['--stream'])
 
         node.safe_psql(
             "postgres",
@@ -2077,16 +2065,10 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         node_restored.cleanup()
 
         self.restore_node(
-            backup_dir, 'replica', node_restored,
-            node_restored.data_dir, options=['--recovery-target=latest', '--recovery-target-action=promote'])
+            backup_dir, 'node', node_restored, node_restored.data_dir,
+            options=['--recovery-target=latest', '--recovery-target-action=promote'])
         self.set_auto_conf(node_restored, {'port': node_restored.port})
         self.set_auto_conf(node_restored, {'hot_standby': 'off'})
-        self.set_auto_conf(node_restored, {'synchronous_standby_names': app_name})
-
-        # it will set node_restored as warm standby.
-#        with open(os.path.join(node_restored.data_dir, "standby.signal"), 'w') as f:
-#            f.flush()
-#            f.close()
 
         node_restored.slow_start()
 
