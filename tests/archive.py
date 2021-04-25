@@ -2061,6 +2061,8 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             "md5(repeat(i::text,10))::tsvector as tsvector "
             "from generate_series(1000000,2000000) i")
 
+        pg_receivexlog.kill()
+
         node_restored = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node_restored'))
         node_restored.cleanup()
@@ -2084,7 +2086,6 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(result, result_new)
 
         # Clean after yourself
-        pg_receivexlog.kill()
         self.del_test_dir(module_name, fname)
 
     @unittest.skip("skip")
