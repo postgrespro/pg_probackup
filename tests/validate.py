@@ -1088,7 +1088,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         """
         check that interrupt during validation is handled correctly
         """
-        fname = self.id().split('.')[3]q
+        fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'])
