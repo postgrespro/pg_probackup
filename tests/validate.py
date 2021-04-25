@@ -983,6 +983,204 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
+    def test_validate_instance_with_several_corrupt_backups(self):
+        """
+        make archive node, take FULL1, PAGE1_1, FULL2, PAGE2_1 backups, FULL3
+        corrupt file in FULL and FULL2 and run validate on instance,
+        expect FULL1 to gain status CORRUPT, PAGE1_1 to gain status ORPHAN
+        FULL2 to gain status CORRUPT, PAGE2_1 to gain status ORPHAN
+        """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'])
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        node.safe_psql(
+            "postgres",
+            "create table t_heap as select generate_series(0,1) i")
+        # FULL1
+        backup_id_1 = self.backup_node(
+            backup_dir, 'node', node, options=['--no-validate'])
+
+        # FULL2
+        backup_id_2 = self.backup_node(backup_dir, 'node', node)
+        rel_path = node.safe_psql(
+            "postgres",
+            "select pg_relation_filepath('t_heap')").decode('utf-8').rstrip()
+
+        node.safe_psql(
+            "postgres",
+            "insert into t_heap values(2)")
+
+        backup_id_3 = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        # FULL3
+        backup_id_4 = self.backup_node(backup_dir, 'node', node)
+
+        node.safe_psql(
+            "postgres",
+            "insert into t_heap values(3)")
+
+        backup_id_5 = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        # FULL4
+        backup_id_6 = self.backup_node(
+            backup_dir, 'node', node, options=['--no-validate'])
+
+        # Corrupt some files in FULL2 and FULL3 backup
+        os.remove(os.path.join(
+            backup_dir, 'backups', 'node', backup_id_2,
+            'database', rel_path))
+        os.remove(os.path.join(
+            backup_dir, 'backups', 'node', backup_id_4,
+            'database', rel_path))
+
+        # Validate Instance
+        try:
+            self.validate_pb(backup_dir, 'node', options=["-j", "4", "--log-level-file=LOG"])
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because of data files corruption.\n "
+                "Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertTrue(
+                "INFO: Validate backups of the instance 'node'" in e.message,
+                "\n Unexpected Error Message: {0}\n "
+                "CMD: {1}".format(repr(e.message), self.cmd))
+            self.assertTrue(
+                'WARNING: Some backups are not valid' in e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        self.assertEqual(
+            'OK', self.show_pb(backup_dir, 'node', backup_id_1)['status'],
+            'Backup STATUS should be "OK"')
+        self.assertEqual(
+            'CORRUPT', self.show_pb(backup_dir, 'node', backup_id_2)['status'],
+            'Backup STATUS should be "CORRUPT"')
+        self.assertEqual(
+            'ORPHAN', self.show_pb(backup_dir, 'node', backup_id_3)['status'],
+            'Backup STATUS should be "ORPHAN"')
+        self.assertEqual(
+            'CORRUPT', self.show_pb(backup_dir, 'node', backup_id_4)['status'],
+            'Backup STATUS should be "CORRUPT"')
+        self.assertEqual(
+            'ORPHAN', self.show_pb(backup_dir, 'node', backup_id_5)['status'],
+            'Backup STATUS should be "ORPHAN"')
+        self.assertEqual(
+            'OK', self.show_pb(backup_dir, 'node', backup_id_6)['status'],
+            'Backup STATUS should be "OK"')
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_validate_instance_with_several_corrupt_backups_interrupt(self):
+        """
+        check that interrupt during validation is handled correctly
+        """
+        fname = self.id().split('.')[3]q
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'])
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        node.safe_psql(
+            "postgres",
+            "create table t_heap as select generate_series(0,1) i")
+        # FULL1
+        backup_id_1 = self.backup_node(
+            backup_dir, 'node', node, options=['--no-validate'])
+
+        # FULL2
+        backup_id_2 = self.backup_node(backup_dir, 'node', node)
+        rel_path = node.safe_psql(
+            "postgres",
+            "select pg_relation_filepath('t_heap')").decode('utf-8').rstrip()
+
+        node.safe_psql(
+            "postgres",
+            "insert into t_heap values(2)")
+
+        backup_id_3 = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        # FULL3
+        backup_id_4 = self.backup_node(backup_dir, 'node', node)
+
+        node.safe_psql(
+            "postgres",
+            "insert into t_heap values(3)")
+
+        backup_id_5 = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        # FULL4
+        backup_id_6 = self.backup_node(
+            backup_dir, 'node', node, options=['--no-validate'])
+
+        # Corrupt some files in FULL2 and FULL3 backup
+        os.remove(os.path.join(
+            backup_dir, 'backups', 'node', backup_id_1,
+            'database', rel_path))
+        os.remove(os.path.join(
+            backup_dir, 'backups', 'node', backup_id_3,
+            'database', rel_path))
+
+        # Validate Instance
+        gdb = self.validate_pb(
+            backup_dir, 'node', options=["-j", "4", "--log-level-file=LOG"], gdb=True)
+
+        gdb.set_breakpoint('validate_file_pages')
+        gdb.run_until_break()
+        gdb.continue_execution_until_break()
+        gdb.remove_all_breakpoints()
+        gdb._execute('signal SIGINT')
+        gdb.continue_execution_until_error()
+
+        self.assertEqual(
+            'DONE', self.show_pb(backup_dir, 'node', backup_id_1)['status'],
+            'Backup STATUS should be "OK"')
+        self.assertEqual(
+            'OK', self.show_pb(backup_dir, 'node', backup_id_2)['status'],
+            'Backup STATUS should be "OK"')
+        self.assertEqual(
+            'OK', self.show_pb(backup_dir, 'node', backup_id_3)['status'],
+            'Backup STATUS should be "CORRUPT"')
+        self.assertEqual(
+            'OK', self.show_pb(backup_dir, 'node', backup_id_4)['status'],
+            'Backup STATUS should be "ORPHAN"')
+        self.assertEqual(
+            'OK', self.show_pb(backup_dir, 'node', backup_id_5)['status'],
+            'Backup STATUS should be "OK"')
+        self.assertEqual(
+            'DONE', self.show_pb(backup_dir, 'node', backup_id_6)['status'],
+            'Backup STATUS should be "OK"')
+
+        log_file = os.path.join(backup_dir, 'log', 'pg_probackup.log')
+        with open(log_file, 'r') as f:
+            log_content = f.read()
+            self.assertNotIn(
+                'Interrupted while locking backup', log_content)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
     def test_validate_instance_with_corrupted_page(self):
         """
         make archive node, take FULL, PAGE1, PAGE2, FULL2, PAGE3 backups,
