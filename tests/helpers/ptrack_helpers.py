@@ -138,11 +138,11 @@ def slow_start(self, replica=False):
 
         except testgres.QueryException as e:
             if 'database system is starting up' in e.message:
-                continue
+                pass
             else:
                 raise e
 
-        sleep(1)
+        sleep(0.5)
 
 class ProbackupTest(object):
     # Class attributes
