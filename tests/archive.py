@@ -2030,7 +2030,9 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         if self.archive_compress and node.major_version >= 10:
             cmdline += ['-Z', '1']
 
-        pg_receivexlog = self.run_binary(cmdline, asynchronous=True)
+        env = self.test_env
+        env["PGAPPNAME"] = app_name
+        pg_receivexlog = self.run_binary(cmdline, asynchronous=True, env)
 
         if pg_receivexlog.returncode:
             self.assertFalse(

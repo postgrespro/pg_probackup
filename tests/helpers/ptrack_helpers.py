@@ -779,7 +779,11 @@ class ProbackupTest(object):
         except subprocess.CalledProcessError as e:
             raise ProbackupException(e.output.decode('utf-8'), self.cmd)
 
-    def run_binary(self, command, asynchronous=False):
+    def run_binary(self, command, asynchronous=False, env=None):
+
+        if not env:
+            env = self.test_env
+
         if self.verbose:
                 print([' '.join(map(str, command))])
         try:
@@ -789,13 +793,13 @@ class ProbackupTest(object):
                     stdin=subprocess.PIPE,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
-                    env=self.test_env
+                    env=env
                 )
             else:
                 self.output = subprocess.check_output(
                     command,
                     stderr=subprocess.STDOUT,
-                    env=self.test_env
+                    env=env
                     ).decode('utf-8')
                 return self.output
         except subprocess.CalledProcessError as e:
