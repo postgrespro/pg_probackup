@@ -761,10 +761,9 @@ ALTER ROLE backup WITH REPLICATION;
     <title>Setting up Continuous WAL Archiving</title>
     <para>
       Making backups in PAGE backup mode, performing
-      <link linkend="pbk-performing-point-in-time-pitr-recovery">PITR</link>,
+      <link linkend="pbk-performing-point-in-time-pitr-recovery">PITR</link> and
       making backups with
-      <link linkend="pbk-archive-mode">ARCHIVE</link> WAL delivery mode and
-      running incremental backup after timeline switch
+      <link linkend="pbk-archive-mode">ARCHIVE</link> WAL delivery mode
       require
       <ulink url="https://postgrespro.com/docs/postgresql/current/continuous-archiving.html">continuous
       WAL archiving</ulink> to be enabled. To set up continuous
