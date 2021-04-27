@@ -15,6 +15,8 @@
 #include <time.h>
 #include <unistd.h>
 
+#include "streamer.h"
+
 /*
  * global variable needed by ReceiveXlogStream()
  *
@@ -232,11 +234,13 @@ StreamLog(void *arg)
 		ctl.synchronous = false;
 		ctl.mark_done = false;
 
-		if(ReceiveXlogStream(stream_arg->conn, &ctl) == false)
-		{
-			interrupted = true;
-			elog(ERROR, "Problem in receivexlog");
-		}
+//		if(ReceiveXlogStream(stream_arg->conn, &ctl) == false)
+//		{
+//			interrupted = true;
+//			elog(ERROR, "Problem in receivexlog");
+//		}
+
+		RunStream(stream_arg->conn, &ctl);
 
 #if PG_VERSION_NUM >= 100000
 		if (!ctl.walmethod->finish())
