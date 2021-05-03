@@ -72,7 +72,7 @@ Installers are available in release **assets**. [Latests](https://github.com/pos
 #### pg_probackup for vanilla PostgreSQL
 ```shell
 #DEB Ubuntu|Debian Packages
-sudo echo "deb [arch=amd64] https://repo.postgrespro.ru/pg_probackup/deb/ $(lsb_release -cs) main-$(lsb_release -cs)" > /etc/apt/sources.list.d/pg_probackup.list
+sudo sh -c 'echo "deb [arch=amd64] https://repo.postgrespro.ru/pg_probackup/deb/ $(lsb_release -cs) main-$(lsb_release -cs)" > /etc/apt/sources.list.d/pg_probackup.list'
 sudo wget -O - https://repo.postgrespro.ru/pg_probackup/keys/GPG-KEY-PG_PROBACKUP | sudo apt-key add - && sudo apt-get update
 sudo apt-get install pg-probackup-{13,12,11,10,9.6,9.5}
 sudo apt-get install pg-probackup-{13,12,11,10,9.6,9.5}-dbg
