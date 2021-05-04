@@ -130,7 +130,7 @@ sudo apt-get install pg_probackup-{13,12,11,10,9.6,9.5}-debuginfo
 #### pg_probackup for PostgresPro Standard and Enterprise
 ```shell
 #DEB Ubuntu|Debian Packages
-sudo echo "deb [arch=amd64] https://repo.postgrespro.ru/pg_probackup-forks/deb/ $(lsb_release -cs) main-$(lsb_release -cs)" > /etc/apt/sources.list.d/pg_probackup-forks.list
+sudo sh -c 'echo "deb [arch=amd64] https://repo.postgrespro.ru/pg_probackup-forks/deb/ $(lsb_release -cs) main-$(lsb_release -cs)" > /etc/apt/sources.list.d/pg_probackup-forks.list'
 sudo wget -O - https://repo.postgrespro.ru/pg_probackup-forks/keys/GPG-KEY-PG_PROBACKUP | sudo apt-key add - && sudo apt-get update
 sudo apt-get install pg-probackup-{std,ent}-{12,11,10,9.6}
 sudo apt-get install pg-probackup-{std,ent}-{12,11,10,9.6}-dbg
