@@ -973,6 +973,31 @@ class ProbackupTest(object):
 
         return self.run_pb(cmd_list + options, gdb=gdb, old_binary=old_binary)
 
+    def catchup_node(
+            self,
+            backup_mode, source_pgdata, destination_base_dir,
+            options = [],
+            node = None
+            ):
+
+        real_destination_dir = os.path.join(self.tmp_path, destination_base_dir)
+        if not node:
+            shutil.rmtree(real_destination_dir, ignore_errors = True)
+            node = testgres.get_new_node('test', base_dir = real_destination_dir)
+            node.slow_start = slow_start.__get__(node)
+            node.should_rm_dirs = True
+
+        cmd_list = [
+            'catchup',
+            '--backup-mode={0}'.format(backup_mode),
+            '--catchup-source-pgdata={0}'.format(source_pgdata),
+            '--catchup-destination-pgdata={0}'.format(node.data_dir)
+        ]
+        self.run_pb(cmd_list + options)
+
+        node.append_conf(port=node.port)
+        return node
+
     def show_pb(
             self, backup_dir, instance=None, backup_id=None,
             options=[], as_text=False, as_json=True, old_binary=False,

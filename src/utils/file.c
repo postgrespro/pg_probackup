@@ -96,7 +96,7 @@ setMyLocation(ProbackupSubcmd const subcmd)
 	MyLocation = IsSshProtocol()
 		? (subcmd == ARCHIVE_PUSH_CMD || subcmd == ARCHIVE_GET_CMD)
 		   ? FIO_DB_HOST
-		   : (subcmd == BACKUP_CMD || subcmd == RESTORE_CMD || subcmd == ADD_INSTANCE_CMD)
+		   : (subcmd == BACKUP_CMD || subcmd == RESTORE_CMD || subcmd == ADD_INSTANCE_CMD || subcmd == CATCHUP_CMD)
 		      ? FIO_BACKUP_HOST
 		      : FIO_LOCAL_HOST
 		: FIO_LOCAL_HOST;
@@ -1799,6 +1799,183 @@ int fio_send_pages(const char *to_fullpath, const char *from_fullpath, pgFile *f
 				return WRITE_FAILED;
 			}
 			file->write_size += hdr.size;
+			file->uncompressed_size += BLCKSZ;
+		}
+		else
+			elog(ERROR, "Remote agent returned message of unexpected type: %i", hdr.cop);
+	}
+
+	if (out)
+		fclose(out);
+	pg_free(out_buf);
+
+	return n_blocks_read;
+}
+
+/*
+ * Return number of actually(!) readed blocks, attempts or
+ * half-readed block are not counted.
+ * Return values in case of error:
+ *  FILE_MISSING
+ *  OPEN_FAILED
+ *  READ_ERROR
+ *  PAGE_CORRUPTION
+ *  WRITE_FAILED
+ *
+ * If none of the above, this function return number of blocks
+ * readed by remote agent.
+ *
+ * In case of DELTA mode horizonLsn must be a valid lsn,
+ * otherwise it should be set to InvalidXLogRecPtr.
+ * Взято из fio_send_pages
+ */
+int
+fio_copy_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
+				   XLogRecPtr horizonLsn, int calg, int clevel, uint32 checksum_version,
+				   bool use_pagemap, BlockNumber* err_blknum, char **errormsg,
+				   BackupPageHeader2 **headers)
+{
+	FILE *out = NULL;
+	char *out_buf = NULL;
+	struct {
+		fio_header hdr;
+		fio_send_request arg;
+	} req;
+	BlockNumber	n_blocks_read = 0;
+	BlockNumber blknum = 0;
+
+	/* send message with header
+
+	  16bytes      24bytes             var        var
+	--------------------------------------------------------------
+	| fio_header | fio_send_request | FILE PATH | BITMAP(if any) |
+	--------------------------------------------------------------
+	*/
+
+	req.hdr.cop = FIO_SEND_PAGES;
+
+	if (use_pagemap)
+	{
+		req.hdr.size = sizeof(fio_send_request) + (*file).pagemap.bitmapsize + strlen(from_fullpath) + 1;
+		req.arg.bitmapsize = (*file).pagemap.bitmapsize;
+
+		/* TODO: add optimization for the case of pagemap
+		 * containing small number of blocks with big serial numbers:
+		 * https://github.com/postgrespro/pg_probackup/blob/remote_page_backup/src/utils/file.c#L1211
+		 */
+	}
+	else
+	{
+		req.hdr.size = sizeof(fio_send_request) + strlen(from_fullpath) + 1;
+		req.arg.bitmapsize = 0;
+	}
+
+	req.arg.nblocks = file->size/BLCKSZ;
+	req.arg.segmentno = file->segno * RELSEG_SIZE;
+	req.arg.horizonLsn = horizonLsn;
+	req.arg.checksumVersion = checksum_version;
+	req.arg.calg = calg;
+	req.arg.clevel = clevel;
+	req.arg.path_len = strlen(from_fullpath) + 1;
+
+	file->compress_alg = calg; /* TODO: wtf? why here? */
+
+//<-----
+//	datapagemap_iterator_t *iter;
+//	BlockNumber blkno;
+//	iter = datapagemap_iterate(pagemap);
+//	while (datapagemap_next(iter, &blkno))
+//		elog(INFO, "block %u", blkno);
+//	pg_free(iter);
+//<-----
+
+	/* send header */
+	IO_CHECK(fio_write_all(fio_stdout, &req, sizeof(req)), sizeof(req));
+
+	/* send file path */
+	IO_CHECK(fio_write_all(fio_stdout, from_fullpath, req.arg.path_len), req.arg.path_len);
+
+	/* send pagemap if any */
+	if (use_pagemap)
+		IO_CHECK(fio_write_all(fio_stdout, (*file).pagemap.bitmap, (*file).pagemap.bitmapsize), (*file).pagemap.bitmapsize);
+
+	//out = open_local_file_rw_append(to_fullpath, &out_buf, STDIO_BUFSIZE);
+	out = fio_fopen(to_fullpath, PG_BINARY_R "+", FIO_BACKUP_HOST);
+	if (out == NULL)
+		elog(ERROR, "Cannot open restore target file \"%s\": %s", to_fullpath, strerror(errno));
+
+	while (true)
+	{
+		fio_header hdr;
+		char buf[BLCKSZ + sizeof(BackupPageHeader)];
+		IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
+
+		if (interrupted)
+			elog(ERROR, "Interrupted during page reading");
+
+		if (hdr.cop == FIO_ERROR)
+		{
+			/* FILE_MISSING, OPEN_FAILED and READ_FAILED */
+			if (hdr.size > 0)
+			{
+				IO_CHECK(fio_read_all(fio_stdin, buf, hdr.size), hdr.size);
+				*errormsg = pgut_malloc(hdr.size);
+				snprintf(*errormsg, hdr.size, "%s", buf);
+			}
+
+			return hdr.arg;
+		}
+		else if (hdr.cop == FIO_SEND_FILE_CORRUPTION)
+		{
+			*err_blknum = hdr.arg;
+
+			if (hdr.size > 0)
+			{
+				IO_CHECK(fio_read_all(fio_stdin, buf, hdr.size), hdr.size);
+				*errormsg = pgut_malloc(hdr.size);
+				snprintf(*errormsg, hdr.size, "%s", buf);
+			}
+			return PAGE_CORRUPTION;
+		}
+		else if (hdr.cop == FIO_SEND_FILE_EOF)
+		{
+			/* n_blocks_read reported by EOF */
+			n_blocks_read = hdr.arg;
+
+			/* receive headers if any */
+			if (hdr.size > 0)
+			{
+				*headers = pgut_malloc(hdr.size);
+				IO_CHECK(fio_read_all(fio_stdin, *headers, hdr.size), hdr.size);
+				file->n_headers = (hdr.size / sizeof(BackupPageHeader2)) -1;
+			}
+
+			break;
+		}
+		else if (hdr.cop == FIO_PAGE)
+		{
+			blknum = hdr.arg;
+
+			Assert(hdr.size <= sizeof(buf));
+			IO_CHECK(fio_read_all(fio_stdin, buf, hdr.size), hdr.size);
+
+			COMP_FILE_CRC32(true, file->crc, buf, hdr.size);
+
+			elog(INFO, "Copy block %u with size %u of %s", blknum, hdr.size - sizeof(BackupPageHeader), to_fullpath);
+			if (fio_fseek(out, blknum * BLCKSZ) < 0)
+			{
+				elog(ERROR, "Cannot seek block %u of \"%s\": %s",
+					blknum, to_fullpath, strerror(errno));
+			}
+			// должен прилетать некомпрессированный блок с заголовком
+			// Вставить assert?
+			if (fio_fwrite(out, buf + sizeof(BackupPageHeader), hdr.size - sizeof(BackupPageHeader)) != BLCKSZ)
+			{
+				fio_fclose(out);
+				*err_blknum = blknum;
+				return WRITE_FAILED;
+			}
+			file->write_size += BLCKSZ;
 			file->uncompressed_size += BLCKSZ;
 		}
 		else

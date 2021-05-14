@@ -384,6 +384,21 @@ get_redo(const char *pgdata_path, RedoParams *redo)
 	redo->checksum_version = ControlFile.data_checksum_version;
 }
 
+/* Get minRecoveryPoint from control file from pgdata_path */
+XLogRecPtr
+get_min_recovery_point(char *pgdata_path)
+{
+        ControlFileData ControlFile;
+        char       *buffer;
+        size_t          size;
+
+        buffer = slurpFile(pgdata_path, XLOG_CONTROL_FILE, &size, false, FIO_LOCAL_HOST);
+        digestControlFile(&ControlFile, buffer, size);
+        pg_free(buffer);
+
+        return ControlFile.minRecoveryPoint;
+}
+
 /*
  * Rewrite minRecoveryPoint of pg_control in backup directory. minRecoveryPoint
  * 'as-is' is not to be trusted.
