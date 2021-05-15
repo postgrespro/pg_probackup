@@ -290,6 +290,9 @@ do_restore_or_validate(InstanceState *instanceState, time_t target_backup_id, pg
 				timelines = read_timeline_history(instanceState->instance_wal_subdir_path,
 												  rt->target_tli, true);
 
+				if (!timelines)
+					elog(ERROR, "Failed to get history file for target timeline %i", rt->target_tli);
+
 				if (!satisfy_timeline(timelines, current_backup))
 				{
 					if (target_backup_id != INVALID_BACKUP_ID)
@@ -408,7 +411,7 @@ do_restore_or_validate(InstanceState *instanceState, time_t target_backup_id, pg
 	{
 		int rc = check_tablespace_mapping(dest_backup,
 										  params->incremental_mode != INCR_NONE, params->force,
-										  pgdata_is_empty);
+										  pgdata_is_empty, params->no_validate);
 
 		/* backup contain no tablespaces */
 		if (rc == NoTblspc)
@@ -1374,7 +1377,7 @@ print_recovery_settings(InstanceState *instanceState, FILE *fp, pgBackup *backup
 	else
 	{
 		/* default cmdline, ok for local restore */
-		sprintf(restore_command_guc, "%s archive-get -B %s --instance %s "
+		sprintf(restore_command_guc, "\"%s\" archive-get -B \"%s\" --instance \"%s\" "
 				"--wal-file-path=%%p --wal-file-name=%%f",
 				PROGRAM_FULL_PATH ? PROGRAM_FULL_PATH : PROGRAM_NAME,
 				/* TODO What is going on here? Why do we use catalog path as wal-file-path? */
@@ -1781,6 +1784,14 @@ read_timeline_history(const char *arclog_path, TimeLineID targetTLI, bool strict
 	if (last_timeline && targetTLI <= last_timeline->tli)
 		elog(ERROR, "Timeline IDs must be less than child timeline's ID.");
 
+	/* History file is empty or corrupted */
+	if (parray_num(result) == 0 && targetTLI != 1)
+	{
+		elog(WARNING, "History file is corrupted or missing: \"%s\"", path);
+		pg_free(result);
+		return NULL;
+	}
+
 	/* append target timeline */
 	entry = pgut_new(TimeLineHistoryEntry);
 	entry->tli = targetTLI;
@@ -2165,6 +2176,8 @@ check_incremental_compatibility(const char *pgdata, uint64 system_identifier,
 		postmaster_is_up = true;
 	}
 
+	/* check that PG_VERSION is the same */
+
 	/* slurp pg_control and check that system ID is the same
 	 * check that instance is not running
 	 * if lsn_based, check that there is no backup_label files is around AND
@@ -2174,6 +2187,7 @@ check_incremental_compatibility(const char *pgdata, uint64 system_identifier,
 	 * data files content, because based on pg_control information we will
 	 * choose a backup suitable for lsn based incremental restore.
 	 */
+	elog(INFO, "Trying to read pg_control file in destination direstory");
 
 	system_id_pgdata = get_system_identifier(pgdata);
 
@@ -2205,6 +2219,10 @@ check_incremental_compatibility(const char *pgdata, uint64 system_identifier,
 
 	if (postmaster_is_up)
 		return POSTMASTER_IS_RUNNING;
+
+	/* PG_CONTROL MISSING */
+
+	/* PG_CONTROL unreadable */
 
 	if (!system_id_match)
 		return SYSTEM_ID_MISMATCH;

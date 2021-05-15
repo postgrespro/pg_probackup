@@ -1008,7 +1008,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
             'FULL')
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname, [node])
+        self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def test_basic_window_merge_multiple_descendants_1(self):
@@ -1275,7 +1275,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
                 '--delete-expired', '--log-level-console=log'])
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname, [node])
+        self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def test_window_chains(self):
@@ -1712,7 +1712,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
                     repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertTrue(
-                "WARNING: Valid backup on current timeline 1 is not found" in e.message and
+                "WARNING: Valid full backup on current timeline 1 is not found" in e.message and
                 "ERROR: Create new full backup before an incremental one" in e.message,
                 "\n Unexpected Error Message: {0}\n CMD: {1}".format(
                     repr(e.message), self.cmd))
@@ -2535,4 +2535,82 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         self.validate_pb(backup_dir, 'node')
 
-        self.del_test_dir(module_name, fname, [node])
+        self.del_test_dir(module_name, fname)
+
+    def test_concurrent_running_full_backup(self):
+        """
+        https://github.com/postgrespro/pg_probackup/issues/328
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # FULL
+        self.backup_node(backup_dir, 'node', node)
+
+        gdb = self.backup_node(backup_dir, 'node', node, gdb=True)
+        gdb.set_breakpoint('backup_data_file')
+        gdb.run_until_break()
+        gdb.kill()
+
+        self.assertTrue(
+            self.show_pb(backup_dir, 'node')[0]['status'],
+            'RUNNING')
+
+        self.backup_node(
+            backup_dir, 'node', node, backup_type='delta',
+            options=['--retention-redundancy=2', '--delete-expired'])
+
+        self.assertTrue(
+            self.show_pb(backup_dir, 'node')[1]['status'],
+            'RUNNING')
+
+        self.backup_node(backup_dir, 'node', node)
+
+        gdb = self.backup_node(backup_dir, 'node', node, gdb=True)
+        gdb.set_breakpoint('backup_data_file')
+        gdb.run_until_break()
+        gdb.kill()
+
+        gdb = self.backup_node(backup_dir, 'node', node, gdb=True)
+        gdb.set_breakpoint('backup_data_file')
+        gdb.run_until_break()
+        gdb.kill()
+
+        self.backup_node(backup_dir, 'node', node)
+
+        gdb = self.backup_node(backup_dir, 'node', node, gdb=True)
+        gdb.set_breakpoint('backup_data_file')
+        gdb.run_until_break()
+        gdb.kill()
+
+        self.backup_node(
+            backup_dir, 'node', node, backup_type='delta',
+            options=['--retention-redundancy=2', '--delete-expired'],
+            return_id=False)
+
+        self.assertTrue(
+            self.show_pb(backup_dir, 'node')[0]['status'],
+            'OK')
+
+        self.assertTrue(
+            self.show_pb(backup_dir, 'node')[1]['status'],
+            'RUNNING')
+
+        self.assertTrue(
+            self.show_pb(backup_dir, 'node')[2]['status'],
+            'OK')
+
+        self.assertEqual(
+            len(self.show_pb(backup_dir, 'node')),
+            6)
+
+        self.del_test_dir(module_name, fname)

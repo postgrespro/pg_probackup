@@ -19,7 +19,8 @@ static void delete_walfiles_in_tli(InstanceState *instanceState, XLogRecPtr keep
 static void do_retention_internal(parray *backup_list, parray *to_keep_list,
 									parray *to_purge_list);
 static void do_retention_merge(InstanceState *instanceState, parray *backup_list,
-							   parray *to_keep_list, parray *to_purge_list);
+							   parray *to_keep_list, parray *to_purge_list,
+							   bool no_validate, bool no_sync);
 static void do_retention_purge(parray *to_keep_list, parray *to_purge_list);
 static void do_retention_wal(InstanceState *instanceState, bool dry_run);
 
@@ -123,7 +124,7 @@ do_delete(InstanceState *instanceState, time_t backup_id)
  * which FULL backup should be keeped for redundancy obligation(only valid do),
  * but if invalid backup is not guarded by retention - it is removed
  */
-void do_retention(InstanceState *instanceState)
+void do_retention(InstanceState *instanceState, bool no_validate, bool no_sync)
 {
 	parray	   *backup_list = NULL;
 	parray	   *to_keep_list = parray_new();
@@ -172,7 +173,7 @@ void do_retention(InstanceState *instanceState)
 		do_retention_internal(backup_list, to_keep_list, to_purge_list);
 
 	if (merge_expired && !dry_run && !backup_list_is_empty)
-		do_retention_merge(instanceState, backup_list, to_keep_list, to_purge_list);
+		do_retention_merge(instanceState, backup_list, to_keep_list, to_purge_list, no_validate, no_sync);
 
 	if (delete_expired && !dry_run && !backup_list_is_empty)
 		do_retention_purge(to_keep_list, to_purge_list);
@@ -227,21 +228,22 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 		{
 			pgBackup   *backup = (pgBackup *) parray_get(backup_list, i);
 
-			/* Consider only valid FULL backups for Redundancy */
-			if (instance_config.retention_redundancy > 0 &&
-				backup->backup_mode == BACKUP_MODE_FULL &&
-				(backup->status == BACKUP_STATUS_OK ||
-					backup->status == BACKUP_STATUS_DONE))
+			if (backup->backup_mode == BACKUP_MODE_FULL)
 			{
-				n_full_backups++;
-
 				/* Add every FULL backup that satisfy Redundancy policy to separate list */
-				if (n_full_backups <= instance_config.retention_redundancy)
+				if (n_full_backups < instance_config.retention_redundancy)
 				{
 					if (!redundancy_full_backup_list)
 						redundancy_full_backup_list = parray_new();
 
 					parray_append(redundancy_full_backup_list, backup);
+				}
+
+				/* Consider only valid FULL backups for Redundancy fulfillment */
+				if (backup->status == BACKUP_STATUS_OK ||
+					backup->status == BACKUP_STATUS_DONE)
+				{
+					n_full_backups++;
 				}
 			}
 		}
@@ -413,7 +415,10 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 				pinning_window ? pinning_window : instance_config.retention_window,
 				action);
 
-		if (backup->backup_mode == BACKUP_MODE_FULL)
+		/* Only valid full backups are count to something */
+		if (backup->backup_mode == BACKUP_MODE_FULL &&
+			(backup->status == BACKUP_STATUS_OK ||
+			 backup->status == BACKUP_STATUS_DONE))
 				cur_full_backup_num++;
 	}
 }
@@ -421,7 +426,8 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 /* Merge partially expired incremental chains */
 static void
 do_retention_merge(InstanceState *instanceState, parray *backup_list,
-				   parray *to_keep_list, parray *to_purge_list)
+				   parray *to_keep_list, parray *to_purge_list,
+				   bool no_validate, bool no_sync)
 {
 	int i;
 	int j;
@@ -538,9 +544,8 @@ do_retention_merge(InstanceState *instanceState, parray *backup_list,
 		 *
 		 * Merge incremental chain from PAGE3 into FULL.
 		 */
-
 		keep_backup = parray_get(merge_list, 0);
-		merge_chain(instanceState, merge_list, full_backup, keep_backup);
+		merge_chain(instanceState, merge_list, full_backup, keep_backup, no_validate, no_sync);
 		backup_merged = true;
 
 		for (j = parray_num(merge_list) - 2; j >= 0; j--)
@@ -551,8 +556,8 @@ do_retention_merge(InstanceState *instanceState, parray *backup_list,
 			parray_rm(to_purge_list, tmp_backup, pgBackupCompareId);
 			parray_set(to_keep_list, i, NULL);
 		}
-
-		pgBackupValidate(full_backup, NULL);
+		if (!no_validate)
+			pgBackupValidate(full_backup, NULL);
 		if (full_backup->status == BACKUP_STATUS_CORRUPT)
 			elog(ERROR, "Merging of backup %s failed", base36enc(full_backup->start_time));
 
@@ -743,7 +748,10 @@ delete_backup_files(pgBackup *backup)
 		return;
 	}
 
-	time2iso(timestamp, lengthof(timestamp), backup->recovery_time, false);
+	if (backup->recovery_time)
+		time2iso(timestamp, lengthof(timestamp), backup->recovery_time, false);
+	else
+		time2iso(timestamp, lengthof(timestamp), backup->start_time, false);
 
 	elog(INFO, "Delete: %s %s",
 		 base36enc(backup->start_time), timestamp);

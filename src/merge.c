@@ -30,6 +30,7 @@ typedef struct
 	bool		program_version_match;
 	bool        use_bitmap;
 	bool        is_retry;
+	bool        no_sync;
 
 	/*
 	 * Return value from the thread.
@@ -50,13 +51,13 @@ static void
 merge_data_file(parray *parent_chain, pgBackup *full_backup,
 				pgBackup *dest_backup, pgFile *dest_file,
 				pgFile *tmp_file, const char *to_root, bool use_bitmap,
-				bool is_retry);
+				bool is_retry, bool no_sync);
 
 static void
 merge_non_data_file(parray *parent_chain, pgBackup *full_backup,
 				pgBackup *dest_backup, pgFile *dest_file,
 				pgFile *tmp_file, const char *full_database_dir,
-				const char *full_external_prefix);
+				const char *full_external_prefix, bool no_sync);
 
 static bool is_forward_compatible(parray *parent_chain);
 
@@ -68,7 +69,7 @@ static bool is_forward_compatible(parray *parent_chain);
  * - Remove unnecessary files, which doesn't exist in the target backup anymore
  */
 void
-do_merge(InstanceState *instanceState, time_t backup_id)
+do_merge(InstanceState *instanceState, time_t backup_id, bool no_validate, bool no_sync)
 {
 	parray	   *backups;
 	parray	   *merge_list = parray_new();
@@ -405,9 +406,10 @@ do_merge(InstanceState *instanceState, time_t backup_id)
 	catalog_lock_backup_list(merge_list, parray_num(merge_list) - 1, 0, true, true);
 
 	/* do actual merge */
-	merge_chain(instanceState, merge_list, full_backup, dest_backup);
+	merge_chain(instanceState, merge_list, full_backup, dest_backup, no_validate, no_sync);
 
-	pgBackupValidate(full_backup, NULL);
+	if (!no_validate)
+		pgBackupValidate(full_backup, NULL);
 	if (full_backup->status == BACKUP_STATUS_CORRUPT)
 		elog(ERROR, "Merging of backup %s failed", base36enc(backup_id));
 
@@ -435,7 +437,8 @@ do_merge(InstanceState *instanceState, time_t backup_id)
  */
 void
 merge_chain(InstanceState *instanceState,
-			parray *parent_chain, pgBackup *full_backup, pgBackup *dest_backup)
+			parray *parent_chain, pgBackup *full_backup, pgBackup *dest_backup,
+			bool no_validate, bool no_sync)
 {
 	int			i;
 	char 		*dest_backup_id;
@@ -555,25 +558,28 @@ merge_chain(InstanceState *instanceState,
 	 * with sole exception of FULL backup. If it has MERGING status
 	 * then it isn't valid backup until merging is finished.
 	 */
-	elog(INFO, "Validate parent chain for backup %s",
-					base36enc(dest_backup->start_time));
-
-	for (i = parray_num(parent_chain) - 1; i >= 0; i--)
+	if (!no_validate)
 	{
-		pgBackup   *backup = (pgBackup *) parray_get(parent_chain, i);
+		elog(INFO, "Validate parent chain for backup %s",
+						base36enc(dest_backup->start_time));
 
-		/* FULL backup is not to be validated if its status is MERGING */
-		if (backup->backup_mode == BACKUP_MODE_FULL &&
-			backup->status == BACKUP_STATUS_MERGING)
+		for (i = parray_num(parent_chain) - 1; i >= 0; i--)
 		{
-			continue;
+			pgBackup   *backup = (pgBackup *) parray_get(parent_chain, i);
+
+			/* FULL backup is not to be validated if its status is MERGING */
+			if (backup->backup_mode == BACKUP_MODE_FULL &&
+				backup->status == BACKUP_STATUS_MERGING)
+			{
+				continue;
+			}
+
+			pgBackupValidate(backup, NULL);
+
+			if (backup->status != BACKUP_STATUS_OK)
+				elog(ERROR, "Backup %s has status %s, merge is aborted",
+					base36enc(backup->start_time), status2str(backup->status));
 		}
-
-		pgBackupValidate(backup, NULL);
-
-		if (backup->status != BACKUP_STATUS_OK)
-			elog(ERROR, "Backup %s has status %s, merge is aborted",
-				base36enc(backup->start_time), status2str(backup->status));
 	}
 
 	/*
@@ -666,6 +672,7 @@ merge_chain(InstanceState *instanceState,
 		arg->program_version_match = program_version_match;
 		arg->use_bitmap = use_bitmap;
 		arg->is_retry = is_retry;
+		arg->no_sync = no_sync;
 		/* By default there are some error */
 		arg->ret = 1;
 
@@ -1099,14 +1106,16 @@ merge_files(void *arg)
 							dest_file, tmp_file,
 							arguments->full_database_dir,
 							arguments->use_bitmap,
-							arguments->is_retry);
+							arguments->is_retry,
+							arguments->no_sync);
 		else
 			merge_non_data_file(arguments->parent_chain,
 								arguments->full_backup,
 								arguments->dest_backup,
 								dest_file, tmp_file,
 								arguments->full_database_dir,
-								arguments->full_external_prefix);
+								arguments->full_external_prefix,
+								arguments->no_sync);
 
 done:
 		parray_append(arguments->merge_filelist, tmp_file);
@@ -1199,7 +1208,8 @@ reorder_external_dirs(pgBackup *to_backup, parray *to_external,
 void
 merge_data_file(parray *parent_chain, pgBackup *full_backup,
 				pgBackup *dest_backup, pgFile *dest_file, pgFile *tmp_file,
-				const char *full_database_dir, bool use_bitmap, bool is_retry)
+				const char *full_database_dir, bool use_bitmap, bool is_retry,
+				bool no_sync)
 {
 	FILE   *out = NULL;
 	char   *buffer = pgut_malloc(STDIO_BUFSIZE);
@@ -1270,7 +1280,7 @@ merge_data_file(parray *parent_chain, pgBackup *full_backup,
 		return;
 
 	/* sync second temp file to disk */
-	if (fio_sync(to_fullpath_tmp2, FIO_BACKUP_HOST) != 0)
+	if (!no_sync && fio_sync(to_fullpath_tmp2, FIO_BACKUP_HOST) != 0)
 		elog(ERROR, "Cannot sync merge temp file \"%s\": %s",
 			to_fullpath_tmp2, strerror(errno));
 
@@ -1291,7 +1301,8 @@ merge_data_file(parray *parent_chain, pgBackup *full_backup,
 void
 merge_non_data_file(parray *parent_chain, pgBackup *full_backup,
 				pgBackup *dest_backup, pgFile *dest_file, pgFile *tmp_file,
-				const char *full_database_dir, const char *to_external_prefix)
+				const char *full_database_dir, const char *to_external_prefix,
+				bool no_sync)
 {
 	int		i;
 	char	to_fullpath[MAXPGPATH];
@@ -1375,7 +1386,7 @@ merge_non_data_file(parray *parent_chain, pgBackup *full_backup,
 						 to_fullpath_tmp, BACKUP_MODE_FULL, 0, false);
 
 	/* sync temp file to disk */
-	if (fio_sync(to_fullpath_tmp, FIO_BACKUP_HOST) != 0)
+	if (!no_sync && fio_sync(to_fullpath_tmp, FIO_BACKUP_HOST) != 0)
 		elog(ERROR, "Cannot sync merge temp file \"%s\": %s",
 			to_fullpath_tmp, strerror(errno));
 

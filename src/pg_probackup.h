@@ -233,6 +233,8 @@ do { \
 		FIN_TRADITIONAL_CRC32(crc); \
 } while (0)
 
+#define pg_off_t unsigned long long
+
 
 /* Information about single file (or dir) in backup */
 typedef struct pgFile
@@ -274,8 +276,8 @@ typedef struct pgFile
 	/* Coordinates in header map */
 	int      n_headers;		/* number of blocks in the data file in backup */
 	pg_crc32 hdr_crc;		/* CRC value of header file: name_hdr */
-	off_t    hdr_off;       /* offset in header map */
-	int      hdr_size;       /* offset in header map */
+	pg_off_t hdr_off;       /* offset in header map */
+	int      hdr_size;      /* length of headers */
 } pgFile;
 
 typedef struct page_map_entry
@@ -427,11 +429,11 @@ typedef struct PGNodeInfo
 /* structure used for access to block header map */
 typedef struct HeaderMap
 {
-	char  path[MAXPGPATH];
-	char  path_tmp[MAXPGPATH]; /* used only in merge */
-	FILE  *fp;                 /* used only for writing */
-	char  *buf;	               /* buffer */
-	off_t  offset;             /* current position in fp */
+	char     path[MAXPGPATH];
+	char     path_tmp[MAXPGPATH]; /* used only in merge */
+	FILE    *fp;                  /* used only for writing */
+	char    *buf;                 /* buffer */
+	pg_off_t offset;              /* current position in fp */
 	pthread_mutex_t mutex;
 
 } HeaderMap;
@@ -862,10 +864,11 @@ extern parray *read_timeline_history(const char *arclog_path, TimeLineID targetT
 extern bool tliIsPartOfHistory(const parray *timelines, TimeLineID tli);
 
 /* in merge.c */
-extern void do_merge(InstanceState *instanceState, time_t backup_id);
+extern void do_merge(InstanceState *instanceState, time_t backup_id, bool no_validate, bool no_sync);
 extern void merge_backups(pgBackup *backup, pgBackup *next_backup);
 extern void merge_chain(InstanceState *instanceState, parray *parent_chain,
-						pgBackup *full_backup, pgBackup *dest_backup);
+						pgBackup *full_backup, pgBackup *dest_backup,
+						bool no_validate, bool no_sync);
 
 extern parray *read_database_map(pgBackup *backup);
 
@@ -893,7 +896,7 @@ extern int do_show(CatalogState *catalogState, InstanceState *instanceState,
 /* in delete.c */
 extern void do_delete(InstanceState *instanceState, time_t backup_id);
 extern void delete_backup_files(pgBackup *backup);
-extern void do_retention(InstanceState *instanceState);
+extern void do_retention(InstanceState *instanceState, bool no_validate, bool no_sync);
 extern int do_delete_instance(InstanceState *instanceState);
 extern void do_delete_status(InstanceState *instanceState, 
 					InstanceConfig *instance_config, const char *status);
@@ -917,7 +920,9 @@ extern int do_validate_all(CatalogState *catalogState, InstanceState *instanceSt
 extern int validate_one_page(Page page, BlockNumber absolute_blkno,
 							 XLogRecPtr stop_lsn, PageState *page_st,
 							 uint32 checksum_version);
-extern bool validate_tablespace_map(pgBackup *backup);
+extern bool validate_tablespace_map(pgBackup *backup, bool no_validate);
+
+extern parray* get_history_streaming(ConnectionOptions *conn_opt, TimeLineID tli, parray *backup_list);
 
 /* return codes for validate_one_page */
 /* TODO: use enum */
@@ -950,6 +955,7 @@ extern pgBackup *catalog_get_last_data_backup(parray *backup_list,
 extern pgBackup *get_multi_timeline_parent(parray *backup_list, parray *tli_list,
 	                      TimeLineID current_tli, time_t current_start_time,
 						  InstanceConfig *instance);
+extern timelineInfo *timelineInfoNew(TimeLineID tli);
 extern void timelineInfoFree(void *tliInfo);
 extern parray *catalog_get_timelines(InstanceState *instanceState, InstanceConfig *instance);
 extern void do_set_backup(InstanceState *instanceState, time_t backup_id,
@@ -1007,7 +1013,7 @@ extern void create_data_directories(parray *dest_files,
 extern void read_tablespace_map(parray *links, const char *backup_dir);
 extern void opt_tablespace_map(ConfigOption *opt, const char *arg);
 extern void opt_externaldir_map(ConfigOption *opt, const char *arg);
-extern int  check_tablespace_mapping(pgBackup *backup, bool incremental, bool force, bool pgdata_is_empty);
+extern int  check_tablespace_mapping(pgBackup *backup, bool incremental, bool force, bool pgdata_is_empty, bool no_validate);
 extern void check_external_dir_mapping(pgBackup *backup, bool incremental);
 extern char *get_external_remap(char *current_dir);
 

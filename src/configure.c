@@ -297,6 +297,7 @@ do_set_config(InstanceState *instanceState, bool missing_ok)
 
 	for (i = 0; instance_options[i].type; i++)
 	{
+		int rc = 0;
 		ConfigOption *opt = &instance_options[i];
 		char	   *value;
 
@@ -317,13 +318,25 @@ do_set_config(InstanceState *instanceState, bool missing_ok)
 		}
 
 		if (strchr(value, ' '))
-			fprintf(fp, "%s = '%s'\n", opt->lname, value);
+			rc = fprintf(fp, "%s = '%s'\n", opt->lname, value);
 		else
-			fprintf(fp, "%s = %s\n", opt->lname, value);
+			rc = fprintf(fp, "%s = %s\n", opt->lname, value);
+
+		if (rc < 0)
+			elog(ERROR, "Cannot write to configuration file: \"%s\"", path_temp);
+
 		pfree(value);
 	}
 
-	fclose(fp);
+	if (ferror(fp) || fflush(fp))
+		elog(ERROR, "Cannot write to configuration file: \"%s\"", path_temp);
+
+	if (fclose(fp))
+		elog(ERROR, "Cannot close configuration file: \"%s\"", path_temp);
+
+	if (fio_sync(path_temp, FIO_LOCAL_HOST) != 0)
+		elog(ERROR, "Failed to sync temp configuration file \"%s\": %s",
+			 path_temp, strerror(errno));
 
 	if (rename(path_temp, instanceState->instance_config_path) < 0)
 	{

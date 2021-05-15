@@ -101,7 +101,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(count1, count2)
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname, [node])
+        self.del_test_dir(module_name, fname)
 
     def test_merge_compressed_backups(self):
         """
@@ -2245,7 +2245,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
                     repr(e.message), self.cmd))
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname, [node])
+        self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def test_smart_merge(self):
@@ -2305,7 +2305,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
                 logfile_content = f.read()
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname, [node])
+        self.del_test_dir(module_name, fname)
 
     def test_idempotent_merge(self):
         """
@@ -2380,7 +2380,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(
             page_id_2, self.show_pb(backup_dir, 'node')[0]['id'])
 
-        self.del_test_dir(module_name, fname, [node])
+        self.del_test_dir(module_name, fname)
 
     def test_merge_correct_inheritance(self):
         """
@@ -2435,7 +2435,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
             page_meta['expire-time'],
             self.show_pb(backup_dir, 'node', page_id)['expire-time'])
 
-        self.del_test_dir(module_name, fname, [node])
+        self.del_test_dir(module_name, fname)
 
     def test_merge_correct_inheritance_1(self):
         """
@@ -2485,7 +2485,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
             'expire-time',
             self.show_pb(backup_dir, 'node', page_id))
 
-        self.del_test_dir(module_name, fname, [node])
+        self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure
@@ -2604,7 +2604,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
                 '-d', 'postgres', '-p', str(node_restored.port)])
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname, [node, node_restored])
+        self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure

@@ -811,6 +811,7 @@ main(int argc, char *argv[])
 		case SHOW_CMD:
 			return do_show(catalogState, instanceState, current.backup_id, show_archive);
 		case DELETE_CMD:
+
 			if (delete_expired && backup_id_string)
 				elog(ERROR, "You cannot specify --delete-expired and (-i, --backup-id) options together");
 			if (merge_expired && backup_id_string)
@@ -825,13 +826,13 @@ main(int argc, char *argv[])
 				if (delete_status)
 					do_delete_status(instanceState, &instance_config, delete_status);
 				else
-					do_retention(instanceState);
+					do_retention(instanceState, no_validate, no_sync);
 			}
 			else
 					do_delete(instanceState, current.backup_id);
 			break;
 		case MERGE_CMD:
-			do_merge(instanceState, current.backup_id);
+			do_merge(instanceState, current.backup_id, no_validate, no_sync);
 			break;
 		case SHOW_CONFIG_CMD:
 			do_show_config();

@@ -781,6 +781,8 @@ dir_check_file(pgFile *file, bool backup_logs)
  * List files in parent->path directory.  If "exclude" is true do not add into
  * "files" files from pgdata_exclude_files and directories from
  * pgdata_exclude_dir.
+ *
+ * TODO: should we check for interrupt here ?
  */
 static void
 dir_list_file_internal(parray *files, pgFile *parent, const char *parent_dir,
@@ -1116,6 +1118,8 @@ create_data_directories(parray *dest_files, const char *data_dir, const char *ba
 		elog(VERBOSE, "Create directory \"%s\"", dir->rel_path);
 
 		join_path_components(to_path, data_dir, dir->rel_path);
+
+		// TODO check exit code
 		fio_mkdir(to_path, dir->mode, location);
 	}
 
@@ -1147,12 +1151,21 @@ read_tablespace_map(parray *links, const char *backup_dir)
 
 	while (fgets(buf, lengthof(buf), fp))
 	{
-		char		link_name[MAXPGPATH],
-					path[MAXPGPATH];
-		pgFile	   *file;
+		char        link_name[MAXPGPATH];
+		char       *path;
+		int         n = 0;
+		pgFile     *file;
+		int         i = 0;
 
-		if (sscanf(buf, "%1023s %1023s", link_name, path) != 2)
+		if (sscanf(buf, "%s %n", link_name, &n) != 1)
 			elog(ERROR, "invalid format found in \"%s\"", map_path);
+
+		path = buf + n;
+
+		/* Remove newline character at the end of string if any  */
+		i = strcspn(path, "\n");
+		if (strlen(path) > i)
+			path[i] = '\0';
 
 		file = pgut_new(pgFile);
 		memset(file, 0, sizeof(pgFile));
@@ -1191,7 +1204,7 @@ read_tablespace_map(parray *links, const char *backup_dir)
  *  3. backup has tablespaces and some of them are not empty
  */
 int
-check_tablespace_mapping(pgBackup *backup, bool incremental, bool force, bool pgdata_is_empty)
+check_tablespace_mapping(pgBackup *backup, bool incremental, bool force, bool pgdata_is_empty, bool no_validate)
 {
 	parray	   *links = parray_new();
 	size_t		i;
@@ -1205,7 +1218,7 @@ check_tablespace_mapping(pgBackup *backup, bool incremental, bool force, bool pg
 	/* validate tablespace map,
 	 * if there are no tablespaces, then there is nothing left to do
 	 */
-	if (!validate_tablespace_map(backup))
+	if (!validate_tablespace_map(backup, no_validate))
 	{
 		/*
 		 * Sanity check
@@ -1278,12 +1291,19 @@ check_tablespace_mapping(pgBackup *backup, bool incremental, bool force, bool pg
 		bool remapped = false;
 
 		for (cell = tablespace_dirs.head; cell; cell = cell->next)
+		{
 			if (strcmp(link->linked, cell->old_dir) == 0)
 			{
 				linked_path = cell->new_dir;
 				remapped = true;
 				break;
 			}
+		}
+
+		if (remapped)
+			elog(INFO, "Tablespace %s will be remapped from \"%s\" to \"%s\"", link->name, cell->old_dir, cell->new_dir);
+		else
+			elog(INFO, "Tablespace %s will be restored using old path \"%s\"", link->name, linked_path);
 
 		if (!is_absolute_path(linked_path))
 			elog(ERROR, "Tablespace directory path must be an absolute path: %s\n",
