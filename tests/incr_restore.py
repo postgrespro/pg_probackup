@@ -70,9 +70,9 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
 
         node.stop()
 
-        print(self.restore_node(
+        self.restore_node(
             backup_dir, 'node', node,
-            options=["-j", "4", "--incremental-mode=checksum"]))
+            options=["-j", "4", "--incremental-mode=checksum"])
 
         pgdata_restored = self.pgdata_content(node.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
@@ -119,9 +119,9 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
 
         node.cleanup()
 
-        print(self.restore_node(
+        self.restore_node(
             backup_dir, 'node', node,
-            options=["-j", "4", "--incremental-mode=checksum"]))
+            options=["-j", "4", "--incremental-mode=checksum"])
 
         pgdata_restored = self.pgdata_content(node.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
@@ -136,7 +136,8 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
-            initdb_params=['--data-checksums'])
+            initdb_params=['--data-checksums'],
+            pg_options={'autovacuum': 'off'})
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
@@ -453,7 +454,6 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
                 "Output: {0} \n CMD: {1}".format(
                     repr(self.output), self.cmd))
         except ProbackupException as e:
-            print(e.message)
             self.assertIn(
                 'WARNING: Backup catalog was initialized for system id',
                 e.message,
@@ -649,8 +649,6 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
             options=[
                 "-j", "4", "--incremental-mode=checksum"])
 
-        print(out)
-
         pgdata_restored = self.pgdata_content(node.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
 
@@ -723,7 +721,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
                     repr(e.message), self.cmd))
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname, [node])
+        self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def test_incr_checksum_restore(self):
@@ -800,9 +798,9 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
 
         pgdata = self.pgdata_content(node_1.data_dir)
 
-        print(self.restore_node(
+        self.restore_node(
             backup_dir, 'node', node,
-            options=["-j", "4", "--incremental-mode=checksum"]))
+            options=["-j", "4", "--incremental-mode=checksum"])
 
         pgdata_restored = self.pgdata_content(node.data_dir)
 
@@ -812,7 +810,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         self.compare_pgdata(pgdata, pgdata_restored)
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname, [node, node_1])
+        self.del_test_dir(module_name, fname)
 
 
     # @unittest.skip("skip")
@@ -890,8 +888,8 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
 
         pgdata = self.pgdata_content(node_1.data_dir)
 
-        print(self.restore_node(
-            backup_dir, 'node', node, options=["-j", "4", "--incremental-mode=lsn"]))
+        self.restore_node(
+            backup_dir, 'node', node, options=["-j", "4", "--incremental-mode=lsn"])
 
         pgdata_restored = self.pgdata_content(node.data_dir)
 
@@ -901,7 +899,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         self.compare_pgdata(pgdata, pgdata_restored)
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname, [node, node_1])
+        self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def test_incr_lsn_sanity(self):
@@ -970,7 +968,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
                     repr(e.message), self.cmd))
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname, [node_1])
+        self.del_test_dir(module_name, fname)
 
         # @unittest.skip("skip")
     def test_incr_checksum_sanity(self):
@@ -1029,7 +1027,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         self.compare_pgdata(pgdata, pgdata_restored)
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname, [node_1])
+        self.del_test_dir(module_name, fname)
 
 
         # @unittest.skip("skip")
@@ -1079,9 +1077,9 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
                 f.flush()
                 f.close
 
-        print(self.restore_node(
+        self.restore_node(
             backup_dir, 'node', node, data_dir=node.data_dir,
-            options=["-j", "4", "--incremental-mode=checksum"]))
+            options=["-j", "4", "--incremental-mode=checksum"])
 
         pgdata_restored = self.pgdata_content(node.data_dir)
 
@@ -1209,9 +1207,9 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
 
         node.stop()
 
-        print(self.restore_node(
+        self.restore_node(
             backup_dir, 'node', node,
-            options=["-j", "4", '--incremental-mode=checksum', '--log-level-console=VERBOSE']))
+            options=["-j", "4", '--incremental-mode=checksum'])
 
         pgdata_restored = self.pgdata_content(
             node.base_dir, exclude_dirs=['logs'])
@@ -1281,9 +1279,9 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
 
         node.stop()
 
-        print(self.restore_node(
+        self.restore_node(
             backup_dir, 'node', node,
-            options=["-j", "4", '--incremental-mode=lsn']))
+            options=["-j", "4", '--incremental-mode=lsn'])
 
         pgdata_restored = self.pgdata_content(
             node.base_dir, exclude_dirs=['logs'])
@@ -1341,11 +1339,13 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
 
         node.stop()
 
-        print(self.restore_node(
+        self.restore_node(
             backup_dir, 'node', node, backup_id=full_id,
             options=[
-                "-j", "4", '--incremental-mode=lsn', '--log-level-file=VERBOSE',
-                '--recovery-target=immediate', '--recovery-target-action=pause']))
+                "-j", "4",
+                '--incremental-mode=lsn',
+                '--recovery-target=immediate',
+                '--recovery-target-action=pause'])
 
         pgdata_restored = self.pgdata_content(node.data_dir)
         self.compare_pgdata(full_pgdata, pgdata_restored)
@@ -1384,11 +1384,13 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         node.slow_start(replica=True)
         node.stop()
 
-        print(self.restore_node(
+        self.restore_node(
             backup_dir, 'node', node, backup_id=delta_id,
             options=[
-                "-j", "4", '--incremental-mode=lsn',
-                '--recovery-target=immediate', '--recovery-target-action=pause']))
+                "-j", "4",
+                '--incremental-mode=lsn',
+                '--recovery-target=immediate',
+                '--recovery-target-action=pause'])
 
         pgdata_restored = self.pgdata_content(node.data_dir)
         self.compare_pgdata(delta_pgdata, pgdata_restored)
@@ -1447,11 +1449,13 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
 
         node.stop()
 
-        print(self.restore_node(
+        self.restore_node(
             backup_dir, 'node', node, backup_id=full_id,
             options=[
-                "-j", "4", '--incremental-mode=checksum',
-                '--recovery-target=immediate', '--recovery-target-action=pause']))
+                "-j", "4",
+                '--incremental-mode=checksum',
+                '--recovery-target=immediate',
+                '--recovery-target-action=pause'])
 
         pgdata_restored = self.pgdata_content(node.data_dir)
         self.compare_pgdata(full_pgdata, pgdata_restored)
@@ -1459,11 +1463,13 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         node.slow_start(replica=True)
         node.stop()
 
-        print(self.restore_node(
+        self.restore_node(
             backup_dir, 'node', node, backup_id=page_id,
             options=[
-                "-j", "4", '--incremental-mode=checksum',
-                '--recovery-target=immediate', '--recovery-target-action=pause']))
+                "-j", "4",
+                '--incremental-mode=checksum',
+                '--recovery-target=immediate',
+                '--recovery-target-action=pause'])
 
         pgdata_restored = self.pgdata_content(node.data_dir)
         self.compare_pgdata(page_pgdata, pgdata_restored)
@@ -1471,11 +1477,13 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         node.slow_start(replica=True)
         node.stop()
 
-        print(self.restore_node(
+        self.restore_node(
             backup_dir, 'node', node, backup_id=delta_id,
             options=[
-                "-j", "4", '--incremental-mode=checksum',
-                '--recovery-target=immediate', '--recovery-target-action=pause']))
+                "-j", "4",
+                '--incremental-mode=checksum',
+                '--recovery-target=immediate',
+                '--recovery-target-action=pause'])
 
         pgdata_restored = self.pgdata_content(node.data_dir)
         self.compare_pgdata(delta_pgdata, pgdata_restored)
@@ -1542,9 +1550,9 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
             data_dir=new_master.data_dir, backup_type='page')
 
         # restore old master as replica
-        print(self.restore_node(
+        self.restore_node(
             backup_dir, 'node', old_master, data_dir=old_master.data_dir,
-            options=['-R', '--incremental-mode=checksum']))
+            options=['-R', '--incremental-mode=checksum'])
 
         self.set_replica(new_master, old_master, synchronous=True)
 
@@ -1554,7 +1562,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         pgbench.wait()
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname, [new_master, old_master])
+        self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def test_make_replica_via_incr_lsn_restore(self):
@@ -1615,9 +1623,9 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
             data_dir=new_master.data_dir, backup_type='page')
 
         # restore old master as replica
-        print(self.restore_node(
+        self.restore_node(
             backup_dir, 'node', old_master, data_dir=old_master.data_dir,
-            options=['-R', '--incremental-mode=lsn']))
+            options=['-R', '--incremental-mode=lsn'])
 
         self.set_replica(new_master, old_master, synchronous=True)
 
@@ -1627,7 +1635,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         pgbench.wait()
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname, [new_master, old_master])
+        self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure
@@ -1704,6 +1712,9 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure
+    # This test will pass with Enterprise
+    # because it has checksums enabled by default
+    @unittest.skipIf(ProbackupTest.enterprise, 'skip')
     def test_incr_lsn_long_xact_1(self):
         """
         """
@@ -1762,9 +1773,9 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         node.stop()
 
         try:
-            print(self.restore_node(
+            self.restore_node(
                 backup_dir, 'node', node, backup_id=full_id,
-                options=["-j", "4", '--incremental-mode=lsn']))
+                options=["-j", "4", '--incremental-mode=lsn'])
             # we should die here because exception is what we expect to happen
             self.assertEqual(
                 1, 0,
@@ -1868,7 +1879,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
             '1')
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname, [node])
+        self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure
@@ -1920,9 +1931,9 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
 
         node.stop()
 
-        print(self.restore_node(
+        self.restore_node(
             backup_dir, 'node', node, backup_id=id1,
-            options=["-j", "4", '-I', 'checksum']))
+            options=["-j", "4", '-I', 'checksum'])
 
         pgdata_restored = self.pgdata_content(node.data_dir)
         self.compare_pgdata(pgdata1, pgdata_restored)
@@ -1994,9 +2005,9 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
 
         node.stop()
 
-        print(self.restore_node(
+        self.restore_node(
             backup_dir, 'node', node, backup_id=id1,
-            options=["-j", "4", '-I', 'checksum']))
+            options=["-j", "4", '-I', 'checksum'])
 
         pgdata_restored = self.pgdata_content(node.data_dir)
         self.compare_pgdata(pgdata1, pgdata_restored)
@@ -2088,12 +2099,12 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         pgdata1 = self.pgdata_content(node1.data_dir)
 
         # partial incremental restore backup into node2
-        print(self.restore_node(
+        self.restore_node(
             backup_dir, 'node',
             node2, options=[
                 "--db-exclude=db1",
                 "--db-exclude=db5",
-                "-I", "checksum"]))
+                "-I", "checksum"])
 
         pgdata2 = self.pgdata_content(node2.data_dir)
 
@@ -2127,7 +2138,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         self.assertNotIn('PANIC', output)
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname, [node, node2])
+        self.del_test_dir(module_name, fname)
 
     def test_incremental_partial_restore_exclude_lsn(self):
         """"""
@@ -2198,12 +2209,12 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         node2.port = node.port
         node2.slow_start()
         node2.stop()
-        print(self.restore_node(
+        self.restore_node(
             backup_dir, 'node',
             node2, options=[
                 "--db-exclude=db1",
                 "--db-exclude=db5",
-                "-I", "lsn"]))
+                "-I", "lsn"])
 
         pgdata2 = self.pgdata_content(node2.data_dir)
 
@@ -2237,7 +2248,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         self.assertNotIn('PANIC', output)
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname, [node2])
+        self.del_test_dir(module_name, fname)
 
     def test_incremental_partial_restore_exclude_tablespace_checksum(self):
         """"""
@@ -2381,7 +2392,66 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         self.assertNotIn('PANIC', output)
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname, [node2])
+        self.del_test_dir(module_name, fname)
+
+    def test_incremental_pg_filenode_map(self):
+        """
+        https://github.com/postgrespro/pg_probackup/issues/320
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        node1 = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node1'),
+            initdb_params=['--data-checksums'])
+        node1.cleanup()
+
+        node.pgbench_init(scale=5)
+
+        # FULL backup
+        backup_id = self.backup_node(backup_dir, 'node', node)
+
+        # in node1 restore full backup
+        self.restore_node(backup_dir, 'node', node1)
+        self.set_auto_conf(node1, {'port': node1.port})
+        node1.slow_start()
+
+        pgbench = node.pgbench(
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            options=['-T', '10', '-c', '1'])
+
+        pgbench = node1.pgbench(
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            options=['-T', '10', '-c', '1'])
+
+        node.safe_psql(
+            'postgres',
+            'reindex index pg_type_oid_index')
+
+        # FULL backup
+        backup_id = self.backup_node(backup_dir, 'node', node)
+
+        node1.stop()
+
+        # incremental restore into node1
+        self.restore_node(backup_dir, 'node', node1, options=["-I", "checksum"])
+
+        self.set_auto_conf(node1, {'port': node1.port})
+        node1.slow_start()
+
+        node1.safe_psql(
+            'postgres',
+            'select 1')
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
 
 # check that MinRecPoint and BackupStartLsn are correctly used in case of --incrementa-lsn
-# incremental restore + partial restore.

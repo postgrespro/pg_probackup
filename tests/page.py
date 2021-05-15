@@ -100,7 +100,7 @@ class PageTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(result1, result2)
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname, [node, node_restored])
+        self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def test_page_vacuum_truncate_1(self):
@@ -757,8 +757,6 @@ class PageTest(ProbackupTest, unittest.TestCase):
                     self.output, self.cmd))
         except ProbackupException as e:
             self.assertTrue(
-                'INFO: Wait for WAL segment' in e.message and
-                'to be archived' in e.message and
                 'Could not read WAL record at' in e.message and
                 'is absent' in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
@@ -782,8 +780,6 @@ class PageTest(ProbackupTest, unittest.TestCase):
                     self.output, self.cmd))
         except ProbackupException as e:
             self.assertTrue(
-                'INFO: Wait for WAL segment' in e.message and
-                'to be archived' in e.message and
                 'Could not read WAL record at' in e.message and
                 'is absent' in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
@@ -872,8 +868,6 @@ class PageTest(ProbackupTest, unittest.TestCase):
                     self.output, self.cmd))
         except ProbackupException as e:
             self.assertTrue(
-                'INFO: Wait for WAL segment' in e.message and
-                'to be archived' in e.message and
                 'Could not read WAL record at' in e.message and
                 'Possible WAL corruption. Error has occured during reading WAL segment' in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
@@ -896,8 +890,6 @@ class PageTest(ProbackupTest, unittest.TestCase):
                     self.output, self.cmd))
         except ProbackupException as e:
             self.assertTrue(
-                'INFO: Wait for WAL segment' in e.message and
-                'to be archived' in e.message and
                 'Could not read WAL record at' in e.message and
                 'Possible WAL corruption. Error has occured during reading WAL segment "{0}"'.format(
                     file) in e.message,
@@ -997,8 +989,6 @@ class PageTest(ProbackupTest, unittest.TestCase):
                     self.output, self.cmd))
         except ProbackupException as e:
             self.assertTrue(
-                'INFO: Wait for WAL segment' in e.message and
-                'to be archived' in e.message and
                 'Could not read WAL record at' in e.message and
                 'Possible WAL corruption. Error has occured during reading WAL segment' in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
@@ -1020,8 +1010,6 @@ class PageTest(ProbackupTest, unittest.TestCase):
                 "Output: {0} \n CMD: {1}".format(
                     self.output, self.cmd))
         except ProbackupException as e:
-            self.assertIn('INFO: Wait for WAL segment', e.message)
-            self.assertIn('to be archived', e.message)
             self.assertIn('Could not read WAL record at', e.message)
             self.assertIn('WAL file is from different database system: '
                 'WAL file database system identifier is', e.message)

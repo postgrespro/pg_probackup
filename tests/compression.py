@@ -117,7 +117,7 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(delta_result, delta_result_new)
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname, [node])
+        self.del_test_dir(module_name, fname)
 
     def test_compression_archive_zlib(self):
         """

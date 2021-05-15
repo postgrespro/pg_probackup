@@ -201,6 +201,8 @@ get_ptrack_version(PGconn *backup_conn, PGNodeInfo *nodeInfo)
 		nodeInfo->ptrack_version_num = 20;
 	else if (strcmp(ptrack_version_str, "2.1") == 0)
 		nodeInfo->ptrack_version_num = 21;
+	else if (strcmp(ptrack_version_str, "2.2") == 0)
+		nodeInfo->ptrack_version_num = 22;
 	else
 		elog(WARNING, "Update your ptrack to the version 2.1 or upper. Current version is %s",
 			 ptrack_version_str);

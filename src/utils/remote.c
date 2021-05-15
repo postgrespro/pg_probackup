@@ -247,8 +247,9 @@ bool launch_agent(void)
 				(agent_version / 100) % 100,
 				agent_version % 100);
 
-		elog(ERROR, "Remote agent version %s does not match local program version %s",
-			agent_version_str, PROGRAM_VERSION);
+		elog(ERROR, "Remote agent protocol version %s does not match local program protocol version %s, "
+					"consider to upgrade pg_probackup binary",
+			agent_version_str, AGENT_PROTOCOL_VERSION_STR);
 	}
 
 	return true;

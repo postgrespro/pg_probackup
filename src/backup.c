@@ -152,12 +152,17 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool
 		if (prev_backup == NULL)
 		{
 			/* try to setup multi-timeline backup chain */
-			elog(WARNING, "Valid backup on current timeline %u is not found, "
+			elog(WARNING, "Valid full backup on current timeline %u is not found, "
 						"trying to look up on previous timelines",
 						current.tli);
 
-			/* TODO: use read_timeline_history */
-			tli_list = catalog_get_timelines(&instance_config);
+			tli_list = get_history_streaming(&instance_config.conn_opt, current.tli, backup_list);
+			if (!tli_list)
+			{
+				elog(WARNING, "Failed to obtain current timeline history file via replication protocol");
+				/* fallback to using archive */
+				tli_list = catalog_get_timelines(&instance_config);
+			}
 
 			if (parray_num(tli_list) == 0)
 				elog(WARNING, "Cannot find valid backup on previous timelines, "
@@ -270,6 +275,12 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool
 
 		start_WAL_streaming(backup_conn, dst_backup_path, &instance_config.conn_opt,
 							current.start_lsn, current.tli);
+
+		/* Make sure that WAL streaming is working
+		 * PAGE backup in stream mode is waited twice, first for
+		 * segment in WAL archive and then for streamed segment
+		 */
+		wait_wal_lsn(current.start_lsn, true, current.tli, false, true, ERROR, true, &current);
 	}
 
 	/* initialize backup's file list */
@@ -874,7 +885,7 @@ do_backup(pgSetBackupParams *set_backup_params,
 	 * which are expired according to retention policies
 	 */
 	if (delete_expired || merge_expired || delete_wal)
-		do_retention();
+		do_retention(no_validate, no_sync);
 
 	return 0;
 }
@@ -1030,6 +1041,8 @@ pg_start_backup(const char *label, bool smooth, BackupMode backup_mode, bool fro
 	uint32		lsn_lo;
 
 	params[0] = label;
+
+	elog(INFO, "wait for pg_start_backup()");
 
 	/* 2nd argument is 'fast'*/
 	params[1] = smooth ? "false" : "true";
@@ -1289,8 +1302,7 @@ wait_wal_lsn(XLogRecPtr target_lsn, bool is_start_lsn, TimeLineID tli,
 	 */
 	/*if (in_stream_dir)
 	{
-		pgBackupGetPath2(&current, pg_wal_dir, lengthof(pg_wal_dir),
-						 DATABASE_DIR, PG_XLOG_DIR);
+		join_path_components(pg_wal_dir, backup->database_dir, PG_XLOG_DIR);
 		join_path_components(wal_segment_path, pg_wal_dir, wal_segment);
 		wal_segment_dir = pg_wal_dir;
 	}
@@ -1388,8 +1400,8 @@ wait_wal_lsn(XLogRecPtr target_lsn, bool is_start_lsn, TimeLineID tli,
 		}
 
 		sleep(1);
-		if (interrupted)
-			elog(ERROR, "Interrupted during waiting for WAL archiving");
+		if (interrupted || thread_interrupted)
+			elog(ERROR, "Interrupted during waiting for WAL %s", in_stream_dir ? "streaming" : "archiving");
 		try_count++;
 
 		/* Inform user if WAL segment is absent in first attempt */
@@ -1413,9 +1425,10 @@ wait_wal_lsn(XLogRecPtr target_lsn, bool is_start_lsn, TimeLineID tli,
 		{
 			if (file_exists)
 				elog(timeout_elevel, "WAL segment %s was %s, "
-					 "but target LSN %X/%X could not be archived in %d seconds",
+					 "but target LSN %X/%X could not be %s in %d seconds",
 					 wal_segment, wal_delivery_str,
-					 (uint32) (target_lsn >> 32), (uint32) target_lsn, timeout);
+					 (uint32) (target_lsn >> 32), (uint32) target_lsn,
+					 wal_delivery_str, timeout);
 			/* If WAL segment doesn't exist or we wait for previous segment */
 			else
 				elog(timeout_elevel,
@@ -1567,7 +1580,12 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn,
 	 */
 	if (pg_stop_backup_is_sent && !in_cleanup)
 	{
+		int timeout = ARCHIVE_TIMEOUT_DEFAULT;
 		res = NULL;
+
+		/* kludge against some old bug in archive_timeout. TODO: remove in 3.0.0 */
+		if (instance_config.archive_timeout > 0)
+			timeout = instance_config.archive_timeout;
 
 		while (1)
 		{
@@ -1593,11 +1611,10 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn,
 				 * If postgres haven't answered in archive_timeout seconds,
 				 * send an interrupt.
 				 */
-				if (pg_stop_backup_timeout > instance_config.archive_timeout)
+				if (pg_stop_backup_timeout > timeout)
 				{
 					pgut_cancel(conn);
-					elog(ERROR, "pg_stop_backup doesn't answer in %d seconds, cancel it",
-						 instance_config.archive_timeout);
+					elog(ERROR, "pg_stop_backup doesn't answer in %d seconds, cancel it", timeout);
 				}
 			}
 			else

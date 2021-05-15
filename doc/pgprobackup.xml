@@ -155,7 +155,7 @@ doc/src/sgml/pgprobackup.sgml
    recovery of <productname>PostgreSQL</productname> database clusters.
    It is designed to perform periodic backups of the <productname>PostgreSQL</productname> 
    instance that enable you to restore the server in case of a failure.
-   <application>pg_probackup</application> supports <productname>PostgreSQL</productname> 9.5 or higher.
+   <application>pg_probackup</application> supports PostgreSQL 9.5 or higher.
   </para>
 
 <itemizedlist spacing="compact">
@@ -389,7 +389,7 @@ doc/src/sgml/pgprobackup.sgml
     <itemizedlist spacing="compact">
       <listitem>
         <para>
-          <application>pg_probackup</application> only supports <productname>PostgreSQL</productname>  9.5 and higher.
+          <application>pg_probackup</application> only supports PostgreSQL 9.5 and higher.
         </para>
       </listitem>
       <listitem>
@@ -410,7 +410,7 @@ doc/src/sgml/pgprobackup.sgml
       </listitem>
       <listitem>
         <para>
-          For PostgreSQL 9.5, functions
+          For <productname>PostgreSQL</productname> 9.5, functions
           <function>pg_create_restore_point(text)</function> and
           <function>pg_switch_xlog()</function> can be executed only if
           the backup role is a superuser, so backup of a
@@ -599,7 +599,7 @@ pg_probackup add-instance -B <replaceable>backup_dir</replaceable> -D <replaceab
       connection</emphasis> to the <productname>PostgreSQL</productname> server:
     </para>
     <para>
-      For PostgreSQL 9.5:
+      For <productname>PostgreSQL</productname> 9.5:
     </para>
     <programlisting>
 BEGIN;
@@ -761,10 +761,9 @@ ALTER ROLE backup WITH REPLICATION;
     <title>Setting up Continuous WAL Archiving</title>
     <para>
       Making backups in PAGE backup mode, performing
-      <link linkend="pbk-performing-point-in-time-pitr-recovery">PITR</link>,
+      <link linkend="pbk-performing-point-in-time-pitr-recovery">PITR</link> and
       making backups with
-      <link linkend="pbk-archive-mode">ARCHIVE</link> WAL delivery mode and
-      running incremental backup after timeline switch
+      <link linkend="pbk-archive-mode">ARCHIVE</link> WAL delivery mode
       require
       <ulink url="https://postgrespro.com/docs/postgresql/current/continuous-archiving.html">continuous
       WAL archiving</ulink> to be enabled. To set up continuous
@@ -794,7 +793,7 @@ ALTER ROLE backup WITH REPLICATION;
           parameter, as follows:
         </para>
         <programlisting>
-archive_command = '<replaceable>install_dir</replaceable>/pg_probackup archive-push -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> --wal-file-name=%f [<replaceable>remote_options</replaceable>]'
+archive_command = '"<replaceable>install_dir</replaceable>/pg_probackup" archive-push -B "<replaceable>backup_dir</replaceable>" --instance <replaceable>instance_name</replaceable> --wal-file-name=%f [<replaceable>remote_options</replaceable>]'
 </programlisting>
       </listitem>
     </itemizedlist>
@@ -1202,8 +1201,9 @@ CREATE EXTENSION ptrack;
        together, which leads to false-positive results when tracking changed
        blocks and increases the incremental backup size as unchanged blocks
        can also be copied into the incremental backup.
-       Setting <varname>ptrack.map_size</varname> to a higher value
-       does not affect PTRACK operation. The maximum allowed value is 1024.
+       Setting <varname>ptrack.map_size</varname> to a higher value does not
+       affect PTRACK operation, but it is not recommended to set this parameter
+       to a value higher than 1024.
       </para>
      </listitem>
     </orderedlist>
@@ -1587,7 +1587,7 @@ pg_probackup validate -B <replaceable>backup_dir</replaceable> --instance <repla
       specified timestamp, run this command:
     </para>
     <programlisting>
-pg_probackup validate -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> -i PT8XFX --recovery-target-time='2017-05-18 14:18:11+03'
+pg_probackup validate -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> -i PT8XFX --recovery-target-time="2017-05-18 14:18:11+03"
 </programlisting>
     <para>
       If you specify the <replaceable>backup_id</replaceable> of an incremental backup,
@@ -1711,7 +1711,7 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
       <para>
         The speed of restore from backup can be significantly improved
         by replacing only invalid and changed pages in already
-        existing PostgreSQL data directory using
+        existing <productname>PostgreSQL</productname> data directory using
         <link linkend="pbk-incremental-restore-options">incremental
         restore options</link> with the <xref linkend="pbk-restore"/>
         command.
@@ -1874,11 +1874,11 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
       </note>
       <note>
         <para>
-          Due to recovery specifics of PostgreSQL versions earlier than 12,
+          Due to recovery specifics of <productname>PostgreSQL</productname> versions earlier than 12,
           it is advisable that you set the
           <ulink url="https://postgrespro.com/docs/postgresql/current/runtime-config-replication.html#GUC-HOT-STANDBY">hot_standby</ulink>
           parameter to <literal>off</literal> when running partial
-          restore of a PostgreSQL cluster of version earlier than 12.
+          restore of a <productname>PostgreSQL</productname> cluster of version earlier than 12.
           Otherwise the recovery may fail.
         </para>
       </note>
@@ -1914,7 +1914,7 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
           timestamp format. For example:
         </para>
         <programlisting>
-pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> --recovery-target-time='2017-05-18 14:18:11+03'
+pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> --recovery-target-time="2017-05-18 14:18:11+03"
 </programlisting>
       </listitem>
       <listitem>
@@ -1941,7 +1941,7 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
           point, use <option>--recovery-target-name</option> option:
         </para>
         <programlisting>
-pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> --recovery-target-name='before_app_upgrade'
+pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> --recovery-target-name="before_app_upgrade"
 </programlisting>
       </listitem>
       <listitem>
@@ -1951,7 +1951,7 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
           with <literal>latest</literal> value:
         </para>
         <programlisting>
-pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> --recovery-target='latest'
+pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> --recovery-target="latest"
 </programlisting>
       </listitem>
       <listitem>
@@ -2078,14 +2078,14 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
       Provided arguments will be used to construct the <command>restore_command</command>:
     </para>
     <programlisting>
-restore_command = '<replaceable>install_dir</replaceable>/pg_probackup archive-get -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> --wal-file-path=%p --wal-file-name=%f --remote-host=192.168.0.3 --remote-port=2303 --remote-user=backup'
+restore_command = '"<replaceable>install_dir</replaceable>/pg_probackup" archive-get -B "<replaceable>backup_dir</replaceable>" --instance <replaceable>instance_name</replaceable> --wal-file-path=%p --wal-file-name=%f --remote-host=192.168.0.3 --remote-port=2303 --remote-user=backup'
 </programlisting>
     <para>
       Alternatively, you can use the <option>--restore-command</option>
       option to provide the entire <parameter>restore_command</parameter>:
     </para>
     <programlisting>
-pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> --remote-user=postgres --remote-host=192.168.0.2 --remote-port=2302 --restore-command='<replaceable>install_dir</replaceable>/pg_probackup archive-get -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> --wal-file-path=%p --wal-file-name=%f --remote-host=192.168.0.3 --remote-port=2303 --remote-user=backup'
+pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> --remote-user=postgres --remote-host=192.168.0.2 --remote-port=2302 --restore-command='"<replaceable>install_dir</replaceable>/pg_probackup" archive-get -B "<replaceable>backup_dir</replaceable>" --instance <replaceable>instance_name</replaceable> --wal-file-path=%p --wal-file-name=%f --remote-host=192.168.0.3 --remote-port=2303 --remote-user=backup'
 </programlisting>
     <note>
       <para>
@@ -3133,7 +3133,7 @@ pg_probackup set-backup -B <replaceable>backup_dir</replaceable> --instance <rep
         using the <option>--expire-time</option> option. For example:
       </para>
       <programlisting>
-pg_probackup set-backup -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> -i <replaceable>backup_id</replaceable> --expire-time='2020-01-01 00:00:00+03'
+pg_probackup set-backup -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> -i <replaceable>backup_id</replaceable> --expire-time="2020-01-01 00:00:00+03"
 </programlisting>
       <para>
         Alternatively, you can use the <option>--ttl</option> and
@@ -3143,7 +3143,7 @@ pg_probackup set-backup -B <replaceable>backup_dir</replaceable> --instance <rep
       </para>
       <programlisting>
 pg_probackup backup -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> -b FULL --ttl=30d
-pg_probackup backup -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> -b FULL --expire-time='2020-01-01 00:00:00+03'
+pg_probackup backup -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> -b FULL --expire-time="2020-01-01 00:00:00+03"
 </programlisting>
       <para>
         To check if the backup is pinned,
@@ -3869,7 +3869,7 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
         This option will be ignored unless the <option>-R</option> flag is specified.
       </para>
       <para>
-        Example: <literal>--primary-conninfo='host=192.168.1.50 port=5432 user=foo password=foopass'</literal>
+        Example: <literal>--primary-conninfo="host=192.168.1.50 port=5432 user=foo password=foopass"</literal>
       </para>
       </listitem>
       </varlistentry>
@@ -4109,7 +4109,7 @@ pg_probackup validate -B <replaceable>backup_dir</replaceable>
       <title>merge</title>
       <programlisting>
 pg_probackup merge -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> -i <replaceable>backup_id</replaceable>
-[--help] [-j <replaceable>num_threads</replaceable>] [--progress]
+[--help] [-j <replaceable>num_threads</replaceable>] [--progress] [--no-validate] [--no-sync]
 [<replaceable>logging_options</replaceable>]
 </programlisting>
       <para>
@@ -4120,6 +4120,30 @@ pg_probackup merge -B <replaceable>backup_dir</replaceable> --instance <replacea
         between them. Once the merge is complete, the full backup takes in all
         the merged data, and the incremental backups are removed as redundant.
       </para>
+
+      <para>
+      <variablelist>
+        <varlistentry>
+        <term><option>--no-validate</option></term>
+        <listitem>
+        <para>
+          Skips automatic validation before and after merge.
+        </para>
+        </listitem>
+        </varlistentry>
+        <varlistentry>
+        <term><option>--no-sync</option></term>
+        <listitem>
+        <para>
+          Do not sync merged files to disk. You can use this flag to speed
+          up the merge process. Using this flag can result in data
+          corruption in case of operating system or hardware crash.
+        </para>
+        </listitem>
+        </varlistentry>
+      </variablelist>
+      </para>
+
       <para>
         For details, see the section
         <link linkend="pbk-merging-backups">Merging Backups</link>.
@@ -4132,13 +4156,38 @@ pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replace
 [--help] [-j <replaceable>num_threads</replaceable>] [--progress]
 [--retention-redundancy=<replaceable>redundancy</replaceable>][--retention-window=<replaceable>window</replaceable>][--wal-depth=<replaceable>wal_depth</replaceable>] [--delete-wal]
 {-i <replaceable>backup_id</replaceable> | --delete-expired [--merge-expired] | --merge-expired | --status=backup_status}
-[--dry-run] [<replaceable>logging_options</replaceable>]
+[--dry-run] [--no-validate] [--no-sync] [<replaceable>logging_options</replaceable>]
 </programlisting>
       <para>
         Deletes backup with specified <replaceable>backup_id</replaceable>
         or launches the retention purge of backups and archived WAL
         that do not satisfy the current retention policies.
       </para>
+
+      <para>
+      <variablelist>
+        <varlistentry>
+        <term><option>--no-validate</option></term>
+        <listitem>
+        <para>
+          Skips automatic validation before and after retention merge.
+        </para>
+        </listitem>
+        </varlistentry>
+
+        <varlistentry>
+        <term><option>--no-sync</option></term>
+        <listitem>
+        <para>
+          Do not sync merged files to disk. You can use this flag to speed
+          up the retention merge process. Using this flag can result in data
+          corruption in case of operating system or hardware crash.
+        </para>
+        </listitem>
+        </varlistentry>
+      </variablelist>
+      </para>
+
       <para>
         For details, see the sections
         <link linkend="pbk-deleting-backups">Deleting Backups</link>,
@@ -4421,7 +4470,7 @@ pg_probackup archive-get -B <replaceable>backup_dir</replaceable> --instance <re
         If the time zone offset is not specified, the local time zone is used.
       </para>
       <para>
-       Example: <literal>--recovery-target-time='2020-01-01 00:00:00+03'</literal>
+       Example: <literal>--recovery-target-time="2020-01-01 00:00:00+03"</literal>
       </para>
       </listitem>
       </varlistentry>
@@ -4611,7 +4660,7 @@ pg_probackup archive-get -B <replaceable>backup_dir</replaceable> --instance <re
           If the time zone offset is not specified, the local time zone is used.
       </para>
       <para>
-       Example: <literal>--expire-time='2020-01-01 00:00:00+03'</literal>
+       Example: <literal>--expire-time="2020-01-01 00:00:00+03"</literal>
       </para>
       </listitem>
       </varlistentry>
@@ -5164,7 +5213,7 @@ pg_probackup archive-get -B <replaceable>backup_dir</replaceable> --instance <re
         Provides a string of SSH command-line options. For example,
         the following options can be used to set <parameter>keep-alive</parameter> for SSH
         connections opened by <application>pg_probackup</application>:
-        <literal>--ssh-options='-o ServerAliveCountMax=5 -o ServerAliveInterval=60'</literal>.
+        <literal>--ssh-options="-o ServerAliveCountMax=5 -o ServerAliveInterval=60"</literal>.
         For the full list of possible options, see
         <ulink url="https://man.openbsd.org/ssh_config.5">ssh_config
         manual page</ulink>.
@@ -5517,14 +5566,14 @@ INFO: Backup catalog '/mnt/backups' successfully inited
       <step id="pbk-add-instance-pg-11-to-backup-catalog">
         <title>Add instance <literal>pg-11</literal> to the backup catalog:</title>
         <programlisting>
-[backupman@backup_host]$ pg_probackup-11 add-instance -B /mnt/backups --instance 'pg-11' --remote-host=postgres_host --remote-user=postgres -D /var/lib/postgresql/11/main
+[backupman@backup_host]$ pg_probackup-11 add-instance -B /mnt/backups --instance pg-11 --remote-host=postgres_host --remote-user=postgres -D /var/lib/postgresql/11/main
 INFO: Instance 'node' successfully inited
 </programlisting>
       </step>
       <step id="pbk-take-full-backup">
         <title>Take a FULL backup:</title>
         <programlisting>
-[backupman@backup_host] pg_probackup-11 backup -B /mnt/backups --instance 'pg-11' -b FULL --stream --remote-host=postgres_host --remote-user=postgres -U backup -d backupdb
+[backupman@backup_host] pg_probackup-11 backup -B /mnt/backups --instance pg-11 -b FULL --stream --remote-host=postgres_host --remote-user=postgres -U backup -d backupdb
 INFO: Backup start, pg_probackup version: 2.2.0, instance: node, backup ID: PZ7YK2, backup mode: FULL, wal mode: STREAM, remote: true, compress-algorithm: none, compress-level: 1
 INFO: Start transferring data files
 INFO: Data files are transferred
@@ -5539,7 +5588,7 @@ INFO: Backup PZ7YK2 completed
       <step id="pbk-lets-take-a-look-at-the-backup-catalog">
         <title>Let's take a look at the backup catalog:</title>
         <programlisting>
-[backupman@backup_host] pg_probackup-11 show -B /mnt/backups --instance 'pg-11'
+[backupman@backup_host] pg_probackup-11 show -B /mnt/backups --instance pg-11
 
 BACKUP INSTANCE 'pg-11'
 ==================================================================================================================================
@@ -5551,7 +5600,7 @@ BACKUP INSTANCE 'pg-11'
       <step id="pbk-take-incremental-backup-in-delta-mode">
         <title>Take an incremental backup in the DELTA mode:</title>
         <programlisting>
-[backupman@backup_host] pg_probackup-11 backup -B /mnt/backups --instance 'pg-11' -b delta --stream --remote-host=postgres_host --remote-user=postgres -U backup -d backupdb
+[backupman@backup_host] pg_probackup-11 backup -B /mnt/backups --instance pg-11 -b delta --stream --remote-host=postgres_host --remote-user=postgres -U backup -d backupdb
 INFO: Backup start, pg_probackup version: 2.2.0, instance: node, backup ID: PZ7YMP, backup mode: DELTA, wal mode: STREAM, remote: true, compress-algorithm: none, compress-level: 1
 INFO: Parent backup: PZ7YK2
 INFO: Start transferring data files
@@ -5568,14 +5617,14 @@ INFO: Backup PZ7YMP completed
         <title>Let's add some parameters to <application>pg_probackup</application>
         configuration file, so that you can omit them from the command line:</title>
         <programlisting>
-[backupman@backup_host] pg_probackup-11 set-config -B /mnt/backups --instance 'pg-11' --remote-host=postgres_host --remote-user=postgres -U backup -d backupdb
+[backupman@backup_host] pg_probackup-11 set-config -B /mnt/backups --instance pg-11 --remote-host=postgres_host --remote-user=postgres -U backup -d backupdb
 </programlisting>
       </step>
       <step id="pbk-take-another-incremental-backup-in-delta-mode-omitting-some-of-the-previous-parameters">
         <title>Take another incremental backup in the DELTA mode, omitting
         some of the previous parameters:</title>
         <programlisting>
-[backupman@backup_host] pg_probackup-11 backup -B /mnt/backups --instance 'pg-11' -b delta --stream
+[backupman@backup_host] pg_probackup-11 backup -B /mnt/backups --instance pg-11 -b delta --stream
 INFO: Backup start, pg_probackup version: 2.2.0, instance: node, backup ID: PZ7YR5, backup mode: DELTA, wal mode: STREAM, remote: true, compress-algorithm: none, compress-level: 1
 INFO: Parent backup: PZ7YMP
 INFO: Start transferring data files
@@ -5591,7 +5640,7 @@ INFO: Backup PZ7YR5 completed
       <step id="pbk-lets-take-a-look-at-instance-config">
         <title>Let's take a look at the instance configuration:</title>
         <programlisting>
-[backupman@backup_host] pg_probackup-11 show-config -B /mnt/backups --instance 'pg-11'
+[backupman@backup_host] pg_probackup-11 show-config -B /mnt/backups --instance pg-11
 
 # Backup instance information
 pgdata = /var/lib/postgresql/11/main
@@ -5630,7 +5679,7 @@ remote-host = postgres_host
       <step id="pbk-lets-take-a-look-at-the-backup-catalog-1">
         <title>Let's take a look at the backup catalog:</title>
         <programlisting>
-[backupman@backup_host] pg_probackup-11 show -B /mnt/backups --instance 'pg-11'
+[backupman@backup_host] pg_probackup-11 show -B /mnt/backups --instance pg-11
 
 ====================================================================================================================================
  Instance  Version  ID      Recovery Time           Mode   WAL Mode  TLI  Time   Data   WAL  Zratio  Start LSN   Stop LSN    Status

@@ -122,11 +122,12 @@ pg_probackup - utility to manage backup/recovery of PostgreSQL database.
                  [--wal-depth=wal-depth]
                  [-i backup-id | --delete-expired | --merge-expired | --status=backup_status]
                  [--delete-wal]
-                 [--dry-run]
+                 [--dry-run] [--no-validate] [--no-sync]
                  [--help]
 
   pg_probackup merge -B backup-path --instance=instance_name
                  -i backup-id [--progress] [-j num-threads]
+                 [--no-validate] [--no-sync]
                  [--help]
 
   pg_probackup add-instance -B backup-path -D pgdata-path

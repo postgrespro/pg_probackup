@@ -349,7 +349,7 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
                 log_file_content)
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname, [node])
+        self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def test_checkdb_block_validation_sanity(self):

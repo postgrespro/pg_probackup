@@ -10,6 +10,7 @@
 #include "pg_probackup.h"
 #include "receivelog.h"
 #include "streamutil.h"
+#include "access/timeline.h"
 
 #include <time.h>
 #include <unistd.h>
@@ -69,6 +70,7 @@ static void add_walsegment_to_filelist(parray *filelist, uint32 timeline,
                                        uint32 xlog_seg_size);
 static void add_history_file_to_filelist(parray *filelist, uint32 timeline,
 										 char *basedir);
+static parray* parse_tli_history_buffer(char *history, TimeLineID tli);
 
 /*
  * Run IDENTIFY_SYSTEM through a given connection and
@@ -231,7 +233,10 @@ StreamLog(void *arg)
 		ctl.mark_done = false;
 
 		if(ReceiveXlogStream(stream_arg->conn, &ctl) == false)
+		{
+			interrupted = true;
 			elog(ERROR, "Problem in receivexlog");
+		}
 
 #if PG_VERSION_NUM >= 100000
 		if (!ctl.walmethod->finish())
@@ -243,7 +248,10 @@ StreamLog(void *arg)
 	if(ReceiveXlogStream(stream_arg->conn, stream_arg->startpos, stream_arg->starttli,
 						NULL, (char *) stream_arg->basedir, stop_streaming,
 						standby_message_timeout, NULL, false, false) == false)
+	{
+		interrupted = true;
 		elog(ERROR, "Problem in receivexlog");
+	}
 #endif
 
     /* be paranoid and sort xlog_files_list,
@@ -357,6 +365,204 @@ stop_streaming(XLogRecPtr xlogpos, uint32 timeline, bool segment_finished)
  * Maybe add a StreamOptions struct ?
  * Backup conn only needed to calculate stream_stop_timeout. Think about refactoring it.
  */
+parray*
+get_history_streaming(ConnectionOptions *conn_opt, TimeLineID tli, parray *backup_list)
+{
+	PGresult     *res;
+	PGconn	     *conn;
+	char         *history;
+	char          query[128];
+	parray	     *result = NULL;
+	parray       *tli_list = NULL;
+	timelineInfo *tlinfo = NULL;
+	int           i,j;
+
+	snprintf(query, sizeof(query), "TIMELINE_HISTORY %u", tli);
+
+	/*
+	 * Connect in replication mode to the server.
+	 */
+	conn = pgut_connect_replication(conn_opt->pghost,
+									conn_opt->pgport,
+									conn_opt->pgdatabase,
+									conn_opt->pguser,
+									false);
+
+	if (!conn)
+		return NULL;
+
+	res = PQexec(conn, query);
+	PQfinish(conn);
+
+	if (PQresultStatus(res) != PGRES_TUPLES_OK)
+	{
+		elog(WARNING, "Could not send replication command \"%s\": %s",
+					query, PQresultErrorMessage(res));
+		PQclear(res);
+		return NULL;
+	}
+
+	/*
+	 * The response to TIMELINE_HISTORY is a single row result set
+	 * with two fields: filename and content
+	 */
+
+	if (PQnfields(res) != 2 || PQntuples(res) != 1)
+	{
+		elog(WARNING, "Unexpected response to TIMELINE_HISTORY command: "
+				"got %d rows and %d fields, expected %d rows and %d fields",
+				PQntuples(res), PQnfields(res), 1, 2);
+		PQclear(res);
+		return NULL;
+	}
+
+	history = pgut_strdup(PQgetvalue(res, 0, 1));
+	result = parse_tli_history_buffer(history, tli);
+
+	/* some cleanup */
+	pg_free(history);
+	PQclear(res);
+
+	if (result)
+		tlinfo = timelineInfoNew(tli);
+	else
+		return NULL;
+
+	/* transform TimeLineHistoryEntry into timelineInfo */
+	for (i = parray_num(result) -1; i >= 0; i--)
+	{
+		TimeLineHistoryEntry *tln = (TimeLineHistoryEntry *) parray_get(result, i);
+
+		tlinfo->parent_tli = tln->tli;
+		tlinfo->switchpoint = tln->end;
+
+		if (!tli_list)
+			tli_list = parray_new();
+
+		parray_append(tli_list, tlinfo);
+
+		/* Next tli */
+		tlinfo = timelineInfoNew(tln->tli);
+
+		/* oldest tli */
+		if (i == 0)
+		{
+			tlinfo->tli = tln->tli;
+			tlinfo->parent_tli = 0;
+			tlinfo->switchpoint = 0;
+			parray_append(tli_list, tlinfo);
+		}
+	}
+
+	/* link parent to child */
+	for (i = 0; i < parray_num(tli_list); i++)
+	{
+		timelineInfo *tlinfo = (timelineInfo *) parray_get(tli_list, i);
+
+		for (j = 0; j < parray_num(tli_list); j++)
+		{
+			timelineInfo *tlinfo_parent = (timelineInfo *) parray_get(tli_list, j);
+
+			if (tlinfo->parent_tli == tlinfo_parent->tli)
+			{
+				tlinfo->parent_link = tlinfo_parent;
+				break;
+			}
+		}
+	}
+
+	/* add backups to each timeline info */
+	for (i = 0; i < parray_num(tli_list); i++)
+	{
+		timelineInfo *tlinfo = parray_get(tli_list, i);
+		for (j = 0; j < parray_num(backup_list); j++)
+		{
+			pgBackup *backup = parray_get(backup_list, j);
+			if (tlinfo->tli == backup->tli)
+			{
+				if (tlinfo->backups == NULL)
+					tlinfo->backups = parray_new();
+				parray_append(tlinfo->backups, backup);
+			}
+		}
+	}
+
+	/* cleanup */
+	parray_walk(result, pg_free);
+	pg_free(result);
+
+	return tli_list;
+}
+
+parray*
+parse_tli_history_buffer(char *history, TimeLineID tli)
+{
+	char   *curLine = history;
+	TimeLineHistoryEntry *entry;
+	TimeLineHistoryEntry *last_timeline = NULL;
+	parray *result = NULL;
+
+	/* Parse timeline history buffer string by string */
+	while (curLine)
+	{
+		char    tempStr[1024];
+		char   *nextLine = strchr(curLine, '\n');
+		int     curLineLen = nextLine ? (nextLine-curLine) : strlen(curLine);
+
+		memcpy(tempStr, curLine, curLineLen);
+		tempStr[curLineLen] = '\0';  // NUL-terminate!
+		curLine = nextLine ? (nextLine+1) : NULL;
+
+		if (curLineLen > 0)
+		{
+			char	   *ptr;
+			TimeLineID	tli;
+			uint32		switchpoint_hi;
+			uint32		switchpoint_lo;
+			int			nfields;
+
+			for (ptr = tempStr; *ptr; ptr++)
+			{
+				if (!isspace((unsigned char) *ptr))
+					break;
+			}
+			if (*ptr == '\0' || *ptr == '#')
+				continue;
+
+			nfields = sscanf(tempStr, "%u\t%X/%X", &tli, &switchpoint_hi, &switchpoint_lo);
+
+			if (nfields < 1)
+			{
+				/* expect a numeric timeline ID as first field of line */
+				elog(ERROR, "Syntax error in timeline history: \"%s\". Expected a numeric timeline ID.", tempStr);
+			}
+			if (nfields != 3)
+				elog(ERROR, "Syntax error in timeline history: \"%s\". Expected a transaction log switchpoint location.", tempStr);
+
+			if (last_timeline && tli <= last_timeline->tli)
+				elog(ERROR, "Timeline IDs must be in increasing sequence: \"%s\"", tempStr);
+
+			entry = pgut_new(TimeLineHistoryEntry);
+			entry->tli = tli;
+			entry->end = ((uint64) switchpoint_hi << 32) | switchpoint_lo;
+
+			last_timeline = entry;
+			/* Build list with newest item first */
+			if (!result)
+				result = parray_new();
+			parray_append(result, entry);
+
+			/* we ignore the remainder of each line */
+		}
+	}
+
+	return result;
+}
+
+/*
+ * Maybe add a StreamOptions struct ?
+ * Backup conn only needed to calculate stream_stop_timeout. Think about refactoring it.
+ */
 void
 start_WAL_streaming(PGconn *backup_conn, char *stream_dst_path, ConnectionOptions *conn_opt,
 					XLogRecPtr startpos, TimeLineID starttli)
@@ -374,7 +580,8 @@ start_WAL_streaming(PGconn *backup_conn, char *stream_dst_path, ConnectionOption
 	stream_thread_arg.conn = pgut_connect_replication(conn_opt->pghost,
 													  conn_opt->pgport,
 													  conn_opt->pgdatabase,
-													  conn_opt->pguser);
+													  conn_opt->pguser,
+													  true);
 	/* sanity check*/
 	IdentifySystem(&stream_thread_arg);
 

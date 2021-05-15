@@ -7,6 +7,7 @@ from testgres import QueryException
 import shutil
 from datetime import datetime, timedelta
 import time
+import subprocess
 
 module_name = "merge"
 
@@ -100,7 +101,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(count1, count2)
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname, [node])
+        self.del_test_dir(module_name, fname)
 
     def test_merge_compressed_backups(self):
         """
@@ -2244,7 +2245,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
                     repr(e.message), self.cmd))
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname, [node])
+        self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def test_smart_merge(self):
@@ -2304,7 +2305,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
                 logfile_content = f.read()
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname, [node])
+        self.del_test_dir(module_name, fname)
 
     def test_idempotent_merge(self):
         """
@@ -2379,7 +2380,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(
             page_id_2, self.show_pb(backup_dir, 'node')[0]['id'])
 
-        self.del_test_dir(module_name, fname, [node])
+        self.del_test_dir(module_name, fname)
 
     def test_merge_correct_inheritance(self):
         """
@@ -2434,7 +2435,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
             page_meta['expire-time'],
             self.show_pb(backup_dir, 'node', page_id)['expire-time'])
 
-        self.del_test_dir(module_name, fname, [node])
+        self.del_test_dir(module_name, fname)
 
     def test_merge_correct_inheritance_1(self):
         """
@@ -2484,7 +2485,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
             'expire-time',
             self.show_pb(backup_dir, 'node', page_id))
 
-        self.del_test_dir(module_name, fname, [node])
+        self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure
@@ -2603,7 +2604,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
                 '-d', 'postgres', '-p', str(node_restored.port)])
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname, [node, node_restored])
+        self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure
@@ -2827,6 +2828,58 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(
             'OK', self.show_pb(backup_dir, 'node')[0]['status'])
 
+        self.del_test_dir(module_name, fname)
+
+    def test_merge_pg_filenode_map(self):
+        """
+        https://github.com/postgrespro/pg_probackup/issues/320
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        node1 = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node1'),
+            initdb_params=['--data-checksums'])
+        node1.cleanup()
+
+        node.pgbench_init(scale=5)
+
+        # FULL backup
+        self.backup_node(backup_dir, 'node', node)
+
+        pgbench = node.pgbench(
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            options=['-T', '10', '-c', '1'])
+
+        self.backup_node(backup_dir, 'node', node, backup_type='delta')
+
+        node.safe_psql(
+            'postgres',
+            'reindex index pg_type_oid_index')
+
+        backup_id = self.backup_node(
+            backup_dir, 'node', node, backup_type='delta')
+
+        self.merge_backup(backup_dir, 'node', backup_id)
+
+        node.cleanup()
+
+        self.restore_node(backup_dir, 'node', node)
+        node.slow_start()
+
+        node.safe_psql(
+            'postgres',
+            'select 1')
+
+        # Clean after yourself
         self.del_test_dir(module_name, fname)
 
 # 1. Need new test with corrupted FULL backup

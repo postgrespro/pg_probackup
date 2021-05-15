@@ -270,7 +270,8 @@ pgut_connect(const char *host, const char *port,
 
 PGconn *
 pgut_connect_replication(const char *host, const char *port,
-						 const char *dbname, const char *username)
+						 const char *dbname, const char *username,
+						 bool strict)
 {
 	PGconn	   *tmpconn;
 	int			argcount = 7;	/* dbname, replication, fallback_app_name,
@@ -356,7 +357,7 @@ pgut_connect_replication(const char *host, const char *port,
 			continue;
 		}
 
-		elog(ERROR, "could not connect to database %s: %s",
+		elog(strict ? ERROR : WARNING, "could not connect to database %s: %s",
 			 dbname, PQerrorMessage(tmpconn));
 		PQfinish(tmpconn);
 		free(values);
