@@ -87,7 +87,6 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool
 {
 	int			i;
 	char		external_prefix[MAXPGPATH]; /* Temp value. Used as template */
-	char		dst_backup_path[MAXPGPATH];
 	char		label[1024];
 	XLogRecPtr	prev_backup_start_lsn = InvalidXLogRecPtr;
 
@@ -270,17 +269,19 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool
 	/* start stream replication */
 	if (stream_wal)
 	{
-		join_path_components(dst_backup_path, current.database_dir, PG_XLOG_DIR);
-		fio_mkdir(dst_backup_path, DIR_PERMISSION, FIO_BACKUP_HOST);
+		char stream_xlog_path[MAXPGPATH];
 
-		start_WAL_streaming(backup_conn, dst_backup_path, &instance_config.conn_opt,
+		join_path_components(stream_xlog_path, current.database_dir, PG_XLOG_DIR);
+		fio_mkdir(stream_xlog_path, DIR_PERMISSION, FIO_BACKUP_HOST);
+
+		start_WAL_streaming(backup_conn, stream_xlog_path, &instance_config.conn_opt,
 							current.start_lsn, current.tli);
 
 		/* Make sure that WAL streaming is working
 		 * PAGE backup in stream mode is waited twice, first for
 		 * segment in WAL archive and then for streamed segment
 		 */
-		wait_wal_lsn(current.start_lsn, true, current.tli, false, true, ERROR, true, &current);
+		wait_wal_lsn(current.start_lsn, true, current.tli, false, true, ERROR, true, stream_xlog_path);
 	}
 
 	/* initialize backup's file list */
