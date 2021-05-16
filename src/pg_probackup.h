@@ -603,11 +603,11 @@ typedef struct
 	const char *to_root;
 	const char *external_prefix;
 
-	parray	   *files_list;
-	parray	   *prev_filelist;
+	parray	   *source_filelist;
+	parray	   *dest_filelist;
 	/* TODO разобраться */
 	//parray	   *external_dirs;
-	XLogRecPtr	prev_start_lsn;
+	XLogRecPtr	sync_lsn;
 	BackupMode	backup_mode;
 
 	ConnectionArgs conn_arg;
@@ -861,7 +861,8 @@ extern char *pg_ptrack_get_block(ConnectionArgs *arguments,
 								 BlockNumber blknum, size_t *result_size,
 								 int ptrack_version_num, const char *ptrack_schema);
 /* in catchup.c */
-extern int do_catchup(char *source_pgdata, char *dest_pgdata, BackupMode backup_mode, ConnectionOptions conn_opt, bool stream_wal, int num_threads);
+extern int do_catchup(const char *source_pgdata, const char *dest_pgdata, BackupMode backup_mode,
+					  ConnectionOptions conn_opt, bool stream_wal, int num_threads);
 /* in restore.c */
 extern int do_restore_or_validate(time_t target_backup_id,
 					  pgRecoveryTarget *rt,
@@ -882,6 +883,8 @@ extern parray *get_dbOid_exclude_list(pgBackup *backup, parray *datname_list,
 extern parray *get_backup_filelist(pgBackup *backup, bool strict);
 extern parray *read_timeline_history(const char *arclog_path, TimeLineID targetTLI, bool strict);
 extern bool tliIsPartOfHistory(const parray *timelines, TimeLineID tli);
+extern DestDirIncrCompatibility check_incremental_compatibility(const char *pgdata, uint64 system_identifier,
+																IncrRestoreMode incremental_mode);
 
 /* in merge.c */
 extern void do_merge(time_t backup_id, bool no_validate, bool no_sync);
@@ -1167,9 +1170,9 @@ extern uint64 get_system_identifier(const char *pgdata_path);
 extern uint64 get_remote_system_identifier(PGconn *conn);
 extern uint32 get_data_checksum_version(bool safe);
 extern pg_crc32c get_pgcontrol_checksum(const char *pgdata_path);
-extern uint32 get_xlog_seg_size(char *pgdata_path);
+extern uint32 get_xlog_seg_size(const char *pgdata_path);
 extern void get_redo(const char *pgdata_path, RedoParams *redo);
-extern XLogRecPtr get_min_recovery_point(char *pgdata_path);
+extern XLogRecPtr get_min_recovery_point(const char *pgdata_path);
 extern void set_min_recovery_point(pgFile *file, const char *backup_path,
 								   XLogRecPtr stop_backup_lsn);
 extern void copy_pgcontrol_file(const char *from_fullpath, fio_location from_location,
@@ -1194,7 +1197,7 @@ extern void pretty_size(int64 size, char *buf, size_t len);
 extern void pretty_time_interval(double time, char *buf, size_t len);
 
 extern PGconn *pgdata_basic_setup(ConnectionOptions conn_opt, PGNodeInfo *nodeInfo);
-extern void check_system_identifiers(PGconn *conn, char *pgdata);
+extern void check_system_identifiers(PGconn *conn, const char *pgdata);
 extern void parse_filelist_filenames(parray *files, const char *root);
 
 /* in ptrack.c */

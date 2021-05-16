@@ -528,11 +528,7 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool
 	}
 
 	/* Notify end of backup */
-	{
-		char backup_database_dir[MAXPGPATH];
-		pgBackupGetPath(&current, backup_database_dir, lengthof(backup_database_dir), DATABASE_DIR);
-		pg_stop_backup(&current, backup_conn, nodeInfo, backup_database_dir);
-	}
+	pg_stop_backup(&current, backup_conn, nodeInfo, current.database_dir);
 
 	/* In case of backup from replica >= 9.6 we must fix minRecPoint,
 	 * First we must find pg_control in backup_files_list.
@@ -719,7 +715,7 @@ pgdata_basic_setup(ConnectionOptions conn_opt, PGNodeInfo *nodeInfo)
 
 	if (nodeInfo->is_superuser)
 		elog(WARNING, "Current PostgreSQL role is superuser. "
-						"It is not recommended to run backup or checkdb as superuser.");
+						"It is not recommended to run pg_probackup under superuser.");
 
 	StrNCpy(current.server_version, nodeInfo->server_version_str,
 			sizeof(current.server_version));
@@ -974,7 +970,7 @@ check_server_version(PGconn *conn, PGNodeInfo *nodeInfo)
  * All system identifiers must be equal.
  */
 void
-check_system_identifiers(PGconn *conn, char *pgdata)
+check_system_identifiers(PGconn *conn, const char *pgdata)
 {
 	uint64		system_id_conn;
 	uint64		system_id_pgdata;

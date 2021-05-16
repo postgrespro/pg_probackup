@@ -299,7 +299,7 @@ get_remote_system_identifier(PGconn *conn)
 }
 
 uint32
-get_xlog_seg_size(char *pgdata_path)
+get_xlog_seg_size(const char *pgdata_path)
 {
 #if PG_VERSION_NUM >= 110000
 	ControlFileData ControlFile;
@@ -386,7 +386,7 @@ get_redo(const char *pgdata_path, RedoParams *redo)
 
 /* Get minRecoveryPoint from control file from pgdata_path */
 XLogRecPtr
-get_min_recovery_point(char *pgdata_path)
+get_min_recovery_point(const char *pgdata_path)
 {
         ControlFileData ControlFile;
         char       *buffer;

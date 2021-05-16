@@ -67,8 +67,6 @@ static void restore_chain(pgBackup *dest_backup, parray *parent_chain,
 						  parray *dbOid_exclude_list, pgRestoreParams *params,
 						  const char *pgdata_path, bool no_sync, bool cleanup_pgdata,
 						  bool backup_has_tblspc);
-static DestDirIncrCompatibility check_incremental_compatibility(const char *pgdata, uint64 system_identifier,
-																IncrRestoreMode incremental_mode);
 
 /*
  * Iterate over backup list to find all ancestors of the broken parent_backup

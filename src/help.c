@@ -1026,7 +1026,7 @@ help_catchup(void)
 	printf(_("                 [--remote-port] [--remote-path] [--remote-user]\n"));
 	printf(_("                 [--ssh-options]\n\n"));
 
-	printf(_("  -b, --backup-mode=backup-mode    backup mode=FULL|PTRACK\n"));
+	printf(_("  -b, --backup-mode=backup-mode    backup mode=FULL|DELTA|PTRACK\n"));
 	printf(_("      --stream                     stream the transaction log and include it in the backup\n"));
 	printf(_("  -S, --slot=SLOTNAME              replication slot to use\n"));
 	printf(_("      --temp-slot                  use temporary replication slot\n"));
