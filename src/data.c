@@ -276,8 +276,7 @@ get_checksum_errormsg(Page page, char **errormsg, BlockNumber absolute_blkno)
  *                                      return it to the caller
  */
 static int32
-prepare_page(ConnectionArgs *conn_arg,
-			 pgFile *file, XLogRecPtr prev_backup_start_lsn,
+prepare_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 			 BlockNumber blknum, FILE *in,
 			 BackupMode backup_mode,
 			 Page page, bool strict,
@@ -393,66 +392,6 @@ prepare_page(ConnectionArgs *conn_arg,
 		/* Checkdb not going futher */
 		if (!strict)
 			return PageIsOk;
-	}
-
-	/*
-	 * Get page via ptrack interface from PostgreSQL shared buffer.
-	 * We do this only in the cases of PTRACK 1.x versions backup
-	 */
-	if (backup_mode == BACKUP_MODE_DIFF_PTRACK
-		&& (ptrack_version_num >= 15 && ptrack_version_num < 20))
-	{
-		int rc = 0;
-		size_t page_size = 0;
-		Page ptrack_page = NULL;
-		ptrack_page = (Page) pg_ptrack_get_block(conn_arg, file->dbOid, file->tblspcOid,
-										  file->relOid, absolute_blknum, &page_size,
-										  ptrack_version_num, ptrack_schema);
-
-		if (ptrack_page == NULL)
-			/* This block was truncated.*/
-			return PageIsTruncated;
-
-		if (page_size != BLCKSZ)
-			elog(ERROR, "File: \"%s\", block %u, expected block size %d, but read %zu",
-					   from_fullpath, blknum, BLCKSZ, page_size);
-
-		/*
-		 * We need to copy the page that was successfully
-		 * retrieved from ptrack into our output "page" parameter.
-		 */
-		memcpy(page, ptrack_page, BLCKSZ);
-		pg_free(ptrack_page);
-
-		/*
-		 * UPD: It apprears that is possible to get zeroed page or page with invalid header
-		 * from shared buffer.
-		 * Note, that getting page with wrong checksumm from shared buffer is
-		 * acceptable.
-		 */
-		rc = validate_one_page(page, absolute_blknum,
-							   InvalidXLogRecPtr, page_st,
-							   checksum_version);
-
-		/* It is ok to get zeroed page */
-		if (rc == PAGE_IS_ZEROED)
-			return PageIsOk;
-
-		/* Getting page with invalid header from shared buffers is unacceptable */
-		if (rc == PAGE_HEADER_IS_INVALID)
-		{
-			char *errormsg = NULL;
-			get_header_errormsg(page, &errormsg);
-			elog(ERROR, "Corruption detected in file \"%s\", block %u: %s",
-								from_fullpath, blknum, errormsg);
-		}
-
-		/*
-		 * We must set checksum here, because it is outdated
-		 * in the block recieved from shared buffers.
-		 */
-		if (checksum_version)
-			page_st->checksum = ((PageHeader) page)->pd_checksum = pg_checksum_page(page, absolute_blknum);
 	}
 
 	/*
@@ -714,12 +653,11 @@ cleanup:
  * backup with special header.
  */
 void
-catchup_data_file(ConnectionArgs* conn_arg, pgFile *file,
-				 const char *from_fullpath, const char *to_fullpath,
+catchup_data_file(pgFile *file, const char *from_fullpath, const char *to_fullpath,
 				 XLogRecPtr prev_backup_start_lsn, BackupMode backup_mode,
 				 CompressAlg calg, int clevel, uint32 checksum_version,
 				 int ptrack_version_num, const char *ptrack_schema,
-				 HeaderMap *hdr_map, bool is_merge)
+				 bool is_merge)
 {
 	int         rc;
 	bool        use_pagemap;
@@ -796,7 +734,7 @@ catchup_data_file(ConnectionArgs* conn_arg, pgFile *file,
 	else
 	{
 		/* TODO: stop handling errors internally */
-		rc = copy_pages(conn_arg, to_fullpath, from_fullpath, file,
+		rc = copy_pages(to_fullpath, from_fullpath, file,
 						/* send prev backup START_LSN */
 						backup_mode == BACKUP_MODE_DIFF_DELTA &&
 						file->exists_in_prev ? prev_backup_start_lsn : InvalidXLogRecPtr,
@@ -1742,7 +1680,7 @@ check_data_file(ConnectionArgs *arguments, pgFile *file,
 	for (blknum = 0; blknum < nblocks; blknum++)
 	{
 		PageState page_st;
-		page_state = prepare_page(NULL, file, InvalidXLogRecPtr,
+		page_state = prepare_page(file, InvalidXLogRecPtr,
 									blknum, in, BACKUP_MODE_FULL,
 									curr_page, false, checksum_version,
 									0, NULL, from_fullpath, &page_st);
@@ -2228,7 +2166,7 @@ send_pages(ConnectionArgs* conn_arg, const char *to_fullpath, const char *from_f
 	while (blknum < file->n_blocks)
 	{
 		PageState page_st;
-		int rc = prepare_page(conn_arg, file, prev_backup_start_lsn,
+		int rc = prepare_page(file, prev_backup_start_lsn,
 									  blknum, in, backup_mode, curr_page,
 									  true, checksum_version,
 									  ptrack_version_num, ptrack_schema,
@@ -2303,7 +2241,7 @@ send_pages(ConnectionArgs* conn_arg, const char *to_fullpath, const char *from_f
 
 /* copy local file (взята из send_pages, но используется простое копирование странички, без добавления заголовков и компрессии) */
 int
-copy_pages(ConnectionArgs* conn_arg, const char *to_fullpath, const char *from_fullpath,
+copy_pages(const char *to_fullpath, const char *from_fullpath,
 		   pgFile *file, XLogRecPtr prev_backup_start_lsn,
 		   uint32 checksum_version, bool use_pagemap,
 		   BackupMode backup_mode, int ptrack_version_num, const char *ptrack_schema)
@@ -2358,7 +2296,7 @@ copy_pages(ConnectionArgs* conn_arg, const char *to_fullpath, const char *from_f
 	while (blknum < file->n_blocks)
 	{
 		PageState page_st;
-		int rc = prepare_page(conn_arg, file, prev_backup_start_lsn,
+		int rc = prepare_page(file, prev_backup_start_lsn,
 									  blknum, in, backup_mode, curr_page,
 									  true, checksum_version,
 									  ptrack_version_num, ptrack_schema,

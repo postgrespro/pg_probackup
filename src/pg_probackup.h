@@ -601,18 +601,13 @@ typedef struct
 
 	const char *from_root;
 	const char *to_root;
-	const char *external_prefix;
 
 	parray	   *source_filelist;
 	parray	   *dest_filelist;
-	/* TODO разобраться */
-	//parray	   *external_dirs;
+
 	XLogRecPtr	sync_lsn;
 	BackupMode	backup_mode;
-
-	ConnectionArgs conn_arg;
 	int			thread_num;
-	HeaderMap   *hdr_map;
 
 	/*
 	 * Return value from the thread.
@@ -1093,12 +1088,11 @@ extern void backup_data_file(ConnectionArgs* conn_arg, pgFile *file,
 								 CompressAlg calg, int clevel, uint32 checksum_version,
 								 int ptrack_version_num, const char *ptrack_schema,
 								 HeaderMap *hdr_map, bool missing_ok);
-extern void catchup_data_file(ConnectionArgs* conn_arg, pgFile *file,
-								 const char *from_fullpath, const char *to_fullpath,
+extern void catchup_data_file(pgFile *file, const char *from_fullpath, const char *to_fullpath,
 								 XLogRecPtr prev_backup_start_lsn, BackupMode backup_mode,
 								 CompressAlg calg, int clevel, uint32 checksum_version,
 								 int ptrack_version_num, const char *ptrack_schema,
-								 HeaderMap *hdr_map, bool missing_ok);
+								 bool missing_ok);
 extern void backup_non_data_file(pgFile *file, pgFile *prev_file,
 								 const char *from_fullpath, const char *to_fullpath,
 								 BackupMode backup_mode, time_t parent_backup_time,
@@ -1226,7 +1220,7 @@ extern int send_pages(ConnectionArgs* conn_arg, const char *to_fullpath, const c
 					  pgFile *file, XLogRecPtr prev_backup_start_lsn, CompressAlg calg, int clevel,
 					  uint32 checksum_version, bool use_pagemap, BackupPageHeader2 **headers,
 					  BackupMode backup_mode, int ptrack_version_num, const char *ptrack_schema);
-extern int copy_pages(ConnectionArgs* conn_arg, const char *to_fullpath, const char *from_fullpath,
+extern int copy_pages(const char *to_fullpath, const char *from_fullpath,
 					  pgFile *file, XLogRecPtr prev_backup_start_lsn,
 					  uint32 checksum_version, bool use_pagemap,
 					  BackupMode backup_mode, int ptrack_version_num, const char *ptrack_schema);

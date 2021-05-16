@@ -91,7 +91,7 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 		 backup_mode == BACKUP_MODE_DIFF_DELTA))
 	{
 		dest_filelist = parray_new();
-        dir_list_file(dest_filelist, dest_pgdata,
+		dir_list_file(dest_filelist, dest_pgdata,
 			true, true, false, backup_logs, true, 0, FIO_LOCAL_HOST);
 
 		sync_lsn = get_min_recovery_point(dest_pgdata);
@@ -268,18 +268,10 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 		arg->nodeInfo = nodeInfo;
 		arg->from_root = source_pgdata;
 		arg->to_root = dest_pgdata;
-		/* TODO разобраться */
-		//arg->external_prefix = external_prefix;
-		//arg->external_dirs = external_dirs;
 		arg->source_filelist = source_filelist;
-        /* TODO !!!! change to target file_list */
 		arg->dest_filelist = dest_filelist;
 		arg->sync_lsn = sync_lsn;
 		arg->backup_mode = backup_mode;
-		arg->conn_arg.conn = NULL;
-		arg->conn_arg.cancel_conn = NULL;
-		/* TODO !!!! */
-		arg->hdr_map = &(current.hdr_map);
 		arg->thread_num = i+1;
 		/* By default there are some error */
 		arg->ret = 1;
@@ -564,7 +556,7 @@ catchup_files(void *arg)
 		/* Do actual work */
 		if (file->is_datafile && !file->is_cfs)
 		{
-			catchup_data_file(&(arguments->conn_arg), file, from_fullpath, to_fullpath,
+			catchup_data_file(file, from_fullpath, to_fullpath,
 								 arguments->sync_lsn,
 								 arguments->backup_mode,
 								 NONE_COMPRESS,
@@ -572,7 +564,7 @@ catchup_files(void *arg)
 								 arguments->nodeInfo->checksum_version,
 								 arguments->nodeInfo->ptrack_version_num,
 								 arguments->nodeInfo->ptrack_schema,
-								 arguments->hdr_map, false);
+								 false);
 		}
 		else
 		{
