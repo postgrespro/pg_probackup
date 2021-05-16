@@ -73,9 +73,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             backup_mode = 'FULL',
             source_pgdata = source_pg.data_dir,
             destination_base_dir = os.path.join(module_name, fname, 'dst'),
-            options = ['-d', 'postgres', '-p', str(source_pg.port), '--stream', '-j', '4',
-                '--remote-proto=ssh', '--remote-host=localhost']
-            )
+            options = ['-d', 'postgres', '-p', str(source_pg.port), '--stream', '-j', '4'])
         source_pg.stop()
 
         dest_pg.slow_start()
@@ -115,9 +113,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             backup_mode = 'FULL',
             source_pgdata = source_pg.data_dir,
             destination_base_dir = os.path.join(module_name, fname, 'dst'),
-            options = ['-d', 'postgres', '-p', str(source_pg.port), '--stream',
-                '--remote-proto=ssh', '--remote-host=localhost']
-            )
+            options = ['-d', 'postgres', '-p', str(source_pg.port), '--stream'])
         self.set_replica(source_pg, dest_pg)
         dest_pg.slow_start(replica = True)
         dest_pg.stop()
@@ -134,10 +130,8 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             backup_mode = 'PTRACK',
             source_pgdata = source_pg.data_dir,
             destination_base_dir = os.path.join(module_name, fname, 'dst'),
-            options = ['-d', 'postgres', '-p', str(source_pg.port), '--stream',
-                '--remote-proto=ssh', '--remote-host=localhost'],
-            node = dest_pg
-            )
+            options = ['-d', 'postgres', '-p', str(source_pg.port), '--stream'],
+            node = dest_pg)
 
         # stop replication
         source_pg.stop()
