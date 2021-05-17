@@ -733,7 +733,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         # to original data
         master.psql(
             "postgres",
-            "insert into t_heap as select i as id, md5(i::text) as text, "
+            "insert into t_heap select i as id, md5(i::text) as text, "
             "md5(repeat(i::text,10))::tsvector as tsvector "
             "from generate_series(256,512) i")
         before = master.safe_psql("postgres", "SELECT * FROM t_heap")
@@ -768,7 +768,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         # to original data
         master.psql(
             "postgres",
-            "insert into t_heap as select i as id, md5(i::text) as text, "
+            "insert into t_heap select i as id, md5(i::text) as text, "
             "md5(repeat(i::text,10))::tsvector as tsvector "
             "from generate_series(512,80680) i")
 
@@ -911,6 +911,11 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
                 'autovacuum': 'off',
                 'archive_timeout': '10s'})
 
+        if self.get_version(master) < self.version_to_num('9.6.0'):
+            self.del_test_dir(module_name, fname)
+            return unittest.skip(
+                'Skipped because backup from replica is not supported in PG 9.5')
+
         replica = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'replica'))
         replica.cleanup()
@@ -956,7 +961,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
         master.psql(
             "postgres",
-            "insert into t_heap as select i as id, md5(i::text) as text, "
+            "insert into t_heap select i as id, md5(i::text) as text, "
             "md5(repeat(i::text,10))::tsvector as tsvector "
             "from generate_series(0,10000) i")
 

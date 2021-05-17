@@ -1760,6 +1760,7 @@ pg_stop_backup(InstanceState *instanceState, pgBackup *backup, PGconn *pg_startb
 	PGconn		*conn;
 	//XLogRecPtr	restore_lsn = InvalidXLogRecPtr;
 	bool		stop_lsn_exists = false;
+	int 		server_version;
 
 	if (!backup_in_progress)
 		elog(ERROR, "backup is not in progress");
@@ -1768,12 +1769,17 @@ pg_stop_backup(InstanceState *instanceState, pgBackup *backup, PGconn *pg_startb
 
 	pg_silent_client_messages(conn);
 
+	if (nodeInfo != NULL)
+		server_version = nodeInfo->server_version;
+	else
+		server_version = PQserverVersion(conn);
+
 	/* Create restore point
 	 * Only if backup is from master.
 	 * For PG 9.5 create restore point only if pguser is superuser.
 	 */
 	if (backup != NULL && !backup->from_replica &&
-		!(nodeInfo->server_version < 90600 &&
+		!(server_version < 90600 &&
 		  !nodeInfo->is_superuser))
 		pg_create_restore_point(conn, backup->start_time);
 
@@ -1788,7 +1794,7 @@ pg_stop_backup(InstanceState *instanceState, pgBackup *backup, PGconn *pg_startb
 		/* kludge against some old bug in archive_timeout. TODO: remove in 3.0.0 */
 		if (instance_config.archive_timeout > 0)
 			timeout = instance_config.archive_timeout;
-		pg_invoke_pg_stop_backup(conn, nodeInfo->server_version, current.from_replica,
+		pg_invoke_pg_stop_backup(conn, server_version, current.from_replica,
 			exclusive_backup, timeout,
 			!in_cleanup ? &stop_backup_result : NULL);
 
