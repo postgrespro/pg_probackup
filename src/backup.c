@@ -32,13 +32,25 @@ static parray *backup_files_list = NULL;
 /* We need critical section for datapagemap_add() in case of using threads */
 static pthread_mutex_t backup_pagemap_mutex = PTHREAD_MUTEX_INITIALIZER;
 
-
+// TODO: move to PGnodeInfo
 bool exclusive_backup = false;
 
 /* Is pg_start_backup() was executed */
 static bool backup_in_progress = false;
-/* Is pg_stop_backup() was sent */
-static bool pg_stop_backup_is_sent = false;
+
+struct pg_stop_backup_result {
+	/*
+	 * We will use values of snapshot_xid and invocation_time if there are
+	 * no transactions between start_lsn and stop_lsn.
+	 */
+	TransactionId	snapshot_xid;
+	time_t		invocation_time;
+	XLogRecPtr	lsn;
+	size_t		backup_label_content_len;
+	char		*backup_label_content;
+	size_t		tablespace_map_content_len;
+	char		*tablespace_map_content;
+};
 
 /*
  * Backup routines
@@ -57,6 +69,7 @@ static void pg_silent_client_messages(PGconn *conn);
 static void pg_create_restore_point(PGconn *conn, time_t backup_start_time);
 
 static void pg_stop_backup(InstanceState *instanceState, pgBackup *backup, PGconn *pg_startbackup_conn, PGNodeInfo *nodeInfo);
+static void pg_stop_backup_send(PGconn *conn, int server_version, bool is_started_on_replica, bool is_exclusive, char **query_text);
 
 static XLogRecPtr wait_wal_lsn(InstanceState *instanceState, XLogRecPtr lsn, bool is_start_lsn, TimeLineID tli,
 								bool in_prev_segment, bool segment_only,
@@ -77,18 +90,20 @@ static void check_server_version(PGconn *conn, PGNodeInfo *nodeInfo);
 static void confirm_block_size(PGconn *conn, const char *name, int blcksz);
 static void set_cfs_datafiles(parray *files, const char *root, char *relative, size_t i);
 
+static StopBackupCallbackState stop_callback_state;
+
 static void
 backup_stopbackup_callback(bool fatal, void *userdata)
 {
-	InstanceState *instanceState = (InstanceState *) userdata;
-	PGconn *pg_startbackup_conn = instanceState->conn;
+	StopBackupCallbackState *st = (StopBackupCallbackState *) userdata;
 	/*
 	 * If backup is in progress, notify stop of backup to PostgreSQL
 	 */
 	if (backup_in_progress)
 	{
 		elog(WARNING, "backup in progress, stop backup");
-		pg_stop_backup(instanceState, NULL, pg_startbackup_conn, NULL);	/* don't care about stop_lsn in case of error */
+		/* don't care about stop_lsn in case of error */
+		pg_stop_backup_send(st->conn, st->server_version, current.from_replica, exclusive_backup, NULL);
 	}
 }
 
@@ -1051,7 +1066,6 @@ pg_start_backup(InstanceState *instanceState, const char *label, bool smooth, pg
 	const char *params[2];
 	uint32		lsn_hi;
 	uint32		lsn_lo;
-
 	params[0] = label;
 
 	elog(INFO, "wait for pg_start_backup()");
@@ -1074,8 +1088,9 @@ pg_start_backup(InstanceState *instanceState, const char *label, bool smooth, pg
 	 * is necessary to call pg_stop_backup() in backup_cleanup().
 	 */
 	backup_in_progress = true;
-	instanceState->conn = conn;
-	pgut_atexit_push(backup_stopbackup_callback, instanceState);
+	stop_callback_state.conn = conn;
+	stop_callback_state.server_version = nodeInfo->server_version;
+	pgut_atexit_push(backup_stopbackup_callback, &stop_callback_state);
 
 	/* Extract timeline and LSN from results of pg_start_backup() */
 	XLogDataFromLSN(PQgetvalue(res, 0, 0), &lsn_hi, &lsn_lo);
@@ -1477,40 +1492,9 @@ pg_create_restore_point(PGconn *conn, time_t backup_start_time)
 	PQclear(res);
 }
 
-/*
- * pg_invoke_pg_stop_backup -- 'pg_stop_backup' query wrapper
- * side effects:
- *  1. set pg_stop_backup_is_sent global variable
- *  2. allocates memory for tablespace_map and backup_label contents, so it must freed by caller (if its not null)
- * parameters:
- *  result -- if it's null, we don't wait completion of pg_stop_backup()
- */
-struct pg_invoke_pg_stop_backup_result {
-	/*
-	 * We will use values of snapshot_xid and invocation_time if there are
-	 * no transactions between start_lsn and stop_lsn.
-	 */
-	TransactionId	snapshot_xid;
-	time_t		invocation_time;
-	XLogRecPtr	lsn;
-	size_t		backup_label_content_len;
-	char		*backup_label_content;
-	size_t		tablespace_map_content_len;
-	char		*tablespace_map_content;
-};
-
-static void
-pg_invoke_pg_stop_backup(PGconn *conn, int server_version, bool is_started_on_replica,
-		bool is_exclusive, uint32 timeout,
-		struct pg_invoke_pg_stop_backup_result *result)
+void
+pg_stop_backup_send(PGconn *conn, int server_version, bool is_started_on_replica, bool is_exclusive, char **query_text)
 {
-	enum stop_backup_query_result_column_numbers {
-		recovery_xid_colno = 0,
-		recovery_time_colno,
-		lsn_colno,
-		backup_label_colno,
-		tablespace_map_colno
-		};
 	static const char
 		stop_exlusive_backup_query[] =
 			/*
@@ -1573,12 +1557,9 @@ pg_invoke_pg_stop_backup(PGconn *conn, int server_version, bool is_started_on_re
 					stop_backup_on_master_before10_query
 				);
 	bool		sent = false;
-	uint32		pg_stop_backup_timeout = 0;
-	PGresult	*query_result;
 
 	/* Make proper timestamp format for parse_time(recovery_time) */
-	query_result = pgut_execute(conn, "SET datestyle = 'ISO, DMY';", 0, NULL);
-	PQclear(query_result);
+	pgut_execute(conn, "SET datestyle = 'ISO, DMY';", 0, NULL);
 
 	/*
 	 * send pg_stop_backup asynchronously because we could came
@@ -1587,13 +1568,40 @@ pg_invoke_pg_stop_backup(PGconn *conn, int server_version, bool is_started_on_re
 	 * wait for pg_stop_backup() forever.
 	 */
 	sent = pgut_send(conn, stop_backup_query, 0, NULL, WARNING);
-	pg_stop_backup_is_sent = true;
 	if (!sent)
 		elog(ERROR, "Failed to send pg_stop_backup query");
 
-	/* caller don't want to wait completion of pg_stop_backup() query */
-	if (result == NULL)
-		return;
+	/* After we have sent pg_stop_backup, we don't need this callback anymore */
+	pgut_atexit_pop(backup_stopbackup_callback, &stop_callback_state);
+
+	if (query_text)
+	{
+		*query_text = pgut_malloc(strlen(stop_backup_query)+1);
+		snprintf(*query_text, strlen(stop_backup_query)+1, "%s", stop_backup_query);
+	}
+}
+
+/*
+ * pg_stop_backup_consume -- get 'pg_stop_backup' query results
+ * side effects:
+ *  - allocates memory for tablespace_map and backup_label contents, so it must freed by caller (if its not null)
+ * parameters:
+ *  -
+ */
+static void
+pg_stop_backup_consume(PGconn *conn, int server_version,
+		bool is_exclusive, uint32 timeout, const char *query_text,
+		struct pg_stop_backup_result *result)
+{
+	PGresult	*query_result;
+	uint32		 pg_stop_backup_timeout = 0;
+	enum stop_backup_query_result_column_numbers {
+		recovery_xid_colno = 0,
+		recovery_time_colno,
+		lsn_colno,
+		backup_label_colno,
+		tablespace_map_colno
+		};
 
 	/* and now wait */
 	while (1)
@@ -1648,8 +1656,9 @@ pg_invoke_pg_stop_backup(PGconn *conn, int server_version, bool is_started_on_re
 				break;
 			default:
 				elog(ERROR, "query failed: %s query was: %s",
-					 PQerrorMessage(conn), stop_backup_query);
+					 PQerrorMessage(conn), query_text);
 		}
+		backup_in_progress = false;
 		elog(INFO, "pg_stop backup() successfully executed");
 	}
 
@@ -1757,10 +1766,16 @@ static void
 pg_stop_backup(InstanceState *instanceState, pgBackup *backup, PGconn *pg_startbackup_conn,
 				PGNodeInfo *nodeInfo)
 {
-	PGconn		*conn;
-	//XLogRecPtr	restore_lsn = InvalidXLogRecPtr;
-	bool		stop_lsn_exists = false;
+	PGconn	*conn;
+	bool	 stop_lsn_exists = false;
+	struct	 pg_stop_backup_result	stop_backup_result;
+	char	*xlog_path,stream_xlog_path[MAXPGPATH];
+	/* kludge against some old bug in archive_timeout. TODO: remove in 3.0.0 */
+	int	     timeout = (instance_config.archive_timeout > 0) ?
+				instance_config.archive_timeout : ARCHIVE_TIMEOUT_DEFAULT;
+	char    *query_text = NULL;
 
+	/* Remove it ? */
 	if (!backup_in_progress)
 		elog(ERROR, "backup is not in progress");
 
@@ -1774,237 +1789,218 @@ pg_stop_backup(InstanceState *instanceState, pgBackup *backup, PGconn *pg_startb
 	 */
 	if (backup != NULL && !backup->from_replica &&
 		!(nodeInfo->server_version < 90600 &&
-		  !nodeInfo->is_superuser))
+		  nodeInfo->is_superuser))
 		pg_create_restore_point(conn, backup->start_time);
 
-	if (!pg_stop_backup_is_sent)
+	/* Execute pg_stop_backup using PostgreSQL connection */
+	pg_stop_backup_send(conn, nodeInfo->server_version, current.from_replica, exclusive_backup, &query_text);
+
+	/*
+	 * Wait for the result of pg_stop_backup(), but no longer than
+	 * archive_timeout seconds
+	 */
+	pg_stop_backup_consume(conn, nodeInfo->server_version, exclusive_backup, timeout, query_text, &stop_backup_result);
+
+	/* It is ok for replica to return invalid STOP LSN
+	 * UPD: Apparently it is ok even for a master.
+	 */
+	if (!XRecOffIsValid(stop_backup_result.lsn))
 	{
-		struct pg_invoke_pg_stop_backup_result	stop_backup_result;
+		char	   *xlog_path,
+					stream_xlog_path[MAXPGPATH];
+		XLogSegNo	segno = 0;
+		XLogRecPtr	lsn_tmp = InvalidXLogRecPtr;
+
 		/*
-		 * Wait for the result of pg_stop_backup(), but no longer than
-		 * archive_timeout seconds
+		 * Even though the value is invalid, it's expected postgres behaviour
+		 * and we're trying to fix it below.
 		 */
-		int timeout = ARCHIVE_TIMEOUT_DEFAULT;
-		/* kludge against some old bug in archive_timeout. TODO: remove in 3.0.0 */
-		if (instance_config.archive_timeout > 0)
-			timeout = instance_config.archive_timeout;
-		pg_invoke_pg_stop_backup(conn, nodeInfo->server_version, current.from_replica,
-			exclusive_backup, timeout,
-			!in_cleanup ? &stop_backup_result : NULL);
+		elog(LOG, "Invalid offset in stop_lsn value %X/%X, trying to fix",
+			 (uint32) (stop_backup_result.lsn >> 32), (uint32) (stop_backup_result.lsn));
 
-		backup_in_progress = false;
-		/* After we have sent pg_stop_backup, we don't need this callback anymore */
-		instanceState->conn = pg_startbackup_conn;
-		pgut_atexit_pop(backup_stopbackup_callback, instanceState);
-
-		if (in_cleanup)
-			return;
-
-		/* It is ok for replica to return invalid STOP LSN
-		 * UPD: Apparently it is ok even for a master.
+		/*
+		 * Note: even with gdb it is very hard to produce automated tests for
+		 * contrecord + invalid LSN, so emulate it for manual testing.
 		 */
-		if (!XRecOffIsValid(stop_backup_result.lsn))
+		//stop_backup_result.lsn = stop_backup_result.lsn - XLOG_SEG_SIZE;
+		//elog(WARNING, "New Invalid stop_backup_lsn value %X/%X",
+		//	 (uint32) (stop_backup_result.lsn >> 32), (uint32) (stop_backup_result.lsn));
+
+		if (stream_wal)
 		{
-			char	   *xlog_path,
-						stream_xlog_path[MAXPGPATH];
-			XLogSegNo	segno = 0;
-			XLogRecPtr	lsn_tmp = InvalidXLogRecPtr;
+			snprintf(stream_xlog_path, lengthof(stream_xlog_path),
+					 "%s/%s/%s/%s", instanceState->instance_backup_subdir_path,
+					 base36enc(backup->start_time),
+					 DATABASE_DIR, PG_XLOG_DIR);
+			xlog_path = stream_xlog_path;
+		}
+		else
+			xlog_path = instanceState->instance_wal_subdir_path;
 
-			/*
-			 * Even though the value is invalid, it's expected postgres behaviour
-			 * and we're trying to fix it below.
-			 */
-			elog(LOG, "Invalid offset in stop_lsn value %X/%X, trying to fix",
-				 (uint32) (stop_backup_result.lsn >> 32), (uint32) (stop_backup_result.lsn));
+		GetXLogSegNo(stop_backup_result.lsn, segno, instance_config.xlog_seg_size);
 
-			/*
-			 * Note: even with gdb it is very hard to produce automated tests for
-			 * contrecord + invalid LSN, so emulate it for manual testing.
-			 */
-			//stop_backup_result.lsn = stop_backup_result.lsn - XLOG_SEG_SIZE;
-			//elog(WARNING, "New Invalid stop_backup_lsn value %X/%X",
-			//	 (uint32) (stop_backup_result.lsn >> 32), (uint32) (stop_backup_result.lsn));
+		/*
+		 * Note, that there is no guarantee that corresponding WAL file even exists.
+		 * Replica may return LSN from future and keep staying in present.
+		 * Or it can return invalid LSN.
+		 *
+		 * That's bad, since we want to get real LSN to save it in backup label file
+		 * and to use it in WAL validation.
+		 *
+		 * So we try to do the following:
+		 * 1. Wait 'archive_timeout' seconds for segment containing stop_lsn and
+		 *	  look for the first valid record in it.
+		 * 	  It solves the problem of occasional invalid LSN on write-busy system.
+		 * 2. Failing that, look for record in previous segment with endpoint
+		 *	  equal or greater than stop_lsn. It may(!) solve the problem of invalid LSN
+		 *	  on write-idle system. If that fails too, error out.
+		 */
 
-			if (stream_wal)
+		/* stop_lsn is pointing to a 0 byte of xlog segment */
+		if (stop_backup_result.lsn % instance_config.xlog_seg_size == 0)
+		{
+			/* Wait for segment with current stop_lsn, it is ok for it to never arrive */
+			wait_wal_lsn(instanceState, stop_backup_result.lsn, false, backup->tli,
+						 false, true, WARNING, stream_wal, backup);
+
+			/* Get the first record in segment with current stop_lsn */
+			lsn_tmp = get_first_record_lsn(xlog_path, segno, backup->tli,
+									       instance_config.xlog_seg_size,
+									       instance_config.archive_timeout);
+
+			/* Check that returned LSN is valid and greater than stop_lsn */
+			if (XLogRecPtrIsInvalid(lsn_tmp) ||
+				!XRecOffIsValid(lsn_tmp) ||
+				lsn_tmp < stop_backup_result.lsn)
 			{
-				snprintf(stream_xlog_path, lengthof(stream_xlog_path),
-						 "%s/%s/%s/%s", instanceState->instance_backup_subdir_path,
-				 		 base36enc(backup->start_time),
-						 DATABASE_DIR, PG_XLOG_DIR);
-				xlog_path = stream_xlog_path;
-			}
-			else
-				xlog_path = instanceState->instance_wal_subdir_path;
-
-			GetXLogSegNo(stop_backup_result.lsn, segno, instance_config.xlog_seg_size);
-
-			/*
-			 * Note, that there is no guarantee that corresponding WAL file even exists.
-			 * Replica may return LSN from future and keep staying in present.
-			 * Or it can return invalid LSN.
-			 *
-			 * That's bad, since we want to get real LSN to save it in backup label file
-			 * and to use it in WAL validation.
-			 *
-			 * So we try to do the following:
-			 * 1. Wait 'archive_timeout' seconds for segment containing stop_lsn and
-			 *	  look for the first valid record in it.
-			 * 	  It solves the problem of occasional invalid LSN on write-busy system.
-			 * 2. Failing that, look for record in previous segment with endpoint
-			 *	  equal or greater than stop_lsn. It may(!) solve the problem of invalid LSN
-			 *	  on write-idle system. If that fails too, error out.
-			 */
-
-			/* stop_lsn is pointing to a 0 byte of xlog segment */
-			if (stop_backup_result.lsn % instance_config.xlog_seg_size == 0)
-			{
-				/* Wait for segment with current stop_lsn, it is ok for it to never arrive */
-				wait_wal_lsn(instanceState, stop_backup_result.lsn, false, backup->tli,
-							 false, true, WARNING, stream_wal, backup);
-
-				/* Get the first record in segment with current stop_lsn */
-				lsn_tmp = get_first_record_lsn(xlog_path, segno, backup->tli,
-										       instance_config.xlog_seg_size,
-										       instance_config.archive_timeout);
-
-				/* Check that returned LSN is valid and greater than stop_lsn */
-				if (XLogRecPtrIsInvalid(lsn_tmp) ||
-					!XRecOffIsValid(lsn_tmp) ||
-					lsn_tmp < stop_backup_result.lsn)
-				{
-					/* Backup from master should error out here */
-					if (!backup->from_replica)
-						elog(ERROR, "Failed to get next WAL record after %X/%X",
-									(uint32) (stop_backup_result.lsn >> 32),
-									(uint32) (stop_backup_result.lsn));
-
-					/* No luck, falling back to looking up for previous record */
-					elog(WARNING, "Failed to get next WAL record after %X/%X, "
-								"looking for previous WAL record",
+				/* Backup from master should error out here */
+				if (!backup->from_replica)
+					elog(ERROR, "Failed to get next WAL record after %X/%X",
 								(uint32) (stop_backup_result.lsn >> 32),
 								(uint32) (stop_backup_result.lsn));
 
-					/* Despite looking for previous record there is not guarantee of success
-					 * because previous record can be the contrecord.
-					 */
-					lsn_tmp = wait_wal_lsn(instanceState, stop_backup_result.lsn, false, backup->tli,
-										   true, false, ERROR, stream_wal, backup);
+				/* No luck, falling back to looking up for previous record */
+				elog(WARNING, "Failed to get next WAL record after %X/%X, "
+							"looking for previous WAL record",
+							(uint32) (stop_backup_result.lsn >> 32),
+							(uint32) (stop_backup_result.lsn));
 
-					/* sanity */
-					if (!XRecOffIsValid(lsn_tmp) || XLogRecPtrIsInvalid(lsn_tmp))
-						elog(ERROR, "Failed to get WAL record prior to %X/%X",
-									(uint32) (stop_backup_result.lsn >> 32),
-									(uint32) (stop_backup_result.lsn));
-				}
-			}
-			/* stop lsn is aligned to xlog block size, just find next lsn */
-			else if (stop_backup_result.lsn % XLOG_BLCKSZ == 0)
-			{
-				/* Wait for segment with current stop_lsn */
-				wait_wal_lsn(instanceState, stop_backup_result.lsn, false, backup->tli,
-							 false, true, ERROR, stream_wal, backup);
-
-				/* Get the next closest record in segment with current stop_lsn */
-				lsn_tmp = get_next_record_lsn(xlog_path, segno, backup->tli,
-										       instance_config.xlog_seg_size,
-										       instance_config.archive_timeout,
-										       stop_backup_result.lsn);
+				/* Despite looking for previous record there is not guarantee of success
+				 * because previous record can be the contrecord.
+				 */
+				lsn_tmp = wait_wal_lsn(instanceState, stop_backup_result.lsn, false, backup->tli,
+									   true, false, ERROR, stream_wal, backup);
 
 				/* sanity */
 				if (!XRecOffIsValid(lsn_tmp) || XLogRecPtrIsInvalid(lsn_tmp))
-					elog(ERROR, "Failed to get WAL record next to %X/%X",
+					elog(ERROR, "Failed to get WAL record prior to %X/%X",
 								(uint32) (stop_backup_result.lsn >> 32),
 								(uint32) (stop_backup_result.lsn));
 			}
-			/* PostgreSQL returned something very illegal as STOP_LSN, error out */
-			else
-				elog(ERROR, "Invalid stop_backup_lsn value %X/%X",
-					 (uint32) (stop_backup_result.lsn >> 32), (uint32) (stop_backup_result.lsn));
-
-			/* Setting stop_backup_lsn will set stop point for streaming */
-			stop_backup_lsn = lsn_tmp;
-			stop_lsn_exists = true;
 		}
-
-		elog(LOG, "stop_lsn: %X/%X",
-			(uint32) (stop_backup_result.lsn >> 32), (uint32) (stop_backup_result.lsn));
-
-		/* Write backup_label and tablespace_map */
-		if (!exclusive_backup)
+		/* stop lsn is aligned to xlog block size, just find next lsn */
+		else if (stop_backup_result.lsn % XLOG_BLCKSZ == 0)
 		{
-			char	path[MAXPGPATH];
+			/* Wait for segment with current stop_lsn */
+			wait_wal_lsn(instanceState, stop_backup_result.lsn, false, backup->tli,
+						 false, true, ERROR, stream_wal, backup);
 
-			Assert(stop_backup_result.backup_label_content != NULL);
-			snprintf(path, lengthof(path), "%s/%s/%s", instanceState->instance_backup_subdir_path,
-				 base36enc(backup->start_time), DATABASE_DIR);
+			/* Get the next closest record in segment with current stop_lsn */
+			lsn_tmp = get_next_record_lsn(xlog_path, segno, backup->tli,
+									       instance_config.xlog_seg_size,
+									       instance_config.archive_timeout,
+									       stop_backup_result.lsn);
 
-			/* Write backup_label */
-			pg_stop_backup_write_file_helper(path, PG_BACKUP_LABEL_FILE, "backup label",
-				stop_backup_result.backup_label_content, stop_backup_result.backup_label_content_len,
+			/* sanity */
+			if (!XRecOffIsValid(lsn_tmp) || XLogRecPtrIsInvalid(lsn_tmp))
+				elog(ERROR, "Failed to get WAL record next to %X/%X",
+							(uint32) (stop_backup_result.lsn >> 32),
+							(uint32) (stop_backup_result.lsn));
+		}
+		/* PostgreSQL returned something very illegal as STOP_LSN, error out */
+		else
+			elog(ERROR, "Invalid stop_backup_lsn value %X/%X",
+				 (uint32) (stop_backup_result.lsn >> 32), (uint32) (stop_backup_result.lsn));
+
+		/* Setting stop_backup_lsn will set stop point for streaming */
+		stop_backup_lsn = lsn_tmp;
+		stop_lsn_exists = true;
+	}
+
+	elog(LOG, "stop_lsn: %X/%X",
+		(uint32) (stop_backup_result.lsn >> 32), (uint32) (stop_backup_result.lsn));
+
+	/* Write backup_label and tablespace_map */
+	if (!exclusive_backup)
+	{
+		char	path[MAXPGPATH];
+
+		Assert(stop_backup_result.backup_label_content != NULL);
+		snprintf(path, lengthof(path), "%s/%s/%s", instanceState->instance_backup_subdir_path,
+			 base36enc(backup->start_time), DATABASE_DIR);
+
+		/* Write backup_label */
+		pg_stop_backup_write_file_helper(path, PG_BACKUP_LABEL_FILE, "backup label",
+			stop_backup_result.backup_label_content, stop_backup_result.backup_label_content_len,
+			backup_files_list);
+		free(stop_backup_result.backup_label_content);
+		stop_backup_result.backup_label_content = NULL;
+		stop_backup_result.backup_label_content_len = 0;
+
+		/* Write tablespace_map */
+		if (stop_backup_result.tablespace_map_content != NULL)
+		{
+			pg_stop_backup_write_file_helper(path, PG_TABLESPACE_MAP_FILE, "tablespace map",
+				stop_backup_result.tablespace_map_content, stop_backup_result.tablespace_map_content_len,
 				backup_files_list);
-			free(stop_backup_result.backup_label_content);
-			stop_backup_result.backup_label_content = NULL;
-			stop_backup_result.backup_label_content_len = 0;
-
-			/* Write tablespace_map */
-			if (stop_backup_result.tablespace_map_content != NULL)
-			{
-				pg_stop_backup_write_file_helper(path, PG_TABLESPACE_MAP_FILE, "tablespace map",
-					stop_backup_result.tablespace_map_content, stop_backup_result.tablespace_map_content_len,
-					backup_files_list);
-				free(stop_backup_result.tablespace_map_content);
-				stop_backup_result.tablespace_map_content = NULL;
-				stop_backup_result.tablespace_map_content_len = 0;
-			}
-		}
-
-		/* Fill in fields if that is the correct end of backup. */
-		if (backup != NULL)
-		{
-			char	   *xlog_path,
-					stream_xlog_path[MAXPGPATH];
-
-			/*
-			 * Wait for stop_lsn to be archived or streamed.
-			 * If replica returned valid STOP_LSN of not actually existing record,
-			 * look for previous record with endpoint >= STOP_LSN.
-			 */
-			if (!stop_lsn_exists)
-				stop_backup_lsn = wait_wal_lsn(instanceState, stop_backup_result.lsn, false, backup->tli,
-											false, false, ERROR, stream_wal, backup);
-
-			if (stream_wal)
-			{
-				/* This function will also add list of xlog files
-				 * to the passed filelist */
-				if(wait_WAL_streaming_end(backup_files_list))
-					elog(ERROR, "WAL streaming failed");
-
-				snprintf(stream_xlog_path, lengthof(stream_xlog_path), "%s/%s/%s/%s",
-					 instanceState->instance_backup_subdir_path, base36enc(backup->start_time),
-					 DATABASE_DIR, PG_XLOG_DIR);
-
-				xlog_path = stream_xlog_path;
-			}
-			else
-				xlog_path = instanceState->instance_wal_subdir_path;
-
-			backup->stop_lsn = stop_backup_lsn;
-			backup->recovery_xid = stop_backup_result.snapshot_xid;
-
-			elog(LOG, "Getting the Recovery Time from WAL");
-
-			/* iterate over WAL from stop_backup lsn to start_backup lsn */
-			if (!read_recovery_info(xlog_path, backup->tli,
-								instance_config.xlog_seg_size,
-								backup->start_lsn, backup->stop_lsn,
-								&backup->recovery_time))
-			{
-				elog(LOG, "Failed to find Recovery Time in WAL, forced to trust current_timestamp");
-				backup->recovery_time = stop_backup_result.invocation_time;
-			}
+			free(stop_backup_result.tablespace_map_content);
+			stop_backup_result.tablespace_map_content = NULL;
+			stop_backup_result.tablespace_map_content_len = 0;
 		}
 	}
+
+	/*
+	 * Wait for stop_lsn to be archived or streamed.
+	 * If replica returned valid STOP_LSN of not actually existing record,
+	 * look for previous record with endpoint >= STOP_LSN.
+	 */
+	if (!stop_lsn_exists)
+		stop_backup_lsn = wait_wal_lsn(instanceState, stop_backup_result.lsn, false, backup->tli,
+									false, false, ERROR, stream_wal, backup);
+
+	if (stream_wal)
+	{
+		/* This function will also add list of xlog files
+		 * to the passed filelist */
+		if(wait_WAL_streaming_end(backup_files_list))
+			elog(ERROR, "WAL streaming failed");
+
+		snprintf(stream_xlog_path, lengthof(stream_xlog_path), "%s/%s/%s/%s",
+			 instanceState->instance_backup_subdir_path, base36enc(backup->start_time),
+			 DATABASE_DIR, PG_XLOG_DIR);
+
+		xlog_path = stream_xlog_path;
+	}
+	else
+		xlog_path = instanceState->instance_wal_subdir_path;
+
+	backup->stop_lsn = stop_backup_lsn;
+	backup->recovery_xid = stop_backup_result.snapshot_xid;
+
+	elog(LOG, "Getting the Recovery Time from WAL");
+
+	/* iterate over WAL from stop_backup lsn to start_backup lsn */
+	if (!read_recovery_info(xlog_path, backup->tli,
+						instance_config.xlog_seg_size,
+						backup->start_lsn, backup->stop_lsn,
+						&backup->recovery_time))
+	{
+		elog(LOG, "Failed to find Recovery Time in WAL, forced to trust current_timestamp");
+		backup->recovery_time = stop_backup_result.invocation_time;
+	}
+
+	/* Cleanup */
+	pg_free(query_text);
 }
 
 /*

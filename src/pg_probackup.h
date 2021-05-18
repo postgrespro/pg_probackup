@@ -679,6 +679,11 @@ typedef struct BackupPageHeader2
 	uint16      checksum;
 } BackupPageHeader2;
 
+typedef struct StopBackupCallbackState {
+	PGconn	*conn;
+	int      server_version;
+} StopBackupCallbackState;
+
 /* Special value for compressed_size field */
 #define PageIsOk		 0
 #define SkipCurrentPage -1
