@@ -3459,3 +3459,115 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_backup_atexit(self):
+        """"""
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            ptrack_enable=self.ptrack,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        node.pgbench_init(scale=5)
+
+        # Full backup in streaming mode
+        gdb = self.backup_node(
+            backup_dir, 'node', node,
+            options=['--stream', '--log-level-file=VERBOSE'], gdb=True)
+
+        # break at streaming start
+        gdb.set_breakpoint('backup_data_file')
+        gdb.run_until_break()
+
+        gdb.remove_all_breakpoints()
+        gdb._execute('signal SIGINT')
+        sleep(1)
+
+        self.assertEqual(
+            self.show_pb(
+                backup_dir, 'node')[0]['status'], 'ERROR')
+
+        with open(os.path.join(backup_dir, 'log', 'pg_probackup.log')) as f:
+            log_content = f.read()
+            #print(log_content)
+            self.assertIn(
+                'WARNING: backup in progress, stop backup',
+                log_content)
+            
+            self.assertIn(
+                'FROM pg_catalog.pg_stop_backup',
+                log_content)
+            
+            self.assertIn(
+                'setting its status to ERROR',
+                log_content)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_pg_stop_backup_missing_permissions(self):
+        """"""
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            ptrack_enable=self.ptrack,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        node.pgbench_init(scale=5)
+
+        self.simple_bootstrap(node, 'backup')
+
+        if self.get_version(node) < 90600:
+            node.safe_psql(
+                'postgres',
+                'REVOKE EXECUTE ON FUNCTION pg_catalog.pg_stop_backup() FROM backup')
+        elif self.get_version(node) > 90600 and self.get_version(node) < 100000:
+            node.safe_psql(
+                'postgres',
+                'REVOKE EXECUTE ON FUNCTION pg_catalog.pg_stop_backup(boolean) FROM backup')
+        else:
+            node.safe_psql(
+                'postgres',
+                'REVOKE EXECUTE ON FUNCTION pg_catalog.pg_stop_backup(boolean, boolean) FROM backup')
+
+        # Full backup in streaming mode
+        try:
+            self.backup_node(
+                backup_dir, 'node', node,
+                options=['--stream', '-U', 'backup'])
+            # we should die here because exception is what we expect to happen
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because of missing permissions on pg_stop_backup "
+                "\n Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                "ERROR:  permission denied for function pg_stop_backup",
+                e.message,
+                "\n Unexpected Error Message: {0}\n CMD: {1}".format(
+                    repr(e.message), self.cmd))
+            self.assertIn(
+                "query was: SELECT pg_catalog.txid_snapshot_xmax",
+                e.message,
+                "\n Unexpected Error Message: {0}\n CMD: {1}".format(
+                    repr(e.message), self.cmd))
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
