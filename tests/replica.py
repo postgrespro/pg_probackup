@@ -149,7 +149,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         # to original data
         master.psql(
             "postgres",
-            "insert into t_heap as select i as id, md5(i::text) as text, "
+            "insert into t_heap select i as id, md5(i::text) as text, "
             "md5(repeat(i::text,10))::tsvector as tsvector "
             "from generate_series(256,512) i")
         before = master.safe_psql("postgres", "SELECT * FROM t_heap")
@@ -185,7 +185,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         # to original data
         master.psql(
             "postgres",
-            "insert into t_heap as select i as id, md5(i::text) as text, "
+            "insert into t_heap select i as id, md5(i::text) as text, "
             "md5(repeat(i::text,10))::tsvector as tsvector "
             "from generate_series(512,768) i")
 
@@ -279,7 +279,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         # equal to original data
         master.psql(
             "postgres",
-            "insert into t_heap as select i as id, md5(i::text) as text, "
+            "insert into t_heap select i as id, md5(i::text) as text, "
             "md5(repeat(i::text,10))::tsvector as tsvector "
             "from generate_series(256,25120) i")
 
