@@ -1560,6 +1560,7 @@ pg_stop_backup_send(PGconn *conn, int server_version, bool is_started_on_replica
 
 	/* Make proper timestamp format for parse_time(recovery_time) */
 	pgut_execute(conn, "SET datestyle = 'ISO, DMY';", 0, NULL);
+	// TODO: check result
 
 	/*
 	 * send pg_stop_backup asynchronously because we could came
@@ -1575,10 +1576,7 @@ pg_stop_backup_send(PGconn *conn, int server_version, bool is_started_on_replica
 	pgut_atexit_pop(backup_stopbackup_callback, &stop_callback_state);
 
 	if (query_text)
-	{
-		*query_text = pgut_malloc(strlen(stop_backup_query)+1);
-		snprintf(*query_text, strlen(stop_backup_query)+1, "%s", stop_backup_query);
-	}
+		*query_text = pgut_strdup(stop_backup_query);
 }
 
 /*
