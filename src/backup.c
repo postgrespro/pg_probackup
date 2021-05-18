@@ -87,7 +87,7 @@ static parray *get_database_map(PGconn *pg_startbackup_conn);
 static bool pgpro_support(PGconn *conn);
 
 /* Check functions */
-static bool pg_checksum_enable(PGconn *conn);
+static bool pg_is_checksum_enabled(PGconn *conn);
 static bool pg_is_in_recovery(PGconn *conn);
 static bool pg_is_superuser(PGconn *conn);
 static void check_server_version(PGconn *conn, PGNodeInfo *nodeInfo);
@@ -732,7 +732,7 @@ pgdata_basic_setup(ConnectionOptions conn_opt, PGNodeInfo *nodeInfo)
 	/* Confirm that this server version is supported */
 	check_server_version(cur_conn, nodeInfo);
 
-	if (pg_checksum_enable(cur_conn))
+	if (pg_is_checksum_enabled(cur_conn))
 		current.checksum_version = 1;
 	else
 		current.checksum_version = 0;
@@ -1222,7 +1222,7 @@ get_database_map(PGconn *conn)
 
 /* Check if ptrack is enabled in target instance */
 static bool
-pg_checksum_enable(PGconn *conn)
+pg_is_checksum_enabled(PGconn *conn)
 {
 	PGresult   *res_db;
 
