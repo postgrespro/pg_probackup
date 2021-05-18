@@ -1787,9 +1787,9 @@ pg_stop_backup(InstanceState *instanceState, pgBackup *backup, PGconn *pg_startb
 	 * Only if backup is from master.
 	 * For PG 9.5 create restore point only if pguser is superuser.
 	 */
-	if (backup != NULL && !backup->from_replica &&
+	if (!backup->from_replica &&
 		!(nodeInfo->server_version < 90600 &&
-		  nodeInfo->is_superuser))
+		  !nodeInfo->is_superuser)) //TODO: check correctness
 		pg_create_restore_point(conn, backup->start_time);
 
 	/* Execute pg_stop_backup using PostgreSQL connection */
