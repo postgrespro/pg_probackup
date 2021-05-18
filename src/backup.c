@@ -1794,6 +1794,7 @@ pg_stop_backup(InstanceState *instanceState, pgBackup *backup, PGconn *pg_startb
 
 	/* Execute pg_stop_backup using PostgreSQL connection */
 	pg_stop_backup_send(conn, nodeInfo->server_version, current.from_replica, exclusive_backup, &query_text);
+
 	/*
 	 * Wait for the result of pg_stop_backup(), but no longer than
 	 * archive_timeout seconds
