@@ -38,19 +38,23 @@ bool exclusive_backup = false;
 /* Is pg_start_backup() was executed */
 static bool backup_in_progress = false;
 
-struct pg_stop_backup_result {
+typedef struct PGStopBackupResult
+{
 	/*
 	 * We will use values of snapshot_xid and invocation_time if there are
 	 * no transactions between start_lsn and stop_lsn.
 	 */
 	TransactionId	snapshot_xid;
 	time_t		invocation_time;
+	/*
+	 * Fields that store pg_catalog.pg_stop_backup() result
+	 */
 	XLogRecPtr	lsn;
 	size_t		backup_label_content_len;
 	char		*backup_label_content;
 	size_t		tablespace_map_content_len;
 	char		*tablespace_map_content;
-};
+} PGStopBackupResult;
 
 /*
  * Backup routines
@@ -90,12 +94,12 @@ static void check_server_version(PGconn *conn, PGNodeInfo *nodeInfo);
 static void confirm_block_size(PGconn *conn, const char *name, int blcksz);
 static void set_cfs_datafiles(parray *files, const char *root, char *relative, size_t i);
 
-static StopBackupCallbackState stop_callback_state;
+static StopBackupCallbackParams stop_callback_params;
 
 static void
 backup_stopbackup_callback(bool fatal, void *userdata)
 {
-	StopBackupCallbackState *st = (StopBackupCallbackState *) userdata;
+	StopBackupCallbackParams *st = (StopBackupCallbackParams *) userdata;
 	/*
 	 * If backup is in progress, notify stop of backup to PostgreSQL
 	 */
@@ -214,11 +218,11 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 
 	if (prev_backup)
 	{
-        if (parse_program_version(prev_backup->program_version) > parse_program_version(PROGRAM_VERSION))
-            elog(ERROR, "pg_probackup binary version is %s, but backup %s version is %s. "
-                        "pg_probackup do not guarantee to be forward compatible. "
-                        "Please upgrade pg_probackup binary.",
-                        PROGRAM_VERSION, base36enc(prev_backup->start_time), prev_backup->program_version);
+		if (parse_program_version(prev_backup->program_version) > parse_program_version(PROGRAM_VERSION))
+			elog(ERROR, "pg_probackup binary version is %s, but backup %s version is %s. "
+						"pg_probackup do not guarantee to be forward compatible. "
+						"Please upgrade pg_probackup binary.",
+						PROGRAM_VERSION, base36enc(prev_backup->start_time), prev_backup->program_version);
 
 		elog(INFO, "Parent backup: %s", base36enc(prev_backup->start_time));
 
@@ -1088,9 +1092,9 @@ pg_start_backup(InstanceState *instanceState, const char *label, bool smooth, pg
 	 * is necessary to call pg_stop_backup() in backup_cleanup().
 	 */
 	backup_in_progress = true;
-	stop_callback_state.conn = conn;
-	stop_callback_state.server_version = nodeInfo->server_version;
-	pgut_atexit_push(backup_stopbackup_callback, &stop_callback_state);
+	stop_callback_params.conn = conn;
+	stop_callback_params.server_version = nodeInfo->server_version;
+	pgut_atexit_push(backup_stopbackup_callback, &stop_callback_params);
 
 	/* Extract timeline and LSN from results of pg_start_backup() */
 	XLogDataFromLSN(PQgetvalue(res, 0, 0), &lsn_hi, &lsn_lo);
@@ -1573,7 +1577,7 @@ pg_stop_backup_send(PGconn *conn, int server_version, bool is_started_on_replica
 		elog(ERROR, "Failed to send pg_stop_backup query");
 
 	/* After we have sent pg_stop_backup, we don't need this callback anymore */
-	pgut_atexit_pop(backup_stopbackup_callback, &stop_callback_state);
+	pgut_atexit_pop(backup_stopbackup_callback, &stop_callback_params);
 
 	if (query_text)
 		*query_text = pgut_strdup(stop_backup_query);
@@ -1589,7 +1593,7 @@ pg_stop_backup_send(PGconn *conn, int server_version, bool is_started_on_replica
 static void
 pg_stop_backup_consume(PGconn *conn, int server_version,
 		bool is_exclusive, uint32 timeout, const char *query_text,
-		struct pg_stop_backup_result *result)
+		PGStopBackupResult *result)
 {
 	PGresult	*query_result;
 	uint32		 pg_stop_backup_timeout = 0;
@@ -1738,7 +1742,7 @@ pg_stop_backup_write_file_helper(const char *path, const char *filename, const c
 			 error_msg_filename, full_filename, strerror(errno));
 
 	/*
-	 * It's vital to check if backup_files_list is initialized,
+	 * It's vital to check if files_list is initialized,
 	 * because we could get here because the backup was interrupted
 	 */
 	if (file_list)
@@ -1766,7 +1770,7 @@ pg_stop_backup(InstanceState *instanceState, pgBackup *backup, PGconn *pg_startb
 {
 	PGconn	*conn;
 	bool	 stop_lsn_exists = false;
-	struct	 pg_stop_backup_result	stop_backup_result;
+	PGStopBackupResult	stop_backup_result;
 	char	*xlog_path,stream_xlog_path[MAXPGPATH];
 	/* kludge against some old bug in archive_timeout. TODO: remove in 3.0.0 */
 	int	     timeout = (instance_config.archive_timeout > 0) ?
