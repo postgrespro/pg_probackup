@@ -83,12 +83,10 @@ class FalsePositive(ProbackupTest, unittest.TestCase):
         except ProbackupException as e:
             self.assertEqual(
                 e.message,
-                'ERROR: Valid backup on current timeline is not found. '
+                'ERROR: Valid full backup on current timeline is not found. '
                 'Create new FULL backup before an incremental one.\n',
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
-
-            sleep(1)
             self.assertFalse(
                 True,
                 "Expecting Error because page backup should not be "
@@ -98,7 +96,7 @@ class FalsePositive(ProbackupTest, unittest.TestCase):
         except ProbackupException as e:
             self.assertEqual(
                 e.message,
-                'ERROR: Valid backup on current timeline is not found. '
+                'ERROR: Valid full backup on current timeline is not found. '
                 'Create new FULL backup before an incremental one.\n',
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))

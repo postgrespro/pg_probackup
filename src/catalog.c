@@ -48,7 +48,7 @@ typedef struct LockInfo
 	bool exclusive;
 } LockInfo;
 
-static timelineInfo *
+timelineInfo *
 timelineInfoNew(TimeLineID tli)
 {
 	timelineInfo *tlinfo = (timelineInfo *) pgut_malloc(sizeof(timelineInfo));
@@ -74,7 +74,8 @@ timelineInfoFree(void *tliInfo)
 
 	if (tli->backups)
 	{
-		parray_walk(tli->backups, pgBackupFree);
+		/* backups themselves should freed separately  */
+//		parray_walk(tli->backups, pgBackupFree);
 		parray_free(tli->backups);
 	}
 
@@ -972,17 +973,11 @@ catalog_get_backup_list(const char *instance_name, time_t requested_backup_id)
 			continue;
 		}
 		parray_append(backups, backup);
-
-		if (errno && errno != ENOENT)
-		{
-			elog(WARNING, "cannot read data directory \"%s\": %s",
-				 data_ent->d_name, strerror(errno));
-			goto err_proc;
-		}
 	}
+
 	if (errno)
 	{
-		elog(WARNING, "cannot read backup root directory \"%s\": %s",
+		elog(WARNING, "Cannot read backup root directory \"%s\": %s",
 			backup_instance_path, strerror(errno));
 		goto err_proc;
 	}
@@ -1409,7 +1404,7 @@ catalog_get_timelines(InstanceConfig *instance)
 
 	/* read all xlog files that belong to this archive */
 	sprintf(arclog_path, "%s/%s/%s", backup_path, "wal", instance->name);
-	dir_list_file(xlog_files_list, arclog_path, false, false, false, false, true, 0, FIO_BACKUP_HOST);
+	dir_list_file(xlog_files_list, arclog_path, false, true, false, false, true, 0, FIO_BACKUP_HOST);
 	parray_qsort(xlog_files_list, pgFileCompareName);
 
 	timelineinfos = parray_new();
@@ -2462,7 +2457,7 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 		{
 			len += sprintf(line+len, ",\"n_headers\":\"%i\"", file->n_headers);
 			len += sprintf(line+len, ",\"hdr_crc\":\"%u\"", file->hdr_crc);
-			len += sprintf(line+len, ",\"hdr_off\":\"%li\"", file->hdr_off);
+			len += sprintf(line+len, ",\"hdr_off\":\"%llu\"", file->hdr_off);
 			len += sprintf(line+len, ",\"hdr_size\":\"%i\"", file->hdr_size);
 		}
 

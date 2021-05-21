@@ -197,11 +197,12 @@ help_pg_probackup(void)
 	printf(_("                 [--wal-depth=wal-depth]\n"));
 	printf(_("                 [-i backup-id | --delete-expired | --merge-expired | --status=backup_status]\n"));
 	printf(_("                 [--delete-wal]\n"));
-	printf(_("                 [--dry-run]\n"));
+	printf(_("                 [--dry-run] [--no-validate] [--no-sync]\n"));
 	printf(_("                 [--help]\n"));
 
 	printf(_("\n  %s merge -B backup-path --instance=instance_name\n"), PROGRAM_NAME);
 	printf(_("                 -i backup-id [--progress] [-j num-threads]\n"));
+	printf(_("                 [--no-validate] [--no-sync]\n"));
 	printf(_("                 [--help]\n"));
 
 	printf(_("\n  %s add-instance -B backup-path -D pgdata-path\n"), PROGRAM_NAME);
@@ -631,13 +632,16 @@ help_delete(void)
 	printf(_("                 [-j num-threads] [--progress]\n"));
 	printf(_("                 [--retention-redundancy=retention-redundancy]\n"));
 	printf(_("                 [--retention-window=retention-window]\n"));
-	printf(_("                 [--wal-depth=wal-depth]\n\n"));
+	printf(_("                 [--wal-depth=wal-depth]\n"));
+	printf(_("                 [--no-validate] [--no-sync]\n\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
 	printf(_("      --instance=instance_name     name of the instance\n"));
 	printf(_("  -i, --backup-id=backup-id        backup to delete\n"));
 	printf(_("  -j, --threads=NUM                number of parallel threads\n"));
 	printf(_("      --progress                   show progress\n"));
+	printf(_("      --no-validate                disable validation during retention merge\n"));
+	printf(_("      --no-sync                    do not sync merged files to disk\n"));
 
 	printf(_("\n  Retention options:\n"));
 	printf(_("      --delete-expired             delete backups expired according to current\n"));
@@ -681,6 +685,7 @@ help_merge(void)
 {
 	printf(_("\n%s merge -B backup-path --instance=instance_name\n"), PROGRAM_NAME);
 	printf(_("                 -i backup-id [-j num-threads] [--progress]\n"));
+	printf(_("                 [--no-validate] [--no-sync]\n"));
 	printf(_("                 [--log-level-console=log-level-console]\n"));
 	printf(_("                 [--log-level-file=log-level-file]\n"));
 	printf(_("                 [--log-filename=log-filename]\n"));
@@ -695,6 +700,8 @@ help_merge(void)
 
 	printf(_("  -j, --threads=NUM                number of parallel threads\n"));
 	printf(_("      --progress                   show progress\n"));
+	printf(_("      --no-validate                disable validation during retention merge\n"));
+	printf(_("      --no-sync                    do not sync merged files to disk\n"));
 
 	printf(_("\n  Logging options:\n"));
 	printf(_("      --log-level-console=log-level-console\n"));

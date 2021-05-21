@@ -410,7 +410,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 	{
 		int rc = check_tablespace_mapping(dest_backup,
 										  params->incremental_mode != INCR_NONE, params->force,
-										  pgdata_is_empty);
+										  pgdata_is_empty, params->no_validate);
 
 		/* backup contain no tablespaces */
 		if (rc == NoTblspc)
@@ -1375,7 +1375,7 @@ print_recovery_settings(FILE *fp, pgBackup *backup,
 	else
 	{
 		/* default cmdline, ok for local restore */
-		sprintf(restore_command_guc, "%s archive-get -B %s --instance %s "
+		sprintf(restore_command_guc, "\"%s\" archive-get -B \"%s\" --instance \"%s\" "
 				"--wal-file-path=%%p --wal-file-name=%%f",
 				PROGRAM_FULL_PATH ? PROGRAM_FULL_PATH : PROGRAM_NAME,
 				backup_path, instance_name);
@@ -2173,6 +2173,8 @@ check_incremental_compatibility(const char *pgdata, uint64 system_identifier,
 		postmaster_is_up = true;
 	}
 
+	/* check that PG_VERSION is the same */
+
 	/* slurp pg_control and check that system ID is the same
 	 * check that instance is not running
 	 * if lsn_based, check that there is no backup_label files is around AND
@@ -2182,6 +2184,7 @@ check_incremental_compatibility(const char *pgdata, uint64 system_identifier,
 	 * data files content, because based on pg_control information we will
 	 * choose a backup suitable for lsn based incremental restore.
 	 */
+	elog(INFO, "Trying to read pg_control file in destination direstory");
 
 	system_id_pgdata = get_system_identifier(pgdata);
 
@@ -2213,6 +2216,10 @@ check_incremental_compatibility(const char *pgdata, uint64 system_identifier,
 
 	if (postmaster_is_up)
 		return POSTMASTER_IS_RUNNING;
+
+	/* PG_CONTROL MISSING */
+
+	/* PG_CONTROL unreadable */
 
 	if (!system_id_match)
 		return SYSTEM_ID_MISMATCH;

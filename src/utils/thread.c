@@ -11,6 +11,10 @@
 
 #include "thread.h"
 
+/*
+ * Global var used to detect error condition (not signal interrupt!) in threads,
+ * so if one thread errored out, then others may abort
+ */
 bool thread_interrupted = false;
 
 #ifdef WIN32

@@ -1008,7 +1008,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
             'FULL')
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname, [node])
+        self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def test_basic_window_merge_multiple_descendants_1(self):
@@ -1275,7 +1275,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
                 '--delete-expired', '--log-level-console=log'])
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname, [node])
+        self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def test_window_chains(self):
@@ -1712,7 +1712,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
                     repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertTrue(
-                "WARNING: Valid backup on current timeline 1 is not found" in e.message and
+                "WARNING: Valid full backup on current timeline 1 is not found" in e.message and
                 "ERROR: Create new full backup before an incremental one" in e.message,
                 "\n Unexpected Error Message: {0}\n CMD: {1}".format(
                     repr(e.message), self.cmd))
@@ -2535,7 +2535,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         self.validate_pb(backup_dir, 'node')
 
-        self.del_test_dir(module_name, fname, [node])
+        self.del_test_dir(module_name, fname)
 
     def test_concurrent_running_full_backup(self):
         """
@@ -2613,4 +2613,4 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
             len(self.show_pb(backup_dir, 'node')),
             6)
 
-        self.del_test_dir(module_name, fname, [node])
+        self.del_test_dir(module_name, fname)

@@ -1,5 +1,6 @@
 # you need os for unittest to work
 import os
+import gc
 from sys import exit, argv, version_info
 import subprocess
 import shutil
@@ -137,10 +138,11 @@ def slow_start(self, replica=False):
 
         except testgres.QueryException as e:
             if 'database system is starting up' in e.message:
-                continue
+                pass
             else:
                 raise e
 
+        sleep(0.5)
 
 class ProbackupTest(object):
     # Class attributes
@@ -402,7 +404,6 @@ class ProbackupTest(object):
         if node.major_version >= 13:
             self.set_auto_conf(
                 node, {}, 'postgresql.conf', ['wal_keep_segments'])
-
         return node
 
     def create_tblspace_in_node(self, node, tblspc_name, tblspc_path=None, cfs=False):
@@ -778,7 +779,11 @@ class ProbackupTest(object):
         except subprocess.CalledProcessError as e:
             raise ProbackupException(e.output.decode('utf-8'), self.cmd)
 
-    def run_binary(self, command, asynchronous=False):
+    def run_binary(self, command, asynchronous=False, env=None):
+
+        if not env:
+            env = self.test_env
+
         if self.verbose:
                 print([' '.join(map(str, command))])
         try:
@@ -788,13 +793,13 @@ class ProbackupTest(object):
                     stdin=subprocess.PIPE,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
-                    env=self.test_env
+                    env=env
                 )
             else:
                 self.output = subprocess.check_output(
                     command,
                     stderr=subprocess.STDOUT,
-                    env=self.test_env
+                    env=env
                     ).decode('utf-8')
                 return self.output
         except subprocess.CalledProcessError as e:
@@ -1514,15 +1519,15 @@ class ProbackupTest(object):
     def get_bin_path(self, binary):
         return testgres.get_bin_path(binary)
 
-    def del_test_dir(self, module_name, fname, nodes=[]):
-        """ Del testdir and optimistically try to del module dir"""
-        try:
-            testgres.clean_all()
-        except:
-            pass
+    def clean_all(self):
+        for o in gc.get_referrers(testgres.PostgresNode):
+            if o.__class__ is testgres.PostgresNode:
+                o.cleanup()
 
-        for node in nodes:
-            node.stop()
+    def del_test_dir(self, module_name, fname):
+        """ Del testdir and optimistically try to del module dir"""
+
+        self.clean_all()
 
         shutil.rmtree(
             os.path.join(
@@ -1532,10 +1537,6 @@ class ProbackupTest(object):
             ),
             ignore_errors=True
         )
-        try:
-            os.rmdir(os.path.join(self.tmp_path, module_name))
-        except:
-            pass
 
     def pgdata_content(self, pgdata, ignore_ptrack=True, exclude_dirs=None):
         """ return dict with directory content. "
@@ -1761,6 +1762,7 @@ class GdbException(Exception):
 class GDBobj(ProbackupTest):
     def __init__(self, cmd, verbose, attach=False):
         self.verbose = verbose
+        self.output = ''
 
         # Check gdb presense
         try:
@@ -1802,10 +1804,8 @@ class GDBobj(ProbackupTest):
         )
         self.gdb_pid = self.proc.pid
 
-        # discard data from pipe,
-        # is there a way to do it a less derpy way?
         while True:
-            line = self.proc.stdout.readline()
+            line = self.get_line()
 
             if 'No such process' in line:
                 raise GdbException(line)
@@ -1814,6 +1814,11 @@ class GDBobj(ProbackupTest):
                 pass
             else:
                 break
+
+    def get_line(self):
+        line = self.proc.stdout.readline()
+        self.output += line
+        return line
 
     def kill(self):
         self.proc.kill()
@@ -1936,10 +1941,8 @@ class GDBobj(ProbackupTest):
             'Failed to continue execution until break.\n')
 
     def stopped_in_breakpoint(self):
-        output = []
         while True:
-            line = self.proc.stdout.readline()
-            output += [line]
+            line = self.get_line()
             if self.verbose:
                 print(line)
             if line.startswith('*stopped,reason="breakpoint-hit"'):
@@ -1956,7 +1959,7 @@ class GDBobj(ProbackupTest):
 
         # look for command we just send
         while True:
-            line = self.proc.stdout.readline()
+            line = self.get_line()
             if self.verbose:
                 print(repr(line))
 
@@ -1966,7 +1969,7 @@ class GDBobj(ProbackupTest):
                 break
 
         while True:
-            line = self.proc.stdout.readline()
+            line = self.get_line()
             output += [line]
             if self.verbose:
                 print(repr(line))

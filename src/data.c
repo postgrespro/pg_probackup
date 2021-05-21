@@ -1864,7 +1864,7 @@ get_checksum_map(const char *fullpath, uint32 checksum_version,
 		if (feof(in))
 			break;
 
-		if (interrupted)
+		if (interrupted || thread_interrupted)
 			elog(ERROR, "Interrupted during page reading");
 	}
 
@@ -1927,7 +1927,7 @@ get_lsn_map(const char *fullpath, uint32 checksum_version,
 		if (feof(in))
 			break;
 
-		if (interrupted)
+		if (interrupted || thread_interrupted)
 			elog(ERROR, "Interrupted during page reading");
 	}
 
@@ -2169,11 +2169,11 @@ get_data_file_headers(HeaderMap *hdr_map, pgFile *file, uint32 backup_version, b
 		return NULL;
 	}
 	/* disable buffering for header file */
-	setvbuf(in, NULL, _IONBF, BUFSIZ);
+	setvbuf(in, NULL, _IONBF, 0);
 
-	if (fseek(in, file->hdr_off, SEEK_SET))
+	if (fseeko(in, file->hdr_off, SEEK_SET))
 	{
-		elog(strict ? ERROR : WARNING, "Cannot seek to position %lu in page header map \"%s\": %s",
+		elog(strict ? ERROR : WARNING, "Cannot seek to position %llu in page header map \"%s\": %s",
 			file->hdr_off, hdr_map->path, strerror(errno));
 		goto cleanup;
 	}
@@ -2190,7 +2190,7 @@ get_data_file_headers(HeaderMap *hdr_map, pgFile *file, uint32 backup_version, b
 
 	if (fread(zheaders, 1, file->hdr_size, in) != file->hdr_size)
 	{
-		elog(strict ? ERROR : WARNING, "Cannot read header file at offset: %li len: %i \"%s\": %s",
+		elog(strict ? ERROR : WARNING, "Cannot read header file at offset: %llu len: %i \"%s\": %s",
 			file->hdr_off, file->hdr_size, hdr_map->path, strerror(errno));
 		goto cleanup;
 	}
@@ -2221,7 +2221,7 @@ get_data_file_headers(HeaderMap *hdr_map, pgFile *file, uint32 backup_version, b
 	if (hdr_crc != file->hdr_crc)
 	{
 		elog(strict ? ERROR : WARNING, "Header map for file \"%s\" crc mismatch \"%s\" "
-				"offset: %lu, len: %lu, current: %u, expected: %u",
+				"offset: %llu, len: %lu, current: %u, expected: %u",
 			file->rel_path, hdr_map->path, file->hdr_off, read_len, hdr_crc, file->hdr_crc);
 		goto cleanup;
 	}
@@ -2281,7 +2281,7 @@ write_page_headers(BackupPageHeader2 *headers, pgFile *file, HeaderMap *hdr_map,
 	{
 		elog(LOG, "Creating page header map \"%s\"", map_path);
 
-		hdr_map->fp = fopen(map_path, PG_BINARY_W);
+		hdr_map->fp = fopen(map_path, PG_BINARY_A);
 		if (hdr_map->fp == NULL)
 			elog(ERROR, "Cannot open header file \"%s\": %s",
 				 map_path, strerror(errno));
@@ -2310,7 +2310,7 @@ write_page_headers(BackupPageHeader2 *headers, pgFile *file, HeaderMap *hdr_map,
 				 file->rel_path, z_len);
 	}
 
-	elog(VERBOSE, "Writing headers for file \"%s\" offset: %li, len: %i, crc: %u",
+	elog(VERBOSE, "Writing headers for file \"%s\" offset: %llu, len: %i, crc: %u",
 			file->rel_path, file->hdr_off, z_len, file->hdr_crc);
 
 	if (fwrite(zheaders, 1, z_len, hdr_map->fp) != z_len)
