@@ -557,8 +557,8 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 		elog(INFO, "shift LSN: %X/%X",
 			(uint32) (shift_lsn >> 32), (uint32) shift_lsn);
 
-		params->shift_lsn = shift_lsn;
 	}
+	params->shift_lsn = shift_lsn;
 
 	/* for validation or restore with enabled validation */
 	if (!params->is_restore || !params->no_validate)
