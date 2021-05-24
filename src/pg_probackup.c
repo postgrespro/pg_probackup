@@ -68,8 +68,6 @@ static char	   *backup_path = NULL;
 static CatalogState *catalogState = NULL;
 /* ================ catalogState (END) =========== */
 
-/* colon separated external directories list ("/path1:/path2") */
-char	   *externaldir = NULL;
 /* common options */
 int			num_threads = 1;
 bool		stream_wal = false;

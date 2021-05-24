@@ -63,12 +63,6 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 	char		pretty_bytes[20];
 
 	elog(LOG, "Database catchup start");
-	if(current.external_dir_str)
-	{
-		external_dirs = make_external_directory_list(current.external_dir_str,
-													 false);
-		check_external_for_tablespaces(external_dirs, source_conn);
-	}
 
 	/* notify start of backup to PostgreSQL server */
 	time2iso(label, lengthof(label), current.start_time, false);
@@ -76,7 +70,7 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 			strlen(" with pg_probackup"));
 
 	/* Call pg_start_backup function in PostgreSQL connect */
-	pg_start_backup(label, smooth_checkpoint, backup_mode, current.from_replica, &start_lsn, nodeInfo, source_conn);
+	pg_start_backup(label, smooth_checkpoint, &current, nodeInfo, source_conn);
 	elog(LOG, "pg_start_backup START LSN %X/%X", (uint32) (start_lsn >> 32), (uint32) (start_lsn));
 
 	/* Obtain current timeline */
@@ -309,7 +303,7 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 
 	/* Notify end of backup */
 	current.start_lsn = start_lsn;
-	pg_stop_backup(&current, source_conn, nodeInfo, dest_pgdata);
+	//!!!!!! pg_stop_backup(&current, source_conn, nodeInfo, dest_pgdata);
 
 	/* In case of backup from replica >= 9.6 we must fix minRecPoint,
 	 * First we must find pg_control in source_filelist.
