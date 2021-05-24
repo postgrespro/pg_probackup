@@ -66,7 +66,7 @@ static void *backup_files(void *arg);
 static void do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 						 PGNodeInfo *nodeInfo, bool no_sync, bool backup_logs);
 
-static void pg_start_backup(InstanceState *instanceState, const char *label, bool smooth, pgBackup *backup,
+static void pg_start_backup(const char *label, bool smooth, pgBackup *backup,
 							PGNodeInfo *nodeInfo, PGconn *conn);
 static void pg_switch_wal(PGconn *conn);
 static void pg_silent_client_messages(PGconn *conn);
@@ -162,7 +162,7 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 			strlen(" with pg_probackup"));
 
 	/* Call pg_start_backup function in PostgreSQL connect */
-	pg_start_backup(instanceState, label, smooth_checkpoint, &current, nodeInfo, backup_conn);
+	pg_start_backup(label, smooth_checkpoint, &current, nodeInfo, backup_conn);
 
 	/* Obtain current timeline */
 #if PG_VERSION_NUM >= 90600
@@ -1063,7 +1063,7 @@ confirm_block_size(PGconn *conn, const char *name, int blcksz)
  * Notify start of backup to PostgreSQL server.
  */
 static void
-pg_start_backup(InstanceState *instanceState, const char *label, bool smooth, pgBackup *backup,
+pg_start_backup(const char *label, bool smooth, pgBackup *backup,
 				PGNodeInfo *nodeInfo, PGconn *conn)
 {
 	PGresult   *res;
