@@ -54,14 +54,14 @@ typedef struct ShowArchiveRow
 
 static void show_instance_start(void);
 static void show_instance_end(void);
-static void show_instance(const char *instance_name, time_t requested_backup_id, bool show_name);
+static void show_instance(InstanceState *instanceState, time_t requested_backup_id, bool show_name);
 static void print_backup_json_object(PQExpBuffer buf, pgBackup *backup);
-static int show_backup(const char *instance_name, time_t requested_backup_id);
+static int show_backup(InstanceState *instanceState, time_t requested_backup_id);
 
 static void show_instance_plain(const char *instance_name, parray *backup_list, bool show_name);
 static void show_instance_json(const char *instance_name, parray *backup_list);
 
-static void show_instance_archive(InstanceConfig *instance);
+static void show_instance_archive(InstanceState *instanceState, InstanceConfig *instance);
 static void show_archive_plain(const char *instance_name, uint32 xlog_seg_size,
 							   parray *timelines_list, bool show_name);
 static void show_archive_json(const char *instance_name, uint32 xlog_seg_size,
@@ -75,11 +75,12 @@ static int32 json_level = 0;
  * Entry point of pg_probackup SHOW subcommand.
  */
 int
-do_show(const char *instance_name, time_t requested_backup_id, bool show_archive)
+do_show(CatalogState *catalogState, InstanceState *instanceState, 
+		time_t requested_backup_id, bool show_archive)
 {
 	int i;
 
-	if (instance_name == NULL &&
+	if (instanceState == NULL &&
 		requested_backup_id != INVALID_BACKUP_ID)
 		elog(ERROR, "You must specify --instance to use (-i, --backup-id) option");
 
@@ -88,28 +89,25 @@ do_show(const char *instance_name, time_t requested_backup_id, bool show_archive
 		elog(ERROR, "You cannot specify --archive and (-i, --backup-id) options together");
 
 	/*
-	 * if instance_name is not specified,
+	 * if instance is not specified,
 	 * show information about all instances in this backup catalog
 	 */
-	if (instance_name == NULL)
+	if (instanceState == NULL)
 	{
-		parray *instances = catalog_get_instance_list();
+		parray *instances = catalog_get_instance_list(catalogState);
 
 		show_instance_start();
 		for (i = 0; i < parray_num(instances); i++)
 		{
-			InstanceConfig *instance = parray_get(instances, i);
-			char backup_instance_path[MAXPGPATH];
+			InstanceState *instanceState = parray_get(instances, i);
 
 			if (interrupted)
 				elog(ERROR, "Interrupted during show");
 
-			sprintf(backup_instance_path, "%s/%s/%s", backup_path, BACKUPS_DIR, instance->name);
-
 			if (show_archive)
-				show_instance_archive(instance);
+				show_instance_archive(instanceState, instanceState->config);
 			else
-				show_instance(instance->name, INVALID_BACKUP_ID, true);
+				show_instance(instanceState, INVALID_BACKUP_ID, true);
 		}
 		show_instance_end();
 
@@ -123,11 +121,11 @@ do_show(const char *instance_name, time_t requested_backup_id, bool show_archive
 
 		if (show_archive)
 		{
-			InstanceConfig *instance = readInstanceConfigFile(instance_name);
-			show_instance_archive(instance);
+			InstanceConfig *instance = readInstanceConfigFile(instanceState);
+			show_instance_archive(instanceState, instance);
 		}
 		else
-			show_instance(instance_name, requested_backup_id, false);
+			show_instance(instanceState, requested_backup_id, false);
 
 		show_instance_end();
 
@@ -137,11 +135,11 @@ do_show(const char *instance_name, time_t requested_backup_id, bool show_archive
 	{
 		if (show_archive)
 		{
-			InstanceConfig *instance = readInstanceConfigFile(instance_name);
-			show_instance_archive(instance);
+			InstanceConfig *instance = readInstanceConfigFile(instanceState);
+			show_instance_archive(instanceState, instance);
 		}
 		else
-			show_backup(instance_name, requested_backup_id);
+			show_backup(instanceState, requested_backup_id);
 
 		return 0;
 	}
@@ -289,16 +287,16 @@ show_instance_end(void)
  * Show brief meta information about all backups in the backup instance.
  */
 static void
-show_instance(const char *instance_name, time_t requested_backup_id, bool show_name)
+show_instance(InstanceState *instanceState, time_t requested_backup_id, bool show_name)
 {
 	parray	   *backup_list;
 
-	backup_list = catalog_get_backup_list(instance_name, requested_backup_id);
+	backup_list = catalog_get_backup_list(instanceState, requested_backup_id);
 
 	if (show_format == SHOW_PLAIN)
-		show_instance_plain(instance_name, backup_list, show_name);
+		show_instance_plain(instanceState->instance_name, backup_list, show_name);
 	else if (show_format == SHOW_JSON)
-		show_instance_json(instance_name, backup_list);
+		show_instance_json(instanceState->instance_name, backup_list);
 	else
 		elog(ERROR, "Invalid show format %d", (int) show_format);
 
@@ -450,13 +448,14 @@ print_backup_json_object(PQExpBuffer buf, pgBackup *backup)
  * Show detailed meta information about specified backup.
  */
 static int
-show_backup(const char *instance_name, time_t requested_backup_id)
+show_backup(InstanceState *instanceState, time_t requested_backup_id)
 {
 	int i;
 	pgBackup   *backup = NULL;
 	parray	   *backups;
 
-	backups = catalog_get_backup_list(instance_name, INVALID_BACKUP_ID);
+	//TODO pass requested_backup_id to the function
+	backups = catalog_get_backup_list(instanceState, INVALID_BACKUP_ID);
 
 	/* Find requested backup */
 	for (i = 0; i < parray_num(backups); i++)
@@ -775,16 +774,16 @@ show_instance_json(const char *instance_name, parray *backup_list)
  * show information about WAL archive of the instance
  */
 static void
-show_instance_archive(InstanceConfig *instance)
+show_instance_archive(InstanceState *instanceState, InstanceConfig *instance)
 {
 	parray *timelineinfos;
 
-	timelineinfos = catalog_get_timelines(instance);
+	timelineinfos = catalog_get_timelines(instanceState, instance);
 
 	if (show_format == SHOW_PLAIN)
-		show_archive_plain(instance->name, instance->xlog_seg_size, timelineinfos, true);
+		show_archive_plain(instanceState->instance_name, instance->xlog_seg_size, timelineinfos, true);
 	else if (show_format == SHOW_JSON)
-		show_archive_json(instance->name, instance->xlog_seg_size, timelineinfos);
+		show_archive_json(instanceState->instance_name, instance->xlog_seg_size, timelineinfos);
 	else
 		elog(ERROR, "Invalid show format %d", (int) show_format);
 }

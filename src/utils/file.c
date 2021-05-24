@@ -2169,13 +2169,13 @@ static void fio_send_pages_impl(int out, char* buf)
 		n_blocks_read++;
 
 		/*
-		 * horizonLsn is not 0 only in case of delta backup.
+		 * horizonLsn is not 0 only in case of delta and ptrack backup.
 		 * As far as unsigned number are always greater or equal than zero,
 		 * there is no sense to add more checks.
 		 */
-		if ((req->horizonLsn == InvalidXLogRecPtr) ||                 /* full, page, ptrack */
+		if ((req->horizonLsn == InvalidXLogRecPtr) ||                 /* full, page */
 			(page_st.lsn == InvalidXLogRecPtr) ||                     /* zeroed page */
-			(req->horizonLsn > 0 && page_st.lsn > req->horizonLsn))   /* delta */
+			(req->horizonLsn > 0 && page_st.lsn > req->horizonLsn))   /* delta, ptrack */
 		{
 			int  compressed_size = 0;
 			char write_buffer[BLCKSZ*2];

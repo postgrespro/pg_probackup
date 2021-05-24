@@ -2,6 +2,38 @@
  *
  * pg_probackup.c: Backup/Recovery manager for PostgreSQL.
  *
+ * This is an entry point for the program.
+ * Parse command name and it's options, verify them and call a
+ * do_***() function that implements the command.
+ *
+ * Avoid using global variables in the code.
+ * Pass all needed information as funciton arguments:
+ *
+
+ *
+ * TODO (see pg_probackup_state.h):
+ *
+ * Functions that work with a backup catalog accept catalogState,
+ * which currently only contains pathes to backup catalog subdirectories
+ * + function specific options.
+ * 
+ * Functions that work with an instance accept instanceState argument, which
+ * includes catalogState, instance_name,
+ * info about pgdata associated with the instance (see pgState),
+ * various instance config options, and list of backups belonging to the instance.
+ * + function specific options.
+ * 
+ * Functions that work with multiple backups in the catalog
+ * accept instanceState and info needed to determine the range of backups to handle.
+ * + function specific options.
+ *
+ * Functions that work with a single backup accept backupState argument,
+ * which includes link to the instanceState, backup_id and backup-specific info.
+ * + function specific options.
+ *
+ * Functions that work with a postgreSQL instance (i.e. checkdb) accept pgState,
+ * which includes info about pgdata directory and connection.
+ *
  * Portions Copyright (c) 2009-2013, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
  * Portions Copyright (c) 2015-2019, Postgres Professional
  *
@@ -9,6 +41,7 @@
  */
 
 #include "pg_probackup.h"
+#include "pg_probackup_state.h"
 
 #include "pg_getopt.h"
 #include "streamutil.h"
@@ -27,23 +60,17 @@ const char  *PROGRAM_FULL_PATH = NULL;
 const char  *PROGRAM_URL = "https://github.com/postgrespro/pg_probackup";
 const char  *PROGRAM_EMAIL = "https://github.com/postgrespro/pg_probackup/issues";
 
+/* ================ catalogState =========== */
 /* directory options */
-char	   *backup_path = NULL;
-/*
- * path or to the data files in the backup catalog
- * $BACKUP_PATH/backups/instance_name
- */
-char		backup_instance_path[MAXPGPATH];
-/*
- * path or to the wal files in the backup catalog
- * $BACKUP_PATH/wal/instance_name
- */
-char		arclog_path[MAXPGPATH] = "";
+/* TODO make it local variable, pass as an argument to all commands that need it.  */
+static char	   *backup_path = NULL;
+
+static CatalogState *catalogState = NULL;
+/* ================ catalogState (END) =========== */
 
 /* colon separated external directories list ("/path1:/path2") */
 char	   *externaldir = NULL;
 /* common options */
-static char *backup_id_string = NULL;
 int			num_threads = 1;
 bool		stream_wal = false;
 bool		no_color = false;
@@ -107,10 +134,14 @@ bool		force = false;
 bool		dry_run = false;
 static char *delete_status = NULL;
 /* compression options */
-bool 		compress_shortcut = false;
+static bool 		compress_shortcut = false;
 
-/* other options */
-char	   *instance_name;
+/* ================ instanceState =========== */
+static char	   *instance_name;
+
+static InstanceState *instanceState = NULL;
+
+/* ================ instanceState (END) =========== */
 
 /* archive push options */
 int		batch_size = 1;
@@ -132,8 +163,10 @@ int64 ttl = -1;
 static char *expire_time_string = NULL;
 static pgSetBackupParams *set_backup_params = NULL;
 
-/* current settings */
+/* ================ backupState =========== */
+static char *backup_id_string = NULL;
 pgBackup	current;
+/* ================ backupState (END) =========== */
 
 static bool help_opt = false;
 
@@ -261,6 +294,7 @@ main(int argc, char *argv[])
 	pgBackupInit(&current);
 
 	/* Initialize current instance configuration */
+	//TODO get git of this global variable craziness
 	init_config(&instance_config, instance_name);
 
 	PROGRAM_NAME = get_progname(argv[0]);
@@ -393,6 +427,7 @@ main(int argc, char *argv[])
 	/* set location based on cmdline options only */
 	setMyLocation(backup_subcmd);
 
+	/* ===== catalogState ======*/
 	if (backup_path == NULL)
 	{
 		/*
@@ -409,10 +444,26 @@ main(int argc, char *argv[])
 		/* Ensure that backup_path is an absolute path */
 		if (!is_absolute_path(backup_path))
 			elog(ERROR, "-B, --backup-path must be an absolute path");
+
+		catalogState = pgut_new(CatalogState);
+		strncpy(catalogState->catalog_path, backup_path, MAXPGPATH);
+		join_path_components(catalogState->backup_subdir_path,
+							catalogState->catalog_path, BACKUPS_DIR);
+		join_path_components(catalogState->wal_subdir_path,
+							catalogState->catalog_path, WAL_SUBDIR);
 	}
-	/* backup_path is required for all pg_probackup commands except help, version and checkdb */
-	if (backup_path == NULL && backup_subcmd != CHECKDB_CMD && backup_subcmd != HELP_CMD && backup_subcmd != VERSION_CMD && backup_subcmd != CATCHUP_CMD)
+
+	/* backup_path is required for all pg_probackup commands except help, version, checkdb and catchup */
+	if (backup_path == NULL &&
+		backup_subcmd != CHECKDB_CMD &&
+		backup_subcmd != HELP_CMD &&
+		backup_subcmd != VERSION_CMD &&
+		backup_subcmd != CATCHUP_CMD)
 		elog(ERROR, "required parameter not specified: BACKUP_PATH (-B, --backup-path)");
+
+	/* ===== catalogState (END) ======*/
+
+	/* ===== instanceState ======*/
 
 	/*
 	 * Option --instance is required for all commands except
@@ -425,8 +476,20 @@ main(int argc, char *argv[])
 			elog(ERROR, "required parameter not specified: --instance");
 	}
 	else
-		/* Set instance name */
-		instance_config.name = pgut_strdup(instance_name);
+	{
+		instanceState = pgut_new(InstanceState);
+		instanceState->catalog_state = catalogState;
+
+		strncpy(instanceState->instance_name, instance_name, MAXPGPATH);
+		join_path_components(instanceState->instance_backup_subdir_path,
+							catalogState->backup_subdir_path, instanceState->instance_name);
+		join_path_components(instanceState->instance_wal_subdir_path,
+							catalogState->wal_subdir_path, instanceState->instance_name);
+		join_path_components(instanceState->instance_config_path,
+							 instanceState->instance_backup_subdir_path, BACKUP_CATALOG_CONF_FILE);
+
+	}
+	/* ===== instanceState (END) ======*/
 
 	/*
 	 * If --instance option was passed, construct paths for backup data and
@@ -434,28 +497,6 @@ main(int argc, char *argv[])
 	 */
 	if ((backup_path != NULL) && instance_name)
 	{
-		/*
-		 * Fill global variables used to generate pathes inside the instance's
-		 * backup catalog.
-		 * TODO replace global variables with InstanceConfig structure fields
-		 */
-		sprintf(backup_instance_path, "%s/%s/%s",
-				backup_path, BACKUPS_DIR, instance_name);
-		sprintf(arclog_path, "%s/%s/%s", backup_path, "wal", instance_name);
-
-		/*
-		 * Fill InstanceConfig structure fields used to generate pathes inside
-		 * the instance's backup catalog.
-		 * TODO continue refactoring to use these fields instead of global vars
-		 */
-		sprintf(instance_config.backup_instance_path, "%s/%s/%s",
-				backup_path, BACKUPS_DIR, instance_name);
-		canonicalize_path(instance_config.backup_instance_path);
-
-		sprintf(instance_config.arclog_path, "%s/%s/%s",
-				backup_path, "wal", instance_name);
-		canonicalize_path(instance_config.arclog_path);
-
 		/*
 		 * Ensure that requested backup instance exists.
 		 * for all commands except init, which doesn't take this parameter,
@@ -467,10 +508,11 @@ main(int argc, char *argv[])
 		{
 			struct stat st;
 
-			if (fio_stat(backup_instance_path, &st, true, FIO_BACKUP_HOST) != 0)
+			if (fio_stat(instanceState->instance_backup_subdir_path,
+						 &st, true, FIO_BACKUP_HOST) != 0)
 			{
 				elog(WARNING, "Failed to access directory \"%s\": %s",
-					backup_instance_path, strerror(errno));
+					instanceState->instance_backup_subdir_path, strerror(errno));
 
 				// TODO: redundant message, should we get rid of it?
 				elog(ERROR, "Instance '%s' does not exist in this backup catalog",
@@ -492,7 +534,6 @@ main(int argc, char *argv[])
 	 */
 	if (instance_name)
 	{
-		char		path[MAXPGPATH];
 		/* Read environment variables */
 		config_get_opt_env(instance_options);
 
@@ -500,13 +541,10 @@ main(int argc, char *argv[])
 		if (backup_subcmd != ADD_INSTANCE_CMD &&
 			backup_subcmd != ARCHIVE_GET_CMD)
 		{
-			join_path_components(path, backup_instance_path,
-								 BACKUP_CATALOG_CONF_FILE);
-
 			if (backup_subcmd == CHECKDB_CMD)
-				config_read_opt(path, instance_options, ERROR, true, true);
+				config_read_opt(instanceState->instance_config_path, instance_options, ERROR, true, true);
 			else
-				config_read_opt(path, instance_options, ERROR, true, false);
+				config_read_opt(instanceState->instance_config_path, instance_options, ERROR, true, false);
 
 			/*
 			 * We can determine our location only after reading the configuration file,
@@ -751,19 +789,19 @@ main(int argc, char *argv[])
 	switch (backup_subcmd)
 	{
 		case ARCHIVE_PUSH_CMD:
-			do_archive_push(&instance_config, wal_file_path, wal_file_name,
+			do_archive_push(instanceState, &instance_config, wal_file_path, wal_file_name,
 							batch_size, file_overwrite, no_sync, no_ready_rename);
 			break;
 		case ARCHIVE_GET_CMD:
-			do_archive_get(&instance_config, prefetch_dir,
+			do_archive_get(instanceState, &instance_config, prefetch_dir,
 						   wal_file_path, wal_file_name, batch_size, !no_validate_wal);
 			break;
 		case ADD_INSTANCE_CMD:
-			return do_add_instance(&instance_config);
+			return do_add_instance(instanceState, &instance_config);
 		case DELETE_INSTANCE_CMD:
-			return do_delete_instance();
+			return do_delete_instance(instanceState);
 		case INIT_CMD:
-			return do_init();
+			return do_init(catalogState);
 		case BACKUP_CMD:
 			{
 				current.stream = stream_wal;
@@ -773,12 +811,13 @@ main(int argc, char *argv[])
 					elog(ERROR, "required parameter not specified: BACKUP_MODE "
 						 "(-b, --backup-mode)");
 
-				return do_backup(set_backup_params, no_validate, no_sync, backup_logs);
+				return do_backup(instanceState, set_backup_params,
+								 no_validate, no_sync, backup_logs);
 			}
 		case CATCHUP_CMD:
 			return do_catchup(catchup_source_pgdata, catchup_destination_pgdata, current.backup_mode, instance_config.conn_opt, stream_wal, num_threads);
 		case RESTORE_CMD:
-			return do_restore_or_validate(current.backup_id,
+			return do_restore_or_validate(instanceState, current.backup_id,
 							recovery_target_options,
 							restore_params, no_sync);
 		case VALIDATE_CMD:
@@ -788,16 +827,16 @@ main(int argc, char *argv[])
 				if (datname_exclude_list || datname_include_list)
 					elog(ERROR, "You must specify parameter (-i, --backup-id) for partial validation");
 
-				return do_validate_all();
+				return do_validate_all(catalogState, instanceState);
 			}
 			else
 				/* PITR validation and, optionally, partial validation */
-				return do_restore_or_validate(current.backup_id,
+				return do_restore_or_validate(instanceState, current.backup_id,
 						  recovery_target_options,
 						  restore_params,
 						  no_sync);
 		case SHOW_CMD:
-			return do_show(instance_name, current.backup_id, show_archive);
+			return do_show(catalogState, instanceState, current.backup_id, show_archive);
 		case DELETE_CMD:
 
 			if (delete_expired && backup_id_string)
@@ -812,26 +851,26 @@ main(int argc, char *argv[])
 			if (!backup_id_string)
 			{
 				if (delete_status)
-					do_delete_status(&instance_config, delete_status);
+					do_delete_status(instanceState, &instance_config, delete_status);
 				else
-					do_retention(no_validate, no_sync);
+					do_retention(instanceState, no_validate, no_sync);
 			}
 			else
-					do_delete(current.backup_id);
+					do_delete(instanceState, current.backup_id);
 			break;
 		case MERGE_CMD:
-			do_merge(current.backup_id, no_validate, no_sync);
+			do_merge(instanceState, current.backup_id, no_validate, no_sync);
 			break;
 		case SHOW_CONFIG_CMD:
 			do_show_config();
 			break;
 		case SET_CONFIG_CMD:
-			do_set_config(false);
+			do_set_config(instanceState, false);
 			break;
 		case SET_BACKUP_CMD:
 			if (!backup_id_string)
 				elog(ERROR, "You must specify parameter (-i, --backup-id) for 'set-backup' command");
-			do_set_backup(instance_name, current.backup_id, set_backup_params);
+			do_set_backup(instanceState, current.backup_id, set_backup_params);
 			break;
 		case CHECKDB_CMD:
 			do_checkdb(need_amcheck,

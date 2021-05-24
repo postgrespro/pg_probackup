@@ -17,43 +17,39 @@
  * Initialize backup catalog.
  */
 int
-do_init(void)
+do_init(CatalogState *catalogState)
 {
-	char		path[MAXPGPATH];
-	char		arclog_path_dir[MAXPGPATH];
 	int			results;
 
-	results = pg_check_dir(backup_path);
+	results = pg_check_dir(catalogState->catalog_path);
+
 	if (results == 4)	/* exists and not empty*/
 		elog(ERROR, "backup catalog already exist and it's not empty");
 	else if (results == -1) /*trouble accessing directory*/
 	{
 		int errno_tmp = errno;
 		elog(ERROR, "cannot open backup catalog directory \"%s\": %s",
-			backup_path, strerror(errno_tmp));
+			catalogState->catalog_path, strerror(errno_tmp));
 	}
 
 	/* create backup catalog root directory */
-	dir_create_dir(backup_path, DIR_PERMISSION, false);
+	dir_create_dir(catalogState->catalog_path, DIR_PERMISSION, false);
 
 	/* create backup catalog data directory */
-	join_path_components(path, backup_path, BACKUPS_DIR);
-	dir_create_dir(path, DIR_PERMISSION, false);
+	dir_create_dir(catalogState->backup_subdir_path, DIR_PERMISSION, false);
 
 	/* create backup catalog wal directory */
-	join_path_components(arclog_path_dir, backup_path, "wal");
-	dir_create_dir(arclog_path_dir, DIR_PERMISSION, false);
+	dir_create_dir(catalogState->wal_subdir_path, DIR_PERMISSION, false);
 
-	elog(INFO, "Backup catalog '%s' successfully inited", backup_path);
+	elog(INFO, "Backup catalog '%s' successfully inited", catalogState->catalog_path);
 	return 0;
 }
 
 int
-do_add_instance(InstanceConfig *instance)
+do_add_instance(InstanceState *instanceState, InstanceConfig *instance)
 {
-	char		path[MAXPGPATH];
-	char		arclog_path_dir[MAXPGPATH];
 	struct stat st;
+	CatalogState *catalogState = instanceState->catalog_state;
 
 	/* PGDATA is always required */
 	if (instance->pgdata == NULL)
@@ -66,33 +62,32 @@ do_add_instance(InstanceConfig *instance)
 	instance->xlog_seg_size = get_xlog_seg_size(instance->pgdata);
 
 	/* Ensure that all root directories already exist */
-	if (access(backup_path, F_OK) != 0)
-		elog(ERROR, "Directory does not exist: '%s'", backup_path);
+	/* TODO maybe call do_init() here instead of error?*/
+	if (access(catalogState->catalog_path, F_OK) != 0)
+		elog(ERROR, "Directory does not exist: '%s'", catalogState->catalog_path);
 
-	join_path_components(path, backup_path, BACKUPS_DIR);
-	if (access(path, F_OK) != 0)
-		elog(ERROR, "Directory does not exist: '%s'", path);
+	if (access(catalogState->backup_subdir_path, F_OK) != 0)
+		elog(ERROR, "Directory does not exist: '%s'", catalogState->backup_subdir_path);
 
-	join_path_components(arclog_path_dir, backup_path, "wal");
-	if (access(arclog_path_dir, F_OK) != 0)
-		elog(ERROR, "Directory does not exist: '%s'", arclog_path_dir);
+	if (access(catalogState->wal_subdir_path, F_OK) != 0)
+		elog(ERROR, "Directory does not exist: '%s'", catalogState->wal_subdir_path);
 
-	if (stat(instance->backup_instance_path, &st) == 0 && S_ISDIR(st.st_mode))
+	if (stat(instanceState->instance_backup_subdir_path, &st) == 0 && S_ISDIR(st.st_mode))
 		elog(ERROR, "Instance '%s' backup directory already exists: '%s'",
-			instance->name, instance->backup_instance_path);
+			instanceState->instance_name, instanceState->instance_backup_subdir_path);
 
 	/*
 	 * Create directory for wal files of this specific instance.
 	 * Existence check is extra paranoid because if we don't have such a
 	 * directory in data dir, we shouldn't have it in wal as well.
 	 */
-	if (stat(instance->arclog_path, &st) == 0 && S_ISDIR(st.st_mode))
+	if (stat(instanceState->instance_wal_subdir_path, &st) == 0 && S_ISDIR(st.st_mode))
 		elog(ERROR, "Instance '%s' WAL archive directory already exists: '%s'",
-				instance->name, instance->arclog_path);
+				instanceState->instance_name, instanceState->instance_wal_subdir_path);
 
 	/* Create directory for data files of this specific instance */
-	dir_create_dir(instance->backup_instance_path, DIR_PERMISSION, false);
-	dir_create_dir(instance->arclog_path, DIR_PERMISSION, false);
+	dir_create_dir(instanceState->instance_backup_subdir_path, DIR_PERMISSION, false);
+	dir_create_dir(instanceState->instance_wal_subdir_path, DIR_PERMISSION, false);
 
 	/*
 	 * Write initial configuration file.
@@ -124,8 +119,8 @@ do_add_instance(InstanceConfig *instance)
 				   SOURCE_DEFAULT);
 
 	/* pgdata was set through command line */
-	do_set_config(true);
+	do_set_config(instanceState, true);
 
-	elog(INFO, "Instance '%s' successfully inited", instance_name);
+	elog(INFO, "Instance '%s' successfully inited", instanceState->instance_name);
 	return 0;
 }

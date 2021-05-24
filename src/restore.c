@@ -41,22 +41,22 @@ typedef struct
 
 
 static void
-print_recovery_settings(FILE *fp, pgBackup *backup,
+print_recovery_settings(InstanceState *instanceState, FILE *fp, pgBackup *backup,
 							   pgRestoreParams *params, pgRecoveryTarget *rt);
 static void
 print_standby_settings_common(FILE *fp, pgBackup *backup, pgRestoreParams *params);
 
 #if PG_VERSION_NUM >= 120000
 static void
-update_recovery_options(pgBackup *backup,
+update_recovery_options(InstanceState *instanceState, pgBackup *backup,
 						pgRestoreParams *params, pgRecoveryTarget *rt);
 #else
 static void
-update_recovery_options_before_v12(pgBackup *backup,
+update_recovery_options_before_v12(InstanceState *instanceState, pgBackup *backup,
 								   pgRestoreParams *params, pgRecoveryTarget *rt);
 #endif
 
-static void create_recovery_conf(time_t backup_id,
+static void create_recovery_conf(InstanceState *instanceState, time_t backup_id,
 								 pgRecoveryTarget *rt,
 								 pgBackup *backup,
 								 pgRestoreParams *params);
@@ -92,7 +92,7 @@ set_orphan_status(parray *backups, pgBackup *parent_backup)
 			if (backup->status == BACKUP_STATUS_OK ||
 				backup->status == BACKUP_STATUS_DONE)
 			{
-				write_backup_status(backup, BACKUP_STATUS_ORPHAN, instance_name, true);
+				write_backup_status(backup, BACKUP_STATUS_ORPHAN, true);
 
 				elog(WARNING,
 					"Backup %s is orphaned because his parent %s has status: %s",
@@ -115,7 +115,7 @@ set_orphan_status(parray *backups, pgBackup *parent_backup)
  * Entry point of pg_probackup RESTORE and VALIDATE subcommands.
  */
 int
-do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
+do_restore_or_validate(InstanceState *instanceState, time_t target_backup_id, pgRecoveryTarget *rt,
 					   pgRestoreParams *params, bool no_sync)
 {
 	int			i = 0;
@@ -134,7 +134,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 	bool        backup_has_tblspc = true; /* backup contain tablespace */
 	XLogRecPtr  shift_lsn = InvalidXLogRecPtr;
 
-	if (instance_name == NULL)
+	if (instanceState == NULL)
 		elog(ERROR, "required parameter not specified: --instance");
 
 	if (params->is_restore)
@@ -214,7 +214,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 	elog(LOG, "%s begin.", action);
 
 	/* Get list of all backups sorted in order of descending start time */
-	backups = catalog_get_backup_list(instance_name, INVALID_BACKUP_ID);
+	backups = catalog_get_backup_list(instanceState, INVALID_BACKUP_ID);
 
 	/* Find backup range we should restore or validate. */
 	while ((i < parray_num(backups)) && !dest_backup)
@@ -285,7 +285,8 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 
 			//	elog(LOG, "target timeline ID = %u", rt->target_tli);
 				/* Read timeline history files from archives */
-				timelines = read_timeline_history(arclog_path, rt->target_tli, true);
+				timelines = read_timeline_history(instanceState->instance_wal_subdir_path,
+												  rt->target_tli, true);
 
 				if (!timelines)
 					elog(ERROR, "Failed to get history file for target timeline %i", rt->target_tli);
@@ -365,7 +366,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 					if (backup->status == BACKUP_STATUS_OK ||
 						backup->status == BACKUP_STATUS_DONE)
 					{
-						write_backup_status(backup, BACKUP_STATUS_ORPHAN, instance_name, true);
+						write_backup_status(backup, BACKUP_STATUS_ORPHAN, true);
 
 						elog(WARNING, "Backup %s is orphaned because his parent %s is missing",
 								base36enc(backup->start_time), missing_backup_id);
@@ -490,7 +491,8 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 			elog(ERROR, "Incremental restore in 'lsn' mode require "
 				"data_checksums to be enabled in destination data directory");
 
-		timelines = read_timeline_history(arclog_path, redo.tli, false);
+		timelines = read_timeline_history(instanceState->instance_wal_subdir_path,
+										  redo.tli, false);
 
 		if (!timelines)
 			elog(WARNING, "Failed to get history for redo timeline %i, "
@@ -605,7 +607,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 			 * We pass base_full_backup timeline as last argument to this function,
 			 * because it's needed to form the name of xlog file.
 			 */
-			validate_wal(dest_backup, arclog_path, rt->target_time,
+			validate_wal(dest_backup, instanceState->instance_wal_subdir_path, rt->target_time,
 						 rt->target_xid, rt->target_lsn,
 						 dest_backup->tli, instance_config.xlog_seg_size);
 		}
@@ -674,7 +676,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 
 		//TODO rename and update comment
 		/* Create recovery.conf with given recovery target parameters */
-		create_recovery_conf(target_backup_id, rt, dest_backup, params);
+		create_recovery_conf(instanceState, target_backup_id, rt, dest_backup, params);
 	}
 
 	/* ssh connection to longer needed */
@@ -1304,7 +1306,7 @@ done:
  * with given recovery target parameters
  */
 static void
-create_recovery_conf(time_t backup_id,
+create_recovery_conf(InstanceState *instanceState, time_t backup_id,
 					 pgRecoveryTarget *rt,
 					 pgBackup *backup,
 					 pgRestoreParams *params)
@@ -1351,16 +1353,16 @@ create_recovery_conf(time_t backup_id,
 	elog(LOG, "----------------------------------------");
 
 #if PG_VERSION_NUM >= 120000
-	update_recovery_options(backup, params, rt);
+	update_recovery_options(instanceState, backup, params, rt);
 #else
-	update_recovery_options_before_v12(backup, params, rt);
+	update_recovery_options_before_v12(instanceState, backup, params, rt);
 #endif
 }
 
 
-/* TODO get rid of using global variables: instance_config, backup_path, instance_name */
+/* TODO get rid of using global variables: instance_config */
 static void
-print_recovery_settings(FILE *fp, pgBackup *backup,
+print_recovery_settings(InstanceState *instanceState, FILE *fp, pgBackup *backup,
 							   pgRestoreParams *params, pgRecoveryTarget *rt)
 {
 	char restore_command_guc[16384];
@@ -1376,7 +1378,8 @@ print_recovery_settings(FILE *fp, pgBackup *backup,
 		sprintf(restore_command_guc, "\"%s\" archive-get -B \"%s\" --instance \"%s\" "
 				"--wal-file-path=%%p --wal-file-name=%%f",
 				PROGRAM_FULL_PATH ? PROGRAM_FULL_PATH : PROGRAM_NAME,
-				backup_path, instance_name);
+				/* TODO What is going on here? Why do we use catalog path as wal-file-path? */
+				instanceState->catalog_state->catalog_path, instanceState->instance_name);
 
 		/* append --remote-* parameters provided via --archive-* settings */
 		if (instance_config.archive.host)
@@ -1461,7 +1464,7 @@ print_standby_settings_common(FILE *fp, pgBackup *backup, pgRestoreParams *param
 
 #if PG_VERSION_NUM < 120000
 static void
-update_recovery_options_before_v12(pgBackup *backup,
+update_recovery_options_before_v12(InstanceState *instanceState, pgBackup *backup,
 								   pgRestoreParams *params, pgRecoveryTarget *rt)
 {
 	FILE	   *fp;
@@ -1492,7 +1495,7 @@ update_recovery_options_before_v12(pgBackup *backup,
 				PROGRAM_VERSION);
 
 	if (params->recovery_settings_mode == PITR_REQUESTED)
-		print_recovery_settings(fp, backup, params, rt);
+		print_recovery_settings(instanceState, fp, backup, params, rt);
 
 	if (params->restore_as_replica)
 	{
@@ -1514,7 +1517,7 @@ update_recovery_options_before_v12(pgBackup *backup,
  */
 #if PG_VERSION_NUM >= 120000
 static void
-update_recovery_options(pgBackup *backup,
+update_recovery_options(InstanceState *instanceState, pgBackup *backup,
 						pgRestoreParams *params, pgRecoveryTarget *rt)
 
 {
@@ -1623,7 +1626,7 @@ update_recovery_options(pgBackup *backup,
 				base36enc(backup->start_time), current_time_str);
 
 		if (params->recovery_settings_mode == PITR_REQUESTED)
-			print_recovery_settings(fp, backup, params, rt);
+			print_recovery_settings(instanceState, fp, backup, params, rt);
 
 		if (params->restore_as_replica)
 			print_standby_settings_common(fp, backup, params);

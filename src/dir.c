@@ -28,7 +28,7 @@
  * start so they are not included in backups.  The directories themselves are
  * kept and included as empty to preserve access permissions.
  */
-const char *pgdata_exclude_dir[] =
+static const char *pgdata_exclude_dir[] =
 {
 	PG_XLOG_DIR,
 	/*
@@ -1450,7 +1450,7 @@ get_external_remap(char *current_dir)
  *
  * Returns true if the value was found in the line.
  */
-static bool
+bool
 get_control_value(const char *str, const char *name,
 				  char *value_str, int64 *value_int64, bool is_mandatory)
 {
@@ -1572,123 +1572,6 @@ bad_format:
 	elog(ERROR, "%s file has invalid format in line %s",
 		 DATABASE_FILE_LIST, str);
 	return false;	/* Make compiler happy */
-}
-
-/*
- * Construct parray of pgFile from the backup content list.
- * If root is not NULL, path will be absolute path.
- */
-parray *
-dir_read_file_list(const char *root, const char *external_prefix,
-				   const char *file_txt, fio_location location, pg_crc32 expected_crc)
-{
-	FILE    *fp;
-	parray  *files;
-	char     buf[BLCKSZ];
-	char     stdio_buf[STDIO_BUFSIZE];
-	pg_crc32 content_crc = 0;
-
-	fp = fio_open_stream(file_txt, location);
-	if (fp == NULL)
-		elog(ERROR, "cannot open \"%s\": %s", file_txt, strerror(errno));
-
-	/* enable stdio buffering for local file */
-	if (!fio_is_remote(location))
-		setvbuf(fp, stdio_buf, _IOFBF, STDIO_BUFSIZE);
-
-	files = parray_new();
-
-	INIT_FILE_CRC32(true, content_crc);
-
-	while (fgets(buf, lengthof(buf), fp))
-	{
-		char		path[MAXPGPATH];
-		char		linked[MAXPGPATH];
-		char		compress_alg_string[MAXPGPATH];
-		int64		write_size,
-					mode,		/* bit length of mode_t depends on platforms */
-					is_datafile,
-					is_cfs,
-					external_dir_num,
-					crc,
-					segno,
-					n_blocks,
-					n_headers,
-					dbOid,		/* used for partial restore */
-					hdr_crc,
-					hdr_off,
-					hdr_size;
-		pgFile	   *file;
-
-		COMP_FILE_CRC32(true, content_crc, buf, strlen(buf));
-
-		get_control_value(buf, "path", path, NULL, true);
-		get_control_value(buf, "size", NULL, &write_size, true);
-		get_control_value(buf, "mode", NULL, &mode, true);
-		get_control_value(buf, "is_datafile", NULL, &is_datafile, true);
-		get_control_value(buf, "is_cfs", NULL, &is_cfs, false);
-		get_control_value(buf, "crc", NULL, &crc, true);
-		get_control_value(buf, "compress_alg", compress_alg_string, NULL, false);
-		get_control_value(buf, "external_dir_num", NULL, &external_dir_num, false);
-		get_control_value(buf, "dbOid", NULL, &dbOid, false);
-
-		file = pgFileInit(path);
-		file->write_size = (int64) write_size;
-		file->mode = (mode_t) mode;
-		file->is_datafile = is_datafile ? true : false;
-		file->is_cfs = is_cfs ? true : false;
-		file->crc = (pg_crc32) crc;
-		file->compress_alg = parse_compress_alg(compress_alg_string);
-		file->external_dir_num = external_dir_num;
-		file->dbOid = dbOid ? dbOid : 0;
-
-		/*
-		 * Optional fields
-		 */
-
-		if (get_control_value(buf, "linked", linked, NULL, false) && linked[0])
-		{
-			file->linked = pgut_strdup(linked);
-			canonicalize_path(file->linked);
-		}
-
-		if (get_control_value(buf, "segno", NULL, &segno, false))
-			file->segno = (int) segno;
-
-		if (get_control_value(buf, "n_blocks", NULL, &n_blocks, false))
-			file->n_blocks = (int) n_blocks;
-
-		if (get_control_value(buf, "n_headers", NULL, &n_headers, false))
-			file->n_headers = (int) n_headers;
-
-		if (get_control_value(buf, "hdr_crc", NULL, &hdr_crc, false))
-			file->hdr_crc = (pg_crc32) hdr_crc;
-
-		if (get_control_value(buf, "hdr_off", NULL, &hdr_off, false))
-			file->hdr_off = hdr_off;
-
-		if (get_control_value(buf, "hdr_size", NULL, &hdr_size, false))
-			file->hdr_size = (int) hdr_size;
-
-		parray_append(files, file);
-	}
-
-	FIN_FILE_CRC32(true, content_crc);
-
-	if (ferror(fp))
-		elog(ERROR, "Failed to read from file: \"%s\"", file_txt);
-
-	fio_close_stream(fp);
-
-	if (expected_crc != 0 &&
-		expected_crc != content_crc)
-	{
-		elog(WARNING, "Invalid CRC of backup control file '%s': %u. Expected: %u",
-				file_txt, content_crc, expected_crc);
-		return NULL;
-	}
-
-	return files;
 }
 
 /*
@@ -1900,7 +1783,6 @@ read_database_map(pgBackup *backup)
 	char		path[MAXPGPATH];
 	char		database_map_path[MAXPGPATH];
 
-//	pgBackupGetPath(backup, path, lengthof(path), DATABASE_DIR);
 	join_path_components(path, backup->root_dir, DATABASE_DIR);
 	join_path_components(database_map_path, path, DATABASE_MAP);
 

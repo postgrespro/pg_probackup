@@ -124,7 +124,7 @@ read_backup(const char *root_dir)
  */
 void
 write_backup_status(pgBackup *backup, BackupStatus status,
-					const char *instance_name, bool strict)
+					bool strict)
 {
 	pgBackup   *tmp;
 
@@ -850,13 +850,11 @@ IsDir(const char *dirpath, const char *entry, fio_location location)
 /*
  * Create list of instances in given backup catalog.
  *
- * Returns parray of "InstanceConfig" structures, filled with
- * actual config of each instance.
+ * Returns parray of InstanceState structures.
  */
 parray *
-catalog_get_instance_list(void)
+catalog_get_instance_list(CatalogState *catalogState)
 {
-	char		path[MAXPGPATH];
 	DIR		   *dir;
 	struct dirent *dent;
 	parray		*instances;
@@ -864,24 +862,23 @@ catalog_get_instance_list(void)
 	instances = parray_new();
 
 	/* open directory and list contents */
-	join_path_components(path, backup_path, BACKUPS_DIR);
-	dir = opendir(path);
+	dir = opendir(catalogState->backup_subdir_path);
 	if (dir == NULL)
 		elog(ERROR, "Cannot open directory \"%s\": %s",
-			 path, strerror(errno));
+			 catalogState->backup_subdir_path, strerror(errno));
 
 	while (errno = 0, (dent = readdir(dir)) != NULL)
 	{
 		char		child[MAXPGPATH];
 		struct stat	st;
-		InstanceConfig *instance;
+		InstanceState *instanceState = NULL;
 
 		/* skip entries point current dir or parent dir */
 		if (strcmp(dent->d_name, ".") == 0 ||
 			strcmp(dent->d_name, "..") == 0)
 			continue;
 
-		join_path_components(child, path, dent->d_name);
+		join_path_components(child, catalogState->backup_subdir_path, dent->d_name);
 
 		if (lstat(child, &st) == -1)
 			elog(ERROR, "Cannot stat file \"%s\": %s",
@@ -890,9 +887,18 @@ catalog_get_instance_list(void)
 		if (!S_ISDIR(st.st_mode))
 			continue;
 
-		instance = readInstanceConfigFile(dent->d_name);
+		instanceState = pgut_new(InstanceState);
 
-		parray_append(instances, instance);
+		strncpy(instanceState->instance_name, dent->d_name, MAXPGPATH);
+		join_path_components(instanceState->instance_backup_subdir_path,
+							catalogState->backup_subdir_path, instanceState->instance_name);
+		join_path_components(instanceState->instance_wal_subdir_path,
+							catalogState->wal_subdir_path, instanceState->instance_name);
+		join_path_components(instanceState->instance_config_path,
+							 instanceState->instance_backup_subdir_path, BACKUP_CATALOG_CONF_FILE);
+
+		instanceState->config = readInstanceConfigFile(instanceState);
+		parray_append(instances, instanceState);
 	}
 
 	/* TODO 3.0: switch to ERROR */
@@ -901,11 +907,11 @@ catalog_get_instance_list(void)
 
 	if (errno)
 		elog(ERROR, "Cannot read directory \"%s\": %s",
-				path, strerror(errno));
+				catalogState->backup_subdir_path, strerror(errno));
 
 	if (closedir(dir))
 		elog(ERROR, "Cannot close directory \"%s\": %s",
-				path, strerror(errno));
+				catalogState->backup_subdir_path, strerror(errno));
 
 	return instances;
 }
@@ -917,22 +923,18 @@ catalog_get_instance_list(void)
  * If valid backup id is passed only matching backup will be added to the list.
  */
 parray *
-catalog_get_backup_list(const char *instance_name, time_t requested_backup_id)
+catalog_get_backup_list(InstanceState *instanceState, time_t requested_backup_id)
 {
 	DIR		   *data_dir = NULL;
 	struct dirent *data_ent = NULL;
 	parray	   *backups = NULL;
 	int			i;
-	char backup_instance_path[MAXPGPATH];
-
-	sprintf(backup_instance_path, "%s/%s/%s",
-			backup_path, BACKUPS_DIR, instance_name);
 
 	/* open backup instance backups directory */
-	data_dir = fio_opendir(backup_instance_path, FIO_BACKUP_HOST);
+	data_dir = fio_opendir(instanceState->instance_backup_subdir_path, FIO_BACKUP_HOST);
 	if (data_dir == NULL)
 	{
-		elog(WARNING, "cannot open directory \"%s\": %s", backup_instance_path,
+		elog(WARNING, "cannot open directory \"%s\": %s", instanceState->instance_backup_subdir_path,
 			strerror(errno));
 		goto err_proc;
 	}
@@ -946,12 +948,12 @@ catalog_get_backup_list(const char *instance_name, time_t requested_backup_id)
 		pgBackup   *backup = NULL;
 
 		/* skip not-directory entries and hidden entries */
-		if (!IsDir(backup_instance_path, data_ent->d_name, FIO_BACKUP_HOST)
+		if (!IsDir(instanceState->instance_backup_subdir_path, data_ent->d_name, FIO_BACKUP_HOST)
 			|| data_ent->d_name[0] == '.')
 			continue;
 
 		/* open subdirectory of specific backup */
-		join_path_components(data_path, backup_instance_path, data_ent->d_name);
+		join_path_components(data_path, instanceState->instance_backup_subdir_path, data_ent->d_name);
 
 		/* read backup information from BACKUP_CONTROL_FILE */
 		snprintf(backup_conf_path, MAXPGPATH, "%s/%s", data_path, BACKUP_CONTROL_FILE);
@@ -991,7 +993,7 @@ catalog_get_backup_list(const char *instance_name, time_t requested_backup_id)
 	if (errno)
 	{
 		elog(WARNING, "Cannot read backup root directory \"%s\": %s",
-			backup_instance_path, strerror(errno));
+			instanceState->instance_backup_subdir_path, strerror(errno));
 		goto err_proc;
 	}
 
@@ -1032,19 +1034,118 @@ err_proc:
 }
 
 /*
- * Create list of backup datafiles.
- * If 'requested_backup_id' is INVALID_BACKUP_ID, exit with error.
- * If valid backup id is passed only matching backup will be added to the list.
- * TODO this function only used once. Is it really needed?
+ * Get list of files in the backup from the DATABASE_FILE_LIST.
  */
 parray *
 get_backup_filelist(pgBackup *backup, bool strict)
 {
 	parray		*files = NULL;
 	char		backup_filelist_path[MAXPGPATH];
+	FILE    *fp;
+	char     buf[BLCKSZ];
+	char     stdio_buf[STDIO_BUFSIZE];
+	pg_crc32 content_crc = 0;
 
 	join_path_components(backup_filelist_path, backup->root_dir, DATABASE_FILE_LIST);
-	files = dir_read_file_list(NULL, NULL, backup_filelist_path, FIO_BACKUP_HOST, backup->content_crc);
+
+	fp = fio_open_stream(backup_filelist_path, FIO_BACKUP_HOST);
+	if (fp == NULL)
+		elog(ERROR, "cannot open \"%s\": %s", backup_filelist_path, strerror(errno));
+
+	/* enable stdio buffering for local file */
+	if (!fio_is_remote(FIO_BACKUP_HOST))
+		setvbuf(fp, stdio_buf, _IOFBF, STDIO_BUFSIZE);
+
+	files = parray_new();
+
+	INIT_FILE_CRC32(true, content_crc);
+
+	while (fgets(buf, lengthof(buf), fp))
+	{
+		char		path[MAXPGPATH];
+		char		linked[MAXPGPATH];
+		char		compress_alg_string[MAXPGPATH];
+		int64		write_size,
+					mode,		/* bit length of mode_t depends on platforms */
+					is_datafile,
+					is_cfs,
+					external_dir_num,
+					crc,
+					segno,
+					n_blocks,
+					n_headers,
+					dbOid,		/* used for partial restore */
+					hdr_crc,
+					hdr_off,
+					hdr_size;
+		pgFile	   *file;
+
+		COMP_FILE_CRC32(true, content_crc, buf, strlen(buf));
+
+		get_control_value(buf, "path", path, NULL, true);
+		get_control_value(buf, "size", NULL, &write_size, true);
+		get_control_value(buf, "mode", NULL, &mode, true);
+		get_control_value(buf, "is_datafile", NULL, &is_datafile, true);
+		get_control_value(buf, "is_cfs", NULL, &is_cfs, false);
+		get_control_value(buf, "crc", NULL, &crc, true);
+		get_control_value(buf, "compress_alg", compress_alg_string, NULL, false);
+		get_control_value(buf, "external_dir_num", NULL, &external_dir_num, false);
+		get_control_value(buf, "dbOid", NULL, &dbOid, false);
+
+		file = pgFileInit(path);
+		file->write_size = (int64) write_size;
+		file->mode = (mode_t) mode;
+		file->is_datafile = is_datafile ? true : false;
+		file->is_cfs = is_cfs ? true : false;
+		file->crc = (pg_crc32) crc;
+		file->compress_alg = parse_compress_alg(compress_alg_string);
+		file->external_dir_num = external_dir_num;
+		file->dbOid = dbOid ? dbOid : 0;
+
+		/*
+		 * Optional fields
+		 */
+		if (get_control_value(buf, "linked", linked, NULL, false) && linked[0])
+		{
+			file->linked = pgut_strdup(linked);
+			canonicalize_path(file->linked);
+		}
+
+		if (get_control_value(buf, "segno", NULL, &segno, false))
+			file->segno = (int) segno;
+
+		if (get_control_value(buf, "n_blocks", NULL, &n_blocks, false))
+			file->n_blocks = (int) n_blocks;
+
+		if (get_control_value(buf, "n_headers", NULL, &n_headers, false))
+			file->n_headers = (int) n_headers;
+
+		if (get_control_value(buf, "hdr_crc", NULL, &hdr_crc, false))
+			file->hdr_crc = (pg_crc32) hdr_crc;
+
+		if (get_control_value(buf, "hdr_off", NULL, &hdr_off, false))
+			file->hdr_off = hdr_off;
+
+		if (get_control_value(buf, "hdr_size", NULL, &hdr_size, false))
+			file->hdr_size = (int) hdr_size;
+
+		parray_append(files, file);
+	}
+
+	FIN_FILE_CRC32(true, content_crc);
+
+	if (ferror(fp))
+		elog(ERROR, "Failed to read from file: \"%s\"", backup_filelist_path);
+
+	fio_close_stream(fp);
+
+	if (backup->content_crc != 0 &&
+		backup->content_crc != content_crc)
+	{
+		elog(WARNING, "Invalid CRC of backup control file '%s': %u. Expected: %u",
+					 backup_filelist_path, content_crc, backup->content_crc);
+		return NULL;
+	}
 
 	/* redundant sanity? */
 	if (!files)
@@ -1402,22 +1503,21 @@ create_backup_dir(pgBackup *backup, const char *backup_instance_path)
  * TODO: '.partial' and '.part' segno information should be added to tlinfo.
  */
 parray *
-catalog_get_timelines(InstanceConfig *instance)
+catalog_get_timelines(InstanceState *instanceState, InstanceConfig *instance)
 {
 	int i,j,k;
 	parray *xlog_files_list = parray_new();
 	parray *timelineinfos;
 	parray *backups;
 	timelineInfo *tlinfo;
-	char		arclog_path[MAXPGPATH];
 
 	/* for fancy reporting */
 	char begin_segno_str[MAXFNAMELEN];
 	char end_segno_str[MAXFNAMELEN];
 
 	/* read all xlog files that belong to this archive */
-	sprintf(arclog_path, "%s/%s/%s", backup_path, "wal", instance->name);
-	dir_list_file(xlog_files_list, arclog_path, false, true, false, false, true, 0, FIO_BACKUP_HOST);
+	dir_list_file(xlog_files_list, instanceState->instance_wal_subdir_path,
+				  false, true, false, false, true, 0, FIO_BACKUP_HOST);
 	parray_qsort(xlog_files_list, pgFileCompareName);
 
 	timelineinfos = parray_new();
@@ -1587,7 +1687,7 @@ catalog_get_timelines(InstanceConfig *instance)
 			TimeLineHistoryEntry *tln;
 
 			sscanf(file->name, "%08X.history", &tli);
-			timelines = read_timeline_history(arclog_path, tli, true);
+			timelines = read_timeline_history(instanceState->instance_wal_subdir_path, tli, true);
 
 			/* History file is empty or corrupted, disregard it */
 			if (!timelines)
@@ -1625,7 +1725,7 @@ catalog_get_timelines(InstanceConfig *instance)
 	}
 
 	/* save information about backups belonging to each timeline */
-	backups = catalog_get_backup_list(instance->name, INVALID_BACKUP_ID);
+	backups = catalog_get_backup_list(instanceState, INVALID_BACKUP_ID);
 
 	for (i = 0; i < parray_num(timelineinfos); i++)
 	{
@@ -2098,7 +2198,7 @@ get_oldest_backup(timelineInfo *tlinfo)
  * Overwrite backup metadata.
  */
 void
-do_set_backup(const char *instance_name, time_t backup_id,
+do_set_backup(InstanceState *instanceState, time_t backup_id,
 			  pgSetBackupParams *set_backup_params)
 {
 	pgBackup	*target_backup = NULL;
@@ -2107,7 +2207,7 @@ do_set_backup(const char *instance_name, time_t backup_id,
 	if (!set_backup_params)
 		elog(ERROR, "Nothing to set by 'set-backup' command");
 
-	backup_list = catalog_get_backup_list(instance_name, backup_id);
+	backup_list = catalog_get_backup_list(instanceState, backup_id);
 	if (parray_num(backup_list) != 1)
 		elog(ERROR, "Failed to find backup %s", base36enc(backup_id));
 
@@ -2871,64 +2971,6 @@ pgBackupCompareIdDesc(const void *l, const void *r)
 }
 
 /*
- * Construct absolute path of the backup directory.
- * If subdir is not NULL, it will be appended after the path.
- */
-void
-pgBackupGetPath(const pgBackup *backup, char *path, size_t len, const char *subdir)
-{
-	pgBackupGetPath2(backup, path, len, subdir, NULL);
-}
-
-/*
- * Construct absolute path of the backup directory.
- * Append "subdir1" and "subdir2" to the backup directory.
- */
-void
-pgBackupGetPath2(const pgBackup *backup, char *path, size_t len,
-				 const char *subdir1, const char *subdir2)
-{
-	/* If "subdir1" is NULL do not check "subdir2" */
-	if (!subdir1)
-		snprintf(path, len, "%s/%s", backup_instance_path,
-				 base36enc(backup->start_time));
-	else if (!subdir2)
-		snprintf(path, len, "%s/%s/%s", backup_instance_path,
-				 base36enc(backup->start_time), subdir1);
-	/* "subdir1" and "subdir2" is not NULL */
-	else
-		snprintf(path, len, "%s/%s/%s/%s", backup_instance_path,
-				 base36enc(backup->start_time), subdir1, subdir2);
-}
-
-/*
- * independent from global variable backup_instance_path
- * Still depends from backup_path
- */
-void
-pgBackupGetPathInInstance(const char *instance_name,
-				 const pgBackup *backup, char *path, size_t len,
-				 const char *subdir1, const char *subdir2)
-{
-	char		backup_instance_path[MAXPGPATH];
-
-	sprintf(backup_instance_path, "%s/%s/%s",
-				backup_path, BACKUPS_DIR, instance_name);
-
-	/* If "subdir1" is NULL do not check "subdir2" */
-	if (!subdir1)
-		snprintf(path, len, "%s/%s", backup_instance_path,
-				 base36enc(backup->start_time));
-	else if (!subdir2)
-		snprintf(path, len, "%s/%s/%s", backup_instance_path,
-				 base36enc(backup->start_time), subdir1);
-	/* "subdir1" and "subdir2" is not NULL */
-	else
-		snprintf(path, len, "%s/%s/%s/%s", backup_instance_path,
-				 base36enc(backup->start_time), subdir1, subdir2);
-}
-
-/*
  * Check if multiple backups consider target backup to be their direct parent
  */
 bool
@@ -3075,26 +3117,6 @@ is_parent(time_t parent_backup_time, pgBackup *child_backup, bool inclusive)
 	//	return true;
 
 	return false;
-}
-
-/*
- * Return backup index number.
- * Note: this index number holds true until new sorting of backup list
- */
-int
-get_backup_index_number(parray *backup_list, pgBackup *backup)
-{
-	int i;
-
-	for (i = 0; i < parray_num(backup_list); i++)
-	{
-		pgBackup   *tmp_backup = (pgBackup *) parray_get(backup_list, i);
-
-		if (tmp_backup->start_time == backup->start_time)
-			return i;
-	}
-	elog(WARNING, "Failed to find backup %s", base36enc(backup->start_time));
-	return -1;
 }
 
 /* On backup_list lookup children of target_backup and append them to append_list */
