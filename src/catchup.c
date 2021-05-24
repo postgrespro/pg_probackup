@@ -186,11 +186,16 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 		(backup_mode == BACKUP_MODE_DIFF_PTRACK ||
 		 backup_mode == BACKUP_MODE_DIFF_DELTA))
 	{
+		RedoParams	dest_redo;
+
 		dest_filelist = parray_new();
 		dir_list_file(dest_filelist, dest_pgdata,
 			true, true, false, backup_logs, true, 0, FIO_LOCAL_HOST);
 
-		sync_lsn = get_min_recovery_point(dest_pgdata);
+		// fill dest_redo.lsn and dest_redo.tli
+		get_redo(dest_pgdata, &dest_redo);
+
+		sync_lsn = dest_redo.lsn;
 		elog(INFO, "syncLSN = %X/%X", (uint32) (sync_lsn >> 32), (uint32) sync_lsn);
 	}
 
