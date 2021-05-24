@@ -421,7 +421,7 @@ typedef struct PGNodeInfo
 	char			server_version_str[100];
 
 	int				ptrack_version_num;
-	bool			is_ptrack_enable;
+	bool			is_ptrack_enabled;
 	const char		*ptrack_schema; /* used only for ptrack 2.x */
 
 } PGNodeInfo;
@@ -619,7 +619,7 @@ typedef struct
 	 * 0 means there is no error, 1 - there is an error.
 	 */
 	int			ret;
-} catchup_files_arg;
+} catchup_thread_runner_arg;
 
 typedef struct timelineInfo timelineInfo;
 
@@ -869,7 +869,7 @@ extern char *pg_ptrack_get_block(ConnectionArgs *arguments,
 								 int ptrack_version_num, const char *ptrack_schema);
 /* in catchup.c */
 extern int do_catchup(const char *source_pgdata, const char *dest_pgdata, BackupMode backup_mode,
-					  ConnectionOptions conn_opt, bool stream_wal, int num_threads);
+					  ConnectionOptions conn_opt, int num_threads);
 /* in restore.c */
 extern int do_restore_or_validate(InstanceState *instanceState,
 					  time_t target_backup_id,
@@ -1212,7 +1212,7 @@ extern void make_pagemap_from_ptrack_2(parray* files, PGconn* backup_conn,
 									   XLogRecPtr lsn);
 extern void pg_ptrack_clear(PGconn *backup_conn, int ptrack_version_num);
 extern void get_ptrack_version(PGconn *backup_conn, PGNodeInfo *nodeInfo);
-extern bool pg_ptrack_enable(PGconn *backup_conn, int ptrack_version_num);
+extern bool pg_is_ptrack_enabled(PGconn *backup_conn, int ptrack_version_num);
 extern bool pg_ptrack_get_and_clear_db(Oid dbOid, Oid tblspcOid, PGconn *backup_conn);
 extern char *pg_ptrack_get_and_clear(Oid tablespace_oid,
 									 Oid db_oid,

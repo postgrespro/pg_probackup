@@ -2,8 +2,7 @@
  *
  * catchup.c: sync DB cluster
  *
- * Portions Copyright (c) 2009-2013, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
- * Portions Copyright (c) 2015-2021, Postgres Professional
+ * Copyright (c) 2021, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */
@@ -27,7 +26,118 @@
 /*
  * Catchup routines
  */
-static void *catchup_files(void *arg);
+static PGconn *catchup_collect_info(PGNodeInfo *source_node_info, const char *source_pgdata, const char *dest_pgdata,
+		BackupMode backup_mode, ConnectionOptions conn_opt);
+static void catchup_preflight_checks(PGNodeInfo *source_node_info, PGconn *source_conn,
+		const char *source_pgdata, BackupMode backup_mode);
+static void do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *source_conn,
+					PGNodeInfo *nodeInfo, BackupMode backup_mode, bool no_sync, bool backup_logs,
+					bool dest_pgdata_is_empty);
+static void *catchup_thread_runner(void *arg);
+
+/*
+ * Entry point of pg_probackup CATCHUP subcommand.
+ */
+int
+do_catchup(const char *source_pgdata, const char *dest_pgdata, BackupMode backup_mode,
+		   ConnectionOptions conn_opt, int num_threads)
+{
+	PGconn		*source_conn = NULL;
+	PGNodeInfo	source_node_info;
+	bool		no_sync = false;
+	bool		backup_logs = false;
+	bool        dest_pgdata_is_empty = dir_is_empty(dest_pgdata, FIO_LOCAL_HOST);
+
+	source_conn = catchup_collect_info(&source_node_info, source_pgdata, dest_pgdata, backup_mode, conn_opt);
+	catchup_preflight_checks(&source_node_info, source_conn, source_pgdata, backup_mode);
+
+	if (!dest_pgdata_is_empty &&
+		 check_incremental_compatibility(dest_pgdata,
+										  instance_config.system_identifier,
+										  INCR_CHECKSUM) != DEST_OK)
+		elog(ERROR, "Incremental restore is not allowed");
+
+	if (current.from_replica && exclusive_backup)
+		elog(ERROR, "Catchup from standby is available only for PG >= 9.6");
+
+	do_catchup_instance(source_pgdata, dest_pgdata, source_conn, &source_node_info,
+						backup_mode, no_sync, backup_logs, dest_pgdata_is_empty);
+
+	/* TODO: show the amount of transfered data in bytes and calculate incremental ratio */
+
+	return 0;
+}
+
+static PGconn *
+catchup_collect_info(PGNodeInfo	*source_node_info, const char *source_pgdata, const char *dest_pgdata,
+		BackupMode backup_mode, ConnectionOptions conn_opt)
+{
+	PGconn		*source_conn;
+	/* Initialize PGInfonode */
+	pgNodeInit(source_node_info);
+
+	/* Get WAL segments size and system ID of source PG instance */
+	instance_config.xlog_seg_size = get_xlog_seg_size(source_pgdata);
+	instance_config.system_identifier = get_system_identifier(source_pgdata);
+	current.start_time = time(NULL);
+
+	StrNCpy(current.program_version, PROGRAM_VERSION, sizeof(current.program_version));
+	//current.compress_alg = instance_config.compress_alg;
+	//current.compress_level = instance_config.compress_level;
+
+	/* Do some compatibility checks and fill basic info about PG instance */
+	source_conn = pgdata_basic_setup(conn_opt, source_node_info);
+
+	/* below perform checks specific for backup command */
+#if PG_VERSION_NUM >= 110000
+	if (!RetrieveWalSegSize(source_conn))
+		elog(ERROR, "Failed to retrieve wal_segment_size");
+#endif
+
+	get_ptrack_version(source_conn, source_node_info);
+	if (source_node_info->ptrack_version_num > 0)
+		source_node_info->is_ptrack_enabled = pg_is_ptrack_enabled(source_conn, source_node_info->ptrack_version_num);
+
+	/* Obtain current timeline */
+#if PG_VERSION_NUM >= 90600
+	current.tli = get_current_timeline(source_conn);
+#else
+	current.tli = get_current_timeline_from_control(false);
+#endif
+
+	elog(INFO, "Catchup start, pg_probackup version: %s, "
+			"PostgreSQL version: %s, "
+			"remote: %s, catchup-source-pgdata: %s, catchup-destination-pgdata: %s",
+			PROGRAM_VERSION, source_node_info->server_version_str,
+			IsSshProtocol()  ? "true" : "false",
+			source_pgdata, dest_pgdata);
+
+	if (current.from_replica)
+		elog(INFO, "Running catchup from standby");
+
+	return source_conn;
+}
+
+static void
+catchup_preflight_checks(PGNodeInfo *source_node_info, PGconn *source_conn,
+		const char *source_pgdata, BackupMode backup_mode)
+{
+	// TODO: add sanity check that source PGDATA is not empty
+
+	/* Check that connected PG instance and source PGDATA are the same */
+	check_system_identifiers(source_conn, source_pgdata);
+
+	if (backup_mode == BACKUP_MODE_DIFF_PTRACK)
+	{
+		if (source_node_info->ptrack_version_num == 0)
+			elog(ERROR, "This PostgreSQL instance does not support ptrack");
+		else if (source_node_info->ptrack_version_num < 20)
+			elog(ERROR, "ptrack extension is too old.\n"
+					"Upgrade ptrack to version >= 2");
+		else if (!source_node_info->is_ptrack_enabled)
+			elog(ERROR, "Ptrack is disabled");
+	}
+}
 
 /*
  * TODO:
@@ -36,18 +146,17 @@ static void *catchup_files(void *arg);
  */
 static void
 do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *source_conn,
-					PGNodeInfo *nodeInfo, BackupMode backup_mode, bool no_sync, bool backup_logs,
+					PGNodeInfo *source_node_info, BackupMode backup_mode, bool no_sync, bool backup_logs,
 					bool dest_pgdata_is_empty)
 {
 	int			i;
-	char		dst_xlog_path[MAXPGPATH];
+	char		dest_xlog_path[MAXPGPATH];
 	char		label[1024];
 	XLogRecPtr	sync_lsn = InvalidXLogRecPtr;
-	XLogRecPtr	start_lsn;
 
 	/* arrays with meta info for multi threaded backup */
 	pthread_t	*threads;
-	catchup_files_arg *threads_args;
+	catchup_thread_runner_arg *threads_args;
 	bool		catchup_isok = true;
 
 	parray     *source_filelist = NULL;
@@ -70,15 +179,8 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 			strlen(" with pg_probackup"));
 
 	/* Call pg_start_backup function in PostgreSQL connect */
-	pg_start_backup(label, smooth_checkpoint, &current, nodeInfo, source_conn);
-	elog(LOG, "pg_start_backup START LSN %X/%X", (uint32) (start_lsn >> 32), (uint32) (start_lsn));
-
-	/* Obtain current timeline */
-#if PG_VERSION_NUM >= 90600
-	current.tli = get_current_timeline(source_conn);
-#else
-	current.tli = get_current_timeline_from_control(false);
-#endif
+	pg_start_backup(label, smooth_checkpoint, &current, source_node_info, source_conn);
+	elog(LOG, "pg_start_backup START LSN %X/%X", (uint32) (current.start_lsn >> 32), (uint32) (current.start_lsn));
 
 	if (!dest_pgdata_is_empty &&
 		(backup_mode == BACKUP_MODE_DIFF_PTRACK ||
@@ -97,43 +199,33 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 	 */
 	if (backup_mode == BACKUP_MODE_DIFF_PTRACK)
 	{
-		XLogRecPtr	ptrack_lsn = get_last_ptrack_lsn(source_conn, nodeInfo);
+		XLogRecPtr	ptrack_lsn = get_last_ptrack_lsn(source_conn, source_node_info);
 
-		if (nodeInfo->ptrack_version_num < 20)
-		{
-			elog(ERROR, "ptrack extension is too old.\n"
-					"Upgrade ptrack to version >= 2");
-		}
-		else
-		{
-			// new ptrack is more robust and checks Start LSN
-			if (ptrack_lsn > sync_lsn || ptrack_lsn == InvalidXLogRecPtr)
-			{
-				elog(ERROR, "LSN from ptrack_control %X/%X is greater than checkpoint LSN  %X/%X.\n"
-							"Create new full backup before an incremental one.",
-							(uint32) (ptrack_lsn >> 32), (uint32) (ptrack_lsn),
-							(uint32) (sync_lsn >> 32),
-							(uint32) (sync_lsn));
-			}
-		}
+		// new ptrack is more robust and checks Start LSN
+		if (ptrack_lsn > sync_lsn || ptrack_lsn == InvalidXLogRecPtr)
+			elog(ERROR, "LSN from ptrack_control %X/%X is greater than checkpoint LSN  %X/%X.\n"
+						"Create new full backup before an incremental one.",
+						(uint32) (ptrack_lsn >> 32), (uint32) (ptrack_lsn),
+						(uint32) (sync_lsn >> 32),
+						(uint32) (sync_lsn));
 	}
 
-	/* Check that sync_lsn is less than start_lsn */
+	/* Check that sync_lsn is less than current.start_lsn */
 	/* TODO это нужно? */
 	if (backup_mode != BACKUP_MODE_FULL &&
-		sync_lsn > start_lsn)
+		sync_lsn > current.start_lsn)
 			elog(ERROR, "Current START LSN %X/%X is lower than SYNC LSN %X/%X, "
 				"it may indicate that we are trying to catchup with PostgreSQL instance from the past",
-				(uint32) (start_lsn >> 32), (uint32) (start_lsn),
+				(uint32) (current.start_lsn >> 32), (uint32) (current.start_lsn),
 				(uint32) (sync_lsn >> 32), (uint32) (sync_lsn));
 
 	/* Start stream replication */
 	if (stream_wal)
 	{
-		join_path_components(dst_xlog_path, dest_pgdata, PG_XLOG_DIR);
-		fio_mkdir(dst_xlog_path, DIR_PERMISSION, FIO_BACKUP_HOST);
-		start_WAL_streaming(source_conn, dst_xlog_path, &instance_config.conn_opt,
-							start_lsn, current.tli);
+		join_path_components(dest_xlog_path, dest_pgdata, PG_XLOG_DIR);
+		fio_mkdir(dest_xlog_path, DIR_PERMISSION, FIO_BACKUP_HOST);
+		start_WAL_streaming(source_conn, dest_xlog_path, &instance_config.conn_opt,
+							current.start_lsn, current.tli);
 	}
 
 	/* initialize backup list */
@@ -189,7 +281,7 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 	parse_filelist_filenames(source_filelist, source_pgdata);
 
 	elog(LOG, "Current Start LSN: %X/%X, TLI: %X",
-			(uint32) (start_lsn >> 32), (uint32) (start_lsn),
+			(uint32) (current.start_lsn >> 32), (uint32) (current.start_lsn),
 			current.tli);
 	/* TODO проверить, нужна ли проверка TLI */
 	/*if (backup_mode != BACKUP_MODE_FULL)
@@ -200,17 +292,15 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 
 	/* Build page mapping in PTRACK mode */
 
-	if (backup_mode == BACKUP_MODE_DIFF_PAGE)
-		elog(ERROR, "Catchup in PAGE mode currently is not supported");
-	else if (backup_mode == BACKUP_MODE_DIFF_PTRACK)
+	if (backup_mode == BACKUP_MODE_DIFF_PTRACK)
 	{
 		time(&start_time);
 		elog(INFO, "Extracting pagemap of changed blocks");
 
 		/* Build the page map from ptrack information */
 		make_pagemap_from_ptrack_2(source_filelist, source_conn,
-								   nodeInfo->ptrack_schema,
-								   nodeInfo->ptrack_version_num,
+								   source_node_info->ptrack_schema,
+								   source_node_info->ptrack_version_num,
 								   sync_lsn);
 		time(&end_time);
 		elog(INFO, "Pagemap successfully extracted, time elapsed: %.0f sec",
@@ -253,13 +343,13 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 
 	/* init thread args with own file lists */
 	threads = (pthread_t *) palloc(sizeof(pthread_t) * num_threads);
-	threads_args = (catchup_files_arg *) palloc(sizeof(catchup_files_arg)*num_threads);
+	threads_args = (catchup_thread_runner_arg *) palloc(sizeof(catchup_thread_runner_arg)*num_threads);
 
 	for (i = 0; i < num_threads; i++)
 	{
-		catchup_files_arg *arg = &(threads_args[i]);
+		catchup_thread_runner_arg *arg = &(threads_args[i]);
 
-		arg->nodeInfo = nodeInfo;
+		arg->nodeInfo = source_node_info;
 		arg->from_root = source_pgdata;
 		arg->to_root = dest_pgdata;
 		arg->source_filelist = source_filelist;
@@ -277,10 +367,10 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 	time(&start_time);
 	for (i = 0; i < num_threads; i++)
 	{
-		catchup_files_arg *arg = &(threads_args[i]);
+		catchup_thread_runner_arg *arg = &(threads_args[i]);
 
 		elog(VERBOSE, "Start thread num: %i", i);
-		pthread_create(&threads[i], NULL, catchup_files, arg);
+		pthread_create(&threads[i], NULL, catchup_thread_runner, arg);
 	}
 
 	/* Wait threads */
@@ -302,8 +392,85 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 			pretty_time);
 
 	/* Notify end of backup */
-	current.start_lsn = start_lsn;
-	//!!!!!! pg_stop_backup(&current, source_conn, nodeInfo, dest_pgdata);
+	//!!!!!
+	//catchup_pg_stop_backup(&current, source_conn, source_node_info, dest_pgdata);
+
+/*
+ * Notify end of backup to PostgreSQL server.
+ */
+//static void
+//catchup_pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn, PGNodeInfo *source_node_info, const char *destination_dir)
+//{
+	PGStopBackupResult	stop_backup_result;
+	/* kludge against some old bug in archive_timeout. TODO: remove in 3.0.0 */
+	int	     timeout = (instance_config.archive_timeout > 0) ?
+				instance_config.archive_timeout : ARCHIVE_TIMEOUT_DEFAULT;
+	char    *query_text = NULL;
+
+	pg_silent_client_messages(source_conn);
+
+	/* Create restore point
+	 * Only if backup is from master.
+	 * For PG 9.5 create restore point only if pguser is superuser.
+	 */
+	if (!current.from_replica &&
+		!(source_node_info->server_version < 90600 &&
+		  !source_node_info->is_superuser)) //TODO: check correctness
+		pg_create_restore_point(source_conn, current.start_time);
+
+	/* Execute pg_stop_backup using PostgreSQL connection */
+	pg_stop_backup_send(source_conn, source_node_info->server_version, current.from_replica, exclusive_backup, &query_text);
+
+	/*
+	 * Wait for the result of pg_stop_backup(), but no longer than
+	 * archive_timeout seconds
+	 */
+	pg_stop_backup_consume(source_conn, source_node_info->server_version, exclusive_backup, timeout, query_text, &stop_backup_result);
+
+	wait_wal_and_calculate_stop_lsn(dest_xlog_path, stop_backup_result.lsn, &current);
+
+	/* Write backup_label and tablespace_map */
+	Assert(stop_backup_result.backup_label_content != NULL);
+
+	/* Write backup_label */
+	pg_stop_backup_write_file_helper(dest_pgdata, PG_BACKUP_LABEL_FILE, "backup label",
+		stop_backup_result.backup_label_content, stop_backup_result.backup_label_content_len,
+		backup_files_list);
+	free(stop_backup_result.backup_label_content);
+	stop_backup_result.backup_label_content = NULL;
+	stop_backup_result.backup_label_content_len = 0;
+
+	/* Write tablespace_map */
+	if (stop_backup_result.tablespace_map_content != NULL)
+	{
+		pg_stop_backup_write_file_helper(dest_pgdata, PG_TABLESPACE_MAP_FILE, "tablespace map",
+			stop_backup_result.tablespace_map_content, stop_backup_result.tablespace_map_content_len,
+			backup_files_list);
+		free(stop_backup_result.tablespace_map_content);
+		stop_backup_result.tablespace_map_content = NULL;
+		stop_backup_result.tablespace_map_content_len = 0;
+	}
+
+	/* This function will also add list of xlog files
+	 * to the passed filelist */
+	if(wait_WAL_streaming_end(backup_files_list))
+		elog(ERROR, "WAL streaming failed");
+
+	current.recovery_xid = stop_backup_result.snapshot_xid;
+
+	elog(LOG, "Getting the Recovery Time from WAL");
+	/* iterate over WAL from stop_backup lsn to start_backup lsn */
+	if (!read_recovery_info(dest_xlog_path, current.tli,
+						instance_config.xlog_seg_size,
+						current.start_lsn, current.stop_lsn,
+						&current.recovery_time))
+	{
+		elog(LOG, "Failed to find Recovery Time in WAL, forced to trust current_timestamp");
+		current.recovery_time = stop_backup_result.invocation_time;
+	}
+
+	/* Cleanup */
+	pg_free(query_text);
 
 	/* In case of backup from replica >= 9.6 we must fix minRecPoint,
 	 * First we must find pg_control in source_filelist.
@@ -390,99 +557,16 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 }
 
 /*
- * Entry point of pg_probackup CATCHUP subcommand.
- */
-int
-do_catchup(const char *source_pgdata, const char *dest_pgdata, BackupMode backup_mode,
-		   ConnectionOptions conn_opt, bool stream_wal, int num_threads)
-{
-	PGconn		*conn = NULL;
-	PGNodeInfo	nodeInfo;
-	bool		no_sync = false;
-	bool		backup_logs = false;
-	bool        dest_pgdata_is_empty = dir_is_empty(dest_pgdata, FIO_LOCAL_HOST);
-
-	/* Initialize PGInfonode */
-	pgNodeInit(&nodeInfo);
-
-	// TODO: add sanity check that source PGDATA is not empty
-
-	/* Get WAL segments size and system ID of source PG instance */
-	instance_config.xlog_seg_size = get_xlog_seg_size(source_pgdata);
-	instance_config.system_identifier = get_system_identifier(source_pgdata);
-
-	StrNCpy(current.program_version, PROGRAM_VERSION, sizeof(current.program_version));
-
-	elog(INFO, "Catchup start, pg_probackup version: %s, "
-			"wal mode: %s, remote: %s, catchup-source-pgdata: %s, catchup-destination-pgdata: %s",
-			PROGRAM_VERSION,
-			current.stream ? "STREAM" : "ARCHIVE", IsSshProtocol()  ? "true" : "false",
-			source_pgdata, dest_pgdata);
-
-	/* Do some compatibility checks and fill basic info about PG instance */
-	conn = pgdata_basic_setup(instance_config.conn_opt, &nodeInfo);
-
-	elog(INFO, "PostgreSQL version: %s", nodeInfo.server_version_str);
-
-	if (current.from_replica)
-		elog(INFO, "Running catchup from standby");
-
-	/* Check that connected PG instance and source PGDATA are the same */
-	check_system_identifiers(conn, source_pgdata);
-
-	if (!dest_pgdata_is_empty &&
-		 check_incremental_compatibility(dest_pgdata,
-										  instance_config.system_identifier,
-										  INCR_CHECKSUM) != DEST_OK)
-		elog(ERROR, "Incremental restore is not allowed");
-
-	/* below perform checks specific for backup command */
-#if PG_VERSION_NUM >= 110000
-	if (!RetrieveWalSegSize(conn))
-		elog(ERROR, "Failed to retrieve wal_segment_size");
-#endif
-
-	// TODO: move to separate function for reuse in backup.c and catchup.c
-	// ->
-	get_ptrack_version(conn, &nodeInfo);
-
-	if (nodeInfo.ptrack_version_num > 0)
-		nodeInfo.is_ptrack_enable = pg_ptrack_enable(conn, nodeInfo.ptrack_version_num);
-
-	if (backup_mode == BACKUP_MODE_DIFF_PTRACK)
-	{
-		if (nodeInfo.ptrack_version_num == 0)
-			elog(ERROR, "This PostgreSQL instance does not support ptrack");
-		else
-		{
-			if (!nodeInfo.is_ptrack_enable)
-				elog(ERROR, "Ptrack is disabled");
-		}
-	}
-	// <-
-
-	if (current.from_replica && exclusive_backup)
-		elog(ERROR, "Catchup from standby is available only for PG >= 9.6");
-
-	do_catchup_instance(source_pgdata, dest_pgdata, conn, &nodeInfo,
-						backup_mode, no_sync, backup_logs, dest_pgdata_is_empty);
-
-	/* TODO: show the amount of transfered data in bytes and calculate incremental ratio */
-
-	return 0;
-}
-
-/*
  * TODO: add description
  */
 static void *
-catchup_files(void *arg)
+catchup_thread_runner(void *arg)
 {
 	int			i;
 	char		from_fullpath[MAXPGPATH];
 	char		to_fullpath[MAXPGPATH];
 
-	catchup_files_arg *arguments = (catchup_files_arg *) arg;
+	catchup_thread_runner_arg *arguments = (catchup_thread_runner_arg *) arg;
 	int 		n_files = parray_num(arguments->source_filelist);
 
 	/* catchup a file */

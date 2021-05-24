@@ -125,7 +125,7 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 	}
 
 	/* Clear ptrack files for not PTRACK backups */
-	if (current.backup_mode != BACKUP_MODE_DIFF_PTRACK && nodeInfo->is_ptrack_enable)
+	if (current.backup_mode != BACKUP_MODE_DIFF_PTRACK && nodeInfo->is_ptrack_enabled)
 		pg_ptrack_clear(backup_conn, nodeInfo->ptrack_version_num);
 
 	/* notify start of backup to PostgreSQL server */
@@ -812,7 +812,7 @@ do_backup(InstanceState *instanceState, pgSetBackupParams *set_backup_params,
 	//	elog(WARNING, "ptrack_version_num %d", ptrack_version_num);
 
 	if (nodeInfo.ptrack_version_num > 0)
-		nodeInfo.is_ptrack_enable = pg_ptrack_enable(backup_conn, nodeInfo.ptrack_version_num);
+		nodeInfo.is_ptrack_enabled = pg_is_ptrack_enabled(backup_conn, nodeInfo.ptrack_version_num);
 
 	if (current.backup_mode == BACKUP_MODE_DIFF_PTRACK)
 	{
@@ -820,7 +820,7 @@ do_backup(InstanceState *instanceState, pgSetBackupParams *set_backup_params,
 			elog(ERROR, "This PostgreSQL instance does not support ptrack");
 		else
 		{
-			if (!nodeInfo.is_ptrack_enable)
+			if (!nodeInfo.is_ptrack_enabled)
 				elog(ERROR, "Ptrack is disabled");
 		}
 	}

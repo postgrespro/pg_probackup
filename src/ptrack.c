@@ -226,7 +226,7 @@ get_ptrack_version(PGconn *backup_conn, PGNodeInfo *nodeInfo)
  * Check if ptrack is enabled in target instance
  */
 bool
-pg_ptrack_enable(PGconn *backup_conn, int ptrack_version_num)
+pg_is_ptrack_enabled(PGconn *backup_conn, int ptrack_version_num)
 {
 	PGresult   *res_db;
 	bool		result = false;

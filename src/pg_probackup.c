@@ -68,6 +68,8 @@ static char	   *backup_path = NULL;
 static CatalogState *catalogState = NULL;
 /* ================ catalogState (END) =========== */
 
+/* colon separated external directories list ("/path1:/path2") */
+char	   *externaldir = NULL;
 /* common options */
 int			num_threads = 1;
 bool		stream_wal = false;
@@ -451,7 +453,7 @@ main(int argc, char *argv[])
 							catalogState->catalog_path, WAL_SUBDIR);
 	}
 
-	/* backup_path is required for all pg_probackup commands except help, version, checkdb and catchup */
+	/* backup_path is required for all pg_probackup commands except help, version and checkdb */
 	if (backup_path == NULL &&
 		backup_subcmd != CHECKDB_CMD &&
 		backup_subcmd != HELP_CMD &&
@@ -765,8 +767,13 @@ main(int argc, char *argv[])
 			elog(ERROR, "You must specify \"--catchup-destination-pgdata\" option with the \"%s\" command", get_subcmd_name(backup_subcmd));
 		if (current.backup_mode == BACKUP_MODE_INVALID)
 			elog(ERROR, "Required parameter not specified: BACKUP_MODE (-b, --backup-mode)");
-		if (current.backup_mode != BACKUP_MODE_FULL && current.backup_mode != BACKUP_MODE_DIFF_PTRACK)
-			elog(ERROR, "Only \"FULL\" and \"PTRACK\" modes are supported with the \"%s\" command", get_subcmd_name(backup_subcmd));
+		if (current.backup_mode != BACKUP_MODE_FULL && current.backup_mode != BACKUP_MODE_DIFF_PTRACK && current.backup_mode != BACKUP_MODE_DIFF_DELTA)
+			elog(ERROR, "Only \"FULL\", \"PTRACK\" and \"DELTA\" modes are supported with the \"%s\" command", get_subcmd_name(backup_subcmd));
+		if (!stream_wal)
+			elog(INFO, "--stream is required, forcing stream mode");
+		current.stream = stream_wal = true;
+		if (instance_config.external_dir_str)
+			elog(ERROR, "external directories not supported fom \"%s\" command", get_subcmd_name(backup_subcmd));
 		// TODO проверить instance_config.conn_opt
 	}
 
@@ -813,7 +820,7 @@ main(int argc, char *argv[])
 								 no_validate, no_sync, backup_logs);
 			}
 		case CATCHUP_CMD:
-			return do_catchup(catchup_source_pgdata, catchup_destination_pgdata, current.backup_mode, instance_config.conn_opt, stream_wal, num_threads);
+			return do_catchup(catchup_source_pgdata, catchup_destination_pgdata, current.backup_mode, instance_config.conn_opt, num_threads);
 		case RESTORE_CMD:
 			return do_restore_or_validate(instanceState, current.backup_id,
 							recovery_target_options,
