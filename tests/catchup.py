@@ -36,10 +36,11 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             "CREATE TABLE ultimate_question AS SELECT 42 AS answer")
         result = source_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
 
+        dest_pg = self.make_empty_node(os.path.join(module_name, fname, 'dst'))
         dest_pg = self.catchup_node(
             backup_mode = 'FULL',
             source_pgdata = source_pg.data_dir,
-            destination_base_dir = os.path.join(module_name, fname, 'dst'),
+            destination_node = dest_pg,
             options = ['-d', 'postgres', '-p', str(source_pg.port), '--stream', '-j', '4']
             )
         source_pg.stop()
@@ -69,10 +70,11 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             "CREATE TABLE ultimate_question AS SELECT 42 AS answer")
         result = source_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
 
+        dest_pg = self.make_empty_node(os.path.join(module_name, fname, 'dst'))
         dest_pg = self.catchup_node(
             backup_mode = 'FULL',
             source_pgdata = source_pg.data_dir,
-            destination_base_dir = os.path.join(module_name, fname, 'dst'),
+            destination_node = dest_pg,
             options = ['-d', 'postgres', '-p', str(source_pg.port), '--stream', '-j', '4'])
         source_pg.stop()
 
@@ -109,10 +111,11 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         source_pg.safe_psql("postgres", "CREATE TABLE ultimate_question(answer int)")
 
         # make clean shutdowned lagging behind replica
+        dest_pg = self.make_empty_node(os.path.join(module_name, fname, 'dst'))
         dest_pg = self.catchup_node(
             backup_mode = 'FULL',
             source_pgdata = source_pg.data_dir,
-            destination_base_dir = os.path.join(module_name, fname, 'dst'),
+            destination_node = dest_pg,
             options = ['-d', 'postgres', '-p', str(source_pg.port), '--stream'])
         self.set_replica(source_pg, dest_pg)
         dest_pg.slow_start(replica = True)
@@ -129,9 +132,8 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         self.catchup_node(
             backup_mode = 'PTRACK',
             source_pgdata = source_pg.data_dir,
-            destination_base_dir = os.path.join(module_name, fname, 'dst'),
-            options = ['-d', 'postgres', '-p', str(source_pg.port), '--stream'],
-            node = dest_pg)
+            destination_node = dest_pg,
+            options = ['-d', 'postgres', '-p', str(source_pg.port), '--stream'])
 
         # stop replication
         source_pg.stop()

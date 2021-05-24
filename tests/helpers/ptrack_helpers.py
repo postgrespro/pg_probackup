@@ -335,14 +335,9 @@ class ProbackupTest(object):
 #                print('PGPROBACKUP_SSH_USER is not set')
 #                exit(1)
 
-    def make_simple_node(
+    def make_empty_node(
             self,
-            base_dir=None,
-            set_replication=False,
-            ptrack_enable=False,
-            initdb_params=[],
-            pg_options={}):
-
+            base_dir=None):
         real_base_dir = os.path.join(self.tmp_path, base_dir)
         shutil.rmtree(real_base_dir, ignore_errors=True)
         os.makedirs(real_base_dir)
@@ -351,6 +346,17 @@ class ProbackupTest(object):
         # bound method slow_start() to 'node' class instance
         node.slow_start = slow_start.__get__(node)
         node.should_rm_dirs = True
+        return node
+
+    def make_simple_node(
+            self,
+            base_dir=None,
+            set_replication=False,
+            ptrack_enable=False,
+            initdb_params=[],
+            pg_options={}):
+
+        node = self.make_empty_node(base_dir)
         node.init(
            initdb_params=initdb_params, allow_streaming=set_replication)
 
@@ -1033,23 +1039,15 @@ class ProbackupTest(object):
 
     def catchup_node(
             self,
-            backup_mode, source_pgdata, destination_base_dir,
-            options = [],
-            node = None
+            backup_mode, source_pgdata, destination_node,
+            options = []
             ):
-
-        real_destination_dir = os.path.join(self.tmp_path, destination_base_dir)
-        if not node:
-            shutil.rmtree(real_destination_dir, ignore_errors = True)
-            node = testgres.get_new_node('test', base_dir = real_destination_dir)
-            node.slow_start = slow_start.__get__(node)
-            node.should_rm_dirs = True
 
         cmd_list = [
             'catchup',
             '--backup-mode={0}'.format(backup_mode),
             '--catchup-source-pgdata={0}'.format(source_pgdata),
-            '--catchup-destination-pgdata={0}'.format(node.data_dir)
+            '--catchup-destination-pgdata={0}'.format(destination_node.data_dir)
         ]
 
         if self.remote:
@@ -1057,8 +1055,8 @@ class ProbackupTest(object):
 
         self.run_pb(cmd_list + options)
 
-        node.append_conf(port=node.port)
-        return node
+        destination_node.append_conf(port=destination_node.port)
+        return destination_node
 
     def show_pb(
             self, backup_dir, instance=None, backup_id=None,
