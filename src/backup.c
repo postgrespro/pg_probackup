@@ -1431,6 +1431,142 @@ wait_wal_lsn(const char *wal_segment_dir, XLogRecPtr target_lsn, bool is_start_l
 	}
 }
 
+/*
+ * Check stop_lsn (returned from pg_stop_backup()) and update backup->stop_lsn
+ */
+void
+wait_wal_and_calculate_stop_lsn(const char *xlog_path, XLogRecPtr stop_lsn, pgBackup *backup)
+{
+	bool	 stop_lsn_exists = false;
+
+	/* It is ok for replica to return invalid STOP LSN
+	 * UPD: Apparently it is ok even for a master.
+	 */
+	if (!XRecOffIsValid(stop_lsn))
+	{
+		XLogSegNo	segno = 0;
+		XLogRecPtr	lsn_tmp = InvalidXLogRecPtr;
+
+		/*
+		 * Even though the value is invalid, it's expected postgres behaviour
+		 * and we're trying to fix it below.
+		 */
+		elog(LOG, "Invalid offset in stop_lsn value %X/%X, trying to fix",
+			 (uint32) (stop_lsn >> 32), (uint32) (stop_lsn));
+
+		/*
+		 * Note: even with gdb it is very hard to produce automated tests for
+		 * contrecord + invalid LSN, so emulate it for manual testing.
+		 */
+		//lsn = lsn - XLOG_SEG_SIZE;
+		//elog(WARNING, "New Invalid stop_backup_lsn value %X/%X",
+		//	 (uint32) (stop_lsn >> 32), (uint32) (stop_lsn));
+
+		GetXLogSegNo(stop_lsn, segno, instance_config.xlog_seg_size);
+
+		/*
+		 * Note, that there is no guarantee that corresponding WAL file even exists.
+		 * Replica may return LSN from future and keep staying in present.
+		 * Or it can return invalid LSN.
+		 *
+		 * That's bad, since we want to get real LSN to save it in backup label file
+		 * and to use it in WAL validation.
+		 *
+		 * So we try to do the following:
+		 * 1. Wait 'archive_timeout' seconds for segment containing stop_lsn and
+		 *	  look for the first valid record in it.
+		 * 	  It solves the problem of occasional invalid LSN on write-busy system.
+		 * 2. Failing that, look for record in previous segment with endpoint
+		 *	  equal or greater than stop_lsn. It may(!) solve the problem of invalid LSN
+		 *	  on write-idle system. If that fails too, error out.
+		 */
+
+		/* stop_lsn is pointing to a 0 byte of xlog segment */
+		if (stop_lsn % instance_config.xlog_seg_size == 0)
+		{
+			/* Wait for segment with current stop_lsn, it is ok for it to never arrive */
+			wait_wal_lsn(xlog_path, stop_lsn, false, backup->tli,
+						 false, true, WARNING, backup->stream);
+
+			/* Get the first record in segment with current stop_lsn */
+			lsn_tmp = get_first_record_lsn(xlog_path, segno, backup->tli,
+									       instance_config.xlog_seg_size,
+									       instance_config.archive_timeout);
+
+			/* Check that returned LSN is valid and greater than stop_lsn */
+			if (XLogRecPtrIsInvalid(lsn_tmp) ||
+				!XRecOffIsValid(lsn_tmp) ||
+				lsn_tmp < stop_lsn)
+			{
+				/* Backup from master should error out here */
+				if (!backup->from_replica)
+					elog(ERROR, "Failed to get next WAL record after %X/%X",
+								(uint32) (stop_lsn >> 32),
+								(uint32) (stop_lsn));
+
+				/* No luck, falling back to looking up for previous record */
+				elog(WARNING, "Failed to get next WAL record after %X/%X, "
+							"looking for previous WAL record",
+							(uint32) (stop_lsn >> 32),
+							(uint32) (stop_lsn));
+
+				/* Despite looking for previous record there is not guarantee of success
+				 * because previous record can be the contrecord.
+				 */
+				lsn_tmp = wait_wal_lsn(xlog_path, stop_lsn, false, backup->tli,
+									   true, false, ERROR, backup->stream);
+
+				/* sanity */
+				if (!XRecOffIsValid(lsn_tmp) || XLogRecPtrIsInvalid(lsn_tmp))
+					elog(ERROR, "Failed to get WAL record prior to %X/%X",
+								(uint32) (stop_lsn >> 32),
+								(uint32) (stop_lsn));
+			}
+		}
+		/* stop lsn is aligned to xlog block size, just find next lsn */
+		else if (stop_lsn % XLOG_BLCKSZ == 0)
+		{
+			/* Wait for segment with current stop_lsn */
+			wait_wal_lsn(xlog_path, stop_lsn, false, backup->tli,
+						 false, true, ERROR, backup->stream);
+
+			/* Get the next closest record in segment with current stop_lsn */
+			lsn_tmp = get_next_record_lsn(xlog_path, segno, backup->tli,
+									       instance_config.xlog_seg_size,
+									       instance_config.archive_timeout,
+									       stop_lsn);
+
+			/* sanity */
+			if (!XRecOffIsValid(lsn_tmp) || XLogRecPtrIsInvalid(lsn_tmp))
+				elog(ERROR, "Failed to get WAL record next to %X/%X",
+							(uint32) (stop_lsn >> 32),
+							(uint32) (stop_lsn));
+		}
+		/* PostgreSQL returned something very illegal as STOP_LSN, error out */
+		else
+			elog(ERROR, "Invalid stop_backup_lsn value %X/%X",
+				 (uint32) (stop_lsn >> 32), (uint32) (stop_lsn));
+
+		/* Setting stop_backup_lsn will set stop point for streaming */
+		stop_backup_lsn = lsn_tmp;
+		stop_lsn_exists = true;
+	}
+
+	elog(LOG, "stop_lsn: %X/%X",
+		(uint32) (stop_lsn >> 32), (uint32) (stop_lsn));
+
+	/*
+	 * Wait for stop_lsn to be archived or streamed.
+	 * If replica returned valid STOP_LSN of not actually existing record,
+	 * look for previous record with endpoint >= STOP_LSN.
+	 */
+	if (!stop_lsn_exists)
+		stop_backup_lsn = wait_wal_lsn(xlog_path, stop_lsn, false, backup->tli,
+									false, false, ERROR, backup->stream);
+
+	backup->stop_lsn = stop_backup_lsn;
+}
+
 /* Remove annoying NOTICE messages generated by backend */
 void
 pg_silent_client_messages(PGconn *conn)
@@ -1729,7 +1865,6 @@ static void
 pg_stop_backup(InstanceState *instanceState, pgBackup *backup, PGconn *pg_startbackup_conn,
 				PGNodeInfo *nodeInfo)
 {
-	bool	 stop_lsn_exists = false;
 	PGStopBackupResult	stop_backup_result;
 	char	*xlog_path, stream_xlog_path[MAXPGPATH];
 	/* kludge against some old bug in archive_timeout. TODO: remove in 3.0.0 */
@@ -1772,121 +1907,7 @@ pg_stop_backup(InstanceState *instanceState, pgBackup *backup, PGconn *pg_startb
 	else
 		xlog_path = instanceState->instance_wal_subdir_path;
 
-	/* It is ok for replica to return invalid STOP LSN
-	 * UPD: Apparently it is ok even for a master.
-	 */
-	if (!XRecOffIsValid(stop_backup_result.lsn))
-	{
-		XLogSegNo	segno = 0;
-		XLogRecPtr	lsn_tmp = InvalidXLogRecPtr;
-
-		/*
-		 * Even though the value is invalid, it's expected postgres behaviour
-		 * and we're trying to fix it below.
-		 */
-		elog(LOG, "Invalid offset in stop_lsn value %X/%X, trying to fix",
-			 (uint32) (stop_backup_result.lsn >> 32), (uint32) (stop_backup_result.lsn));
-
-		/*
-		 * Note: even with gdb it is very hard to produce automated tests for
-		 * contrecord + invalid LSN, so emulate it for manual testing.
-		 */
-		//stop_backup_result.lsn = stop_backup_result.lsn - XLOG_SEG_SIZE;
-		//elog(WARNING, "New Invalid stop_backup_lsn value %X/%X",
-		//	 (uint32) (stop_backup_result.lsn >> 32), (uint32) (stop_backup_result.lsn));
-
-		GetXLogSegNo(stop_backup_result.lsn, segno, instance_config.xlog_seg_size);
-
-		/*
-		 * Note, that there is no guarantee that corresponding WAL file even exists.
-		 * Replica may return LSN from future and keep staying in present.
-		 * Or it can return invalid LSN.
-		 *
-		 * That's bad, since we want to get real LSN to save it in backup label file
-		 * and to use it in WAL validation.
-		 *
-		 * So we try to do the following:
-		 * 1. Wait 'archive_timeout' seconds for segment containing stop_lsn and
-		 *	  look for the first valid record in it.
-		 * 	  It solves the problem of occasional invalid LSN on write-busy system.
-		 * 2. Failing that, look for record in previous segment with endpoint
-		 *	  equal or greater than stop_lsn. It may(!) solve the problem of invalid LSN
-		 *	  on write-idle system. If that fails too, error out.
-		 */
-
-		/* stop_lsn is pointing to a 0 byte of xlog segment */
-		if (stop_backup_result.lsn % instance_config.xlog_seg_size == 0)
-		{
-			/* Wait for segment with current stop_lsn, it is ok for it to never arrive */
-			wait_wal_lsn(xlog_path, stop_backup_result.lsn, false, backup->tli,
-						 false, true, WARNING, backup->stream);
-
-			/* Get the first record in segment with current stop_lsn */
-			lsn_tmp = get_first_record_lsn(xlog_path, segno, backup->tli,
-									       instance_config.xlog_seg_size,
-									       instance_config.archive_timeout);
-
-			/* Check that returned LSN is valid and greater than stop_lsn */
-			if (XLogRecPtrIsInvalid(lsn_tmp) ||
-				!XRecOffIsValid(lsn_tmp) ||
-				lsn_tmp < stop_backup_result.lsn)
-			{
-				/* Backup from master should error out here */
-				if (!backup->from_replica)
-					elog(ERROR, "Failed to get next WAL record after %X/%X",
-								(uint32) (stop_backup_result.lsn >> 32),
-								(uint32) (stop_backup_result.lsn));
-
-				/* No luck, falling back to looking up for previous record */
-				elog(WARNING, "Failed to get next WAL record after %X/%X, "
-							"looking for previous WAL record",
-							(uint32) (stop_backup_result.lsn >> 32),
-							(uint32) (stop_backup_result.lsn));
-
-				/* Despite looking for previous record there is not guarantee of success
-				 * because previous record can be the contrecord.
-				 */
-				lsn_tmp = wait_wal_lsn(xlog_path, stop_backup_result.lsn, false, backup->tli,
-									   true, false, ERROR, backup->stream);
-
-				/* sanity */
-				if (!XRecOffIsValid(lsn_tmp) || XLogRecPtrIsInvalid(lsn_tmp))
-					elog(ERROR, "Failed to get WAL record prior to %X/%X",
-								(uint32) (stop_backup_result.lsn >> 32),
-								(uint32) (stop_backup_result.lsn));
-			}
-		}
-		/* stop lsn is aligned to xlog block size, just find next lsn */
-		else if (stop_backup_result.lsn % XLOG_BLCKSZ == 0)
-		{
-			/* Wait for segment with current stop_lsn */
-			wait_wal_lsn(xlog_path, stop_backup_result.lsn, false, backup->tli,
-						 false, true, ERROR, backup->stream);
-
-			/* Get the next closest record in segment with current stop_lsn */
-			lsn_tmp = get_next_record_lsn(xlog_path, segno, backup->tli,
-									       instance_config.xlog_seg_size,
-									       instance_config.archive_timeout,
-									       stop_backup_result.lsn);
-
-			/* sanity */
-			if (!XRecOffIsValid(lsn_tmp) || XLogRecPtrIsInvalid(lsn_tmp))
-				elog(ERROR, "Failed to get WAL record next to %X/%X",
-							(uint32) (stop_backup_result.lsn >> 32),
-							(uint32) (stop_backup_result.lsn));
-		}
-		/* PostgreSQL returned something very illegal as STOP_LSN, error out */
-		else
-			elog(ERROR, "Invalid stop_backup_lsn value %X/%X",
-				 (uint32) (stop_backup_result.lsn >> 32), (uint32) (stop_backup_result.lsn));
-
-		/* Setting stop_backup_lsn will set stop point for streaming */
-		stop_backup_lsn = lsn_tmp;
-		stop_lsn_exists = true;
-	}
-
-	elog(LOG, "stop_lsn: %X/%X",
-		(uint32) (stop_backup_result.lsn >> 32), (uint32) (stop_backup_result.lsn));
+	wait_wal_and_calculate_stop_lsn(xlog_path, stop_backup_result.lsn, backup);
 
 	/* Write backup_label and tablespace_map */
 	if (!exclusive_backup)
@@ -1917,15 +1938,6 @@ pg_stop_backup(InstanceState *instanceState, pgBackup *backup, PGconn *pg_startb
 		}
 	}
 
-	/*
-	 * Wait for stop_lsn to be archived or streamed.
-	 * If replica returned valid STOP_LSN of not actually existing record,
-	 * look for previous record with endpoint >= STOP_LSN.
-	 */
-	if (!stop_lsn_exists)
-		stop_backup_lsn = wait_wal_lsn(xlog_path, stop_backup_result.lsn, false, backup->tli,
-									false, false, ERROR, backup->stream);
-
 	if (backup->stream)
 	{
 		/* This function will also add list of xlog files
@@ -1934,7 +1946,6 @@ pg_stop_backup(InstanceState *instanceState, pgBackup *backup, PGconn *pg_startb
 			elog(ERROR, "WAL streaming failed");
 	}
 
-	backup->stop_lsn = stop_backup_lsn;
 	backup->recovery_xid = stop_backup_result.snapshot_xid;
 
 	elog(LOG, "Getting the Recovery Time from WAL");

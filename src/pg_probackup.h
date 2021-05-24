@@ -1295,6 +1295,6 @@ extern void pg_stop_backup_write_file_helper(const char *path, const char *filen
 extern XLogRecPtr wait_wal_lsn(const char *wal_segment_dir, XLogRecPtr lsn, bool is_start_lsn, TimeLineID tli,
 								bool in_prev_segment, bool segment_only,
 								int timeout_elevel, bool in_stream_dir);
-
+extern void wait_wal_and_calculate_stop_lsn(const char *xlog_path, XLogRecPtr stop_lsn, pgBackup *backup);
 
 #endif /* PG_PROBACKUP_H */
