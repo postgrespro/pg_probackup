@@ -1756,7 +1756,6 @@ static void
 pg_stop_backup(InstanceState *instanceState, pgBackup *backup, PGconn *pg_startbackup_conn,
 				PGNodeInfo *nodeInfo)
 {
-	PGconn	*conn;
 	bool	 stop_lsn_exists = false;
 	PGStopBackupResult	stop_backup_result;
 	char	*xlog_path, stream_xlog_path[MAXPGPATH];
@@ -1769,9 +1768,7 @@ pg_stop_backup(InstanceState *instanceState, pgBackup *backup, PGconn *pg_startb
 	if (!backup_in_progress)
 		elog(ERROR, "backup is not in progress");
 
-	conn = pg_startbackup_conn;
-
-	pg_silent_client_messages(conn);
+	pg_silent_client_messages(pg_startbackup_conn);
 
 	/* Create restore point
 	 * Only if backup is from master.
@@ -1780,16 +1777,16 @@ pg_stop_backup(InstanceState *instanceState, pgBackup *backup, PGconn *pg_startb
 	if (!backup->from_replica &&
 		!(nodeInfo->server_version < 90600 &&
 		  !nodeInfo->is_superuser)) //TODO: check correctness
-		pg_create_restore_point(conn, backup->start_time);
+		pg_create_restore_point(pg_startbackup_conn, backup->start_time);
 
 	/* Execute pg_stop_backup using PostgreSQL connection */
-	pg_stop_backup_send(conn, nodeInfo->server_version, current.from_replica, exclusive_backup, &query_text);
+	pg_stop_backup_send(pg_startbackup_conn, nodeInfo->server_version, current.from_replica, exclusive_backup, &query_text);
 
 	/*
 	 * Wait for the result of pg_stop_backup(), but no longer than
 	 * archive_timeout seconds
 	 */
-	pg_stop_backup_consume(conn, nodeInfo->server_version, exclusive_backup, timeout, query_text, &stop_backup_result);
+	pg_stop_backup_consume(pg_startbackup_conn, nodeInfo->server_version, exclusive_backup, timeout, query_text, &stop_backup_result);
 
 	if (stream_wal)
 	{
