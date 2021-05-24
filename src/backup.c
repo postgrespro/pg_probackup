@@ -75,9 +75,9 @@ static void pg_create_restore_point(PGconn *conn, time_t backup_start_time);
 static void pg_stop_backup(InstanceState *instanceState, pgBackup *backup, PGconn *pg_startbackup_conn, PGNodeInfo *nodeInfo);
 static void pg_stop_backup_send(PGconn *conn, int server_version, bool is_started_on_replica, bool is_exclusive, char **query_text);
 
-static XLogRecPtr wait_wal_lsn(InstanceState *instanceState, XLogRecPtr lsn, bool is_start_lsn, TimeLineID tli,
+static XLogRecPtr wait_wal_lsn(const char *wal_segment_dir, XLogRecPtr lsn, bool is_start_lsn, TimeLineID tli,
 								bool in_prev_segment, bool segment_only,
-								int timeout_elevel, bool in_stream_dir, pgBackup *backup);
+								int timeout_elevel, bool in_stream_dir);
 
 static void check_external_for_tablespaces(parray *external_list,
 										   PGconn *backup_conn);
@@ -298,7 +298,7 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 		 * Because WAL streaming will start after pg_start_backup() in stream
 		 * mode.
 		 */
-		wait_wal_lsn(instanceState, current.start_lsn, true, current.tli, false, true, ERROR, false, &current);
+		wait_wal_lsn(instanceState->instance_wal_subdir_path, current.start_lsn, true, current.tli, false, true, ERROR, false);
 	}
 
 	/* start stream replication */
@@ -314,7 +314,7 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 		 * PAGE backup in stream mode is waited twice, first for
 		 * segment in WAL archive and then for streamed segment
 		 */
-		wait_wal_lsn(instanceState, current.start_lsn, true, current.tli, false, true, ERROR, true, &current);
+		wait_wal_lsn(dst_backup_path, current.start_lsn, true, current.tli, false, true, ERROR, true);
 	}
 
 	/* initialize backup's file list */
@@ -1298,14 +1298,12 @@ pg_is_superuser(PGconn *conn)
  * Returns InvalidXLogRecPtr if 'segment_only' flag is used.
  */
 static XLogRecPtr
-wait_wal_lsn(InstanceState *instanceState, XLogRecPtr target_lsn, bool is_start_lsn, TimeLineID tli,
+wait_wal_lsn(const char *wal_segment_dir, XLogRecPtr target_lsn, bool is_start_lsn, TimeLineID tli,
 			 bool in_prev_segment, bool segment_only,
-			 int timeout_elevel, bool in_stream_dir, pgBackup *backup)
+			 int timeout_elevel, bool in_stream_dir)
 {
 	XLogSegNo	targetSegNo;
-	char		pg_wal_dir[MAXPGPATH];
 	char		wal_segment_path[MAXPGPATH],
-			   *wal_segment_dir,
 				wal_segment[MAXFNAMELEN];
 	bool		file_exists = false;
 	uint32		try_count = 0,
@@ -1323,6 +1321,7 @@ wait_wal_lsn(InstanceState *instanceState, XLogRecPtr target_lsn, bool is_start_
 	GetXLogFileName(wal_segment, tli, targetSegNo,
 					instance_config.xlog_seg_size);
 
+	join_path_components(wal_segment_path, wal_segment_dir, wal_segment);
 	/*
 	 * In pg_start_backup we wait for 'target_lsn' in 'pg_wal' directory if it is
 	 * stream and non-page backup. Page backup needs archived WAL files, so we
@@ -1330,17 +1329,6 @@ wait_wal_lsn(InstanceState *instanceState, XLogRecPtr target_lsn, bool is_start_
 	 *
 	 * In pg_stop_backup it depends only on stream_wal.
 	 */
-	if (in_stream_dir)
-	{
-		join_path_components(pg_wal_dir, backup->database_dir, PG_XLOG_DIR);
-		join_path_components(wal_segment_path, pg_wal_dir, wal_segment);
-		wal_segment_dir = pg_wal_dir;
-	}
-	else
-	{
-		join_path_components(wal_segment_path, instanceState->instance_wal_subdir_path, wal_segment);
-		wal_segment_dir = instanceState->instance_wal_subdir_path;
-	}
 
 	/* TODO: remove this in 3.0 (it is a cludge against some old bug with archive_timeout) */
 	if (instance_config.archive_timeout > 0)
@@ -1771,7 +1759,7 @@ pg_stop_backup(InstanceState *instanceState, pgBackup *backup, PGconn *pg_startb
 	PGconn	*conn;
 	bool	 stop_lsn_exists = false;
 	PGStopBackupResult	stop_backup_result;
-	char	*xlog_path,stream_xlog_path[MAXPGPATH];
+	char	*xlog_path, stream_xlog_path[MAXPGPATH];
 	/* kludge against some old bug in archive_timeout. TODO: remove in 3.0.0 */
 	int	     timeout = (instance_config.archive_timeout > 0) ?
 				instance_config.archive_timeout : ARCHIVE_TIMEOUT_DEFAULT;
@@ -1803,13 +1791,22 @@ pg_stop_backup(InstanceState *instanceState, pgBackup *backup, PGconn *pg_startb
 	 */
 	pg_stop_backup_consume(conn, nodeInfo->server_version, exclusive_backup, timeout, query_text, &stop_backup_result);
 
+	if (stream_wal)
+	{
+		snprintf(stream_xlog_path, lengthof(stream_xlog_path),
+				 "%s/%s/%s/%s", instanceState->instance_backup_subdir_path,
+				 base36enc(backup->start_time),
+				 DATABASE_DIR, PG_XLOG_DIR);
+		xlog_path = stream_xlog_path;
+	}
+	else
+		xlog_path = instanceState->instance_wal_subdir_path;
+
 	/* It is ok for replica to return invalid STOP LSN
 	 * UPD: Apparently it is ok even for a master.
 	 */
 	if (!XRecOffIsValid(stop_backup_result.lsn))
 	{
-		char	   *xlog_path,
-					stream_xlog_path[MAXPGPATH];
 		XLogSegNo	segno = 0;
 		XLogRecPtr	lsn_tmp = InvalidXLogRecPtr;
 
@@ -1827,17 +1824,6 @@ pg_stop_backup(InstanceState *instanceState, pgBackup *backup, PGconn *pg_startb
 		//stop_backup_result.lsn = stop_backup_result.lsn - XLOG_SEG_SIZE;
 		//elog(WARNING, "New Invalid stop_backup_lsn value %X/%X",
 		//	 (uint32) (stop_backup_result.lsn >> 32), (uint32) (stop_backup_result.lsn));
-
-		if (stream_wal)
-		{
-			snprintf(stream_xlog_path, lengthof(stream_xlog_path),
-					 "%s/%s/%s/%s", instanceState->instance_backup_subdir_path,
-					 base36enc(backup->start_time),
-					 DATABASE_DIR, PG_XLOG_DIR);
-			xlog_path = stream_xlog_path;
-		}
-		else
-			xlog_path = instanceState->instance_wal_subdir_path;
 
 		GetXLogSegNo(stop_backup_result.lsn, segno, instance_config.xlog_seg_size);
 
@@ -1862,8 +1848,8 @@ pg_stop_backup(InstanceState *instanceState, pgBackup *backup, PGconn *pg_startb
 		if (stop_backup_result.lsn % instance_config.xlog_seg_size == 0)
 		{
 			/* Wait for segment with current stop_lsn, it is ok for it to never arrive */
-			wait_wal_lsn(instanceState, stop_backup_result.lsn, false, backup->tli,
-						 false, true, WARNING, stream_wal, backup);
+			wait_wal_lsn(xlog_path, stop_backup_result.lsn, false, backup->tli,
+						 false, true, WARNING, stream_wal);
 
 			/* Get the first record in segment with current stop_lsn */
 			lsn_tmp = get_first_record_lsn(xlog_path, segno, backup->tli,
@@ -1890,8 +1876,8 @@ pg_stop_backup(InstanceState *instanceState, pgBackup *backup, PGconn *pg_startb
 				/* Despite looking for previous record there is not guarantee of success
 				 * because previous record can be the contrecord.
 				 */
-				lsn_tmp = wait_wal_lsn(instanceState, stop_backup_result.lsn, false, backup->tli,
-									   true, false, ERROR, stream_wal, backup);
+				lsn_tmp = wait_wal_lsn(xlog_path, stop_backup_result.lsn, false, backup->tli,
+									   true, false, ERROR, stream_wal);
 
 				/* sanity */
 				if (!XRecOffIsValid(lsn_tmp) || XLogRecPtrIsInvalid(lsn_tmp))
@@ -1904,8 +1890,8 @@ pg_stop_backup(InstanceState *instanceState, pgBackup *backup, PGconn *pg_startb
 		else if (stop_backup_result.lsn % XLOG_BLCKSZ == 0)
 		{
 			/* Wait for segment with current stop_lsn */
-			wait_wal_lsn(instanceState, stop_backup_result.lsn, false, backup->tli,
-						 false, true, ERROR, stream_wal, backup);
+			wait_wal_lsn(xlog_path, stop_backup_result.lsn, false, backup->tli,
+						 false, true, ERROR, stream_wal);
 
 			/* Get the next closest record in segment with current stop_lsn */
 			lsn_tmp = get_next_record_lsn(xlog_path, segno, backup->tli,
@@ -1967,8 +1953,8 @@ pg_stop_backup(InstanceState *instanceState, pgBackup *backup, PGconn *pg_startb
 	 * look for previous record with endpoint >= STOP_LSN.
 	 */
 	if (!stop_lsn_exists)
-		stop_backup_lsn = wait_wal_lsn(instanceState, stop_backup_result.lsn, false, backup->tli,
-									false, false, ERROR, stream_wal, backup);
+		stop_backup_lsn = wait_wal_lsn(xlog_path, stop_backup_result.lsn, false, backup->tli,
+									false, false, ERROR, stream_wal);
 
 	if (stream_wal)
 	{
@@ -1976,15 +1962,7 @@ pg_stop_backup(InstanceState *instanceState, pgBackup *backup, PGconn *pg_startb
 		 * to the passed filelist */
 		if(wait_WAL_streaming_end(backup_files_list))
 			elog(ERROR, "WAL streaming failed");
-
-		snprintf(stream_xlog_path, lengthof(stream_xlog_path), "%s/%s/%s/%s",
-			 instanceState->instance_backup_subdir_path, base36enc(backup->start_time),
-			 DATABASE_DIR, PG_XLOG_DIR);
-
-		xlog_path = stream_xlog_path;
 	}
-	else
-		xlog_path = instanceState->instance_wal_subdir_path;
 
 	backup->stop_lsn = stop_backup_lsn;
 	backup->recovery_xid = stop_backup_result.snapshot_xid;
