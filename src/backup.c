@@ -259,7 +259,7 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 	write_backup(&current, true);
 
 	/* In PAGE mode or in ARCHIVE wal-mode wait for current segment */
-	if (current.backup_mode == BACKUP_MODE_DIFF_PAGE || !stream_wal)
+	if (current.backup_mode == BACKUP_MODE_DIFF_PAGE || !current.stream)
 	{
 		/* Check that archive_dir can be reached */
 		if (fio_access(instanceState->instance_wal_subdir_path, F_OK, FIO_BACKUP_HOST) != 0)
@@ -275,7 +275,7 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 	}
 
 	/* start stream replication */
-	if (stream_wal)
+	if (current.stream)
 	{
 		join_path_components(dst_backup_path, current.database_dir, PG_XLOG_DIR);
 		fio_mkdir(dst_backup_path, DIR_PERMISSION, FIO_BACKUP_HOST);
@@ -1076,7 +1076,7 @@ pg_start_backup(const char *label, bool smooth, pgBackup *backup,
 
 	PQclear(res);
 
-	if ((!stream_wal || current.backup_mode == BACKUP_MODE_DIFF_PAGE) &&
+	if ((!backup->stream || backup->backup_mode == BACKUP_MODE_DIFF_PAGE) &&
 		!backup->from_replica &&
 		!(nodeInfo->server_version < 90600 &&
 		  !nodeInfo->is_superuser))
@@ -1261,7 +1261,7 @@ pg_is_superuser(PGconn *conn)
  *  previous segment.
  *
  * Flag 'in_stream_dir' determine whether we looking for WAL in 'pg_wal' directory or
- * in archive. Do note, that we cannot rely sorely on global variable 'stream_wal' because,
+ * in archive. Do note, that we cannot rely sorely on global variable 'stream_wal' (current.stream) because,
  * for example, PAGE backup must(!) look for start_lsn in archive regardless of wal_mode.
  *
  * 'timeout_elevel' determine the elevel for timeout elog message. If elevel lighter than
@@ -1407,7 +1407,7 @@ wait_wal_lsn(const char *wal_segment_dir, XLogRecPtr target_lsn, bool is_start_l
 					 wal_delivery_str, wal_segment_path);
 		}
 
-		if (!stream_wal && is_start_lsn && try_count == 30)
+		if (!current.stream && is_start_lsn && try_count == 30)
 			elog(WARNING, "By default pg_probackup assume WAL delivery method to be ARCHIVE. "
 				 "If continuous archiving is not set up, use '--stream' option to make autonomous backup. "
 				 "Otherwise check that continuous archiving works correctly.");
@@ -1753,7 +1753,7 @@ pg_stop_backup(InstanceState *instanceState, pgBackup *backup, PGconn *pg_startb
 		pg_create_restore_point(pg_startbackup_conn, backup->start_time);
 
 	/* Execute pg_stop_backup using PostgreSQL connection */
-	pg_stop_backup_send(pg_startbackup_conn, nodeInfo->server_version, current.from_replica, exclusive_backup, &query_text);
+	pg_stop_backup_send(pg_startbackup_conn, nodeInfo->server_version, backup->from_replica, exclusive_backup, &query_text);
 
 	/*
 	 * Wait for the result of pg_stop_backup(), but no longer than
@@ -1761,7 +1761,7 @@ pg_stop_backup(InstanceState *instanceState, pgBackup *backup, PGconn *pg_startb
 	 */
 	pg_stop_backup_consume(pg_startbackup_conn, nodeInfo->server_version, exclusive_backup, timeout, query_text, &stop_backup_result);
 
-	if (stream_wal)
+	if (backup->stream)
 	{
 		snprintf(stream_xlog_path, lengthof(stream_xlog_path),
 				 "%s/%s/%s/%s", instanceState->instance_backup_subdir_path,
@@ -1819,7 +1819,7 @@ pg_stop_backup(InstanceState *instanceState, pgBackup *backup, PGconn *pg_startb
 		{
 			/* Wait for segment with current stop_lsn, it is ok for it to never arrive */
 			wait_wal_lsn(xlog_path, stop_backup_result.lsn, false, backup->tli,
-						 false, true, WARNING, stream_wal);
+						 false, true, WARNING, backup->stream);
 
 			/* Get the first record in segment with current stop_lsn */
 			lsn_tmp = get_first_record_lsn(xlog_path, segno, backup->tli,
@@ -1847,7 +1847,7 @@ pg_stop_backup(InstanceState *instanceState, pgBackup *backup, PGconn *pg_startb
 				 * because previous record can be the contrecord.
 				 */
 				lsn_tmp = wait_wal_lsn(xlog_path, stop_backup_result.lsn, false, backup->tli,
-									   true, false, ERROR, stream_wal);
+									   true, false, ERROR, backup->stream);
 
 				/* sanity */
 				if (!XRecOffIsValid(lsn_tmp) || XLogRecPtrIsInvalid(lsn_tmp))
@@ -1861,7 +1861,7 @@ pg_stop_backup(InstanceState *instanceState, pgBackup *backup, PGconn *pg_startb
 		{
 			/* Wait for segment with current stop_lsn */
 			wait_wal_lsn(xlog_path, stop_backup_result.lsn, false, backup->tli,
-						 false, true, ERROR, stream_wal);
+						 false, true, ERROR, backup->stream);
 
 			/* Get the next closest record in segment with current stop_lsn */
 			lsn_tmp = get_next_record_lsn(xlog_path, segno, backup->tli,
@@ -1924,9 +1924,9 @@ pg_stop_backup(InstanceState *instanceState, pgBackup *backup, PGconn *pg_startb
 	 */
 	if (!stop_lsn_exists)
 		stop_backup_lsn = wait_wal_lsn(xlog_path, stop_backup_result.lsn, false, backup->tli,
-									false, false, ERROR, stream_wal);
+									false, false, ERROR, backup->stream);
 
-	if (stream_wal)
+	if (backup->stream)
 	{
 		/* This function will also add list of xlog files
 		 * to the passed filelist */
