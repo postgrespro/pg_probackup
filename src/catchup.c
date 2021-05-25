@@ -339,10 +339,20 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 		else
 		{
 			/* this directory located in pg_tblspc */
-			const char *linked_path = leaked_abstraction_get_tablespace_mapping(file->name);
+			const char *linked_path = NULL;
 			char	to_path[MAXPGPATH];
 
-			//elog(WARNING, "pgFile name: %s rel_path: %s linked: %s\n", file->name, file->rel_path, file->linked);
+			{ /* get full symlink path and map this path to new location */
+				char	source_full_path[MAXPGPATH];
+				char	symlink_content[MAXPGPATH];
+				join_path_components(source_full_path, source_pgdata, file->rel_path);
+				fio_readlink(source_full_path, symlink_content, sizeof(symlink_content), FIO_DB_HOST);
+				linked_path = leaked_abstraction_get_tablespace_mapping(symlink_content);
+				elog(WARNING, "Map tablespace full_path: \"%s\" old_symlink_content: \"%s\" old_symlink_content: \"%s\"\n",
+					source_full_path,
+					symlink_content,
+					linked_path);
+			}
 
 			if (!is_absolute_path(linked_path))
 				elog(ERROR, "Tablespace directory path must be an absolute path: %s\n",

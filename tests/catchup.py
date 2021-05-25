@@ -85,8 +85,8 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             'Different answer from copy')
         dest_pg.stop()
 
-        source_pgdata = self.pgdata_content(source_node.data_dir)
-        dest_pgdata = self.pgdata_content(dest_node.data_dir)
+        source_pgdata = self.pgdata_content(source_pg.data_dir)
+        dest_pgdata = self.pgdata_content(dest_pg.data_dir)
         self.compare_pgdata(source_pgdata, dest_pgdata)
 
         # Clean after yourself

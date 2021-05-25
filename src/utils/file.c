@@ -1062,6 +1062,46 @@ int fio_stat(char const* path, struct stat* st, bool follow_symlink, fio_locatio
 	}
 }
 
+/*
+ * Read value of a symbolic link
+ * this is a wrapper about readlink() syscall
+ * side effects: string truncation occur (and it
+ * can be checked by caller by comparing
+ * returned value >= valsiz)
+ */
+ssize_t
+fio_readlink(const char *path, char *value, size_t valsiz, fio_location location)
+{
+	if (!fio_is_remote(location))
+	{
+		/* readlink don't place trailing \0 */
+		ssize_t len = readlink(path, value, valsiz);
+		value[len < valsiz ? len : valsiz] = '\0';
+		return len;
+	}
+	else
+	{
+		fio_header hdr;
+		size_t path_len = strlen(path) + 1;
+
+		hdr.cop = FIO_READLINK;
+		hdr.handle = -1;
+		Assert(valsiz <= UINT_MAX); /* max value of fio_header.arg */
+		hdr.arg = valsiz;
+		hdr.size = path_len;
+
+		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
+		IO_CHECK(fio_write_all(fio_stdout, path, path_len), path_len);
+
+		IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
+		Assert(hdr.cop == FIO_READLINK);
+		Assert(hdr.size <= valsiz);
+		IO_CHECK(fio_read_all(fio_stdin, value, hdr.size), hdr.size);
+		value[hdr.size < valsiz ? hdr.size : valsiz] = '\0';
+		return hdr.size;
+	}
+}
+
 /* Check presence of the file */
 int fio_access(char const* path, int mode, fio_location location)
 {
@@ -3174,6 +3214,26 @@ void fio_communicate(int in, int out)
 			break;
 		  case FIO_GET_ASYNC_ERROR:
 			fio_get_async_error_impl(out);
+			break;
+		  case FIO_READLINK: /* Read content of a symbolic link */
+			{
+				/*
+				 * We need a buf for a arguments and for a result at the same time
+				 * hdr.size = strlen(symlink_name) + 1
+				 * hdr.arg = bufsize for a answer (symlink content)
+				 */
+				size_t filename_size = (size_t)hdr.size;
+				if (filename_size + hdr.arg > buf_size) {
+					buf_size = hdr.arg;
+					buf = (char*)realloc(buf, buf_size);
+				}
+				rc = readlink(buf, buf + filename_size, hdr.arg);
+				hdr.cop = FIO_READLINK;
+				hdr.size = rc > 0 ? rc : 0;
+				IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
+				if (hdr.size != 0)
+					IO_CHECK(fio_write_all(out, buf + filename_size, hdr.size), hdr.size);
+			}
 			break;
 		  default:
 			Assert(false);
