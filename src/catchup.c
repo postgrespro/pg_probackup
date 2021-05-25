@@ -26,12 +26,11 @@
 /*
  * Catchup routines
  */
-static PGconn *catchup_collect_info(PGNodeInfo *source_node_info, const char *source_pgdata, const char *dest_pgdata,
-		BackupMode backup_mode, ConnectionOptions conn_opt);
-static void catchup_preflight_checks(PGNodeInfo *source_node_info, PGconn *source_conn,
-		const char *source_pgdata, BackupMode backup_mode);
+static PGconn *catchup_collect_info(PGNodeInfo *source_node_info, const char *source_pgdata, const char *dest_pgdata);
+static void catchup_preflight_checks(PGNodeInfo *source_node_info, PGconn *source_conn, const char *source_pgdata, 
+					const char *dest_pgdata, bool dest_pgdata_is_empty);
 static void do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *source_conn,
-					PGNodeInfo *nodeInfo, BackupMode backup_mode, bool no_sync, bool backup_logs,
+					PGNodeInfo *nodeInfo, bool no_sync, bool backup_logs,
 					bool dest_pgdata_is_empty);
 static void *catchup_thread_runner(void *arg);
 
@@ -39,29 +38,19 @@ static void *catchup_thread_runner(void *arg);
  * Entry point of pg_probackup CATCHUP subcommand.
  */
 int
-do_catchup(const char *source_pgdata, const char *dest_pgdata, BackupMode backup_mode,
-		   ConnectionOptions conn_opt, int num_threads)
+do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads)
 {
 	PGconn		*source_conn = NULL;
 	PGNodeInfo	source_node_info;
 	bool		no_sync = false;
 	bool		backup_logs = false;
-	bool        dest_pgdata_is_empty = dir_is_empty(dest_pgdata, FIO_LOCAL_HOST);
+	bool		dest_pgdata_is_empty = dir_is_empty(dest_pgdata, FIO_LOCAL_HOST);
 
-	source_conn = catchup_collect_info(&source_node_info, source_pgdata, dest_pgdata, backup_mode, conn_opt);
-	catchup_preflight_checks(&source_node_info, source_conn, source_pgdata, backup_mode);
-
-	if (!dest_pgdata_is_empty &&
-		 check_incremental_compatibility(dest_pgdata,
-										  instance_config.system_identifier,
-										  INCR_CHECKSUM) != DEST_OK)
-		elog(ERROR, "Incremental restore is not allowed");
-
-	if (current.from_replica && exclusive_backup)
-		elog(ERROR, "Catchup from standby is available only for PG >= 9.6");
+	source_conn = catchup_collect_info(&source_node_info, source_pgdata, dest_pgdata);
+	catchup_preflight_checks(&source_node_info, source_conn, source_pgdata, dest_pgdata, dest_pgdata_is_empty);
 
 	do_catchup_instance(source_pgdata, dest_pgdata, source_conn, &source_node_info,
-						backup_mode, no_sync, backup_logs, dest_pgdata_is_empty);
+						no_sync, backup_logs, dest_pgdata_is_empty);
 
 	/* TODO: show the amount of transfered data in bytes and calculate incremental ratio */
 
@@ -69,8 +58,7 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, BackupMode backup
 }
 
 static PGconn *
-catchup_collect_info(PGNodeInfo	*source_node_info, const char *source_pgdata, const char *dest_pgdata,
-		BackupMode backup_mode, ConnectionOptions conn_opt)
+catchup_collect_info(PGNodeInfo	*source_node_info, const char *source_pgdata, const char *dest_pgdata)
 {
 	PGconn		*source_conn;
 	/* Initialize PGInfonode */
@@ -86,7 +74,7 @@ catchup_collect_info(PGNodeInfo	*source_node_info, const char *source_pgdata, co
 	//current.compress_level = instance_config.compress_level;
 
 	/* Do some compatibility checks and fill basic info about PG instance */
-	source_conn = pgdata_basic_setup(conn_opt, source_node_info);
+	source_conn = pgdata_basic_setup(instance_config.conn_opt, source_node_info);
 
 	/* below perform checks specific for backup command */
 #if PG_VERSION_NUM >= 110000
@@ -120,14 +108,14 @@ catchup_collect_info(PGNodeInfo	*source_node_info, const char *source_pgdata, co
 
 static void
 catchup_preflight_checks(PGNodeInfo *source_node_info, PGconn *source_conn,
-		const char *source_pgdata, BackupMode backup_mode)
+		const char *source_pgdata, const char *dest_pgdata, bool dest_pgdata_is_empty)
 {
 	// TODO: add sanity check that source PGDATA is not empty
 
 	/* Check that connected PG instance and source PGDATA are the same */
 	check_system_identifiers(source_conn, source_pgdata);
 
-	if (backup_mode == BACKUP_MODE_DIFF_PTRACK)
+	if (current.backup_mode == BACKUP_MODE_DIFF_PTRACK)
 	{
 		if (source_node_info->ptrack_version_num == 0)
 			elog(ERROR, "This PostgreSQL instance does not support ptrack");
@@ -137,6 +125,17 @@ catchup_preflight_checks(PGNodeInfo *source_node_info, PGconn *source_conn,
 		else if (!source_node_info->is_ptrack_enabled)
 			elog(ERROR, "Ptrack is disabled");
 	}
+
+	if (!dest_pgdata_is_empty &&
+		 check_incremental_compatibility(dest_pgdata,
+										  instance_config.system_identifier,
+										  INCR_CHECKSUM) != DEST_OK)
+		elog(ERROR, "Catchup is not possible in this destination");
+
+	if (current.from_replica && exclusive_backup)
+		elog(ERROR, "Catchup from standby is available only for PG >= 9.6");
+
+	// TODO check if it is local catchup and source contain tablespaces
 }
 
 /*
@@ -146,13 +145,13 @@ catchup_preflight_checks(PGNodeInfo *source_node_info, PGconn *source_conn,
  */
 static void
 do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *source_conn,
-					PGNodeInfo *source_node_info, BackupMode backup_mode, bool no_sync, bool backup_logs,
+					PGNodeInfo *source_node_info, bool no_sync, bool backup_logs,
 					bool dest_pgdata_is_empty)
 {
 	int			i;
 	char		dest_xlog_path[MAXPGPATH];
 	char		label[1024];
-	XLogRecPtr	sync_lsn = InvalidXLogRecPtr;
+	RedoParams	dest_redo = { 0, InvalidXLogRecPtr, 0 };
 
 	/* arrays with meta info for multi threaded backup */
 	pthread_t	*threads;
@@ -171,6 +170,12 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 	char		pretty_time[20];
 	char		pretty_bytes[20];
 
+	PGStopBackupResult	stop_backup_result;
+	/* kludge against some old bug in archive_timeout. TODO: remove in 3.0.0 */
+	int	     timeout = (instance_config.archive_timeout > 0) ?
+				instance_config.archive_timeout : ARCHIVE_TIMEOUT_DEFAULT;
+	char    *query_text = NULL;
+
 	elog(LOG, "Database catchup start");
 
 	/* notify start of backup to PostgreSQL server */
@@ -178,51 +183,48 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 	strncat(label, " with pg_probackup", lengthof(label) -
 			strlen(" with pg_probackup"));
 
+	// TODO delete dest control file
+
 	/* Call pg_start_backup function in PostgreSQL connect */
 	pg_start_backup(label, smooth_checkpoint, &current, source_node_info, source_conn);
 	elog(LOG, "pg_start_backup START LSN %X/%X", (uint32) (current.start_lsn >> 32), (uint32) (current.start_lsn));
 
 	if (!dest_pgdata_is_empty &&
-		(backup_mode == BACKUP_MODE_DIFF_PTRACK ||
-		 backup_mode == BACKUP_MODE_DIFF_DELTA))
+		(current.backup_mode == BACKUP_MODE_DIFF_PTRACK ||
+		 current.backup_mode == BACKUP_MODE_DIFF_DELTA))
 	{
-		RedoParams	dest_redo;
-
 		dest_filelist = parray_new();
 		dir_list_file(dest_filelist, dest_pgdata,
 			true, true, false, backup_logs, true, 0, FIO_LOCAL_HOST);
 
 		// fill dest_redo.lsn and dest_redo.tli
 		get_redo(dest_pgdata, &dest_redo);
-
-		sync_lsn = dest_redo.lsn;
-		elog(INFO, "syncLSN = %X/%X", (uint32) (sync_lsn >> 32), (uint32) sync_lsn);
+		elog(INFO, "syncLSN = %X/%X", (uint32) (dest_redo.lsn >> 32), (uint32) dest_redo.lsn);
 	}
 
 	/*
 	 * TODO: move to separate function to use in both backup.c and catchup.c
 	 */
-	if (backup_mode == BACKUP_MODE_DIFF_PTRACK)
+	if (current.backup_mode == BACKUP_MODE_DIFF_PTRACK)
 	{
 		XLogRecPtr	ptrack_lsn = get_last_ptrack_lsn(source_conn, source_node_info);
 
 		// new ptrack is more robust and checks Start LSN
-		if (ptrack_lsn > sync_lsn || ptrack_lsn == InvalidXLogRecPtr)
+		if (ptrack_lsn > dest_redo.lsn || ptrack_lsn == InvalidXLogRecPtr)
 			elog(ERROR, "LSN from ptrack_control %X/%X is greater than checkpoint LSN  %X/%X.\n"
 						"Create new full backup before an incremental one.",
 						(uint32) (ptrack_lsn >> 32), (uint32) (ptrack_lsn),
-						(uint32) (sync_lsn >> 32),
-						(uint32) (sync_lsn));
+						(uint32) (dest_redo.lsn >> 32),
+						(uint32) (dest_redo.lsn));
 	}
 
-	/* Check that sync_lsn is less than current.start_lsn */
-	/* TODO это нужно? */
-	if (backup_mode != BACKUP_MODE_FULL &&
-		sync_lsn > current.start_lsn)
+	/* Check that dest_redo.lsn is less than current.start_lsn */
+	if (current.backup_mode != BACKUP_MODE_FULL &&
+		dest_redo.lsn > current.start_lsn)
 			elog(ERROR, "Current START LSN %X/%X is lower than SYNC LSN %X/%X, "
 				"it may indicate that we are trying to catchup with PostgreSQL instance from the past",
 				(uint32) (current.start_lsn >> 32), (uint32) (current.start_lsn),
-				(uint32) (sync_lsn >> 32), (uint32) (sync_lsn));
+				(uint32) (dest_redo.lsn >> 32), (uint32) (dest_redo.lsn));
 
 	/* Start stream replication */
 	if (stream_wal)
@@ -243,31 +245,15 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 	else
 		dir_list_file(source_filelist, source_pgdata,
 					  true, true, false, backup_logs, true, 0, FIO_LOCAL_HOST);
+	// TODO filter pg_xlog/wal?
+	// TODO what if wal is not a dir (symlink to a dir)?
 
 	/* close ssh session in main thread */
 	fio_disconnect();
 
-	/* Calculate pgdata_bytes
-	 * TODO: move to separate function to use in both backup.c and catchup.c
-	 */
-	for (i = 0; i < parray_num(source_filelist); i++)
-	{
-		pgFile	   *file = (pgFile *) parray_get(source_filelist, i);
-
-		if (file->external_dir_num != 0)
-			continue;
-
-		if (S_ISDIR(file->mode))
-		{
-			current.pgdata_bytes += 4096;
-			continue;
-		}
-
-		current.pgdata_bytes += file->size;
-	}
-
+	current.pgdata_bytes += calculate_datasize_of_filelist(source_filelist);
 	pretty_size(current.pgdata_bytes, pretty_bytes, lengthof(pretty_bytes));
-	elog(INFO, "PGDATA size: %s", pretty_bytes);
+	elog(INFO, "Source PGDATA size: %s", pretty_bytes);
 
 	/*
 	 * Sort pathname ascending. It is necessary to create intermediate
@@ -285,19 +271,17 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 	/* Extract information about files in backup_list parsing their names:*/
 	parse_filelist_filenames(source_filelist, source_pgdata);
 
-	elog(LOG, "Current Start LSN: %X/%X, TLI: %X",
+	elog(LOG, "Start LSN (source): %X/%X, TLI: %X",
 			(uint32) (current.start_lsn >> 32), (uint32) (current.start_lsn),
 			current.tli);
 	/* TODO проверить, нужна ли проверка TLI */
-	/*if (backup_mode != BACKUP_MODE_FULL)
-		elog(LOG, "Parent Start LSN: %X/%X, TLI: %X",
-			 (uint32) (sync_lsn >> 32), (uint32) (sync_lsn),
-			 prev_backup->tli);
-	*/
+	if (current.backup_mode != BACKUP_MODE_FULL)
+		elog(LOG, "LSN in destination: %X/%X, TLI: %X",
+			 (uint32) (dest_redo.lsn >> 32), (uint32) (dest_redo.lsn),
+			 dest_redo.tli);
 
 	/* Build page mapping in PTRACK mode */
-
-	if (backup_mode == BACKUP_MODE_DIFF_PTRACK)
+	if (current.backup_mode == BACKUP_MODE_DIFF_PTRACK)
 	{
 		time(&start_time);
 		elog(INFO, "Extracting pagemap of changed blocks");
@@ -306,7 +290,7 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 		make_pagemap_from_ptrack_2(source_filelist, source_conn,
 								   source_node_info->ptrack_schema,
 								   source_node_info->ptrack_version_num,
-								   sync_lsn);
+								   dest_redo.lsn);
 		time(&end_time);
 		elog(INFO, "Pagemap successfully extracted, time elapsed: %.0f sec",
 			 difftime(end_time, start_time));
@@ -315,32 +299,68 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 	/*
 	 * Make directories before catchup and setup threads at the same time
 	 */
+	/*
+	 * We iterate over source_filelist and for every directory with parent 'pg_tblspc'
+	 * we must lookup this directory name in tablespace map.
+	 * If we got a match, we treat this directory as tablespace.
+	 * It means that we create directory specified in tablespace_map and
+	 * original directory created as symlink to it.
+	 */
 	for (i = 0; i < parray_num(source_filelist); i++)
 	{
 		pgFile	   *file = (pgFile *) parray_get(source_filelist, i);
+		char parent_dir[MAXPGPATH];
 
-		/* if the entry was a directory, create it in the backup */
-		if (S_ISDIR(file->mode))
+		/* setup threads */
+		pg_atomic_clear_flag(&file->lock);
+
+		if (!S_ISDIR(file->mode))
+			continue;
+
+		/*
+		 * check if it is fake "directory" and is a tablespace link
+		 * это происходить потому что мы передали follow_symlink при построении списка
+		 */
+		/* get parent dir of rel_path */
+		strncpy(parent_dir, file->rel_path, MAXPGPATH);
+		get_parent_directory(parent_dir);
+
+		/* check if directory is actually link to tablespace */
+		if (strcmp(parent_dir, PG_TBLSPC_DIR) != 0)
 		{
+			/* if the entry is a regular directory, create it in the destination */
 			char		dirpath[MAXPGPATH];
 
-			if (file->external_dir_num)
-			{
-				char		temp[MAXPGPATH];
-				/* TODO пока непонятно, разобраться! */
-				/* snprintf(temp, MAXPGPATH, "%s%d", external_prefix,
-						 file->external_dir_num); */
-				join_path_components(dirpath, temp, file->rel_path);
-			}
-			else
-				join_path_components(dirpath, dest_pgdata, file->rel_path);
+			join_path_components(dirpath, dest_pgdata, file->rel_path);
 
 			elog(VERBOSE, "Create directory '%s'", dirpath);
 			fio_mkdir(dirpath, DIR_PERMISSION, FIO_BACKUP_HOST);
 		}
+		else
+		{
+			/* this directory located in pg_tblspc */
+			const char *linked_path = leaked_abstraction_get_tablespace_mapping(file->name);
+			char	to_path[MAXPGPATH];
 
-		/* setup threads */
-		pg_atomic_clear_flag(&file->lock);
+			//elog(WARNING, "pgFile name: %s rel_path: %s linked: %s\n", file->name, file->rel_path, file->linked);
+
+			if (!is_absolute_path(linked_path))
+				elog(ERROR, "Tablespace directory path must be an absolute path: %s\n",
+						 linked_path);
+
+			join_path_components(to_path, dest_pgdata, file->rel_path);
+
+			elog(VERBOSE, "Create directory \"%s\" and symbolic link \"%s\"",
+					 linked_path, to_path);
+
+			/* create tablespace directory */
+			fio_mkdir(linked_path, DIR_PERMISSION, FIO_BACKUP_HOST);
+
+			/* create link to linked_path */
+			if (fio_symlink(linked_path, to_path, true, FIO_BACKUP_HOST) < 0)
+				elog(ERROR, "Could not create symbolic link \"%s\": %s",
+					 to_path, strerror(errno));
+		}
 	}
 
 	/* Sort by size for load balancing */
@@ -359,8 +379,8 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 		arg->to_root = dest_pgdata;
 		arg->source_filelist = source_filelist;
 		arg->dest_filelist = dest_filelist;
-		arg->sync_lsn = sync_lsn;
-		arg->backup_mode = backup_mode;
+		arg->sync_lsn = dest_redo.lsn;
+		arg->backup_mode = current.backup_mode;
 		arg->thread_num = i+1;
 		/* By default there are some error */
 		arg->ret = 1;
@@ -397,21 +417,6 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 			pretty_time);
 
 	/* Notify end of backup */
-	//!!!!!
-	//catchup_pg_stop_backup(&current, source_conn, source_node_info, dest_pgdata);
-
-/*
- * Notify end of backup to PostgreSQL server.
- */
-//static void
-//catchup_pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn, PGNodeInfo *source_node_info, const char *destination_dir)
-//{
-	PGStopBackupResult	stop_backup_result;
-	/* kludge against some old bug in archive_timeout. TODO: remove in 3.0.0 */
-	int	     timeout = (instance_config.archive_timeout > 0) ?
-				instance_config.archive_timeout : ARCHIVE_TIMEOUT_DEFAULT;
-	char    *query_text = NULL;
-
 	pg_silent_client_messages(source_conn);
 
 	/* Create restore point
@@ -440,7 +445,7 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 	/* Write backup_label */
 	pg_stop_backup_write_file_helper(dest_pgdata, PG_BACKUP_LABEL_FILE, "backup label",
 		stop_backup_result.backup_label_content, stop_backup_result.backup_label_content_len,
-		backup_files_list);
+		NULL);
 	free(stop_backup_result.backup_label_content);
 	stop_backup_result.backup_label_content = NULL;
 	stop_backup_result.backup_label_content_len = 0;
@@ -448,9 +453,10 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 	/* Write tablespace_map */
 	if (stop_backup_result.tablespace_map_content != NULL)
 	{
+		// TODO what if tablespace is created during catchup?
 		pg_stop_backup_write_file_helper(dest_pgdata, PG_TABLESPACE_MAP_FILE, "tablespace map",
 			stop_backup_result.tablespace_map_content, stop_backup_result.tablespace_map_content_len,
-			backup_files_list);
+			NULL);
 		free(stop_backup_result.tablespace_map_content);
 		stop_backup_result.tablespace_map_content = NULL;
 		stop_backup_result.tablespace_map_content_len = 0;
@@ -458,7 +464,7 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 
 	/* This function will also add list of xlog files
 	 * to the passed filelist */
-	if(wait_WAL_streaming_end(backup_files_list))
+	if(wait_WAL_streaming_end(NULL))
 		elog(ERROR, "WAL streaming failed");
 
 	current.recovery_xid = stop_backup_result.snapshot_xid;

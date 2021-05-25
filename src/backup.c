@@ -335,23 +335,7 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 		elog(ERROR, "PGDATA is almost empty. Either it was concurrently deleted or "
 			"pg_probackup do not possess sufficient permissions to list PGDATA content");
 
-	/* Calculate pgdata_bytes */
-	for (i = 0; i < parray_num(backup_files_list); i++)
-	{
-		pgFile	   *file = (pgFile *) parray_get(backup_files_list, i);
-
-		if (file->external_dir_num != 0)
-			continue;
-
-		if (S_ISDIR(file->mode))
-		{
-			current.pgdata_bytes += 4096;
-			continue;
-		}
-
-		current.pgdata_bytes += file->size;
-	}
-
+	current.pgdata_bytes += calculate_datasize_of_filelist(backup_files_list);
 	pretty_size(current.pgdata_bytes, pretty_bytes, lengthof(pretty_bytes));
 	elog(INFO, "PGDATA size: %s", pretty_bytes);
 
@@ -2381,4 +2365,37 @@ check_external_for_tablespaces(parray *external_list, PGconn *backup_conn)
 
 		}
 	}
+}
+
+/*
+ * Calculate pgdata_bytes
+ * accepts (parray *) of (pgFile *)
+ */
+int64
+calculate_datasize_of_filelist(parray *filelist)
+{
+	int64	bytes = 0;
+	int	i;
+
+	/* parray_num don't check for NULL */
+	if (filelist == NULL)
+		return 0;
+
+	for (i = 0; i < parray_num(filelist); i++)
+	{
+		pgFile	   *file = (pgFile *) parray_get(filelist, i);
+
+		if (file->external_dir_num != 0)
+			continue;
+
+		if (S_ISDIR(file->mode))
+		{
+			// TODO is a dir always 4K?
+			bytes += 4096;
+			continue;
+		}
+
+		bytes += file->size;
+	}
+	return bytes;
 }

@@ -820,7 +820,7 @@ main(int argc, char *argv[])
 								 no_validate, no_sync, backup_logs);
 			}
 		case CATCHUP_CMD:
-			return do_catchup(catchup_source_pgdata, catchup_destination_pgdata, current.backup_mode, instance_config.conn_opt, num_threads);
+			return do_catchup(catchup_source_pgdata, catchup_destination_pgdata, num_threads);
 		case RESTORE_CMD:
 			return do_restore_or_validate(instanceState, current.backup_id,
 							recovery_target_options,

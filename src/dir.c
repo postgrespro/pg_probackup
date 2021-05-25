@@ -908,6 +908,17 @@ get_tablespace_mapping(const char *dir)
 }
 
 /*
+ * TODO протёкшая абстрация, надо на этапе ревью решить что с ней делать,
+ * потому как непонятно, почему мы в backup.c напрямую работаем с созданием
+ * каталогов, видимо, когда-то подразумевалось, что вся работа будет в dir.c
+ */
+const char *
+leaked_abstraction_get_tablespace_mapping(const char *dir)
+{
+	return get_tablespace_mapping(dir);
+}
+
+/*
  * Split argument into old_dir and new_dir and append to mapping
  * list.
  *

@@ -868,8 +868,7 @@ extern char *pg_ptrack_get_block(ConnectionArgs *arguments,
 								 BlockNumber blknum, size_t *result_size,
 								 int ptrack_version_num, const char *ptrack_schema);
 /* in catchup.c */
-extern int do_catchup(const char *source_pgdata, const char *dest_pgdata, BackupMode backup_mode,
-					  ConnectionOptions conn_opt, int num_threads);
+extern int do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads);
 /* in restore.c */
 extern int do_restore_or_validate(InstanceState *instanceState,
 					  time_t target_backup_id,
@@ -1034,6 +1033,7 @@ extern void dir_list_file(parray *files, const char *root, bool exclude,
 						  bool follow_symlink, bool add_root, bool backup_logs,
 						  bool skip_hidden, int external_dir_num, fio_location location);
 
+extern const char *leaked_abstraction_get_tablespace_mapping(const char *dir);
 extern void create_data_directories(parray *dest_files,
 										const char *data_dir,
 										const char *backup_dir,
@@ -1335,5 +1335,6 @@ extern XLogRecPtr wait_wal_lsn(const char *wal_segment_dir, XLogRecPtr lsn, bool
 								bool in_prev_segment, bool segment_only,
 								int timeout_elevel, bool in_stream_dir);
 extern void wait_wal_and_calculate_stop_lsn(const char *xlog_path, XLogRecPtr stop_lsn, pgBackup *backup);
+extern int64 calculate_datasize_of_filelist(parray *filelist);
 
 #endif /* PG_PROBACKUP_H */

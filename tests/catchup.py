@@ -7,21 +7,6 @@ module_name = 'catchup'
 class CatchupTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
-    def dummy(self):
-        """
-        dummy test
-        """
-        fname = self.id().split('.')[3]
-        node = self.make_simple_node(
-            base_dir = os.path.join(module_name, fname, 'node')
-            )
-        node.slow_start()
-
-        # Clean after yourself
-        node.stop()
-        self.del_test_dir(module_name, fname)
-
-    # @unittest.skip("skip")
     def test_multithread_local_transfer(self):
         """
         Test 'multithreaded basebackup' mode
@@ -51,6 +36,58 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             dest_pg.safe_psql("postgres", "SELECT * FROM ultimate_question"),
             'Different answer from copy')
         dest_pg.stop()
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_local_simple_transfer_with_tablespace(self):
+        """
+        Test 'multithreaded basebackup' mode
+        create node, insert some test data, catchup into other dir, start, select test data
+        """
+        fname = self.id().split('.')[3]
+
+        source_pg = self.make_simple_node(
+            base_dir = os.path.join(module_name, fname, 'src'),
+            initdb_params = ['--data-checksums'])
+        source_pg.slow_start()
+
+        tblspace1_old_path = self.get_tblspace_path(source_pg, 'tblspace1_old')
+        self.create_tblspace_in_node(
+            source_pg, 'tblspace1',
+            tblspc_path = tblspace1_old_path)
+
+        source_pg.safe_psql(
+            "postgres",
+            "CREATE TABLE ultimate_question TABLESPACE tblspace1 AS SELECT 42 AS answer")
+        result = source_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
+
+        dest_pg = self.make_empty_node(os.path.join(module_name, fname, 'dst'))
+        tblspace1_new_path = self.get_tblspace_path(dest_pg, 'tblspace1_new')
+        dest_pg = self.catchup_node(
+            backup_mode = 'FULL',
+            source_pgdata = source_pg.data_dir,
+            destination_node = dest_pg,
+            options = [
+                '-d', 'postgres',
+                '-p', str(source_pg.port),
+                '--stream',
+                '-T', '{0}={1}'.format(tblspace1_old_path, tblspace1_new_path)
+                ]
+            )
+        source_pg.stop()
+
+        dest_pg.slow_start()
+        self.assertEqual(
+            result,
+            dest_pg.safe_psql("postgres", "SELECT * FROM ultimate_question"),
+            'Different answer from copy')
+        dest_pg.stop()
+
+        source_pgdata = self.pgdata_content(source_node.data_dir)
+        dest_pgdata = self.pgdata_content(dest_node.data_dir)
+        self.compare_pgdata(source_pgdata, dest_pgdata)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -211,3 +248,4 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
+
