@@ -459,7 +459,7 @@ prepare_page(ConnectionArgs *conn_arg,
 	 * Skip page if page lsn is less than START_LSN of parent backup.
 	 * Nullified pages must be copied by DELTA backup, just to be safe.
 	 */
-	if (backup_mode == BACKUP_MODE_DIFF_DELTA &&
+	if ((backup_mode == BACKUP_MODE_DIFF_DELTA || backup_mode == BACKUP_MODE_DIFF_PTRACK) &&
 		file->exists_in_prev &&
 		page_st->lsn > 0 &&
 		page_st->lsn < prev_backup_start_lsn)
@@ -603,7 +603,7 @@ backup_data_file(ConnectionArgs* conn_arg, pgFile *file,
 
 		rc = fio_send_pages(to_fullpath, from_fullpath, file,
 							/* send prev backup START_LSN */
-							backup_mode == BACKUP_MODE_DIFF_DELTA &&
+							(backup_mode == BACKUP_MODE_DIFF_DELTA || backup_mode == BACKUP_MODE_DIFF_PTRACK) &&
 							file->exists_in_prev ? prev_backup_start_lsn : InvalidXLogRecPtr,
 							calg, clevel, checksum_version,
 							/* send pagemap if any */
@@ -616,7 +616,7 @@ backup_data_file(ConnectionArgs* conn_arg, pgFile *file,
 		/* TODO: stop handling errors internally */
 		rc = send_pages(conn_arg, to_fullpath, from_fullpath, file,
 						/* send prev backup START_LSN */
-						backup_mode == BACKUP_MODE_DIFF_DELTA &&
+						(backup_mode == BACKUP_MODE_DIFF_DELTA || backup_mode == BACKUP_MODE_DIFF_PTRACK) &&
 						file->exists_in_prev ? prev_backup_start_lsn : InvalidXLogRecPtr,
 						calg, clevel, checksum_version, use_pagemap,
 						&headers, backup_mode, ptrack_version_num, ptrack_schema);
