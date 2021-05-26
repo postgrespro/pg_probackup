@@ -335,8 +335,8 @@ prepare_page(ConnectionArgs *conn_arg,
 						return PageIsOk;
 
 					case PAGE_IS_VALID:
-						/* in DELTA mode we must compare lsn */
-						if (backup_mode == BACKUP_MODE_DIFF_DELTA)
+						/* in DELTA or PTRACK modes we must compare lsn */
+						if (backup_mode == BACKUP_MODE_DIFF_DELTA || backup_mode == BACKUP_MODE_DIFF_PTRACK)
 							page_is_valid = true;
 						else
 							return PageIsOk;
