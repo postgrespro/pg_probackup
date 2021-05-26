@@ -59,10 +59,12 @@ extern int pgut_wait(int num, PGconn *connections[], struct timeval *timeout);
  * memory allocators
  */
 extern void *pgut_malloc(size_t size);
+extern void *pgut_malloc0(size_t size);
 extern void *pgut_realloc(void *p, size_t size);
 extern char *pgut_strdup(const char *str);
 
 #define pgut_new(type)			((type *) pgut_malloc(sizeof(type)))
+#define pgut_new0(type)			((type *) pgut_malloc0(sizeof(type)))
 #define pgut_newarray(type, n)	((type *) pgut_malloc(sizeof(type) * (n)))
 
 /*

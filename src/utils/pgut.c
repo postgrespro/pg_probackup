@@ -878,6 +878,17 @@ pgut_malloc(size_t size)
 }
 
 void *
+pgut_malloc0(size_t size)
+{
+	char *ret;
+
+	ret = pgut_malloc(size);
+	memset(ret, 0, size);
+
+	return ret;
+}
+
+void *
 pgut_realloc(void *p, size_t size)
 {
 	char *ret;
