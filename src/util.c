@@ -136,7 +136,7 @@ writeControlFile(ControlFileData *ControlFile, const char *path, fio_location lo
 #endif
 
 	/* copy controlFileSize */
-	buffer = pg_malloc(ControlFileSize);
+	buffer = pg_malloc0(ControlFileSize);
 	memcpy(buffer, ControlFile, sizeof(ControlFileData));
 
 	/* Write pg_control */

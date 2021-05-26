@@ -26,9 +26,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
-            initdb_params=['--data-checksums'],
-            pg_options={
-                'autovacuum': 'off'})
+            initdb_params=['--data-checksums'])
 
         node_restored = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node_restored'))
@@ -96,9 +94,6 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
-            pg_options={
-                'autovacuum': 'off'
-            }
         )
         node_restored = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node_restored'),
@@ -183,9 +178,6 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
-            pg_options={
-                'autovacuum': 'off'
-            }
         )
         node_restored = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node_restored'),
@@ -408,7 +400,6 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
                 'fsync': 'off',
                 'shared_buffers': '1GB',
                 'maintenance_work_mem': '1GB',
-                'autovacuum': 'off',
                 'full_page_writes': 'off'
             }
         )
@@ -566,7 +557,6 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
             initdb_params=['--data-checksums'],
             pg_options={
                 'max_wal_size': '10GB',
-                'autovacuum': 'off'
             }
         )
 
@@ -693,7 +683,6 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
             pg_options={
                 'max_wal_size': '10GB',
                 'checkpoint_timeout': '5min',
-                'autovacuum': 'off'
             }
         )
 
@@ -798,7 +787,6 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
             set_replication=True, initdb_params=['--data-checksums'],
             pg_options={
                 'checkpoint_timeout': '30s',
-                'autovacuum': 'off'
             }
         )
 
@@ -884,9 +872,6 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
-            pg_options={
-                'autovacuum': 'off'
-            }
         )
 
         self.init_pb(backup_dir)
@@ -976,7 +961,6 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
             set_replication=True, initdb_params=['--data-checksums'],
             pg_options={
                 'checkpoint_timeout': '30s',
-                'autovacuum': 'off'
             }
         )
 
@@ -1184,7 +1168,6 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'autovacuum': 'off',
                 'shared_buffers': '512MB',
                 'max_wal_size': '3GB'})
 

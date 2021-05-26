@@ -908,7 +908,6 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             initdb_params=['--data-checksums'],
             pg_options={
                 'checkpoint_timeout': '30s',
-                'autovacuum': 'off',
                 'archive_timeout': '10s'})
 
         if self.get_version(master) < self.version_to_num('9.6.0'):
@@ -1012,8 +1011,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         master = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'master'),
             set_replication=True,
-            initdb_params=['--data-checksums'],
-            pg_options={'autovacuum': 'off'})
+            initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', master)
@@ -1245,8 +1243,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             initdb_params=['--data-checksums'],
             pg_options={
                 'archive_timeout': '30s',
-                'checkpoint_timeout': '30s',
-                'autovacuum': 'off'})
+                'checkpoint_timeout': '30s'})
 
         if self.get_version(master) < self.version_to_num('9.6.0'):
             self.del_test_dir(module_name, fname)
@@ -1568,8 +1565,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             initdb_params=['--data-checksums'],
             pg_options={
                 'archive_timeout': '30s',
-                'checkpoint_timeout': '30s',
-                'autovacuum': 'off'})
+                'checkpoint_timeout': '30s'})
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -1624,8 +1620,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             initdb_params=['--data-checksums'],
             pg_options={
                 'archive_timeout': '30s',
-                'checkpoint_timeout': '30s',
-                'autovacuum': 'off'})
+                'checkpoint_timeout': '30s'})
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -1821,8 +1816,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
-            initdb_params=['--data-checksums'],
-            pg_options={'autovacuum': 'off'})
+            initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -1885,7 +1879,6 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'autovacuum': 'off',
                 'checkpoint_timeout': '30s',
                 'max_wal_size': '64MB'})
 
@@ -2018,8 +2011,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
-            initdb_params=['--data-checksums'],
-            pg_options={'autovacuum': 'off'})
+            initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -2108,8 +2100,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
-            initdb_params=['--data-checksums'],
-            pg_options={'autovacuum': 'off'})
+            initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -2224,8 +2215,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
-            initdb_params=['--data-checksums'],
-            pg_options={'autovacuum': 'off'})
+            initdb_params=['--data-checksums'])
 
         if self.get_version(node) < self.version_to_num('9.6.0'):
             self.del_test_dir(module_name, fname)
@@ -2297,8 +2287,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
-            initdb_params=['--data-checksums'],
-            pg_options={'autovacuum': 'off'})
+            initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
