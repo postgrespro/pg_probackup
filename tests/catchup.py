@@ -42,10 +42,6 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     def test_local_simple_transfer_with_tablespace(self):
-        """
-        Test 'multithreaded basebackup' mode
-        create node, insert some test data, catchup into other dir, start, select test data
-        """
         fname = self.id().split('.')[3]
 
         source_pg = self.make_simple_node(
@@ -203,10 +199,8 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             base_dir = os.path.join(module_name, fname, 'src'),
             set_replication = True,
             ptrack_enable = True,
-            initdb_params = ['--data-checksums']
             )
         source_pg.slow_start()
-        source_pg.safe_psql("postgres", "CREATE EXTENSION ptrack")
         source_pg.safe_psql("postgres", "CREATE TABLE ultimate_question(answer int)")
 
         # make clean shutdowned lagging behind replica
@@ -249,3 +243,58 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
+    # @unittest.skip("skip")
+    def test_table_drop(self):
+        """
+        Test 'multithreaded basebackup' mode
+        create node, insert some test data, catchup into other dir, start, select test data
+        """
+        fname = self.id().split('.')[3]
+
+        source_pg = self.make_simple_node(
+            base_dir = os.path.join(module_name, fname, 'src'),
+            ptrack_enable = True,
+            initdb_params = ['--data-checksums'])
+        source_pg.slow_start()
+
+        source_pg.safe_psql("postgres", "CREATE EXTENSION ptrack")
+        source_pg.safe_psql(
+            "postgres",
+            "CREATE TABLE ultimate_question AS SELECT 42 AS answer")
+
+        dest_pg = self.make_empty_node(os.path.join(module_name, fname, 'dst'))
+        dest_pg = self.catchup_node(
+            backup_mode = 'FULL',
+            source_pgdata = source_pg.data_dir,
+            destination_node = dest_pg,
+            options = [
+                '-d', 'postgres',
+                '-p', str(source_pg.port),
+                '--stream'
+                ]
+            )
+
+        dest_pg.slow_start()
+        dest_pg.stop()
+
+        source_pg.safe_psql("postgres", "DROP TABLE ultimate_question")
+        source_pg.safe_psql("postgres", "CHECKPOINT")
+        source_pg.safe_psql("postgres", "CHECKPOINT")
+
+        # catchup
+        self.catchup_node(
+            backup_mode = 'PTRACK',
+            source_pgdata = source_pg.data_dir,
+            destination_node = dest_pg,
+            options = ['-d', 'postgres', '-p', str(source_pg.port), '--stream'])
+
+        source_pg.stop()
+        dest_pg.slow_start()
+        dest_pg.stop()
+
+        source_pgdata = self.pgdata_content(source_pg.data_dir)
+        dest_pgdata = self.pgdata_content(dest_pg.data_dir)
+        self.compare_pgdata(source_pgdata, dest_pgdata)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)

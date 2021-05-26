@@ -311,15 +311,12 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 		pgFile	   *file = (pgFile *) parray_get(source_filelist, i);
 		char parent_dir[MAXPGPATH];
 
-		/* setup threads */
-		pg_atomic_clear_flag(&file->lock);
-
 		if (!S_ISDIR(file->mode))
 			continue;
 
 		/*
 		 * check if it is fake "directory" and is a tablespace link
-		 * это происходить потому что мы передали follow_symlink при построении списка
+		 * это происходит потому что мы передали follow_symlink при построении списка
 		 */
 		/* get parent dir of rel_path */
 		strncpy(parent_dir, file->rel_path, MAXPGPATH);
@@ -342,12 +339,14 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 			const char *linked_path = NULL;
 			char	to_path[MAXPGPATH];
 
+			// perform additional check that this is actually synlink?
 			{ /* get full symlink path and map this path to new location */
 				char	source_full_path[MAXPGPATH];
 				char	symlink_content[MAXPGPATH];
 				join_path_components(source_full_path, source_pgdata, file->rel_path);
 				fio_readlink(source_full_path, symlink_content, sizeof(symlink_content), FIO_DB_HOST);
 				linked_path = leaked_abstraction_get_tablespace_mapping(symlink_content);
+				// TODO: check that linked_path != symlink_content in case of local catchup?
 				elog(WARNING, "Map tablespace full_path: \"%s\" old_symlink_content: \"%s\" old_symlink_content: \"%s\"\n",
 					source_full_path,
 					symlink_content,
@@ -372,6 +371,50 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 					 to_path, strerror(errno));
 		}
 	}
+
+	if (!dest_pgdata_is_empty &&
+		(current.backup_mode == BACKUP_MODE_DIFF_PTRACK ||
+		 current.backup_mode == BACKUP_MODE_DIFF_DELTA))
+	{
+		elog(INFO, "Removing redundant files in destination directory");
+		parray_qsort(dest_filelist, pgFileCompareRelPathWithExternalDesc);
+		for (i = 0; i < parray_num(dest_filelist); i++)
+		{
+			bool     redundant = true;
+			pgFile	*file = (pgFile *) parray_get(dest_filelist, i);
+
+			if (parray_bsearch(source_filelist, file, pgFileCompareRelPathWithExternal))
+				redundant = false;
+
+			/* pg_filenode.map are always restored, because it's crc cannot be trusted */
+			if (file->external_dir_num == 0 &&
+				pg_strcasecmp(file->name, RELMAPPER_FILENAME) == 0)
+				redundant = true;
+
+			/* do not delete the useful internal directories */
+			if (S_ISDIR(file->mode) && !redundant)
+				continue;
+
+			/* if file does not exists in destination list, then we can safely unlink it */
+			if (redundant)
+			{
+				char		fullpath[MAXPGPATH];
+
+				join_path_components(fullpath, dest_pgdata, file->rel_path);
+
+				fio_delete(file->mode, fullpath, FIO_DB_HOST);
+				elog(VERBOSE, "Deleted file \"%s\"", fullpath);
+
+				/* shrink pgdata list */
+				pgFileFree(file);
+				parray_remove(dest_filelist, i);
+				i--;
+			}
+		}
+	}
+
+	/* clear file locks */
+	pfilearray_clear_locks(source_filelist);
 
 	/* Sort by size for load balancing */
 	parray_qsort(source_filelist, pgFileCompareSize);
