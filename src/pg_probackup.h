@@ -1087,6 +1087,7 @@ extern int pgFileCompareRelPathWithExternalDesc(const void *f1, const void *f2);
 extern int pgFileCompareLinked(const void *f1, const void *f2);
 extern int pgFileCompareSize(const void *f1, const void *f2);
 extern int pgCompareOid(const void *f1, const void *f2);
+extern void pfilearray_clear_locks(parray *file_list);
 
 /* in data.c */
 extern bool check_data_file(ConnectionArgs *arguments, pgFile *file,

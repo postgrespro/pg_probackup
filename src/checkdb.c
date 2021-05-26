@@ -455,13 +455,14 @@ get_index_list(const char *dbname, bool first_db_with_amcheck,
 		ind->heapallindexed_is_supported = heapallindexed_is_supported;
 		ind->amcheck_nspname = pgut_malloc(strlen(amcheck_nspname) + 1);
 		strcpy(ind->amcheck_nspname, amcheck_nspname);
-		pg_atomic_clear_flag(&ind->lock);
 
 		if (index_list == NULL)
 			index_list = parray_new();
 
 		parray_append(index_list, ind);
 	}
+
+	pfilearray_clear_locks(index_list);
 
 	PQclear(res);
 

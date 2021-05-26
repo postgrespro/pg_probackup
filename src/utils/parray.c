@@ -175,7 +175,7 @@ parray_rm(parray *array, const void *key, int(*compare)(const void *, const void
 size_t
 parray_num(const parray *array)
 {
-	return array->used;
+	return array!= NULL ? array->used : (size_t) 0;
 }
 
 void

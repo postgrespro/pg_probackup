@@ -822,7 +822,7 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 	}
 
 	/*
-	 * Setup directory structure for external directories and file locks
+	 * Setup directory structure for external directories
 	 */
 	for (i = 0; i < parray_num(dest_files); i++)
 	{
@@ -846,10 +846,10 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 			elog(VERBOSE, "Create external directory \"%s\"", dirpath);
 			fio_mkdir(dirpath, file->mode, FIO_DB_HOST);
 		}
-
-		/* setup threads */
-		pg_atomic_clear_flag(&file->lock);
 	}
+
+	/* setup threads */
+	pfilearray_clear_locks(dest_files);
 
 	/* Get list of files in destination directory and remove redundant files */
 	if (params->incremental_mode != INCR_NONE || cleanup_pgdata)

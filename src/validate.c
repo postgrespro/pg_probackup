@@ -130,11 +130,7 @@ pgBackupValidate(pgBackup *backup, pgRestoreParams *params)
 //														params->partial_restore_type);
 
 	/* setup threads */
-	for (i = 0; i < parray_num(files); i++)
-	{
-		pgFile	   *file = (pgFile *) parray_get(files, i);
-		pg_atomic_clear_flag(&file->lock);
-	}
+	pfilearray_clear_locks(files);
 
 	/* init thread args with own file lists */
 	threads = (pthread_t *) palloc(sizeof(pthread_t) * num_threads);
