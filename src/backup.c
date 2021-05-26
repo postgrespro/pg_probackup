@@ -430,7 +430,7 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 	}
 
 	/*
-	 * Make directories before backup and setup threads at the same time
+	 * Make directories before backup
 	 */
 	for (i = 0; i < parray_num(backup_files_list); i++)
 	{
@@ -455,9 +455,10 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 			fio_mkdir(dirpath, DIR_PERMISSION, FIO_BACKUP_HOST);
 		}
 
-		/* setup threads */
-		pg_atomic_clear_flag(&file->lock);
 	}
+
+	/* setup thread locks */
+	pfilearray_clear_locks(backup_files_list);
 
 	/* Sort by size for load balancing */
 	parray_qsort(backup_files_list, pgFileCompareSize);
