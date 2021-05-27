@@ -983,7 +983,6 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'autovacuum': 'off',
                 'checkpoint_timeout': '1h',
                 'wal_level': 'replica',
                 'shared_buffers': '128MB'})
@@ -1084,7 +1083,6 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'autovacuum': 'off',
                 'checkpoint_timeout': '1h',
                 'wal_level': 'replica',
                 'shared_buffers': '128MB'})
@@ -1293,8 +1291,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             initdb_params=['--data-checksums'],
             pg_options={
                 'checkpoint_timeout': '30s',
-                'archive_timeout': '30s',
-                'autovacuum': 'off'})
+                'archive_timeout': '30s'})
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node1)
@@ -1414,8 +1411,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             initdb_params=['--data-checksums'],
             pg_options={
                 'checkpoint_timeout': '30s',
-                'archive_timeout': '30s',
-                'autovacuum': 'off'})
+                'archive_timeout': '30s'})
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node1)
@@ -1645,7 +1641,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
-            pg_options={'autovacuum': 'off', 'hot_standby': 'on'})
+            pg_options={'hot_standby': 'on'})
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)

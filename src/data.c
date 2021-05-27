@@ -334,8 +334,8 @@ prepare_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 						return PageIsOk;
 
 					case PAGE_IS_VALID:
-						/* in DELTA mode we must compare lsn */
-						if (backup_mode == BACKUP_MODE_DIFF_DELTA)
+						/* in DELTA or PTRACK modes we must compare lsn */
+						if (backup_mode == BACKUP_MODE_DIFF_DELTA || backup_mode == BACKUP_MODE_DIFF_PTRACK)
 							page_is_valid = true;
 						else
 							return PageIsOk;
@@ -2118,13 +2118,14 @@ send_pages(ConnectionArgs* conn_arg, const char *to_fullpath, const char *from_f
 {
 	FILE *in = NULL;
 	FILE *out = NULL;
-	int   hdr_num = -1;
 	off_t  cur_pos_out = 0;
 	char  curr_page[BLCKSZ];
 	int   n_blocks_read = 0;
 	BlockNumber blknum = 0;
 	datapagemap_iterator_t *iter = NULL;
 	int   compressed_size = 0;
+	BackupPageHeader2 *header = NULL;
+	parray *harray = NULL;
 
 	/* stdio buffers */
 	char *in_buf = NULL;
@@ -2163,6 +2164,8 @@ send_pages(ConnectionArgs* conn_arg, const char *to_fullpath, const char *from_f
 		setvbuf(in, in_buf, _IOFBF, STDIO_BUFSIZE);
 	}
 
+	harray = parray_new();
+
 	while (blknum < file->n_blocks)
 	{
 		PageState page_st;
@@ -2180,17 +2183,15 @@ send_pages(ConnectionArgs* conn_arg, const char *to_fullpath, const char *from_f
 			if (!out)
 				out = open_local_file_rw(to_fullpath, &out_buf, STDIO_BUFSIZE);
 
-			hdr_num++;
+			header = pgut_new0(BackupPageHeader2);
+			*header = (BackupPageHeader2){
+					.block = blknum,
+					.pos = cur_pos_out,
+					.lsn = page_st.lsn,
+					.checksum = page_st.checksum,
+			};
 
-			if (!*headers)
-				*headers = (BackupPageHeader2 *) pgut_malloc(sizeof(BackupPageHeader2));
-			else
-				*headers = (BackupPageHeader2 *) pgut_realloc(*headers, (hdr_num+1) * sizeof(BackupPageHeader2));
-
-			(*headers)[hdr_num].block = blknum;
-			(*headers)[hdr_num].pos = cur_pos_out;
-			(*headers)[hdr_num].lsn = page_st.lsn;
-			(*headers)[hdr_num].checksum = page_st.checksum;
+			parray_append(harray, header);
 
 			compressed_size = compress_and_backup_page(file, blknum, in, out, &(file->crc),
 														rc, curr_page, calg, clevel,
@@ -2215,12 +2216,22 @@ send_pages(ConnectionArgs* conn_arg, const char *to_fullpath, const char *from_f
 	 * Add dummy header, so we can later extract the length of last header
 	 * as difference between their offsets.
 	 */
-	if (*headers)
+	if (parray_num(harray) > 0)
 	{
-		file->n_headers = hdr_num +1;
-		*headers = (BackupPageHeader2 *) pgut_realloc(*headers, (hdr_num+2) * sizeof(BackupPageHeader2));
-		(*headers)[hdr_num+1].pos = cur_pos_out;
+		size_t hdr_num = parray_num(harray);
+		size_t i;
+
+		file->n_headers = (int) hdr_num; /* is it valid? */
+		*headers = (BackupPageHeader2 *) pgut_malloc0((hdr_num + 1) * sizeof(BackupPageHeader2));
+		for (i = 0; i < hdr_num; i++)
+		{
+			header = (BackupPageHeader2 *)parray_get(harray, i);
+			(*headers)[i] = *header;
+			pg_free(header);
+		}
+		(*headers)[hdr_num] = (BackupPageHeader2){.pos=cur_pos_out};
 	}
+	parray_free(harray);
 
 	/* cleanup */
 	if (in && fclose(in))

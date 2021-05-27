@@ -1884,10 +1884,7 @@ pg_stop_backup(InstanceState *instanceState, pgBackup *backup, PGconn *pg_startb
 
 	if (backup->stream)
 	{
-		snprintf(stream_xlog_path, lengthof(stream_xlog_path),
-				 "%s/%s/%s/%s", instanceState->instance_backup_subdir_path,
-				 base36enc(backup->start_time),
-				 DATABASE_DIR, PG_XLOG_DIR);
+		join_path_components(stream_xlog_path, backup->database_dir, PG_XLOG_DIR);
 		xlog_path = stream_xlog_path;
 	}
 	else
@@ -1898,14 +1895,10 @@ pg_stop_backup(InstanceState *instanceState, pgBackup *backup, PGconn *pg_startb
 	/* Write backup_label and tablespace_map */
 	if (!exclusive_backup)
 	{
-		char	path[MAXPGPATH];
-
 		Assert(stop_backup_result.backup_label_content != NULL);
-		snprintf(path, lengthof(path), "%s/%s/%s", instanceState->instance_backup_subdir_path,
-			 base36enc(backup->start_time), DATABASE_DIR);
 
 		/* Write backup_label */
-		pg_stop_backup_write_file_helper(path, PG_BACKUP_LABEL_FILE, "backup label",
+		pg_stop_backup_write_file_helper(backup->database_dir, PG_BACKUP_LABEL_FILE, "backup label",
 			stop_backup_result.backup_label_content, stop_backup_result.backup_label_content_len,
 			backup_files_list);
 		free(stop_backup_result.backup_label_content);
@@ -1915,7 +1908,7 @@ pg_stop_backup(InstanceState *instanceState, pgBackup *backup, PGconn *pg_startb
 		/* Write tablespace_map */
 		if (stop_backup_result.tablespace_map_content != NULL)
 		{
-			pg_stop_backup_write_file_helper(path, PG_TABLESPACE_MAP_FILE, "tablespace map",
+			pg_stop_backup_write_file_helper(backup->database_dir, PG_TABLESPACE_MAP_FILE, "tablespace map",
 				stop_backup_result.tablespace_map_content, stop_backup_result.tablespace_map_content_len,
 				backup_files_list);
 			free(stop_backup_result.tablespace_map_content);

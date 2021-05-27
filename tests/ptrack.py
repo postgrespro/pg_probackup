@@ -66,8 +66,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             ptrack_enable=True,
-            initdb_params=['--data-checksums'],
-            pg_options={'autovacuum': 'off'})
+            initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -149,8 +148,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             ptrack_enable=True,
-            initdb_params=['--data-checksums'],
-            pg_options={'autovacuum': 'off'})
+            initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -301,8 +299,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             ptrack_enable=True,
-            initdb_params=['--data-checksums'],
-            pg_options={'autovacuum': 'off'})
+            initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -666,8 +663,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             ptrack_enable=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'wal_level': 'replica',
-                'autovacuum': 'off'})
+                'wal_level': 'replica'})
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -815,8 +811,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             ptrack_enable=True,
-            initdb_params=['--data-checksums'],
-            pg_options={'autovacuum': 'off'})
+            initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -974,8 +969,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             ptrack_enable=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'checkpoint_timeout': '30s',
-                'autovacuum': 'off'})
+                'checkpoint_timeout': '30s'})
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -1066,8 +1060,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             ptrack_enable=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'checkpoint_timeout': '30s',
-                'autovacuum': 'off'})
+                'checkpoint_timeout': '30s'})
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -1183,8 +1176,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             ptrack_enable=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'checkpoint_timeout': '30s',
-                'autovacuum': 'off'})
+                'checkpoint_timeout': '30s'})
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -1266,8 +1258,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             ptrack_enable=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'checkpoint_timeout': '30s',
-                'autovacuum': 'off'})
+                'checkpoint_timeout': '30s'})
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -1337,8 +1328,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             ptrack_enable=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'checkpoint_timeout': '30s',
-                'autovacuum': 'off'})
+                'checkpoint_timeout': '30s'})
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -1410,8 +1400,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             ptrack_enable=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'max_wal_size': '10GB',
-                'autovacuum': 'off'})
+                'max_wal_size': '10GB'})
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -1530,8 +1519,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             ptrack_enable=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'checkpoint_timeout': '30s',
-                'autovacuum': 'off'})
+                'checkpoint_timeout': '30s'})
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -1630,8 +1618,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             ptrack_enable=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'checkpoint_timeout': '30s',
-                'autovacuum': 'off'})
+                'checkpoint_timeout': '30s'})
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -1724,8 +1711,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             ptrack_enable=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'checkpoint_timeout': '30s',
-                'autovacuum': 'off'})
+                'checkpoint_timeout': '30s'})
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -1796,8 +1782,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             ptrack_enable=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'checkpoint_timeout': '30s',
-                'autovacuum': 'off'})
+                'checkpoint_timeout': '30s'})
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -1893,8 +1878,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             ptrack_enable=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'checkpoint_timeout': '30s',
-                'autovacuum': 'off'})
+                'checkpoint_timeout': '30s'})
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -2011,7 +1995,6 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             ptrack_enable=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'autovacuum': 'off',
                 'full_page_writes': 'off'})
 
         self.init_pb(backup_dir)
@@ -2768,9 +2751,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             ptrack_enable=True,
-            initdb_params=['--data-checksums'],
-            pg_options={
-                'autovacuum': 'off'})
+            initdb_params=['--data-checksums'])
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
@@ -2851,8 +2832,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             base_dir=os.path.join(module_name, fname, 'master'),
             set_replication=True,
             initdb_params=['--data-checksums'],
-            ptrack_enable=True,
-            pg_options={'autovacuum': 'off'})
+            ptrack_enable=True)
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
@@ -3031,8 +3011,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             pg_options={
                 'max_wal_size': '32MB',
                 'archive_timeout': '10s',
-                'checkpoint_timeout': '5min',
-                'autovacuum': 'off'})
+                'checkpoint_timeout': '5min'})
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
@@ -3692,8 +3671,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             base_dir=os.path.join(module_name, fname, 'master'),
             set_replication=True,
             ptrack_enable=True,
-            initdb_params=['--data-checksums'],
-            pg_options={'autovacuum': 'off'})
+            initdb_params=['--data-checksums'])
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
@@ -3982,9 +3960,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             ptrack_enable=True,
-            initdb_params=['--data-checksums'],
-            pg_options={
-                'autovacuum': 'off'})
+            initdb_params=['--data-checksums'])
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
@@ -4048,7 +4024,6 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             ptrack_enable=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'autovacuum': 'off',
                 'shared_buffers': '512MB',
                 'max_wal_size': '3GB'})
 
@@ -4181,7 +4156,6 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             ptrack_enable=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'autovacuum': 'off',
                 'shared_buffers': '512MB',
                 'max_wal_size': '3GB'})
 
@@ -4459,6 +4433,81 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         pgdata_restored = self.pgdata_content(node.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+        # @unittest.skip("skip")
+    def test_horizon_lsn_ptrack(self):
+        """
+        https://github.com/postgrespro/pg_probackup/pull/386
+        """
+
+        if self.pg_config_version < self.version_to_num('11.0'):
+            return unittest.skip("You need PostgreSQL >= 11 for this test")
+
+        self.assertLessEqual(
+            self.version_to_num(self.old_probackup_version),
+            self.version_to_num('2.4.15'),
+            'You need pg_probackup old_binary =< 2.4.15 for this test')
+
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            ptrack_enable=True,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.slow_start()
+
+        if node.major_version >= 11:
+            node.safe_psql(
+                "postgres",
+                "CREATE EXTENSION ptrack")
+
+        # TODO: ptrack version must be 2.1
+        ptrack_version = node.safe_psql(
+            "postgres",
+            "SELECT extversion "
+			"FROM pg_catalog.pg_extension WHERE extname = 'ptrack'").decode('utf-8').rstrip()
+
+        self.assertEqual(
+            ptrack_version,
+            "2.1",
+            "You need ptrack 2.1 for this test")
+
+        # set map_size to a minimal value
+        self.set_auto_conf(node, {'ptrack.map_size': '1'})
+        node.restart()
+
+        node.pgbench_init(scale=100)
+
+        # FULL backup
+        full_id = self.backup_node(backup_dir, 'node', node, options=['--stream'], old_binary=True)
+
+        # enable archiving so the WAL size to do interfere with data bytes comparison later
+        self.set_archiving(backup_dir, 'node', node)
+        node.restart()
+
+        # change data
+        pgbench = node.pgbench(options=['-T', '10', '-c', '1', '--no-vacuum'])
+        pgbench.wait()
+
+        # DELTA is exemplar
+        delta_id = self.backup_node(
+            backup_dir, 'node', node, backup_type='delta')
+        delta_bytes = self.show_pb(backup_dir, 'node', backup_id=delta_id)["data-bytes"]
+        self.delete_pb(backup_dir, 'node', backup_id=delta_id)
+
+        # PTRACK with current binary
+        ptrack_id = self.backup_node(backup_dir, 'node', node, backup_type='ptrack')
+        ptrack_bytes = self.show_pb(backup_dir, 'node', backup_id=ptrack_id)["data-bytes"]
+
+        # make sure that backup size is exactly the same
+        self.assertEqual(delta_bytes, ptrack_bytes)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
