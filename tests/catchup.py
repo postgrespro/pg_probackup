@@ -312,3 +312,61 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         source_pg.stop()
         self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_tablefile_truncation(self):
+        """
+        """
+        fname = self.id().split('.')[3]
+
+        source_pg = self.make_simple_node(
+            base_dir = os.path.join(module_name, fname, 'src'),
+            ptrack_enable = True,
+            initdb_params = ['--data-checksums'])
+        source_pg.slow_start()
+
+        source_pg.safe_psql("postgres", "CREATE EXTENSION ptrack")
+        source_pg.safe_psql(
+            "postgres",
+            "CREATE SEQUENCE t_seq; "
+            "CREATE TABLE t_heap AS SELECT i AS id, "
+            "md5(i::text) AS text, "
+            "md5(repeat(i::text, 10))::tsvector AS tsvector "
+            "FROM generate_series(0, 1024) i")
+        source_pg.safe_psql("postgres", "VACUUM t_heap")
+
+        dest_pg = self.make_empty_node(os.path.join(module_name, fname, 'dst'))
+        dest_pg = self.catchup_node(
+            backup_mode = 'FULL',
+            source_pgdata = source_pg.data_dir,
+            destination_node = dest_pg,
+            options = [
+                '-d', 'postgres',
+                '-p', str(source_pg.port),
+                '--stream'
+                ]
+            )
+
+        dest_options = {}
+        dest_options['port'] = str(dest_pg.port)
+        self.set_auto_conf(dest_pg, dest_options)
+        dest_pg.slow_start()
+        dest_pg.stop()
+
+        source_pg.safe_psql("postgres", "DELETE FROM t_heap WHERE ctid >= '(11,0)'")
+        source_pg.safe_psql("postgres", "VACUUM t_heap")
+
+        # catchup
+        self.catchup_node(
+            backup_mode = 'PTRACK',
+            source_pgdata = source_pg.data_dir,
+            destination_node = dest_pg,
+            options = ['-d', 'postgres', '-p', str(source_pg.port), '--stream'])
+
+        source_pgdata = self.pgdata_content(source_pg.data_dir)
+        dest_pgdata = self.pgdata_content(dest_pg.data_dir)
+        self.compare_pgdata(source_pgdata, dest_pgdata)
+
+        # Clean after yourself
+        source_pg.stop()
+        self.del_test_dir(module_name, fname)
