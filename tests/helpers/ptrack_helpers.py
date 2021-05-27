@@ -1050,13 +1050,10 @@ class ProbackupTest(object):
             '--catchup-source-pgdata={0}'.format(source_pgdata),
             '--catchup-destination-pgdata={0}'.format(destination_node.data_dir)
         ]
-
         if self.remote:
             cmd_list += ['--remote-proto=ssh', '--remote-host=localhost']
 
         self.run_pb(cmd_list + options)
-
-        destination_node.append_conf(port=destination_node.port)
         return destination_node
 
     def show_pb(

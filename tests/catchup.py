@@ -30,6 +30,9 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             )
         source_pg.stop()
 
+        dest_options = {}
+        dest_options['port'] = str(dest_pg.port)
+        self.set_auto_conf(dest_pg, dest_options)
         dest_pg.slow_start()
         self.assertEqual(
             result,
@@ -72,18 +75,22 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
                 '-T', '{0}={1}'.format(tblspace1_old_path, tblspace1_new_path)
                 ]
             )
+
+        source_pgdata = self.pgdata_content(source_pg.data_dir)
+        dest_pgdata = self.pgdata_content(dest_pg.data_dir)
+        self.compare_pgdata(source_pgdata, dest_pgdata)
+
         source_pg.stop()
 
+        dest_options = {}
+        dest_options['port'] = str(dest_pg.port)
+        self.set_auto_conf(dest_pg, dest_options)
         dest_pg.slow_start()
         self.assertEqual(
             result,
             dest_pg.safe_psql("postgres", "SELECT * FROM ultimate_question"),
             'Different answer from copy')
         dest_pg.stop()
-
-        source_pgdata = self.pgdata_content(source_pg.data_dir)
-        dest_pgdata = self.pgdata_content(dest_pg.data_dir)
-        self.compare_pgdata(source_pgdata, dest_pgdata)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -111,6 +118,9 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             options = ['-d', 'postgres', '-p', str(source_pg.port), '--stream', '-j', '4'])
         source_pg.stop()
 
+        dest_options = {}
+        dest_options['port'] = str(dest_pg.port)
+        self.set_auto_conf(dest_pg, dest_options)
         dest_pg.slow_start()
         self.assertEqual(
             result,
@@ -172,6 +182,9 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         source_pg.stop()
 
         # check latest changes
+        dest_options = {}
+        dest_options['port'] = str(dest_pg.port)
+        self.set_auto_conf(dest_pg, dest_options)
         self.set_replica(source_pg, dest_pg)
         dest_pg.slow_start(replica = True)
         self.assertEqual(
@@ -211,6 +224,9 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             destination_node = dest_pg,
             options = ['-d', 'postgres', '-p', str(source_pg.port), '--stream'])
         self.set_replica(source_pg, dest_pg)
+        dest_options = {}
+        dest_options['port'] = str(dest_pg.port)
+        self.set_auto_conf(dest_pg, dest_options)
         dest_pg.slow_start(replica = True)
         dest_pg.stop()
 
@@ -246,8 +262,6 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
     # @unittest.skip("skip")
     def test_table_drop(self):
         """
-        Test 'multithreaded basebackup' mode
-        create node, insert some test data, catchup into other dir, start, select test data
         """
         fname = self.id().split('.')[3]
 
@@ -274,6 +288,9 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
                 ]
             )
 
+        dest_options = {}
+        dest_options['port'] = str(dest_pg.port)
+        self.set_auto_conf(dest_pg, dest_options)
         dest_pg.slow_start()
         dest_pg.stop()
 
@@ -288,13 +305,10 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             destination_node = dest_pg,
             options = ['-d', 'postgres', '-p', str(source_pg.port), '--stream'])
 
-        source_pg.stop()
-        dest_pg.slow_start()
-        dest_pg.stop()
-
         source_pgdata = self.pgdata_content(source_pg.data_dir)
         dest_pgdata = self.pgdata_content(dest_pg.data_dir)
         self.compare_pgdata(source_pgdata, dest_pgdata)
 
         # Clean after yourself
+        source_pg.stop()
         self.del_test_dir(module_name, fname)
