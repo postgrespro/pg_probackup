@@ -600,7 +600,6 @@ typedef struct
 	int			ret;
 } backup_files_arg;
 
-
 typedef struct timelineInfo timelineInfo;
 
 /* struct to collect info about timelines in WAL archive */
@@ -679,10 +678,11 @@ typedef struct BackupPageHeader2
 	uint16      checksum;
 } BackupPageHeader2;
 
-typedef struct StopBackupCallbackState {
+typedef struct StopBackupCallbackParams
+{
 	PGconn	*conn;
 	int      server_version;
-} StopBackupCallbackState;
+} StopBackupCallbackParams;
 
 /* Special value for compressed_size field */
 #define PageIsOk		 0
@@ -1061,6 +1061,7 @@ extern int pgFileCompareRelPathWithExternalDesc(const void *f1, const void *f2);
 extern int pgFileCompareLinked(const void *f1, const void *f2);
 extern int pgFileCompareSize(const void *f1, const void *f2);
 extern int pgCompareOid(const void *f1, const void *f2);
+extern void pfilearray_clear_locks(parray *file_list);
 
 /* in data.c */
 extern bool check_data_file(ConnectionArgs *arguments, pgFile *file,
@@ -1259,4 +1260,42 @@ extern void start_WAL_streaming(PGconn *backup_conn, char *stream_dst_path,
 							   ConnectionOptions *conn_opt,
 							   XLogRecPtr startpos, TimeLineID starttli);
 extern int wait_WAL_streaming_end(parray *backup_files_list);
+
+/* external variables and functions, implemented in backup.c */
+typedef struct PGStopBackupResult
+{
+	/*
+	 * We will use values of snapshot_xid and invocation_time if there are
+	 * no transactions between start_lsn and stop_lsn.
+	 */
+	TransactionId	snapshot_xid;
+	time_t		invocation_time;
+	/*
+	 * Fields that store pg_catalog.pg_stop_backup() result
+	 */
+	XLogRecPtr	lsn;
+	size_t		backup_label_content_len;
+	char		*backup_label_content;
+	size_t		tablespace_map_content_len;
+	char		*tablespace_map_content;
+} PGStopBackupResult;
+
+extern bool backup_in_progress;
+extern parray *backup_files_list;
+
+extern void pg_start_backup(const char *label, bool smooth, pgBackup *backup,
+							PGNodeInfo *nodeInfo, PGconn *conn);
+extern void pg_silent_client_messages(PGconn *conn);
+extern void pg_create_restore_point(PGconn *conn, time_t backup_start_time);
+extern void pg_stop_backup_send(PGconn *conn, int server_version, bool is_started_on_replica, bool is_exclusive, char **query_text);
+extern void pg_stop_backup_consume(PGconn *conn, int server_version,
+		bool is_exclusive, uint32 timeout, const char *query_text,
+		PGStopBackupResult *result);
+extern void pg_stop_backup_write_file_helper(const char *path, const char *filename, const char *error_msg_filename,
+		const void *data, size_t len, parray *file_list);
+extern XLogRecPtr wait_wal_lsn(const char *wal_segment_dir, XLogRecPtr lsn, bool is_start_lsn, TimeLineID tli,
+								bool in_prev_segment, bool segment_only,
+								int timeout_elevel, bool in_stream_dir);
+extern void wait_wal_and_calculate_stop_lsn(const char *xlog_path, XLogRecPtr stop_lsn, pgBackup *backup);
+
 #endif /* PG_PROBACKUP_H */

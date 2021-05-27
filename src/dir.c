@@ -222,6 +222,8 @@ pgFileInit(const char *rel_path)
 	/* Number of blocks backed up during backup */
 	file->n_headers = 0;
 
+	// May be add?
+	// pg_atomic_clear_flag(file->lock);
 	return file;
 }
 
@@ -1858,4 +1860,18 @@ cleanup_tablespace(const char *path)
 
 	parray_walk(files, pgFileFree);
 	parray_free(files);
+}
+
+/*
+ * Clear the synchronisation locks in a parray of (pgFile *)'s
+ */
+void
+pfilearray_clear_locks(parray *file_list)
+{
+	int i;
+	for (i = 0; i < parray_num(file_list); i++)
+	{
+		pgFile *file = (pgFile *) parray_get(file_list, i);
+		pg_atomic_clear_flag(&file->lock);
+	}
 }
