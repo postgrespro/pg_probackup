@@ -72,6 +72,9 @@ catchup_collect_info(PGNodeInfo	*source_node_info, const char *source_pgdata, co
 	/* Get WAL segments size and system ID of source PG instance */
 	instance_config.xlog_seg_size = get_xlog_seg_size(source_pgdata);
 	instance_config.system_identifier = get_system_identifier(source_pgdata);
+#if PG_VERSION_NUM < 90600
+	instance_config.pgdata = source_pgdata;
+#endif
 	current.start_time = time(NULL);
 
 	StrNCpy(current.program_version, PROGRAM_VERSION, sizeof(current.program_version));
@@ -113,7 +116,10 @@ catchup_collect_info(PGNodeInfo	*source_node_info, const char *source_pgdata, co
 	return source_conn;
 }
 
-//REVIEW Please add a comment to this function.
+/*
+ * Check that catchup can be performed on source and dest
+ * this function is for checks, that can be performed without modification of data on disk
+ */
 static void
 catchup_preflight_checks(PGNodeInfo *source_node_info, PGconn *source_conn,
 		const char *source_pgdata, const char *dest_pgdata, bool dest_pgdata_is_empty)
@@ -164,16 +170,13 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 	RedoParams	dest_redo = { 0, InvalidXLogRecPtr, 0 };
 	pgFile		*source_pg_control_file = NULL;
 
-	//REVIEW please adjust this comment.
-	/* arrays with meta info for multi threaded backup */
+	/* arrays with meta info for multi threaded catchup */
 	pthread_t	*threads;
 	catchup_thread_runner_arg *threads_args;
 	bool		catchup_isok = true;
 
 	parray     *source_filelist = NULL;
 	parray	   *dest_filelist = NULL;
-	//REVIEW We don't handle external_dirs in catchup, do we? Let's clean this up.
-	parray	   *external_dirs = NULL;
 
 	//REVIEW FIXME Let's fix it before release. It can cause some obscure bugs.
 	/* TODO: in case of timeline mistmatch, check that source PG timeline descending from dest PG timeline */
@@ -198,8 +201,6 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 	time2iso(label, lengthof(label), current.start_time, false);
 	strncat(label, " with pg_probackup", lengthof(label) -
 			strlen(" with pg_probackup"));
-
-	//REVIEW FIXME Let' do that.
 
 	/* Call pg_start_backup function in PostgreSQL connect */
 	pg_start_backup(label, smooth_checkpoint, &current, source_node_info, source_conn);
@@ -231,8 +232,8 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 
 		// new ptrack is more robust and checks Start LSN
 		if (ptrack_lsn > dest_redo.lsn || ptrack_lsn == InvalidXLogRecPtr)
-			elog(ERROR, "LSN from ptrack_control %X/%X is greater than checkpoint LSN  %X/%X.\n"
-						"Create new full backup before an incremental one.",
+			elog(ERROR, "LSN from ptrack_control in source %X/%X is greater than checkpoint LSN in destination %X/%X.\n"
+						"You can perform only FULL catchup.",
 						(uint32) (ptrack_lsn >> 32), (uint32) (ptrack_lsn),
 						(uint32) (dest_redo.lsn >> 32),
 						(uint32) (dest_redo.lsn));
@@ -255,8 +256,6 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 							current.start_lsn, current.tli);
 	}
 
-	//REVIEW please adjust the comment.
-	/* initialize backup list */
 	source_filelist = parray_new();
 
 	/* list files with the logical path. omit $PGDATA */
@@ -471,14 +470,14 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 	//REVIEW Hmm. Why do we need this at all?
 	//I'd expect that we init pgfile with unset lock...
 	//Not related to this patch, though.
+	//REVIEW_ANSWER initialization in the pgFileInit function was proposed but was not accepted (see 2c8b7e9)
 	/* clear file locks */
 	pfilearray_clear_locks(source_filelist);
 
 	/* Sort by size for load balancing */
 	parray_qsort(source_filelist, pgFileCompareSize);
 
-	//REVIEW. This comment looks a bit misleading, since all theads share same filelist.
-	/* init thread args with own file lists */
+	/* init thread args */
 	threads = (pthread_t *) palloc(sizeof(pthread_t) * num_threads);
 	threads_args = (catchup_thread_runner_arg *) palloc(sizeof(catchup_thread_runner_arg) * num_threads);
 
@@ -539,6 +538,7 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 			pretty_time);
 
 	//REVIEW The comment looks unrelated to the function. Do I miss something?
+	//REVIEW_ANSWER because it is a part of pg_stop_backup() calling
 	/* Notify end of backup */
 	pg_silent_client_messages(source_conn);
 
@@ -681,12 +681,9 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 		parray_walk(dest_filelist, pgFileFree);
 		parray_free(dest_filelist);
 	}
-
 	parray_walk(source_filelist, pgFileFree);
 	parray_free(source_filelist);
 	pgFileFree(source_pg_control_file);
-	//REVIEW Huh?
-	// где закрывается conn?
 }
 
 /*

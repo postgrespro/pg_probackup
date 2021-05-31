@@ -14,7 +14,9 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         """
         fname = self.id().split('.')[3]
 
-        source_pg = self.make_simple_node(base_dir = os.path.join(module_name, fname, 'src'))
+        source_pg = self.make_simple_node(
+            base_dir = os.path.join(module_name, fname, 'src'),
+            set_replication=True)
         source_pg.slow_start()
         source_pg.safe_psql(
             "postgres",
@@ -140,6 +142,9 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         generate some load on master, insert some test data on master,
         catchup copy, start and select test data
         """
+        if not self.ptrack:
+            return unittest.skip('Skipped because ptrack support is disabled')
+
         fname = self.id().split('.')[3]
 
         # prepare master
@@ -263,6 +268,9 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
     def test_table_drop(self):
         """
         """
+        if not self.ptrack:
+            return unittest.skip('Skipped because ptrack support is disabled')
+
         fname = self.id().split('.')[3]
 
         source_pg = self.make_simple_node(
@@ -317,6 +325,9 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
     def test_tablefile_truncation(self):
         """
         """
+        if not self.ptrack:
+            return unittest.skip('Skipped because ptrack support is disabled')
+
         fname = self.id().split('.')[3]
 
         source_pg = self.make_simple_node(
