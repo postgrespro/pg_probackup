@@ -909,6 +909,7 @@ get_tablespace_mapping(const char *dir)
 	return dir;
 }
 
+//REVIEW What exactly wrong with this abstraction? I don't get it...
 /*
  * TODO протёкшая абстрация, надо на этапе ревью решить что с ней делать,
  * потому как непонятно, почему мы в backup.c напрямую работаем с созданием

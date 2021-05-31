@@ -52,11 +52,16 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads)
 	do_catchup_instance(source_pgdata, dest_pgdata, source_conn, &source_node_info,
 						no_sync, backup_logs, dest_pgdata_is_empty);
 
+	//REVIEW: Are we going to do that before release?
 	/* TODO: show the amount of transfered data in bytes and calculate incremental ratio */
 
 	return 0;
 }
 
+//REVIEW Please add a comment to this function.
+//Besides, the name of this function looks strange to me.
+//Maybe catchup_init_state() or catchup_setup() will do better?
+//I'd also suggest to wrap all these fields into some CatchupState, but it isn't urgent.
 static PGconn *
 catchup_collect_info(PGNodeInfo	*source_node_info, const char *source_pgdata, const char *dest_pgdata)
 {
@@ -70,12 +75,14 @@ catchup_collect_info(PGNodeInfo	*source_node_info, const char *source_pgdata, co
 	current.start_time = time(NULL);
 
 	StrNCpy(current.program_version, PROGRAM_VERSION, sizeof(current.program_version));
+	//REVIEW I guess these are some copy-paste leftovers. Let's clean them.
 	//current.compress_alg = instance_config.compress_alg;
 	//current.compress_level = instance_config.compress_level;
 
 	/* Do some compatibility checks and fill basic info about PG instance */
 	source_conn = pgdata_basic_setup(instance_config.conn_opt, source_node_info);
 
+	//REVIEW Please adjust the comment. Do we need this code for catchup at all?
 	/* below perform checks specific for backup command */
 #if PG_VERSION_NUM >= 110000
 	if (!RetrieveWalSegSize(source_conn))
@@ -106,10 +113,12 @@ catchup_collect_info(PGNodeInfo	*source_node_info, const char *source_pgdata, co
 	return source_conn;
 }
 
+//REVIEW Please add a comment to this function.
 static void
 catchup_preflight_checks(PGNodeInfo *source_node_info, PGconn *source_conn,
 		const char *source_pgdata, const char *dest_pgdata, bool dest_pgdata_is_empty)
 {
+	//REVIEW Let's fix it before release.
 	// TODO: add sanity check that source PGDATA is not empty
 
 	/* Check that connected PG instance and source PGDATA are the same */
@@ -135,6 +144,7 @@ catchup_preflight_checks(PGNodeInfo *source_node_info, PGconn *source_conn,
 	if (current.from_replica && exclusive_backup)
 		elog(ERROR, "Catchup from standby is available only for PG >= 9.6");
 
+	//REVIEW FIXME Let's fix it before release. This one seems like a potential bug.
 	// TODO check if it is local catchup and source contain tablespaces
 }
 
@@ -154,6 +164,7 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 	RedoParams	dest_redo = { 0, InvalidXLogRecPtr, 0 };
 	pgFile		*source_pg_control_file = NULL;
 
+	//REVIEW please adjust this comment.
 	/* arrays with meta info for multi threaded backup */
 	pthread_t	*threads;
 	catchup_thread_runner_arg *threads_args;
@@ -161,8 +172,10 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 
 	parray     *source_filelist = NULL;
 	parray	   *dest_filelist = NULL;
+	//REVIEW We don't handle external_dirs in catchup, do we? Let's clean this up.
 	parray	   *external_dirs = NULL;
 
+	//REVIEW FIXME Let's fix it before release. It can cause some obscure bugs.
 	/* TODO: in case of timeline mistmatch, check that source PG timeline descending from dest PG timeline */
 	parray       *tli_list = NULL;
 
@@ -172,6 +185,8 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 	char		pretty_bytes[20];
 
 	PGStopBackupResult	stop_backup_result;
+	//REVIEW Is it relevant to catchup? I suppose it isn't, since catchup is a new code.
+	//If we do need it, please write a comment explaining that.
 	/* kludge against some old bug in archive_timeout. TODO: remove in 3.0.0 */
 	int	     timeout = (instance_config.archive_timeout > 0) ?
 				instance_config.archive_timeout : ARCHIVE_TIMEOUT_DEFAULT;
@@ -184,10 +199,14 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 	strncat(label, " with pg_probackup", lengthof(label) -
 			strlen(" with pg_probackup"));
 
+	//REVIEW FIXME Let' do that.
+
 	/* Call pg_start_backup function in PostgreSQL connect */
 	pg_start_backup(label, smooth_checkpoint, &current, source_node_info, source_conn);
 	elog(LOG, "pg_start_backup START LSN %X/%X", (uint32) (current.start_lsn >> 32), (uint32) (current.start_lsn));
 
+	//REVIEW I wonder, if we can move this piece above and call before pg_start backup()?
+	//It seems to be a part of setup phase.
 	if (!dest_pgdata_is_empty &&
 		(current.backup_mode == BACKUP_MODE_DIFF_PTRACK ||
 		 current.backup_mode == BACKUP_MODE_DIFF_DELTA))
@@ -201,6 +220,8 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 		elog(INFO, "syncLSN = %X/%X", (uint32) (dest_redo.lsn >> 32), (uint32) dest_redo.lsn);
 	}
 
+	//REVIEW I wonder, if we can move this piece above and call before pg_start backup()?
+	//It seems to be a part of setup phase.
 	/*
 	 * TODO: move to separate function to use in both backup.c and catchup.c
 	 */
@@ -234,6 +255,7 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 							current.start_lsn, current.tli);
 	}
 
+	//REVIEW please adjust the comment.
 	/* initialize backup list */
 	source_filelist = parray_new();
 
@@ -244,12 +266,15 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 	else
 		dir_list_file(source_filelist, source_pgdata,
 					  true, true, false, backup_logs, true, 0, FIO_LOCAL_HOST);
+
+	//REVIEW FIXME. Let's fix that before release.
 	// TODO filter pg_xlog/wal?
 	// TODO what if wal is not a dir (symlink to a dir)?
 
 	/* close ssh session in main thread */
 	fio_disconnect();
 
+	//REVIEW Do we want to do similar calculation for dest?
 	current.pgdata_bytes += calculate_datasize_of_filelist(source_filelist);
 	pretty_size(current.pgdata_bytes, pretty_bytes, lengthof(pretty_bytes));
 	elog(INFO, "Source PGDATA size: %s", pretty_bytes);
@@ -267,12 +292,14 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 	 */
 	parray_qsort(source_filelist, pgFileCompareRelPathWithExternal);
 
+	//REVIEW Please adjust the comment.
 	/* Extract information about files in source_filelist parsing their names:*/
 	parse_filelist_filenames(source_filelist, source_pgdata);
 
 	elog(LOG, "Start LSN (source): %X/%X, TLI: %X",
 			(uint32) (current.start_lsn >> 32), (uint32) (current.start_lsn),
 			current.tli);
+	//REVIEW FIXME Huh? Don't we check TLI at all? 
 	/* TODO проверить, нужна ли проверка TLI */
 	if (current.backup_mode != BACKUP_MODE_FULL)
 		elog(LOG, "LSN in destination: %X/%X, TLI: %X",
@@ -339,11 +366,14 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 			char	to_path[MAXPGPATH];
 
 			// perform additional check that this is actually synlink?
+			//REVIEW Why is this code block separated?
 			{ /* get full symlink path and map this path to new location */
 				char	source_full_path[MAXPGPATH];
 				char	symlink_content[MAXPGPATH];
 				join_path_components(source_full_path, source_pgdata, file->rel_path);
 				fio_readlink(source_full_path, symlink_content, sizeof(symlink_content), FIO_DB_HOST);
+				//REVIEW What if we won't find mapping for this tablespace?
+				//I'd expect a failure. Otherwise, we may spoil source database data.
 				linked_path = leaked_abstraction_get_tablespace_mapping(symlink_content);
 				// TODO: check that linked_path != symlink_content in case of local catchup?
 				elog(WARNING, "Map tablespace full_path: \"%s\" old_symlink_content: \"%s\" old_symlink_content: \"%s\"\n",
@@ -361,6 +391,8 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 			elog(VERBOSE, "Create directory \"%s\" and symbolic link \"%s\"",
 					 linked_path, to_path);
 
+			//REVIEW Handle return value here.
+			//We should not proceed if failed to create dir.
 			/* create tablespace directory */
 			fio_mkdir(linked_path, DIR_PERMISSION, FIO_BACKUP_HOST);
 
@@ -403,6 +435,8 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 			bool     redundant = true;
 			pgFile	*file = (pgFile *) parray_get(dest_filelist, i);
 
+			//REVIEW Can we maybe optimize it and use some merge-like algorithm
+			//instead of bsearch for each file? Of course it isn't an urgent fix.
 			if (parray_bsearch(source_filelist, file, pgFileCompareRelPathWithExternal))
 				redundant = false;
 
@@ -411,6 +445,7 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 				pg_strcasecmp(file->name, RELMAPPER_FILENAME) == 0)
 				redundant = true;
 
+			//REVIEW This check seems unneded. Anyway we delete only redundant stuff below.
 			/* do not delete the useful internal directories */
 			if (S_ISDIR(file->mode) && !redundant)
 				continue;
@@ -433,12 +468,16 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 		}
 	}
 
+	//REVIEW Hmm. Why do we need this at all?
+	//I'd expect that we init pgfile with unset lock...
+	//Not related to this patch, though.
 	/* clear file locks */
 	pfilearray_clear_locks(source_filelist);
 
 	/* Sort by size for load balancing */
 	parray_qsort(source_filelist, pgFileCompareSize);
 
+	//REVIEW. This comment looks a bit misleading, since all theads share same filelist.
 	/* init thread args with own file lists */
 	threads = (pthread_t *) palloc(sizeof(pthread_t) * num_threads);
 	threads_args = (catchup_thread_runner_arg *) palloc(sizeof(catchup_thread_runner_arg) * num_threads);
@@ -499,9 +538,12 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 		elog(ERROR, "Data files transferring failed, time elapsed: %s",
 			pretty_time);
 
+	//REVIEW The comment looks unrelated to the function. Do I miss something?
 	/* Notify end of backup */
 	pg_silent_client_messages(source_conn);
 
+	//REVIEW. Do we want to support pg 9.5? I suppose we never test it...
+	//Maybe check it and error out early?
 	/* Create restore point
 	 * Only if backup is from master.
 	 * For PG 9.5 create restore point only if pguser is superuser.
@@ -545,14 +587,17 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 		stop_backup_result.tablespace_map_content_len = 0;
 	}
 
+	//REVIEW We don't pass a filelist. Please adjust the comment.
 	/* This function will also add list of xlog files
 	 * to the passed filelist */
 	if(wait_WAL_streaming_end(NULL))
 		elog(ERROR, "WAL streaming failed");
 
+	//REVIEW Please add a comment about these lsns. It is a crutial part of the algorithm.
 	current.recovery_xid = stop_backup_result.snapshot_xid;
 
 	elog(LOG, "Getting the Recovery Time from WAL");
+
 	/* iterate over WAL from stop_backup lsn to start_backup lsn */
 	if (!read_recovery_info(dest_xlog_path, current.tli,
 						instance_config.xlog_seg_size,
@@ -566,6 +611,7 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 	/* Cleanup */
 	pg_free(query_text);
 
+	//REVIEW Please adjust the comment.
 	/* In case of backup from replica >= 9.6 we must fix minRecPoint,
 	 * First we must find pg_control in source_filelist.
 	 */
@@ -601,6 +647,7 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 			/* construct fullpath */
 			if (file->external_dir_num == 0)
 				join_path_components(to_fullpath, dest_pgdata, file->rel_path);
+			//REVIEW Let's clean this.
 			/* TODO разобраться с external */
 			/*else
 			{
@@ -638,6 +685,7 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 	parray_walk(source_filelist, pgFileFree);
 	parray_free(source_filelist);
 	pgFileFree(source_pg_control_file);
+	//REVIEW Huh?
 	// где закрывается conn?
 }
 
@@ -682,6 +730,7 @@ catchup_thread_runner(void *arg)
 			join_path_components(from_fullpath, arguments->from_root, file->rel_path);
 			join_path_components(to_fullpath, arguments->to_root, file->rel_path);
 		}
+		//REVIEW Let's clean this.
 		/*else
 		{
 			char 	external_dst[MAXPGPATH];
