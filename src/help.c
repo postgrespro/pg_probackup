@@ -248,7 +248,7 @@ help_pg_probackup(void)
 	printf(_("                 [--ssh-options]\n"));
 	printf(_("                 [--help]\n"));
 
-	printf(_("\n%s catchup  -b catchup-mode\n"), PROGRAM_NAME);
+	printf(_("\n  %s catchup  -b catchup-mode\n"), PROGRAM_NAME);
 	printf(_("                 --catchup-source-pgdata=path_to_pgdata_on_remote_server\n"));
 	printf(_("                 --catchup-destination-pgdata=path_to_local_dir\n"));
 	printf(_("                 [--stream [-S slot-name]] [--temp-slot]\n"));
