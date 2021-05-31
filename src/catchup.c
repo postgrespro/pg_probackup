@@ -152,6 +152,7 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 	char		dest_xlog_path[MAXPGPATH];
 	char		label[1024];
 	RedoParams	dest_redo = { 0, InvalidXLogRecPtr, 0 };
+	pgFile		*source_pg_control_file = NULL;
 
 	/* arrays with meta info for multi threaded backup */
 	pthread_t	*threads;
@@ -182,8 +183,6 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 	time2iso(label, lengthof(label), current.start_time, false);
 	strncat(label, " with pg_probackup", lengthof(label) -
 			strlen(" with pg_probackup"));
-
-	// TODO delete dest control file
 
 	/* Call pg_start_backup function in PostgreSQL connect */
 	pg_start_backup(label, smooth_checkpoint, &current, source_node_info, source_conn);
@@ -268,7 +267,7 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 	 */
 	parray_qsort(source_filelist, pgFileCompareRelPathWithExternal);
 
-	/* Extract information about files in backup_list parsing their names:*/
+	/* Extract information about files in source_filelist parsing their names:*/
 	parse_filelist_filenames(source_filelist, source_pgdata);
 
 	elog(LOG, "Start LSN (source): %X/%X, TLI: %X",
@@ -372,6 +371,27 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 		}
 	}
 
+	/*
+	 * find pg_control file (in already sorted source_filelist)
+	 * and exclude it from list for future special processing
+	 */
+	{
+		int control_file_elem_index;
+		pgFile search_key ;
+		MemSet(&search_key, 0, sizeof(pgFile));
+		/* pgFileCompareRelPathWithExternal uses only .rel_path and .external_dir_num for comparision */
+		search_key.rel_path = XLOG_CONTROL_FILE;
+		search_key.external_dir_num = 0;
+		control_file_elem_index = parray_bsearch_index(source_filelist, &search_key, pgFileCompareRelPathWithExternal);
+		if(control_file_elem_index < 0)
+			elog(ERROR, "\"%s\" not found in \"%s\"\n", XLOG_CONTROL_FILE, source_pgdata);
+		source_pg_control_file = parray_remove(source_filelist, control_file_elem_index);
+	}
+
+	/*
+	 * remove absent source files in dest (dropped tables, etc...)
+	 * note: global/pg_control will also be deleted here
+	 */
 	if (!dest_pgdata_is_empty &&
 		(current.backup_mode == BACKUP_MODE_DIFF_PTRACK ||
 		 current.backup_mode == BACKUP_MODE_DIFF_DELTA))
@@ -421,7 +441,7 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 
 	/* init thread args with own file lists */
 	threads = (pthread_t *) palloc(sizeof(pthread_t) * num_threads);
-	threads_args = (catchup_thread_runner_arg *) palloc(sizeof(catchup_thread_runner_arg)*num_threads);
+	threads_args = (catchup_thread_runner_arg *) palloc(sizeof(catchup_thread_runner_arg) * num_threads);
 
 	for (i = 0; i < num_threads; i++)
 	{
@@ -434,7 +454,7 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 		arg->dest_filelist = dest_filelist;
 		arg->sync_lsn = dest_redo.lsn;
 		arg->backup_mode = current.backup_mode;
-		arg->thread_num = i+1;
+		arg->thread_num = i + 1;
 		/* By default there are some error */
 		arg->ret = 1;
 	}
@@ -457,6 +477,16 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 		pthread_join(threads[i], NULL);
 		if (threads_args[i].ret == 1)
 			catchup_isok = false;
+	}
+
+	/* at last copy control file */
+	{
+		char	from_fullpath[MAXPGPATH];
+		char	to_fullpath[MAXPGPATH];
+		join_path_components(from_fullpath, source_pgdata, source_pg_control_file->rel_path);
+		join_path_components(to_fullpath, dest_pgdata, source_pg_control_file->rel_path);
+		copy_pgcontrol_file(from_fullpath, FIO_DB_HOST,
+				to_fullpath, FIO_BACKUP_HOST, source_pg_control_file);
 	}
 
 	time(&end_time);
@@ -541,25 +571,7 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 	 */
 	if (current.from_replica && !exclusive_backup)
 	{
-		pgFile	   *pg_control = NULL;
-
-		for (i = 0; i < parray_num(source_filelist); i++)
-		{
-			pgFile	   *tmp_file = (pgFile *) parray_get(source_filelist, i);
-
-			if (tmp_file->external_dir_num == 0 &&
-				(strcmp(tmp_file->rel_path, XLOG_CONTROL_FILE) == 0))
-			{
-				pg_control = tmp_file;
-				break;
-			}
-		}
-
-		if (!pg_control)
-			elog(ERROR, "Failed to find file \"%s\" in backup filelist.",
-							XLOG_CONTROL_FILE);
-
-		set_min_recovery_point(pg_control, dest_pgdata, current.stop_lsn);
+		set_min_recovery_point(source_pg_control_file, dest_pgdata, current.stop_lsn);
 	}
 
 	/* close ssh session in main thread */
@@ -570,12 +582,13 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 		elog(WARNING, "Files are not synced to disk");
 	else
 	{
+		char    to_fullpath[MAXPGPATH];
+
 		elog(INFO, "Syncing copied files to disk");
 		time(&start_time);
 
 		for (i = 0; i < parray_num(source_filelist); i++)
 		{
-			char    to_fullpath[MAXPGPATH];
 			pgFile *file = (pgFile *) parray_get(source_filelist, i);
 
 			/* TODO: sync directory ? */
@@ -602,6 +615,13 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 				elog(ERROR, "Cannot sync file \"%s\": %s", to_fullpath, strerror(errno));
 		}
 
+		/*
+		 * sync pg_control file
+		 */
+		join_path_components(to_fullpath, dest_pgdata, source_pg_control_file->rel_path);
+		if (fio_sync(to_fullpath, FIO_BACKUP_HOST) != 0)
+			elog(ERROR, "Cannot sync file \"%s\": %s", to_fullpath, strerror(errno));
+
 		time(&end_time);
 		pretty_time_interval(difftime(end_time, start_time),
 							 pretty_time, lengthof(pretty_time));
@@ -617,6 +637,7 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 
 	parray_walk(source_filelist, pgFileFree);
 	parray_free(source_filelist);
+	pgFileFree(source_pg_control_file);
 	// где закрывается conn?
 }
 

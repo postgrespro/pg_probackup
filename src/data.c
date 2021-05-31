@@ -682,8 +682,7 @@ catchup_data_file(pgFile *file, const char *from_fullpath, const char *to_fullpa
 	 * This way we can correctly handle null-sized files which are
 	 * not tracked by pagemap and thus always marked as unchanged.
 	 */
-	if ((backup_mode == BACKUP_MODE_DIFF_PAGE ||
-		backup_mode == BACKUP_MODE_DIFF_PTRACK) &&
+	if (backup_mode == BACKUP_MODE_DIFF_PTRACK &&
 		file->pagemap.bitmapsize == PageBitmapIsEmpty &&
 		file->exists_in_prev && !file->pagemap_isabsent)
 	{
@@ -711,7 +710,7 @@ catchup_data_file(pgFile *file, const char *from_fullpath, const char *to_fullpa
 	 * Such files should be fully copied.
 	 */
 
-	if 	(file->pagemap.bitmapsize == PageBitmapIsEmpty ||
+	if (file->pagemap.bitmapsize == PageBitmapIsEmpty ||
 		 file->pagemap_isabsent || !file->exists_in_prev ||
 		 !file->pagemap.bitmap)
 		use_pagemap = false;
