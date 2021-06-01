@@ -2185,7 +2185,7 @@ check_incremental_compatibility(const char *pgdata, uint64 system_identifier,
 	 * data files content, because based on pg_control information we will
 	 * choose a backup suitable for lsn based incremental restore.
 	 */
-	elog(INFO, "Trying to read pg_control file in destination direstory");
+	elog(INFO, "Trying to read pg_control file in destination directory");
 
 	system_id_pgdata = get_system_identifier(pgdata);
 
