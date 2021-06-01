@@ -28,10 +28,9 @@
  */
 static PGconn *catchup_collect_info(PGNodeInfo *source_node_info, const char *source_pgdata, const char *dest_pgdata);
 static void catchup_preflight_checks(PGNodeInfo *source_node_info, PGconn *source_conn, const char *source_pgdata, 
-					const char *dest_pgdata, bool dest_pgdata_is_empty);
+					const char *dest_pgdata);
 static void do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *source_conn,
-					PGNodeInfo *nodeInfo, bool no_sync, bool backup_logs,
-					bool dest_pgdata_is_empty);
+					PGNodeInfo *nodeInfo, bool no_sync, bool backup_logs);
 static void *catchup_thread_runner(void *arg);
 
 /*
@@ -44,13 +43,12 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads)
 	PGNodeInfo	source_node_info;
 	bool		no_sync = false;
 	bool		backup_logs = false;
-	bool		dest_pgdata_is_empty = dir_is_empty(dest_pgdata, FIO_LOCAL_HOST);
 
 	source_conn = catchup_collect_info(&source_node_info, source_pgdata, dest_pgdata);
-	catchup_preflight_checks(&source_node_info, source_conn, source_pgdata, dest_pgdata, dest_pgdata_is_empty);
+	catchup_preflight_checks(&source_node_info, source_conn, source_pgdata, dest_pgdata);
 
 	do_catchup_instance(source_pgdata, dest_pgdata, source_conn, &source_node_info,
-						no_sync, backup_logs, dest_pgdata_is_empty);
+						no_sync, backup_logs);
 
 	//REVIEW: Are we going to do that before release?
 	/* TODO: show the amount of transfered data in bytes and calculate incremental ratio */
@@ -66,6 +64,7 @@ static PGconn *
 catchup_collect_info(PGNodeInfo	*source_node_info, const char *source_pgdata, const char *dest_pgdata)
 {
 	PGconn		*source_conn;
+
 	/* Initialize PGInfonode */
 	pgNodeInit(source_node_info);
 
@@ -85,8 +84,6 @@ catchup_collect_info(PGNodeInfo	*source_node_info, const char *source_pgdata, co
 	/* Do some compatibility checks and fill basic info about PG instance */
 	source_conn = pgdata_basic_setup(instance_config.conn_opt, source_node_info);
 
-	//REVIEW Please adjust the comment. Do we need this code for catchup at all?
-	/* below perform checks specific for backup command */
 #if PG_VERSION_NUM >= 110000
 	if (!RetrieveWalSegSize(source_conn))
 		elog(ERROR, "Failed to retrieve wal_segment_size");
@@ -122,10 +119,42 @@ catchup_collect_info(PGNodeInfo	*source_node_info, const char *source_pgdata, co
  */
 static void
 catchup_preflight_checks(PGNodeInfo *source_node_info, PGconn *source_conn,
-		const char *source_pgdata, const char *dest_pgdata, bool dest_pgdata_is_empty)
+		const char *source_pgdata, const char *dest_pgdata)
 {
-	//REVIEW Let's fix it before release.
-	// TODO: add sanity check that source PGDATA is not empty
+	/*  TODO
+	 *  gsmol - fallback to FULL mode if dest PGDATA is empty
+	 *  kulaginm -- I think this is a harmful feature. If user requested an incremental catchup, then
+	 * he expects that this will be done quickly and efficiently. If, for example, he made a mistake
+	 * with dest_dir, then he will receive a second full copy instead of an error message, and I think
+         * that in some cases he would prefer the error.
+	 * I propose in future versions to offer a backup_mode auto, in which we will look to the dest_dir
+	 * and decide which of the modes will be the most effective.
+	 * I.e.:
+	 *   if(requested_backup_mode == BACKUP_MODE_DIFF_AUTO)
+	 *   {
+	 *     if(dest_pgdata_is_empty)
+	 *       backup_mode = BACKUP_MODE_FULL;
+         *     else
+         *       if(ptrack supported and applicable)
+	 *         backup_mode = BACKUP_MODE_DIFF_PTRACK;
+         *       else
+	 *         backup_mode = BACKUP_MODE_DIFF_DELTA;
+	 *   }
+	 */
+
+	if (dir_is_empty(dest_pgdata, FIO_LOCAL_HOST))
+	{
+		if (current.backup_mode == BACKUP_MODE_DIFF_PTRACK ||
+			 current.backup_mode == BACKUP_MODE_DIFF_DELTA)
+			elog(ERROR, "\"%s\" is empty but incremental catchup mode requested.",
+				dest_pgdata);
+	}
+	else /* dest dir not empty */
+	{
+		if (current.backup_mode == BACKUP_MODE_FULL)
+			elog(ERROR, "Can't perform full catchup into not empty directory \"%s\".",
+				dest_pgdata);
+	}
 
 	/* Check that connected PG instance and source PGDATA are the same */
 	check_system_identifiers(source_conn, source_pgdata);
@@ -141,7 +170,7 @@ catchup_preflight_checks(PGNodeInfo *source_node_info, PGconn *source_conn,
 			elog(ERROR, "Ptrack is disabled");
 	}
 
-	if (!dest_pgdata_is_empty &&
+	if (current.backup_mode != BACKUP_MODE_FULL &&
 		 check_incremental_compatibility(dest_pgdata,
 										  instance_config.system_identifier,
 										  INCR_CHECKSUM) != DEST_OK)
@@ -157,12 +186,10 @@ catchup_preflight_checks(PGNodeInfo *source_node_info, PGconn *source_conn,
 /*
  * TODO:
  *  - add description
- *  - fallback to FULL mode if dest PGDATA is empty
  */
 static void
 do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *source_conn,
-					PGNodeInfo *source_node_info, bool no_sync, bool backup_logs,
-					bool dest_pgdata_is_empty)
+					PGNodeInfo *source_node_info, bool no_sync, bool backup_logs)
 {
 	int			i;
 	char		dest_xlog_path[MAXPGPATH];
@@ -208,9 +235,8 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 
 	//REVIEW I wonder, if we can move this piece above and call before pg_start backup()?
 	//It seems to be a part of setup phase.
-	if (!dest_pgdata_is_empty &&
-		(current.backup_mode == BACKUP_MODE_DIFF_PTRACK ||
-		 current.backup_mode == BACKUP_MODE_DIFF_DELTA))
+	if (current.backup_mode == BACKUP_MODE_DIFF_PTRACK ||
+		 current.backup_mode == BACKUP_MODE_DIFF_DELTA)
 	{
 		dest_filelist = parray_new();
 		dir_list_file(dest_filelist, dest_pgdata,
@@ -423,9 +449,8 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 	 * remove absent source files in dest (dropped tables, etc...)
 	 * note: global/pg_control will also be deleted here
 	 */
-	if (!dest_pgdata_is_empty &&
-		(current.backup_mode == BACKUP_MODE_DIFF_PTRACK ||
-		 current.backup_mode == BACKUP_MODE_DIFF_DELTA))
+	if (current.backup_mode == BACKUP_MODE_DIFF_PTRACK ||
+		 current.backup_mode == BACKUP_MODE_DIFF_DELTA)
 	{
 		elog(INFO, "Removing redundant files in destination directory");
 		parray_qsort(dest_filelist, pgFileCompareRelPathWithExternalDesc);
@@ -676,7 +701,7 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 	}
 
 	/* Cleanup */
-	if (!dest_pgdata_is_empty && dest_filelist)
+	if (dest_filelist)
 	{
 		parray_walk(dest_filelist, pgFileFree);
 		parray_free(dest_filelist);
