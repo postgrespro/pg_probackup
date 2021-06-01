@@ -29,6 +29,7 @@
 static PGconn *catchup_collect_info(PGNodeInfo *source_node_info, const char *source_pgdata, const char *dest_pgdata);
 static void catchup_preflight_checks(PGNodeInfo *source_node_info, PGconn *source_conn, const char *source_pgdata, 
 					const char *dest_pgdata);
+static void check_tablespaces_existance_in_tbsmapping(PGconn *conn);
 static void do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *source_conn,
 					PGNodeInfo *nodeInfo, bool no_sync, bool backup_logs);
 static void *catchup_thread_runner(void *arg);
@@ -126,7 +127,7 @@ catchup_preflight_checks(PGNodeInfo *source_node_info, PGconn *source_conn,
 	 *  kulaginm -- I think this is a harmful feature. If user requested an incremental catchup, then
 	 * he expects that this will be done quickly and efficiently. If, for example, he made a mistake
 	 * with dest_dir, then he will receive a second full copy instead of an error message, and I think
-         * that in some cases he would prefer the error.
+	 * that in some cases he would prefer the error.
 	 * I propose in future versions to offer a backup_mode auto, in which we will look to the dest_dir
 	 * and decide which of the modes will be the most effective.
 	 * I.e.:
@@ -134,10 +135,10 @@ catchup_preflight_checks(PGNodeInfo *source_node_info, PGconn *source_conn,
 	 *   {
 	 *     if(dest_pgdata_is_empty)
 	 *       backup_mode = BACKUP_MODE_FULL;
-         *     else
-         *       if(ptrack supported and applicable)
+	 *     else
+	 *       if(ptrack supported and applicable)
 	 *         backup_mode = BACKUP_MODE_DIFF_PTRACK;
-         *       else
+	 *       else
 	 *         backup_mode = BACKUP_MODE_DIFF_DELTA;
 	 *   }
 	 */
@@ -179,8 +180,48 @@ catchup_preflight_checks(PGNodeInfo *source_node_info, PGconn *source_conn,
 	if (current.from_replica && exclusive_backup)
 		elog(ERROR, "Catchup from standby is available only for PG >= 9.6");
 
-	//REVIEW FIXME Let's fix it before release. This one seems like a potential bug.
-	// TODO check if it is local catchup and source contain tablespaces
+	if (!fio_is_remote(FIO_DB_HOST))
+		check_tablespaces_existance_in_tbsmapping(source_conn);
+}
+
+/*
+ * Check that all tablespaces exists in tablespace mapping (--tablespace-mapping option)
+ * Emit fatal error if that tablespace found
+ */
+static void
+check_tablespaces_existance_in_tbsmapping(PGconn *conn)
+{
+	PGresult	*res;
+	int		i;
+	char		*tablespace_path = NULL;
+	const char	*linked_path = NULL;
+	char		*query = "SELECT pg_catalog.pg_tablespace_location(oid) "
+						"FROM pg_catalog.pg_tablespace "
+						"WHERE pg_catalog.pg_tablespace_location(oid) <> '';";
+
+	res = pgut_execute(conn, query, 0, NULL);
+
+	if (!res)
+		elog(ERROR, "Failed to get list of tablespaces");
+
+	for (i = 0; i < res->ntups; i++)
+	{
+		tablespace_path = PQgetvalue(res, i, 0);
+		Assert (strlen(tablespace_path) > 0);
+
+		canonicalize_path(tablespace_path);
+		linked_path = leaked_abstraction_get_tablespace_mapping(tablespace_path);
+
+		if (strcmp(tablespace_path, linked_path) == 0)
+			/* same result -> not found in mapping */
+			elog(ERROR, "Local catchup executed, but source database contains "
+				"tablespace (\"%s\"), that are not listed in the map", tablespace_path);
+
+		if (!is_absolute_path(linked_path))
+			elog(ERROR, "Tablespace directory path must be an absolute path: %s\n",
+				linked_path);
+	}
+	PQclear(res);
 }
 
 /*

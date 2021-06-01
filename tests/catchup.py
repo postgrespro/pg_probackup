@@ -381,3 +381,45 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         source_pg.stop()
         self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_local_tablespace_without_mapping(self):
+        fname = self.id().split('.')[3]
+
+        source_pg = self.make_simple_node(
+            base_dir = os.path.join(module_name, fname, 'src'),
+            initdb_params = ['--data-checksums'])
+        source_pg.slow_start()
+
+        tblspace_path = self.get_tblspace_path(source_pg, 'tblspace')
+        self.create_tblspace_in_node(
+            source_pg, 'tblspace',
+            tblspc_path = tblspace_path)
+
+        source_pg.safe_psql(
+            "postgres",
+            "CREATE TABLE ultimate_question TABLESPACE tblspace AS SELECT 42 AS answer")
+
+        dest_pg = self.make_empty_node(os.path.join(module_name, fname, 'dst'))
+        try:
+            dest_pg = self.catchup_node(
+                backup_mode = 'FULL',
+                source_pgdata = source_pg.data_dir,
+                destination_node = dest_pg,
+                options = [
+                    '-d', 'postgres',
+                    '-p', str(source_pg.port),
+                    '--stream',
+                    ]
+                )
+            self.assertEqual(1, 0, "Expecting Error because '-T' parameter is not specified.\n Output: {0} \n CMD: {1}".format(
+                repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                'ERROR: Local catchup executed, but source database contains tablespace',
+                e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
+
+        source_pg.stop()
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
