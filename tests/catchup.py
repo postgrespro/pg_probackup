@@ -217,6 +217,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             base_dir = os.path.join(module_name, fname, 'src'),
             set_replication = True,
             ptrack_enable = True,
+            pg_options = { 'wal_log_hints': 'on' }
             )
         source_pg.slow_start()
         source_pg.safe_psql("postgres", "CREATE TABLE ultimate_question(answer int)")
@@ -227,7 +228,8 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             backup_mode = 'FULL',
             source_pgdata = source_pg.data_dir,
             destination_node = dest_pg,
-            options = ['-d', 'postgres', '-p', str(source_pg.port), '--stream'])
+            options = ['-d', 'postgres', '-p', str(source_pg.port), '--stream']
+            )
         self.set_replica(source_pg, dest_pg)
         dest_options = {}
         dest_options['port'] = str(dest_pg.port)
@@ -236,7 +238,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         dest_pg.stop()
 
         # make changes on master
-        source_pg.pgbench_init(scale=10)
+        source_pg.pgbench_init(scale = 10)
         pgbench = source_pg.pgbench(options=['-T', '10', '--no-vacuum'])
         pgbench.wait()
         source_pg.safe_psql("postgres", "INSERT INTO ultimate_question VALUES(42)")
@@ -247,13 +249,18 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             backup_mode = 'DELTA',
             source_pgdata = source_pg.data_dir,
             destination_node = dest_pg,
-            options = ['-d', 'postgres', '-p', str(source_pg.port), '--stream'])
+            options = ['-d', 'postgres', '-p', str(source_pg.port), '--stream']
+            )
+
+        source_pgdata = self.pgdata_content(source_pg.data_dir)
+        dest_pgdata = self.pgdata_content(dest_pg.data_dir)
+        self.compare_pgdata(source_pgdata, dest_pgdata)
 
         # stop replication
         source_pg.stop()
 
         # check latest changes
-        self.set_replica(source_pg, dest_pg)
+        self.set_replica(master = source_pg, replica = dest_pg)
         dest_pg.slow_start(replica = True)
         self.assertEqual(
             result,

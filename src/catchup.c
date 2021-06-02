@@ -853,7 +853,7 @@ catchup_thread_runner(void *arg)
 
 		if (file->write_size == BYTES_INVALID)
 		{
-			elog(VERBOSE, "Skipping the unchanged file: \"%s\"", from_fullpath);
+			elog(VERBOSE, "Skipping the unchanged file: \"%s\", read %li bytes", from_fullpath, file->read_size);
 			continue;
 		}
 

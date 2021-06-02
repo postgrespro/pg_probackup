@@ -268,7 +268,7 @@ get_checksum_errormsg(Page page, char **errormsg, BlockNumber absolute_blkno)
  *                 PageIsOk(0) if page was successfully retrieved
  *         PageIsTruncated(-1) if the page was truncated
  *         SkipCurrentPage(-2) if we need to skip this page,
- *                                only used for DELTA backup
+ *                                only used for DELTA and PTRACK backup
  *         PageIsCorrupted(-3) if the page checksum mismatch
  *                                or header corruption,
  *                                only used for checkdb
@@ -403,7 +403,12 @@ prepare_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 		page_st->lsn > 0 &&
 		page_st->lsn < prev_backup_start_lsn)
 	{
-		elog(VERBOSE, "Skipping blknum %u in file: \"%s\"", blknum, from_fullpath);
+		elog(VERBOSE, "Skipping blknum %u in file: \"%s\", file->exists_in_prev: %s, page_st->lsn: %X/%X, prev_backup_start_lsn: %X/%X",
+			blknum, from_fullpath,
+			file->exists_in_prev ? "true" : "false",
+			(uint32) (page_st->lsn >> 32), (uint32) page_st->lsn,
+			(uint32) (prev_backup_start_lsn >> 32), (uint32) prev_backup_start_lsn
+			);
 		return SkipCurrentPage;
 	}
 
@@ -2255,7 +2260,7 @@ send_pages(ConnectionArgs* conn_arg, const char *to_fullpath, const char *from_f
 /* copy local file (взята из send_pages, но используется простое копирование странички, без добавления заголовков и компрессии) */
 int
 copy_pages(const char *to_fullpath, const char *from_fullpath,
-		   pgFile *file, XLogRecPtr prev_backup_start_lsn,
+		   pgFile *file, XLogRecPtr sync_lsn,
 		   uint32 checksum_version, bool use_pagemap,
 		   BackupMode backup_mode, int ptrack_version_num, const char *ptrack_schema)
 {
@@ -2303,13 +2308,26 @@ copy_pages(const char *to_fullpath, const char *from_fullpath,
 		setvbuf(in, in_buf, _IOFBF, STDIO_BUFSIZE);
 	}
 
-	/* ошибки бы тут обработать! */
-	out = open_local_file_rw(to_fullpath, &out_buf, STDIO_BUFSIZE);
+	out = fio_fopen(to_fullpath, PG_BINARY_R "+", FIO_BACKUP_HOST);
+	if (out == NULL)
+		elog(ERROR, "Cannot open destination file \"%s\": %s",
+			to_fullpath, strerror(errno));
+
+	/* update file permission */
+	if (fio_chmod(to_fullpath, file->mode, FIO_BACKUP_HOST) == -1)
+		elog(ERROR, "Cannot change mode of \"%s\": %s", to_fullpath,
+			strerror(errno));
+
+	if (!fio_is_remote_file(out))
+	{
+		out_buf = pgut_malloc(STDIO_BUFSIZE);
+		setvbuf(out, out_buf, _IOFBF, STDIO_BUFSIZE);
+	}
 
 	while (blknum < file->n_blocks)
 	{
 		PageState page_st;
-		int rc = prepare_page(file, prev_backup_start_lsn,
+		int rc = prepare_page(file, sync_lsn,
 									  blknum, in, backup_mode, curr_page,
 									  true, checksum_version,
 									  ptrack_version_num, ptrack_schema,
@@ -2318,7 +2336,14 @@ copy_pages(const char *to_fullpath, const char *from_fullpath,
 			break;
 
 		else if (rc == PageIsOk)
+		{
+			if (fio_fseek(out, blknum * BLCKSZ) < 0)
+			{
+				elog(ERROR, "Cannot seek block %u of \"%s\": %s",
+					blknum, to_fullpath, strerror(errno));
+			}
 			copy_page(file, blknum, in, out, curr_page, to_fullpath);
+		}
 
 		n_blocks_read++;
 
@@ -2339,8 +2364,8 @@ copy_pages(const char *to_fullpath, const char *from_fullpath,
 			 to_fullpath, strerror(errno));
 
 	/* close local output file */
-	if (out && fclose(out))
-		elog(ERROR, "Cannot close the backup file \"%s\": %s",
+	if (out && fio_fclose(out))
+		elog(ERROR, "Cannot close the destination file \"%s\": %s",
 			 to_fullpath, strerror(errno));
 
 	pg_free(iter);
