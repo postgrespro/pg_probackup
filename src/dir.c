@@ -485,6 +485,13 @@ pgFileCompareSize(const void *f1, const void *f2)
 		return 0;
 }
 
+/* Compare two pgFile with their size in descending order */
+int
+pgFileCompareSizeDesc(const void *f1, const void *f2)
+{
+	return -1 * pgFileCompareSize(f1, f2);
+}
+
 static int
 pgCompareString(const void *str1, const void *str2)
 {

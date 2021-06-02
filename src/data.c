@@ -717,12 +717,15 @@ catchup_data_file(pgFile *file, const char *from_fullpath, const char *to_fullpa
 	else
 		use_pagemap = true;
 
+	if (use_pagemap)
+		elog(VERBOSE, "Using pagemap for file \"%s\"", file->rel_path);
+
 	/* Remote mode */
 	if (fio_is_remote(FIO_DB_HOST))
 	{
 		rc = fio_copy_pages(to_fullpath, from_fullpath, file,
 							/* send prev backup START_LSN */
-							backup_mode == BACKUP_MODE_DIFF_DELTA &&
+							(backup_mode == BACKUP_MODE_DIFF_DELTA || backup_mode == BACKUP_MODE_DIFF_PTRACK) &&
 							file->exists_in_prev ? prev_backup_start_lsn : InvalidXLogRecPtr,
 							calg, clevel, checksum_version,
 							/* send pagemap if any */
@@ -735,7 +738,7 @@ catchup_data_file(pgFile *file, const char *from_fullpath, const char *to_fullpa
 		/* TODO: stop handling errors internally */
 		rc = copy_pages(to_fullpath, from_fullpath, file,
 						/* send prev backup START_LSN */
-						backup_mode == BACKUP_MODE_DIFF_DELTA &&
+						(backup_mode == BACKUP_MODE_DIFF_DELTA || backup_mode == BACKUP_MODE_DIFF_PTRACK) &&
 						file->exists_in_prev ? prev_backup_start_lsn : InvalidXLogRecPtr,
 						checksum_version, use_pagemap,
 						backup_mode, ptrack_version_num, ptrack_schema);

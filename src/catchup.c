@@ -389,7 +389,7 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 	}
 
 	/*
-	 * Make directories before catchup and setup threads at the same time
+	 * Make directories before catchup
 	 */
 	/*
 	 * We iterate over source_filelist and for every directory with parent 'pg_tblspc'
@@ -541,7 +541,11 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 	pfilearray_clear_locks(source_filelist);
 
 	/* Sort by size for load balancing */
-	parray_qsort(source_filelist, pgFileCompareSize);
+	parray_qsort(source_filelist, pgFileCompareSizeDesc);
+
+	/* Sort the array for binary search */
+	if (dest_filelist)
+		parray_qsort(dest_filelist, pgFileCompareRelPathWithExternal);
 
 	/* init thread args */
 	threads = (pthread_t *) palloc(sizeof(pthread_t) * num_threads);
@@ -653,9 +657,6 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 		stop_backup_result.tablespace_map_content_len = 0;
 	}
 
-	//REVIEW We don't pass a filelist. Please adjust the comment.
-	/* This function will also add list of xlog files
-	 * to the passed filelist */
 	if(wait_WAL_streaming_end(NULL))
 		elog(ERROR, "WAL streaming failed");
 
