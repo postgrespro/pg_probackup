@@ -1756,10 +1756,10 @@ class ProbackupTest(object):
                 ):
                     fail = True
                     error_message += '\nFile permissions mismatch:\n'
-                    error_message += ' File_old: {0} Permissions: {1}\n'.format(
+                    error_message += ' File_old: {0} Permissions: {1:o}\n'.format(
                         os.path.join(original_pgdata['pgdata'], file),
                         original_pgdata['files'][file]['mode'])
-                    error_message += ' File_new: {0} Permissions: {1}\n'.format(
+                    error_message += ' File_new: {0} Permissions: {1:o}\n'.format(
                         os.path.join(restored_pgdata['pgdata'], file),
                         restored_pgdata['files'][file]['mode'])
 
