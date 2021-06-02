@@ -61,6 +61,9 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads)
 //Besides, the name of this function looks strange to me.
 //Maybe catchup_init_state() or catchup_setup() will do better?
 //I'd also suggest to wrap all these fields into some CatchupState, but it isn't urgent.
+/*
+ * Prepare for work: fill some globals, open connection to source database
+ */
 static PGconn *
 catchup_collect_info(PGNodeInfo	*source_node_info, const char *source_pgdata, const char *dest_pgdata)
 {
@@ -186,7 +189,7 @@ catchup_preflight_checks(PGNodeInfo *source_node_info, PGconn *source_conn,
 
 /*
  * Check that all tablespaces exists in tablespace mapping (--tablespace-mapping option)
- * Emit fatal error if that tablespace found
+ * Emit fatal error if that (not existent in map) tablespace found
  */
 static void
 check_tablespaces_existance_in_tbsmapping(PGconn *conn)
@@ -227,6 +230,7 @@ check_tablespaces_existance_in_tbsmapping(PGconn *conn)
 /*
  * TODO:
  *  - add description
+ * main worker function, to be moved into do_catchup() and then to be split into meaningful pieces
  */
 static void
 do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *source_conn,
@@ -315,13 +319,10 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 				(uint32) (dest_redo.lsn >> 32), (uint32) (dest_redo.lsn));
 
 	/* Start stream replication */
-	if (stream_wal)
-	{
-		join_path_components(dest_xlog_path, dest_pgdata, PG_XLOG_DIR);
-		fio_mkdir(dest_xlog_path, DIR_PERMISSION, FIO_BACKUP_HOST);
-		start_WAL_streaming(source_conn, dest_xlog_path, &instance_config.conn_opt,
-							current.start_lsn, current.tli);
-	}
+	join_path_components(dest_xlog_path, dest_pgdata, PG_XLOG_DIR);
+	fio_mkdir(dest_xlog_path, DIR_PERMISSION, FIO_BACKUP_HOST);
+	start_WAL_streaming(source_conn, dest_xlog_path, &instance_config.conn_opt,
+						current.start_lsn, current.tli);
 
 	source_filelist = parray_new();
 
@@ -358,7 +359,6 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 	 */
 	parray_qsort(source_filelist, pgFileCompareRelPathWithExternal);
 
-	//REVIEW Please adjust the comment.
 	/* Extract information about files in source_filelist parsing their names:*/
 	parse_filelist_filenames(source_filelist, source_pgdata);
 
@@ -408,7 +408,7 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 
 		/*
 		 * check if it is fake "directory" and is a tablespace link
-		 * это происходит потому что мы передали follow_symlink при построении списка
+		 * this is because we passed the follow_symlink when building the list
 		 */
 		/* get parent dir of rel_path */
 		strncpy(parent_dir, file->rel_path, MAXPGPATH);
@@ -431,8 +431,9 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 			const char *linked_path = NULL;
 			char	to_path[MAXPGPATH];
 
-			// perform additional check that this is actually synlink?
+			// perform additional check that this is actually symlink?
 			//REVIEW Why is this code block separated?
+			//REVIEW_ANSWER because i want to localize usage of source_full_path and symlink_content
 			{ /* get full symlink path and map this path to new location */
 				char	source_full_path[MAXPGPATH];
 				char	symlink_content[MAXPGPATH];
@@ -440,9 +441,10 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 				fio_readlink(source_full_path, symlink_content, sizeof(symlink_content), FIO_DB_HOST);
 				//REVIEW What if we won't find mapping for this tablespace?
 				//I'd expect a failure. Otherwise, we may spoil source database data.
+				// REVIEW_ANSWER we checked that in preflight_checks for local catchup
+				// and for remote catchup this may be correct behavior
 				linked_path = leaked_abstraction_get_tablespace_mapping(symlink_content);
-				// TODO: check that linked_path != symlink_content in case of local catchup?
-				elog(WARNING, "Map tablespace full_path: \"%s\" old_symlink_content: \"%s\" old_symlink_content: \"%s\"\n",
+				elog(INFO, "Map tablespace full_path: \"%s\" old_symlink_content: \"%s\" new_symlink_content: \"%s\"\n",
 					source_full_path,
 					symlink_content,
 					linked_path);
@@ -457,15 +459,15 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 			elog(VERBOSE, "Create directory \"%s\" and symbolic link \"%s\"",
 					 linked_path, to_path);
 
-			//REVIEW Handle return value here.
-			//We should not proceed if failed to create dir.
 			/* create tablespace directory */
-			fio_mkdir(linked_path, DIR_PERMISSION, FIO_BACKUP_HOST);
+			if (fio_mkdir(linked_path, file->mode, FIO_BACKUP_HOST) != 0)
+				elog(ERROR, "Could not create tablespace directory \"%s\": %s",
+					 linked_path, strerror(errno));
 
 			/* create link to linked_path */
 			if (fio_symlink(linked_path, to_path, true, FIO_BACKUP_HOST) < 0)
-				elog(ERROR, "Could not create symbolic link \"%s\": %s",
-					 to_path, strerror(errno));
+				elog(ERROR, "Could not create symbolic link \"%s\" -> \"%s\": %s",
+					 linked_path, to_path, strerror(errno));
 		}
 	}
 
@@ -475,7 +477,7 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 	 */
 	{
 		int control_file_elem_index;
-		pgFile search_key ;
+		pgFile search_key;
 		MemSet(&search_key, 0, sizeof(pgFile));
 		/* pgFileCompareRelPathWithExternal uses only .rel_path and .external_dir_num for comparision */
 		search_key.rel_path = XLOG_CONTROL_FILE;
@@ -502,12 +504,13 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 
 			//REVIEW Can we maybe optimize it and use some merge-like algorithm
 			//instead of bsearch for each file? Of course it isn't an urgent fix.
+			//REVIEW_ANSWER yes, merge will be better
 			if (parray_bsearch(source_filelist, file, pgFileCompareRelPathWithExternal))
 				redundant = false;
 
 			/* pg_filenode.map are always restored, because it's crc cannot be trusted */
-			if (file->external_dir_num == 0 &&
-				pg_strcasecmp(file->name, RELMAPPER_FILENAME) == 0)
+			Assert(file->external_dir_num == 0);
+			if (pg_strcasecmp(file->name, RELMAPPER_FILENAME) == 0)
 				redundant = true;
 
 			//REVIEW This check seems unneded. Anyway we delete only redundant stuff below.
@@ -588,6 +591,7 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 	}
 
 	/* at last copy control file */
+	if (catchup_isok)
 	{
 		char	from_fullpath[MAXPGPATH];
 		char	to_fullpath[MAXPGPATH];
@@ -678,9 +682,8 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 	/* Cleanup */
 	pg_free(query_text);
 
-	//REVIEW Please adjust the comment.
-	/* In case of backup from replica >= 9.6 we must fix minRecPoint,
-	 * First we must find pg_control in source_filelist.
+	/*
+	 * In case of backup from replica >= 9.6 we must fix minRecPoint
 	 */
 	if (current.from_replica && !exclusive_backup)
 	{
@@ -712,19 +715,9 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 				continue;
 
 			/* construct fullpath */
-			if (file->external_dir_num == 0)
-				join_path_components(to_fullpath, dest_pgdata, file->rel_path);
-			//REVIEW Let's clean this.
-			/* TODO разобраться с external */
-			/*else
-			{
-				char 	external_dst[MAXPGPATH];
+			Assert(file->external_dir_num == 0);
+			join_path_components(to_fullpath, dest_pgdata, file->rel_path);
 
-				makeExternalDirPathByNum(external_dst, external_prefix,
-										 file->external_dir_num);
-				join_path_components(to_fullpath, external_dst, file->rel_path);
-			}
-			*/
 			if (fio_sync(to_fullpath, FIO_BACKUP_HOST) != 0)
 				elog(ERROR, "Cannot sync file \"%s\": %s", to_fullpath, strerror(errno));
 		}
@@ -754,7 +747,7 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 }
 
 /*
- * TODO: add description
+ * Catchup file copier executed in separate threads
  */
 static void *
 catchup_thread_runner(void *arg)
@@ -788,27 +781,9 @@ catchup_thread_runner(void *arg)
 				 i + 1, n_files, file->rel_path);
 
 		/* construct destination filepath */
-		/* TODO разобраться нужен ли external */
-		if (file->external_dir_num == 0)
-		{
-			join_path_components(from_fullpath, arguments->from_root, file->rel_path);
-			join_path_components(to_fullpath, arguments->to_root, file->rel_path);
-		}
-		//REVIEW Let's clean this.
-		/*else
-		{
-			char 	external_dst[MAXPGPATH];
-			char	*external_path = parray_get(arguments->external_dirs,
-												file->external_dir_num - 1);
-
-			makeExternalDirPathByNum(external_dst,
-								 arguments->external_prefix,
-								 file->external_dir_num);
-
-			join_path_components(to_fullpath, external_dst, file->rel_path);
-			join_path_components(from_fullpath, external_path, file->rel_path);
-		}
-		*/
+		Assert(file->external_dir_num == 0);
+		join_path_components(from_fullpath, arguments->from_root, file->rel_path);
+		join_path_components(to_fullpath, arguments->to_root, file->rel_path);
 
 		/* Encountered some strange beast */
 		if (!S_ISREG(file->mode))
