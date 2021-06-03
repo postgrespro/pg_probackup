@@ -300,7 +300,7 @@ prepare_page(ConnectionArgs *conn_arg,
 	 * Under high write load it's possible that we've read partly
 	 * flushed page, so try several times before throwing an error.
 	 */
-	if (backup_mode != BACKUP_MODE_DIFF_PTRACK || ptrack_version_num >= 20)
+	if (backup_mode != BACKUP_MODE_DIFF_PTRACK || ptrack_version_num >= 200)
 	{
 		int rc = 0;
 		while (!page_is_valid && try_again--)
@@ -400,7 +400,7 @@ prepare_page(ConnectionArgs *conn_arg,
 	 * We do this only in the cases of PTRACK 1.x versions backup
 	 */
 	if (backup_mode == BACKUP_MODE_DIFF_PTRACK
-		&& (ptrack_version_num >= 15 && ptrack_version_num < 20))
+		&& (ptrack_version_num >= 105 && ptrack_version_num < 200))
 	{
 		int rc = 0;
 		size_t page_size = 0;
