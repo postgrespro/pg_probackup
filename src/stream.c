@@ -70,7 +70,6 @@ static void add_walsegment_to_filelist(parray *filelist, uint32 timeline,
                                        uint32 xlog_seg_size);
 static void add_history_file_to_filelist(parray *filelist, uint32 timeline,
 										 char *basedir);
-static parray* parse_tli_history_buffer(char *history, TimeLineID tli);
 
 /*
  * Run IDENTIFY_SYSTEM through a given connection and

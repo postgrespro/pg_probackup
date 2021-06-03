@@ -140,7 +140,7 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 #if PG_VERSION_NUM >= 90600
 	current.tli = get_current_timeline(backup_conn);
 #else
-	current.tli = get_current_timeline_from_control(false);
+	current.tli = get_current_timeline_from_control(instance_config.pgdata, FIO_DB_HOST, false);
 #endif
 
 	/*
@@ -968,7 +968,7 @@ check_system_identifiers(PGconn *conn, const char *pgdata)
 	uint64		system_id_conn;
 	uint64		system_id_pgdata;
 
-	system_id_pgdata = get_system_identifier(pgdata);
+	system_id_pgdata = get_system_identifier(pgdata, FIO_DB_HOST);
 	system_id_conn = get_remote_system_identifier(conn);
 
 	/* for checkdb check only system_id_pgdata and system_id_conn */

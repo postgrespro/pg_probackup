@@ -1170,9 +1170,9 @@ extern XLogRecPtr get_next_record_lsn(const char *archivedir, XLogSegNo	segno, T
 
 /* in util.c */
 extern TimeLineID get_current_timeline(PGconn *conn);
-extern TimeLineID get_current_timeline_from_control(bool safe);
+extern TimeLineID get_current_timeline_from_control(const char *pgdata_path, fio_location location, bool safe);
 extern XLogRecPtr get_checkpoint_location(PGconn *conn);
-extern uint64 get_system_identifier(const char *pgdata_path);
+extern uint64 get_system_identifier(const char *pgdata_path, fio_location location);
 extern uint64 get_remote_system_identifier(PGconn *conn);
 extern uint32 get_data_checksum_version(bool safe);
 extern pg_crc32c get_pgcontrol_checksum(const char *pgdata_path);
@@ -1300,6 +1300,7 @@ extern void start_WAL_streaming(PGconn *backup_conn, char *stream_dst_path,
 							   ConnectionOptions *conn_opt,
 							   XLogRecPtr startpos, TimeLineID starttli);
 extern int wait_WAL_streaming_end(parray *backup_files_list);
+extern parray* parse_tli_history_buffer(char *history, TimeLineID tli);
 
 /* external variables and functions, implemented in backup.c */
 typedef struct PGStopBackupResult

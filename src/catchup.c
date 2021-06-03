@@ -29,7 +29,8 @@
 static PGconn *catchup_collect_info(PGNodeInfo *source_node_info, const char *source_pgdata, const char *dest_pgdata);
 static void catchup_preflight_checks(PGNodeInfo *source_node_info, PGconn *source_conn, const char *source_pgdata, 
 					const char *dest_pgdata);
-static void check_tablespaces_existance_in_tbsmapping(PGconn *conn);
+static void catchup_check_tablespaces_existance_in_tbsmapping(PGconn *conn);
+static parray* catchup_get_tli_history(ConnectionOptions *conn_opt, TimeLineID tli);
 static void do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *source_conn,
 					PGNodeInfo *nodeInfo, bool no_sync, bool backup_logs);
 static void *catchup_thread_runner(void *arg);
@@ -74,10 +75,7 @@ catchup_collect_info(PGNodeInfo	*source_node_info, const char *source_pgdata, co
 
 	/* Get WAL segments size and system ID of source PG instance */
 	instance_config.xlog_seg_size = get_xlog_seg_size(source_pgdata);
-	instance_config.system_identifier = get_system_identifier(source_pgdata);
-#if PG_VERSION_NUM < 90600
-	instance_config.pgdata = source_pgdata;
-#endif
+	instance_config.system_identifier = get_system_identifier(source_pgdata, FIO_DB_HOST);
 	current.start_time = time(NULL);
 
 	StrNCpy(current.program_version, PROGRAM_VERSION, sizeof(current.program_version));
@@ -101,7 +99,8 @@ catchup_collect_info(PGNodeInfo	*source_node_info, const char *source_pgdata, co
 #if PG_VERSION_NUM >= 90600
 	current.tli = get_current_timeline(source_conn);
 #else
-	current.tli = get_current_timeline_from_control(false);
+	instance_config.pgdata = source_pgdata;
+	current.tli = get_current_timeline_from_control(source_pgdata, FIO_DB_HOST, false);
 #endif
 
 	elog(INFO, "Catchup start, pg_probackup version: %s, "
@@ -160,9 +159,46 @@ catchup_preflight_checks(PGNodeInfo *source_node_info, PGconn *source_conn,
 				dest_pgdata);
 	}
 
-	/* Check that connected PG instance and source PGDATA are the same */
-	check_system_identifiers(source_conn, source_pgdata);
+	/* check that postmaster is not running in destination */
+	if (current.backup_mode != BACKUP_MODE_FULL)
+	{
+		pid_t   pid;
+		pid = fio_check_postmaster(dest_pgdata, FIO_LOCAL_HOST);
+		if (pid == 1) /* postmaster.pid is mangled */
+		{
+			char	pid_filename[MAXPGPATH];
+			join_path_components(pid_filename, dest_pgdata, "postmaster.pid");
+			elog(ERROR, "Pid file \"%s\" is mangled, cannot determine whether postmaster is running or not",
+				pid_filename);
+		}
+		else if (pid > 1) /* postmaster is up */
+		{
+			elog(ERROR, "Postmaster with pid %u is running in destination directory \"%s\"",
+				pid, dest_pgdata);
+		}
+	}
 
+	/* Check that connected PG instance, source and destination PGDATA are the same */
+	{
+		uint64	source_conn_id, source_id, dest_id;
+
+		source_conn_id = get_remote_system_identifier(source_conn);
+		source_id = get_system_identifier(source_pgdata, FIO_DB_HOST); /* same as instance_config.system_identifier */
+
+		if (source_conn_id != source_id)
+			elog(ERROR, "Database identifiers mismatch: we connected to DB id %lu, but in \"%s\" we found id %lu",
+				source_conn_id, source_pgdata, source_id);
+
+		if (current.backup_mode != BACKUP_MODE_FULL)
+		{
+			dest_id = get_system_identifier(dest_pgdata, FIO_LOCAL_HOST);
+			if (source_conn_id != dest_id)
+			elog(ERROR, "Database identifiers mismatch: we connected to DB id %lu, but in \"%s\" we found id %lu",
+				source_conn_id, dest_pgdata, dest_id);
+		}
+	}
+
+	/* check PTRACK version */
 	if (current.backup_mode == BACKUP_MODE_DIFF_PTRACK)
 	{
 		if (source_node_info->ptrack_version_num == 0)
@@ -174,17 +210,42 @@ catchup_preflight_checks(PGNodeInfo *source_node_info, PGconn *source_conn,
 			elog(ERROR, "Ptrack is disabled");
 	}
 
-	if (current.backup_mode != BACKUP_MODE_FULL &&
-		 check_incremental_compatibility(dest_pgdata,
-										  instance_config.system_identifier,
-										  INCR_CHECKSUM) != DEST_OK)
-		elog(ERROR, "Catchup is not possible in this destination");
+	/* check backup_label absence in dest */
+	if (current.backup_mode != BACKUP_MODE_FULL)
+	{
+		char	backup_label_filename[MAXPGPATH];
+
+		join_path_components(backup_label_filename, dest_pgdata, "backup_label");
+		if (fio_access(backup_label_filename, F_OK, FIO_LOCAL_HOST) == 0)
+			elog(ERROR, "Destination directory contains \"backup_control\" file");
+	}
 
 	if (current.from_replica && exclusive_backup)
 		elog(ERROR, "Catchup from standby is available only for PG >= 9.6");
 
+	/* if local catchup, check that we don't overwrite tablespace in source pgdata */
 	if (!fio_is_remote(FIO_DB_HOST))
-		check_tablespaces_existance_in_tbsmapping(source_conn);
+		catchup_check_tablespaces_existance_in_tbsmapping(source_conn);
+
+	/* check timelines */
+	if (current.backup_mode != BACKUP_MODE_FULL)
+	{
+		TimeLineID	dest_tli;
+		parray		*source_timelines;
+
+		dest_tli = get_current_timeline_from_control(dest_pgdata, FIO_LOCAL_HOST, false);
+
+		source_timelines = catchup_get_tli_history(&instance_config.conn_opt, current.tli);
+
+		if (source_timelines != NULL && !tliIsPartOfHistory(source_timelines, dest_tli))
+			elog(ERROR, "Destination is not in source history");
+
+		if (source_timelines != NULL)
+		{
+			parray_walk(source_timelines, pfree);
+			parray_free(source_timelines);
+		}
+	}
 }
 
 /*
@@ -192,7 +253,7 @@ catchup_preflight_checks(PGNodeInfo *source_node_info, PGconn *source_conn,
  * Emit fatal error if that (not existent in map) tablespace found
  */
 static void
-check_tablespaces_existance_in_tbsmapping(PGconn *conn)
+catchup_check_tablespaces_existance_in_tbsmapping(PGconn *conn)
 {
 	PGresult	*res;
 	int		i;
@@ -228,6 +289,68 @@ check_tablespaces_existance_in_tbsmapping(PGconn *conn)
 }
 
 /*
+ * Get timeline history via replication connection
+ * returns parray* of TimeLineHistoryEntry*
+ */
+static parray*
+catchup_get_tli_history(ConnectionOptions *conn_opt, TimeLineID tli)
+{
+	PGresult     *res;
+	PGconn	     *conn;
+	char         *history;
+	char          query[128];
+	parray	     *result = NULL;
+
+	snprintf(query, sizeof(query), "TIMELINE_HISTORY %u", tli);
+
+	/*
+	 * Connect in replication mode to the server.
+	 */
+	conn = pgut_connect_replication(conn_opt->pghost,
+									conn_opt->pgport,
+									conn_opt->pgdatabase,
+									conn_opt->pguser,
+									false);
+
+	if (!conn)
+		return NULL;
+
+	res = PQexec(conn, query);
+	PQfinish(conn);
+
+	if (PQresultStatus(res) != PGRES_TUPLES_OK)
+	{
+		elog(WARNING, "Could not send replication command \"%s\": %s",
+					query, PQresultErrorMessage(res));
+		PQclear(res);
+		return NULL;
+	}
+
+	/*
+	 * The response to TIMELINE_HISTORY is a single row result set
+	 * with two fields: filename and content
+	 */
+	if (PQnfields(res) != 2 || PQntuples(res) != 1)
+	{
+		elog(ERROR, "Unexpected response to TIMELINE_HISTORY command: "
+				"got %d rows and %d fields, expected %d rows and %d fields",
+				PQntuples(res), PQnfields(res), 1, 2);
+		PQclear(res);
+		return NULL;
+	}
+
+	history = pgut_strdup(PQgetvalue(res, 0, 1));
+	result = parse_tli_history_buffer(history, tli);
+
+	/* some cleanup */
+	pg_free(history);
+	PQclear(res);
+
+	return result;
+}
+
+
+/*
  * TODO:
  *  - add description
  * main worker function, to be moved into do_catchup() and then to be split into meaningful pieces
@@ -249,10 +372,6 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 
 	parray     *source_filelist = NULL;
 	parray	   *dest_filelist = NULL;
-
-	//REVIEW FIXME Let's fix it before release. It can cause some obscure bugs.
-	/* TODO: in case of timeline mistmatch, check that source PG timeline descending from dest PG timeline */
-	parray       *tli_list = NULL;
 
 	/* for fancy reporting */
 	time_t		start_time, end_time;
@@ -365,8 +484,6 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 	elog(LOG, "Start LSN (source): %X/%X, TLI: %X",
 			(uint32) (current.start_lsn >> 32), (uint32) (current.start_lsn),
 			current.tli);
-	//REVIEW FIXME Huh? Don't we check TLI at all? 
-	/* TODO проверить, нужна ли проверка TLI */
 	if (current.backup_mode != BACKUP_MODE_FULL)
 		elog(LOG, "LSN in destination: %X/%X, TLI: %X",
 			 (uint32) (dest_redo.lsn >> 32), (uint32) (dest_redo.lsn),

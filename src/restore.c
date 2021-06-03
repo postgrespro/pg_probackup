@@ -2187,7 +2187,7 @@ check_incremental_compatibility(const char *pgdata, uint64 system_identifier,
 	 */
 	elog(INFO, "Trying to read pg_control file in destination directory");
 
-	system_id_pgdata = get_system_identifier(pgdata);
+	system_id_pgdata = get_system_identifier(pgdata, FIO_DB_HOST);
 
 	if (system_id_pgdata == instance_config.system_identifier)
 		system_id_match = true;

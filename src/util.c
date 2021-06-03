@@ -174,7 +174,7 @@ get_current_timeline(PGconn *conn)
 	if (PQresultStatus(res) == PGRES_TUPLES_OK)
 		val = PQgetvalue(res, 0, 0);
 	else
-		return get_current_timeline_from_control(false);
+		return get_current_timeline_from_control(instance_config.pgdata, FIO_DB_HOST, false);
 
 	if (!parse_uint32(val, &tli, 0))
 	{
@@ -182,7 +182,7 @@ get_current_timeline(PGconn *conn)
 		elog(WARNING, "Invalid value of timeline_id %s", val);
 
 		/* TODO 3.0 remove it and just error out */
-		return get_current_timeline_from_control(false);
+		return get_current_timeline_from_control(instance_config.pgdata, FIO_DB_HOST, false);
 	}
 
 	return tli;
@@ -190,15 +190,15 @@ get_current_timeline(PGconn *conn)
 
 /* Get timeline from pg_control file */
 TimeLineID
-get_current_timeline_from_control(bool safe)
+get_current_timeline_from_control(const char *pgdata_path, fio_location location, bool safe)
 {
 	ControlFileData ControlFile;
 	char       *buffer;
 	size_t      size;
 
 	/* First fetch file... */
-	buffer = slurpFile(instance_config.pgdata, XLOG_CONTROL_FILE, &size,
-					   safe, FIO_DB_HOST);
+	buffer = slurpFile(pgdata_path, XLOG_CONTROL_FILE, &size,
+					   safe, location);
 	if (safe && buffer == NULL)
 		return 0;
 
@@ -249,14 +249,14 @@ get_checkpoint_location(PGconn *conn)
 }
 
 uint64
-get_system_identifier(const char *pgdata_path)
+get_system_identifier(const char *pgdata_path, fio_location location)
 {
 	ControlFileData ControlFile;
 	char	   *buffer;
 	size_t		size;
 
 	/* First fetch file... */
-	buffer = slurpFile(pgdata_path, XLOG_CONTROL_FILE, &size, false, FIO_DB_HOST);
+	buffer = slurpFile(pgdata_path, XLOG_CONTROL_FILE, &size, false, location);
 	if (buffer == NULL)
 		return 0;
 	digestControlFile(&ControlFile, buffer, size);
