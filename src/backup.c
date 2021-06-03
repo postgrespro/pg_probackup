@@ -217,7 +217,7 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 	{
 		XLogRecPtr	ptrack_lsn = get_last_ptrack_lsn(backup_conn, nodeInfo);
 
-		if (nodeInfo->ptrack_version_num < 20)
+		if (nodeInfo->ptrack_version_num < 200)
 		{
 			// backward compatibility kludge: use Stop LSN for ptrack 1.x,
 			if (ptrack_lsn > prev_backup->stop_lsn || ptrack_lsn == InvalidXLogRecPtr)
@@ -407,14 +407,14 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 			/*
 			 * Build the page map from ptrack information.
 			 */
-			if (nodeInfo->ptrack_version_num >= 20)
+			if (nodeInfo->ptrack_version_num >= 200)
 				make_pagemap_from_ptrack_2(backup_files_list, backup_conn,
 										   nodeInfo->ptrack_schema,
 										   nodeInfo->ptrack_version_num,
 										   prev_backup_start_lsn);
-			else if (nodeInfo->ptrack_version_num == 15 ||
-					 nodeInfo->ptrack_version_num == 16 ||
-					 nodeInfo->ptrack_version_num == 17)
+			else if (nodeInfo->ptrack_version_num == 105 ||
+					 nodeInfo->ptrack_version_num == 106 ||
+					 nodeInfo->ptrack_version_num == 107)
 				make_pagemap_from_ptrack_1(backup_files_list, backup_conn);
 		}
 
