@@ -139,6 +139,23 @@ make_pagemap_from_ptrack_1(parray *files, PGconn *backup_conn)
 	}
 }
 
+/*
+ * Parse a string like "2.1" into int
+ * result: int by formula major_number * 100 + minor_number
+ * or -1 if string cannot be parsed
+ */
+static int
+ptrack_parse_version_string(const char *version_str)
+{
+	int ma, mi;
+	int sscanf_readed_count;
+	if (sscanf(version_str, "%u.%2u%n", &ma, &mi, &sscanf_readed_count) != 2)
+		return -1;
+	if (sscanf_readed_count != strlen(version_str))
+		return -1;
+	return ma * 100 + mi;
+}
+
 /* Check if the instance supports compatible version of ptrack,
  * fill-in version number if it does.
  * Also for ptrack 2.x save schema namespace.
@@ -148,6 +165,7 @@ get_ptrack_version(PGconn *backup_conn, PGNodeInfo *nodeInfo)
 {
 	PGresult	*res_db;
 	char	*ptrack_version_str;
+	int	ptrack_version_num;
 
 	res_db = pgut_execute(backup_conn,
 						  "SELECT extnamespace::regnamespace, extversion "
@@ -191,24 +209,16 @@ get_ptrack_version(PGconn *backup_conn, PGNodeInfo *nodeInfo)
 		ptrack_version_str = PQgetvalue(res_db, 0, 0);
 	}
 
-	if (strcmp(ptrack_version_str, "1.5") == 0)
-		nodeInfo->ptrack_version_num = 15;
-	else if (strcmp(ptrack_version_str, "1.6") == 0)
-		nodeInfo->ptrack_version_num = 16;
-	else if (strcmp(ptrack_version_str, "1.7") == 0)
-		nodeInfo->ptrack_version_num = 17;
-	else if (strcmp(ptrack_version_str, "2.0") == 0)
-		nodeInfo->ptrack_version_num = 20;
-	else if (strcmp(ptrack_version_str, "2.1") == 0)
-		nodeInfo->ptrack_version_num = 21;
-	else if (strcmp(ptrack_version_str, "2.2") == 0)
-		nodeInfo->ptrack_version_num = 22;
-	else
-		elog(WARNING, "Update your ptrack to the version 2.1 or upper. Current version is %s",
+	ptrack_version_num = ptrack_parse_version_string(ptrack_version_str);
+	if (ptrack_version_num == -1)
+		/* leave default nodeInfo->ptrack_version_num = 0 from pgNodeInit() */
+		elog(WARNING, "Cannot parse ptrack version string \"%s\"",
 			 ptrack_version_str);
+	else
+		nodeInfo->ptrack_version_num = ptrack_version_num;
 
 	/* ptrack 1.X is buggy, so fall back to DELTA backup strategy for safety */
-	if (nodeInfo->ptrack_version_num >= 15 && nodeInfo->ptrack_version_num < 20)
+	if (nodeInfo->ptrack_version_num >= 105 && nodeInfo->ptrack_version_num < 200)
 	{
 		if (current.backup_mode == BACKUP_MODE_DIFF_PTRACK)
 		{
@@ -231,12 +241,12 @@ pg_ptrack_enable(PGconn *backup_conn, int ptrack_version_num)
 	PGresult   *res_db;
 	bool		result = false;
 
-	if (ptrack_version_num < 20)
+	if (ptrack_version_num < 200)
 	{
 		res_db = pgut_execute(backup_conn, "SHOW ptrack_enable", 0, NULL);
 		result = strcmp(PQgetvalue(res_db, 0, 0), "on") == 0;
 	}
-	else if (ptrack_version_num == 20)
+	else if (ptrack_version_num == 200)
 	{
 		res_db = pgut_execute(backup_conn, "SHOW ptrack_map_size", 0, NULL);
 		result = strcmp(PQgetvalue(res_db, 0, 0), "0") != 0;
@@ -270,7 +280,7 @@ pg_ptrack_clear(PGconn *backup_conn, int ptrack_version_num)
 	char *params[2];
 
 	// FIXME Perform this check on caller's side
-	if (ptrack_version_num >= 20)
+	if (ptrack_version_num >= 200)
 		return;
 
 	params[0] = palloc(64);
@@ -472,14 +482,14 @@ get_last_ptrack_lsn(PGconn *backup_conn, PGNodeInfo *nodeInfo)
 	uint32		lsn_lo;
 	XLogRecPtr	lsn;
 
-	if (nodeInfo->ptrack_version_num < 20)
+	if (nodeInfo->ptrack_version_num < 200)
 		res = pgut_execute(backup_conn, "SELECT pg_catalog.pg_ptrack_control_lsn()",
 						   0, NULL);
 	else
 	{
 		char query[128];
 
-		if (nodeInfo->ptrack_version_num == 20)
+		if (nodeInfo->ptrack_version_num == 200)
 			sprintf(query, "SELECT %s.pg_ptrack_control_lsn()", nodeInfo->ptrack_schema);
 		else
 			sprintf(query, "SELECT %s.ptrack_init_lsn()", nodeInfo->ptrack_schema);
@@ -537,7 +547,7 @@ pg_ptrack_get_block(ConnectionArgs *arguments,
 
 	// elog(LOG, "db %i pg_ptrack_get_block(%i, %i, %u)",dbOid, tblsOid, relOid, blknum);
 
-	if (ptrack_version_num < 20)
+	if (ptrack_version_num < 200)
 		res = pgut_execute_parallel(arguments->conn,
 									arguments->cancel_conn,
 						"SELECT pg_catalog.pg_ptrack_get_block_2($1, $2, $3, $4)",
@@ -550,7 +560,7 @@ pg_ptrack_get_block(ConnectionArgs *arguments,
 		if (!ptrack_schema)
 			elog(ERROR, "Schema name of ptrack extension is missing");
 
-		if (ptrack_version_num == 20)
+		if (ptrack_version_num == 200)
 			sprintf(query, "SELECT %s.pg_ptrack_get_block($1, $2, $3, $4)", ptrack_schema);
 		else
 			elog(ERROR, "ptrack >= 2.1.0 does not support pg_ptrack_get_block()");
@@ -614,7 +624,7 @@ pg_ptrack_get_pagemapset(PGconn *backup_conn, const char *ptrack_schema,
 	if (!ptrack_schema)
 		elog(ERROR, "Schema name of ptrack extension is missing");
 
-	if (ptrack_version_num == 20)
+	if (ptrack_version_num == 200)
 		sprintf(query, "SELECT path, pagemap FROM %s.pg_ptrack_get_pagemapset($1) ORDER BY 1",
 				ptrack_schema);
 	else
