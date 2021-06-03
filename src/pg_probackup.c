@@ -205,8 +205,8 @@ static ConfigOption cmd_options[] =
 	{ 'b', 185, "dry-run",			&dry_run,			SOURCE_CMD_STRICT },
 	{ 's', 238, "note",				&backup_note,		SOURCE_CMD_STRICT },
 	/* catchup options */
-	{ 's', 239, "catchup-source-pgdata",		&catchup_source_pgdata,	SOURCE_CMD_STRICT },
-	{ 's', 240, "catchup-destination-pgdata",	&catchup_destination_pgdata,	SOURCE_CMD_STRICT },
+	{ 's', 239, "source-pgdata",		&catchup_source_pgdata,	SOURCE_CMD_STRICT },
+	{ 's', 240, "destination-pgdata",	&catchup_destination_pgdata,	SOURCE_CMD_STRICT },
 	/* restore options */
 	{ 's', 136, "recovery-target-time",	&target_time,	SOURCE_CMD_STRICT },
 	{ 's', 137, "recovery-target-xid",	&target_xid,	SOURCE_CMD_STRICT },
@@ -760,9 +760,9 @@ main(int argc, char *argv[])
 	if (backup_subcmd == CATCHUP_CMD)
 	{
 		if (catchup_source_pgdata == NULL)
-			elog(ERROR, "You must specify \"--catchup-source-pgdata\" option with the \"%s\" command", get_subcmd_name(backup_subcmd));
+			elog(ERROR, "You must specify \"--source-pgdata\" option with the \"%s\" command", get_subcmd_name(backup_subcmd));
 		if (catchup_destination_pgdata == NULL)
-			elog(ERROR, "You must specify \"--catchup-destination-pgdata\" option with the \"%s\" command", get_subcmd_name(backup_subcmd));
+			elog(ERROR, "You must specify \"--destination-pgdata\" option with the \"%s\" command", get_subcmd_name(backup_subcmd));
 		if (current.backup_mode == BACKUP_MODE_INVALID)
 			elog(ERROR, "Required parameter not specified: BACKUP_MODE (-b, --backup-mode)");
 		if (current.backup_mode != BACKUP_MODE_FULL && current.backup_mode != BACKUP_MODE_DIFF_PTRACK && current.backup_mode != BACKUP_MODE_DIFF_DELTA)

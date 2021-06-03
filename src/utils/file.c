@@ -2001,7 +2001,6 @@ fio_copy_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
 
 			COMP_FILE_CRC32(true, file->crc, buf, hdr.size);
 
-			elog(INFO, "Copy block %u with size %lu of %s", blknum, hdr.size - sizeof(BackupPageHeader), to_fullpath);
 			if (fio_fseek(out, blknum * BLCKSZ) < 0)
 			{
 				elog(ERROR, "Cannot seek block %u of \"%s\": %s",

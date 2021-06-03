@@ -105,7 +105,7 @@ catchup_collect_info(PGNodeInfo	*source_node_info, const char *source_pgdata, co
 
 	elog(INFO, "Catchup start, pg_probackup version: %s, "
 			"PostgreSQL version: %s, "
-			"remote: %s, catchup-source-pgdata: %s, catchup-destination-pgdata: %s",
+			"remote: %s, source-pgdata: %s, destination-pgdata: %s",
 			PROGRAM_VERSION, source_node_info->server_version_str,
 			IsSshProtocol()  ? "true" : "false",
 			source_pgdata, dest_pgdata);

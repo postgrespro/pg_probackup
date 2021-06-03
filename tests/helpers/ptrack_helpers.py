@@ -1047,8 +1047,8 @@ class ProbackupTest(object):
         cmd_list = [
             'catchup',
             '--backup-mode={0}'.format(backup_mode),
-            '--catchup-source-pgdata={0}'.format(source_pgdata),
-            '--catchup-destination-pgdata={0}'.format(destination_node.data_dir)
+            '--source-pgdata={0}'.format(source_pgdata),
+            '--destination-pgdata={0}'.format(destination_node.data_dir)
         ]
         if self.remote:
             cmd_list += ['--remote-proto=ssh', '--remote-host=localhost']
