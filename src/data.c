@@ -299,7 +299,7 @@ prepare_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 	 * Under high write load it's possible that we've read partly
 	 * flushed page, so try several times before throwing an error.
 	 */
-	if (backup_mode != BACKUP_MODE_DIFF_PTRACK || ptrack_version_num >= 20)
+	if (backup_mode != BACKUP_MODE_DIFF_PTRACK || ptrack_version_num >= 200)
 	{
 		int rc = 0;
 		while (!page_is_valid && try_again--)

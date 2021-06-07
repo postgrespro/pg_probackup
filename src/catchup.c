@@ -200,7 +200,7 @@ catchup_preflight_checks(PGNodeInfo *source_node_info, PGconn *source_conn,
 	{
 		if (source_node_info->ptrack_version_num == 0)
 			elog(ERROR, "This PostgreSQL instance does not support ptrack");
-		else if (source_node_info->ptrack_version_num < 20)
+		else if (source_node_info->ptrack_version_num < 200)
 			elog(ERROR, "ptrack extension is too old.\n"
 					"Upgrade ptrack to version >= 2");
 		else if (!source_node_info->is_ptrack_enabled)
