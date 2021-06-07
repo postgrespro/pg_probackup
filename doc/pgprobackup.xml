@@ -143,6 +143,14 @@ doc/src/sgml/pgprobackup.sgml
    <arg choice="plain"><option>--wal-file-name</option> <replaceable>wal_file_name</replaceable></arg>
    <arg rep="repeat"><replaceable>option</replaceable></arg>
   </cmdsynopsis>
+  <cmdsynopsis condition="12+">
+   <command>pg_probackup</command>
+   <arg choice="plain"><option>catchup</option></arg>
+   <arg choice="plain"><option>-b</option> <replaceable>catchup_mode</replaceable></arg>
+   <arg choice="plain"><option>--source-pgdata</option>=<replaceable>path_to_pgdata_on_remote_server</replaceable></arg>
+   <arg choice="plain"><option>--destination-pgdata</option>=<replaceable>path_to_local_dir</replaceable></arg>
+   <arg rep="repeat"><replaceable>option</replaceable></arg>
+  </cmdsynopsis>
 
   </refsynopsisdiv>
 
@@ -281,6 +289,12 @@ doc/src/sgml/pgprobackup.sgml
     <listitem>
       <para>
         Partial restore: restoring only the specified databases.
+      </para>
+    </listitem>
+    <listitem condition="12+">
+      <para>
+        Catchup: <quote>catching up</quote> a fallen-behind standby server
+        with the <command>catchup</command> command.
       </para>
     </listitem>
   </itemizedlist>
@@ -1076,7 +1090,8 @@ GRANT SELECT ON TABLE pg_catalog.pg_database TO backup;
             mode: <xref linkend="pbk-add-instance"/>,
             <xref linkend="pbk-backup"/>,
             <xref linkend="pbk-restore"/>,
-            <xref linkend="pbk-archive-push"/>,
+            <phrase condition="12+"><xref linkend="pbk-catchup"/>,</phrase>
+            <xref linkend="pbk-archive-push"/>, and
             <xref linkend="pbk-archive-get"/>.
           </para>
         </listitem>
@@ -1459,6 +1474,7 @@ pg_probackup backup -B <replaceable>backup_dir</replaceable> --instance <replace
       </para>
     </refsect3>
   </refsect2>
+
   <refsect2 id="pbk-verifying-a-cluster">
     <title>Performing Cluster Verification</title>
     <para>
@@ -1534,6 +1550,7 @@ pg_probackup checkdb --amcheck --skip-block-validation [<replaceable>connection_
       higher cost of CPU, memory, and I/O consumption.
     </para>
   </refsect2>
+
   <refsect2 id="pbk-validating-backups">
     <title>Validating a Backup</title>
     <para>
@@ -2101,6 +2118,7 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
       <xref linkend="pbk-restore"/>,
       <xref linkend="pbk-merge"/>,
       <xref linkend="pbk-delete"/>,
+      <phrase condition="12+"><xref linkend="pbk-catchup"/>,</phrase>
       <xref linkend="pbk-checkdb"/> and
       <xref linkend="pbk-validate"/> processes can be
       executed on several parallel threads. This can significantly
@@ -3418,6 +3436,128 @@ pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replace
     </para>
 
 </refsect2>
+
+  <refsect2 id="pbk-creating-backup-to-catchup" condition="12+">
+    <title>Cloning a Database Instance</title>
+    <para>
+      <application>pg_probackup</application> can create a copy of a <productname>PostgreSQL</productname>
+      database instance directly, without using the backup catalog. This allows you
+      to add a new standby server in a parallel mode or to <quote>catch up</quote> a standby
+      server that has fallen behind.
+    </para>
+
+    <para>
+      Cloning a database instance is different from other <application>pg_probackup</application>
+      processes:
+      <itemizedlist>
+        <listitem>
+          <para>
+           The backup catalog is not required.
+          </para>
+        </listitem>
+        <listitem>
+          <para>
+           STREAM WAL delivery mode is only supported.
+          </para>
+        </listitem>
+        <listitem>
+          <para>
+           Copying external directories
+           is not supported.
+          </para>
+        </listitem>
+      </itemizedlist>
+    </para>
+
+    <para>
+     Before cloning a database instance, set up the source database server as follows:
+      <itemizedlist>
+        <listitem>
+          <para>
+           <link linkend="pbk-configuring-the-database-cluster">Configure
+           the database cluster</link> that contains the database instance to copy.
+          </para>
+        </listitem>
+        <listitem>
+          <para>
+           To copy from a remote server, <link linkend="pbk-configuring-the-remote-mode">configure the remote mode</link>.
+          </para>
+        </listitem>
+        <listitem>
+          <para>
+           To use the PTRACK backup mode, <link linkend="pbk-setting-up-ptrack-backups">set up PTRACK backups</link>.
+          </para>
+        </listitem>
+      </itemizedlist>
+    </para>
+
+    <para>
+      To clone a database instance, ensure that the source
+      database is running and accepting connections and
+      on the server with the destination database, run the following command:
+    </para>
+    <programlisting>
+pg_probackup catchup -b <replaceable>catchup-mode</replaceable> --source-pgdata=<replaceable>path_to_pgdata_on_remote_server</replaceable> --destination-pgdata=<replaceable>path_to_local_dir</replaceable> --stream [<replaceable>connection_options</replaceable>] [<replaceable>remote_options</replaceable>]
+</programlisting>
+    <para>
+      Where <replaceable>catchup_mode</replaceable> can take one of the
+      following values: <literal>FULL</literal>, <literal>DELTA</literal>, or <literal>PTRACK</literal>.
+    </para>
+    <itemizedlist spacing="compact">
+      <listitem>
+        <para>
+          FULL — creates a full copy of the database instance.
+          The destination directory must be empty for this mode.
+        </para>
+      </listitem>
+      <listitem>
+        <para>
+          DELTA — reads all data files in the data directory and
+          creates an incremental copy for pages that have changed
+          since the destination database was shut down cleanly.
+          For this mode, the destination directory must contain a previous
+          copy of the database that was shut down cleanly.
+        </para>
+      </listitem>
+      <listitem>
+        <para>
+          PTRACK — creates an incremental backup tracking page
+          changes on the fly.
+          For this mode, the destination directory must contain a previous
+          copy of the database that was shut down cleanly.
+        </para>
+      </listitem>
+    </itemizedlist>
+    <para>
+      You can use <link linkend="pbk-connection-opts">connection_options</link> to specify
+      the connection to the source database, and if it is located on a different server,
+      also specify <link linkend="pbk-remote-server-opts">remote_options</link>.
+      If the source database contains tablespaces that must be located in
+      a different directory, additionally specify the <option>--tablespace-mapping</option>
+      option:
+     <programlisting>
+pg_probackup catchup -b <replaceable>catchup-mode</replaceable> --source-pgdata=<replaceable>path_to_pgdata_on_remote_server</replaceable> --destination-pgdata=<replaceable>path_to_local_dir</replaceable> --stream --tablespace-mapping=<replaceable>OLDDIR</replaceable>=<replaceable>NEWDIR</replaceable>
+</programlisting>
+      To run the <command>catchup</command> command on parallel threads, specify the number
+      of threads with the <option>--threads</option> option:
+     <programlisting>
+pg_probackup catchup -b <replaceable>catchup-mode</replaceable> --source-pgdata=<replaceable>path_to_pgdata_on_remote_server</replaceable> --destination-pgdata=<replaceable>path_to_local_dir</replaceable> --stream --threads=<replaceable>num_threads</replaceable>
+</programlisting>
+    </para>
+    <para>
+      For example, assume that a remote standby server with the database instance in <filename>/replica-pgdata</filename> data directory has fallen behind. To sync this database instance with that in <filename>/master-pgdata</filename> data directory, you can run
+      <command>catchup</command> in the <literal>PTRACK</literal> mode on four parallel threads as follows:
+      <programlisting>
+pg_probackup catchup --source-pgdata=/master-pgdata --destination-pgdata=/replica-pgdata -p 5432 -d postgres -U remote-postgres-user --stream --backup-mode=PTRACK --remote-host=remote-hostname --remote-user=remote-unix-username -j 4
+</programlisting>
+    </para>
+    <para>
+      Another example shows how you can add a new remote standby server with the <productname>PostgreSQL</productname> data directory <filename>/replica-pgdata</filename> by running <command>catchup</command> in the <literal>FULL</literal> mode on four parallel threads:
+<programlisting>
+pg_probackup catchup --source-pgdata=/master-pgdata --destination-pgdata=/replica-pgdata -p 5432 -d postgres -U remote-postgres-user --stream --backup-mode=FULL --remote-host=remote-hostname --remote-user=remote-unix-username -j 4
+</programlisting>
+    </para>
+  </refsect2>
 </refsect1>
 
 <refsect1 id="pbk-reference">
@@ -3576,7 +3716,7 @@ pg_probackup show-config -B <replaceable>backup_dir</replaceable> --instance <re
       <title>show</title>
       <programlisting>
 pg_probackup show -B <replaceable>backup_dir</replaceable>
-[--help] [--instance <replaceable>instance_name</replaceable> [-i <replaceable>backup_id</replaceable> | --archive]] [--format=plain|json] [--no-color]
+[--help] [--instance <replaceable>instance_name</replaceable> [-i <replaceable>backup_id</replaceable> | --archive]] [--format=plain|json]
 </programlisting>
       <para>
         Shows the contents of the backup catalog. If
@@ -3591,8 +3731,6 @@ pg_probackup show -B <replaceable>backup_dir</replaceable>
         plain text. You can specify the
         <literal>--format=json</literal> option to get the result
         in the <acronym>JSON</acronym> format.
-        If <literal>--no-color</literal> flag is used,
-        then the output is not colored.
       </para>
       <para>
         For details on usage, see the sections
@@ -4290,6 +4428,120 @@ pg_probackup archive-get -B <replaceable>backup_dir</replaceable> --instance <re
         For details, see section <link linkend="pbk-archiving-options">Archiving Options</link>.
       </para>
     </refsect3>
+
+    <refsect3 id="pbk-catchup" xreflabel="catchup" condition="12+">
+      <title>catchup</title>
+      <programlisting>
+pg_probackup catchup -b <replaceable>catchup_mode</replaceable>
+--source-pgdata=<replaceable>path_to_pgdata_on_remote_server</replaceable>
+--destination-pgdata=<replaceable>path_to_local_dir</replaceable>
+[--help] [--stream] [-j <replaceable>num_threads</replaceable>]
+[-T <replaceable>OLDDIR</replaceable>=<replaceable>NEWDIR</replaceable>]
+[<replaceable>connection_options</replaceable>] [<replaceable>remote_options</replaceable>]
+</programlisting>
+      <para>
+        Creates a copy of a <productname>PostgreSQL</productname> database
+        instance without using the backup catalog.
+
+      <variablelist>
+      <varlistentry>
+<term><option>-b <replaceable>catchup_mode</replaceable></option></term>
+<term><option>--backup-mode=<replaceable>catchup_mode</replaceable></option></term>
+      <listitem>
+      <para>
+        Specifies the catchup mode to use. Possible values are:
+
+      <itemizedlist spacing="compact">
+        <listitem>
+          <para>
+            <literal>FULL</literal> — creates a full copy of the database instance.
+          </para>
+        </listitem>
+        <listitem>
+          <para>
+            <literal>DELTA</literal> — reads all data files in the data directory and
+            creates an incremental copy for pages that have changed
+            since the destination database was shut down cleanly.
+          </para>
+        </listitem>
+        <listitem>
+          <para>
+            <literal>PTRACK</literal> — creates an incremental PTRACK backup tracking
+            page changes on the fly.
+          </para>
+        </listitem>
+      </itemizedlist>
+      </para>
+      </listitem>
+      </varlistentry>
+
+      <varlistentry>
+<term><option>--source-pgdata=<replaceable>path_to_pgdata_on_remote_server</replaceable></option></term>
+      <listitem>
+      <para>
+        Specifies the path to the data directory of the database to be copied, which can be local or remote.
+      </para>
+      </listitem>
+      </varlistentry>
+
+      <varlistentry>
+<term><option>--destination-pgdata=<replaceable>path_to_local_dir</replaceable></option></term>
+      <listitem>
+      <para>
+        Specifies the path to the local data directory of the database to copy to.
+      </para>
+      </listitem>
+      </varlistentry>
+
+      <varlistentry>
+<term><option>--stream</option></term>
+      <listitem>
+      <para>
+        Makes a <link linkend="pbk-stream-mode">STREAM</link> backup, which
+        includes all the necessary WAL files by streaming them from
+        the database server via replication protocol.
+      </para>
+      </listitem>
+      </varlistentry>
+
+      <varlistentry>
+<term><option>-j <replaceable>num_threads</replaceable></option></term>
+<term><option>--threads=<replaceable>num_threads</replaceable></option></term>
+      <listitem>
+      <para>
+        Sets the number of parallel threads for
+        <command>catchup</command> process.
+      </para>
+      </listitem>
+      </varlistentry>
+
+      <varlistentry>
+<term><option>-T <replaceable>OLDDIR</replaceable>=<replaceable>NEWDIR</replaceable></option></term>
+<term><option>--tablespace-mapping=<replaceable>OLDDIR</replaceable>=<replaceable>NEWDIR</replaceable></option></term>
+      <listitem>
+      <para>
+        Relocates the tablespace from the <replaceable>OLDDIR</replaceable> to the <replaceable>NEWDIR</replaceable>
+        directory at the time of recovery. Both <replaceable>OLDDIR</replaceable> and <replaceable>NEWDIR</replaceable> must
+        be absolute paths. If the path contains the equals sign (<literal>=</literal>),
+        escape it with a backslash. This option can be specified
+        multiple times for multiple tablespaces.
+      </para>
+      </listitem>
+      </varlistentry>
+
+      </variablelist>
+      </para>
+
+      <para>
+        Additionally, <link linkend="pbk-connection-opts">connection
+        options</link>, <link linkend="pbk-remote-server-opts">remote
+        mode options</link> can be used.
+      </para>
+      <para>
+        For details on usage, see the section
+        <link linkend="pbk-creating-backup-to-catchup">Creating a Catchup Copy</link>.
+      </para>
+    </refsect3>
   </refsect2>
   <refsect2 id="pbk-options">
     <title>Options</title>
@@ -4674,16 +4926,6 @@ pg_probackup archive-get -B <replaceable>backup_dir</replaceable> --instance <re
       </para>
       <para>
       <variablelist>
-
-      <varlistentry>
-<term><option>--no-color</option></term>
-      <listitem>
-      <para>
-        Disable the coloring for console log messages of <literal>warning</literal> and <literal>error</literal> levels.
-      </para>
-      </listitem>
-      </varlistentry>
-
       <varlistentry>
 <term><option>--log-level-console=<replaceable>log_level</replaceable></option></term>
       <listitem>
@@ -4832,7 +5074,8 @@ pg_probackup archive-get -B <replaceable>backup_dir</replaceable> --instance <re
       <title>Connection Options</title>
       <para>
         You can use these options together with
-        <xref linkend="pbk-backup"/> and
+        <xref linkend="pbk-backup"/>
+        <phrase condition="12+">, <xref linkend="pbk-catchup"/>,</phrase> and
         <xref linkend="pbk-checkdb"/> commands.
       </para>
       <para>
@@ -5123,6 +5366,7 @@ pg_probackup archive-get -B <replaceable>backup_dir</replaceable> --instance <re
         used with <xref linkend="pbk-add-instance"/>,
         <xref linkend="pbk-set-config"/>,
         <xref linkend="pbk-backup"/>,
+        <phrase condition="12+"><xref linkend="pbk-catchup"/>,</phrase>
         <xref linkend="pbk-restore"/>,
         <xref linkend="pbk-archive-push"/>, and
         <xref linkend="pbk-archive-get"/> commands.
