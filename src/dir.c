@@ -904,7 +904,7 @@ dir_list_file_internal(parray *files, pgFile *parent, const char *parent_dir,
  *
  * Copy of function get_tablespace_mapping() from pg_basebackup.c.
  */
-static const char *
+const char *
 get_tablespace_mapping(const char *dir)
 {
 	TablespaceListCell *cell;
@@ -914,18 +914,6 @@ get_tablespace_mapping(const char *dir)
 			return cell->new_dir;
 
 	return dir;
-}
-
-//REVIEW What exactly wrong with this abstraction? I don't get it...
-/*
- * TODO протёкшая абстрация, надо на этапе ревью решить что с ней делать,
- * потому как непонятно, почему мы в backup.c напрямую работаем с созданием
- * каталогов, видимо, когда-то подразумевалось, что вся работа будет в dir.c
- */
-const char *
-leaked_abstraction_get_tablespace_mapping(const char *dir)
-{
-	return get_tablespace_mapping(dir);
 }
 
 /*

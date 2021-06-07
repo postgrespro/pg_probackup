@@ -1033,7 +1033,7 @@ extern void dir_list_file(parray *files, const char *root, bool exclude,
 						  bool follow_symlink, bool add_root, bool backup_logs,
 						  bool skip_hidden, int external_dir_num, fio_location location);
 
-extern const char *leaked_abstraction_get_tablespace_mapping(const char *dir);
+extern const char *get_tablespace_mapping(const char *dir);
 extern void create_data_directories(parray *dest_files,
 										const char *data_dir,
 										const char *backup_dir,

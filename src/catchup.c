@@ -58,7 +58,6 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads)
 	return 0;
 }
 
-
 //REVIEW The name of this function looks strange to me.
 //Maybe catchup_init_state() or catchup_setup() will do better?
 //I'd also suggest to wrap all these fields into some CatchupState, but it isn't urgent.
@@ -247,7 +246,8 @@ catchup_preflight_checks(PGNodeInfo *source_node_info, PGconn *source_conn,
 
 /*
  * Check that all tablespaces exists in tablespace mapping (--tablespace-mapping option)
- * Emit fatal error if that (not existent in map) tablespace found
+ * Check that all local mapped directories is empty if it is local catchup
+ * Emit fatal error if that (not existent in map or not empty) tablespace found
  */
 static void
 catchup_check_tablespaces_existance_in_tbsmapping(PGconn *conn)
@@ -271,7 +271,7 @@ catchup_check_tablespaces_existance_in_tbsmapping(PGconn *conn)
 		Assert (strlen(tablespace_path) > 0);
 
 		canonicalize_path(tablespace_path);
-		linked_path = leaked_abstraction_get_tablespace_mapping(tablespace_path);
+		linked_path = get_tablespace_mapping(tablespace_path);
 
 		if (strcmp(tablespace_path, linked_path) == 0)
 			/* same result -> not found in mapping */
@@ -279,7 +279,12 @@ catchup_check_tablespaces_existance_in_tbsmapping(PGconn *conn)
 				"tablespace (\"%s\"), that are not listed in the map", tablespace_path);
 
 		if (!is_absolute_path(linked_path))
-			elog(ERROR, "Tablespace directory path must be an absolute path: %s\n",
+			elog(ERROR, "Tablespace directory path must be an absolute path: \"%s\"",
+				linked_path);
+
+		if (current.backup_mode == BACKUP_MODE_FULL
+				&& !dir_is_empty(linked_path, FIO_LOCAL_HOST))
+			elog(ERROR, "Target mapped tablespace direcotory (\"%s\") is not empty in local catchup",
 				linked_path);
 	}
 	PQclear(res);
@@ -436,7 +441,7 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 
 	/* Start stream replication */
 	join_path_components(dest_xlog_path, dest_pgdata, PG_XLOG_DIR);
-	fio_mkdir(dest_xlog_path, DIR_PERMISSION, FIO_BACKUP_HOST);
+	fio_mkdir(dest_xlog_path, DIR_PERMISSION, FIO_LOCAL_HOST);
 	start_WAL_streaming(source_conn, dest_xlog_path, &instance_config.conn_opt,
 						current.start_lsn, current.tli);
 
@@ -537,7 +542,7 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 			join_path_components(dirpath, dest_pgdata, file->rel_path);
 
 			elog(VERBOSE, "Create directory '%s'", dirpath);
-			fio_mkdir(dirpath, DIR_PERMISSION, FIO_BACKUP_HOST);
+			fio_mkdir(dirpath, DIR_PERMISSION, FIO_LOCAL_HOST);
 		}
 		else
 		{
@@ -552,7 +557,7 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 				join_path_components(source_full_path, source_pgdata, file->rel_path);
 				fio_readlink(source_full_path, symlink_content, sizeof(symlink_content), FIO_DB_HOST);
 				/* we checked that mapping exists in preflight_checks for local catchup */
-				linked_path = leaked_abstraction_get_tablespace_mapping(symlink_content);
+				linked_path = get_tablespace_mapping(symlink_content);
 				elog(INFO, "Map tablespace full_path: \"%s\" old_symlink_content: \"%s\" new_symlink_content: \"%s\"\n",
 					source_full_path,
 					symlink_content,
@@ -569,12 +574,12 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 					 linked_path, to_path);
 
 			/* create tablespace directory */
-			if (fio_mkdir(linked_path, file->mode, FIO_BACKUP_HOST) != 0)
+			if (fio_mkdir(linked_path, file->mode, FIO_LOCAL_HOST) != 0)
 				elog(ERROR, "Could not create tablespace directory \"%s\": %s",
 					 linked_path, strerror(errno));
 
 			/* create link to linked_path */
-			if (fio_symlink(linked_path, to_path, true, FIO_BACKUP_HOST) < 0)
+			if (fio_symlink(linked_path, to_path, true, FIO_LOCAL_HOST) < 0)
 				elog(ERROR, "Could not create symbolic link \"%s\" -> \"%s\": %s",
 					 linked_path, to_path, strerror(errno));
 		}
@@ -702,7 +707,7 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 		join_path_components(from_fullpath, source_pgdata, source_pg_control_file->rel_path);
 		join_path_components(to_fullpath, dest_pgdata, source_pg_control_file->rel_path);
 		copy_pgcontrol_file(from_fullpath, FIO_DB_HOST,
-				to_fullpath, FIO_BACKUP_HOST, source_pg_control_file);
+				to_fullpath, FIO_LOCAL_HOST, source_pg_control_file);
 	}
 
 	time(&end_time);
@@ -820,7 +825,7 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 			Assert(file->external_dir_num == 0);
 			join_path_components(to_fullpath, dest_pgdata, file->rel_path);
 
-			if (fio_sync(to_fullpath, FIO_BACKUP_HOST) != 0)
+			if (fio_sync(to_fullpath, FIO_LOCAL_HOST) != 0)
 				elog(ERROR, "Cannot sync file \"%s\": %s", to_fullpath, strerror(errno));
 		}
 
@@ -828,7 +833,7 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 		 * sync pg_control file
 		 */
 		join_path_components(to_fullpath, dest_pgdata, source_pg_control_file->rel_path);
-		if (fio_sync(to_fullpath, FIO_BACKUP_HOST) != 0)
+		if (fio_sync(to_fullpath, FIO_LOCAL_HOST) != 0)
 			elog(ERROR, "Cannot sync file \"%s\": %s", to_fullpath, strerror(errno));
 
 		time(&end_time);
