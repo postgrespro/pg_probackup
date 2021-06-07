@@ -293,8 +293,7 @@ doc/src/sgml/pgprobackup.sgml
     </listitem>
     <listitem condition="12+">
       <para>
-        Catchup: <quote>catching up</quote> a fallen-behind standby server
-        with the <command>catchup</command> command.
+        Catchup: <quote>catching up</quote> of a fallen-behind standby server.
       </para>
     </listitem>
   </itemizedlist>
@@ -3442,8 +3441,8 @@ pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replace
     <para>
       <application>pg_probackup</application> can create a copy of a <productname>PostgreSQL</productname>
       database instance directly, without using the backup catalog. This allows you
-      to add a new standby server in a parallel mode or to <quote>catch up</quote> a standby
-      server that has fallen behind.
+      to add a new standby server in a parallel mode or to have a standby
+      server that has fallen behind <quote>catch up</quote> with master.
     </para>
 
     <para>
@@ -3546,13 +3545,14 @@ pg_probackup catchup -b <replaceable>catchup-mode</replaceable> --source-pgdata=
     </para>
     <para>
       For example, assume that a remote standby server with the database instance in <filename>/replica-pgdata</filename> data directory has fallen behind. To sync this database instance with that in <filename>/master-pgdata</filename> data directory, you can run
-      <command>catchup</command> in the <literal>PTRACK</literal> mode on four parallel threads as follows:
+      the <command>catchup</command> command in the <literal>PTRACK</literal> mode on four parallel threads as follows:
       <programlisting>
 pg_probackup catchup --source-pgdata=/master-pgdata --destination-pgdata=/replica-pgdata -p 5432 -d postgres -U remote-postgres-user --stream --backup-mode=PTRACK --remote-host=remote-hostname --remote-user=remote-unix-username -j 4
 </programlisting>
     </para>
     <para>
-      Another example shows how you can add a new remote standby server with the <productname>PostgreSQL</productname> data directory <filename>/replica-pgdata</filename> by running <command>catchup</command> in the <literal>FULL</literal> mode on four parallel threads:
+      Another example shows how you can add a new remote standby server with the <productname>PostgreSQL</productname> data directory <filename>/replica-pgdata</filename> by running the <command>catchup</command> command in the <literal>FULL</literal> mode
+      on four parallel threads:
 <programlisting>
 pg_probackup catchup --source-pgdata=/master-pgdata --destination-pgdata=/replica-pgdata -p 5432 -d postgres -U remote-postgres-user --stream --backup-mode=FULL --remote-host=remote-hostname --remote-user=remote-unix-username -j 4
 </programlisting>
@@ -4933,7 +4933,7 @@ pg_probackup catchup -b <replaceable>catchup_mode</replaceable>
 <term><option>--no-color</option></term>
       <listitem>
       <para>
-        Disable the coloring for console log messages of <literal>warning</literal> and <literal>error</literal> levels.
+        Disable coloring for console log messages of <literal>warning</literal> and <literal>error</literal> levels.
       </para>
       </listitem>
       </varlistentry>
