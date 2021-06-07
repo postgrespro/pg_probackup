@@ -145,13 +145,13 @@ catchup_preflight_checks(PGNodeInfo *source_node_info, PGconn *source_conn,
 	{
 		if (current.backup_mode == BACKUP_MODE_DIFF_PTRACK ||
 			 current.backup_mode == BACKUP_MODE_DIFF_DELTA)
-			elog(ERROR, "\"%s\" is empty but incremental catchup mode requested.",
+			elog(ERROR, "\"%s\" is empty, but incremental catchup mode requested.",
 				dest_pgdata);
 	}
 	else /* dest dir not empty */
 	{
 		if (current.backup_mode == BACKUP_MODE_FULL)
-			elog(ERROR, "Can't perform full catchup into not empty directory \"%s\".",
+			elog(ERROR, "Can't perform full catchup into non-empty directory \"%s\".",
 				dest_pgdata);
 	}
 
@@ -217,7 +217,7 @@ catchup_preflight_checks(PGNodeInfo *source_node_info, PGconn *source_conn,
 	}
 
 	if (current.from_replica && exclusive_backup)
-		elog(ERROR, "Catchup from standby is available only for PG >= 9.6");
+		elog(ERROR, "Catchup from standby is only available for PostgreSQL >= 9.6");
 
 	/* if local catchup, check that we don't overwrite tablespace in source pgdata */
 	if (!fio_is_remote(FIO_DB_HOST))
@@ -276,7 +276,7 @@ catchup_check_tablespaces_existance_in_tbsmapping(PGconn *conn)
 		if (strcmp(tablespace_path, linked_path) == 0)
 			/* same result -> not found in mapping */
 			elog(ERROR, "Local catchup executed, but source database contains "
-				"tablespace (\"%s\"), that are not listed in the map", tablespace_path);
+				"tablespace (\"%s\"), that is not listed in the map", tablespace_path);
 
 		if (!is_absolute_path(linked_path))
 			elog(ERROR, "Tablespace directory path must be an absolute path: \"%s\"",
@@ -284,7 +284,7 @@ catchup_check_tablespaces_existance_in_tbsmapping(PGconn *conn)
 
 		if (current.backup_mode == BACKUP_MODE_FULL
 				&& !dir_is_empty(linked_path, FIO_LOCAL_HOST))
-			elog(ERROR, "Target mapped tablespace direcotory (\"%s\") is not empty in local catchup",
+			elog(ERROR, "Target mapped tablespace directory (\"%s\") is not empty in local catchup",
 				linked_path);
 	}
 	PQclear(res);
@@ -881,7 +881,7 @@ catchup_thread_runner(void *arg)
 
 		/* check for interrupt */
 		if (interrupted || thread_interrupted)
-			elog(ERROR, "interrupted during catchup");
+			elog(ERROR, "Interrupted during catchup");
 
 		if (progress)
 			elog(INFO, "Progress: (%d/%d). Process file \"%s\"",
