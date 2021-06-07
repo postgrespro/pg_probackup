@@ -829,7 +829,7 @@ IsDir(const char *dirpath, const char *entry, fio_location location)
 	char		path[MAXPGPATH];
 	struct stat	st;
 
-	snprintf(path, MAXPGPATH, "%s/%s", dirpath, entry);
+	join_path_components(path, dirpath, entry);
 
 	return fio_stat(path, &st, false, location) == 0 && S_ISDIR(st.st_mode);
 }
@@ -941,7 +941,7 @@ catalog_get_backup_list(const char *instance_name, time_t requested_backup_id)
 		join_path_components(data_path, backup_instance_path, data_ent->d_name);
 
 		/* read backup information from BACKUP_CONTROL_FILE */
-		snprintf(backup_conf_path, MAXPGPATH, "%s/%s", data_path, BACKUP_CONTROL_FILE);
+		join_path_components(backup_conf_path, data_path, BACKUP_CONTROL_FILE);
 		backup = readBackupControlFile(backup_conf_path);
 
 		if (!backup)
