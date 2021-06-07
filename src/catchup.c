@@ -213,7 +213,7 @@ catchup_preflight_checks(PGNodeInfo *source_node_info, PGconn *source_conn,
 
 		join_path_components(backup_label_filename, dest_pgdata, "backup_label");
 		if (fio_access(backup_label_filename, F_OK, FIO_LOCAL_HOST) == 0)
-			elog(ERROR, "Destination directory contains \"backup_control\" file");
+			elog(ERROR, "Destination directory contains \"backup_label\" file");
 	}
 
 	if (current.from_replica && exclusive_backup)
@@ -922,7 +922,8 @@ catchup_thread_runner(void *arg)
 								 arguments->nodeInfo->checksum_version,
 								 arguments->nodeInfo->ptrack_version_num,
 								 arguments->nodeInfo->ptrack_schema,
-								 false);
+								 false,
+								 dest_file != NULL ? dest_file->size : 0);
 		}
 		else
 		{

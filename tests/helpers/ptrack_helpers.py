@@ -1052,9 +1052,10 @@ class ProbackupTest(object):
         ]
         if self.remote:
             cmd_list += ['--remote-proto=ssh', '--remote-host=localhost']
+        if self.verbose:
+            cmd_list += ['--log-level-console=verbose']
 
-        self.run_pb(cmd_list + options)
-        return destination_node
+        return self.run_pb(cmd_list + options)
 
     def show_pb(
             self, backup_dir, instance=None, backup_id=None,

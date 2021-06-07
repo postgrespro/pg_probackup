@@ -1939,10 +1939,26 @@ fio_copy_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
 	if (use_pagemap)
 		IO_CHECK(fio_write_all(fio_stdout, (*file).pagemap.bitmap, (*file).pagemap.bitmapsize), (*file).pagemap.bitmapsize);
 
-	//out = open_local_file_rw_append(to_fullpath, &out_buf, STDIO_BUFSIZE);
 	out = fio_fopen(to_fullpath, PG_BINARY_R "+", FIO_BACKUP_HOST);
 	if (out == NULL)
 		elog(ERROR, "Cannot open restore target file \"%s\": %s", to_fullpath, strerror(errno));
+
+	/* update file permission */
+	if (fio_chmod(to_fullpath, file->mode, FIO_BACKUP_HOST) == -1)
+		elog(ERROR, "Cannot change mode of \"%s\": %s", to_fullpath,
+			strerror(errno));
+
+	elog(VERBOSE, "ftruncate file \"%s\" to size %lu",
+			to_fullpath, file->size);
+	if (fio_ftruncate(out, file->size) == -1)
+		elog(ERROR, "Cannot ftruncate file \"%s\" to size %lu: %s",
+			to_fullpath, file->size, strerror(errno));
+
+	if (!fio_is_remote_file(out))
+	{
+		out_buf = pgut_malloc(STDIO_BUFSIZE);
+		setvbuf(out, out_buf, _IOFBF, STDIO_BUFSIZE);
+	}
 
 	while (true)
 	{

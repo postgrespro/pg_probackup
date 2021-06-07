@@ -662,7 +662,7 @@ catchup_data_file(pgFile *file, const char *from_fullpath, const char *to_fullpa
 				 XLogRecPtr prev_backup_start_lsn, BackupMode backup_mode,
 				 CompressAlg calg, int clevel, uint32 checksum_version,
 				 int ptrack_version_num, const char *ptrack_schema,
-				 bool is_merge)
+				 bool is_merge, size_t prev_size)
 {
 	int         rc;
 	bool        use_pagemap;
@@ -689,7 +689,7 @@ catchup_data_file(pgFile *file, const char *from_fullpath, const char *to_fullpa
 	 */
 	if (backup_mode == BACKUP_MODE_DIFF_PTRACK &&
 		file->pagemap.bitmapsize == PageBitmapIsEmpty &&
-		file->exists_in_prev && !file->pagemap_isabsent)
+		file->exists_in_prev && file->size == prev_size && !file->pagemap_isabsent)
 	{
 		/*
 		 * There are no changed blocks since last backup. We want to make
@@ -793,7 +793,7 @@ catchup_data_file(pgFile *file, const char *from_fullpath, const char *to_fullpa
 	    backup_mode == BACKUP_MODE_DIFF_DELTA)
 		file->n_blocks = file->read_size / BLCKSZ;
 
-	/* Determine that file didn`t changed in case of incremental backup */
+	/* Determine that file didn`t changed in case of incremental catchup */
 	if (backup_mode != BACKUP_MODE_FULL &&
 		file->exists_in_prev &&
 		file->write_size == 0 &&
@@ -2317,6 +2317,12 @@ copy_pages(const char *to_fullpath, const char *from_fullpath,
 	if (fio_chmod(to_fullpath, file->mode, FIO_BACKUP_HOST) == -1)
 		elog(ERROR, "Cannot change mode of \"%s\": %s", to_fullpath,
 			strerror(errno));
+
+	elog(VERBOSE, "ftruncate file \"%s\" to size %lu",
+			to_fullpath, file->size);
+	if (fio_ftruncate(out, file->size) == -1)
+		elog(ERROR, "Cannot ftruncate file \"%s\" to size %lu: %s",
+			to_fullpath, file->size, strerror(errno));
 
 	if (!fio_is_remote_file(out))
 	{

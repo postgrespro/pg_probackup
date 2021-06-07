@@ -1104,7 +1104,7 @@ extern void catchup_data_file(pgFile *file, const char *from_fullpath, const cha
 								 XLogRecPtr prev_backup_start_lsn, BackupMode backup_mode,
 								 CompressAlg calg, int clevel, uint32 checksum_version,
 								 int ptrack_version_num, const char *ptrack_schema,
-								 bool missing_ok);
+								 bool is_merge, size_t prev_size);
 extern void backup_non_data_file(pgFile *file, pgFile *prev_file,
 								 const char *from_fullpath, const char *to_fullpath,
 								 BackupMode backup_mode, time_t parent_backup_time,

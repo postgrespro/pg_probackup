@@ -1,3 +1,4 @@
+import io
 import os
 import unittest
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
@@ -24,7 +25,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         result = source_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
 
         dest_pg = self.make_empty_node(os.path.join(module_name, fname, 'dst'))
-        dest_pg = self.catchup_node(
+        self.catchup_node(
             backup_mode = 'FULL',
             source_pgdata = source_pg.data_dir,
             destination_node = dest_pg,
@@ -66,7 +67,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
 
         dest_pg = self.make_empty_node(os.path.join(module_name, fname, 'dst'))
         tblspace1_new_path = self.get_tblspace_path(dest_pg, 'tblspace1_new')
-        dest_pg = self.catchup_node(
+        self.catchup_node(
             backup_mode = 'FULL',
             source_pgdata = source_pg.data_dir,
             destination_node = dest_pg,
@@ -113,7 +114,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         result = source_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
 
         dest_pg = self.make_empty_node(os.path.join(module_name, fname, 'dst'))
-        dest_pg = self.catchup_node(
+        self.catchup_node(
             backup_mode = 'FULL',
             source_pgdata = source_pg.data_dir,
             destination_node = dest_pg,
@@ -160,7 +161,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
 
         # make clean shutdowned lagging behind replica
         dest_pg = self.make_empty_node(os.path.join(module_name, fname, 'dst'))
-        dest_pg = self.catchup_node(
+        self.catchup_node(
             backup_mode = 'FULL',
             source_pgdata = source_pg.data_dir,
             destination_node = dest_pg,
@@ -224,7 +225,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
 
         # make clean shutdowned lagging behind replica
         dest_pg = self.make_empty_node(os.path.join(module_name, fname, 'dst'))
-        dest_pg = self.catchup_node(
+        self.catchup_node(
             backup_mode = 'FULL',
             source_pgdata = source_pg.data_dir,
             destination_node = dest_pg,
@@ -292,7 +293,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             "CREATE TABLE ultimate_question AS SELECT 42 AS answer")
 
         dest_pg = self.make_empty_node(os.path.join(module_name, fname, 'dst'))
-        dest_pg = self.catchup_node(
+        self.catchup_node(
             backup_mode = 'FULL',
             source_pgdata = source_pg.data_dir,
             destination_node = dest_pg,
@@ -354,7 +355,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         source_pg.safe_psql("postgres", "VACUUM t_heap")
 
         dest_pg = self.make_empty_node(os.path.join(module_name, fname, 'dst'))
-        dest_pg = self.catchup_node(
+        self.catchup_node(
             backup_mode = 'FULL',
             source_pgdata = source_pg.data_dir,
             destination_node = dest_pg,
@@ -380,6 +381,8 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             source_pgdata = source_pg.data_dir,
             destination_node = dest_pg,
             options = ['-d', 'postgres', '-p', str(source_pg.port), '--stream'])
+        with io.open(os.path.join(dest_pg.logs_dir, 'catchup.log'), 'a') as catchup_log:
+                catchup_log.write(self.output)
 
         source_pgdata = self.pgdata_content(source_pg.data_dir)
         dest_pgdata = self.pgdata_content(dest_pg.data_dir)
@@ -391,6 +394,9 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     def test_local_tablespace_without_mapping(self):
+        if self.remote:
+            return unittest.skip('Skipped because this test tests local catchup error handling')
+
         fname = self.id().split('.')[3]
 
         source_pg = self.make_simple_node(
@@ -409,7 +415,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
 
         dest_pg = self.make_empty_node(os.path.join(module_name, fname, 'dst'))
         try:
-            dest_pg = self.catchup_node(
+            self.catchup_node(
                 backup_mode = 'FULL',
                 source_pgdata = source_pg.data_dir,
                 destination_node = dest_pg,
