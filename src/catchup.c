@@ -58,8 +58,8 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads)
 	return 0;
 }
 
-//REVIEW Please add a comment to this function.
-//Besides, the name of this function looks strange to me.
+
+//REVIEW The name of this function looks strange to me.
 //Maybe catchup_init_state() or catchup_setup() will do better?
 //I'd also suggest to wrap all these fields into some CatchupState, but it isn't urgent.
 /*
@@ -79,9 +79,6 @@ catchup_collect_info(PGNodeInfo	*source_node_info, const char *source_pgdata, co
 	current.start_time = time(NULL);
 
 	StrNCpy(current.program_version, PROGRAM_VERSION, sizeof(current.program_version));
-	//REVIEW I guess these are some copy-paste leftovers. Let's clean them.
-	//current.compress_alg = instance_config.compress_alg;
-	//current.compress_level = instance_config.compress_level;
 
 	/* Do some compatibility checks and fill basic info about PG instance */
 	source_conn = pgdata_basic_setup(instance_config.conn_opt, source_node_info);
@@ -548,18 +545,13 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 			const char *linked_path = NULL;
 			char	to_path[MAXPGPATH];
 
-			// perform additional check that this is actually symlink?
-			//REVIEW Why is this code block separated?
-			//REVIEW_ANSWER because i want to localize usage of source_full_path and symlink_content
+			// TODO perform additional check that this is actually symlink?
 			{ /* get full symlink path and map this path to new location */
 				char	source_full_path[MAXPGPATH];
 				char	symlink_content[MAXPGPATH];
 				join_path_components(source_full_path, source_pgdata, file->rel_path);
 				fio_readlink(source_full_path, symlink_content, sizeof(symlink_content), FIO_DB_HOST);
-				//REVIEW What if we won't find mapping for this tablespace?
-				//I'd expect a failure. Otherwise, we may spoil source database data.
-				// REVIEW_ANSWER we checked that in preflight_checks for local catchup
-				// and for remote catchup this may be correct behavior
+				/* we checked that mapping exists in preflight_checks for local catchup */
 				linked_path = leaked_abstraction_get_tablespace_mapping(symlink_content);
 				elog(INFO, "Map tablespace full_path: \"%s\" old_symlink_content: \"%s\" new_symlink_content: \"%s\"\n",
 					source_full_path,
@@ -619,9 +611,8 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 			bool     redundant = true;
 			pgFile	*file = (pgFile *) parray_get(dest_filelist, i);
 
-			//REVIEW Can we maybe optimize it and use some merge-like algorithm
-			//instead of bsearch for each file? Of course it isn't an urgent fix.
-			//REVIEW_ANSWER yes, merge will be better
+			//TODO optimize it and use some merge-like algorithm
+			//instead of bsearch for each file.
 			if (parray_bsearch(source_filelist, file, pgFileCompareRelPathWithExternal))
 				redundant = false;
 
@@ -653,10 +644,6 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 		}
 	}
 
-	//REVIEW Hmm. Why do we need this at all?
-	//I'd expect that we init pgfile with unset lock...
-	//Not related to this patch, though.
-	//REVIEW_ANSWER initialization in the pgFileInit function was proposed but was not accepted (see 2c8b7e9)
 	/* clear file locks */
 	pfilearray_clear_locks(source_filelist);
 
@@ -728,8 +715,6 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 		elog(ERROR, "Data files transferring failed, time elapsed: %s",
 			pretty_time);
 
-	//REVIEW The comment looks unrelated to the function. Do I miss something?
-	//REVIEW_ANSWER because it is a part of pg_stop_backup() calling
 	/* Notify end of backup */
 	pg_silent_client_messages(source_conn);
 
