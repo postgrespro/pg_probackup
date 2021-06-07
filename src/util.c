@@ -418,7 +418,7 @@ set_min_recovery_point(pgFile *file, const char *backup_path,
 	FIN_CRC32C(ControlFile.crc);
 
 	/* overwrite pg_control */
-	snprintf(fullpath, sizeof(fullpath), "%s/%s", backup_path, XLOG_CONTROL_FILE);
+	join_path_components(fullpath, backup_path, XLOG_CONTROL_FILE);
 	writeControlFile(&ControlFile, fullpath, FIO_LOCAL_HOST);
 
 	/* Update pg_control checksum in backup_list */
@@ -569,7 +569,7 @@ check_postmaster(const char *pgdata)
 	pid_t  pid;
 	char   pid_file[MAXPGPATH];
 
-	snprintf(pid_file, MAXPGPATH, "%s/postmaster.pid", pgdata);
+	join_path_components(pid_file, pgdata, "postmaster.pid");
 
 	fp = fopen(pid_file, "r");
 	if (fp == NULL)
