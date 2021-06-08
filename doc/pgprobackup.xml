@@ -293,7 +293,7 @@ doc/src/sgml/pgprobackup.sgml
     </listitem>
     <listitem condition="12+">
       <para>
-        Catchup: <quote>catching up</quote> of a fallen-behind standby server.
+        Catchup: cloning a <productname>PostgreSQL</productname> instance for a fallen-behind standby server to <quote>catch up</quote> with master.
       </para>
     </listitem>
   </itemizedlist>
@@ -3437,16 +3437,16 @@ pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replace
 </refsect2>
 
   <refsect2 id="pbk-creating-backup-to-catchup" condition="12+">
-    <title>Cloning a Database Instance</title>
+    <title>Cloning <productname>PostgreSQL</productname> Instance</title>
     <para>
       <application>pg_probackup</application> can create a copy of a <productname>PostgreSQL</productname>
-      database instance directly, without using the backup catalog. This allows you
+      instance directly, without using the backup catalog. This allows you
       to add a new standby server in a parallel mode or to have a standby
       server that has fallen behind <quote>catch up</quote> with master.
     </para>
 
     <para>
-      Cloning a database instance is different from other <application>pg_probackup</application>
+      Cloning a <productname>PostgreSQL</productname> instance is different from other <application>pg_probackup</application>
       processes:
       <itemizedlist>
         <listitem>
@@ -3469,12 +3469,12 @@ pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replace
     </para>
 
     <para>
-     Before cloning a database instance, set up the source database server as follows:
+     Before cloning a <productname>PostgreSQL</productname> instance, set up the source database server as follows:
       <itemizedlist>
         <listitem>
           <para>
            <link linkend="pbk-configuring-the-database-cluster">Configure
-           the database cluster</link> that contains the database instance to copy.
+           the database cluster</link> for the instance to copy.
           </para>
         </listitem>
         <listitem>
@@ -3491,8 +3491,8 @@ pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replace
     </para>
 
     <para>
-      To clone a database instance, ensure that the source
-      database is running and accepting connections and
+      To clone a <productname>PostgreSQL</productname> instance, ensure that the source
+      database server is running and accepting connections and
       on the server with the destination database, run the following command:
     </para>
     <programlisting>
@@ -3505,7 +3505,7 @@ pg_probackup catchup -b <replaceable>catchup-mode</replaceable> --source-pgdata=
     <itemizedlist spacing="compact">
       <listitem>
         <para>
-          FULL — creates a full copy of the database instance.
+          FULL — creates a full copy of the <productname>PostgreSQL</productname> instance.
           The destination directory must be empty for this mode.
         </para>
       </listitem>
@@ -3529,7 +3529,7 @@ pg_probackup catchup -b <replaceable>catchup-mode</replaceable> --source-pgdata=
     </itemizedlist>
     <para>
       You can use <link linkend="pbk-connection-opts">connection_options</link> to specify
-      the connection to the source database, and if it is located on a different server,
+      the connection to the source database cluster. If it is located on a different server,
       also specify <link linkend="pbk-remote-server-opts">remote_options</link>.
       If the source database contains tablespaces that must be located in
       a different directory, additionally specify the <option>--tablespace-mapping</option>
@@ -3544,7 +3544,7 @@ pg_probackup catchup -b <replaceable>catchup-mode</replaceable> --source-pgdata=
 </programlisting>
     </para>
     <para>
-      For example, assume that a remote standby server with the database instance in <filename>/replica-pgdata</filename> data directory has fallen behind. To sync this database instance with that in <filename>/master-pgdata</filename> data directory, you can run
+      For example, assume that a remote standby server with the <productname>PostgreSQL</productname> instance in <filename>/replica-pgdata</filename> data directory has fallen behind. To sync this instance with the one in <filename>/master-pgdata</filename> data directory, you can run
       the <command>catchup</command> command in the <literal>PTRACK</literal> mode on four parallel threads as follows:
       <programlisting>
 pg_probackup catchup --source-pgdata=/master-pgdata --destination-pgdata=/replica-pgdata -p 5432 -d postgres -U remote-postgres-user --stream --backup-mode=PTRACK --remote-host=remote-hostname --remote-user=remote-unix-username -j 4
@@ -4442,7 +4442,7 @@ pg_probackup catchup -b <replaceable>catchup_mode</replaceable>
 [<replaceable>connection_options</replaceable>] [<replaceable>remote_options</replaceable>]
 </programlisting>
       <para>
-        Creates a copy of a <productname>PostgreSQL</productname> database
+        Creates a copy of a <productname>PostgreSQL</productname>
         instance without using the backup catalog.
 
       <variablelist>
@@ -4456,7 +4456,7 @@ pg_probackup catchup -b <replaceable>catchup_mode</replaceable>
       <itemizedlist spacing="compact">
         <listitem>
           <para>
-            <literal>FULL</literal> — creates a full copy of the database instance.
+            <literal>FULL</literal> — creates a full copy of the <productname>PostgreSQL</productname> instance.
           </para>
         </listitem>
         <listitem>
@@ -4481,7 +4481,7 @@ pg_probackup catchup -b <replaceable>catchup_mode</replaceable>
 <term><option>--source-pgdata=<replaceable>path_to_pgdata_on_remote_server</replaceable></option></term>
       <listitem>
       <para>
-        Specifies the path to the data directory of the database to be copied, which can be local or remote.
+        Specifies the path to the data directory of the instance to be copied. The path can be local or remote.
       </para>
       </listitem>
       </varlistentry>
@@ -4490,7 +4490,7 @@ pg_probackup catchup -b <replaceable>catchup_mode</replaceable>
 <term><option>--destination-pgdata=<replaceable>path_to_local_dir</replaceable></option></term>
       <listitem>
       <para>
-        Specifies the path to the local data directory of the database to copy to.
+        Specifies the path to the local data directory to copy to.
       </para>
       </listitem>
       </varlistentry>
@@ -4541,7 +4541,7 @@ pg_probackup catchup -b <replaceable>catchup_mode</replaceable>
       </para>
       <para>
         For details on usage, see the section
-        <link linkend="pbk-creating-backup-to-catchup">Creating a Catchup Copy</link>.
+        <link linkend="pbk-creating-backup-to-catchup">Cloning <productname>PostgreSQL</productname> Instance</link>.
       </para>
     </refsect3>
   </refsect2>
