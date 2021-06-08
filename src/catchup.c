@@ -219,9 +219,8 @@ catchup_preflight_checks(PGNodeInfo *source_node_info, PGconn *source_conn,
 	if (current.from_replica && exclusive_backup)
 		elog(ERROR, "Catchup from standby is only available for PostgreSQL >= 9.6");
 
-	/* if local catchup, check that we don't overwrite tablespace in source pgdata */
-	if (!fio_is_remote(FIO_DB_HOST))
-		catchup_check_tablespaces_existance_in_tbsmapping(source_conn);
+	/* check that we don't overwrite tablespace in source pgdata */
+	catchup_check_tablespaces_existance_in_tbsmapping(source_conn);
 
 	/* check timelines */
 	if (current.backup_mode != BACKUP_MODE_FULL)
@@ -246,7 +245,7 @@ catchup_preflight_checks(PGNodeInfo *source_node_info, PGconn *source_conn,
 
 /*
  * Check that all tablespaces exists in tablespace mapping (--tablespace-mapping option)
- * Check that all local mapped directories is empty if it is local catchup
+ * Check that all local mapped directories is empty if it is local FULL catchup
  * Emit fatal error if that (not existent in map or not empty) tablespace found
  */
 static void
@@ -274,9 +273,15 @@ catchup_check_tablespaces_existance_in_tbsmapping(PGconn *conn)
 		linked_path = get_tablespace_mapping(tablespace_path);
 
 		if (strcmp(tablespace_path, linked_path) == 0)
-			/* same result -> not found in mapping */
-			elog(ERROR, "Local catchup executed, but source database contains "
-				"tablespace (\"%s\"), that is not listed in the map", tablespace_path);
+		/* same result -> not found in mapping */
+		{
+			if (!fio_is_remote(FIO_DB_HOST))
+				elog(ERROR, "Local catchup executed, but source database contains "
+					"tablespace (\"%s\"), that is not listed in the map", tablespace_path);
+			else
+				elog(WARNING, "Remote catchup executed and source database contains "
+					"tablespace (\"%s\"), that is not listed in the map", tablespace_path);
+		}
 
 		if (!is_absolute_path(linked_path))
 			elog(ERROR, "Tablespace directory path must be an absolute path: \"%s\"",
@@ -284,7 +289,7 @@ catchup_check_tablespaces_existance_in_tbsmapping(PGconn *conn)
 
 		if (current.backup_mode == BACKUP_MODE_FULL
 				&& !dir_is_empty(linked_path, FIO_LOCAL_HOST))
-			elog(ERROR, "Target mapped tablespace directory (\"%s\") is not empty in local catchup",
+			elog(ERROR, "Target mapped tablespace directory (\"%s\") is not empty in FULL catchup",
 				linked_path);
 	}
 	PQclear(res);
