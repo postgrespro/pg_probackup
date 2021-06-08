@@ -745,10 +745,8 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 
 	wait_wal_and_calculate_stop_lsn(dest_xlog_path, stop_backup_result.lsn, &current);
 
-	/* Write backup_label and tablespace_map */
-	Assert(stop_backup_result.backup_label_content != NULL);
-
 	/* Write backup_label */
+	Assert(stop_backup_result.backup_label_content != NULL);
 	pg_stop_backup_write_file_helper(dest_pgdata, PG_BACKUP_LABEL_FILE, "backup label",
 		stop_backup_result.backup_label_content, stop_backup_result.backup_label_content_len,
 		NULL);
@@ -756,13 +754,17 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 	stop_backup_result.backup_label_content = NULL;
 	stop_backup_result.backup_label_content_len = 0;
 
-	/* Write tablespace_map */
+	/* tablespace_map */
 	if (stop_backup_result.tablespace_map_content != NULL)
 	{
 		// TODO what if tablespace is created during catchup?
-		pg_stop_backup_write_file_helper(dest_pgdata, PG_TABLESPACE_MAP_FILE, "tablespace map",
-			stop_backup_result.tablespace_map_content, stop_backup_result.tablespace_map_content_len,
-			NULL);
+		/* Because we have already created symlinks in pg_tblspc earlier,
+		 * we do not need to write the tablespace_map file.
+		 * So this call is unnecessary:
+		 * pg_stop_backup_write_file_helper(dest_pgdata, PG_TABLESPACE_MAP_FILE, "tablespace map",
+		 *	stop_backup_result.tablespace_map_content, stop_backup_result.tablespace_map_content_len,
+		 *	NULL);
+		 */
 		free(stop_backup_result.tablespace_map_content);
 		stop_backup_result.tablespace_map_content = NULL;
 		stop_backup_result.tablespace_map_content_len = 0;
