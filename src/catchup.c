@@ -211,9 +211,9 @@ catchup_preflight_checks(PGNodeInfo *source_node_info, PGconn *source_conn,
 	{
 		char	backup_label_filename[MAXPGPATH];
 
-		join_path_components(backup_label_filename, dest_pgdata, "backup_label");
+		join_path_components(backup_label_filename, dest_pgdata, PG_BACKUP_LABEL_FILE);
 		if (fio_access(backup_label_filename, F_OK, FIO_LOCAL_HOST) == 0)
-			elog(ERROR, "Destination directory contains \"backup_label\" file");
+			elog(ERROR, "Destination directory contains \"" PG_BACKUP_LABEL_FILE "\" file");
 	}
 
 	if (current.from_replica && exclusive_backup)
@@ -414,7 +414,7 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 			true, true, false, backup_logs, true, 0, FIO_LOCAL_HOST);
 
 		// fill dest_redo.lsn and dest_redo.tli
-		get_redo(dest_pgdata, &dest_redo);
+		get_redo(dest_pgdata, FIO_LOCAL_HOST, &dest_redo);
 		elog(INFO, "syncLSN = %X/%X", (uint32) (dest_redo.lsn >> 32), (uint32) dest_redo.lsn);
 	}
 

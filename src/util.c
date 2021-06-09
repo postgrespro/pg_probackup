@@ -352,14 +352,14 @@ get_pgcontrol_checksum(const char *pgdata_path)
 }
 
 void
-get_redo(const char *pgdata_path, RedoParams *redo)
+get_redo(const char *pgdata_path, fio_location pgdata_location, RedoParams *redo)
 {
 	ControlFileData ControlFile;
 	char	   *buffer;
 	size_t		size;
 
 	/* First fetch file... */
-	buffer = slurpFile(pgdata_path, XLOG_CONTROL_FILE, &size, false, FIO_DB_HOST);
+	buffer = slurpFile(pgdata_path, XLOG_CONTROL_FILE, &size, false, pgdata_location);
 
 	digestControlFile(&ControlFile, buffer, size);
 	pg_free(buffer);

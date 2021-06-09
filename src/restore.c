@@ -485,7 +485,7 @@ do_restore_or_validate(InstanceState *instanceState, time_t target_backup_id, pg
 	{
 		RedoParams redo;
 		parray	  *timelines = NULL;
-		get_redo(instance_config.pgdata, &redo);
+		get_redo(instance_config.pgdata, FIO_DB_HOST, &redo);
 
 		if (redo.checksum_version == 0)
 			elog(ERROR, "Incremental restore in 'lsn' mode require "
