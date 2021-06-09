@@ -172,7 +172,7 @@ StreamLog(void *arg)
 	 */
 	stream_arg->startpos -= stream_arg->startpos % instance_config.xlog_seg_size;
 
-    xlog_files_list = parray_new();
+	xlog_files_list = parray_new();
 
 	/* Initialize timeout */
 	stream_stop_begin = 0;
