@@ -451,7 +451,7 @@ main(int argc, char *argv[])
 							catalogState->catalog_path, WAL_SUBDIR);
 	}
 
-	/* backup_path is required for all pg_probackup commands except help, version and checkdb */
+	/* backup_path is required for all pg_probackup commands except help, version, checkdb and catchup */
 	if (backup_path == NULL &&
 		backup_subcmd != CHECKDB_CMD &&
 		backup_subcmd != HELP_CMD &&
@@ -596,6 +596,13 @@ main(int argc, char *argv[])
 		(!instance_config.pgdata || !instance_name))
 		elog(ERROR, "Cannot save checkdb logs to a file. "
 			"You must specify --log-directory option when running checkdb with "
+			"--log-level-file option enabled.");
+
+	if (backup_subcmd == CATCHUP_CMD &&
+		instance_config.logger.log_level_file != LOG_OFF &&
+		instance_config.logger.log_directory == NULL)
+		elog(ERROR, "Cannot save catchup logs to a file. "
+			"You must specify --log-directory option when running catchup with "
 			"--log-level-file option enabled.");
 
 	/* Initialize logger */

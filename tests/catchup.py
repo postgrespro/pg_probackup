@@ -1,4 +1,3 @@
-import io
 import os
 import unittest
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
@@ -381,8 +380,6 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             source_pgdata = source_pg.data_dir,
             destination_node = dest_pg,
             options = ['-d', 'postgres', '-p', str(source_pg.port), '--stream'])
-        with io.open(os.path.join(dest_pg.logs_dir, 'catchup.log'), 'a') as catchup_log:
-                catchup_log.write(self.output)
 
         source_pgdata = self.pgdata_content(source_pg.data_dir)
         dest_pgdata = self.pgdata_content(dest_pg.data_dir)
