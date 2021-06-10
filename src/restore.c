@@ -291,7 +291,7 @@ do_restore_or_validate(InstanceState *instanceState, time_t target_backup_id, pg
 				if (!timelines)
 					elog(ERROR, "Failed to get history file for target timeline %i", rt->target_tli);
 
-				if (!satisfy_timeline(timelines, current_backup))
+				if (!satisfy_timeline(timelines, current_backup->tli, current_backup->stop_lsn))
 				{
 					if (target_backup_id != INVALID_BACKUP_ID)
 						elog(ERROR, "target backup %s does not satisfy target timeline",
@@ -1818,7 +1818,7 @@ satisfy_recovery_target(const pgBackup *backup, const pgRecoveryTarget *rt)
 
 /* TODO description */
 bool
-satisfy_timeline(const parray *timelines, const pgBackup *backup)
+satisfy_timeline(const parray *timelines, TimeLineID tli, XLogRecPtr lsn)
 {
 	int			i;
 
@@ -1827,9 +1827,9 @@ satisfy_timeline(const parray *timelines, const pgBackup *backup)
 		TimeLineHistoryEntry *timeline;
 
 		timeline = (TimeLineHistoryEntry *) parray_get(timelines, i);
-		if (backup->tli == timeline->tli &&
+		if (tli == timeline->tli &&
 			(XLogRecPtrIsInvalid(timeline->end) ||
-			 backup->stop_lsn <= timeline->end))
+			 lsn <= timeline->end))
 			return true;
 	}
 	return false;

@@ -42,7 +42,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             self.pgdata_content(dst_pg.data_dir)
             )
 
-        # run&recover catchup'ed instance 
+        # run&recover catchup'ed instance
         src_pg.stop()
         dst_options = {}
         dst_options['port'] = str(dst_pg.port)
@@ -101,7 +101,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             "UPDATE ultimate_question SET answer = -1")
         src_pg.stop()
 
-        # run&recover catchup'ed instance 
+        # run&recover catchup'ed instance
         dst_options = {}
         dst_options['port'] = str(dst_pg.port)
         self.set_auto_conf(dst_pg, dst_options)
@@ -166,7 +166,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             self.pgdata_content(dst_pg.data_dir)
             )
 
-        # run&recover catchup'ed instance 
+        # run&recover catchup'ed instance
         src_pg.stop()
         self.set_replica(master = src_pg, replica = dst_pg)
         dst_options = {}
@@ -238,7 +238,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             self.pgdata_content(dst_pg.data_dir)
             )
 
-        # run&recover catchup'ed instance 
+        # run&recover catchup'ed instance
         src_pg.stop()
         self.set_replica(master = src_pg, replica = dst_pg)
         dst_options = {}
@@ -251,6 +251,137 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(src_query_result, dst_query_result, 'Different answer from copy')
 
         # Cleanup
+        dst_pg.stop()
+        self.del_test_dir(module_name, self.fname)
+
+    def test_tli_delta_catchup(self):
+        """
+        Test that we correctly follow timeline change with delta catchup
+        """
+        # preparation 1: source
+        src_pg = self.make_simple_node(
+            base_dir = os.path.join(module_name, self.fname, 'src'),
+            set_replication = True,
+            pg_options = { 'wal_log_hints': 'on' }
+            )
+        src_pg.slow_start()
+
+        # preparation 2: destination
+        dst_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'dst'))
+        self.catchup_node(
+            backup_mode = 'FULL',
+            source_pgdata = src_pg.data_dir,
+            destination_node = dst_pg,
+            options = ['-d', 'postgres', '-p', str(src_pg.port), '--stream']
+            )
+        dst_options = {}
+        dst_options['port'] = str(dst_pg.port)
+        self.set_auto_conf(dst_pg, dst_options)
+        dst_pg.slow_start()
+        dst_pg.stop()
+
+        # preparation 3: promote source
+        src_pg.stop()
+        self.set_replica(dst_pg, src_pg) # fake replication
+        src_pg.slow_start(replica = True)
+        src_pg.promote()
+        src_pg.safe_psql("postgres", "CREATE TABLE ultimate_question AS SELECT 42 AS answer")
+        src_query_result = src_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
+
+        # do catchup
+        self.catchup_node(
+            backup_mode = 'DELTA',
+            source_pgdata = src_pg.data_dir,
+            destination_node = dst_pg,
+            options = ['-d', 'postgres', '-p', str(src_pg.port), '--stream']
+            )
+
+        # 1st check: compare data directories
+        self.compare_pgdata(
+            self.pgdata_content(src_pg.data_dir),
+            self.pgdata_content(dst_pg.data_dir)
+            )
+
+        # run&recover catchup'ed instance
+        dst_options = {}
+        dst_options['port'] = str(dst_pg.port)
+        self.set_auto_conf(dst_pg, dst_options)
+        dst_pg.slow_start()
+
+        # 2nd check: run verification query
+        dst_query_result = dst_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
+        self.assertEqual(src_query_result, dst_query_result, 'Different answer from copy')
+
+        # Cleanup
+        src_pg.stop()
+        dst_pg.stop()
+        self.del_test_dir(module_name, self.fname)
+
+    def test_tli_ptrack_catchup(self):
+        """
+        Test that we correctly follow timeline change with ptrack catchup
+        """
+        if not self.ptrack:
+            return unittest.skip('Skipped because ptrack support is disabled')
+
+        # preparation 1: source
+        src_pg = self.make_simple_node(
+            base_dir = os.path.join(module_name, self.fname, 'src'),
+            set_replication = True,
+            ptrack_enable = True,
+            initdb_params = ['--data-checksums']
+            )
+        src_pg.slow_start()
+        src_pg.safe_psql("postgres", "CREATE EXTENSION ptrack")
+
+        # preparation 2: destination
+        dst_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'dst'))
+        self.catchup_node(
+            backup_mode = 'FULL',
+            source_pgdata = src_pg.data_dir,
+            destination_node = dst_pg,
+            options = ['-d', 'postgres', '-p', str(src_pg.port), '--stream']
+            )
+        dst_options = {}
+        dst_options['port'] = str(dst_pg.port)
+        self.set_auto_conf(dst_pg, dst_options)
+        dst_pg.slow_start()
+        dst_pg.stop()
+
+        # preparation 3: promote source
+        src_pg.stop()
+        self.set_replica(dst_pg, src_pg) # fake replication
+        src_pg.slow_start(replica = True)
+        src_pg.promote()
+        src_pg.safe_psql("postgres", "CREATE TABLE ultimate_question AS SELECT 42 AS answer")
+        src_query_result = src_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
+
+        # do catchup
+        self.catchup_node(
+            backup_mode = 'PTRACK',
+            source_pgdata = src_pg.data_dir,
+            destination_node = dst_pg,
+            options = ['-d', 'postgres', '-p', str(src_pg.port), '--stream']
+            )
+
+        # 1st check: compare data directories
+        self.compare_pgdata(
+            self.pgdata_content(src_pg.data_dir),
+            self.pgdata_content(dst_pg.data_dir)
+            )
+
+        # run&recover catchup'ed instance
+        dst_options = {}
+        dst_options['port'] = str(dst_pg.port)
+        self.set_auto_conf(dst_pg, dst_options)
+        dst_pg.slow_start()
+
+        # 2nd check: run verification query
+        dst_query_result = dst_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
+        self.assertEqual(src_query_result, dst_query_result, 'Different answer from copy')
+
+        # Cleanup
+        src_pg.stop()
         dst_pg.stop()
         self.del_test_dir(module_name, self.fname)
 
@@ -491,6 +622,9 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
 # Test reaction on user errors
 #########################################
     def test_local_tablespace_without_mapping(self):
+        """
+        Test that we detect absence of needed --tablespace-mapping option
+        """
         if self.remote:
             return unittest.skip('Skipped because this test tests local catchup error handling')
 
@@ -555,7 +689,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         self.set_auto_conf(dst_pg, dst_options)
         dst_pg.slow_start()
         # leave running destination postmaster
-        #dst_pg.stop()
+        # so don't call dst_pg.stop()
 
         # try delta catchup
         try:
@@ -703,4 +837,141 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
 
         # Cleanup
         src_pg.stop()
+        self.del_test_dir(module_name, self.fname)
+
+    def test_tli_destination_mismatch(self):
+        """
+        Test that we detect TLI mismatch in destination
+        """
+        # preparation 1: source
+        src_pg = self.make_simple_node(
+            base_dir = os.path.join(module_name, self.fname, 'src'),
+            set_replication = True,
+            pg_options = { 'wal_log_hints': 'on' }
+            )
+        src_pg.slow_start()
+
+        # preparation 2: destination
+        dst_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'dst'))
+        self.catchup_node(
+            backup_mode = 'FULL',
+            source_pgdata = src_pg.data_dir,
+            destination_node = dst_pg,
+            options = ['-d', 'postgres', '-p', str(src_pg.port), '--stream']
+            )
+        dst_options = {}
+        dst_options['port'] = str(dst_pg.port)
+        self.set_auto_conf(dst_pg, dst_options)
+        self.set_replica(src_pg, dst_pg)
+        dst_pg.slow_start(replica = True)
+        dst_pg.promote()
+        dst_pg.stop()
+
+        # preparation 3: "useful" changes
+        src_pg.safe_psql("postgres", "CREATE TABLE ultimate_question AS SELECT 42 AS answer")
+        src_query_result = src_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
+
+        # try catchup
+        try:
+            self.catchup_node(
+                backup_mode = 'DELTA',
+                source_pgdata = src_pg.data_dir,
+                destination_node = dst_pg,
+                options = ['-d', 'postgres', '-p', str(src_pg.port), '--stream']
+                )
+            dst_options = {}
+            dst_options['port'] = str(dst_pg.port)
+            self.set_auto_conf(dst_pg, dst_options)
+            dst_pg.slow_start()
+            dst_query_result = dst_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
+            dst_pg.stop()
+            self.assertEqual(src_query_result, dst_query_result, 'Different answer from copy')
+        except ProbackupException as e:
+            self.assertIn(
+                'ERROR: Source is behind destination in timeline history',
+                e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
+
+        # Cleanup
+        src_pg.stop()
+        self.del_test_dir(module_name, self.fname)
+
+    def test_tli_source_mismatch(self):
+        """
+        Test that we detect TLI mismatch in source history
+        """
+        # preparation 1: source
+        src_pg = self.make_simple_node(
+            base_dir = os.path.join(module_name, self.fname, 'src'),
+            set_replication = True,
+            pg_options = { 'wal_log_hints': 'on' }
+            )
+        src_pg.slow_start()
+
+        # preparation 2: fake source (promouted copy)
+        fake_src_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'fake_src'))
+        self.catchup_node(
+            backup_mode = 'FULL',
+            source_pgdata = src_pg.data_dir,
+            destination_node = fake_src_pg,
+            options = ['-d', 'postgres', '-p', str(src_pg.port), '--stream']
+            )
+        fake_src_options = {}
+        fake_src_options['port'] = str(fake_src_pg.port)
+        self.set_auto_conf(fake_src_pg, fake_src_options)
+        self.set_replica(src_pg, fake_src_pg)
+        fake_src_pg.slow_start(replica = True)
+        fake_src_pg.promote()
+        self.switch_wal_segment(fake_src_pg)
+        fake_src_pg.safe_psql(
+            "postgres",
+            "CREATE TABLE t_heap AS SELECT i AS id, "
+            "md5(i::text) AS text, "
+            "md5(repeat(i::text, 10))::tsvector AS tsvector "
+            "FROM generate_series(0, 256) i")
+        self.switch_wal_segment(fake_src_pg)
+        fake_src_pg.safe_psql("postgres", "CREATE TABLE ultimate_question AS SELECT 'trash' AS garbage")
+
+        # preparation 3: destination
+        dst_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'dst'))
+        self.catchup_node(
+            backup_mode = 'FULL',
+            source_pgdata = src_pg.data_dir,
+            destination_node = dst_pg,
+            options = ['-d', 'postgres', '-p', str(src_pg.port), '--stream']
+            )
+        dst_options = {}
+        dst_options['port'] = str(dst_pg.port)
+        self.set_auto_conf(dst_pg, dst_options)
+        dst_pg.slow_start()
+        dst_pg.stop()
+
+        # preparation 4: "useful" changes
+        src_pg.safe_psql("postgres", "CREATE TABLE ultimate_question AS SELECT 42 AS answer")
+        src_query_result = src_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
+
+        # try catchup
+        try:
+            self.catchup_node(
+                backup_mode = 'DELTA',
+                source_pgdata = fake_src_pg.data_dir,
+                destination_node = dst_pg,
+                options = ['-d', 'postgres', '-p', str(fake_src_pg.port), '--stream']
+                )
+            dst_options = {}
+            dst_options['port'] = str(dst_pg.port)
+            self.set_auto_conf(dst_pg, dst_options)
+            dst_pg.slow_start()
+            dst_query_result = dst_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
+            dst_pg.stop()
+            self.assertEqual(src_query_result, dst_query_result, 'Different answer from copy')
+        except ProbackupException as e:
+            self.assertIn(
+                'ERROR: Destination is not in source timeline history',
+                e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
+
+        # Cleanup
+        src_pg.stop()
+        fake_src_pg.stop()
         self.del_test_dir(module_name, self.fname)

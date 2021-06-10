@@ -855,7 +855,7 @@ extern int do_restore_or_validate(InstanceState *instanceState,
 					  pgRecoveryTarget *rt,
 					  pgRestoreParams *params,
 					  bool no_sync);
-extern bool satisfy_timeline(const parray *timelines, const pgBackup *backup);
+extern bool satisfy_timeline(const parray *timelines, TimeLineID tli, XLogRecPtr lsn);
 extern bool satisfy_recovery_target(const pgBackup *backup,
 									const pgRecoveryTarget *rt);
 extern pgRecoveryTarget *parseRecoveryTargetOptions(

@@ -13,6 +13,7 @@
 #include "catalog/catalog.h"
 #endif
 #include "catalog/pg_tablespace.h"
+#include "access/timeline.h"
 #include "pgtar.h"
 #include "streamutil.h"
 
@@ -210,20 +211,29 @@ catchup_preflight_checks(PGNodeInfo *source_node_info, PGconn *source_conn,
 	/* check timelines */
 	if (current.backup_mode != BACKUP_MODE_FULL)
 	{
-		TimeLineID	dest_tli;
-		parray		*source_timelines;
+		RedoParams	dest_redo = { 0, InvalidXLogRecPtr, 0 };
 
-		dest_tli = get_current_timeline_from_control(dest_pgdata, FIO_LOCAL_HOST, false);
+		/* fill dest_redo.lsn and dest_redo.tli */
+		get_redo(dest_pgdata, FIO_LOCAL_HOST, &dest_redo);
 
-		source_timelines = catchup_get_tli_history(&instance_config.conn_opt, current.tli);
-
-		if (source_timelines != NULL && !tliIsPartOfHistory(source_timelines, dest_tli))
-			elog(ERROR, "Destination is not in source history");
-
-		if (source_timelines != NULL)
+		if (current.tli != 1)
 		{
+			parray	*source_timelines; /* parray* of TimeLineHistoryEntry* */
+			source_timelines = catchup_get_tli_history(&instance_config.conn_opt, current.tli);
+
+			if (source_timelines == NULL)
+				elog(ERROR, "Cannot get source timeline history");
+
+			if (!satisfy_timeline(source_timelines, dest_redo.tli, dest_redo.lsn))
+				elog(ERROR, "Destination is not in source timeline history");
+
 			parray_walk(source_timelines, pfree);
 			parray_free(source_timelines);
+		}
+		else /* special case -- no history files in source */
+		{
+			if (dest_redo.tli != 1)
+				elog(ERROR, "Source is behind destination in timeline history");
 		}
 	}
 }
