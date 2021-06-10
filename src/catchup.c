@@ -31,32 +31,6 @@ static void catchup_preflight_checks(PGNodeInfo *source_node_info, PGconn *sourc
 					const char *dest_pgdata);
 static void catchup_check_tablespaces_existance_in_tbsmapping(PGconn *conn);
 static parray* catchup_get_tli_history(ConnectionOptions *conn_opt, TimeLineID tli);
-static void do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *source_conn,
-					PGNodeInfo *nodeInfo, bool no_sync, bool backup_logs);
-static void *catchup_thread_runner(void *arg);
-
-/*
- * Entry point of pg_probackup CATCHUP subcommand.
- */
-int
-do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads)
-{
-	PGconn		*source_conn = NULL;
-	PGNodeInfo	source_node_info;
-	bool		no_sync = false;
-	bool		backup_logs = false;
-
-	source_conn = catchup_collect_info(&source_node_info, source_pgdata, dest_pgdata);
-	catchup_preflight_checks(&source_node_info, source_conn, source_pgdata, dest_pgdata);
-
-	do_catchup_instance(source_pgdata, dest_pgdata, source_conn, &source_node_info,
-						no_sync, backup_logs);
-
-	//REVIEW: Are we going to do that before release?
-	/* TODO: show the amount of transfered data in bytes and calculate incremental ratio */
-
-	return 0;
-}
 
 //REVIEW The name of this function looks strange to me.
 //Maybe catchup_init_state() or catchup_setup() will do better?
@@ -367,58 +341,264 @@ catchup_get_tli_history(ConnectionOptions *conn_opt, TimeLineID tli)
 	return result;
 }
 
-
 /*
- * TODO:
- *  - add description
- * main worker function, to be moved into do_catchup() and then to be split into meaningful pieces
+ * catchup multithreaded copy rountine and helper structure and function
  */
-static void
-do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *source_conn,
-					PGNodeInfo *source_node_info, bool no_sync, bool backup_logs)
+
+/* parameters for catchup_thread_runner() passed from catchup_multithreaded_copy() */
+typedef struct
+{
+	PGNodeInfo *nodeInfo;
+	const char *from_root;
+	const char *to_root;
+	parray	   *source_filelist;
+	parray	   *dest_filelist;
+	XLogRecPtr	sync_lsn;
+	BackupMode	backup_mode;
+	int	thread_num;
+	bool	completed;
+} catchup_thread_runner_arg;
+
+/* Catchup file copier executed in separate thread */
+static void *
+catchup_thread_runner(void *arg)
 {
 	int			i;
-	char		dest_xlog_path[MAXPGPATH];
-	char		label[1024];
-	RedoParams	dest_redo = { 0, InvalidXLogRecPtr, 0 };
-	pgFile		*source_pg_control_file = NULL;
+	char		from_fullpath[MAXPGPATH];
+	char		to_fullpath[MAXPGPATH];
 
+	catchup_thread_runner_arg *arguments = (catchup_thread_runner_arg *) arg;
+	int 		n_files = parray_num(arguments->source_filelist);
+
+	/* catchup a file */
+	for (i = 0; i < n_files; i++)
+	{
+		pgFile	*file = (pgFile *) parray_get(arguments->source_filelist, i);
+		pgFile	*dest_file = NULL;
+
+		/* We have already copied all directories */
+		if (S_ISDIR(file->mode))
+			continue;
+
+		if (!pg_atomic_test_set_flag(&file->lock))
+			continue;
+
+		/* check for interrupt */
+		if (interrupted || thread_interrupted)
+			elog(ERROR, "Interrupted during catchup");
+
+		if (progress)
+			elog(INFO, "Progress: (%d/%d). Process file \"%s\"",
+				 i + 1, n_files, file->rel_path);
+
+		/* construct destination filepath */
+		Assert(file->external_dir_num == 0);
+		join_path_components(from_fullpath, arguments->from_root, file->rel_path);
+		join_path_components(to_fullpath, arguments->to_root, file->rel_path);
+
+		/* Encountered some strange beast */
+		if (!S_ISREG(file->mode))
+			elog(WARNING, "Unexpected type %d of file \"%s\", skipping",
+							file->mode, from_fullpath);
+
+		/* Check that file exist in dest pgdata */
+		if (arguments->backup_mode != BACKUP_MODE_FULL)
+		{
+			pgFile	**dest_file_tmp = NULL;
+			dest_file_tmp = (pgFile **) parray_bsearch(arguments->dest_filelist,
+											file, pgFileCompareRelPathWithExternal);
+			if (dest_file_tmp)
+			{
+				/* File exists in destination PGDATA */
+				file->exists_in_prev = true;
+				dest_file = *dest_file_tmp;
+			}
+		}
+
+		/* Do actual work */
+		if (file->is_datafile && !file->is_cfs)
+		{
+			catchup_data_file(file, from_fullpath, to_fullpath,
+								 arguments->sync_lsn,
+								 arguments->backup_mode,
+								 NONE_COMPRESS,
+								 0,
+								 arguments->nodeInfo->checksum_version,
+								 arguments->nodeInfo->ptrack_version_num,
+								 arguments->nodeInfo->ptrack_schema,
+								 false,
+								 dest_file != NULL ? dest_file->size : 0);
+		}
+		else
+		{
+			backup_non_data_file(file, dest_file, from_fullpath, to_fullpath,
+								 arguments->backup_mode, current.parent_backup, true);
+		}
+
+		if (file->write_size == FILE_NOT_FOUND)
+			continue;
+
+		if (file->write_size == BYTES_INVALID)
+		{
+			elog(VERBOSE, "Skipping the unchanged file: \"%s\", read %li bytes", from_fullpath, file->read_size);
+			continue;
+		}
+
+		elog(VERBOSE, "File \"%s\". Copied "INT64_FORMAT " bytes",
+						from_fullpath, file->write_size);
+	}
+
+	/* ssh connection to longer needed */
+	fio_disconnect();
+
+	/* Data files transferring is successful */
+	arguments->completed = true;
+
+	return NULL;
+}
+
+/*
+ * main multithreaded copier
+ */
+static bool
+catchup_multithreaded_copy(int num_threads,
+	PGNodeInfo *source_node_info,
+	const char *source_pgdata_path,
+	const char *dest_pgdata_path,
+	parray	   *source_filelist,
+	parray	   *dest_filelist,
+	XLogRecPtr	sync_lsn,
+	BackupMode	backup_mode)
+{
 	/* arrays with meta info for multi threaded catchup */
-	pthread_t	*threads;
 	catchup_thread_runner_arg *threads_args;
+	pthread_t	*threads;
+
+	bool all_threads_successful = true;
+	int	i;
+
+	/* init thread args */
+	threads_args = (catchup_thread_runner_arg *) palloc(sizeof(catchup_thread_runner_arg) * num_threads);
+	for (i = 0; i < num_threads; i++)
+		threads_args[i] = (catchup_thread_runner_arg){
+			.nodeInfo = source_node_info,
+			.from_root = source_pgdata_path,
+			.to_root = dest_pgdata_path,
+			.source_filelist = source_filelist,
+			.dest_filelist = dest_filelist,
+			.sync_lsn = sync_lsn,
+			.backup_mode = backup_mode,
+			.thread_num = i + 1,
+			.completed = false,
+		};
+
+	/* Run threads */
+	thread_interrupted = false;
+	threads = (pthread_t *) palloc(sizeof(pthread_t) * num_threads);
+	for (i = 0; i < num_threads; i++)
+	{
+		elog(VERBOSE, "Start thread num: %i", i);
+		pthread_create(&threads[i], NULL, &catchup_thread_runner, &(threads_args[i]));
+	}
+
+	/* Wait threads */
+	for (i = 0; i < num_threads; i++)
+	{
+		pthread_join(threads[i], NULL);
+		all_threads_successful &= threads_args[i].completed;
+	}
+
+	free(threads);
+	free(threads_args);
+	return all_threads_successful;
+}
+
+/*
+ *
+ */
+static void
+catchup_sync_destination_files(const char* pgdata_path, fio_location location, parray *filelist, pgFile *pg_control_file)
+{
+	char    fullpath[MAXPGPATH];
+	time_t	start_time, end_time;
+	char	pretty_time[20];
+	int	i;
+
+	elog(INFO, "Syncing copied files to disk");
+	time(&start_time);
+
+	for (i = 0; i < parray_num(filelist); i++)
+	{
+		pgFile *file = (pgFile *) parray_get(filelist, i);
+
+		/* TODO: sync directory ? */
+		if (S_ISDIR(file->mode))
+			continue;
+
+		Assert(file->external_dir_num == 0);
+		join_path_components(fullpath, pgdata_path, file->rel_path);
+		if (fio_sync(fullpath, location) != 0)
+			elog(ERROR, "Cannot sync file \"%s\": %s", fullpath, strerror(errno));
+	}
+
+	/*
+	 * sync pg_control file
+	 */
+	join_path_components(fullpath, pgdata_path, pg_control_file->rel_path);
+	if (fio_sync(fullpath, location) != 0)
+		elog(ERROR, "Cannot sync file \"%s\": %s", fullpath, strerror(errno));
+
+	time(&end_time);
+	pretty_time_interval(difftime(end_time, start_time),
+						 pretty_time, lengthof(pretty_time));
+	elog(INFO, "Files are synced, time elapsed: %s", pretty_time);
+}
+
+/*
+ * Entry point of pg_probackup CATCHUP subcommand.
+ */
+int
+do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, bool sync_dest_files)
+{
+	PGconn		*source_conn = NULL;
+	PGNodeInfo	source_node_info;
+	bool		backup_logs = false;
+	parray	*source_filelist = NULL;
+	pgFile	*source_pg_control_file = NULL;
+	parray	*dest_filelist = NULL;
+	char	dest_xlog_path[MAXPGPATH];
+
+	RedoParams	dest_redo = { 0, InvalidXLogRecPtr, 0 };
+	PGStopBackupResult	stop_backup_result;
 	bool		catchup_isok = true;
 
-	parray     *source_filelist = NULL;
-	parray	   *dest_filelist = NULL;
+	int			i;
 
 	/* for fancy reporting */
 	time_t		start_time, end_time;
 	char		pretty_time[20];
 	char		pretty_bytes[20];
 
-	PGStopBackupResult	stop_backup_result;
-	//REVIEW Is it relevant to catchup? I suppose it isn't, since catchup is a new code.
-	//If we do need it, please write a comment explaining that.
-	/* kludge against some old bug in archive_timeout. TODO: remove in 3.0.0 */
-	int	     timeout = (instance_config.archive_timeout > 0) ?
-				instance_config.archive_timeout : ARCHIVE_TIMEOUT_DEFAULT;
-	char    *query_text = NULL;
+	source_conn = catchup_collect_info(&source_node_info, source_pgdata, dest_pgdata);
+	catchup_preflight_checks(&source_node_info, source_conn, source_pgdata, dest_pgdata);
 
 	elog(LOG, "Database catchup start");
 
-	/* notify start of backup to PostgreSQL server */
-	time2iso(label, lengthof(label), current.start_time, false);
-	strncat(label, " with pg_probackup", lengthof(label) -
-			strlen(" with pg_probackup"));
+	{
+		char		label[1024];
+		/* notify start of backup to PostgreSQL server */
+		time2iso(label, lengthof(label), current.start_time, false);
+		strncat(label, " with pg_probackup", lengthof(label) -
+				strlen(" with pg_probackup"));
 
-	/* Call pg_start_backup function in PostgreSQL connect */
-	pg_start_backup(label, smooth_checkpoint, &current, source_node_info, source_conn);
-	elog(LOG, "pg_start_backup START LSN %X/%X", (uint32) (current.start_lsn >> 32), (uint32) (current.start_lsn));
+		/* Call pg_start_backup function in PostgreSQL connect */
+		pg_start_backup(label, smooth_checkpoint, &current, &source_node_info, source_conn);
+		elog(LOG, "pg_start_backup START LSN %X/%X", (uint32) (current.start_lsn >> 32), (uint32) (current.start_lsn));
+	}
 
 	//REVIEW I wonder, if we can move this piece above and call before pg_start backup()?
 	//It seems to be a part of setup phase.
-	if (current.backup_mode == BACKUP_MODE_DIFF_PTRACK ||
-		 current.backup_mode == BACKUP_MODE_DIFF_DELTA)
+	if (current.backup_mode != BACKUP_MODE_FULL)
 	{
 		dest_filelist = parray_new();
 		dir_list_file(dest_filelist, dest_pgdata,
@@ -436,7 +616,7 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 	 */
 	if (current.backup_mode == BACKUP_MODE_DIFF_PTRACK)
 	{
-		XLogRecPtr	ptrack_lsn = get_last_ptrack_lsn(source_conn, source_node_info);
+		XLogRecPtr	ptrack_lsn = get_last_ptrack_lsn(source_conn, &source_node_info);
 
 		// new ptrack is more robust and checks Start LSN
 		if (ptrack_lsn > dest_redo.lsn || ptrack_lsn == InvalidXLogRecPtr)
@@ -515,8 +695,8 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 
 		/* Build the page map from ptrack information */
 		make_pagemap_from_ptrack_2(source_filelist, source_conn,
-								   source_node_info->ptrack_schema,
-								   source_node_info->ptrack_version_num,
+								   source_node_info.ptrack_schema,
+								   source_node_info.ptrack_version_num,
 								   dest_redo.lsn);
 		time(&end_time);
 		elog(INFO, "Pagemap successfully extracted, time elapsed: %.0f sec",
@@ -622,8 +802,7 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 	 * remove absent source files in dest (dropped tables, etc...)
 	 * note: global/pg_control will also be deleted here
 	 */
-	if (current.backup_mode == BACKUP_MODE_DIFF_PTRACK ||
-		 current.backup_mode == BACKUP_MODE_DIFF_DELTA)
+	if (current.backup_mode != BACKUP_MODE_FULL)
 	{
 		elog(INFO, "Removing redundant files in destination directory");
 		parray_qsort(dest_filelist, pgFileCompareRelPathWithExternalDesc);
@@ -675,45 +854,13 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 	if (dest_filelist)
 		parray_qsort(dest_filelist, pgFileCompareRelPathWithExternal);
 
-	/* init thread args */
-	threads = (pthread_t *) palloc(sizeof(pthread_t) * num_threads);
-	threads_args = (catchup_thread_runner_arg *) palloc(sizeof(catchup_thread_runner_arg) * num_threads);
-
-	for (i = 0; i < num_threads; i++)
-	{
-		catchup_thread_runner_arg *arg = &(threads_args[i]);
-
-		arg->nodeInfo = source_node_info;
-		arg->from_root = source_pgdata;
-		arg->to_root = dest_pgdata;
-		arg->source_filelist = source_filelist;
-		arg->dest_filelist = dest_filelist;
-		arg->sync_lsn = dest_redo.lsn;
-		arg->backup_mode = current.backup_mode;
-		arg->thread_num = i + 1;
-		/* By default there are some error */
-		arg->ret = 1;
-	}
-
-	/* Run threads */
-	thread_interrupted = false;
+	/* run copy threads */
 	elog(INFO, "Start transferring data files");
 	time(&start_time);
-	for (i = 0; i < num_threads; i++)
-	{
-		catchup_thread_runner_arg *arg = &(threads_args[i]);
-
-		elog(VERBOSE, "Start thread num: %i", i);
-		pthread_create(&threads[i], NULL, catchup_thread_runner, arg);
-	}
-
-	/* Wait threads */
-	for (i = 0; i < num_threads; i++)
-	{
-		pthread_join(threads[i], NULL);
-		if (threads_args[i].ret == 1)
-			catchup_isok = false;
-	}
+	catchup_isok = catchup_multithreaded_copy(num_threads, &source_node_info,
+		source_pgdata, dest_pgdata,
+		source_filelist, dest_filelist,
+		dest_redo.lsn, current.backup_mode);
 
 	/* at last copy control file */
 	if (catchup_isok)
@@ -737,27 +884,39 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 			pretty_time);
 
 	/* Notify end of backup */
-	pg_silent_client_messages(source_conn);
+	{
+		//REVIEW Is it relevant to catchup? I suppose it isn't, since catchup is a new code.
+		//If we do need it, please write a comment explaining that.
+		/* kludge against some old bug in archive_timeout. TODO: remove in 3.0.0 */
+		int	     timeout = (instance_config.archive_timeout > 0) ?
+					instance_config.archive_timeout : ARCHIVE_TIMEOUT_DEFAULT;
+		char    *stop_backup_query_text = NULL;
 
-	//REVIEW. Do we want to support pg 9.5? I suppose we never test it...
-	//Maybe check it and error out early?
-	/* Create restore point
-	 * Only if backup is from master.
-	 * For PG 9.5 create restore point only if pguser is superuser.
-	 */
-	if (!current.from_replica &&
-		!(source_node_info->server_version < 90600 &&
-		  !source_node_info->is_superuser)) //TODO: check correctness
-		pg_create_restore_point(source_conn, current.start_time);
+		pg_silent_client_messages(source_conn);
 
-	/* Execute pg_stop_backup using PostgreSQL connection */
-	pg_stop_backup_send(source_conn, source_node_info->server_version, current.from_replica, exclusive_backup, &query_text);
+		//REVIEW. Do we want to support pg 9.5? I suppose we never test it...
+		//Maybe check it and error out early?
+		/* Create restore point
+		 * Only if backup is from master.
+		 * For PG 9.5 create restore point only if pguser is superuser.
+		 */
+		if (!current.from_replica &&
+			!(source_node_info.server_version < 90600 &&
+			  !source_node_info.is_superuser)) //TODO: check correctness
+			pg_create_restore_point(source_conn, current.start_time);
 
-	/*
-	 * Wait for the result of pg_stop_backup(), but no longer than
-	 * archive_timeout seconds
-	 */
-	pg_stop_backup_consume(source_conn, source_node_info->server_version, exclusive_backup, timeout, query_text, &stop_backup_result);
+		/* Execute pg_stop_backup using PostgreSQL connection */
+		pg_stop_backup_send(source_conn, source_node_info.server_version, current.from_replica, exclusive_backup, &stop_backup_query_text);
+
+		/*
+		 * Wait for the result of pg_stop_backup(), but no longer than
+		 * archive_timeout seconds
+		 */
+		pg_stop_backup_consume(source_conn, source_node_info.server_version, exclusive_backup, timeout, stop_backup_query_text, &stop_backup_result);
+
+		/* Cleanup */
+		pg_free(stop_backup_query_text);
+	}
 
 	wait_wal_and_calculate_stop_lsn(dest_xlog_path, stop_backup_result.lsn, &current);
 
@@ -804,9 +963,6 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 		current.recovery_time = stop_backup_result.invocation_time;
 	}
 
-	/* Cleanup */
-	pg_free(query_text);
-
 	/*
 	 * In case of backup from replica >= 9.6 we must fix minRecPoint
 	 */
@@ -819,45 +975,12 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 	fio_disconnect();
 
 	/* Sync all copied files unless '--no-sync' flag is used */
-	if (no_sync)
-		elog(WARNING, "Files are not synced to disk");
-	else
+	if (catchup_isok)
 	{
-		char    to_fullpath[MAXPGPATH];
-
-		elog(INFO, "Syncing copied files to disk");
-		time(&start_time);
-
-		for (i = 0; i < parray_num(source_filelist); i++)
-		{
-			pgFile *file = (pgFile *) parray_get(source_filelist, i);
-
-			/* TODO: sync directory ? */
-			if (S_ISDIR(file->mode))
-				continue;
-
-			if (file->write_size <= 0)
-				continue;
-
-			/* construct fullpath */
-			Assert(file->external_dir_num == 0);
-			join_path_components(to_fullpath, dest_pgdata, file->rel_path);
-
-			if (fio_sync(to_fullpath, FIO_LOCAL_HOST) != 0)
-				elog(ERROR, "Cannot sync file \"%s\": %s", to_fullpath, strerror(errno));
-		}
-
-		/*
-		 * sync pg_control file
-		 */
-		join_path_components(to_fullpath, dest_pgdata, source_pg_control_file->rel_path);
-		if (fio_sync(to_fullpath, FIO_LOCAL_HOST) != 0)
-			elog(ERROR, "Cannot sync file \"%s\": %s", to_fullpath, strerror(errno));
-
-		time(&end_time);
-		pretty_time_interval(difftime(end_time, start_time),
-							 pretty_time, lengthof(pretty_time));
-		elog(INFO, "Files are synced, time elapsed: %s", pretty_time);
+		if (sync_dest_files)
+			catchup_sync_destination_files(dest_pgdata, FIO_LOCAL_HOST, source_filelist, source_pg_control_file);
+		else
+			elog(WARNING, "Files are not synced to disk");
 	}
 
 	/* Cleanup */
@@ -869,104 +992,9 @@ do_catchup_instance(const char *source_pgdata, const char *dest_pgdata, PGconn *
 	parray_walk(source_filelist, pgFileFree);
 	parray_free(source_filelist);
 	pgFileFree(source_pg_control_file);
-}
 
-/*
- * Catchup file copier executed in separate threads
- */
-static void *
-catchup_thread_runner(void *arg)
-{
-	int			i;
-	char		from_fullpath[MAXPGPATH];
-	char		to_fullpath[MAXPGPATH];
+	//REVIEW: Are we going to do that before release?
+	/* TODO: show the amount of transfered data in bytes and calculate incremental ratio */
 
-	catchup_thread_runner_arg *arguments = (catchup_thread_runner_arg *) arg;
-	int 		n_files = parray_num(arguments->source_filelist);
-
-	/* catchup a file */
-	for (i = 0; i < n_files; i++)
-	{
-		pgFile	*file = (pgFile *) parray_get(arguments->source_filelist, i);
-		pgFile	*dest_file = NULL;
-
-		/* We have already copied all directories */
-		if (S_ISDIR(file->mode))
-			continue;
-
-		if (!pg_atomic_test_set_flag(&file->lock))
-			continue;
-
-		/* check for interrupt */
-		if (interrupted || thread_interrupted)
-			elog(ERROR, "Interrupted during catchup");
-
-		if (progress)
-			elog(INFO, "Progress: (%d/%d). Process file \"%s\"",
-				 i + 1, n_files, file->rel_path);
-
-		/* construct destination filepath */
-		Assert(file->external_dir_num == 0);
-		join_path_components(from_fullpath, arguments->from_root, file->rel_path);
-		join_path_components(to_fullpath, arguments->to_root, file->rel_path);
-
-		/* Encountered some strange beast */
-		if (!S_ISREG(file->mode))
-			elog(WARNING, "Unexpected type %d of file \"%s\", skipping",
-							file->mode, from_fullpath);
-
-		/* Check that file exist in dest pgdata */
-		if (arguments->backup_mode != BACKUP_MODE_FULL)
-		{
-			pgFile	**dest_file_tmp = NULL;
-			dest_file_tmp = (pgFile **) parray_bsearch(arguments->dest_filelist,
-											file, pgFileCompareRelPathWithExternal);
-			if (dest_file_tmp)
-			{
-				/* File exists in destination PGDATA */
-				file->exists_in_prev = true;
-				dest_file = *dest_file_tmp;
-			}
-		}
-
-		/* Do actual work */
-		if (file->is_datafile && !file->is_cfs)
-		{
-			catchup_data_file(file, from_fullpath, to_fullpath,
-								 arguments->sync_lsn,
-								 arguments->backup_mode,
-								 NONE_COMPRESS,
-								 0,
-								 arguments->nodeInfo->checksum_version,
-								 arguments->nodeInfo->ptrack_version_num,
-								 arguments->nodeInfo->ptrack_schema,
-								 false,
-								 dest_file != NULL ? dest_file->size : 0);
-		}
-		else
-		{
-			backup_non_data_file(file, dest_file, from_fullpath, to_fullpath,
-								 arguments->backup_mode, current.parent_backup, true);
-		}
-
-		if (file->write_size == FILE_NOT_FOUND)
-			continue;
-
-		if (file->write_size == BYTES_INVALID)
-		{
-			elog(VERBOSE, "Skipping the unchanged file: \"%s\", read %li bytes", from_fullpath, file->read_size);
-			continue;
-		}
-
-		elog(VERBOSE, "File \"%s\". Copied "INT64_FORMAT " bytes",
-						from_fullpath, file->write_size);
-	}
-
-	/* ssh connection to longer needed */
-	fio_disconnect();
-
-	/* Data files transferring is successful */
-	arguments->ret = 0;
-
-	return NULL;
+	return 0;
 }

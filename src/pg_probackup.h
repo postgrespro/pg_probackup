@@ -601,27 +601,6 @@ typedef struct
 	int			ret;
 } backup_files_arg;
 
-typedef struct
-{
-	PGNodeInfo *nodeInfo;
-
-	const char *from_root;
-	const char *to_root;
-
-	parray	   *source_filelist;
-	parray	   *dest_filelist;
-
-	XLogRecPtr	sync_lsn;
-	BackupMode	backup_mode;
-	int			thread_num;
-
-	/*
-	 * Return value from the thread.
-	 * 0 means there is no error, 1 - there is an error.
-	 */
-	int			ret;
-} catchup_thread_runner_arg;
-
 typedef struct timelineInfo timelineInfo;
 
 /* struct to collect info about timelines in WAL archive */
@@ -869,7 +848,7 @@ extern char *pg_ptrack_get_block(ConnectionArgs *arguments,
 								 BlockNumber blknum, size_t *result_size,
 								 int ptrack_version_num, const char *ptrack_schema);
 /* in catchup.c */
-extern int do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads);
+extern int do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, bool sync_dest_files);
 /* in restore.c */
 extern int do_restore_or_validate(InstanceState *instanceState,
 					  time_t target_backup_id,
