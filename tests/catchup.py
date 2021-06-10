@@ -5,420 +5,515 @@ from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 module_name = 'catchup'
 
 class CatchupTest(ProbackupTest, unittest.TestCase):
+    def setUp(self):
+        self.fname = self.id().split('.')[3]
 
-    # @unittest.skip("skip")
-    def test_multithread_local_transfer(self):
+#########################################
+# Basic tests
+#########################################
+    def test_simple_full_catchup(self):
         """
-        Test 'multithreaded basebackup' mode
-        create node, insert some test data, catchup into other dir, start, select test data
+        Test 'multithreaded basebackup' mode (aka FULL catchup)
         """
-        fname = self.id().split('.')[3]
-
-        source_pg = self.make_simple_node(
-            base_dir = os.path.join(module_name, fname, 'src'),
-            set_replication=True)
-        source_pg.slow_start()
-        source_pg.safe_psql(
+        # preparation
+        src_pg = self.make_simple_node(
+            base_dir = os.path.join(module_name, self.fname, 'src'),
+            set_replication = True
+            )
+        src_pg.slow_start()
+        src_pg.safe_psql(
             "postgres",
             "CREATE TABLE ultimate_question AS SELECT 42 AS answer")
-        result = source_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
+        src_query_result = src_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
 
-        dest_pg = self.make_empty_node(os.path.join(module_name, fname, 'dst'))
+        # do full catchup
+        dst_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'dst'))
         self.catchup_node(
             backup_mode = 'FULL',
-            source_pgdata = source_pg.data_dir,
-            destination_node = dest_pg,
-            options = ['-d', 'postgres', '-p', str(source_pg.port), '--stream', '-j', '4']
+            source_pgdata = src_pg.data_dir,
+            destination_node = dst_pg,
+            options = ['-d', 'postgres', '-p', str(src_pg.port), '--stream']
             )
-        source_pg.stop()
 
-        dest_options = {}
-        dest_options['port'] = str(dest_pg.port)
-        self.set_auto_conf(dest_pg, dest_options)
-        dest_pg.slow_start()
-        self.assertEqual(
-            result,
-            dest_pg.safe_psql("postgres", "SELECT * FROM ultimate_question"),
-            'Different answer from copy')
-        dest_pg.stop()
+        # 1st check: compare data directories
+        self.compare_pgdata(
+            self.pgdata_content(src_pg.data_dir),
+            self.pgdata_content(dst_pg.data_dir)
+            )
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
+        # run&recover catchup'ed instance 
+        src_pg.stop()
+        dst_options = {}
+        dst_options['port'] = str(dst_pg.port)
+        self.set_auto_conf(dst_pg, dst_options)
+        dst_pg.slow_start()
 
-    # @unittest.skip("skip")
-    def test_local_simple_transfer_with_tablespace(self):
-        fname = self.id().split('.')[3]
+        # 2nd check: run verification query
+        dst_query_result = dst_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
+        self.assertEqual(src_query_result, dst_query_result, 'Different answer from copy')
 
-        source_pg = self.make_simple_node(
-            base_dir = os.path.join(module_name, fname, 'src'),
-            initdb_params = ['--data-checksums'])
-        source_pg.slow_start()
+        # Cleanup
+        dst_pg.stop()
+        self.del_test_dir(module_name, self.fname)
 
-        tblspace1_old_path = self.get_tblspace_path(source_pg, 'tblspace1_old')
-        self.create_tblspace_in_node(
-            source_pg, 'tblspace1',
-            tblspc_path = tblspace1_old_path)
-
-        source_pg.safe_psql(
+    def test_full_catchup_with_tablespace(self):
+        """
+        Test tablespace transfers
+        """
+        # preparation
+        src_pg = self.make_simple_node(
+            base_dir = os.path.join(module_name, self.fname, 'src'),
+            set_replication = True
+            )
+        src_pg.slow_start()
+        tblspace1_old_path = self.get_tblspace_path(src_pg, 'tblspace1_old')
+        self.create_tblspace_in_node(src_pg, 'tblspace1', tblspc_path = tblspace1_old_path)
+        src_pg.safe_psql(
             "postgres",
             "CREATE TABLE ultimate_question TABLESPACE tblspace1 AS SELECT 42 AS answer")
-        result = source_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
+        src_query_result = src_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
 
-        dest_pg = self.make_empty_node(os.path.join(module_name, fname, 'dst'))
-        tblspace1_new_path = self.get_tblspace_path(dest_pg, 'tblspace1_new')
+        # do full catchup with tablespace mapping
+        dst_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'dst'))
+        tblspace1_new_path = self.get_tblspace_path(dst_pg, 'tblspace1_new')
         self.catchup_node(
             backup_mode = 'FULL',
-            source_pgdata = source_pg.data_dir,
-            destination_node = dest_pg,
+            source_pgdata = src_pg.data_dir,
+            destination_node = dst_pg,
             options = [
                 '-d', 'postgres',
-                '-p', str(source_pg.port),
+                '-p', str(src_pg.port),
                 '--stream',
                 '-T', '{0}={1}'.format(tblspace1_old_path, tblspace1_new_path)
                 ]
             )
 
-        source_pgdata = self.pgdata_content(source_pg.data_dir)
-        dest_pgdata = self.pgdata_content(dest_pg.data_dir)
-        self.compare_pgdata(source_pgdata, dest_pgdata)
+        # 1st check: compare data directories
+        self.compare_pgdata(
+            self.pgdata_content(src_pg.data_dir),
+            self.pgdata_content(dst_pg.data_dir)
+            )
 
-        source_pg.stop()
-
-        dest_options = {}
-        dest_options['port'] = str(dest_pg.port)
-        self.set_auto_conf(dest_pg, dest_options)
-        dest_pg.slow_start()
-        self.assertEqual(
-            result,
-            dest_pg.safe_psql("postgres", "SELECT * FROM ultimate_question"),
-            'Different answer from copy')
-        dest_pg.stop()
-
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
-    # @unittest.skip("skip")
-    def test_multithread_remote_transfer(self):
-        """
-        Test 'multithreaded basebackup' mode
-        create node, insert some test data, catchup into other dir, start, select test data
-        """
-        fname = self.id().split('.')[3]
-
-        source_pg = self.make_simple_node(base_dir = os.path.join(module_name, fname, 'src'))
-        source_pg.slow_start()
-        source_pg.safe_psql(
+        # make changes in master tablespace
+        src_pg.safe_psql(
             "postgres",
-            "CREATE TABLE ultimate_question AS SELECT 42 AS answer")
-        result = source_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
+            "UPDATE ultimate_question SET answer = -1")
+        src_pg.stop()
 
-        dest_pg = self.make_empty_node(os.path.join(module_name, fname, 'dst'))
+        # run&recover catchup'ed instance 
+        dst_options = {}
+        dst_options['port'] = str(dst_pg.port)
+        self.set_auto_conf(dst_pg, dst_options)
+        dst_pg.slow_start()
+
+        # 2nd check: run verification query
+        dst_query_result = dst_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
+        self.assertEqual(src_query_result, dst_query_result, 'Different answer from copy')
+
+        # Cleanup
+        dst_pg.stop()
+        self.del_test_dir(module_name, self.fname)
+
+    def test_simple_delta_catchup(self):
+        """
+        Test delta catchup
+        """
+        # preparation 1: source
+        src_pg = self.make_simple_node(
+            base_dir = os.path.join(module_name, self.fname, 'src'),
+            set_replication = True,
+            pg_options = { 'wal_log_hints': 'on' }
+            )
+        src_pg.slow_start()
+        src_pg.safe_psql(
+            "postgres",
+            "CREATE TABLE ultimate_question(answer int)")
+
+        # preparation 2: make clean shutdowned lagging behind replica
+        dst_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'dst'))
         self.catchup_node(
             backup_mode = 'FULL',
-            source_pgdata = source_pg.data_dir,
-            destination_node = dest_pg,
-            options = ['-d', 'postgres', '-p', str(source_pg.port), '--stream', '-j', '4'])
-        source_pg.stop()
+            source_pgdata = src_pg.data_dir,
+            destination_node = dst_pg,
+            options = ['-d', 'postgres', '-p', str(src_pg.port), '--stream']
+            )
+        self.set_replica(src_pg, dst_pg)
+        dst_options = {}
+        dst_options['port'] = str(dst_pg.port)
+        self.set_auto_conf(dst_pg, dst_options)
+        dst_pg.slow_start(replica = True)
+        dst_pg.stop()
 
-        dest_options = {}
-        dest_options['port'] = str(dest_pg.port)
-        self.set_auto_conf(dest_pg, dest_options)
-        dest_pg.slow_start()
-        self.assertEqual(
-            result,
-            dest_pg.safe_psql("postgres", "SELECT * FROM ultimate_question"),
-            'Different answer from copy')
-        dest_pg.stop()
+        # preparation 3: make changes on master (source)
+        src_pg.pgbench_init(scale = 10)
+        pgbench = src_pg.pgbench(options=['-T', '10', '--no-vacuum'])
+        pgbench.wait()
+        src_pg.safe_psql("postgres", "INSERT INTO ultimate_question VALUES(42)")
+        src_query_result = src_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
+        # do delta catchup
+        self.catchup_node(
+            backup_mode = 'DELTA',
+            source_pgdata = src_pg.data_dir,
+            destination_node = dst_pg,
+            options = ['-d', 'postgres', '-p', str(src_pg.port), '--stream']
+            )
 
-    # @unittest.skip("skip")
-    def test_remote_ptrack_catchup(self):
+        # 1st check: compare data directories
+        self.compare_pgdata(
+            self.pgdata_content(src_pg.data_dir),
+            self.pgdata_content(dst_pg.data_dir)
+            )
+
+        # run&recover catchup'ed instance 
+        src_pg.stop()
+        self.set_replica(master = src_pg, replica = dst_pg)
+        dst_options = {}
+        dst_options['port'] = str(dst_pg.port)
+        self.set_auto_conf(dst_pg, dst_options)
+        dst_pg.slow_start(replica = True)
+
+        # 2nd check: run verification query
+        dst_query_result = dst_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
+        self.assertEqual(src_query_result, dst_query_result, 'Different answer from copy')
+
+        # Cleanup
+        dst_pg.stop()
+        self.del_test_dir(module_name, self.fname)
+
+    def test_simple_ptrack_catchup(self):
         """
-        Test 'catchup' mode
-        create node,
-        make a copy with replication, start copy, stop copy,
-        generate some load on master, insert some test data on master,
-        catchup copy, start and select test data
+        Test ptrack catchup
         """
         if not self.ptrack:
             return unittest.skip('Skipped because ptrack support is disabled')
 
-        fname = self.id().split('.')[3]
-
-        # prepare master
-        source_pg = self.make_simple_node(
-            base_dir = os.path.join(module_name, fname, 'src'),
+        # preparation 1: source
+        src_pg = self.make_simple_node(
+            base_dir = os.path.join(module_name, self.fname, 'src'),
             set_replication = True,
             ptrack_enable = True,
             initdb_params = ['--data-checksums']
             )
-        source_pg.slow_start()
-        source_pg.safe_psql("postgres", "CREATE EXTENSION ptrack")
-        source_pg.safe_psql("postgres", "CREATE TABLE ultimate_question(answer int)")
+        src_pg.slow_start()
+        src_pg.safe_psql("postgres", "CREATE EXTENSION ptrack")
+        src_pg.safe_psql(
+            "postgres",
+            "CREATE TABLE ultimate_question(answer int)")
 
-        # make clean shutdowned lagging behind replica
-        dest_pg = self.make_empty_node(os.path.join(module_name, fname, 'dst'))
+        # preparation 2: make clean shutdowned lagging behind replica
+        dst_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'dst'))
         self.catchup_node(
             backup_mode = 'FULL',
-            source_pgdata = source_pg.data_dir,
-            destination_node = dest_pg,
-            options = ['-d', 'postgres', '-p', str(source_pg.port), '--stream'])
-        self.set_replica(source_pg, dest_pg)
-        dest_pg.slow_start(replica = True)
-        dest_pg.stop()
+            source_pgdata = src_pg.data_dir,
+            destination_node = dst_pg,
+            options = ['-d', 'postgres', '-p', str(src_pg.port), '--stream']
+            )
+        self.set_replica(src_pg, dst_pg)
+        dst_options = {}
+        dst_options['port'] = str(dst_pg.port)
+        self.set_auto_conf(dst_pg, dst_options)
+        dst_pg.slow_start(replica = True)
+        dst_pg.stop()
 
-        # make changes on master
-        source_pg.pgbench_init(scale=10)
-        pgbench = source_pg.pgbench(options=['-T', '10', '--no-vacuum'])
+        # preparation 3: make changes on master (source)
+        src_pg.pgbench_init(scale = 10)
+        pgbench = src_pg.pgbench(options=['-T', '10', '--no-vacuum'])
         pgbench.wait()
-        source_pg.safe_psql("postgres", "INSERT INTO ultimate_question VALUES(42)")
-        result = source_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
+        src_pg.safe_psql("postgres", "INSERT INTO ultimate_question VALUES(42)")
+        src_query_result = src_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
 
-        # catchup
+        # do ptrack catchup
         self.catchup_node(
             backup_mode = 'PTRACK',
-            source_pgdata = source_pg.data_dir,
-            destination_node = dest_pg,
-            options = ['-d', 'postgres', '-p', str(source_pg.port), '--stream'])
+            source_pgdata = src_pg.data_dir,
+            destination_node = dst_pg,
+            options = ['-d', 'postgres', '-p', str(src_pg.port), '--stream']
+            )
 
-        # stop replication
-        source_pg.stop()
+        # 1st check: compare data directories
+        self.compare_pgdata(
+            self.pgdata_content(src_pg.data_dir),
+            self.pgdata_content(dst_pg.data_dir)
+            )
 
-        # check latest changes
-        dest_options = {}
-        dest_options['port'] = str(dest_pg.port)
-        self.set_auto_conf(dest_pg, dest_options)
-        self.set_replica(source_pg, dest_pg)
-        dest_pg.slow_start(replica = True)
-        self.assertEqual(
-            result,
-            dest_pg.safe_psql("postgres", "SELECT * FROM ultimate_question"),
-            'Different answer from copy')
-        dest_pg.stop()
+        # run&recover catchup'ed instance 
+        src_pg.stop()
+        self.set_replica(master = src_pg, replica = dst_pg)
+        dst_options = {}
+        dst_options['port'] = str(dst_pg.port)
+        self.set_auto_conf(dst_pg, dst_options)
+        dst_pg.slow_start(replica = True)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
+        # 2nd check: run verification query
+        dst_query_result = dst_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
+        self.assertEqual(src_query_result, dst_query_result, 'Different answer from copy')
 
-    # @unittest.skip("skip")
-    def test_remote_delta_catchup(self):
+        # Cleanup
+        dst_pg.stop()
+        self.del_test_dir(module_name, self.fname)
+
+#########################################
+# Test various corner conditions
+#########################################
+    def test_table_drop_with_delta(self):
         """
-        Test 'catchup' mode
-        create node,
-        make a copy with replication, start copy, stop copy,
-        generate some load on master, insert some test data on master,
-        catchup copy, start and select test data
+        Test that dropped table in source will be dropped in delta catchup'ed instance too
         """
-        fname = self.id().split('.')[3]
-
-        # prepare master
-        source_pg = self.make_simple_node(
-            base_dir = os.path.join(module_name, fname, 'src'),
+        # preparation 1: source
+        src_pg = self.make_simple_node(
+            base_dir = os.path.join(module_name, self.fname, 'src'),
             set_replication = True,
-            ptrack_enable = True,
             pg_options = { 'wal_log_hints': 'on' }
             )
-        source_pg.slow_start()
-        source_pg.safe_psql("postgres", "CREATE TABLE ultimate_question(answer int)")
-
-        # make clean shutdowned lagging behind replica
-        dest_pg = self.make_empty_node(os.path.join(module_name, fname, 'dst'))
-        self.catchup_node(
-            backup_mode = 'FULL',
-            source_pgdata = source_pg.data_dir,
-            destination_node = dest_pg,
-            options = ['-d', 'postgres', '-p', str(source_pg.port), '--stream']
-            )
-        self.set_replica(source_pg, dest_pg)
-        dest_options = {}
-        dest_options['port'] = str(dest_pg.port)
-        self.set_auto_conf(dest_pg, dest_options)
-        dest_pg.slow_start(replica = True)
-        dest_pg.stop()
-
-        # make changes on master
-        source_pg.pgbench_init(scale = 10)
-        pgbench = source_pg.pgbench(options=['-T', '10', '--no-vacuum'])
-        pgbench.wait()
-        source_pg.safe_psql("postgres", "INSERT INTO ultimate_question VALUES(42)")
-        result = source_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
-
-        # catchup
-        self.catchup_node(
-            backup_mode = 'DELTA',
-            source_pgdata = source_pg.data_dir,
-            destination_node = dest_pg,
-            options = ['-d', 'postgres', '-p', str(source_pg.port), '--stream']
-            )
-
-        source_pgdata = self.pgdata_content(source_pg.data_dir)
-        dest_pgdata = self.pgdata_content(dest_pg.data_dir)
-        self.compare_pgdata(source_pgdata, dest_pgdata)
-
-        # stop replication
-        source_pg.stop()
-
-        # check latest changes
-        self.set_replica(master = source_pg, replica = dest_pg)
-        dest_pg.slow_start(replica = True)
-        self.assertEqual(
-            result,
-            dest_pg.safe_psql("postgres", "SELECT * FROM ultimate_question"),
-            'Different answer from copy')
-        dest_pg.stop()
-
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
-    # @unittest.skip("skip")
-    def test_table_drop(self):
-        """
-        """
-        if not self.ptrack:
-            return unittest.skip('Skipped because ptrack support is disabled')
-
-        fname = self.id().split('.')[3]
-
-        source_pg = self.make_simple_node(
-            base_dir = os.path.join(module_name, fname, 'src'),
-            ptrack_enable = True,
-            initdb_params = ['--data-checksums'])
-        source_pg.slow_start()
-
-        source_pg.safe_psql("postgres", "CREATE EXTENSION ptrack")
-        source_pg.safe_psql(
+        src_pg.slow_start()
+        src_pg.safe_psql(
             "postgres",
             "CREATE TABLE ultimate_question AS SELECT 42 AS answer")
 
-        dest_pg = self.make_empty_node(os.path.join(module_name, fname, 'dst'))
+        # preparation 2: make clean shutdowned lagging behind replica
+        dst_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'dst'))
         self.catchup_node(
             backup_mode = 'FULL',
-            source_pgdata = source_pg.data_dir,
-            destination_node = dest_pg,
-            options = [
-                '-d', 'postgres',
-                '-p', str(source_pg.port),
-                '--stream'
-                ]
+            source_pgdata = src_pg.data_dir,
+            destination_node = dst_pg,
+            options = ['-d', 'postgres', '-p', str(src_pg.port), '--stream']
+            )
+        dst_options = {}
+        dst_options['port'] = str(dst_pg.port)
+        self.set_auto_conf(dst_pg, dst_options)
+        dst_pg.slow_start()
+        dst_pg.stop()
+
+        # preparation 3: make changes on master (source)
+        # perform checkpoint twice to ensure, that datafile is actually deleted on filesystem
+        src_pg.safe_psql("postgres", "DROP TABLE ultimate_question")
+        src_pg.safe_psql("postgres", "CHECKPOINT")
+        src_pg.safe_psql("postgres", "CHECKPOINT")
+
+        # do delta catchup
+        self.catchup_node(
+            backup_mode = 'DELTA',
+            source_pgdata = src_pg.data_dir,
+            destination_node = dst_pg,
+            options = ['-d', 'postgres', '-p', str(src_pg.port), '--stream']
             )
 
-        dest_options = {}
-        dest_options['port'] = str(dest_pg.port)
-        self.set_auto_conf(dest_pg, dest_options)
-        dest_pg.slow_start()
-        dest_pg.stop()
+        # Check: compare data directories
+        self.compare_pgdata(
+            self.pgdata_content(src_pg.data_dir),
+            self.pgdata_content(dst_pg.data_dir)
+            )
 
-        source_pg.safe_psql("postgres", "DROP TABLE ultimate_question")
-        source_pg.safe_psql("postgres", "CHECKPOINT")
-        source_pg.safe_psql("postgres", "CHECKPOINT")
+        # Cleanup
+        src_pg.stop()
+        self.del_test_dir(module_name, self.fname)
 
-        # catchup
-        self.catchup_node(
-            backup_mode = 'PTRACK',
-            source_pgdata = source_pg.data_dir,
-            destination_node = dest_pg,
-            options = ['-d', 'postgres', '-p', str(source_pg.port), '--stream'])
-
-        source_pgdata = self.pgdata_content(source_pg.data_dir)
-        dest_pgdata = self.pgdata_content(dest_pg.data_dir)
-        self.compare_pgdata(source_pgdata, dest_pgdata)
-
-        # Clean after yourself
-        source_pg.stop()
-        self.del_test_dir(module_name, fname)
-
-    # @unittest.skip("skip")
-    def test_tablefile_truncation(self):
+    def test_table_drop_with_ptrack(self):
         """
+        Test that dropped table in source will be dropped in ptrack catchup'ed instance too
         """
         if not self.ptrack:
             return unittest.skip('Skipped because ptrack support is disabled')
 
-        fname = self.id().split('.')[3]
-
-        source_pg = self.make_simple_node(
-            base_dir = os.path.join(module_name, fname, 'src'),
+        # preparation 1: source
+        src_pg = self.make_simple_node(
+            base_dir = os.path.join(module_name, self.fname, 'src'),
+            set_replication = True,
             ptrack_enable = True,
-            initdb_params = ['--data-checksums'])
-        source_pg.slow_start()
+            initdb_params = ['--data-checksums']
+            )
+        src_pg.slow_start()
+        src_pg.safe_psql("postgres", "CREATE EXTENSION ptrack")
+        src_pg.safe_psql(
+            "postgres",
+            "CREATE TABLE ultimate_question AS SELECT 42 AS answer")
 
-        source_pg.safe_psql("postgres", "CREATE EXTENSION ptrack")
-        source_pg.safe_psql(
+        # preparation 2: make clean shutdowned lagging behind replica
+        dst_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'dst'))
+        self.catchup_node(
+            backup_mode = 'FULL',
+            source_pgdata = src_pg.data_dir,
+            destination_node = dst_pg,
+            options = ['-d', 'postgres', '-p', str(src_pg.port), '--stream']
+            )
+        dst_options = {}
+        dst_options['port'] = str(dst_pg.port)
+        self.set_auto_conf(dst_pg, dst_options)
+        dst_pg.slow_start()
+        dst_pg.stop()
+
+        # preparation 3: make changes on master (source)
+        # perform checkpoint twice to ensure, that datafile is actually deleted on filesystem
+        src_pg.safe_psql("postgres", "DROP TABLE ultimate_question")
+        src_pg.safe_psql("postgres", "CHECKPOINT")
+        src_pg.safe_psql("postgres", "CHECKPOINT")
+
+        # do ptrack catchup
+        self.catchup_node(
+            backup_mode = 'PTRACK',
+            source_pgdata = src_pg.data_dir,
+            destination_node = dst_pg,
+            options = ['-d', 'postgres', '-p', str(src_pg.port), '--stream']
+            )
+
+        # Check: compare data directories
+        self.compare_pgdata(
+            self.pgdata_content(src_pg.data_dir),
+            self.pgdata_content(dst_pg.data_dir)
+            )
+
+        # Cleanup
+        src_pg.stop()
+        self.del_test_dir(module_name, self.fname)
+
+    def test_tablefile_truncation_with_delta(self):
+        """
+        Test that truncated table in source will be truncated in delta catchup'ed instance too
+        """
+        # preparation 1: source
+        src_pg = self.make_simple_node(
+            base_dir = os.path.join(module_name, self.fname, 'src'),
+            set_replication = True,
+            pg_options = { 'wal_log_hints': 'on' }
+            )
+        src_pg.slow_start()
+        src_pg.safe_psql(
             "postgres",
             "CREATE SEQUENCE t_seq; "
             "CREATE TABLE t_heap AS SELECT i AS id, "
             "md5(i::text) AS text, "
             "md5(repeat(i::text, 10))::tsvector AS tsvector "
             "FROM generate_series(0, 1024) i")
-        source_pg.safe_psql("postgres", "VACUUM t_heap")
+        src_pg.safe_psql("postgres", "VACUUM t_heap")
 
-        dest_pg = self.make_empty_node(os.path.join(module_name, fname, 'dst'))
+        # preparation 2: make clean shutdowned lagging behind replica
+        dst_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'dst'))
         self.catchup_node(
             backup_mode = 'FULL',
-            source_pgdata = source_pg.data_dir,
-            destination_node = dest_pg,
-            options = [
-                '-d', 'postgres',
-                '-p', str(source_pg.port),
-                '--stream'
-                ]
+            source_pgdata = src_pg.data_dir,
+            destination_node = dst_pg,
+            options = ['-d', 'postgres', '-p', str(src_pg.port), '--stream']
+            )
+        dest_options = {}
+        dst_options = {}
+        dst_options['port'] = str(dst_pg.port)
+        self.set_auto_conf(dst_pg, dst_options)
+        dst_pg.slow_start()
+        dst_pg.stop()
+
+        # preparation 3: make changes on master (source)
+        src_pg.safe_psql("postgres", "DELETE FROM t_heap WHERE ctid >= '(11,0)'")
+        src_pg.safe_psql("postgres", "VACUUM t_heap")
+
+        # do delta catchup
+        self.catchup_node(
+            backup_mode = 'DELTA',
+            source_pgdata = src_pg.data_dir,
+            destination_node = dst_pg,
+            options = ['-d', 'postgres', '-p', str(src_pg.port), '--stream']
             )
 
+        # Check: compare data directories
+        self.compare_pgdata(
+            self.pgdata_content(src_pg.data_dir),
+            self.pgdata_content(dst_pg.data_dir)
+            )
+
+        # Cleanup
+        src_pg.stop()
+        self.del_test_dir(module_name, self.fname)
+
+    def test_tablefile_truncation_with_ptrack(self):
+        """
+        Test that truncated table in source will be truncated in ptrack catchup'ed instance too
+        """
+        if not self.ptrack:
+            return unittest.skip('Skipped because ptrack support is disabled')
+
+        # preparation 1: source
+        src_pg = self.make_simple_node(
+            base_dir = os.path.join(module_name, self.fname, 'src'),
+            set_replication = True,
+            ptrack_enable = True,
+            initdb_params = ['--data-checksums']
+            )
+        src_pg.slow_start()
+        src_pg.safe_psql("postgres", "CREATE EXTENSION ptrack")
+        src_pg.safe_psql(
+            "postgres",
+            "CREATE SEQUENCE t_seq; "
+            "CREATE TABLE t_heap AS SELECT i AS id, "
+            "md5(i::text) AS text, "
+            "md5(repeat(i::text, 10))::tsvector AS tsvector "
+            "FROM generate_series(0, 1024) i")
+        src_pg.safe_psql("postgres", "VACUUM t_heap")
+
+        # preparation 2: make clean shutdowned lagging behind replica
+        dst_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'dst'))
+        self.catchup_node(
+            backup_mode = 'FULL',
+            source_pgdata = src_pg.data_dir,
+            destination_node = dst_pg,
+            options = ['-d', 'postgres', '-p', str(src_pg.port), '--stream']
+            )
         dest_options = {}
-        dest_options['port'] = str(dest_pg.port)
-        self.set_auto_conf(dest_pg, dest_options)
-        dest_pg.slow_start()
-        dest_pg.stop()
+        dst_options = {}
+        dst_options['port'] = str(dst_pg.port)
+        self.set_auto_conf(dst_pg, dst_options)
+        dst_pg.slow_start()
+        dst_pg.stop()
 
-        source_pg.safe_psql("postgres", "DELETE FROM t_heap WHERE ctid >= '(11,0)'")
-        source_pg.safe_psql("postgres", "VACUUM t_heap")
+        # preparation 3: make changes on master (source)
+        src_pg.safe_psql("postgres", "DELETE FROM t_heap WHERE ctid >= '(11,0)'")
+        src_pg.safe_psql("postgres", "VACUUM t_heap")
 
-        # catchup
+        # do ptrack catchup
         self.catchup_node(
             backup_mode = 'PTRACK',
-            source_pgdata = source_pg.data_dir,
-            destination_node = dest_pg,
-            options = ['-d', 'postgres', '-p', str(source_pg.port), '--stream'])
+            source_pgdata = src_pg.data_dir,
+            destination_node = dst_pg,
+            options = ['-d', 'postgres', '-p', str(src_pg.port), '--stream']
+            )
 
-        source_pgdata = self.pgdata_content(source_pg.data_dir)
-        dest_pgdata = self.pgdata_content(dest_pg.data_dir)
-        self.compare_pgdata(source_pgdata, dest_pgdata)
+        # Check: compare data directories
+        self.compare_pgdata(
+            self.pgdata_content(src_pg.data_dir),
+            self.pgdata_content(dst_pg.data_dir)
+            )
 
-        # Clean after yourself
-        source_pg.stop()
-        self.del_test_dir(module_name, fname)
+        # Cleanup
+        src_pg.stop()
+        self.del_test_dir(module_name, self.fname)
 
-    # @unittest.skip("skip")
+#########################################
+# Test reaction on user errors
+#########################################
     def test_local_tablespace_without_mapping(self):
         if self.remote:
             return unittest.skip('Skipped because this test tests local catchup error handling')
 
-        fname = self.id().split('.')[3]
+        src_pg = self.make_simple_node(base_dir = os.path.join(module_name, self.fname, 'src'))
+        src_pg.slow_start()
 
-        source_pg = self.make_simple_node(
-            base_dir = os.path.join(module_name, fname, 'src'),
-            initdb_params = ['--data-checksums'])
-        source_pg.slow_start()
-
-        tblspace_path = self.get_tblspace_path(source_pg, 'tblspace')
+        tblspace_path = self.get_tblspace_path(src_pg, 'tblspace')
         self.create_tblspace_in_node(
-            source_pg, 'tblspace',
+            src_pg, 'tblspace',
             tblspc_path = tblspace_path)
 
-        source_pg.safe_psql(
+        src_pg.safe_psql(
             "postgres",
             "CREATE TABLE ultimate_question TABLESPACE tblspace AS SELECT 42 AS answer")
 
-        dest_pg = self.make_empty_node(os.path.join(module_name, fname, 'dst'))
+        dst_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'dst'))
         try:
             self.catchup_node(
                 backup_mode = 'FULL',
-                source_pgdata = source_pg.data_dir,
-                destination_node = dest_pg,
+                source_pgdata = src_pg.data_dir,
+                destination_node = dst_pg,
                 options = [
                     '-d', 'postgres',
-                    '-p', str(source_pg.port),
+                    '-p', str(src_pg.port),
                     '--stream',
                     ]
                 )
@@ -430,6 +525,6 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
                 e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
 
-        source_pg.stop()
+        src_pg.stop()
         # Clean after yourself
-        self.del_test_dir(module_name, fname)
+        self.del_test_dir(module_name, self.fname)
