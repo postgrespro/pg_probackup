@@ -2772,6 +2772,54 @@ fio_get_lsn_map_impl(int out, char *buf)
 }
 
 /*
+ * Return pid of postmaster process running in given pgdata on local machine.
+ * Return 0 if there is none.
+ * Return 1 if postmaster.pid is mangled.
+ */
+static pid_t
+local_check_postmaster(const char *pgdata)
+{
+	FILE  *fp;
+	pid_t  pid;
+	char   pid_file[MAXPGPATH];
+
+	join_path_components(pid_file, pgdata, "postmaster.pid");
+
+	fp = fopen(pid_file, "r");
+	if (fp == NULL)
+	{
+		/* No pid file, acceptable*/
+		if (errno == ENOENT)
+			return 0;
+		else
+			elog(ERROR, "Cannot open file \"%s\": %s",
+				pid_file, strerror(errno));
+	}
+
+	if (fscanf(fp, "%i", &pid) != 1)
+	{
+		/* something is wrong with the file content */
+		pid = 1;
+	}
+
+	if (pid > 1)
+	{
+		if (kill(pid, 0) != 0)
+		{
+			/* process no longer exists */
+			if (errno == ESRCH)
+				pid = 0;
+			else
+				elog(ERROR, "Failed to send signal 0 to a process %d: %s",
+						pid, strerror(errno));
+		}
+	}
+
+	fclose(fp);
+	return pid;
+}
+
+/*
  * Go to the remote host and get postmaster pid from file postmaster.pid
  * and check that process is running, if process is running, return its pid number.
  */
@@ -2793,7 +2841,7 @@ fio_check_postmaster(const char *pgdata, fio_location location)
 		return hdr.arg;
 	}
 	else
-		return check_postmaster(pgdata);
+		return local_check_postmaster(pgdata);
 }
 
 static void
@@ -2803,7 +2851,7 @@ fio_check_postmaster_impl(int out, char *buf)
 	pid_t       postmaster_pid;
 	char       *pgdata = (char*) buf;
 
-	postmaster_pid = check_postmaster(pgdata);
+	postmaster_pid = local_check_postmaster(pgdata);
 
 	/* send arrays of checksums to main process */
 	hdr.arg = postmaster_pid;
