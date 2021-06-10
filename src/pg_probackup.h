@@ -17,6 +17,7 @@
 
 #include "access/xlog_internal.h"
 #include "utils/pg_crc.h"
+#include "catalog/pg_control.h"
 
 #if PG_VERSION_NUM >= 120000
 #include "common/logging.h"
@@ -1176,6 +1177,7 @@ extern uint64 get_system_identifier(const char *pgdata_path, fio_location locati
 extern uint64 get_remote_system_identifier(PGconn *conn);
 extern uint32 get_data_checksum_version(bool safe);
 extern pg_crc32c get_pgcontrol_checksum(const char *pgdata_path);
+extern DBState get_system_dbstate(const char *pgdata_path, fio_location location);
 extern uint32 get_xlog_seg_size(const char *pgdata_path);
 extern void get_redo(const char *pgdata_path, fio_location pgdata_location, RedoParams *redo);
 extern void set_min_recovery_point(pgFile *file, const char *backup_path,

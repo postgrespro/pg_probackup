@@ -174,6 +174,27 @@ catchup_preflight_checks(PGNodeInfo *source_node_info, PGconn *source_conn,
 		}
 	}
 
+	/* check backup_label absence in dest */
+	if (current.backup_mode != BACKUP_MODE_FULL)
+	{
+		char	backup_label_filename[MAXPGPATH];
+
+		join_path_components(backup_label_filename, dest_pgdata, PG_BACKUP_LABEL_FILE);
+		if (fio_access(backup_label_filename, F_OK, FIO_LOCAL_HOST) == 0)
+			elog(ERROR, "Destination directory contains \"" PG_BACKUP_LABEL_FILE "\" file");
+	}
+
+	/* check that destination database is shutdowned cleanly */
+	if (current.backup_mode != BACKUP_MODE_FULL)
+	{
+		DBState state;
+		state = get_system_dbstate(dest_pgdata, FIO_LOCAL_HOST);
+		/* see states in postgres sources (src/include/catalog/pg_control.h) */
+		if (state != DB_SHUTDOWNED && state != DB_SHUTDOWNED_IN_RECOVERY)
+			elog(ERROR, "Postmaster in destination directory \"%s\" must be stopped cleanly",
+				dest_pgdata);
+	}
+
 	/* Check that connected PG instance, source and destination PGDATA are the same */
 	{
 		uint64	source_conn_id, source_id, dest_id;
@@ -204,16 +225,6 @@ catchup_preflight_checks(PGNodeInfo *source_node_info, PGconn *source_conn,
 					"Upgrade ptrack to version >= 2");
 		else if (!source_node_info->is_ptrack_enabled)
 			elog(ERROR, "Ptrack is disabled");
-	}
-
-	/* check backup_label absence in dest */
-	if (current.backup_mode != BACKUP_MODE_FULL)
-	{
-		char	backup_label_filename[MAXPGPATH];
-
-		join_path_components(backup_label_filename, dest_pgdata, PG_BACKUP_LABEL_FILE);
-		if (fio_access(backup_label_filename, F_OK, FIO_LOCAL_HOST) == 0)
-			elog(ERROR, "Destination directory contains \"" PG_BACKUP_LABEL_FILE "\" file");
 	}
 
 	if (current.from_replica && exclusive_backup)

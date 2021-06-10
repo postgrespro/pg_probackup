@@ -1,4 +1,5 @@
 import os
+import signal
 import unittest
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 
@@ -525,6 +526,176 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
                 e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
 
+        # Cleanup
         src_pg.stop()
-        # Clean after yourself
+        self.del_test_dir(module_name, self.fname)
+
+    def test_running_dest_postmaster(self):
+        """
+        Test that we detect running postmaster in destination
+        """
+        # preparation 1: source
+        src_pg = self.make_simple_node(
+            base_dir = os.path.join(module_name, self.fname, 'src'),
+            set_replication = True,
+            pg_options = { 'wal_log_hints': 'on' }
+            )
+        src_pg.slow_start()
+
+        # preparation 2: destination
+        dst_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'dst'))
+        self.catchup_node(
+            backup_mode = 'FULL',
+            source_pgdata = src_pg.data_dir,
+            destination_node = dst_pg,
+            options = ['-d', 'postgres', '-p', str(src_pg.port), '--stream']
+            )
+        dst_options = {}
+        dst_options['port'] = str(dst_pg.port)
+        self.set_auto_conf(dst_pg, dst_options)
+        dst_pg.slow_start()
+        # leave running destination postmaster
+        #dst_pg.stop()
+
+        # try delta catchup
+        try:
+            self.catchup_node(
+                backup_mode = 'DELTA',
+                source_pgdata = src_pg.data_dir,
+                destination_node = dst_pg,
+                options = ['-d', 'postgres', '-p', str(src_pg.port), '--stream']
+                )
+            self.assertEqual(1, 0, "Expecting Error because postmaster in destination is running.\n Output: {0} \n CMD: {1}".format(
+                repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                'ERROR: Postmaster with pid ',
+                e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
+
+        # Cleanup
+        src_pg.stop()
+        self.del_test_dir(module_name, self.fname)
+
+    def test_same_db_id(self):
+        """
+        Test that we detect different id's of source and destination
+        """
+        # preparation:
+        #   source
+        src_pg = self.make_simple_node(
+            base_dir = os.path.join(module_name, self.fname, 'src'),
+            set_replication = True
+            )
+        src_pg.slow_start()
+        #   destination
+        dst_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'dst'))
+        self.catchup_node(
+            backup_mode = 'FULL',
+            source_pgdata = src_pg.data_dir,
+            destination_node = dst_pg,
+            options = ['-d', 'postgres', '-p', str(src_pg.port), '--stream']
+            )
+        #   fake destination
+        fake_dst_pg = self.make_simple_node(base_dir = os.path.join(module_name, self.fname, 'fake_dst'))
+        #   fake source
+        fake_src_pg = self.make_simple_node(base_dir = os.path.join(module_name, self.fname, 'fake_src'))
+
+        # try delta catchup (src (with correct src conn), fake_dst)
+        try:
+            self.catchup_node(
+                backup_mode = 'DELTA',
+                source_pgdata = src_pg.data_dir,
+                destination_node = fake_dst_pg,
+                options = ['-d', 'postgres', '-p', str(src_pg.port), '--stream']
+                )
+            self.assertEqual(1, 0, "Expecting Error because database identifiers mismatch.\n Output: {0} \n CMD: {1}".format(
+                repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                'ERROR: Database identifiers mismatch: ',
+                e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
+
+        # try delta catchup (fake_src (with wrong src conn), dst)
+        try:
+            self.catchup_node(
+                backup_mode = 'DELTA',
+                source_pgdata = fake_src_pg.data_dir,
+                destination_node = dst_pg,
+                options = ['-d', 'postgres', '-p', str(src_pg.port), '--stream']
+                )
+            self.assertEqual(1, 0, "Expecting Error because database identifiers mismatch.\n Output: {0} \n CMD: {1}".format(
+                repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                'ERROR: Database identifiers mismatch: ',
+                e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
+
+        # Cleanup
+        src_pg.stop()
+        self.del_test_dir(module_name, self.fname)
+
+    def test_destination_dbstate(self):
+        """
+        Test that we detect that destination pg is not cleanly shutdowned
+        """
+        # preparation 1: source
+        src_pg = self.make_simple_node(
+            base_dir = os.path.join(module_name, self.fname, 'src'),
+            set_replication = True,
+            pg_options = { 'wal_log_hints': 'on' }
+            )
+        src_pg.slow_start()
+
+        # preparation 2: destination
+        dst_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'dst'))
+        self.catchup_node(
+            backup_mode = 'FULL',
+            source_pgdata = src_pg.data_dir,
+            destination_node = dst_pg,
+            options = ['-d', 'postgres', '-p', str(src_pg.port), '--stream']
+            )
+
+        # try #1
+        try:
+            self.catchup_node(
+                backup_mode = 'DELTA',
+                source_pgdata = src_pg.data_dir,
+                destination_node = dst_pg,
+                options = ['-d', 'postgres', '-p', str(src_pg.port), '--stream']
+                )
+            self.assertEqual(1, 0, "Expecting Error because destination pg is not cleanly shutdowned.\n Output: {0} \n CMD: {1}".format(
+                repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                'ERROR: Destination directory contains "backup_label" file',
+                e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
+
+        # try #2
+        dst_options = {}
+        dst_options['port'] = str(dst_pg.port)
+        self.set_auto_conf(dst_pg, dst_options)
+        dst_pg.slow_start()
+        self.assertNotEqual(dst_pg.pid, 0, "Cannot detect pid of running postgres")
+        os.kill(dst_pg.pid, signal.SIGKILL)
+        try:
+            self.catchup_node(
+                backup_mode = 'DELTA',
+                source_pgdata = src_pg.data_dir,
+                destination_node = dst_pg,
+                options = ['-d', 'postgres', '-p', str(src_pg.port), '--stream']
+                )
+            self.assertEqual(1, 0, "Expecting Error because destination pg is not cleanly shutdowned.\n Output: {0} \n CMD: {1}".format(
+                repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                'must be stopped cleanly',
+                e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
+
+        # Cleanup
+        src_pg.stop()
         self.del_test_dir(module_name, self.fname)
