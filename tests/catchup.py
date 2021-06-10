@@ -596,6 +596,11 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             destination_node = dst_pg,
             options = ['-d', 'postgres', '-p', str(src_pg.port), '--stream']
             )
+        dst_options = {}
+        dst_options['port'] = str(dst_pg.port)
+        self.set_auto_conf(dst_pg, dst_options)
+        dst_pg.slow_start()
+        dst_pg.stop()
         #   fake destination
         fake_dst_pg = self.make_simple_node(base_dir = os.path.join(module_name, self.fname, 'fake_dst'))
         #   fake source
