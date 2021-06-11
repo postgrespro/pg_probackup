@@ -617,6 +617,14 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 		// fill dest_redo.lsn and dest_redo.tli
 		get_redo(dest_pgdata, FIO_LOCAL_HOST, &dest_redo);
 		elog(INFO, "syncLSN = %X/%X", (uint32) (dest_redo.lsn >> 32), (uint32) dest_redo.lsn);
+
+		/*
+		 * Future improvement to catch partial catchup:
+		 *  1. rename dest pg_control into something like pg_control.pbk
+		 *   (so user can't start partial catchup'ed instance from this point)
+		 *  2. try to read by get_redo() pg_control and pg_control.pbk (to detect partial catchup)
+		 *  3. at the end (after copy of correct pg_control), remove pg_control.pbk
+		 */
 	}
 
 	//REVIEW I wonder, if we can move this piece above and call before pg_start backup()?
