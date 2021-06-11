@@ -12,7 +12,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
 #########################################
 # Basic tests
 #########################################
-    def test_simple_full_catchup(self):
+    def test_basic_full_catchup(self):
         """
         Test 'multithreaded basebackup' mode (aka FULL catchup)
         """
@@ -115,7 +115,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         dst_pg.stop()
         self.del_test_dir(module_name, self.fname)
 
-    def test_simple_delta_catchup(self):
+    def test_basic_delta_catchup(self):
         """
         Test delta catchup
         """
@@ -182,7 +182,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         dst_pg.stop()
         self.del_test_dir(module_name, self.fname)
 
-    def test_simple_ptrack_catchup(self):
+    def test_basic_ptrack_catchup(self):
         """
         Test ptrack catchup
         """
