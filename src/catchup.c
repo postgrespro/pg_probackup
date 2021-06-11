@@ -930,6 +930,7 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 
 	wait_wal_and_calculate_stop_lsn(dest_xlog_path, stop_backup_result.lsn, &current);
 
+#if PG_VERSION_NUM >= 90600
 	/* Write backup_label */
 	Assert(stop_backup_result.backup_label_content != NULL);
 	pg_stop_backup_write_file_helper(dest_pgdata, PG_BACKUP_LABEL_FILE, "backup label",
@@ -954,6 +955,7 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 		stop_backup_result.tablespace_map_content = NULL;
 		stop_backup_result.tablespace_map_content_len = 0;
 	}
+#endif
 
 	if(wait_WAL_streaming_end(NULL))
 		elog(ERROR, "WAL streaming failed");
