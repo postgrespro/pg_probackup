@@ -1483,7 +1483,7 @@ update_recovery_options_before_v12(InstanceState *instanceState, pgBackup *backu
 	}
 
 	elog(LOG, "update recovery settings in recovery.conf");
-	snprintf(path, lengthof(path), "%s/recovery.conf", instance_config.pgdata);
+	join_path_components(path, instance_config.pgdata, "recovery.conf");
 
 	fp = fio_fopen(path, "w", FIO_DB_HOST);
 	if (fp == NULL)
@@ -1540,8 +1540,7 @@ update_recovery_options(InstanceState *instanceState, pgBackup *backup,
 
 	time2iso(current_time_str, lengthof(current_time_str), current_time, false);
 
-	snprintf(postgres_auto_path, lengthof(postgres_auto_path),
-				"%s/postgresql.auto.conf", instance_config.pgdata);
+	join_path_components(postgres_auto_path, instance_config.pgdata, "postgresql.auto.conf");
 
 	if (fio_stat(postgres_auto_path, &st, false, FIO_DB_HOST) < 0)
 	{
@@ -1651,7 +1650,7 @@ update_recovery_options(InstanceState *instanceState, pgBackup *backup,
 		if (params->recovery_settings_mode == PITR_REQUESTED)
 		{
 			elog(LOG, "creating recovery.signal file");
-			snprintf(path, lengthof(path), "%s/recovery.signal", instance_config.pgdata);
+			join_path_components(path, instance_config.pgdata, "recovery.signal");
 
 			fp = fio_fopen(path, PG_BINARY_W, FIO_DB_HOST);
 			if (fp == NULL)
@@ -1667,7 +1666,7 @@ update_recovery_options(InstanceState *instanceState, pgBackup *backup,
 		if (params->restore_as_replica)
 		{
 			elog(LOG, "creating standby.signal file");
-			snprintf(path, lengthof(path), "%s/standby.signal", instance_config.pgdata);
+			join_path_components(path, instance_config.pgdata, "standby.signal");
 
 			fp = fio_fopen(path, PG_BINARY_W, FIO_DB_HOST);
 			if (fp == NULL)
@@ -2163,7 +2162,7 @@ check_incremental_compatibility(const char *pgdata, uint64 system_identifier,
 	{
 		char pid_file[MAXPGPATH];
 
-		snprintf(pid_file, MAXPGPATH, "%s/postmaster.pid", pgdata);
+		join_path_components(pid_file, pgdata, "postmaster.pid");
 		elog(WARNING, "Pid file \"%s\" is mangled, cannot determine whether postmaster is running or not",
 			pid_file);
 		success = false;
@@ -2204,7 +2203,7 @@ check_incremental_compatibility(const char *pgdata, uint64 system_identifier,
 	 */
 	if (incremental_mode == INCR_LSN)
 	{
-		snprintf(backup_label, MAXPGPATH, "%s/backup_label", pgdata);
+		join_path_components(backup_label, pgdata, "backup_label");
 		if (fio_access(backup_label, F_OK, FIO_DB_HOST) == 0)
 		{
 			elog(WARNING, "Destination directory contains \"backup_control\" file. "

@@ -1516,7 +1516,7 @@ validate_one_page(Page page, BlockNumber absolute_blkno,
 }
 
 /*
- * Valiate pages of datafile in PGDATA one by one.
+ * Validate pages of datafile in PGDATA one by one.
  *
  * returns true if the file is valid
  * also returns true if the file was not found
