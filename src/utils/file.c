@@ -607,7 +607,15 @@ fio_close(int fd)
 		fio_fdset &= ~(1 << hdr.handle);
 
 		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
-		/* Note, that file is closed without waiting for confirmation */
+
+		/* Wait for response */
+		IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
+
+		if (hdr.arg != 0)
+		{
+			errno = hdr.arg;
+			return -1;
+		}
 
 		return 0;
 	}
@@ -615,6 +623,22 @@ fio_close(int fd)
 	{
 		return close(fd);
 	}
+}
+
+/* Close remote file implementation */
+static void
+fio_close_impl(int fd, int out)
+{
+	fio_header hdr;
+
+	hdr.cop = FIO_CLOSE;
+	hdr.arg = 0;
+
+	if (close(fd) != 0)
+		hdr.arg = errno;
+
+	/* send header */
+	IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 }
 
 /* Truncate stdio file */
@@ -3000,7 +3024,7 @@ fio_communicate(int in, int out)
 			IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 			break;
 		  case FIO_CLOSE: /* Close file */
-			SYS_CHECK(close(fd[hdr.handle]));
+			fio_close_impl(fd[hdr.handle], out);
 			break;
 		  case FIO_WRITE: /* Write to the current position in file */
 //			IO_CHECK(fio_write_all(fd[hdr.handle], buf, hdr.size), hdr.size);
