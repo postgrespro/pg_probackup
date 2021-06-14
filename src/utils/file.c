@@ -814,6 +814,34 @@ fio_fwrite_async(FILE* f, void const* buf, size_t size)
 		: fwrite(buf, 1, size, f);
 }
 
+/*
+ * Write buffer to descriptor by calling write(),
+ * If size of written data is less than buffer size,
+ * then try to write what is left.
+ * We do this to get honest errno if there are some problems
+ * with filesystem, since writing less than buffer size
+ * is not considered an error.
+ */
+static ssize_t
+durable_write(int fd, const char* buf, size_t size)
+{
+	off_t current_pos = 0;
+	size_t bytes_left = size;
+
+	while (bytes_left > 0)
+	{
+		int rc = write(fd, buf + current_pos, bytes_left);
+
+		if (rc <= 0)
+			return rc;
+
+		bytes_left -= rc;
+		current_pos += rc;
+	}
+
+	return size;
+}
+
 /* Write data to the file */
 /* TODO: support async report error */
 ssize_t
@@ -832,27 +860,21 @@ fio_write_async(int fd, void const* buf, size_t size)
 
 		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
 		IO_CHECK(fio_write_all(fio_stdout, buf, size), size);
-
-		return size;
 	}
 	else
-	{
-		return write(fd, buf, size);
-	}
+		return durable_write(fd, buf, size);
+
+	return size;
 }
 
 static void
 fio_write_async_impl(int fd, void const* buf, size_t size, int out)
 {
-	int rc;
-
 	/* Quick exit if agent is tainted */
 	if (async_errormsg)
 		return;
 
-	rc = write(fd, buf, size);
-
-	if (rc <= 0)
+	if (durable_write(fd, buf, size) <= 0)
 	{
 		async_errormsg = pgut_malloc(ERRMSG_MAX_LEN);
 		snprintf(async_errormsg, ERRMSG_MAX_LEN, "%s", strerror(errno));
