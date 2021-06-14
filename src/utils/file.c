@@ -30,7 +30,6 @@ typedef struct
 	int         path_len;
 } fio_send_request;
 
-
 typedef struct
 {
 	char path[MAXPGPATH];
@@ -103,14 +102,16 @@ setMyLocation(ProbackupSubcmd const subcmd)
 }
 
 /* Use specified file descriptors as stdin/stdout for FIO functions */
-void fio_redirect(int in, int out, int err)
+void
+fio_redirect(int in, int out, int err)
 {
 	fio_stdin = in;
 	fio_stdout = out;
 	fio_stderr = err;
 }
 
-void fio_error(int rc, int size, char const* file, int line)
+void
+fio_error(int rc, int size, char const* file, int line)
 {
 	if (remote_agent)
 	{
@@ -133,7 +134,8 @@ void fio_error(int rc, int size, char const* file, int line)
 }
 
 /* Check if file descriptor is local or remote (created by FIO) */
-static bool fio_is_remote_fd(int fd)
+static bool
+fio_is_remote_fd(int fd)
 {
 	return (fd & FIO_PIPE_MARKER) != 0;
 }
@@ -175,14 +177,17 @@ fio_safestat(const char *path, struct stat *buf)
 #define stat(x, y) fio_safestat(x, y)
 
 /* TODO: use real pread on Linux */
-static ssize_t pread(int fd, void* buf, size_t size, off_t off)
+static ssize_t
+pread(int fd, void* buf, size_t size, off_t off)
 {
 	off_t rc = lseek(fd, off, SEEK_SET);
 	if (rc != off)
 		return -1;
 	return read(fd, buf, size);
 }
-static int remove_file_or_dir(char const* path)
+
+static int
+remove_file_or_dir(char const* path)
 {
 	int rc = remove(path);
 #ifdef WIN32
@@ -196,7 +201,8 @@ static int remove_file_or_dir(char const* path)
 #endif
 
 /* Check if specified location is local for current node */
-bool fio_is_remote(fio_location location)
+bool
+fio_is_remote(fio_location location)
 {
 	bool is_remote = MyLocation != FIO_LOCAL_HOST
 		&& location != FIO_LOCAL_HOST
@@ -207,7 +213,8 @@ bool fio_is_remote(fio_location location)
 }
 
 /* Check if specified location is local for current node */
-bool fio_is_remote_simple(fio_location location)
+bool
+fio_is_remote_simple(fio_location location)
 {
 	bool is_remote = MyLocation != FIO_LOCAL_HOST
 		&& location != FIO_LOCAL_HOST
@@ -216,7 +223,8 @@ bool fio_is_remote_simple(fio_location location)
 }
 
 /* Try to read specified amount of bytes unless error or EOF are encountered */
-static ssize_t fio_read_all(int fd, void* buf, size_t size)
+static ssize_t
+fio_read_all(int fd, void* buf, size_t size)
 {
 	size_t offs = 0;
 	while (offs < size)
@@ -238,7 +246,8 @@ static ssize_t fio_read_all(int fd, void* buf, size_t size)
 }
 
 /* Try to write specified amount of bytes unless error is encountered */
-static ssize_t fio_write_all(int fd, void const* buf, size_t size)
+static ssize_t
+fio_write_all(int fd, void const* buf, size_t size)
 {
 	size_t offs = 0;
 	while (offs < size)
@@ -259,7 +268,8 @@ static ssize_t fio_write_all(int fd, void const* buf, size_t size)
 }
 
 /* Get version of remote agent */
-int fio_get_agent_version(void)
+int
+fio_get_agent_version(void)
 {
 	fio_header hdr;
 	hdr.cop = FIO_AGENT_VERSION;
@@ -272,7 +282,8 @@ int fio_get_agent_version(void)
 }
 
 /* Open input stream. Remote file is fetched to the in-memory buffer and then accessed through Linux fmemopen */
-FILE* fio_open_stream(char const* path, fio_location location)
+FILE*
+fio_open_stream(char const* path, fio_location location)
 {
 	FILE* f;
 	if (fio_is_remote(location))
@@ -312,7 +323,8 @@ FILE* fio_open_stream(char const* path, fio_location location)
 }
 
 /* Close input stream */
-int fio_close_stream(FILE* f)
+int
+fio_close_stream(FILE* f)
 {
 	if (fio_stdin_buffer)
 	{
@@ -323,7 +335,8 @@ int fio_close_stream(FILE* f)
 }
 
 /* Open directory */
-DIR* fio_opendir(char const* path, fio_location location)
+DIR*
+fio_opendir(char const* path, fio_location location)
 {
 	DIR* dir;
 	if (fio_is_remote(location))
@@ -364,7 +377,8 @@ DIR* fio_opendir(char const* path, fio_location location)
 }
 
 /* Get next directory entry */
-struct dirent* fio_readdir(DIR *dir)
+struct dirent*
+fio_readdir(DIR *dir)
 {
 	if (fio_is_remote_file((FILE*)dir))
 	{
@@ -392,7 +406,8 @@ struct dirent* fio_readdir(DIR *dir)
 }
 
 /* Close directory */
-int fio_closedir(DIR *dir)
+int
+fio_closedir(DIR *dir)
 {
 	if (fio_is_remote_file((FILE*)dir))
 	{
@@ -412,7 +427,8 @@ int fio_closedir(DIR *dir)
 }
 
 /* Open file */
-int fio_open(char const* path, int mode, fio_location location)
+int
+fio_open(char const* path, int mode, fio_location location)
 {
 	int fd;
 	if (fio_is_remote(location))
@@ -479,7 +495,8 @@ fio_disconnect(void)
 }
 
 /* Open stdio file */
-FILE* fio_fopen(char const* path, char const* mode, fio_location location)
+FILE*
+fio_fopen(char const* path, char const* mode, fio_location location)
 {
 	FILE	   *f = NULL;
 
@@ -524,7 +541,8 @@ FILE* fio_fopen(char const* path, char const* mode, fio_location location)
 }
 
 /* Format output to file stream */
-int fio_fprintf(FILE* f, char const* format, ...)
+int
+fio_fprintf(FILE* f, char const* format, ...)
 {
 	int rc;
     va_list args;
@@ -550,7 +568,8 @@ int fio_fprintf(FILE* f, char const* format, ...)
 }
 
 /* Flush stream data (does nothing for remote file) */
-int fio_fflush(FILE* f)
+int
+fio_fflush(FILE* f)
 {
 	int rc = 0;
 	if (!fio_is_remote_file(f))
@@ -559,13 +578,15 @@ int fio_fflush(FILE* f)
 }
 
 /* Sync file to the disk (does nothing for remote file) */
-int fio_flush(int fd)
+int
+fio_flush(int fd)
 {
 	return fio_is_remote_fd(fd) ? 0 : fsync(fd);
 }
 
 /* Close output stream */
-int fio_fclose(FILE* f)
+int
+fio_fclose(FILE* f)
 {
 	return fio_is_remote_file(f)
 		? fio_close(fio_fileno(f))
@@ -573,7 +594,8 @@ int fio_fclose(FILE* f)
 }
 
 /* Close file */
-int fio_close(int fd)
+int
+fio_close(int fd)
 {
 	if (fio_is_remote_fd(fd))
 	{
@@ -585,7 +607,15 @@ int fio_close(int fd)
 		fio_fdset &= ~(1 << hdr.handle);
 
 		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
-		/* Note, that file is closed without waiting for confirmation */
+
+		/* Wait for response */
+		IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
+
+		if (hdr.arg != 0)
+		{
+			errno = hdr.arg;
+			return -1;
+		}
 
 		return 0;
 	}
@@ -595,8 +625,25 @@ int fio_close(int fd)
 	}
 }
 
+/* Close remote file implementation */
+static void
+fio_close_impl(int fd, int out)
+{
+	fio_header hdr;
+
+	hdr.cop = FIO_CLOSE;
+	hdr.arg = 0;
+
+	if (close(fd) != 0)
+		hdr.arg = errno;
+
+	/* send header */
+	IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
+}
+
 /* Truncate stdio file */
-int fio_ftruncate(FILE* f, off_t size)
+int
+fio_ftruncate(FILE* f, off_t size)
 {
 	return fio_is_remote_file(f)
 		? fio_truncate(fio_fileno(f), size)
@@ -606,7 +653,8 @@ int fio_ftruncate(FILE* f, off_t size)
 /* Truncate file
  * TODO: make it synchronous
  */
-int fio_truncate(int fd, off_t size)
+int
+fio_truncate(int fd, off_t size)
 {
 	if (fio_is_remote_fd(fd))
 	{
@@ -631,7 +679,8 @@ int fio_truncate(int fd, off_t size)
 /*
  * Read file from specified location.
  */
-int fio_pread(FILE* f, void* buf, off_t offs)
+int
+fio_pread(FILE* f, void* buf, off_t offs)
 {
 	if (fio_is_remote_file(f))
 	{
@@ -667,7 +716,8 @@ int fio_pread(FILE* f, void* buf, off_t offs)
 }
 
 /* Set position in stdio file */
-int fio_fseek(FILE* f, off_t offs)
+int
+fio_fseek(FILE* f, off_t offs)
 {
 	return fio_is_remote_file(f)
 		? fio_seek(fio_fileno(f), offs)
@@ -676,7 +726,8 @@ int fio_fseek(FILE* f, off_t offs)
 
 /* Set position in file */
 /* TODO: make it synchronous or check async error */
-int fio_seek(int fd, off_t offs)
+int
+fio_seek(int fd, off_t offs)
 {
 	if (fio_is_remote_fd(fd))
 	{
@@ -717,7 +768,8 @@ fio_seek_impl(int fd, off_t offs)
 }
 
 /* Write data to stdio file */
-size_t fio_fwrite(FILE* f, void const* buf, size_t size)
+size_t
+fio_fwrite(FILE* f, void const* buf, size_t size)
 {
 	if (fio_is_remote_file(f))
 		return fio_write(fio_fileno(f), buf, size);
@@ -726,7 +778,8 @@ size_t fio_fwrite(FILE* f, void const* buf, size_t size)
 }
 
 /* Write data to the file synchronously */
-ssize_t fio_write(int fd, void const* buf, size_t size)
+ssize_t
+fio_write(int fd, void const* buf, size_t size)
 {
 	if (fio_is_remote_fd(fd))
 	{
@@ -777,16 +830,46 @@ fio_write_impl(int fd, void const* buf, size_t size, int out)
 	return;
 }
 
-size_t fio_fwrite_async(FILE* f, void const* buf, size_t size)
+size_t
+fio_fwrite_async(FILE* f, void const* buf, size_t size)
 {
 	return fio_is_remote_file(f)
 		? fio_write_async(fio_fileno(f), buf, size)
 		: fwrite(buf, 1, size, f);
 }
 
+/*
+ * Write buffer to descriptor by calling write(),
+ * If size of written data is less than buffer size,
+ * then try to write what is left.
+ * We do this to get honest errno if there are some problems
+ * with filesystem, since writing less than buffer size
+ * is not considered an error.
+ */
+static ssize_t
+durable_write(int fd, const char* buf, size_t size)
+{
+	off_t current_pos = 0;
+	size_t bytes_left = size;
+
+	while (bytes_left > 0)
+	{
+		int rc = write(fd, buf + current_pos, bytes_left);
+
+		if (rc <= 0)
+			return rc;
+
+		bytes_left -= rc;
+		current_pos += rc;
+	}
+
+	return size;
+}
+
 /* Write data to the file */
 /* TODO: support async report error */
-ssize_t fio_write_async(int fd, void const* buf, size_t size)
+ssize_t
+fio_write_async(int fd, void const* buf, size_t size)
 {
 	if (size == 0)
 		return 0;
@@ -801,27 +884,21 @@ ssize_t fio_write_async(int fd, void const* buf, size_t size)
 
 		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
 		IO_CHECK(fio_write_all(fio_stdout, buf, size), size);
-
-		return size;
 	}
 	else
-	{
-		return write(fd, buf, size);
-	}
+		return durable_write(fd, buf, size);
+
+	return size;
 }
 
 static void
 fio_write_async_impl(int fd, void const* buf, size_t size, int out)
 {
-	int rc;
-
 	/* Quick exit if agent is tainted */
 	if (async_errormsg)
 		return;
 
-	rc = write(fd, buf, size);
-
-	if (rc <= 0)
+	if (durable_write(fd, buf, size) <= 0)
 	{
 		async_errormsg = pgut_malloc(ERRMSG_MAX_LEN);
 		snprintf(async_errormsg, ERRMSG_MAX_LEN, "%s", strerror(errno));
@@ -854,7 +931,8 @@ fio_decompress(void* dst, void const* src, size_t size, int compress_alg, char *
 }
 
 /* Write data to the file */
-ssize_t fio_fwrite_async_compressed(FILE* f, void const* buf, size_t size, int compress_alg)
+ssize_t
+fio_fwrite_async_compressed(FILE* f, void const* buf, size_t size, int compress_alg)
 {
 	if (fio_is_remote_file(f))
 	{
@@ -994,7 +1072,8 @@ fio_get_async_error_impl(int out)
 }
 
 /* Read data from stdio file */
-ssize_t fio_fread(FILE* f, void* buf, size_t size)
+ssize_t
+fio_fread(FILE* f, void* buf, size_t size)
 {
 	size_t rc;
 	if (fio_is_remote_file(f))
@@ -1004,7 +1083,8 @@ ssize_t fio_fread(FILE* f, void* buf, size_t size)
 }
 
 /* Read data from file */
-ssize_t fio_read(int fd, void* buf, size_t size)
+ssize_t
+fio_read(int fd, void* buf, size_t size)
 {
 	if (fio_is_remote_fd(fd))
 	{
@@ -1030,7 +1110,8 @@ ssize_t fio_read(int fd, void* buf, size_t size)
 }
 
 /* Get information about file */
-int fio_stat(char const* path, struct stat* st, bool follow_symlink, fio_location location)
+int
+fio_stat(char const* path, struct stat* st, bool follow_symlink, fio_location location)
 {
 	if (fio_is_remote(location))
 	{
@@ -1103,7 +1184,8 @@ fio_readlink(const char *path, char *value, size_t valsiz, fio_location location
 }
 
 /* Check presence of the file */
-int fio_access(char const* path, int mode, fio_location location)
+int
+fio_access(char const* path, int mode, fio_location location)
 {
 	if (fio_is_remote(location))
 	{
@@ -1134,7 +1216,8 @@ int fio_access(char const* path, int mode, fio_location location)
 }
 
 /* Create symbolic link */
-int fio_symlink(char const* target, char const* link_path, bool overwrite, fio_location location)
+int
+fio_symlink(char const* target, char const* link_path, bool overwrite, fio_location location)
 {
 	if (fio_is_remote(location))
 	{
@@ -1161,7 +1244,8 @@ int fio_symlink(char const* target, char const* link_path, bool overwrite, fio_l
 	}
 }
 
-static void fio_symlink_impl(int out, char *buf, bool overwrite)
+static void
+fio_symlink_impl(int out, char *buf, bool overwrite)
 {
 	char *linked_path = buf;
 	char *link_path = buf + strlen(buf) + 1;
@@ -1175,7 +1259,8 @@ static void fio_symlink_impl(int out, char *buf, bool overwrite)
 }
 
 /* Rename file */
-int fio_rename(char const* old_path, char const* new_path, fio_location location)
+int
+fio_rename(char const* old_path, char const* new_path, fio_location location)
 {
 	if (fio_is_remote(location))
 	{
@@ -1201,7 +1286,8 @@ int fio_rename(char const* old_path, char const* new_path, fio_location location
 }
 
 /* Sync file to disk */
-int fio_sync(char const* path, fio_location location)
+int
+fio_sync(char const* path, fio_location location)
 {
 	if (fio_is_remote(location))
 	{
@@ -1243,7 +1329,8 @@ int fio_sync(char const* path, fio_location location)
 }
 
 /* Get crc32 of file */
-pg_crc32 fio_get_crc32(const char *file_path, fio_location location, bool decompress)
+pg_crc32
+fio_get_crc32(const char *file_path, fio_location location, bool decompress)
 {
 	if (fio_is_remote(location))
 	{
@@ -1274,7 +1361,8 @@ pg_crc32 fio_get_crc32(const char *file_path, fio_location location, bool decomp
 }
 
 /* Remove file */
-int fio_unlink(char const* path, fio_location location)
+int
+fio_unlink(char const* path, fio_location location)
 {
 	if (fio_is_remote(location))
 	{
@@ -1299,7 +1387,8 @@ int fio_unlink(char const* path, fio_location location)
 /* Create directory
  * TODO: add strict flag
  */
-int fio_mkdir(char const* path, int mode, fio_location location)
+int
+fio_mkdir(char const* path, int mode, fio_location location)
 {
 	if (fio_is_remote(location))
 	{
@@ -1325,7 +1414,8 @@ int fio_mkdir(char const* path, int mode, fio_location location)
 }
 
 /* Change file mode */
-int fio_chmod(char const* path, int mode, fio_location location)
+int
+fio_chmod(char const* path, int mode, fio_location location)
 {
 	if (fio_is_remote(location))
 	{
@@ -1620,7 +1710,8 @@ fio_gzclose(gzFile f)
 	}
 }
 
-int fio_gzeof(gzFile f)
+int
+fio_gzeof(gzFile f)
 {
 	if ((size_t)f & FIO_GZ_REMOTE_MARKER)
 	{
@@ -1633,7 +1724,8 @@ int fio_gzeof(gzFile f)
 	}
 }
 
-const char* fio_gzerror(gzFile f, int *errnum)
+const char*
+fio_gzerror(gzFile f, int *errnum)
 {
 	if ((size_t)f & FIO_GZ_REMOTE_MARKER)
 	{
@@ -1648,7 +1740,8 @@ const char* fio_gzerror(gzFile f, int *errnum)
 	}
 }
 
-z_off_t fio_gzseek(gzFile f, z_off_t offset, int whence)
+z_off_t
+fio_gzseek(gzFile f, z_off_t offset, int whence)
 {
 	Assert(!((size_t)f & FIO_GZ_REMOTE_MARKER));
 	return gzseek(f, offset, whence);
@@ -1660,7 +1753,8 @@ z_off_t fio_gzseek(gzFile f, z_off_t offset, int whence)
 /* Send file content
  * Note: it should not be used for large files.
  */
-static void fio_load_file(int out, char const* path)
+static void
+fio_load_file(int out, char const* path)
 {
 	int fd = open(path, O_RDONLY);
 	fio_header hdr;
@@ -1702,7 +1796,8 @@ static void fio_load_file(int out, char const* path)
  * In case of DELTA mode horizonLsn must be a valid lsn,
  * otherwise it should be set to InvalidXLogRecPtr.
  */
-int fio_send_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
+int
+fio_send_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
 				   XLogRecPtr horizonLsn, int calg, int clevel, uint32 checksum_version,
 				   bool use_pagemap, BlockNumber* err_blknum, char **errormsg,
 				   BackupPageHeader2 **headers)
@@ -2054,7 +2149,8 @@ fio_copy_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
  *  FIO_SEND_FILE_CORRUPTION
  *  FIO_SEND_FILE_EOF
  */
-static void fio_send_pages_impl(int out, char* buf)
+static void
+fio_send_pages_impl(int out, char* buf)
 {
 	FILE        *in = NULL;
 	BlockNumber  blknum = 0;
@@ -2324,7 +2420,8 @@ cleanup:
  *   ZLIB_ERROR   (-5)
  *   REMOTE_ERROR (-6)
  */
-int fio_send_file_gz(const char *from_fullpath, const char *to_fullpath, FILE* out, char **errormsg)
+int
+fio_send_file_gz(const char *from_fullpath, const char *to_fullpath, FILE* out, char **errormsg)
 {
 	fio_header hdr;
 	int exit_code = SEND_OK;
@@ -2484,7 +2581,8 @@ cleanup:
  * OPEN_FAILED and READ_FAIL should also set errormsg.
  * If pgFile is not NULL then we must calculate crc and read_size for it.
  */
-int fio_send_file(const char *from_fullpath, const char *to_fullpath, FILE* out,
+int
+fio_send_file(const char *from_fullpath, const char *to_fullpath, FILE* out,
 												pgFile *file, char **errormsg)
 {
 	fio_header hdr;
@@ -2565,7 +2663,8 @@ int fio_send_file(const char *from_fullpath, const char *to_fullpath, FILE* out,
  *  FIO_SEND_FILE_EOF
  *
  */
-static void fio_send_file_impl(int out, char const* path)
+static void
+fio_send_file_impl(int out, char const* path)
 {
 	FILE      *fp;
 	fio_header hdr;
@@ -2656,7 +2755,8 @@ cleanup:
 }
 
 /* Compile the array of files located on remote machine in directory root */
-static void fio_list_dir_internal(parray *files, const char *root, bool exclude,
+static void
+fio_list_dir_internal(parray *files, const char *root, bool exclude,
 								  bool follow_symlink, bool add_root, bool backup_logs,
 								  bool skip_hidden, int external_dir_num)
 {
@@ -2749,7 +2849,8 @@ static void fio_list_dir_internal(parray *files, const char *root, bool exclude,
  *
  * TODO: replace FIO_SEND_FILE and FIO_SEND_FILE_EOF with dedicated messages
  */
-static void fio_list_dir_impl(int out, char* buf)
+static void
+fio_list_dir_impl(int out, char* buf)
 {
 	int i;
 	fio_header hdr;
@@ -2815,7 +2916,8 @@ static void fio_list_dir_impl(int out, char* buf)
 }
 
 /* Wrapper for directory listing */
-void fio_list_dir(parray *files, const char *root, bool exclude,
+void
+fio_list_dir(parray *files, const char *root, bool exclude,
 				  bool follow_symlink, bool add_root, bool backup_logs,
 				  bool skip_hidden, int external_dir_num)
 {
@@ -2870,7 +2972,8 @@ fio_get_checksum_map(const char *fullpath, uint32 checksum_version, int n_blocks
 	}
 }
 
-static void fio_get_checksum_map_impl(int out, char *buf)
+static void
+fio_get_checksum_map_impl(int out, char *buf)
 {
 	fio_header  hdr;
 	PageState  *checksum_map = NULL;
@@ -2937,7 +3040,8 @@ fio_get_lsn_map(const char *fullpath, uint32 checksum_version,
 	return lsn_map;
 }
 
-static void fio_get_lsn_map_impl(int out, char *buf)
+static void
+fio_get_lsn_map_impl(int out, char *buf)
 {
 	fio_header     hdr;
 	datapagemap_t *lsn_map = NULL;
@@ -2964,10 +3068,59 @@ static void fio_get_lsn_map_impl(int out, char *buf)
 }
 
 /*
+ * Return pid of postmaster process running in given pgdata on local machine.
+ * Return 0 if there is none.
+ * Return 1 if postmaster.pid is mangled.
+ */
+static pid_t
+local_check_postmaster(const char *pgdata)
+{
+	FILE  *fp;
+	pid_t  pid;
+	char   pid_file[MAXPGPATH];
+
+	join_path_components(pid_file, pgdata, "postmaster.pid");
+
+	fp = fopen(pid_file, "r");
+	if (fp == NULL)
+	{
+		/* No pid file, acceptable*/
+		if (errno == ENOENT)
+			return 0;
+		else
+			elog(ERROR, "Cannot open file \"%s\": %s",
+				pid_file, strerror(errno));
+	}
+
+	if (fscanf(fp, "%i", &pid) != 1)
+	{
+		/* something is wrong with the file content */
+		pid = 1;
+	}
+
+	if (pid > 1)
+	{
+		if (kill(pid, 0) != 0)
+		{
+			/* process no longer exists */
+			if (errno == ESRCH)
+				pid = 0;
+			else
+				elog(ERROR, "Failed to send signal 0 to a process %d: %s",
+						pid, strerror(errno));
+		}
+	}
+
+	fclose(fp);
+	return pid;
+}
+
+/*
  * Go to the remote host and get postmaster pid from file postmaster.pid
  * and check that process is running, if process is running, return its pid number.
  */
-pid_t fio_check_postmaster(const char *pgdata, fio_location location)
+pid_t
+fio_check_postmaster(const char *pgdata, fio_location location)
 {
 	if (fio_is_remote(location))
 	{
@@ -2984,16 +3137,17 @@ pid_t fio_check_postmaster(const char *pgdata, fio_location location)
 		return hdr.arg;
 	}
 	else
-		return check_postmaster(pgdata);
+		return local_check_postmaster(pgdata);
 }
 
-static void fio_check_postmaster_impl(int out, char *buf)
+static void
+fio_check_postmaster_impl(int out, char *buf)
 {
 	fio_header  hdr;
 	pid_t       postmaster_pid;
 	char       *pgdata = (char*) buf;
 
-	postmaster_pid = check_postmaster(pgdata);
+	postmaster_pid = local_check_postmaster(pgdata);
 
 	/* send arrays of checksums to main process */
 	hdr.arg = postmaster_pid;
@@ -3032,7 +3186,8 @@ fio_delete_impl(mode_t mode, char *buf)
 }
 
 /* Execute commands at remote host */
-void fio_communicate(int in, int out)
+void
+fio_communicate(int in, int out)
 {
 	/*
 	 * Map of file and directory descriptors.
@@ -3101,7 +3256,7 @@ void fio_communicate(int in, int out)
 			IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 			break;
 		  case FIO_CLOSE: /* Close file */
-			SYS_CHECK(close(fd[hdr.handle]));
+			fio_close_impl(fd[hdr.handle], out);
 			break;
 		  case FIO_WRITE: /* Write to the current position in file */
 //			IO_CHECK(fio_write_all(fd[hdr.handle], buf, hdr.size), hdr.size);
@@ -3260,4 +3415,3 @@ void fio_communicate(int in, int out)
 		exit(EXIT_FAILURE);
 	}
 }
-

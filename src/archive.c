@@ -568,6 +568,7 @@ part_opened:
 	}
 
 	/* copy content */
+	errno = 0;
 	for (;;)
 	{
 		size_t  read_len = 0;

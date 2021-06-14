@@ -1017,7 +1017,7 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 
 		GetXLogFileName(xlogfname, reader_data->tli, reader_data->xlogsegno, wal_seg_size);
 
-		snprintf(reader_data->xlogpath, MAXPGPATH, "%s/%s", wal_archivedir, xlogfname);
+		join_path_components(reader_data->xlogpath, wal_archivedir, xlogfname);
 		snprintf(reader_data->gz_xlogpath, MAXPGPATH, "%s.gz", reader_data->xlogpath);
 
 		/* We fall back to using .partial segment in case if we are running

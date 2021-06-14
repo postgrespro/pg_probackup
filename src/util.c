@@ -432,7 +432,7 @@ set_min_recovery_point(pgFile *file, const char *backup_path,
 	FIN_CRC32C(ControlFile.crc);
 
 	/* overwrite pg_control */
-	snprintf(fullpath, sizeof(fullpath), "%s/%s", backup_path, XLOG_CONTROL_FILE);
+	join_path_components(fullpath, backup_path, XLOG_CONTROL_FILE);
 	writeControlFile(&ControlFile, fullpath, FIO_LOCAL_HOST);
 
 	/* Update pg_control checksum in backup_list */
@@ -592,52 +592,4 @@ datapagemap_print_debug(datapagemap_t *map)
 		elog(INFO, "  block %u", blocknum);
 
 	pg_free(iter);
-}
-
-/*
- * Return pid of postmaster process running in given pgdata.
- * Return 0 if there is none.
- * Return 1 if postmaster.pid is mangled.
- */
-pid_t
-check_postmaster(const char *pgdata)
-{
-	FILE  *fp;
-	pid_t  pid;
-	char   pid_file[MAXPGPATH];
-
-	snprintf(pid_file, MAXPGPATH, "%s/postmaster.pid", pgdata);
-
-	fp = fopen(pid_file, "r");
-	if (fp == NULL)
-	{
-		/* No pid file, acceptable*/
-		if (errno == ENOENT)
-			return 0;
-		else
-			elog(ERROR, "Cannot open file \"%s\": %s",
-				pid_file, strerror(errno));
-	}
-
-	if (fscanf(fp, "%i", &pid) != 1)
-	{
-		/* something is wrong with the file content */
-		pid = 1;
-	}
-
-	if (pid > 1)
-	{
-		if (kill(pid, 0) != 0)
-		{
-			/* process no longer exists */
-			if (errno == ESRCH)
-				pid = 0;
-			else
-				elog(ERROR, "Failed to send signal 0 to a process %d: %s",
-						pid, strerror(errno));
-		}
-	}
-
-	fclose(fp);
-	return pid;
 }

@@ -1113,8 +1113,6 @@ extern PageState *get_checksum_map(const char *fullpath, uint32 checksum_version
 								int n_blocks, XLogRecPtr dest_stop_lsn, BlockNumber segmentno);
 extern datapagemap_t *get_lsn_map(const char *fullpath, uint32 checksum_version,
 								  int n_blocks, XLogRecPtr shift_lsn, BlockNumber segmentno);
-extern pid_t check_postmaster(const char *pgdata);
-
 extern bool validate_file_pages(pgFile *file, const char *fullpath, XLogRecPtr stop_lsn,
 							    uint32 checksum_version, uint32 backup_version, HeaderMap *hdr_map);
 

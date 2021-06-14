@@ -147,4 +147,3 @@ extern const char* fio_gzerror(gzFile file, int *errnum);
 #endif
 
 #endif
-

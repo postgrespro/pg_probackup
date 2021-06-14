@@ -1198,7 +1198,7 @@ pgut_rmtree(const char *path, bool rmtopdir, bool strict)
 	/* now we have the names we can start removing things */
 	for (filename = filenames; *filename; filename++)
 	{
-		snprintf(pathbuf, MAXPGPATH, "%s/%s", path, *filename);
+		join_path_components(pathbuf, path, *filename);
 
 		if (lstat(pathbuf, &statbuf) != 0)
 		{
