@@ -1162,7 +1162,7 @@ GRANT SELECT ON TABLE pg_catalog.pg_database TO backup;
     </para>
     <note>
      <para>
-      PTRACK versions lower than 2.0 are deprecated. Postgres Pro Standard and Postgres Pro Enterprise
+      PTRACK versions lower than 2.0 are deprecated and not supported. Postgres Pro Standard and Postgres Pro Enterprise
       versions starting with 11.9.1 contain PTRACK 2.0. Upgrade your server to avoid issues in backups
       that you will take in future and be sure to take fresh backups of your clusters with the upgraded
       PTRACK since the backups taken with PTRACK 1.x might be corrupt.
@@ -1217,34 +1217,6 @@ CREATE EXTENSION ptrack;
      changing <varname>ptrack.map_size</varname>.
     </para>
    </note>
-
-    <para>
-     For older <productname>PostgreSQL</productname> versions,
-     PTRACK required taking backups in the exclusive mode
-     to provide exclusive access to bitmaps with changed blocks.
-     To set up PTRACK backups for <productname>PostgreSQL</productname> 10
-     or lower, do the following:
-    </para>
-    <orderedlist>
-      <listitem>
-        <para>
-          Set the <parameter>ptrack_enable</parameter> parameter to
-          <literal>on</literal>.
-        </para>
-      </listitem>
-      <listitem>
-        <para>
-          Grant the right to execute <application>PTRACK</application>
-          functions to the <literal>backup</literal> role
-          <emphasis role="strong">in every database</emphasis> of the
-          cluster:
-        </para>
-        <programlisting>
-GRANT EXECUTE ON FUNCTION pg_catalog.pg_ptrack_clear() TO backup;
-GRANT EXECUTE ON FUNCTION pg_catalog.pg_ptrack_get_and_clear(oid, oid) TO backup;
-</programlisting>
-      </listitem>
-    </orderedlist>
 
   </refsect2>
 </refsect1>

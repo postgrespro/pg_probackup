@@ -484,6 +484,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             )
 
         if node.major_version < 11:
+            # Reviewer, NB: skip this test in case of old ptrack?
             fnames = [
                 'pg_catalog.oideq(oid, oid)',
                 'pg_catalog.ptrack_version()',
@@ -900,6 +901,9 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
 
+        if node.major_version == 11:
+            self.skipTest("skip --- we do not support ptrack 1.* anymore")
+
         if node.major_version >= 11:
             self.skipTest("skip --- we do not need ptrack_get_block for ptrack 2.*")
             node.safe_psql(
@@ -917,10 +921,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             options=['--stream'],
             gdb=True)
 
-        if node.major_version > 11:
-            gdb.set_breakpoint('make_pagemap_from_ptrack_2')
-        else:
-            gdb.set_breakpoint('make_pagemap_from_ptrack_1')
+        gdb.set_breakpoint('make_pagemap_from_ptrack_2')
         gdb.run_until_break()
 
         node.safe_psql(

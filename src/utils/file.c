@@ -48,7 +48,6 @@ typedef struct
 	size_t  size;
 	time_t  mtime;
 	bool    is_datafile;
-	bool    is_database;
 	Oid     tblspcOid;
 	Oid     dbOid;
 	Oid     relOid;
@@ -2574,7 +2573,6 @@ fio_list_dir_internal(parray *files, const char *root, bool exclude,
 			file->size = fio_file.size;
 			file->mtime = fio_file.mtime;
 			file->is_datafile = fio_file.is_datafile;
-			file->is_database = fio_file.is_database;
 			file->tblspcOid = fio_file.tblspcOid;
 			file->dbOid = fio_file.dbOid;
 			file->relOid = fio_file.relOid;
@@ -2648,7 +2646,6 @@ fio_list_dir_impl(int out, char* buf)
 		fio_file.size = file->size;
 		fio_file.mtime = file->mtime;
 		fio_file.is_datafile = file->is_datafile;
-		fio_file.is_database = file->is_database;
 		fio_file.tblspcOid = file->tblspcOid;
 		fio_file.dbOid = file->dbOid;
 		fio_file.relOid = file->relOid;
