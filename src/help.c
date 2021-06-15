@@ -1042,7 +1042,7 @@ help_catchup(void)
 	printf(_("                 [--help]\n\n"));
 
 	printf(_("  -b, --backup-mode=catchup-mode   catchup mode=FULL|DELTA|PTRACK\n"));
-	printf(_("      --stream                     stream the transaction log and include it in the backup\n"));
+	printf(_("      --stream                     stream the transaction log (only supported mode)\n"));
 	printf(_("  -S, --slot=SLOTNAME              replication slot to use\n"));
 	printf(_("      --temp-slot                  use temporary replication slot\n"));
 
