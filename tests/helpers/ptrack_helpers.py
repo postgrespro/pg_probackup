@@ -2003,6 +2003,9 @@ class GDBobj(ProbackupTest):
                 return True
         return False
 
+    def quit(self):
+        self.proc.terminate()
+
     # use for breakpoint, run, continue
     def _execute(self, cmd, running=True):
         output = []
