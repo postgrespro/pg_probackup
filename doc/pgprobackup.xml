@@ -3447,7 +3447,7 @@ pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replace
 
     <para>
       Cloning a <productname>PostgreSQL</productname> instance is different from other <application>pg_probackup</application>
-      processes:
+      operations:
       <itemizedlist>
         <listitem>
           <para>
@@ -3463,6 +3463,24 @@ pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replace
           <para>
            Copying external directories
            is not supported.
+          </para>
+        </listitem>
+        <listitem>
+          <para>
+           No SQL commands involving tablespaces, such as
+           <ulink url="https://postgrespro.com/docs/postgresql/current/sql-createtablespace"
+           ><command>CREATE TABLESPACE</command></ulink
+           >/<ulink url="https://postgrespro.com/docs/postgresql/current/sql-droptablespace"
+           ><command>DROP TABLESPACE</command></ulink>,
+           can be run simultaneously with <command>catchup</command>.
+          </para>
+        </listitem>
+        <listitem>
+          <para>
+           <command>catchup</command> takes configuration files, such as
+           <filename>postgresql.conf</filename>, <filename>postgresql.auto.conf</filename>,
+           or <filename>pg_hba.conf</filename>, from the source server and overwrites them
+           on the target server.
           </para>
         </listitem>
       </itemizedlist>
@@ -3484,7 +3502,7 @@ pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replace
         </listitem>
         <listitem>
           <para>
-           To use the PTRACK backup mode, <link linkend="pbk-setting-up-ptrack-backups">set up PTRACK backups</link>.
+           To use the PTRACK catchup mode, <link linkend="pbk-setting-up-ptrack-backups">set up PTRACK backups</link>.
           </para>
         </listitem>
       </itemizedlist>
@@ -3520,8 +3538,9 @@ pg_probackup catchup -b <replaceable>catchup-mode</replaceable> --source-pgdata=
       </listitem>
       <listitem>
         <para>
-          PTRACK — creates an incremental backup tracking page
-          changes on the fly.
+          PTRACK — tracking page changes on the fly,
+          only copies pages that have changed since the point of divergence
+          of the source and destination databases.
           For this mode, the destination directory must contain a previous
           copy of the database that was shut down cleanly.
         </para>
@@ -3544,7 +3563,7 @@ pg_probackup catchup -b <replaceable>catchup-mode</replaceable> --source-pgdata=
 </programlisting>
     </para>
     <para>
-      For example, assume that a remote standby server with the <productname>PostgreSQL</productname> instance in <filename>/replica-pgdata</filename> data directory has fallen behind. To sync this instance with the one in <filename>/master-pgdata</filename> data directory, you can run
+      For example, assume that a remote standby server with the <productname>PostgreSQL</productname> instance having <filename>/replica-pgdata</filename> data directory has fallen behind. To sync this instance with the one in <filename>/master-pgdata</filename> data directory, you can run
       the <command>catchup</command> command in the <literal>PTRACK</literal> mode on four parallel threads as follows:
       <programlisting>
 pg_probackup catchup --source-pgdata=/master-pgdata --destination-pgdata=/replica-pgdata -p 5432 -d postgres -U remote-postgres-user --stream --backup-mode=PTRACK --remote-host=remote-hostname --remote-user=remote-unix-username -j 4
@@ -4468,8 +4487,9 @@ pg_probackup catchup -b <replaceable>catchup_mode</replaceable>
         </listitem>
         <listitem>
           <para>
-            <literal>PTRACK</literal> — creates an incremental PTRACK backup tracking
-            page changes on the fly.
+            <literal>PTRACK</literal> — tracking page changes on the fly,
+            only copies pages that have changed since the point of divergence
+            of the source and destination databases.
           </para>
         </listitem>
       </itemizedlist>
