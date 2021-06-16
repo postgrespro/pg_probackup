@@ -983,14 +983,18 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 		search_key.rel_path = XLOG_CONTROL_FILE;
 		search_key.external_dir_num = 0;
 		control_file_elem_index = parray_bsearch_index(dest_files, &search_key, pgFileCompareRelPathWithExternal);
-		if(control_file_elem_index < 0)
-			elog(ERROR, "\"%s\" not found in backup %s", XLOG_CONTROL_FILE, base36enc(dest_backup->start_time));
+
+		if (control_file_elem_index < 0)
+			elog(ERROR, "File \"%s\" not found in backup %s", XLOG_CONTROL_FILE, base36enc(dest_backup->start_time));
 		dest_pg_control_file = parray_remove(dest_files, control_file_elem_index);
 
 		join_path_components(dest_pg_control_fullpath, pgdata_path, dest_pg_control_file->rel_path);
 		/* remove dest control file before restoring */
 		if (params->incremental_mode != INCR_NONE)
 			fio_unlink(dest_pg_control_fullpath, FIO_DB_HOST);
+
+		// TODO: maybe we should rename "pg_control" into something like "pg_control.pbk" to
+		// keep the ability to rerun failed incremental restore ?
 	}
 
 	elog(INFO, "Start restoring backup files. PGDATA size: %s", pretty_dest_bytes);
@@ -1036,7 +1040,6 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 	/* [Issue #313] copy pg_control at very end */
 	if (restore_isok)
 	{
-		fio_is_remote(FIO_DB_HOST); /* reopen already closed ssh connection */
 		total_bytes += restore_file(dest_pg_control_file, dest_pg_control_fullpath, false, NULL,
 			dest_backup, parent_chain, use_bitmap, params->incremental_mode, params->shift_lsn);
 		fio_disconnect();
@@ -1103,7 +1106,6 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 			}
 
 			/* TODO: write test for case: file to be synced is missing */
-			/* MKulagin question: where is fio connection reopened? */
 			if (fio_sync(to_fullpath, FIO_DB_HOST) != 0)
 				elog(ERROR, "Failed to sync file \"%s\": %s", to_fullpath, strerror(errno));
 		}
