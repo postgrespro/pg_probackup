@@ -483,7 +483,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         if node.major_version < 11:
             # Reviewer, NB: skip this test in case of old ptrack?
-            self.fnames = [
+            fnames = [
                 'pg_catalog.oideq(oid, oid)',
                 'pg_catalog.ptrack_version()',
                 'pg_catalog.pg_ptrack_clear()',
@@ -493,7 +493,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
                 'pg_catalog.pg_ptrack_get_block_2(oid, oid, oid, bigint)'
                 ]
 
-            for self.fname in self.fnames:
+            for fname in fnames:
                 node.safe_psql(
                     "backupdb",
                     "GRANT EXECUTE ON FUNCTION {0} TO backup".format(fname))
