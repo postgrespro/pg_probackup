@@ -67,17 +67,17 @@ make USE_PGXS=1 top_srcdir=$PG_SRC install
 
 # Setup python environment
 echo "############### Setting up python env:"
-python2 -m virtualenv pyenv
+python3 -m virtualenv pyenv
 source pyenv/bin/activate
-pip install testgres==1.8.2
+pip3 install testgres
 
 echo "############### Testing:"
 if [ "$MODE" = "basic" ]; then
     export PG_PROBACKUP_TEST_BASIC=ON
-    python -m unittest -v tests
-    python -m unittest -v tests.init
+    python3 -m unittest -v tests
+    python3 -m unittest -v tests.init
 else
-    python -m unittest -v tests.$MODE
+    python3 -m unittest -v tests.$MODE
 fi
 
 # Generate *.gcov files
