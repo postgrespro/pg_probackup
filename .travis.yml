@@ -42,11 +42,11 @@ env:
     - PG_VERSION=9.6 PG_BRANCH=REL9_6_STABLE
     - PG_VERSION=9.5 PG_BRANCH=REL9_5_STABLE
 
-jobs:
-    allow_failures:
-        - if: env(MODE) IN (archive, backup, delta, locking, merge, replica, retention, restore)
+#jobs:
+#    allow_failures:
+#        - if: env(MODE) IN (archive, backup, delta, locking, merge, replica, retention, restore)
 
 # Only run CI for master branch commits to limit our travis usage
-branches:
-    only:
-    - master
+#branches:
+#    only:
+#    - master
