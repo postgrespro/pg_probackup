@@ -2106,7 +2106,6 @@ class BackupTest(ProbackupTest, unittest.TestCase):
             )
 
         if self.ptrack:
-            if node.major_version >= 11:
                 fnames = [
                     'ptrack.ptrack_get_pagemapset(pg_lsn)',
                     'ptrack.ptrack_init_lsn()'
@@ -2121,8 +2120,6 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                         "backupdb",
                         "GRANT EXECUTE ON FUNCTION {0} "
                         "TO backup".format(fname))
-            else:
-                self.skipTest("skip --- we do not support ptrack 1.* anymore")
 
         if ProbackupTest.enterprise:
             node.safe_psql(

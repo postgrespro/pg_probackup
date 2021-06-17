@@ -481,16 +481,15 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
                 "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;"
             )
 
-        if node.major_version >= 11:
-            node.safe_psql(
-                "backupdb",
-                "CREATE SCHEMA ptrack")
-            node.safe_psql(
-                "backupdb",
-                "CREATE EXTENSION ptrack WITH SCHEMA ptrack")
-            node.safe_psql(
-                "backupdb",
-                "GRANT USAGE ON SCHEMA ptrack TO backup")
+        node.safe_psql(
+            "backupdb",
+            "CREATE SCHEMA ptrack")
+        node.safe_psql(
+            "backupdb",
+            "CREATE EXTENSION ptrack WITH SCHEMA ptrack")
+        node.safe_psql(
+            "backupdb",
+            "GRANT USAGE ON SCHEMA ptrack TO backup")
 
         node.safe_psql(
             "backupdb",

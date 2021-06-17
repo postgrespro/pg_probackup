@@ -3,7 +3,16 @@
 #
 # Copyright (c) 2019-2020, Postgres Professional
 #
+set -xe
 
+sudo su -c 'mkdir /run/sshd'
+sudo su -c 'apt-get update -y'
+sudo su -c 'apt-get install openssh-client openssh-server -y'
+/etc/init.d/ssh start
+
+ssh-keygen -t rsa -q -N ""
+cat ~/.ssh/id_rsa.pub > ~/.ssh/authorized_keys
+ssh-keyscan -H localhost >> ~/.ssh/known_hosts
 
 PG_SRC=$PWD/postgres
 
@@ -60,17 +69,17 @@ make USE_PGXS=1 top_srcdir=$PG_SRC install
 
 # Setup python environment
 echo "############### Setting up python env:"
-python2 -m virtualenv pyenv
+python3 -m virtualenv pyenv
 source pyenv/bin/activate
-pip install testgres==1.8.2
+pip3 install testgres
 
 echo "############### Testing:"
 if [ "$MODE" = "basic" ]; then
     export PG_PROBACKUP_TEST_BASIC=ON
-    python -m unittest -v tests
-    python -m unittest -v tests.init
+    python3 -m unittest -v tests
+    python3 -m unittest -v tests.init
 else
-    python -m unittest -v tests.$MODE
+    python3 -m unittest -v tests.$MODE
 fi
 
 # Generate *.gcov files

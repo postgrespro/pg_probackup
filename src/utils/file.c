@@ -776,6 +776,34 @@ fio_fwrite(FILE* f, void const* buf, size_t size)
 		return fwrite(buf, 1, size, f);
 }
 
+/*
+ * Write buffer to descriptor by calling write(),
+ * If size of written data is less than buffer size,
+ * then try to write what is left.
+ * We do this to get honest errno if there are some problems
+ * with filesystem, since writing less than buffer size
+ * is not considered an error.
+ */
+static ssize_t
+durable_write(int fd, const char* buf, size_t size)
+{
+	off_t current_pos = 0;
+	size_t bytes_left = size;
+
+	while (bytes_left > 0)
+	{
+		int rc = write(fd, buf + current_pos, bytes_left);
+
+		if (rc <= 0)
+			return rc;
+
+		bytes_left -= rc;
+		current_pos += rc;
+	}
+
+	return size;
+}
+
 /* Write data to the file synchronously */
 ssize_t
 fio_write(int fd, void const* buf, size_t size)
@@ -805,7 +833,7 @@ fio_write(int fd, void const* buf, size_t size)
 	}
 	else
 	{
-		return write(fd, buf, size);
+		return durable_write(fd, buf, size);
 	}
 }
 
@@ -815,7 +843,7 @@ fio_write_impl(int fd, void const* buf, size_t size, int out)
 	int rc;
 	fio_header hdr;
 
-	rc = write(fd, buf, size);
+	rc = durable_write(fd, buf, size);
 
 	hdr.arg = 0;
 	hdr.size = 0;
@@ -835,34 +863,6 @@ fio_fwrite_async(FILE* f, void const* buf, size_t size)
 	return fio_is_remote_file(f)
 		? fio_write_async(fio_fileno(f), buf, size)
 		: fwrite(buf, 1, size, f);
-}
-
-/*
- * Write buffer to descriptor by calling write(),
- * If size of written data is less than buffer size,
- * then try to write what is left.
- * We do this to get honest errno if there are some problems
- * with filesystem, since writing less than buffer size
- * is not considered an error.
- */
-static ssize_t
-durable_write(int fd, const char* buf, size_t size)
-{
-	off_t current_pos = 0;
-	size_t bytes_left = size;
-
-	while (bytes_left > 0)
-	{
-		int rc = write(fd, buf + current_pos, bytes_left);
-
-		if (rc <= 0)
-			return rc;
-
-		bytes_left -= rc;
-		current_pos += rc;
-	}
-
-	return size;
 }
 
 /* Write data to the file */
@@ -949,23 +949,22 @@ fio_fwrite_async_compressed(FILE* f, void const* buf, size_t size, int compress_
 	}
 	else
 	{
-		char uncompressed_buf[BLCKSZ];
 		char *errormsg = NULL;
-		int32 uncompressed_size = fio_decompress(uncompressed_buf, buf, size, compress_alg, &errormsg);
+		char decompressed_buf[BLCKSZ];
+		int32 decompressed_size = fio_decompress(decompressed_buf, buf, size, compress_alg, &errormsg);
 
-		if (uncompressed_size < 0)
+		if (decompressed_size < 0)
 			elog(ERROR, "%s", errormsg);
 
-		return fwrite(uncompressed_buf, 1, uncompressed_size, f);
+		return fwrite(decompressed_buf, 1, decompressed_size, f);
 	}
 }
 
 static void
 fio_write_compressed_impl(int fd, void const* buf, size_t size, int compress_alg)
 {
-	int rc;
-	int32 uncompressed_size;
-	char uncompressed_buf[BLCKSZ];
+	int32 decompressed_size;
+	char decompressed_buf[BLCKSZ];
 
 	/* If the previous command already have failed,
 	 * then there is no point in bashing a head against the wall
@@ -974,14 +973,12 @@ fio_write_compressed_impl(int fd, void const* buf, size_t size, int compress_alg
 		return;
 
 	/* decompress chunk */
-	uncompressed_size = fio_decompress(uncompressed_buf, buf, size, compress_alg, &async_errormsg);
+	decompressed_size = fio_decompress(decompressed_buf, buf, size, compress_alg, &async_errormsg);
 
-	if (uncompressed_size < 0)
+	if (decompressed_size < 0)
 		return;
 
-	rc = write(fd, uncompressed_buf, uncompressed_size);
-
-	if (rc <= 0)
+	if (durable_write(fd, decompressed_buf, decompressed_size) <= 0)
 	{
 		async_errormsg = pgut_malloc(ERRMSG_MAX_LEN);
 		snprintf(async_errormsg, ERRMSG_MAX_LEN, "%s", strerror(errno));
