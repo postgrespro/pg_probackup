@@ -125,10 +125,6 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 		check_external_for_tablespaces(external_dirs, backup_conn);
 	}
 
-	/* Clear ptrack files for not PTRACK backups */
-	if (current.backup_mode != BACKUP_MODE_DIFF_PTRACK && nodeInfo->is_ptrack_enable)
-		pg_ptrack_clear(backup_conn, nodeInfo->ptrack_version_num);
-
 	/* notify start of backup to PostgreSQL server */
 	time2iso(label, lengthof(label), current.start_time, false);
 	strncat(label, " with pg_probackup", lengthof(label) -
@@ -217,29 +213,14 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 	{
 		XLogRecPtr	ptrack_lsn = get_last_ptrack_lsn(backup_conn, nodeInfo);
 
-		if (nodeInfo->ptrack_version_num < 200)
+		// new ptrack (>=2.0) is more robust and checks Start LSN
+		if (ptrack_lsn > prev_backup->start_lsn || ptrack_lsn == InvalidXLogRecPtr)
 		{
-			// backward compatibility kludge: use Stop LSN for ptrack 1.x,
-			if (ptrack_lsn > prev_backup->stop_lsn || ptrack_lsn == InvalidXLogRecPtr)
-			{
-				elog(ERROR, "LSN from ptrack_control %X/%X differs from Stop LSN of previous backup %X/%X.\n"
-							"Create new full backup before an incremental one.",
-							(uint32) (ptrack_lsn >> 32), (uint32) (ptrack_lsn),
-							(uint32) (prev_backup->stop_lsn >> 32),
-							(uint32) (prev_backup->stop_lsn));
-			}
-		}
-		else
-		{
-			// new ptrack is more robust and checks Start LSN
-			if (ptrack_lsn > prev_backup->start_lsn || ptrack_lsn == InvalidXLogRecPtr)
-			{
-				elog(ERROR, "LSN from ptrack_control %X/%X is greater than Start LSN of previous backup %X/%X.\n"
-							"Create new full backup before an incremental one.",
-							(uint32) (ptrack_lsn >> 32), (uint32) (ptrack_lsn),
-							(uint32) (prev_backup->start_lsn >> 32),
-							(uint32) (prev_backup->start_lsn));
-			}
+			elog(ERROR, "LSN from ptrack_control %X/%X is greater than Start LSN of previous backup %X/%X.\n"
+						"Create new full backup before an incremental one.",
+						(uint32) (ptrack_lsn >> 32), (uint32) (ptrack_lsn),
+						(uint32) (prev_backup->start_lsn >> 32),
+						(uint32) (prev_backup->start_lsn));
 		}
 	}
 
@@ -407,15 +388,10 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 			/*
 			 * Build the page map from ptrack information.
 			 */
-			if (nodeInfo->ptrack_version_num >= 200)
-				make_pagemap_from_ptrack_2(backup_files_list, backup_conn,
-										   nodeInfo->ptrack_schema,
-										   nodeInfo->ptrack_version_num,
-										   prev_backup_start_lsn);
-			else if (nodeInfo->ptrack_version_num == 105 ||
-					 nodeInfo->ptrack_version_num == 106 ||
-					 nodeInfo->ptrack_version_num == 107)
-				make_pagemap_from_ptrack_1(backup_files_list, backup_conn);
+			make_pagemap_from_ptrack_2(backup_files_list, backup_conn,
+									   nodeInfo->ptrack_schema,
+									   nodeInfo->ptrack_version_num,
+									   prev_backup_start_lsn);
 		}
 
 		time(&end_time);
@@ -490,8 +466,6 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 		arg->files_list = backup_files_list;
 		arg->prev_filelist = prev_backup_filelist;
 		arg->prev_start_lsn = prev_backup_start_lsn;
-		arg->conn_arg.conn = NULL;
-		arg->conn_arg.cancel_conn = NULL;
 		arg->hdr_map = &(current.hdr_map);
 		arg->thread_num = i+1;
 		/* By default there are some error */
@@ -816,6 +790,7 @@ do_backup(InstanceState *instanceState, pgSetBackupParams *set_backup_params,
 
 	if (current.backup_mode == BACKUP_MODE_DIFF_PTRACK)
 	{
+		/* ptrack_version_num < 2.0 was already checked in get_ptrack_version() */
 		if (nodeInfo.ptrack_version_num == 0)
 			elog(ERROR, "This PostgreSQL instance does not support ptrack");
 		else
@@ -2085,15 +2060,15 @@ backup_files(void *arg)
 		/* backup file */
 		if (file->is_datafile && !file->is_cfs)
 		{
-			backup_data_file(&(arguments->conn_arg), file, from_fullpath, to_fullpath,
-								 arguments->prev_start_lsn,
-								 current.backup_mode,
-								 instance_config.compress_alg,
-								 instance_config.compress_level,
-								 arguments->nodeInfo->checksum_version,
-								 arguments->nodeInfo->ptrack_version_num,
-								 arguments->nodeInfo->ptrack_schema,
-								 arguments->hdr_map, false);
+			backup_data_file(file, from_fullpath, to_fullpath,
+							 arguments->prev_start_lsn,
+							 current.backup_mode,
+							 instance_config.compress_alg,
+							 instance_config.compress_level,
+							 arguments->nodeInfo->checksum_version,
+							 arguments->nodeInfo->ptrack_version_num,
+							 arguments->nodeInfo->ptrack_schema,
+							 arguments->hdr_map, false);
 		}
 		else
 		{
@@ -2116,10 +2091,6 @@ backup_files(void *arg)
 
 	/* ssh connection to longer needed */
 	fio_disconnect();
-
-	/* Close connection */
-	if (arguments->conn_arg.conn)
-		pgut_disconnect(arguments->conn_arg.conn);
 
 	/* Data files transferring is successful */
 	arguments->ret = 0;

@@ -2106,6 +2106,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 
         if self.ptrack:
             if node.major_version < 12:
+                # Reviewer, NB: skip this test in case of old ptrack?
                 for fname in [
                         'pg_catalog.oideq(oid, oid)',
                         'pg_catalog.ptrack_version()',

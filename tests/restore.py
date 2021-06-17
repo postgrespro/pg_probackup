@@ -3300,6 +3300,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         if self.ptrack:
             fnames = []
             if node.major_version < 12:
+                # Reviewer, NB: skip this test in case of old ptrack?
                 fnames += [
                     'pg_catalog.oideq(oid, oid)',
                     'pg_catalog.ptrack_version()',
@@ -3314,7 +3315,6 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 #                fnames += [
 #                    'pg_ptrack_get_pagemapset(pg_lsn)',
 #                    'pg_ptrack_control_lsn()',
-#                    'pg_ptrack_get_block(oid, oid, oid, bigint)'
 #                    ]
                 node.safe_psql(
                     "backupdb",
