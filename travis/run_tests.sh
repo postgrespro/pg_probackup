@@ -3,7 +3,9 @@
 #
 # Copyright (c) 2019-2020, Postgres Professional
 #
+set -xe
 
+sudo su -c 'mkdir /run/sshd'
 sudo su -c 'apt-get update -y'
 sudo su -c 'apt-get install openssh-client openssh-server -y'
 /etc/init.d/ssh start
