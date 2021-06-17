@@ -8,9 +8,9 @@ set -xe
 sudo su -c 'mkdir /run/sshd'
 sudo su -c 'apt-get update -y'
 sudo su -c 'apt-get install openssh-client openssh-server -y'
-/etc/init.d/ssh start
+sudo su -c '/etc/init.d/ssh start'
 
-ssh-keygen -t rsa -q -N ""
+ssh-keygen -t rsa -f ~/.ssh/id_rsa -q -N ""
 cat ~/.ssh/id_rsa.pub > ~/.ssh/authorized_keys
 ssh-keyscan -H localhost >> ~/.ssh/known_hosts
 
