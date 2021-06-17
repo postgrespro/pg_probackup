@@ -588,7 +588,6 @@ typedef struct
 	parray	   *external_dirs;
 	XLogRecPtr	prev_start_lsn;
 
-	ConnectionArgs conn_arg;
 	int			thread_num;
 	HeaderMap   *hdr_map;
 
@@ -1062,12 +1061,11 @@ extern void pfilearray_clear_locks(parray *file_list);
 extern bool check_data_file(ConnectionArgs *arguments, pgFile *file,
 							const char *from_fullpath, uint32 checksum_version);
 
-extern void backup_data_file(ConnectionArgs* conn_arg, pgFile *file,
-								 const char *from_fullpath, const char *to_fullpath,
-								 XLogRecPtr prev_backup_start_lsn, BackupMode backup_mode,
-								 CompressAlg calg, int clevel, uint32 checksum_version,
-								 int ptrack_version_num, const char *ptrack_schema,
-								 HeaderMap *hdr_map, bool missing_ok);
+extern void backup_data_file(pgFile *file, const char *from_fullpath, const char *to_fullpath,
+							 XLogRecPtr prev_backup_start_lsn, BackupMode backup_mode,
+							 CompressAlg calg, int clevel, uint32 checksum_version,
+							 int ptrack_version_num, const char *ptrack_schema,
+							 HeaderMap *hdr_map, bool missing_ok);
 extern void backup_non_data_file(pgFile *file, pgFile *prev_file,
 								 const char *from_fullpath, const char *to_fullpath,
 								 BackupMode backup_mode, time_t parent_backup_time,
@@ -1180,7 +1178,7 @@ extern parray * pg_ptrack_get_pagemapset(PGconn *backup_conn, const char *ptrack
 /* open local file to writing */
 extern FILE* open_local_file_rw(const char *to_fullpath, char **out_buf, uint32 buf_size);
 
-extern int send_pages(ConnectionArgs* conn_arg, const char *to_fullpath, const char *from_fullpath,
+extern int send_pages(const char *to_fullpath, const char *from_fullpath,
 					  pgFile *file, XLogRecPtr prev_backup_start_lsn, CompressAlg calg, int clevel,
 					  uint32 checksum_version, bool use_pagemap, BackupPageHeader2 **headers,
 					  BackupMode backup_mode, int ptrack_version_num, const char *ptrack_schema);

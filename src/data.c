@@ -276,8 +276,7 @@ get_checksum_errormsg(Page page, char **errormsg, BlockNumber absolute_blkno)
  *                                      return it to the caller
  */
 static int32
-prepare_page(ConnectionArgs *conn_arg,
-			 pgFile *file, XLogRecPtr prev_backup_start_lsn,
+prepare_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 			 BlockNumber blknum, FILE *in,
 			 BackupMode backup_mode,
 			 Page page, bool strict,
@@ -468,8 +467,7 @@ compress_and_backup_page(pgFile *file, BlockNumber blknum,
  * backup with special header.
  */
 void
-backup_data_file(ConnectionArgs* conn_arg, pgFile *file,
-				 const char *from_fullpath, const char *to_fullpath,
+backup_data_file(pgFile *file, const char *from_fullpath, const char *to_fullpath,
 				 XLogRecPtr prev_backup_start_lsn, BackupMode backup_mode,
 				 CompressAlg calg, int clevel, uint32 checksum_version,
 				 int ptrack_version_num, const char *ptrack_schema,
@@ -551,7 +549,7 @@ backup_data_file(ConnectionArgs* conn_arg, pgFile *file,
 	else
 	{
 		/* TODO: stop handling errors internally */
-		rc = send_pages(conn_arg, to_fullpath, from_fullpath, file,
+		rc = send_pages(to_fullpath, from_fullpath, file,
 						/* send prev backup START_LSN */
 						(backup_mode == BACKUP_MODE_DIFF_DELTA || backup_mode == BACKUP_MODE_DIFF_PTRACK) &&
 						file->exists_in_prev ? prev_backup_start_lsn : InvalidXLogRecPtr,
@@ -1500,10 +1498,10 @@ check_data_file(ConnectionArgs *arguments, pgFile *file,
 	for (blknum = 0; blknum < nblocks; blknum++)
 	{
 		PageState page_st;
-		page_state = prepare_page(NULL, file, InvalidXLogRecPtr,
-									blknum, in, BACKUP_MODE_FULL,
-									curr_page, false, checksum_version,
-									0, NULL, from_fullpath, &page_st);
+		page_state = prepare_page(file, InvalidXLogRecPtr,
+								  blknum, in, BACKUP_MODE_FULL,
+								  curr_page, false, checksum_version,
+								  0, NULL, from_fullpath, &page_st);
 
 		if (page_state == PageIsTruncated)
 			break;
@@ -1931,7 +1929,7 @@ open_local_file_rw(const char *to_fullpath, char **out_buf, uint32 buf_size)
 
 /* backup local file */
 int
-send_pages(ConnectionArgs* conn_arg, const char *to_fullpath, const char *from_fullpath,
+send_pages(const char *to_fullpath, const char *from_fullpath,
 		   pgFile *file, XLogRecPtr prev_backup_start_lsn, CompressAlg calg, int clevel,
 		   uint32 checksum_version, bool use_pagemap, BackupPageHeader2 **headers,
 		   BackupMode backup_mode, int ptrack_version_num, const char *ptrack_schema)
@@ -1989,11 +1987,11 @@ send_pages(ConnectionArgs* conn_arg, const char *to_fullpath, const char *from_f
 	while (blknum < file->n_blocks)
 	{
 		PageState page_st;
-		int rc = prepare_page(conn_arg, file, prev_backup_start_lsn,
-									  blknum, in, backup_mode, curr_page,
-									  true, checksum_version,
-									  ptrack_version_num, ptrack_schema,
-									  from_fullpath, &page_st);
+		int rc = prepare_page(file, prev_backup_start_lsn,
+							  blknum, in, backup_mode, curr_page,
+							  true, checksum_version,
+							  ptrack_version_num, ptrack_schema,
+							  from_fullpath, &page_st);
 		if (rc == PageIsTruncated)
 			break;
 

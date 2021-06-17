@@ -466,8 +466,6 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 		arg->files_list = backup_files_list;
 		arg->prev_filelist = prev_backup_filelist;
 		arg->prev_start_lsn = prev_backup_start_lsn;
-		arg->conn_arg.conn = NULL;
-		arg->conn_arg.cancel_conn = NULL;
 		arg->hdr_map = &(current.hdr_map);
 		arg->thread_num = i+1;
 		/* By default there are some error */
@@ -2062,15 +2060,15 @@ backup_files(void *arg)
 		/* backup file */
 		if (file->is_datafile && !file->is_cfs)
 		{
-			backup_data_file(&(arguments->conn_arg), file, from_fullpath, to_fullpath,
-								 arguments->prev_start_lsn,
-								 current.backup_mode,
-								 instance_config.compress_alg,
-								 instance_config.compress_level,
-								 arguments->nodeInfo->checksum_version,
-								 arguments->nodeInfo->ptrack_version_num,
-								 arguments->nodeInfo->ptrack_schema,
-								 arguments->hdr_map, false);
+			backup_data_file(file, from_fullpath, to_fullpath,
+							 arguments->prev_start_lsn,
+							 current.backup_mode,
+							 instance_config.compress_alg,
+							 instance_config.compress_level,
+							 arguments->nodeInfo->checksum_version,
+							 arguments->nodeInfo->ptrack_version_num,
+							 arguments->nodeInfo->ptrack_schema,
+							 arguments->hdr_map, false);
 		}
 		else
 		{
@@ -2093,10 +2091,6 @@ backup_files(void *arg)
 
 	/* ssh connection to longer needed */
 	fio_disconnect();
-
-	/* Close connection */
-	if (arguments->conn_arg.conn)
-		pgut_disconnect(arguments->conn_arg.conn);
 
 	/* Data files transferring is successful */
 	arguments->ret = 0;
