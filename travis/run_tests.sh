@@ -4,6 +4,13 @@
 # Copyright (c) 2019-2020, Postgres Professional
 #
 
+sudo su -c 'apt-get update -y'
+sudo su -c 'apt-get install openssh-client openssh-server -y'
+/etc/init.d/ssh start
+
+ssh-keygen -t rsa -q -N ""
+cat ~/.ssh/id_rsa.pub > ~/.ssh/authorized_keys
+ssh-keyscan -H localhost >> ~/.ssh/known_hosts
 
 PG_SRC=$PWD/postgres
 
