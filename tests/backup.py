@@ -33,7 +33,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.set_archiving(backup_dir, 'node', node)
         node.slow_start()
 
-        if node.major_version >= 12:
+        if node.major_version >= 11:
             node.safe_psql(
                 "postgres",
                 "CREATE EXTENSION ptrack")
@@ -134,7 +134,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.set_archiving(backup_dir, 'node', node)
         node.slow_start()
 
-        if node.major_version >= 12:
+        if node.major_version >= 11:
             node.safe_psql(
                 "postgres",
                 "CREATE EXTENSION ptrack")
@@ -259,7 +259,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.set_archiving(backup_dir, 'node', node)
         node.slow_start()
 
-        if node.major_version >= 12:
+        if node.major_version >= 11:
             node.safe_psql(
                 "postgres",
                 "CREATE EXTENSION ptrack")
@@ -295,7 +295,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
 
-        if node.major_version >= 12:
+        if node.major_version >= 11:
             node.safe_psql(
                 "postgres",
                 "CREATE EXTENSION ptrack")
@@ -1478,7 +1478,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.set_archiving(backup_dir, 'node', node)
         node.slow_start()
 
-        if node.major_version >= 12:
+        if node.major_version >= 11:
             node.safe_psql(
                 "postgres",
                 "CREATE EXTENSION ptrack")
@@ -1992,10 +1992,11 @@ class BackupTest(ProbackupTest, unittest.TestCase):
             'postgres',
             'CREATE DATABASE backupdb')
 
-        if self.ptrack and node.major_version >= 12:
+        if self.ptrack and node.major_version >= 11:
             node.safe_psql(
                 "backupdb",
-                "CREATE EXTENSION ptrack WITH SCHEMA pg_catalog")
+                "CREATE SCHEMA ptrack; "
+                "CREATE EXTENSION ptrack WITH SCHEMA ptrack")
 
         # PG 9.5
         if self.get_version(node) < 90600:
@@ -2105,33 +2106,23 @@ class BackupTest(ProbackupTest, unittest.TestCase):
             )
 
         if self.ptrack:
-            if node.major_version < 12:
-                # Reviewer, NB: skip this test in case of old ptrack?
-                for fname in [
-                        'pg_catalog.oideq(oid, oid)',
-                        'pg_catalog.ptrack_version()',
-                        'pg_catalog.pg_ptrack_clear()',
-                        'pg_catalog.pg_ptrack_control_lsn()',
-                        'pg_catalog.pg_ptrack_get_and_clear_db(oid, oid)',
-                        'pg_catalog.pg_ptrack_get_and_clear(oid, oid)',
-                        'pg_catalog.pg_ptrack_get_block_2(oid, oid, oid, bigint)',
-                        'pg_catalog.pg_stop_backup()']:
-
-                    node.safe_psql(
-                        "backupdb",
-                        "GRANT EXECUTE ON FUNCTION {0} "
-                        "TO backup".format(fname))
-            else:
+            if node.major_version >= 11:
                 fnames = [
-                    'pg_catalog.ptrack_get_pagemapset(pg_lsn)',
-                    'pg_catalog.ptrack_init_lsn()'
+                    'ptrack.ptrack_get_pagemapset(pg_lsn)',
+                    'ptrack.ptrack_init_lsn()'
                 ]
+
+                node.safe_psql(
+                     "backupdb",
+                     "GRANT USAGE ON SCHEMA ptrack TO backup")
 
                 for fname in fnames:
                     node.safe_psql(
                         "backupdb",
                         "GRANT EXECUTE ON FUNCTION {0} "
                         "TO backup".format(fname))
+            else:
+                self.skipTest("skip --- we do not support ptrack 1.* anymore")
 
         if ProbackupTest.enterprise:
             node.safe_psql(
@@ -2391,7 +2382,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
             'postgres',
             'CREATE DATABASE backupdb')
 
-        if self.ptrack and node.major_version >= 12:
+        if self.ptrack and node.major_version >= 11:
             node.safe_psql(
                 'backupdb',
                 'CREATE EXTENSION ptrack')

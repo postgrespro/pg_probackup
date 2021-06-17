@@ -3298,18 +3298,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         if self.ptrack:
             fnames = []
-            if node.major_version < 12:
-                # Reviewer, NB: skip this test in case of old ptrack?
-                fnames += [
-                    'pg_catalog.oideq(oid, oid)',
-                    'pg_catalog.ptrack_version()',
-                    'pg_catalog.pg_ptrack_clear()',
-                    'pg_catalog.pg_ptrack_control_lsn()',
-                    'pg_catalog.pg_ptrack_get_and_clear_db(oid, oid)',
-                    'pg_catalog.pg_ptrack_get_and_clear(oid, oid)',
-                    'pg_catalog.pg_ptrack_get_block_2(oid, oid, oid, bigint)'
-                    ]
-            else:
+            if node.major_version >= 11:
                 # TODO why backup works without these grants ?
 #                fnames += [
 #                    'pg_ptrack_get_pagemapset(pg_lsn)',
@@ -3318,6 +3307,8 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
                 node.safe_psql(
                     "backupdb",
                     "CREATE EXTENSION ptrack WITH SCHEMA pg_catalog")
+            else:
+                self.skipTest("skip --- we do not support ptrack 1.* anymore")
 
             for fname in fnames:
                 node.safe_psql(

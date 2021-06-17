@@ -386,6 +386,7 @@ class ProbackupTest(object):
                 options['ptrack.map_size'] = '128'
                 options['shared_preload_libraries'] = 'ptrack'
             else:
+                # Hmm... throw error here?
                 options['ptrack_enable'] = 'on'
 
         if node.major_version >= 13:

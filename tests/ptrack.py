@@ -481,24 +481,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
                 "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;"
             )
 
-        if node.major_version < 11:
-            # Reviewer, NB: skip this test in case of old ptrack?
-            self.fnames = [
-                'pg_catalog.oideq(oid, oid)',
-                'pg_catalog.ptrack_version()',
-                'pg_catalog.pg_ptrack_clear()',
-                'pg_catalog.pg_ptrack_control_lsn()',
-                'pg_catalog.pg_ptrack_get_and_clear_db(oid, oid)',
-                'pg_catalog.pg_ptrack_get_and_clear(oid, oid)',
-                'pg_catalog.pg_ptrack_get_block_2(oid, oid, oid, bigint)'
-                ]
-
-            for self.fname in self.fnames:
-                node.safe_psql(
-                    "backupdb",
-                    "GRANT EXECUTE ON FUNCTION {0} TO backup".format(fname))
-
-        else:
+        if node.major_version >= 11:
             node.safe_psql(
                 "backupdb",
                 "CREATE SCHEMA ptrack")
