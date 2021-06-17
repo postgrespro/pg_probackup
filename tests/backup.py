@@ -2106,20 +2106,14 @@ class BackupTest(ProbackupTest, unittest.TestCase):
             )
 
         if self.ptrack:
-                fnames = [
-                    'ptrack.ptrack_get_pagemapset(pg_lsn)',
-                    'ptrack.ptrack_init_lsn()'
-                ]
+            node.safe_psql(
+                 "backupdb",
+                 "GRANT USAGE ON SCHEMA ptrack TO backup")
 
-                node.safe_psql(
-                     "backupdb",
-                     "GRANT USAGE ON SCHEMA ptrack TO backup")
-
-                for fname in fnames:
-                    node.safe_psql(
-                        "backupdb",
-                        "GRANT EXECUTE ON FUNCTION {0} "
-                        "TO backup".format(fname))
+            node.safe_psql(
+                "backupdb",
+                "GRANT EXECUTE ON FUNCTION ptrack.ptrack_get_pagemapset(pg_lsn) TO backup; "
+                "GRANT EXECUTE ON FUNCTION 'ptrack.ptrack_init_lsn()' TO backup; ")
 
         if ProbackupTest.enterprise:
             node.safe_psql(
