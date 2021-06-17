@@ -356,7 +356,7 @@ prepare_page(ConnectionArgs *conn_arg,
 	}
 
 	/*
-	 * If page is not valid after 100 attempts to read it
+	 * If page is not valid after PAGE_READ_ATTEMPTS attempts to read it
 	 * throw an error.
 	 */
 	if (!page_is_valid)
