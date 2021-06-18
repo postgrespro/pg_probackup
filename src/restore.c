@@ -2233,7 +2233,7 @@ check_incremental_compatibility(const char *pgdata, uint64 system_identifier,
 	bool    postmaster_is_up = false;
 	bool    backup_label_exists = false;
 	pid_t   pid;
-	char    backup_label[MAXPGPATH];
+	char    filename[MAXPGPATH];
 
 	/* check postmaster pid */
 	pid = fio_check_postmaster(pgdata, FIO_DB_HOST);
@@ -2268,7 +2268,12 @@ check_incremental_compatibility(const char *pgdata, uint64 system_identifier,
 	 */
 	elog(INFO, "Trying to read pg_control file in destination direstory");
 
-	system_id_pgdata = get_system_identifier(pgdata);
+	/* [Issue #313] check for previous failed incremental restore */
+	join_path_components(filename, instance_config.pgdata, XLOG_CONTROL_BAK_FILE);
+	if (fio_access(filename, F_OK, FIO_DB_HOST) == 0)
+		system_id_pgdata = get_system_identifier(pgdata, XLOG_CONTROL_BAK_FILE, FIO_DB_HOST);
+	else
+		system_id_pgdata = get_system_identifier(pgdata, XLOG_CONTROL_FILE, FIO_DB_HOST);
 
 	if (system_id_pgdata == instance_config.system_identifier)
 		system_id_match = true;
@@ -2283,8 +2288,8 @@ check_incremental_compatibility(const char *pgdata, uint64 system_identifier,
 	 */
 	if (incremental_mode == INCR_LSN)
 	{
-		join_path_components(backup_label, pgdata, "backup_label");
-		if (fio_access(backup_label, F_OK, FIO_DB_HOST) == 0)
+		join_path_components(filename, pgdata, PG_BACKUP_LABEL_FILE);
+		if (fio_access(filename, F_OK, FIO_DB_HOST) == 0)
 		{
 			elog(WARNING, "Destination directory contains \"backup_control\" file. "
 				"This does NOT mean that you should delete this file and retry, only that "

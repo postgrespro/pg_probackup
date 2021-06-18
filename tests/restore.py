@@ -3880,7 +3880,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         node.cleanup()
 
         count = 0
-        filelist =  self.get_backup_filelist(backup_dir, 'node', backup_id)
+        filelist = self.get_backup_filelist(backup_dir, 'node', backup_id)
         for file in filelist:
             # count only nondata files
             if int(filelist[file]['is_datafile']) == 0 and int(filelist[file]['size']) > 0:
