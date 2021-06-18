@@ -351,15 +351,18 @@ get_pgcontrol_checksum(const char *pgdata_path)
 	return ControlFile.crc;
 }
 
+/*
+ * you can use XLOG_CONTROL_FILE or XLOG_CONTROL_BAK_FILE for value of control_file_name parameter
+ */
 void
-get_redo(const char *pgdata_path, RedoParams *redo)
+get_redo(const char *pgdata_path, const char *pg_control_filename, RedoParams *redo)
 {
 	ControlFileData ControlFile;
 	char	   *buffer;
 	size_t		size;
 
 	/* First fetch file... */
-	buffer = slurpFile(pgdata_path, XLOG_CONTROL_FILE, &size, false, FIO_DB_HOST);
+	buffer = slurpFile(pgdata_path, pg_control_filename, &size, false, FIO_DB_HOST);
 
 	digestControlFile(&ControlFile, buffer, size);
 	pg_free(buffer);

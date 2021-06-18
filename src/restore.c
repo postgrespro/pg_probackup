@@ -489,7 +489,20 @@ do_restore_or_validate(InstanceState *instanceState, time_t target_backup_id, pg
 	{
 		RedoParams redo;
 		parray	  *timelines = NULL;
-		get_redo(instance_config.pgdata, &redo);
+
+		/* [Issue #313] check for previous failed incremental restore */
+		{
+			char    filename[MAXPGPATH];
+
+			join_path_components(filename, instance_config.pgdata, XLOG_CONTROL_BAK_FILE);
+			if (fio_access(filename, F_OK, FIO_DB_HOST) == 0)
+			{
+				elog(WARNING, "\"%s\" found, using incremental restore parameters from it", filename);
+				get_redo(instance_config.pgdata, XLOG_CONTROL_BAK_FILE, &redo);
+			}
+			else
+				get_redo(instance_config.pgdata, XLOG_CONTROL_FILE, &redo);
+		}
 
 		if (redo.checksum_version == 0)
 			elog(ERROR, "Incremental restore in 'lsn' mode require "
@@ -714,6 +727,7 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 	parray		*external_dirs = NULL;
 	pgFile	*dest_pg_control_file = NULL;
 	char	dest_pg_control_fullpath[MAXPGPATH];
+	char	dest_pg_control_bak_fullpath[MAXPGPATH];
 	/* arrays with meta info for multi threaded backup */
 	pthread_t  *threads;
 	restore_files_arg *threads_args;
@@ -794,12 +808,7 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 	 * unless we are running incremental-lsn restore, then bitmap is mandatory.
 	 */
 	if (use_bitmap && parray_num(parent_chain) == 1)
-	{
-		if (params->incremental_mode == INCR_NONE)
-			use_bitmap = false;
-		else
-			use_bitmap = true;
-	}
+		use_bitmap = params->incremental_mode != INCR_NONE;
 
 	/*
 	 * Restore dest_backup internal directories.
@@ -917,6 +926,11 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 				pg_strcasecmp(file->name, RELMAPPER_FILENAME) == 0)
 				redundant = true;
 
+			/* global/pg_control.pbk.bak are always keeped, because it's needed for restart failed incremental restore */
+			if (file->external_dir_num == 0 &&
+				pg_strcasecmp(file->rel_path, XLOG_CONTROL_BAK_FILE) == 0)
+				redundant = false;
+
 			/* do not delete the useful internal directories */
 			if (S_ISDIR(file->mode) && !redundant)
 				continue;
@@ -988,13 +1002,16 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 			elog(ERROR, "File \"%s\" not found in backup %s", XLOG_CONTROL_FILE, base36enc(dest_backup->start_time));
 		dest_pg_control_file = parray_remove(dest_files, control_file_elem_index);
 
-		join_path_components(dest_pg_control_fullpath, pgdata_path, dest_pg_control_file->rel_path);
-		/* remove dest control file before restoring */
-		if (params->incremental_mode != INCR_NONE)
-			fio_unlink(dest_pg_control_fullpath, FIO_DB_HOST);
-
-		// TODO: maybe we should rename "pg_control" into something like "pg_control.pbk" to
-		// keep the ability to rerun failed incremental restore ?
+		join_path_components(dest_pg_control_fullpath, pgdata_path, XLOG_CONTROL_FILE);
+		join_path_components(dest_pg_control_bak_fullpath, pgdata_path, XLOG_CONTROL_BAK_FILE);
+		/*
+		 * rename (if it exist) dest control file before restoring
+		 * if it doesn't exist, that mean, that we already restoring in a previously failed
+		 * pgdata, where XLOG_CONTROL_BAK_FILE exist
+		 */
+		if (params->incremental_mode != INCR_NONE
+			&& fio_access(dest_pg_control_fullpath, F_OK, FIO_DB_HOST) == 0)
+			fio_rename(dest_pg_control_fullpath, dest_pg_control_bak_fullpath, FIO_DB_HOST);
 	}
 
 	elog(INFO, "Start restoring backup files. PGDATA size: %s", pretty_dest_bytes);
@@ -1042,7 +1059,8 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 	{
 		total_bytes += restore_file(dest_pg_control_file, dest_pg_control_fullpath, false, NULL,
 			dest_backup, parent_chain, use_bitmap, params->incremental_mode, params->shift_lsn);
-		fio_disconnect();
+		if (params->incremental_mode != INCR_NONE)
+			fio_unlink(dest_pg_control_bak_fullpath, FIO_DB_HOST);
 	}
 
 	time(&end_time);
