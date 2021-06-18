@@ -3299,7 +3299,9 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             # because PUBLIC
             node.safe_psql(
                 "backupdb",
-                "CREATE EXTENSION ptrack WITH SCHEMA pg_catalog")
+                "CREATE SCHEMA ptrack; "
+                "GRANT USAGE ON SCHEMA ptrack TO backup; "
+                "CREATE EXTENSION ptrack WITH SCHEMA ptrack")
 
         if ProbackupTest.enterprise:
             node.safe_psql(
