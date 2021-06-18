@@ -36,10 +36,10 @@ git clone https://github.com/postgres/postgres.git -b $PG_BRANCH --depth=1
 echo "############### Compiling Postgres:"
 cd postgres # Go to postgres dir
 ./configure --prefix=$PGHOME --enable-debug --enable-cassert --enable-depend --enable-tap-tests
-#make -s -j$(nproc) install
-make -s -j$(nproc) -C 'src/common' install
-make -s -j$(nproc) -C 'src/port' install
-make -s -j$(nproc) -C 'src/interfaces' install
+make -s -j$(nproc) install
+#make -s -j$(nproc) -C 'src/common' install
+#make -s -j$(nproc) -C 'src/port' install
+#make -s -j$(nproc) -C 'src/interfaces' install
 make -s -j$(nproc) -C contrib/ install
 
 # Override default Postgres instance
