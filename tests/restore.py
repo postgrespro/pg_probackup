@@ -512,10 +512,9 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.set_archiving(backup_dir, 'node', node)
         node.slow_start()
 
-        if node.major_version >= 12:
-            node.safe_psql(
-                "postgres",
-                "CREATE EXTENSION ptrack")
+        node.safe_psql(
+            "postgres",
+            "CREATE EXTENSION ptrack")
 
         node.pgbench_init(scale=2)
 
@@ -567,10 +566,9 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.set_archiving(backup_dir, 'node', node)
         node.slow_start()
 
-        if node.major_version >= 12:
-            node.safe_psql(
-                "postgres",
-                "CREATE EXTENSION ptrack")
+        node.safe_psql(
+            "postgres",
+            "CREATE EXTENSION ptrack")
 
         node.pgbench_init(scale=2)
 
@@ -630,10 +628,9 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.set_archiving(backup_dir, 'node', node)
         node.slow_start()
 
-        if node.major_version >= 12:
-            node.safe_psql(
-                "postgres",
-                "CREATE EXTENSION ptrack")
+        node.safe_psql(
+            "postgres",
+            "CREATE EXTENSION ptrack")
 
         node.pgbench_init(scale=2)
 
@@ -689,10 +686,9 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.set_archiving(backup_dir, 'node', node)
         node.slow_start()
 
-        if node.major_version >= 12:
-            node.safe_psql(
-                "postgres",
-                "CREATE EXTENSION ptrack")
+        node.safe_psql(
+            "postgres",
+            "CREATE EXTENSION ptrack")
 
         node.pgbench_init(scale=2)
 
@@ -759,10 +755,9 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.set_archiving(backup_dir, 'node', node)
         node.slow_start()
 
-        if node.major_version >= 12:
-            node.safe_psql(
-                "postgres",
-                "CREATE EXTENSION ptrack")
+        node.safe_psql(
+            "postgres",
+            "CREATE EXTENSION ptrack")
 
         # wal_segment_size = self.guc_wal_segment_size(node)
         node.pgbench_init(scale=2)

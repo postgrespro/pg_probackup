@@ -35,10 +35,9 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
 
         self.node.slow_start()
 
-        if self.node.major_version >= 12:
-            self.node.safe_psql(
-                "postgres",
-                "CREATE EXTENSION ptrack")
+        self.node.safe_psql(
+            "postgres",
+            "CREATE EXTENSION ptrack")
 
         self.create_tblspace_in_node(self.node, tblspace_name, cfs=True)
 

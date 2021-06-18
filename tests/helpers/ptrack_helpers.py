@@ -619,9 +619,6 @@ class ProbackupTest(object):
         return ptrack_bits_for_fork
 
     def check_ptrack_map_sanity(self, node, idx_ptrack):
-        if node.major_version >= 12:
-            return
-
         success = True
         for i in idx_ptrack:
             # get new size of heap and indexes. size calculated in pages
