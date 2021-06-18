@@ -811,10 +811,9 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         self.set_archiving(backup_dir, 'node', node)
         node.slow_start()
 
-        if node.major_version >= 12:
-            node.safe_psql(
-                "postgres",
-                "CREATE EXTENSION ptrack")
+        node.safe_psql(
+            "postgres",
+            "CREATE EXTENSION ptrack")
 
         self.create_tblspace_in_node(node, 'somedata')
 
