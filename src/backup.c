@@ -725,7 +725,7 @@ pgdata_basic_setup(ConnectionOptions conn_opt, PGNodeInfo *nodeInfo)
 		elog(WARNING, "Current PostgreSQL role is superuser. "
 						"It is not recommended to run backup or checkdb as superuser.");
 
-	StrNCpy(current.server_version, nodeInfo->server_version_str,
+	strlcpy(current.server_version, nodeInfo->server_version_str,
 			sizeof(current.server_version));
 
 	return cur_conn;
@@ -761,7 +761,7 @@ do_backup(pgSetBackupParams *set_backup_params,
 	current.status = BACKUP_STATUS_RUNNING;
 	current.start_time = current.backup_id;
 
-	StrNCpy(current.program_version, PROGRAM_VERSION,
+	strlcpy(current.program_version, PROGRAM_VERSION,
 			sizeof(current.program_version));
 
 	current.compress_alg = instance_config.compress_alg;

@@ -552,7 +552,7 @@ show_instance_plain(const char *instance_name, parray *backup_list, bool show_na
 			time2iso(row->recovery_time, lengthof(row->recovery_time),
 					 backup->recovery_time, false);
 		else
-			StrNCpy(row->recovery_time, "----", sizeof(row->recovery_time));
+			strlcpy(row->recovery_time, "----", sizeof(row->recovery_time));
 		widths[cur] = Max(widths[cur], strlen(row->recovery_time));
 		cur++;
 
@@ -587,7 +587,7 @@ show_instance_plain(const char *instance_name, parray *backup_list, bool show_na
 			pretty_time_interval(difftime(backup->end_time, backup->start_time),
 							row->duration, lengthof(row->duration));
 		else
-			StrNCpy(row->duration, "----", sizeof(row->duration));
+			strlcpy(row->duration, "----", sizeof(row->duration));
 		widths[cur] = Max(widths[cur], strlen(row->duration));
 		cur++;
 
