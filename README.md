@@ -6,7 +6,7 @@
 `pg_probackup` is a utility to manage backup and recovery of PostgreSQL database clusters. It is designed to perform periodic backups of the PostgreSQL instance that enable you to restore the server in case of a failure.
 
 The utility is compatible with:
-* PostgreSQL 9.5, 9.6, 10, 11, 12, 13;
+* PostgreSQL 9.5, 9.6, 10, 11, 12, 13, 14;
 
 As compared to other backup solutions, `pg_probackup` offers the following benefits that can help you implement different backup strategies and deal with large amounts of data:
 * Incremental backup: page-level incremental backup allows you to save disk space, speed up backup and restore. With three different incremental modes, you can plan the backup strategy in accordance with your data flow.
@@ -41,9 +41,9 @@ Regardless of the chosen backup type, all backups taken with `pg_probackup` supp
 ## ptrack support
 
 `PTRACK` backup support provided via following options:
-* vanilla PostgreSQL 12,13 with [ptrack extension](https://github.com/postgrespro/ptrack)
-* Postgres Pro Standard 9.6, 10, 11, 12
-* Postgres Pro Enterprise 9.6, 10, 11, 12
+* vanilla PostgreSQL 11, 12, 13, 14 with [ptrack extension](https://github.com/postgrespro/ptrack)
+* Postgres Pro Standard 9.6, 10, 11, 12, 13
+* Postgres Pro Enterprise 9.6, 10, 11, 12, 13
 
 ## Limitations
 
