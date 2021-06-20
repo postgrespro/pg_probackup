@@ -736,7 +736,7 @@ merge_chain(InstanceState *instanceState,
 	 * We cannot set backup status to OK just yet,
 	 * because it still has old start_time.
 	 */
-	StrNCpy(full_backup->program_version, PROGRAM_VERSION,
+	strlcpy(full_backup->program_version, PROGRAM_VERSION,
 			sizeof(full_backup->program_version));
 	full_backup->parent_backup = INVALID_BACKUP_ID;
 	full_backup->start_lsn = dest_backup->start_lsn;

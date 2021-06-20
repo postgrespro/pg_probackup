@@ -16,6 +16,10 @@
 #include "libpq/pqsignal.h"
 #include "pqexpbuffer.h"
 
+#if PG_VERSION_NUM >= 140000
+#include "common/string.h"
+#endif
+
 #include <time.h>
 
 #include "pgut.h"
@@ -75,7 +79,16 @@ prompt_for_password(const char *username)
 		password = NULL;
 	}
 
-#if PG_VERSION_NUM >= 100000
+#if PG_VERSION_NUM >= 140000
+	if (username == NULL)
+		password = simple_prompt("Password: ", false);
+	else
+	{
+		char	message[256];
+		snprintf(message, lengthof(message), "Password for user %s: ", username);
+		password = simple_prompt(message , false);
+	}
+#elif PG_VERSION_NUM >= 100000
 	password = (char *) pgut_malloc(sizeof(char) * 100 + 1);
 	if (username == NULL)
 		simple_prompt("Password: ", password, 100, false);

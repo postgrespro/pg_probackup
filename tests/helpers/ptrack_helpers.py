@@ -139,6 +139,10 @@ def slow_start(self, replica=False):
         except testgres.QueryException as e:
             if 'database system is starting up' in e.message:
                 pass
+            elif 'FATAL:  the database system is not accepting connections' in e.message:
+                pass
+            elif replica and 'Hot standby mode is disabled' in e.message:
+                raise e
             else:
                 raise e
 

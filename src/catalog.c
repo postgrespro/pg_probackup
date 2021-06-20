@@ -2761,14 +2761,14 @@ readBackupControlFile(const char *path)
 
 	if (program_version)
 	{
-		StrNCpy(backup->program_version, program_version,
+		strlcpy(backup->program_version, program_version,
 				sizeof(backup->program_version));
 		pfree(program_version);
 	}
 
 	if (server_version)
 	{
-		StrNCpy(backup->server_version, server_version,
+		strlcpy(backup->server_version, server_version,
 				sizeof(backup->server_version));
 		pfree(server_version);
 	}
