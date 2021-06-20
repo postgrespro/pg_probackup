@@ -684,26 +684,16 @@ dir_check_file(pgFile *file, bool backup_logs)
 		 */
 		if (sscanf_res == 2 && strcmp(tmp_rel_path, TABLESPACE_VERSION_DIRECTORY) != 0)
 			return CHECK_FALSE;
-
-		if (sscanf_res == 3 && S_ISDIR(file->mode) &&
-			strcmp(tmp_rel_path, TABLESPACE_VERSION_DIRECTORY) == 0)
-			file->is_database = true;
 	}
 	else if (path_is_prefix_of_path("global", file->rel_path))
 	{
 		file->tblspcOid = GLOBALTABLESPACE_OID;
-
-		if (S_ISDIR(file->mode) && strcmp(file->name, "global") == 0)
-			file->is_database = true;
 	}
 	else if (path_is_prefix_of_path("base", file->rel_path))
 	{
 		file->tblspcOid = DEFAULTTABLESPACE_OID;
 
 		sscanf(file->rel_path, "base/%u/", &(file->dbOid));
-
-		if (S_ISDIR(file->mode) && strcmp(file->name, "base") != 0)
-			file->is_database = true;
 	}
 
 	/* Do not backup ptrack_init files */

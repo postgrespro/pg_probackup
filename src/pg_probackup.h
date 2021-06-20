@@ -265,7 +265,6 @@ typedef struct pgFile
 	int		segno;			/* Segment number for ptrack */
 	int		n_blocks;		/* number of blocks in the data file in data directory */
 	bool	is_cfs;			/* Flag to distinguish files compressed by CFS*/
-	bool	is_database;	/* Flag used strictly by ptrack 1.x backup */
 	int		external_dir_num;	/* Number of external directory. 0 if not external */
 	bool	exists_in_prev;		/* Mark files, both data and regular, that exists in previous backup */
 	CompressAlg		compress_alg;		/* compression algorithm applied to the file */
@@ -590,7 +589,6 @@ typedef struct
 	parray	   *external_dirs;
 	XLogRecPtr	prev_start_lsn;
 
-	ConnectionArgs conn_arg;
 	int			thread_num;
 	HeaderMap   *hdr_map;
 
@@ -843,12 +841,9 @@ extern const char *deparse_backup_mode(BackupMode mode);
 extern void process_block_change(ForkNumber forknum, RelFileNode rnode,
 								 BlockNumber blkno);
 
-extern char *pg_ptrack_get_block(ConnectionArgs *arguments,
-								 Oid dbOid, Oid tblsOid, Oid relOid,
-								 BlockNumber blknum, size_t *result_size,
-								 int ptrack_version_num, const char *ptrack_schema);
 /* in catchup.c */
 extern int do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, bool sync_dest_files);
+
 /* in restore.c */
 extern int do_restore_or_validate(InstanceState *instanceState,
 					  time_t target_backup_id,
@@ -1074,17 +1069,17 @@ extern void pfilearray_clear_locks(parray *file_list);
 extern bool check_data_file(ConnectionArgs *arguments, pgFile *file,
 							const char *from_fullpath, uint32 checksum_version);
 
-extern void backup_data_file(ConnectionArgs* conn_arg, pgFile *file,
-								 const char *from_fullpath, const char *to_fullpath,
-								 XLogRecPtr prev_backup_start_lsn, BackupMode backup_mode,
-								 CompressAlg calg, int clevel, uint32 checksum_version,
-								 int ptrack_version_num, const char *ptrack_schema,
-								 HeaderMap *hdr_map, bool missing_ok);
+
 extern void catchup_data_file(pgFile *file, const char *from_fullpath, const char *to_fullpath,
 								 XLogRecPtr prev_backup_start_lsn, BackupMode backup_mode,
 								 CompressAlg calg, int clevel, uint32 checksum_version,
 								 int ptrack_version_num, const char *ptrack_schema,
 								 bool is_merge, size_t prev_size);
+extern void backup_data_file(pgFile *file, const char *from_fullpath, const char *to_fullpath,
+							 XLogRecPtr prev_backup_start_lsn, BackupMode backup_mode,
+							 CompressAlg calg, int clevel, uint32 checksum_version,
+							 int ptrack_version_num, const char *ptrack_schema,
+							 HeaderMap *hdr_map, bool missing_ok);
 extern void backup_non_data_file(pgFile *file, pgFile *prev_file,
 								 const char *from_fullpath, const char *to_fullpath,
 								 BackupMode backup_mode, time_t parent_backup_time,
@@ -1185,20 +1180,13 @@ extern void check_system_identifiers(PGconn *conn, const char *pgdata);
 extern void parse_filelist_filenames(parray *files, const char *root);
 
 /* in ptrack.c */
-extern void make_pagemap_from_ptrack_1(parray* files, PGconn* backup_conn);
 extern void make_pagemap_from_ptrack_2(parray* files, PGconn* backup_conn,
 									   const char *ptrack_schema,
 									   int ptrack_version_num,
 									   XLogRecPtr lsn);
-extern void pg_ptrack_clear(PGconn *backup_conn, int ptrack_version_num);
 extern void get_ptrack_version(PGconn *backup_conn, PGNodeInfo *nodeInfo);
 extern bool pg_is_ptrack_enabled(PGconn *backup_conn, int ptrack_version_num);
-extern bool pg_ptrack_get_and_clear_db(Oid dbOid, Oid tblspcOid, PGconn *backup_conn);
-extern char *pg_ptrack_get_and_clear(Oid tablespace_oid,
-									 Oid db_oid,
-									 Oid rel_oid,
-									 size_t *result_size,
-									 PGconn *backup_conn);
+
 extern XLogRecPtr get_last_ptrack_lsn(PGconn *backup_conn, PGNodeInfo *nodeInfo);
 extern parray * pg_ptrack_get_pagemapset(PGconn *backup_conn, const char *ptrack_schema,
 										 int ptrack_version_num, XLogRecPtr lsn);
@@ -1206,7 +1194,7 @@ extern parray * pg_ptrack_get_pagemapset(PGconn *backup_conn, const char *ptrack
 /* open local file to writing */
 extern FILE* open_local_file_rw(const char *to_fullpath, char **out_buf, uint32 buf_size);
 
-extern int send_pages(ConnectionArgs* conn_arg, const char *to_fullpath, const char *from_fullpath,
+extern int send_pages(const char *to_fullpath, const char *from_fullpath,
 					  pgFile *file, XLogRecPtr prev_backup_start_lsn, CompressAlg calg, int clevel,
 					  uint32 checksum_version, bool use_pagemap, BackupPageHeader2 **headers,
 					  BackupMode backup_mode, int ptrack_version_num, const char *ptrack_schema);

@@ -139,6 +139,10 @@ def slow_start(self, replica=False):
         except testgres.QueryException as e:
             if 'database system is starting up' in e.message:
                 pass
+            elif 'FATAL:  the database system is not accepting connections' in e.message:
+                pass
+            elif replica and 'Hot standby mode is disabled' in e.message:
+                raise e
             else:
                 raise e
 
@@ -312,6 +316,12 @@ class ProbackupTest(object):
 
         os.environ["PGAPPNAME"] = "pg_probackup"
 
+        if self.ptrack:
+            self.assertGreaterEqual(
+                self.pg_config_version,
+                self.version_to_num('11.0'),
+                "ptrack testing require PostgreSQL >= 11")
+
     @property
     def pg_config_version(self):
         return self.version_to_num(
@@ -388,11 +398,8 @@ class ProbackupTest(object):
             options['max_wal_senders'] = 10
 
         if ptrack_enable:
-            if node.major_version >= 11:
-                options['ptrack.map_size'] = '128'
-                options['shared_preload_libraries'] = 'ptrack'
-            else:
-                options['ptrack_enable'] = 'on'
+            options['ptrack.map_size'] = '128'
+            options['shared_preload_libraries'] = 'ptrack'
 
         if node.major_version >= 13:
             options['wal_keep_size'] = '200MB'
@@ -622,9 +629,6 @@ class ProbackupTest(object):
         return ptrack_bits_for_fork
 
     def check_ptrack_map_sanity(self, node, idx_ptrack):
-        if node.major_version >= 12:
-            return
-
         success = True
         for i in idx_ptrack:
             # get new size of heap and indexes. size calculated in pages
@@ -2030,6 +2034,9 @@ class GDBobj(ProbackupTest):
             if line.startswith('*stopped,reason="breakpoint-hit"'):
                 return True
         return False
+
+    def quit(self):
+        self.proc.terminate()
 
     # use for breakpoint, run, continue
     def _execute(self, cmd, running=True):

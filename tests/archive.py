@@ -900,6 +900,9 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             set replica with archiving,
             make sure that archiving on both node is working.
         """
+        if self.pg_config_version < self.version_to_num('9.6.0'):
+            return unittest.skip('You need PostgreSQL >= 9.6 for this test')
+
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         master = self.make_simple_node(
