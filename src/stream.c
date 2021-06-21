@@ -70,7 +70,6 @@ static void add_walsegment_to_filelist(parray *filelist, uint32 timeline,
                                        uint32 xlog_seg_size);
 static void add_history_file_to_filelist(parray *filelist, uint32 timeline,
 										 char *basedir);
-static parray* parse_tli_history_buffer(char *history, TimeLineID tli);
 
 /*
  * Run IDENTIFY_SYSTEM through a given connection and
@@ -173,7 +172,7 @@ StreamLog(void *arg)
 	 */
 	stream_arg->startpos -= stream_arg->startpos % instance_config.xlog_seg_size;
 
-    xlog_files_list = parray_new();
+	xlog_files_list = parray_new();
 
 	/* Initialize timeout */
 	stream_stop_begin = 0;
@@ -308,14 +307,14 @@ stop_streaming(XLogRecPtr xlogpos, uint32 timeline, bool segment_finished)
 
 	/* we assume that we get called once at the end of each segment */
 	if (segment_finished)
-    {
-        elog(VERBOSE, _("finished segment at %X/%X (timeline %u)"),
-             (uint32) (xlogpos >> 32), (uint32) xlogpos, timeline);
+	{
+		elog(VERBOSE, _("finished segment at %X/%X (timeline %u)"),
+		     (uint32) (xlogpos >> 32), (uint32) xlogpos, timeline);
 
-        add_walsegment_to_filelist(xlog_files_list, timeline, xlogpos,
-                                   (char*) stream_thread_arg.basedir,
-                                   instance_config.xlog_seg_size);
-    }
+		add_walsegment_to_filelist(xlog_files_list, timeline, xlogpos,
+		                           (char*) stream_thread_arg.basedir,
+		                           instance_config.xlog_seg_size);
+	}
 
 	/*
 	 * Note that we report the previous, not current, position here. After a
@@ -588,20 +587,25 @@ start_WAL_streaming(PGconn *backup_conn, char *stream_dst_path, ConnectionOption
 	/* Set error exit code as default */
 	stream_thread_arg.ret = 1;
 	/* we must use startpos as start_lsn from start_backup */
-	stream_thread_arg.startpos = current.start_lsn;
-	stream_thread_arg.starttli = current.tli;
+	stream_thread_arg.startpos = startpos;
+	stream_thread_arg.starttli = starttli;
 
 	thread_interrupted = false;
 	pthread_create(&stream_thread, NULL, StreamLog, &stream_thread_arg);
 }
 
-/* Wait for the completion of stream */
+/*
+ * Wait for the completion of stream
+ * append list of streamed xlog files
+ * into backup_files_list (if it is not NULL)
+ */
 int
 wait_WAL_streaming_end(parray *backup_files_list)
 {
     pthread_join(stream_thread, NULL);
 
-    parray_concat(backup_files_list, xlog_files_list);
+    if(backup_files_list != NULL)
+        parray_concat(backup_files_list, xlog_files_list);
     parray_free(xlog_files_list);
     return stream_thread_arg.ret;
 }

@@ -485,6 +485,13 @@ pgFileCompareSize(const void *f1, const void *f2)
 		return 0;
 }
 
+/* Compare two pgFile with their size in descending order */
+int
+pgFileCompareSizeDesc(const void *f1, const void *f2)
+{
+	return -1 * pgFileCompareSize(f1, f2);
+}
+
 static int
 pgCompareString(const void *str1, const void *str2)
 {
@@ -887,7 +894,7 @@ dir_list_file_internal(parray *files, pgFile *parent, const char *parent_dir,
  *
  * Copy of function get_tablespace_mapping() from pg_basebackup.c.
  */
-static const char *
+const char *
 get_tablespace_mapping(const char *dir)
 {
 	TablespaceListCell *cell;

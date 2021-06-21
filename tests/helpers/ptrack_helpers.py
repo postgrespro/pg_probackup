@@ -345,14 +345,9 @@ class ProbackupTest(object):
 #                print('PGPROBACKUP_SSH_USER is not set')
 #                exit(1)
 
-    def make_simple_node(
+    def make_empty_node(
             self,
-            base_dir=None,
-            set_replication=False,
-            ptrack_enable=False,
-            initdb_params=[],
-            pg_options={}):
-
+            base_dir=None):
         real_base_dir = os.path.join(self.tmp_path, base_dir)
         shutil.rmtree(real_base_dir, ignore_errors=True)
         os.makedirs(real_base_dir)
@@ -361,6 +356,17 @@ class ProbackupTest(object):
         # bound method slow_start() to 'node' class instance
         node.slow_start = slow_start.__get__(node)
         node.should_rm_dirs = True
+        return node
+
+    def make_simple_node(
+            self,
+            base_dir=None,
+            set_replication=False,
+            ptrack_enable=False,
+            initdb_params=[],
+            pg_options={}):
+
+        node = self.make_empty_node(base_dir)
         node.init(
            initdb_params=initdb_params, allow_streaming=set_replication)
 
@@ -1035,6 +1041,28 @@ class ProbackupTest(object):
             cmd_list += ['--no-sync']
 
         return self.run_pb(cmd_list + options, gdb=gdb, old_binary=old_binary)
+
+    def catchup_node(
+            self,
+            backup_mode, source_pgdata, destination_node,
+            options = []
+            ):
+
+        cmd_list = [
+            'catchup',
+            '--backup-mode={0}'.format(backup_mode),
+            '--source-pgdata={0}'.format(source_pgdata),
+            '--destination-pgdata={0}'.format(destination_node.data_dir)
+        ]
+        if self.remote:
+            cmd_list += ['--remote-proto=ssh', '--remote-host=localhost']
+        if self.verbose:
+            cmd_list += [
+                '--log-level-file=VERBOSE',
+                '--log-directory={0}'.format(destination_node.logs_dir)
+            ]
+
+        return self.run_pb(cmd_list + options)
 
     def show_pb(
             self, backup_dir, instance=None, backup_id=None,
@@ -1736,10 +1764,10 @@ class ProbackupTest(object):
                 ):
                     fail = True
                     error_message += '\nFile permissions mismatch:\n'
-                    error_message += ' File_old: {0} Permissions: {1}\n'.format(
+                    error_message += ' File_old: {0} Permissions: {1:o}\n'.format(
                         os.path.join(original_pgdata['pgdata'], file),
                         original_pgdata['files'][file]['mode'])
-                    error_message += ' File_new: {0} Permissions: {1}\n'.format(
+                    error_message += ' File_new: {0} Permissions: {1:o}\n'.format(
                         os.path.join(restored_pgdata['pgdata'], file),
                         restored_pgdata['files'][file]['mode'])
 

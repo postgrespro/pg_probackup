@@ -94,7 +94,6 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 {
 	int			i;
 	char		external_prefix[MAXPGPATH]; /* Temp value. Used as template */
-	char		dst_backup_path[MAXPGPATH];
 	char		label[1024];
 	XLogRecPtr	prev_backup_start_lsn = InvalidXLogRecPtr;
 
@@ -137,7 +136,7 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 #if PG_VERSION_NUM >= 90600
 	current.tli = get_current_timeline(backup_conn);
 #else
-	current.tli = get_current_timeline_from_control(false);
+	current.tli = get_current_timeline_from_control(instance_config.pgdata, FIO_DB_HOST, false);
 #endif
 
 	/*
@@ -258,17 +257,19 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 	/* start stream replication */
 	if (current.stream)
 	{
-		join_path_components(dst_backup_path, current.database_dir, PG_XLOG_DIR);
-		fio_mkdir(dst_backup_path, DIR_PERMISSION, FIO_BACKUP_HOST);
+		char stream_xlog_path[MAXPGPATH];
 
-		start_WAL_streaming(backup_conn, dst_backup_path, &instance_config.conn_opt,
+		join_path_components(stream_xlog_path, current.database_dir, PG_XLOG_DIR);
+		fio_mkdir(stream_xlog_path, DIR_PERMISSION, FIO_BACKUP_HOST);
+
+		start_WAL_streaming(backup_conn, stream_xlog_path, &instance_config.conn_opt,
 							current.start_lsn, current.tli);
 
 		/* Make sure that WAL streaming is working
 		 * PAGE backup in stream mode is waited twice, first for
 		 * segment in WAL archive and then for streamed segment
 		 */
-		wait_wal_lsn(dst_backup_path, current.start_lsn, true, current.tli, false, true, ERROR, true);
+		wait_wal_lsn(stream_xlog_path, current.start_lsn, true, current.tli, false, true, ERROR, true);
 	}
 
 	/* initialize backup's file list */
@@ -315,23 +316,7 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 		elog(ERROR, "PGDATA is almost empty. Either it was concurrently deleted or "
 			"pg_probackup do not possess sufficient permissions to list PGDATA content");
 
-	/* Calculate pgdata_bytes */
-	for (i = 0; i < parray_num(backup_files_list); i++)
-	{
-		pgFile	   *file = (pgFile *) parray_get(backup_files_list, i);
-
-		if (file->external_dir_num != 0)
-			continue;
-
-		if (S_ISDIR(file->mode))
-		{
-			current.pgdata_bytes += 4096;
-			continue;
-		}
-
-		current.pgdata_bytes += file->size;
-	}
-
+	current.pgdata_bytes += calculate_datasize_of_filelist(backup_files_list);
 	pretty_size(current.pgdata_bytes, pretty_bytes, lengthof(pretty_bytes));
 	elog(INFO, "PGDATA size: %s", pretty_bytes);
 
@@ -697,7 +682,7 @@ pgdata_basic_setup(ConnectionOptions conn_opt, PGNodeInfo *nodeInfo)
 
 	if (nodeInfo->is_superuser)
 		elog(WARNING, "Current PostgreSQL role is superuser. "
-						"It is not recommended to run backup or checkdb as superuser.");
+						"It is not recommended to run pg_probackup under superuser.");
 
 	strlcpy(current.server_version, nodeInfo->server_version_str,
 			sizeof(current.server_version));
@@ -786,7 +771,7 @@ do_backup(InstanceState *instanceState, pgSetBackupParams *set_backup_params,
 	//	elog(WARNING, "ptrack_version_num %d", ptrack_version_num);
 
 	if (nodeInfo.ptrack_version_num > 0)
-		nodeInfo.is_ptrack_enable = pg_ptrack_enable(backup_conn, nodeInfo.ptrack_version_num);
+		nodeInfo.is_ptrack_enabled = pg_is_ptrack_enabled(backup_conn, nodeInfo.ptrack_version_num);
 
 	if (current.backup_mode == BACKUP_MODE_DIFF_PTRACK)
 	{
@@ -795,7 +780,7 @@ do_backup(InstanceState *instanceState, pgSetBackupParams *set_backup_params,
 			elog(ERROR, "This PostgreSQL instance does not support ptrack");
 		else
 		{
-			if (!nodeInfo.is_ptrack_enable)
+			if (!nodeInfo.is_ptrack_enabled)
 				elog(ERROR, "Ptrack is disabled");
 		}
 	}
@@ -953,12 +938,12 @@ check_server_version(PGconn *conn, PGNodeInfo *nodeInfo)
  * All system identifiers must be equal.
  */
 void
-check_system_identifiers(PGconn *conn, char *pgdata)
+check_system_identifiers(PGconn *conn, const char *pgdata)
 {
 	uint64		system_id_conn;
 	uint64		system_id_pgdata;
 
-	system_id_pgdata = get_system_identifier(pgdata);
+	system_id_pgdata = get_system_identifier(pgdata, FIO_DB_HOST);
 	system_id_conn = get_remote_system_identifier(conn);
 
 	/* for checkdb check only system_id_pgdata and system_id_conn */
@@ -1069,7 +1054,7 @@ pg_start_backup(const char *label, bool smooth, pgBackup *backup,
  * Switch to a new WAL segment. It should be called only for master.
  * For PG 9.5 it should be called only if pguser is superuser.
  */
-static void
+void
 pg_switch_wal(PGconn *conn)
 {
 	PGresult   *res;
@@ -2282,7 +2267,7 @@ process_block_change(ForkNumber forknum, RelFileNode rnode, BlockNumber blkno)
 
 }
 
-static void
+void
 check_external_for_tablespaces(parray *external_list, PGconn *backup_conn)
 {
 	PGresult   *res;
@@ -2345,4 +2330,37 @@ check_external_for_tablespaces(parray *external_list, PGconn *backup_conn)
 
 		}
 	}
+}
+
+/*
+ * Calculate pgdata_bytes
+ * accepts (parray *) of (pgFile *)
+ */
+int64
+calculate_datasize_of_filelist(parray *filelist)
+{
+	int64	bytes = 0;
+	int	i;
+
+	/* parray_num don't check for NULL */
+	if (filelist == NULL)
+		return 0;
+
+	for (i = 0; i < parray_num(filelist); i++)
+	{
+		pgFile	   *file = (pgFile *) parray_get(filelist, i);
+
+		if (file->external_dir_num != 0)
+			continue;
+
+		if (S_ISDIR(file->mode))
+		{
+			// TODO is a dir always 4K?
+			bytes += 4096;
+			continue;
+		}
+
+		bytes += file->size;
+	}
+	return bytes;
 }

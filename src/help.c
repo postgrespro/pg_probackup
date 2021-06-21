@@ -2,7 +2,7 @@
  *
  * help.c
  *
- * Copyright (c) 2017-2019, Postgres Professional
+ * Copyright (c) 2017-2021, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */
@@ -29,6 +29,7 @@ static void help_archive_get(void);
 static void help_checkdb(void);
 static void help_help(void);
 static void help_version(void);
+static void help_catchup(void);
 
 void
 help_print_version(void)
@@ -70,6 +71,7 @@ help_command(ProbackupSubcmd const subcmd)
 		&help_internal, // AGENT_CMD
 		&help_help,
 		&help_version,
+		&help_catchup,
 	};
 
 	Assert((int)subcmd < sizeof(help_functions) / sizeof(help_functions[0]));
@@ -241,6 +243,19 @@ help_pg_probackup(void)
 	printf(_("                 --wal-file-name=wal-file-name\n"));
 	printf(_("                 [-j num-threads] [--batch-size=batch_size]\n"));
 	printf(_("                 [--no-validate-wal]\n"));
+	printf(_("                 [--remote-proto] [--remote-host]\n"));
+	printf(_("                 [--remote-port] [--remote-path] [--remote-user]\n"));
+	printf(_("                 [--ssh-options]\n"));
+	printf(_("                 [--help]\n"));
+
+	printf(_("\n  %s catchup  -b catchup-mode\n"), PROGRAM_NAME);
+	printf(_("                 --source-pgdata=path_to_pgdata_on_remote_server\n"));
+	printf(_("                 --destination-pgdata=path_to_local_dir\n"));
+	printf(_("                 [--stream [-S slot-name]] [--temp-slot]\n"));
+	printf(_("                 [-j num-threads]\n"));
+	printf(_("                 [-T OLDDIR=NEWDIR]\n"));
+	printf(_("                 [-d dbname] [-h host] [-p port] [-U username]\n"));
+	printf(_("                 [-w --no-password] [-W --password]\n"));
 	printf(_("                 [--remote-proto] [--remote-host]\n"));
 	printf(_("                 [--remote-port] [--remote-path] [--remote-user]\n"));
 	printf(_("                 [--ssh-options]\n"));
@@ -1008,4 +1023,50 @@ help_version(void)
 {
 	printf(_("\n%s version\n"), PROGRAM_NAME);
 	printf(_("%s --version\n\n"), PROGRAM_NAME);
+}
+
+static void
+help_catchup(void)
+{
+	printf(_("\n%s catchup  -b catchup-mode\n"), PROGRAM_NAME);
+	printf(_("                 --source-pgdata=path_to_pgdata_on_remote_server\n"));
+	printf(_("                 --destination-pgdata=path_to_local_dir\n"));
+	printf(_("                 [--stream [-S slot-name]] [--temp-slot]\n"));
+	printf(_("                 [-j num-threads]\n"));
+	printf(_("                 [-T OLDDIR=NEWDIR]\n"));
+	printf(_("                 [-d dbname] [-h host] [-p port] [-U username]\n"));
+	printf(_("                 [-w --no-password] [-W --password]\n"));
+	printf(_("                 [--remote-proto] [--remote-host]\n"));
+	printf(_("                 [--remote-port] [--remote-path] [--remote-user]\n"));
+	printf(_("                 [--ssh-options]\n"));
+	printf(_("                 [--help]\n\n"));
+
+	printf(_("  -b, --backup-mode=catchup-mode   catchup mode=FULL|DELTA|PTRACK\n"));
+	printf(_("      --stream                     stream the transaction log (only supported mode)\n"));
+	printf(_("  -S, --slot=SLOTNAME              replication slot to use\n"));
+	printf(_("      --temp-slot                  use temporary replication slot\n"));
+
+	printf(_("  -j, --threads=NUM                number of parallel threads\n"));
+
+	printf(_("  -T, --tablespace-mapping=OLDDIR=NEWDIR\n"));
+	printf(_("                                   relocate the tablespace from directory OLDDIR to NEWDIR\n"));
+
+	printf(_("\n  Connection options:\n"));
+	printf(_("  -U, --pguser=USERNAME            user name to connect as (default: current local user)\n"));
+	printf(_("  -d, --pgdatabase=DBNAME          database to connect (default: username)\n"));
+	printf(_("  -h, --pghost=HOSTNAME            database server host or socket directory(default: 'local socket')\n"));
+	printf(_("  -p, --pgport=PORT                database server port (default: 5432)\n"));
+	printf(_("  -w, --no-password                never prompt for password\n"));
+	printf(_("  -W, --password                   force password prompt\n\n"));
+
+	printf(_("\n  Remote options:\n"));
+	printf(_("      --remote-proto=protocol      remote protocol to use\n"));
+	printf(_("                                   available options: 'ssh', 'none' (default: ssh)\n"));
+	printf(_("      --remote-host=hostname       remote host address or hostname\n"));
+	printf(_("      --remote-port=port           remote host port (default: 22)\n"));
+	printf(_("      --remote-path=path           path to directory with pg_probackup binary on remote host\n"));
+	printf(_("                                   (default: current binary path)\n"));
+	printf(_("      --remote-user=username       user name for ssh connection (default: current user)\n"));
+	printf(_("      --ssh-options=ssh_options    additional ssh options (default: none)\n"));
+	printf(_("                                   (example: --ssh-options='-c cipher_spec -F configfile')\n\n"));
 }

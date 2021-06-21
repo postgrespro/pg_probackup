@@ -110,6 +110,7 @@ static char const * const subcmd_names[] =
 	"agent",
 	"help",
 	"version",
+	"catchup",
 };
 
 ProbackupSubcmd

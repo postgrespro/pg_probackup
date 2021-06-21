@@ -67,8 +67,6 @@ static void restore_chain(pgBackup *dest_backup, parray *parent_chain,
 						  parray *dbOid_exclude_list, pgRestoreParams *params,
 						  const char *pgdata_path, bool no_sync, bool cleanup_pgdata,
 						  bool backup_has_tblspc);
-static DestDirIncrCompatibility check_incremental_compatibility(const char *pgdata, uint64 system_identifier,
-																IncrRestoreMode incremental_mode);
 
 /*
  * Iterate over backup list to find all ancestors of the broken parent_backup
@@ -293,7 +291,7 @@ do_restore_or_validate(InstanceState *instanceState, time_t target_backup_id, pg
 				if (!timelines)
 					elog(ERROR, "Failed to get history file for target timeline %i", rt->target_tli);
 
-				if (!satisfy_timeline(timelines, current_backup))
+				if (!satisfy_timeline(timelines, current_backup->tli, current_backup->stop_lsn))
 				{
 					if (target_backup_id != INVALID_BACKUP_ID)
 						elog(ERROR, "target backup %s does not satisfy target timeline",
@@ -487,7 +485,7 @@ do_restore_or_validate(InstanceState *instanceState, time_t target_backup_id, pg
 	{
 		RedoParams redo;
 		parray	  *timelines = NULL;
-		get_redo(instance_config.pgdata, &redo);
+		get_redo(instance_config.pgdata, FIO_DB_HOST, &redo);
 
 		if (redo.checksum_version == 0)
 			elog(ERROR, "Incremental restore in 'lsn' mode require "
@@ -1819,7 +1817,7 @@ satisfy_recovery_target(const pgBackup *backup, const pgRecoveryTarget *rt)
 
 /* TODO description */
 bool
-satisfy_timeline(const parray *timelines, const pgBackup *backup)
+satisfy_timeline(const parray *timelines, TimeLineID tli, XLogRecPtr lsn)
 {
 	int			i;
 
@@ -1828,9 +1826,9 @@ satisfy_timeline(const parray *timelines, const pgBackup *backup)
 		TimeLineHistoryEntry *timeline;
 
 		timeline = (TimeLineHistoryEntry *) parray_get(timelines, i);
-		if (backup->tli == timeline->tli &&
+		if (tli == timeline->tli &&
 			(XLogRecPtrIsInvalid(timeline->end) ||
-			 backup->stop_lsn <= timeline->end))
+			 lsn <= timeline->end))
 			return true;
 	}
 	return false;
@@ -2186,9 +2184,9 @@ check_incremental_compatibility(const char *pgdata, uint64 system_identifier,
 	 * data files content, because based on pg_control information we will
 	 * choose a backup suitable for lsn based incremental restore.
 	 */
-	elog(INFO, "Trying to read pg_control file in destination direstory");
+	elog(INFO, "Trying to read pg_control file in destination directory");
 
-	system_id_pgdata = get_system_identifier(pgdata);
+	system_id_pgdata = get_system_identifier(pgdata, FIO_DB_HOST);
 
 	if (system_id_pgdata == instance_config.system_identifier)
 		system_id_match = true;

@@ -88,6 +88,9 @@ bool         backup_logs = false;
 bool         smooth_checkpoint;
 char        *remote_agent;
 static char *backup_note = NULL;
+/* catchup options */
+static char *catchup_source_pgdata = NULL;
+static char *catchup_destination_pgdata = NULL;
 /* restore options */
 static char		   *target_time = NULL;
 static char		   *target_xid = NULL;
@@ -201,6 +204,9 @@ static ConfigOption cmd_options[] =
 	{ 'b', 184, "merge-expired",	&merge_expired,		SOURCE_CMD_STRICT },
 	{ 'b', 185, "dry-run",			&dry_run,			SOURCE_CMD_STRICT },
 	{ 's', 238, "note",				&backup_note,		SOURCE_CMD_STRICT },
+	/* catchup options */
+	{ 's', 239, "source-pgdata",		&catchup_source_pgdata,	SOURCE_CMD_STRICT },
+	{ 's', 240, "destination-pgdata",	&catchup_destination_pgdata,	SOURCE_CMD_STRICT },
 	/* restore options */
 	{ 's', 136, "recovery-target-time",	&target_time,	SOURCE_CMD_STRICT },
 	{ 's', 137, "recovery-target-xid",	&target_xid,	SOURCE_CMD_STRICT },
@@ -445,11 +451,12 @@ main(int argc, char *argv[])
 							catalogState->catalog_path, WAL_SUBDIR);
 	}
 
-	/* backup_path is required for all pg_probackup commands except help, version and checkdb */
+	/* backup_path is required for all pg_probackup commands except help, version, checkdb and catchup */
 	if (backup_path == NULL &&
 		backup_subcmd != CHECKDB_CMD &&
 		backup_subcmd != HELP_CMD &&
-		backup_subcmd != VERSION_CMD)
+		backup_subcmd != VERSION_CMD &&
+		backup_subcmd != CATCHUP_CMD)
 		elog(ERROR, "required parameter not specified: BACKUP_PATH (-B, --backup-path)");
 
 	/* ===== catalogState (END) ======*/
@@ -458,12 +465,12 @@ main(int argc, char *argv[])
 
 	/*
 	 * Option --instance is required for all commands except
-	 * init, show, checkdb and validate
+	 * init, show, checkdb, validate and catchup
 	 */
 	if (instance_name == NULL)
 	{
 		if (backup_subcmd != INIT_CMD && backup_subcmd != SHOW_CMD &&
-			backup_subcmd != VALIDATE_CMD && backup_subcmd != CHECKDB_CMD)
+			backup_subcmd != VALIDATE_CMD && backup_subcmd != CHECKDB_CMD && backup_subcmd != CATCHUP_CMD)
 			elog(ERROR, "required parameter not specified: --instance");
 	}
 	else
@@ -545,6 +552,10 @@ main(int argc, char *argv[])
 			setMyLocation(backup_subcmd);
 		}
 	}
+	else if (backup_subcmd == CATCHUP_CMD)
+	{
+		config_get_opt_env(instance_options);
+	}
 
 	/*
 	 * Disable logging into file for archive-push and archive-get.
@@ -585,6 +596,13 @@ main(int argc, char *argv[])
 		(!instance_config.pgdata || !instance_name))
 		elog(ERROR, "Cannot save checkdb logs to a file. "
 			"You must specify --log-directory option when running checkdb with "
+			"--log-level-file option enabled.");
+
+	if (backup_subcmd == CATCHUP_CMD &&
+		instance_config.logger.log_level_file != LOG_OFF &&
+		instance_config.logger.log_directory == NULL)
+		elog(ERROR, "Cannot save catchup logs to a file. "
+			"You must specify --log-directory option when running catchup with "
 			"--log-level-file option enabled.");
 
 	/* Initialize logger */
@@ -745,6 +763,25 @@ main(int argc, char *argv[])
 		}
 	}
 
+	/* checking required options */
+	if (backup_subcmd == CATCHUP_CMD)
+	{
+		if (catchup_source_pgdata == NULL)
+			elog(ERROR, "You must specify \"--source-pgdata\" option with the \"%s\" command", get_subcmd_name(backup_subcmd));
+		if (catchup_destination_pgdata == NULL)
+			elog(ERROR, "You must specify \"--destination-pgdata\" option with the \"%s\" command", get_subcmd_name(backup_subcmd));
+		if (current.backup_mode == BACKUP_MODE_INVALID)
+			elog(ERROR, "Required parameter not specified: BACKUP_MODE (-b, --backup-mode)");
+		if (current.backup_mode != BACKUP_MODE_FULL && current.backup_mode != BACKUP_MODE_DIFF_PTRACK && current.backup_mode != BACKUP_MODE_DIFF_DELTA)
+			elog(ERROR, "Only \"FULL\", \"PTRACK\" and \"DELTA\" modes are supported with the \"%s\" command", get_subcmd_name(backup_subcmd));
+		if (!stream_wal)
+			elog(INFO, "--stream is required, forcing stream mode");
+		current.stream = stream_wal = true;
+		if (instance_config.external_dir_str)
+			elog(ERROR, "external directories not supported fom \"%s\" command", get_subcmd_name(backup_subcmd));
+		// TODO проверить instance_config.conn_opt
+	}
+
 	/* sanity */
 	if (backup_subcmd == VALIDATE_CMD && restore_params->no_validate)
 		elog(ERROR, "You cannot specify \"--no-validate\" option with the \"%s\" command",
@@ -787,6 +824,8 @@ main(int argc, char *argv[])
 				return do_backup(instanceState, set_backup_params,
 								 no_validate, no_sync, backup_logs);
 			}
+		case CATCHUP_CMD:
+			return do_catchup(catchup_source_pgdata, catchup_destination_pgdata, num_threads, !no_sync);
 		case RESTORE_CMD:
 			return do_restore_or_validate(instanceState, current.backup_id,
 							recovery_target_options,
