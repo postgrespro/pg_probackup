@@ -52,7 +52,7 @@ catchup_collect_info(PGNodeInfo	*source_node_info, const char *source_pgdata, co
 	instance_config.system_identifier = get_system_identifier(source_pgdata, FIO_DB_HOST);
 	current.start_time = time(NULL);
 
-	StrNCpy(current.program_version, PROGRAM_VERSION, sizeof(current.program_version));
+	strlcpy(current.program_version, PROGRAM_VERSION, sizeof(current.program_version));
 
 	/* Do some compatibility checks and fill basic info about PG instance */
 	source_conn = pgdata_basic_setup(instance_config.conn_opt, source_node_info);
