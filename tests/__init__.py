@@ -23,7 +23,8 @@ def load_tests(loader, tests, pattern):
 #    suite.addTests(loader.loadTestsFromModule(auth_test))
     suite.addTests(loader.loadTestsFromModule(archive))
     suite.addTests(loader.loadTestsFromModule(backup))
-    suite.addTests(loader.loadTestsFromModule(compatibility))
+    if 'PGPROBACKUPBIN_OLD' in os.environ and os.environ['PGPROBACKUPBIN_OLD']:
+        suite.addTests(loader.loadTestsFromModule(compatibility))
     suite.addTests(loader.loadTestsFromModule(checkdb))
     suite.addTests(loader.loadTestsFromModule(config))
 #    suite.addTests(loader.loadTestsFromModule(cfs_backup))
