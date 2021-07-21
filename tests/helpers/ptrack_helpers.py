@@ -151,6 +151,8 @@ def slow_start(self, replica=False):
 class ProbackupTest(object):
     # Class attributes
     enterprise = is_enterprise()
+    gdb = 'PGPROBACKUP_GDB' in os.environ and \
+          os.environ['PGPROBACKUP_GDB'] == 'ON'
 
     def __init__(self, *args, **kwargs):
         super(ProbackupTest, self).__init__(*args, **kwargs)
