@@ -401,6 +401,7 @@ typedef struct InstanceConfig
 	/* Retention options. 0 disables the option. */
 	uint32		retention_redundancy;
 	uint32		retention_window;
+	uint64		retention_size;
 	uint32		wal_depth;
 
 	CompressAlg	compress_alg;

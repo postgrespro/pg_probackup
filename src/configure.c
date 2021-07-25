@@ -31,6 +31,7 @@ static void show_configure_json(ConfigOption *opt);
 
 #define RETENTION_REDUNDANCY_DEFAULT	0
 #define RETENTION_WINDOW_DEFAULT		0
+#define RETENTION_SIZE_DEFAULT			0
 
 #define OPTION_INSTANCE_GROUP	"Backup instance information"
 #define OPTION_CONN_GROUP		"Connection parameters"
@@ -188,6 +189,11 @@ ConfigOption instance_options[] =
 		'u', 220, "retention-window",
 		&instance_config.retention_window, SOURCE_CMD, 0,
 		OPTION_RETENTION_GROUP, 0, option_get_value
+	},
+	{
+		'U', 231, "retention-size",
+		&instance_config.retention_size, SOURCE_CMD, 0,
+		OPTION_RETENTION_GROUP, OPTION_UNIT_KB, option_get_value
 	},
 	{
 		'u', 221, "wal-depth",
@@ -371,6 +377,7 @@ init_config(InstanceConfig *config, const char *instance_name)
 
 	config->retention_redundancy = RETENTION_REDUNDANCY_DEFAULT;
 	config->retention_window = RETENTION_WINDOW_DEFAULT;
+	config->retention_size = RETENTION_SIZE_DEFAULT;
 	config->wal_depth = 0;
 
 	config->compress_alg = COMPRESS_ALG_DEFAULT;
@@ -542,6 +549,11 @@ readInstanceConfigFile(InstanceState *instanceState)
 		{
 			'u', 220, "retention-window",
 			&instance->retention_window, SOURCE_CMD, 0,
+			OPTION_RETENTION_GROUP, 0, option_get_value
+		},
+		{
+			'u', 231, "retention-size",
+			&instance->retention_size, SOURCE_CMD, 0,
 			OPTION_RETENTION_GROUP, 0, option_get_value
 		},
 		{
