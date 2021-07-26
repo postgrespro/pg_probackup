@@ -1659,12 +1659,9 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         check that '--archive-host', '--archive-user', '--archiver-port'
         and '--restore-command' are working as expected.
         """
-        tryssh = subprocess.call(
-            "ssh -o PasswordAuthentication=no localhost ':'",
-            shell=True)
-        if tryssh != 0:
-            self.skipTest('You must configure keypair on '
-                          'localhost for run this test')
+        if not self.remote:
+            self.skipTest("You must enable PGPROBACKUP_SSH_REMOTE"
+                          " for run this test")
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
