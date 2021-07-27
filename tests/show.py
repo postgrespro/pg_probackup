@@ -318,6 +318,9 @@ class ShowTest(ProbackupTest, unittest.TestCase):
     # @unittest.expectedFailure
     def test_corrupt_correctness_1(self):
         """backup.control contains invalid option"""
+        if not self.remote:
+            self.skipTest("You must enable PGPROBACKUP_SSH_REMOTE"
+                          " for run this test")
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
@@ -428,6 +431,9 @@ class ShowTest(ProbackupTest, unittest.TestCase):
     # @unittest.expectedFailure
     def test_corrupt_correctness_2(self):
         """backup.control contains invalid option"""
+        if not self.remote:
+            self.skipTest("You must enable PGPROBACKUP_SSH_REMOTE"
+                          " for run this test")
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
