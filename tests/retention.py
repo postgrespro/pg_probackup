@@ -2609,3 +2609,211 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
             6)
 
         self.del_test_dir(module_name, fname)
+
+            def test_retention_size(self):
+        """purge backups using size-based retention policy"""
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'])
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        self.set_config(
+            backup_dir, 'node')
+
+        # take FULL BACKUP
+        self.backup_node(backup_dir, 'node', node)
+
+        # Take second FULL BACKUP
+        self.backup_node(backup_dir, 'node', node)
+
+        # Take third FULL BACKUP
+        self.backup_node(backup_dir, 'node', node)
+
+        # Purge backups if their summ size more than 100 Mb
+        self.delete_expired(
+            backup_dir, 'node', options=['--retention-size=100', '--expired'])
+
+        # We should get all 3 backups saved
+        self.assertEqual(len(self.show_pb(backup_dir, 'node')), 3)
+
+        print(self.show_pb(
+            backup_dir, 'node', as_json=False, as_text=True))
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    def test_retention_size_2(self):
+        """purge backups using size-based retention policy"""
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'])
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # take FULL BACKUP
+        self.backup_node(backup_dir, 'node', node)
+
+        # Take second FULL BACKUP
+        self.backup_node(backup_dir, 'node', node)
+
+        # Take third FULL BACKUP
+        self.backup_node(backup_dir, 'node', node)
+
+        # Purge backups if their summ size more than 10 Mb
+        self.delete_expired(
+            backup_dir, 'node', options=['--retention-size=10'])
+
+        # We should get all 3 backups removed
+        self.assertEqual(len(self.show_pb(backup_dir, 'node')), 0)
+
+        print(self.show_pb(
+            backup_dir, 'node', as_json=False, as_text=True))
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    def test_retention_size_3(self):
+        """purge backups using size-based retention policy"""
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'])
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        self.set_config(
+            backup_dir, 'node', options=['--retention-size=25','--delete-expired'])
+
+        # take FULL BACKUP
+        self.backup_node(backup_dir, 'node', node)
+
+        self.delete_expired(
+            backup_dir, 'node', options=['--retention-size=25', '--delete-expired'])
+
+        print(self.show_pb(
+            backup_dir, 'node', as_json=False, as_text=True))
+
+        # Take second FULL BACKUP
+        self.backup_node(backup_dir, 'node', node)
+
+        self.delete_expired(
+            backup_dir, 'node', options=['--retention-size=25', '--delete-expired'])
+
+        print(self.show_pb(
+            backup_dir, 'node', as_json=False, as_text=True))
+
+        # Take third FULL BACKUP
+        self.backup_node(backup_dir, 'node', node)
+
+        self.delete_expired(
+            backup_dir, 'node', options=['--retention-size=25', '--delete-expired'])
+
+        print(self.show_pb(
+            backup_dir, 'node', as_json=False, as_text=True))
+
+        # We should get all 1 backups removed
+        self.assertEqual(len(self.show_pb(backup_dir, 'node')), 1)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    def test_retention_size_merge_incremental(self):
+        """purge backups using size-based retention policy"""
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'])
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # take FULL BACKUP
+        self.backup_node(backup_dir, 'node', node)
+
+        # take PAGE backup
+        page_id_a1 = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        # take DELTA backup
+        page_id_a2 = self.backup_node(
+            backup_dir, 'node', node, backup_type='delta')
+
+        # take DELTA backup
+        page_id_a3 = self.backup_node(
+            backup_dir, 'node', node, backup_type='delta')
+
+        print(self.show_pb(
+            backup_dir, 'node', as_json=False, as_text=True))
+
+        # Purge backups if their summ size more than 10 Mb
+        self.delete_expired(
+            backup_dir, 'node', options=['--retention-size=10', '--merge-expired'])
+
+        print(self.show_pb(
+            backup_dir, 'node', as_json=False, as_text=True))
+
+        # We should get all 3 backups removed
+        self.assertEqual(len(self.show_pb(backup_dir, 'node')), 1)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    def test_retention_size_save_incremental(self):
+        """purge backups using size-based retention policy"""
+
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'])
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+         # take FULL backup
+        self.backup_node(backup_dir, 'node', node)
+
+        # take PAGE backup
+        page_id_a1 = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        # take PAGE backup
+        page_id_a2 = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        # take PAGE backup
+        page_id_a3 = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
+
+        # Purge backups if their summ size more than 10 Mb
+        self.delete_expired(
+            backup_dir, 'node', options=['--retention-size=10', '--expired'])
+
+        print(self.show_pb(
+            backup_dir, 'node', as_json=False, as_text=True))
+
+         # We should get all 3 backups saved
+        self.assertEqual(len(self.show_pb(backup_dir, 'node')), 4)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
