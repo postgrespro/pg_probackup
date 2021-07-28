@@ -2610,7 +2610,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         self.del_test_dir(module_name, fname)
 
-            def test_retention_size(self):
+    def test_retention_size(self):
         """purge backups using size-based retention policy"""
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
