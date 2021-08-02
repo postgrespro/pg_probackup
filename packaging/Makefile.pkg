@@ -66,7 +66,6 @@ prepare_builddir:
 build/all: build/centos
 	@echo Packaging is done
 
-
 ### DEBIAN
 build/debian: build/debian_8 build/debian_9 build/debian_10
 	@echo Debian: done
@@ -96,9 +95,6 @@ build/ubuntu_18.04: build/ubuntu_18.04_9.5 build/ubuntu_18.04_9.6 build/ubuntu_1
 build/ubuntu_20.04: build/ubuntu_20.04_9.5 build/ubuntu_20.04_9.6 build/ubuntu_20.04_10 build/ubuntu_20.04_11 build/ubuntu_20.04_12 build/ubuntu_20.04_13
 	@echo Ubuntu 20.04: done
 
-#build/centos: build/centos_6 build/centos_7 build/rpm_repo_package_centos
-#	@echo Centos: done
-
 define build_deb
 	docker rm -f $1_$2_probackup_$(PKG_NAME_SUFFIX)$(PBK_VERSION) >> /dev/null 2>&1 ; \
 	docker run \
@@ -115,10 +111,10 @@ include packaging/Makefile.debian
 include packaging/Makefile.ubuntu
 
 # CENTOS
-build/centos: build/centos_6 #build/centos_7 build/centos_7 build/rpm_repo_package_centos
+build/centos: build/centos_6 build/centos_7 build/centos_7 #build/rpm_repo_package_centos
 	@echo Centos: done
 
-build/centos_6: build/centos_6_9.5 build/centos_6_9.6 #build/centos_6_10 build/centos_6_11 build/centos_6_12 build/centos_6_13
+build/centos_6: build/centos_6_9.5 build/centos_6_9.6 build/centos_6_10 build/centos_6_11 build/centos_6_12 build/centos_6_13
 	@echo Centos 6: done
 
 build/centos_7: build/centos_7_9.5 build/centos_7_9.6 build/centos_7_10 build/centos_7_11 build/centos_7_12 build/centos_7_13
@@ -128,30 +124,30 @@ build/centos_8: build/centos_8_9.5 build/centos_8_9.6 build/centos_8_10 build/ce
 	@echo Centos 8: done
 
 # Oracle Linux
-build/oraclelinux: build/oraclelinux_6 build/oraclelinux_7 build/oraclelinux_7 build/rpm_repo_package_oraclelinux
-	@echo Oraclelinux: done
-
-build/oraclelinux_6: build/oraclelinux_6_9.5 build/oraclelinux_6_9.6 build/oraclelinux_6_10 build/oraclelinux_6_11 build/oraclelinux_6_12 build/oraclelinux_6_13
-	@echo Oraclelinux 6: done
-
-build/oraclelinux_7: build/oraclelinux_7_9.5 build/oraclelinux_7_9.6 build/oraclelinux_7_10 build/oraclelinux_7_11 build/oraclelinux_7_12 build/oraclelinux_7_13
-	@echo Oraclelinux 7: done
-
-build/oraclelinux_8: build/oraclelinux_8_9.5 build/oraclelinux_8_9.6 build/oraclelinux_8_10 build/oraclelinux_8_11 build/oraclelinux_8_12 build/oraclelinux_8_13
-	@echo Oraclelinux 8: done
-
-# RHEL
-build/rhel: build/rhel_6 build/rhel_7 build/rhel_8 build/rpm_repo_package_rhel
-	@echo Rhel: done
-
-build/rhel_6: build/rhel_6_9.5 build/rhel_6_9.6 build/rhel_6_10 build/rhel_6_11 build/rhel_6_12 build/rhel_6_13
-	@echo Rhel 6: done
-
-build/rhel_7: build/rhel_7_9.5 build/rhel_7_9.6 build/rhel_7_10 build/rhel_7_11 build/rhel_7_12 build/rhel_7_13
-	@echo Rhel 7: done
-
-build/rhel_8: build/rhel_8_9.5 build/rhel_8_9.6 build/rhel_8_10 build/rhel_8_11 build/rhel_8_12 build/rhel_8_13
-	@echo Rhel 8: done
+#build/oraclelinux: build/oraclelinux_6 build/oraclelinux_7 build/oraclelinux_7 #build/rpm_repo_package_oraclelinux
+#	@echo Oraclelinux: done
+#
+#build/oraclelinux_6: build/oraclelinux_6_9.5 build/oraclelinux_6_9.6 build/oraclelinux_6_10 build/oraclelinux_6_11 build/oraclelinux_6_12 build/oraclelinux_6_13
+#	@echo Oraclelinux 6: done
+#
+#build/oraclelinux_7: build/oraclelinux_7_9.5 build/oraclelinux_7_9.6 build/oraclelinux_7_10 build/oraclelinux_7_11 build/oraclelinux_7_12 build/oraclelinux_7_13
+#	@echo Oraclelinux 7: done
+#
+#build/oraclelinux_8: build/oraclelinux_8_9.5 build/oraclelinux_8_9.6 build/oraclelinux_8_10 build/oraclelinux_8_11 build/oraclelinux_8_12 build/oraclelinux_8_13
+#	@echo Oraclelinux 8: done
+#
+## RHEL
+#build/rhel: build/rhel_6 build/rhel_7 build/rhel_8 #build/rpm_repo_package_rhel
+#	@echo Rhel: done
+#
+#build/rhel_6: build/rhel_6_9.5 build/rhel_6_9.6 build/rhel_6_10 build/rhel_6_11 build/rhel_6_12 build/rhel_6_13
+#	@echo Rhel 6: done
+#
+#build/rhel_7: build/rhel_7_9.5 build/rhel_7_9.6 build/rhel_7_10 build/rhel_7_11 build/rhel_7_12 build/rhel_7_13
+#	@echo Rhel 7: done
+#
+#build/rhel_8: build/rhel_8_9.5 build/rhel_8_9.6 build/rhel_8_10 build/rhel_8_11 build/rhel_8_12 build/rhel_8_13
+#	@echo Rhel 8: done
 
 
 define build_rpm
@@ -181,99 +177,75 @@ include packaging/Makefile.centos
 #	touch build/rpm_repo_package_centos
 #
 
-#build/ubuntu_14_04:
-#	$(call build_deb,ubuntu,14.04,trusty)
-#	touch build/ubuntu_14_04
+#repo/all: repo/debian repo/ubuntu repo/centos repo/finish
+#	@echo Build repo for all platform: done
+#	touch build/repo_all
 #
-#build/ubuntu_16_04:
-#	$(call build_deb,ubuntu,16.04,xenial)
-#	touch build/ubuntu_16_04
+#repo/debian: repo/debian_8 repo/debian_9 repo/debian_10
+#	@echo Build repo for debian platforms: done
+#	touch build/repo_debian
 #
-#build/ubuntu_18_04:
-#	$(call build_deb,ubuntu,18.04,bionic)
-#	touch build/ubuntu_18_04
+#repo/ubuntu: repo/ubuntu_16_04 repo/ubuntu_18_04
+#	@echo Build repo for ubuntu platforms: done
+#	touch build/repo_ubuntu
 #
-#build/centos_6:
-#	$(call build_rpm,centos,6)
-#	touch build/centos_6
+#repo/centos: repo/centos_6 repo/centos_7
+#	@echo Build repo for centos platforms: done
+#	touch build/repo_centos
 #
-#build/centos_7:
-#	$(call build_rpm,centos,7)
-#	touch build/centos_7
+#repo/centos_6:
+#	$(call build_repo_rpm,centos,6,6)
+#	touch build/repo_centos_6
+#
+#repo/centos_7:
+#	$(call build_repo_rpm,centos,7,7)
+#	touch build/repo_centos_7
+#
+#repo/debian_8:
+#	$(call build_repo_deb,debian,8,jessie)
+#	touch build/repo_debian_8
+#
+#repo/debian_9:
+#	$(call build_repo_deb,debian,9,stretch)
+#	touch build/repo_debian_9
+#
+#repo/debian_10:
+#	$(call build_repo_deb,debian,10,buster)
+#	touch build/repo_debian_10
+#
+#repo/ubuntu_14_04:
+#	$(call build_repo_deb,ubuntu,14.04,trusty)
+#	touch build/repo_ubuntu_14_04
+#
+#repo/ubuntu_16_04:
+#	$(call build_repo_deb,ubuntu,16.04,xenial)
+#	touch build/repo_ubuntu_16_04
+#
+#repo/ubuntu_18_04:
+#	$(call build_repo_deb,ubuntu,18.04,bionic)
+#	touch build/repo_ubuntu_18_04
 
-#build/centos_8:
-#	$(call build_rpm,centos,8)
-#	touch build/centos_8
+#repo/finish:
+#	$(call repo_finish,centos,7)
+#	touch build/repo_finish
 
-repo/all: repo/debian repo/ubuntu repo/centos repo/finish
-	@echo Build repo for all platform: done
-	touch build/repo_all
-
-repo/debian: repo/debian_8 repo/debian_9 repo/debian_10
-	@echo Build repo for debian platforms: done
-	touch build/repo_debian
-
-repo/ubuntu: repo/ubuntu_16_04 repo/ubuntu_18_04
-	@echo Build repo for ubuntu platforms: done
-	touch build/repo_ubuntu
-
-repo/centos: repo/centos_6 repo/centos_7
-	@echo Build repo for centos platforms: done
-	touch build/repo_centos
-
-repo/centos_6:
-	$(call build_repo_rpm,centos,6,6)
-	touch build/repo_centos_6
-
-repo/centos_7:
-	$(call build_repo_rpm,centos,7,7)
-	touch build/repo_centos_7
-
-repo/debian_8:
-	$(call build_repo_deb,debian,8,jessie)
-	touch build/repo_debian_8
-
-repo/debian_9:
-	$(call build_repo_deb,debian,9,stretch)
-	touch build/repo_debian_9
-
-repo/debian_10:
-	$(call build_repo_deb,debian,10,buster)
-	touch build/repo_debian_10
-
-repo/ubuntu_14_04:
-	$(call build_repo_deb,ubuntu,14.04,trusty)
-	touch build/repo_ubuntu_14_04
-
-repo/ubuntu_16_04:
-	$(call build_repo_deb,ubuntu,16.04,xenial)
-	touch build/repo_ubuntu_16_04
-
-repo/ubuntu_18_04:
-	$(call build_repo_deb,ubuntu,18.04,bionic)
-	touch build/repo_ubuntu_18_04
-
-repo/finish:
-	$(call repo_finish,centos,7)
-	touch build/repo_finish
-
-define build_repo_deb
-	docker run -v $(WORKDIR)/build/pkg/$1/$2:/app/in -v $(WORKDIR)/packaging/repo:/app/repo \
-	-v $(WORKDIR)/packaging/repo:/app/repo -v $(WORKDIR)/build/www:/app/www \
-	-e "DISTRIB=$1" -e "DISTRIB_VERSION=$2" -e "CODENAME=$3" \
-	--rm $1:$2 /app/repo/scripts/deb.sh
-endef
-
-define build_repo_rpm
-	docker run -v $(WORKDIR)/build/pkg/$1/$2:/app/in -v $(WORKDIR)/packaging/repo:/app/repo \
-	-v $(WORKDIR)/packaging/repo:/app/repo -v $(WORKDIR)/build/www:/app/www \
-	-e "DISTRIB=$1" -e "DISTRIB_VERSION=$2" -e "CODENAME=$3" \
-	--rm $1:$2 /app/repo/scripts/rpm.sh
-endef
-
-define repo_finish
-	docker run -v $(WORKDIR)/build/pkg/keys:/app/in -v $(WORKDIR)/build/www:/app/www \
-	-e "DISTRIB=$1" -e "DISTRIB_VERSION=$2" -e "CODENAME=$3" \
-	--rm $1:$2 bash -exc "cp -av /app/in/*rpm /app/www/mamonsu/keys && cd /app/www/mamonsu/ && \
-	ln -s $(VERSION) latest"
-endef
+#define build_repo_deb
+#	docker run -v $(WORKDIR)/build/pkg/$1/$2:/app/in -v $(WORKDIR)/packaging/repo:/app/repo \
+#	-v $(WORKDIR)/packaging/repo:/app/repo -v $(WORKDIR)/build/www:/app/www \
+#	-e "DISTRIB=$1" -e "DISTRIB_VERSION=$2" -e "CODENAME=$3" \
+#	--rm $1:$2 /app/repo/scripts/deb.sh
+#endef
+#
+#define build_repo_rpm
+#	docker run -v $(WORKDIR)/build/pkg/$1/$2:/app/in -v $(WORKDIR)/packaging/repo:/app/repo \
+#	-v $(WORKDIR)/packaging/repo:/app/repo -v $(WORKDIR)/build/www:/app/www \
+#	-e "DISTRIB=$1" -e "DISTRIB_VERSION=$2" -e "CODENAME=$3" \
+#	--rm $1:$2 /app/repo/scripts/rpm.sh
+#endef
+#
+#define repo_finish
+#	docker run -v $(WORKDIR)/build/pkg/keys:/app/in -v $(WORKDIR)/build/www:/app/www \
+#	-e "DISTRIB=$1" -e "DISTRIB_VERSION=$2" -e "CODENAME=$3" \
+#	--rm $1:$2 bash -exc "cp -av /app/in/*rpm /app/www/mamonsu/keys && cd /app/www/mamonsu/ && \
+#	ln -s $(VERSION) latest"
+#endef
