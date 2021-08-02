@@ -80,3 +80,5 @@ src/walmethods.h: $(srchome)/src/bin/pg_basebackup/walmethods.h
 ifeq ($(PORTNAME), aix)
 	CC=xlc_r
 endif
+
+include packaging/Makefile.pkg

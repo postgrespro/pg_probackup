@@ -1,0 +1,29 @@
+#!/usr/bin/make -f
+
+# Uncomment this to turn on verbose mode.
+export DH_VERBOSE=1
+
+%:
+	dh $@
+
+override_dh_auto_clean:
+	# skip
+
+override_dh_auto_build:
+	cd postgresql-@PG_FULL_VERSION@ && ./configure --enable-debug --without-readline --prefix=@PREFIX@ &&\
+	make MAKELEVEL=0 install DESTDIR=$(CURDIR)/debian/tmp && cd .. &&\
+	make USE_PGXS=1 top_srcdir=$(CURDIR)/postgresql-@PG_FULL_VERSION@ PG_CONFIG=$(CURDIR)/debian/tmp/@PREFIX@/bin/pg_config &&\
+	mv pg_probackup pg_probackup-@PG_VERSION@
+
+override_dh_auto_test:
+	# skip
+
+override_dh_auto_install:
+	# skip
+
+override_dh_strip:
+	dh_strip --dbg-package=@PKG_NAME@-dbg
+
+override_dh_auto_clean:
+	# skip
+	#make clean top_srcdir=$(CURDIR)/pg@PG_TOC@-source PG_CONFIG=$(CURDIR)/debian/tmp/stump/bin/pg_config
