@@ -1,12 +1,6 @@
 import os
 import unittest
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
-from datetime import datetime, timedelta
-import subprocess
-from testgres import QueryException
-import shutil
-import sys
-import time
 
 module_name = 'CVE-2018-1058'
 

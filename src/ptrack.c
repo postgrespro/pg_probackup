@@ -187,7 +187,7 @@ get_ptrack_version(PGconn *backup_conn, PGNodeInfo *nodeInfo)
 		/* ptrack 1.x is supported, save version */
 		PQclear(res_db);
 		res_db = pgut_execute(backup_conn,
-							  "SELECT proname FROM pg_proc WHERE proname='ptrack_version'",
+							  "SELECT proname FROM pg_catalog.pg_proc WHERE proname='ptrack_version'::name",
 							  0, NULL);
 
 		if (PQntuples(res_db) == 0)
@@ -285,7 +285,7 @@ pg_ptrack_clear(PGconn *backup_conn, int ptrack_version_num)
 
 	params[0] = palloc(64);
 	params[1] = palloc(64);
-	res_db = pgut_execute(backup_conn, "SELECT datname, oid, dattablespace FROM pg_database",
+	res_db = pgut_execute(backup_conn, "SELECT datname, oid, dattablespace FROM pg_catalog.pg_database",
 						  0, NULL);
 
 	for(i = 0; i < PQntuples(res_db); i++)
@@ -335,7 +335,7 @@ pg_ptrack_get_and_clear_db(Oid dbOid, Oid tblspcOid, PGconn *backup_conn)
 
 	sprintf(params[0], "%i", dbOid);
 	res_db = pgut_execute(backup_conn,
-							"SELECT datname FROM pg_database WHERE oid=$1",
+							"SELECT datname FROM pg_catalog.pg_database WHERE oid=$1",
 							1, (const char **) params);
 	/*
 	 * If database is not found, it's not an error.
