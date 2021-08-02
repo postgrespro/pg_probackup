@@ -1,0 +1,24 @@
+# CENTOS 6
+build/centos_6_9.5:
+	$(call build_rpm,centos,6,,9.5,9.5.25)
+	touch build/centos_6_9.5
+
+build/centos_6_9.6:
+	$(call build_rpm,centos,6,,9.6,9.6.21)
+	touch build/centos_6_9.6
+
+build/centos_6_10:
+	$(call build_rpm,centos,6,,10,10.16)
+	touch build/centos_6_10
+
+build/centos_6_11:
+	$(call build_rpm,centos,6,,11,11.11)
+	touch build/centos_6_11
+
+build/centos_6_12:
+	$(call build_rpm,centos,6,,12,12.6)
+	touch build/centos_6_12
+
+build/centos_6_13:
+	$(call build_rpm,centos,6,,13,13.3)
+	touch build/centos_6_13

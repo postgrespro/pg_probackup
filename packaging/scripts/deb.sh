@@ -12,8 +12,6 @@ set -o pipefail
 ulimit -n 1024
 
 # THere is no std/ent packages for PG 9.5
-#echo ${PG_MAJOUR_VERSION}
-#echo ${PBK_EDITION}
 if [[ ${PG_VERSION} == '9.5' ]] && [[ ${PBK_EDITION} != '' ]] ; then
     exit 0
 fi
@@ -38,12 +36,11 @@ cd /root/build
 # clone pbk repo
 git clone $PKG_URL ${PKG_NAME}_${PKG_VERSION}
 cd ${PKG_NAME}_${PKG_VERSION}
-git fetch -a
 git checkout ${PKG_HASH}
 cd ..
 
 PG_TOC=$(echo ${PG_VERSION} | sed 's|\.||g')
-# Download PostgreSQL source
+# Download PostgreSQL source if building for vanilla
 if [[ ${PBK_EDITION} == '' ]] ; then
     wget -q http://ftp.postgresql.org/pub/source/v${PG_FULL_VERSION}/postgresql-${PG_FULL_VERSION}.tar.bz2
 fi

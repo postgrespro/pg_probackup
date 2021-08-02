@@ -60,14 +60,18 @@ prepare_builddir:
 #	@echo Build for all platform: done
 #	touch build/all
 
-build/all: build/debian build/ubuntu
+#build/all: build/debian build/ubuntu
+#	@echo Packaging is done
+
+build/all: build/centos
 	@echo Packaging is done
 
+
 ### DEBIAN
-build/debian: build/debian_8 #build/debian_9 build/debian_10
+build/debian: build/debian_8 build/debian_9 build/debian_10
 	@echo Debian: done
 
-build/debian_8: build/debian_8_9.5 build/debian_8_9.6 #build/debian_8_10 build/debian_8_11 build/debian_8_12 build/debian_8_13
+build/debian_8: build/debian_8_9.5 build/debian_8_9.6 build/debian_8_10 build/debian_8_11 build/debian_8_12 build/debian_8_13
 	@echo Debian 8: done
 
 build/debian_9: build/debian_9_9.5 build/debian_9_9.6 build/debian_9_10 build/debian_9_11 build/debian_9_12 build/debian_9_13
@@ -77,10 +81,10 @@ build/debian_10: build/debian_9_9.5 build/debian_9_9.6 build/debian_9_10 build/d
 	@echo Debian 10: done
 
 ### UBUNTU
-build/ubuntu: build/ubuntu_14.04 #build/ubuntu_16.04 build/ubuntu_18.04 build/ubuntu_20.04
+build/ubuntu: build/ubuntu_14.04 build/ubuntu_16.04 build/ubuntu_18.04 build/ubuntu_20.04
 	@echo Ubuntu: done
 
-build/ubuntu_14.04: build/ubuntu_14.04_9.5 #build/ubuntu_14.04_9.6 build/ubuntu_14.04_10 build/ubuntu_14.04_11 build/ubuntu_14.04_12 build/ubuntu_14.04_13
+build/ubuntu_14.04: build/ubuntu_14.04_9.5 build/ubuntu_14.04_9.6 build/ubuntu_14.04_10 build/ubuntu_14.04_11 build/ubuntu_14.04_12 build/ubuntu_14.04_13
 	@echo Ubuntu 14.04: 
 
 build/ubuntu_16.04: build/ubuntu_16.04_9.5 build/ubuntu_16.04_9.6 build/ubuntu_16.04_10 build/ubuntu_16.04_11 build/ubuntu_16.04_12 build/ubuntu_16.04_13
@@ -99,7 +103,7 @@ define build_deb
 	docker rm -f $1_$2_probackup_$(PKG_NAME_SUFFIX)$(PBK_VERSION) >> /dev/null 2>&1 ; \
 	docker run \
 		-v "$(WORKDIR)":/app/in \
-		-v $(WORKDIR)/build/data/$(PBK_PKG_REPO):/app/out \
+		-v $(WORKDIR)/build/data/$1/$2/$(PBK_PKG_REPO)/pg-probackup-$(PKG_NAME_SUFFIX)$4/$(PBK_VERSION):/app/out \
 		-e "DISTRIB=$1" -e "DISTRIB_VERSION=$2" -e "CODENAME=$3" -e "PG_VERSION=$4" -e "PG_FULL_VERSION=$5" \
 		-e "PKG_HASH=$(PBK_HASH)" -e "PKG_URL=$(PBK_GIT_REPO)" -e "PKG_RELEASE=$(PBK_RELEASE)" -e "PKG_NAME=pg-probackup-$(PKG_NAME_SUFFIX)$4" \
 		-e "PKG_VERSION=$(PBK_VERSION)" -e "PBK_EDITION=$(PBK_EDITION)" -e "PBK_EDITION_FULL=$(PBK_EDITION_FULL)" \
@@ -107,13 +111,63 @@ define build_deb
 		--rm pgpro/$1:$2 /app/in/packaging/scripts/deb.sh
 endef
 
+include packaging/Makefile.debian
+include packaging/Makefile.ubuntu
 
-#define build_rpm
-#	docker run -v "$(WORKDIR)":/app/in \
-#		-v "$(WORKDIR)/build/pkg/$1/$2/mamonsu/$(VERSION)":/app/out \
-#		-e "VERSION=$(VERSION)" -e "DISTRIB=$1" -e "DISTRIB_VERSION=$2" \
-#		--rm $1:$2 /app/in/packaging/scripts/rpm.sh
-#endef
+# CENTOS
+build/centos: build/centos_6 #build/centos_7 build/centos_7 build/rpm_repo_package_centos
+	@echo Centos: done
+
+build/centos_6: build/centos_6_9.5 build/centos_6_9.6 #build/centos_6_10 build/centos_6_11 build/centos_6_12 build/centos_6_13
+	@echo Centos 6: done
+
+build/centos_7: build/centos_7_9.5 build/centos_7_9.6 build/centos_7_10 build/centos_7_11 build/centos_7_12 build/centos_7_13
+	@echo Centos 7: done
+
+build/centos_8: build/centos_8_9.5 build/centos_8_9.6 build/centos_8_10 build/centos_8_11 build/centos_8_12 build/centos_8_13
+	@echo Centos 8: done
+
+# Oracle Linux
+build/oraclelinux: build/oraclelinux_6 build/oraclelinux_7 build/oraclelinux_7 build/rpm_repo_package_oraclelinux
+	@echo Oraclelinux: done
+
+build/oraclelinux_6: build/oraclelinux_6_9.5 build/oraclelinux_6_9.6 build/oraclelinux_6_10 build/oraclelinux_6_11 build/oraclelinux_6_12 build/oraclelinux_6_13
+	@echo Oraclelinux 6: done
+
+build/oraclelinux_7: build/oraclelinux_7_9.5 build/oraclelinux_7_9.6 build/oraclelinux_7_10 build/oraclelinux_7_11 build/oraclelinux_7_12 build/oraclelinux_7_13
+	@echo Oraclelinux 7: done
+
+build/oraclelinux_8: build/oraclelinux_8_9.5 build/oraclelinux_8_9.6 build/oraclelinux_8_10 build/oraclelinux_8_11 build/oraclelinux_8_12 build/oraclelinux_8_13
+	@echo Oraclelinux 8: done
+
+# RHEL
+build/rhel: build/rhel_6 build/rhel_7 build/rhel_8 build/rpm_repo_package_rhel
+	@echo Rhel: done
+
+build/rhel_6: build/rhel_6_9.5 build/rhel_6_9.6 build/rhel_6_10 build/rhel_6_11 build/rhel_6_12 build/rhel_6_13
+	@echo Rhel 6: done
+
+build/rhel_7: build/rhel_7_9.5 build/rhel_7_9.6 build/rhel_7_10 build/rhel_7_11 build/rhel_7_12 build/rhel_7_13
+	@echo Rhel 7: done
+
+build/rhel_8: build/rhel_8_9.5 build/rhel_8_9.6 build/rhel_8_10 build/rhel_8_11 build/rhel_8_12 build/rhel_8_13
+	@echo Rhel 8: done
+
+
+define build_rpm
+	docker rm -f $1_$2_probackup_$(PKG_NAME_SUFFIX)$(PBK_VERSION) >> /dev/null 2>&1 ; \
+	docker run \
+		-v "$(WORKDIR)":/app/in \
+		-v $(WORKDIR)/build/data/$1/$2/$(PBK_PKG_REPO)/pg_probackup-$(PKG_NAME_SUFFIX)$4/$(PBK_VERSION):/app/out \
+		-e "DISTRIB=$1" -e "DISTRIB_VERSION=$2" -e "CODENAME=$3" -e "PG_VERSION=$4" -e "PG_FULL_VERSION=$5" \
+		-e "PKG_HASH=$(PBK_HASH)" -e "PKG_URL=$(PBK_GIT_REPO)" -e "PKG_RELEASE=$(PBK_RELEASE)" -e "PKG_NAME=pg_probackup-$(PKG_NAME_SUFFIX)$4" \
+		-e "PKG_VERSION=$(PBK_VERSION)" -e "PBK_EDITION=$(PBK_EDITION)" -e "PBK_EDITION_FULL=$(PBK_EDITION_FULL)" \
+		--name $1_$2_probackup_$(PKG_NAME_SUFFIX)$(PBK_VERSION) \
+		--rm pgpro/$1:$2 /app/in/packaging/scripts/rpm.sh
+endef
+
+include packaging/Makefile.centos
+
 #
 #define build_rpm_repo_pkg
 #	docker run -v "$(WORKDIR)":/app/in \
@@ -126,8 +180,6 @@ endef
 #	$(call build_rpm_repo_pkg,centos,7)
 #	touch build/rpm_repo_package_centos
 #
-include packaging/Makefile.debian
-include packaging/Makefile.ubuntu
 
 #build/ubuntu_14_04:
 #	$(call build_deb,ubuntu,14.04,trusty)
