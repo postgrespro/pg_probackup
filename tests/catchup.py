@@ -776,69 +776,6 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         src_pg.stop()
         self.del_test_dir(module_name, self.fname)
 
-    def test_destination_dbstate(self):
-        """
-        Test that we detect that destination pg is not cleanly shutdowned
-        """
-        # preparation 1: source
-        src_pg = self.make_simple_node(
-            base_dir = os.path.join(module_name, self.fname, 'src'),
-            set_replication = True,
-            pg_options = { 'wal_log_hints': 'on' }
-            )
-        src_pg.slow_start()
-
-        # preparation 2: destination
-        dst_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'dst'))
-        self.catchup_node(
-            backup_mode = 'FULL',
-            source_pgdata = src_pg.data_dir,
-            destination_node = dst_pg,
-            options = ['-d', 'postgres', '-p', str(src_pg.port), '--stream']
-            )
-
-        # try #1
-        try:
-            self.catchup_node(
-                backup_mode = 'DELTA',
-                source_pgdata = src_pg.data_dir,
-                destination_node = dst_pg,
-                options = ['-d', 'postgres', '-p', str(src_pg.port), '--stream']
-                )
-            self.assertEqual(1, 0, "Expecting Error because destination pg is not cleanly shutdowned.\n Output: {0} \n CMD: {1}".format(
-                repr(self.output), self.cmd))
-        except ProbackupException as e:
-            self.assertIn(
-                'ERROR: Destination directory contains "backup_label" file',
-                e.message,
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
-
-        # try #2
-        dst_options = {}
-        dst_options['port'] = str(dst_pg.port)
-        self.set_auto_conf(dst_pg, dst_options)
-        dst_pg.slow_start()
-        self.assertNotEqual(dst_pg.pid, 0, "Cannot detect pid of running postgres")
-        os.kill(dst_pg.pid, signal.SIGKILL)
-        try:
-            self.catchup_node(
-                backup_mode = 'DELTA',
-                source_pgdata = src_pg.data_dir,
-                destination_node = dst_pg,
-                options = ['-d', 'postgres', '-p', str(src_pg.port), '--stream']
-                )
-            self.assertEqual(1, 0, "Expecting Error because destination pg is not cleanly shutdowned.\n Output: {0} \n CMD: {1}".format(
-                repr(self.output), self.cmd))
-        except ProbackupException as e:
-            self.assertIn(
-                'must be stopped cleanly',
-                e.message,
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
-
-        # Cleanup
-        src_pg.stop()
-        self.del_test_dir(module_name, self.fname)
-
     def test_tli_destination_mismatch(self):
         """
         Test that we detect TLI mismatch in destination
@@ -974,4 +911,182 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         # Cleanup
         src_pg.stop()
         fake_src_pg.stop()
+        self.del_test_dir(module_name, self.fname)
+
+#########################################
+# Test unclean destination
+#########################################
+    def test_unclean_delta_catchup(self):
+        """
+        Test that we correctly recover uncleanly shutdowned destination
+        """
+        # preparation 1: source
+        src_pg = self.make_simple_node(
+            base_dir = os.path.join(module_name, self.fname, 'src'),
+            set_replication = True,
+            pg_options = { 'wal_log_hints': 'on' }
+            )
+        src_pg.slow_start()
+        src_pg.safe_psql(
+            "postgres",
+            "CREATE TABLE ultimate_question(answer int)")
+
+        # preparation 2: destination
+        dst_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'dst'))
+        self.catchup_node(
+            backup_mode = 'FULL',
+            source_pgdata = src_pg.data_dir,
+            destination_node = dst_pg,
+            options = ['-d', 'postgres', '-p', str(src_pg.port), '--stream']
+            )
+
+        # try #1
+        try:
+            self.catchup_node(
+                backup_mode = 'DELTA',
+                source_pgdata = src_pg.data_dir,
+                destination_node = dst_pg,
+                options = ['-d', 'postgres', '-p', str(src_pg.port), '--stream']
+                )
+            self.assertEqual(1, 0, "Expecting Error because destination pg is not cleanly shutdowned.\n Output: {0} \n CMD: {1}".format(
+                repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                'ERROR: Destination directory contains "backup_label" file',
+                e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
+
+        # try #2
+        dst_options = {}
+        dst_options['port'] = str(dst_pg.port)
+        self.set_auto_conf(dst_pg, dst_options)
+        dst_pg.slow_start()
+        self.assertNotEqual(dst_pg.pid, 0, "Cannot detect pid of running postgres")
+        os.kill(dst_pg.pid, signal.SIGKILL)
+
+        # preparation 3: make changes on master (source)
+        src_pg.pgbench_init(scale = 10)
+        pgbench = src_pg.pgbench(options=['-T', '10', '--no-vacuum'])
+        pgbench.wait()
+        src_pg.safe_psql("postgres", "INSERT INTO ultimate_question VALUES(42)")
+        src_query_result = src_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
+
+        # do delta catchup
+        self.catchup_node(
+            backup_mode = 'DELTA',
+            source_pgdata = src_pg.data_dir,
+            destination_node = dst_pg,
+            options = ['-d', 'postgres', '-p', str(src_pg.port), '--stream']
+            )
+
+        # 1st check: compare data directories
+        self.compare_pgdata(
+            self.pgdata_content(src_pg.data_dir),
+            self.pgdata_content(dst_pg.data_dir)
+            )
+
+        # run&recover catchup'ed instance
+        src_pg.stop()
+        self.set_replica(master = src_pg, replica = dst_pg)
+        dst_options = {}
+        dst_options['port'] = str(dst_pg.port)
+        self.set_auto_conf(dst_pg, dst_options)
+        dst_pg.slow_start(replica = True)
+
+        # 2nd check: run verification query
+        dst_query_result = dst_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
+        self.assertEqual(src_query_result, dst_query_result, 'Different answer from copy')
+
+        # Cleanup
+        dst_pg.stop()
+        self.del_test_dir(module_name, self.fname)
+
+    def test_unclean_ptrack_catchup(self):
+        """
+        Test that we correctly recover uncleanly shutdowned destination
+        """
+        if not self.ptrack:
+            return unittest.skip('Skipped because ptrack support is disabled')
+
+        # preparation 1: source
+        src_pg = self.make_simple_node(
+            base_dir = os.path.join(module_name, self.fname, 'src'),
+            set_replication = True,
+            ptrack_enable = True,
+            pg_options = { 'wal_log_hints': 'on' }
+            )
+        src_pg.slow_start()
+        src_pg.safe_psql("postgres", "CREATE EXTENSION ptrack")
+        src_pg.safe_psql(
+            "postgres",
+            "CREATE TABLE ultimate_question(answer int)")
+
+        # preparation 2: destination
+        dst_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'dst'))
+        self.catchup_node(
+            backup_mode = 'FULL',
+            source_pgdata = src_pg.data_dir,
+            destination_node = dst_pg,
+            options = ['-d', 'postgres', '-p', str(src_pg.port), '--stream']
+            )
+
+        # try #1
+        try:
+            self.catchup_node(
+                backup_mode = 'PTRACK',
+                source_pgdata = src_pg.data_dir,
+                destination_node = dst_pg,
+                options = ['-d', 'postgres', '-p', str(src_pg.port), '--stream']
+                )
+            self.assertEqual(1, 0, "Expecting Error because destination pg is not cleanly shutdowned.\n Output: {0} \n CMD: {1}".format(
+                repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                'ERROR: Destination directory contains "backup_label" file',
+                e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
+
+        # try #2
+        dst_options = {}
+        dst_options['port'] = str(dst_pg.port)
+        self.set_auto_conf(dst_pg, dst_options)
+        dst_pg.slow_start()
+        self.assertNotEqual(dst_pg.pid, 0, "Cannot detect pid of running postgres")
+        os.kill(dst_pg.pid, signal.SIGKILL)
+
+        # preparation 3: make changes on master (source)
+        src_pg.pgbench_init(scale = 10)
+        pgbench = src_pg.pgbench(options=['-T', '10', '--no-vacuum'])
+        pgbench.wait()
+        src_pg.safe_psql("postgres", "INSERT INTO ultimate_question VALUES(42)")
+        src_query_result = src_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
+
+        # do delta catchup
+        self.catchup_node(
+            backup_mode = 'PTRACK',
+            source_pgdata = src_pg.data_dir,
+            destination_node = dst_pg,
+            options = ['-d', 'postgres', '-p', str(src_pg.port), '--stream']
+            )
+
+        # 1st check: compare data directories
+        self.compare_pgdata(
+            self.pgdata_content(src_pg.data_dir),
+            self.pgdata_content(dst_pg.data_dir)
+            )
+
+        # run&recover catchup'ed instance
+        src_pg.stop()
+        self.set_replica(master = src_pg, replica = dst_pg)
+        dst_options = {}
+        dst_options['port'] = str(dst_pg.port)
+        self.set_auto_conf(dst_pg, dst_options)
+        dst_pg.slow_start(replica = True)
+
+        # 2nd check: run verification query
+        dst_query_result = dst_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
+        self.assertEqual(src_query_result, dst_query_result, 'Different answer from copy')
+
+        # Cleanup
+        dst_pg.stop()
         self.del_test_dir(module_name, self.fname)

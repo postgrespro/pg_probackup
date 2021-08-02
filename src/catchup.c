@@ -159,17 +159,6 @@ catchup_preflight_checks(PGNodeInfo *source_node_info, PGconn *source_conn,
 			elog(ERROR, "Destination directory contains \"" PG_BACKUP_LABEL_FILE "\" file");
 	}
 
-	/* check that destination database is shutdowned cleanly */
-	if (current.backup_mode != BACKUP_MODE_FULL)
-	{
-		DBState state;
-		state = get_system_dbstate(dest_pgdata, FIO_LOCAL_HOST);
-		/* see states in postgres sources (src/include/catalog/pg_control.h) */
-		if (state != DB_SHUTDOWNED && state != DB_SHUTDOWNED_IN_RECOVERY)
-			elog(ERROR, "Postmaster in destination directory \"%s\" must be stopped cleanly",
-				dest_pgdata);
-	}
-
 	/* Check that connected PG instance, source and destination PGDATA are the same */
 	{
 		uint64	source_conn_id, source_id, dest_id;
