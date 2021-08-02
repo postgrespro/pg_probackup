@@ -14,18 +14,18 @@ if [ -z ${MODE+x} ]; then
 	MODE=basic
 fi
 
-if [ -z ${APPLY_PTRACK_PATCH+x} ]; then
-	APPLY_PTRACK_PATCH=off
+if [ -z ${PTRACK_PATCH_PG_VERSION+x} ]; then
+	PTRACK_PATCH_PG_VERSION=off
 fi
 
 echo PG_VERSION=${PG_VERSION}
 echo PG_BRANCH=${PG_BRANCH}
 echo MODE=${MODE}
-echo APPLY_PTRACK_PATCH=${APPLY_PTRACK_PATCH}
+echo PTRACK_PATCH_PG_VERSION=${PTRACK_PATCH_PG_VERSION}
 
 sed \
 	-e 's/${PG_VERSION}/'${PG_VERSION}/g \
 	-e 's/${PG_BRANCH}/'${PG_BRANCH}/g \
 	-e 's/${MODE}/'${MODE}/g \
-	-e 's/${APPLY_PTRACK_PATCH}/'${APPLY_PTRACK_PATCH}/g \
+	-e 's/${PTRACK_PATCH_PG_VERSION}/'${PTRACK_PATCH_PG_VERSION}/g \
 Dockerfile.in > Dockerfile

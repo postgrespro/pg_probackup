@@ -33,16 +33,19 @@ echo "############### Getting Postgres sources:"
 git clone https://github.com/postgres/postgres.git -b $PG_BRANCH --depth=1
 
 # Clone ptrack
-if [ "$APPLY_PTRACK_PATCH" = "on" ]; then
+if [ "$PTRACK_PATCH_PG_VERSION" != "off" ]; then
     git clone https://github.com/postgrespro/ptrack.git -b master --depth=1
+    export PG_PROBACKUP_PTRACK=on
+else
+    export PG_PROBACKUP_PTRACK=off
 fi
-export PG_PROBACKUP_PTRACK=${APPLY_PTRACK_PATCH}
+
 
 # Compile and install Postgres
 echo "############### Compiling Postgres:"
 cd postgres # Go to postgres dir
-if [ "$APPLY_PTRACK_PATCH" = "on" ]; then
-    git apply -3 ../ptrack/patches/REL_${PG_VERSION}_STABLE-ptrack-core.diff
+if [ "$PG_PROBACKUP_PTRACK" = "on" ]; then
+    git apply -3 ../ptrack/patches/REL_${PTRACK_PATCH_PG_VERSION}_STABLE-ptrack-core.diff
 fi
 ./configure --prefix=$PGHOME --enable-debug --enable-cassert --enable-depend --enable-tap-tests
 make -s -j$(nproc) install
@@ -51,7 +54,8 @@ make -s -j$(nproc) install
 #make -s -j$(nproc) -C 'src/interfaces' install
 make -s -j$(nproc) -C contrib/ install
 
-if [ "$APPLY_PTRACK_PATCH" = "on" ]; then
+if [ "$PG_PROBACKUP_PTRACK" = "on" ]; then
+    echo "############### Compiling Ptrack:"
     USE_PGXS=1 make -C ../ptrack install
 fi
 
