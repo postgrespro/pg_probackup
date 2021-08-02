@@ -13,12 +13,13 @@ module_name = 'CVE-2018-1058'
 class CVE_2018_1058(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
-    def test_default_search_path(self):
+    def test_basic_default_search_path(self):
         """"""
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'))
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True)
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -40,12 +41,13 @@ class CVE_2018_1058(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
-    def test_backup_modified_search_path(self):
+    def test_basic_backup_modified_search_path(self):
         """"""
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'))
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True)
         self.set_auto_conf(node, options={'search_path': 'public,pg_catalog'})
 
         self.init_pb(backup_dir)
@@ -58,7 +60,7 @@ class CVE_2018_1058(ProbackupTest, unittest.TestCase):
             "RETURNS record "
             "AS $$ "
             "BEGIN "
-            "  RAISE 'pg_probackup vulnerable!'; "
+            "  RAISE '% vulnerable!', 'pg_probackup'; "
             "END "
             "$$ LANGUAGE plpgsql")
 
@@ -68,7 +70,7 @@ class CVE_2018_1058(ProbackupTest, unittest.TestCase):
             "RETURNS record "
             "AS $$ "
             "BEGIN "
-            "  RAISE 'pg_probackup vulnerable!'; "
+            "  RAISE '% vulnerable!', 'pg_probackup'; "
             "END "
             "$$ LANGUAGE plpgsql; "
             "CREATE VIEW public.pg_proc AS SELECT proname FROM public.pg_proc()")
@@ -85,7 +87,7 @@ class CVE_2018_1058(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
-    def test_checkdb_modified_search_path(self):
+    def test_basic_checkdb_modified_search_path(self):
         """"""
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
@@ -125,11 +127,23 @@ class CVE_2018_1058(ProbackupTest, unittest.TestCase):
             "CREATE VIEW public.pg_namespace AS SELECT * FROM public.pg_namespace();"
             )
 
-        self.checkdb_node(
-            options=[
-                '--amcheck',
-                '--skip-block-validation',
-                '-d', 'postgres', '-p', str(node.port)])
+        try:
+            self.checkdb_node(
+                options=[
+                    '--amcheck',
+                    '--skip-block-validation',
+                    '-d', 'postgres', '-p', str(node.port)])
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because amcheck{,_next} not installed\n"
+                " Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                "WARNING: Extension 'amcheck' or 'amcheck_next' are not installed in database postgres",
+                e.message,
+                "\n Unexpected Error Message: {0}\n CMD: {1}".format(
+                    repr(e.message), self.cmd))
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
