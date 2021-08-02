@@ -56,7 +56,7 @@ make -s -j$(nproc) -C contrib/ install
 
 if [ "$PG_PROBACKUP_PTRACK" = "on" ]; then
     echo "############### Compiling Ptrack:"
-    USE_PGXS=1 make -C ../ptrack install
+    make USE_PGXS=1 top_srcdir=$PG_SRC -C ../ptrack install
 fi
 
 # Override default Postgres instance
