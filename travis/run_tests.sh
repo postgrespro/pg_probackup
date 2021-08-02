@@ -32,15 +32,28 @@ PG_SRC=$PWD/postgres
 echo "############### Getting Postgres sources:"
 git clone https://github.com/postgres/postgres.git -b $PG_BRANCH --depth=1
 
+# Clone ptrack
+if [ "$APPLY_PTRACK_PATCH" = "on" ]; then
+    git clone https://github.com/postgrespro/ptrack.git -b master --depth=1
+fi
+export PG_PROBACKUP_PTRACK=${APPLY_PTRACK_PATCH}
+
 # Compile and install Postgres
 echo "############### Compiling Postgres:"
 cd postgres # Go to postgres dir
+if [ "$APPLY_PTRACK_PATCH" = "on" ]; then
+    git apply -3 ../ptrack/patches/REL_${PG_VERSION}_STABLE-ptrack-core.diff
+fi
 ./configure --prefix=$PGHOME --enable-debug --enable-cassert --enable-depend --enable-tap-tests
 make -s -j$(nproc) install
 #make -s -j$(nproc) -C 'src/common' install
 #make -s -j$(nproc) -C 'src/port' install
 #make -s -j$(nproc) -C 'src/interfaces' install
 make -s -j$(nproc) -C contrib/ install
+
+if [ "$APPLY_PTRACK_PATCH" = "on" ]; then
+    USE_PGXS=1 make -C ../ptrack install
+fi
 
 # Override default Postgres instance
 export PATH=$PGHOME/bin:$PATH

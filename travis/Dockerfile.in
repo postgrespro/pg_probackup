@@ -10,6 +10,7 @@ RUN python3 -m pip install virtualenv
 
 # Environment
 ENV PG_MAJOR=${PG_VERSION} PG_BRANCH=${PG_BRANCH}
+ENV APPLY_PTRACK_PATCH=${APPLY_PTRACK_PATCH}
 ENV LANG=C.UTF-8 PGHOME=/pg/testdir/pgbin
 
 # Make directories
