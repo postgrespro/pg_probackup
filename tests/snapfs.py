@@ -10,9 +10,10 @@ module_name = 'snapfs'
 class SnapFSTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.expectedFailure
-    @unittest.skipUnless(ProbackupTest.enterprise, 'skip')
     def test_snapfs_simple(self):
         """standart backup modes with ARCHIVE WAL method"""
+        if not self.enterprise:
+            self.skipTest('This test must be run on enterprise')
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),

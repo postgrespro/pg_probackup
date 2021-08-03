@@ -1088,6 +1088,11 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         """
         check that interrupt during validation is handled correctly
         """
+        if not self.gdb:
+            self.skipTest(
+                "Specify PGPROBACKUP_GDB and build without "
+                "optimizations for run this test"
+            )
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
