@@ -27,7 +27,6 @@ Backup tool for PostgresPro %{edition_full}.
 
 %prep
 #%setup -q -b1 -n pg_probackup-%{version}.tar.bz2
-#cd %{_topdir}/BUILD
 mv %{_topdir}/SOURCES/postgrespro-%{edition}-%{pgsql_full} %{_topdir}/BUILD
 cd %{_topdir}/BUILD/postgrespro-%{edition}-%{pgsql_full}
 mv %{_topdir}/SOURCES/pg_probackup-%{version} contrib/pg_probackup

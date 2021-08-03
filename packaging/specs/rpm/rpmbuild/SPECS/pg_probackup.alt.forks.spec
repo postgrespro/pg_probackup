@@ -17,8 +17,10 @@ Summary:        Backup utility for PostgresPro %{edition_full}
 Group:          Applications/Databases
 License:        BSD
 Url:            http://postgrespro.ru/
-Source0:        postgrespro-%{edition}-%{pgsql_full}.tar.bz2
-Source1:        pg_probackup-%{edition}-%{version}.tar.bz2
+#Source0:        postgrespro-%{edition}-%{pgsql_full}.tar.bz2
+#Source1:        pg_probackup-%{edition}-%{version}.tar.bz2
+Source0:        postgrespro-%{edition}-%{pgsql_full}
+Source1:        pg_probackup-%{version}
 BuildRequires:  gcc make perl glibc-devel bison flex
 BuildRequires:  readline-devel openssl-devel gettext zlib-devel
 
@@ -27,10 +29,17 @@ BuildRequires:  readline-devel openssl-devel gettext zlib-devel
 Backup tool for PostgresPro %{edition_full}.
 
 %prep
-%setup -q -b1 -n postgrespro-%{edition}-%{pgsql_full}
+#%setup -q -b1 -n postgrespro-%{edition}-%{pgsql_full}
+mv %{_topdir}/SOURCES/postgrespro-%{edition}-%{pgsql_full} %{_topdir}/BUILD
+cd %{_topdir}/BUILD/postgrespro-%{edition}-%{pgsql_full}
+mv %{_topdir}/SOURCES/pg_probackup-%{version} contrib/pg_probackup
+
+mkdir %{_topdir}/SOURCES/postgrespro-%{edition}-%{pgsql_full}
+mkdir %{_topdir}/SOURCES/pg_probackup-%{edition}-%{version}
+mkdir %{_topdir}/SOURCES/pg_probackup-%{version}
 
 %build
-mv %{_builddir}/pg_probackup-%{edition}-%{version} contrib/pg_probackup
+cd %{_topdir}/BUILD/postgrespro-%{edition}-%{pgsql_full}
 %if "%{pgsql_major}" == "9.6"
 ./configure --enable-debug
 %else
@@ -42,6 +51,7 @@ make -C 'src/interfaces'
 cd contrib/pg_probackup && make
 
 %install
+cd %{_topdir}/BUILD/postgrespro-%{edition}-%{pgsql_full}
 %{__mkdir} -p %{buildroot}%{_bindir}
 %{__install} -p -m 755 contrib/pg_probackup/pg_probackup %{buildroot}%{_bindir}/%{name}
 
