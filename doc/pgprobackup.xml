@@ -3409,16 +3409,29 @@ pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replace
 </refsect2>
 
   <refsect2 id="pbk-creating-backup-to-catchup" condition="12+">
-    <title>Cloning <productname>PostgreSQL</productname> Instance</title>
+    <title>Cloning and Synchronizing <productname>PostgreSQL</productname> Instance</title>
     <para>
       <application>pg_probackup</application> can create a copy of a <productname>PostgreSQL</productname>
-      instance directly, without using the backup catalog. This allows you
-      to add a new standby server in a parallel mode or to have a standby
-      server that has fallen behind <quote>catch up</quote> with master.
+      instance directly, without using the backup catalog. To do this, you can run <xref linkend="pbk-catchup"/> command.
+      It can be useful in the following cases:
+      <itemizedlist>
+        <listitem>
+          <para>To add a new standby server.</para>
+          <para>Usually, <ulink url="https://postgrespro.com/docs/postgresql/current/app-pgbasebackup">pg_basebackup</ulink>
+          is used to create a copy of a <productname>PostgreSQL</productname> instance. If the data directory of the destination instance
+          is empty, <command>catchup</command> command works similarly, but it can be faster if run in parallel mode.</para>
+        </listitem>
+        <listitem>
+          <para>To have a fallen-behind standby server <quote>catch up</quote> with master.</para>
+          <para>Under high write load, replicas may fail to replay WAL fast enough to keep up with master and hence may lag behind.
+          A usual solution to create a new replica and switch to it requires a lot of extra space and data transfer. <command>catchup</command>
+          command allows you to update an existing replica much faster by bringing differences from master.</para>
+        </listitem>
+      </itemizedlist>
     </para>
 
     <para>
-      Cloning a <productname>PostgreSQL</productname> instance is different from other <application>pg_probackup</application>
+      <command>catchup</command> is different from other <application>pg_probackup</application>
       operations:
       <itemizedlist>
         <listitem>
@@ -3439,12 +3452,12 @@ pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replace
         </listitem>
         <listitem>
           <para>
-           No SQL commands involving tablespaces, such as
+           DDL commands
            <ulink url="https://postgrespro.com/docs/postgresql/current/sql-createtablespace"
            ><command>CREATE TABLESPACE</command></ulink
            >/<ulink url="https://postgrespro.com/docs/postgresql/current/sql-droptablespace"
-           ><command>DROP TABLESPACE</command></ulink>,
-           can be run simultaneously with <command>catchup</command>.
+           ><command>DROP TABLESPACE</command></ulink>
+           cannot be run simultaneously with <command>catchup</command>.
           </para>
         </listitem>
         <listitem>
@@ -3459,7 +3472,8 @@ pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replace
     </para>
 
     <para>
-     Before cloning a <productname>PostgreSQL</productname> instance, set up the source database server as follows:
+     To prepare for cloning/synchronizing a <productname>PostgreSQL</productname> instance,
+     set up the source instance server as follows:
       <itemizedlist>
         <listitem>
           <para>
@@ -3481,9 +3495,9 @@ pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replace
     </para>
 
     <para>
-      To clone a <productname>PostgreSQL</productname> instance, ensure that the source
-      database server is running and accepting connections and
-      on the server with the destination database, run the following command:
+      Before cloning/synchronizing a <productname>PostgreSQL</productname> instance, ensure that the source
+      instance server is running and accepting connections and that the destination instance
+      was shut down cleanly. To clone/sync the instance, on the server with the destination instance, run the following command:
     </para>
     <programlisting>
 pg_probackup catchup -b <replaceable>catchup-mode</replaceable> --source-pgdata=<replaceable>path_to_pgdata_on_remote_server</replaceable> --destination-pgdata=<replaceable>path_to_local_dir</replaceable> --stream [<replaceable>connection_options</replaceable>] [<replaceable>remote_options</replaceable>]
@@ -3496,21 +3510,21 @@ pg_probackup catchup -b <replaceable>catchup-mode</replaceable> --source-pgdata=
       <listitem>
         <para>
           FULL — creates a full copy of the <productname>PostgreSQL</productname> instance.
-          The destination directory must be empty for this mode.
+          The data directory of the destination instance must be empty for this mode.
         </para>
       </listitem>
       <listitem>
         <para>
           DELTA — reads all data files in the data directory and
           creates an incremental copy for pages that have changed
-          since the destination database was shut down.
+          since the destination instance was shut down.
         </para>
       </listitem>
       <listitem>
         <para>
           PTRACK — tracking page changes on the fly,
-          only copies pages that have changed since the point of divergence
-          of the source and destination databases.
+          only reads and copies pages that have changed since the point of divergence
+          of the source and destination instances.
         </para>
       </listitem>
     </itemizedlist>
@@ -3518,7 +3532,7 @@ pg_probackup catchup -b <replaceable>catchup-mode</replaceable> --source-pgdata=
       You can use <link linkend="pbk-connection-opts">connection_options</link> to specify
       the connection to the source database cluster. If it is located on a different server,
       also specify <link linkend="pbk-remote-server-opts">remote_options</link>.
-      If the source database contains tablespaces that must be located in
+      If the source database cluster contains tablespaces that must be located in
       a different directory, additionally specify the <option>--tablespace-mapping</option>
       option:
      <programlisting>
@@ -4450,14 +4464,14 @@ pg_probackup catchup -b <replaceable>catchup_mode</replaceable>
           <para>
             <literal>DELTA</literal> — reads all data files in the data directory and
             creates an incremental copy for pages that have changed
-            since the destination database was shut down.
+            since the destination instance was shut down.
           </para>
         </listitem>
         <listitem>
           <para>
             <literal>PTRACK</literal> — tracking page changes on the fly,
-            only copies pages that have changed since the point of divergence
-            of the source and destination databases.
+            only reads and copies pages that have changed since the point of divergence
+            of the source and destination instances.
           </para>
         </listitem>
       </itemizedlist>
@@ -4487,9 +4501,9 @@ pg_probackup catchup -b <replaceable>catchup_mode</replaceable>
 <term><option>--stream</option></term>
       <listitem>
       <para>
-        Makes a <link linkend="pbk-stream-mode">STREAM</link> backup, which
-        includes all the necessary WAL files by streaming them from
-        the database server via replication protocol.
+        Copies the instance in <link linkend="pbk-stream-mode">STREAM</link> WAL delivery mode,
+        including all the necessary WAL files by streaming them from
+        the instance server via replication protocol.
       </para>
       </listitem>
       </varlistentry>
@@ -4529,7 +4543,7 @@ pg_probackup catchup -b <replaceable>catchup_mode</replaceable>
       </para>
       <para>
         For details on usage, see the section
-        <link linkend="pbk-creating-backup-to-catchup">Cloning <productname>PostgreSQL</productname> Instance</link>.
+        <link linkend="pbk-creating-backup-to-catchup">Cloning and Synchronizing <productname>PostgreSQL</productname> Instance</link>.
       </para>
     </refsect3>
   </refsect2>
