@@ -1557,8 +1557,8 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         double segment - compressed and not
         """
         if not self.archive_compress:
-            return self.fail(
-                'You need to enable ARCHIVE_COMPRESSION for this test to run')
+            self.skipTest('You need to enable ARCHIVE_COMPRESSION '
+                          'for this test to run')
 
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
@@ -1612,8 +1612,8 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         double segment - compressed and not
         """
         if not self.archive_compress:
-            return self.fail(
-                'You need to enable ARCHIVE_COMPRESSION for this test to run')
+            self.skipTest('You need to enable ARCHIVE_COMPRESSION '
+                          'for this test to run')
 
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
@@ -1669,6 +1669,9 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         check that '--archive-host', '--archive-user', '--archiver-port'
         and '--restore-command' are working as expected.
         """
+        if not self.remote:
+            self.skipTest("You must enable PGPROBACKUP_SSH_REMOTE"
+                          " for run this test")
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(

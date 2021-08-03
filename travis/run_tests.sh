@@ -47,7 +47,7 @@ cd postgres # Go to postgres dir
 if [ "$PG_PROBACKUP_PTRACK" = "on" ]; then
     git apply -3 ../ptrack/patches/REL_${PTRACK_PATCH_PG_VERSION}_STABLE-ptrack-core.diff
 fi
-./configure --prefix=$PGHOME --enable-debug --enable-cassert --enable-depend --enable-tap-tests
+CFLAGS="-O0" ./configure --prefix=$PGHOME --enable-debug --enable-cassert --enable-depend --enable-tap-tests
 make -s -j$(nproc) install
 #make -s -j$(nproc) -C 'src/common' install
 #make -s -j$(nproc) -C 'src/port' install

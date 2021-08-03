@@ -184,7 +184,12 @@ StreamLog(void *arg)
 #endif
 
 
-#if PG_VERSION_NUM >= 110000
+#if PG_VERSION_NUM >= 150000
+	/* Create temp repslot */
+	if (temp_slot)
+		CreateReplicationSlot(stream_arg->conn, replication_slot,
+			NULL, temp_slot, true, true, false, false);
+#elif PG_VERSION_NUM >= 110000
 	/* Create temp repslot */
 	if (temp_slot)
 		CreateReplicationSlot(stream_arg->conn, replication_slot,

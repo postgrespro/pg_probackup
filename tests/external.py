@@ -373,6 +373,9 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         restore delta backup, check that incremental chain
         restored correctly
         """
+        if not self.probackup_old_path:
+            self.skipTest("You must specify PGPROBACKUPBIN_OLD"
+                          " for run this test")
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
@@ -474,6 +477,9 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         take delta backup with new binary and 2 external directories
         merge delta backup ajd restore it
         """
+        if not self.probackup_old_path:
+            self.skipTest("You must specify PGPROBACKUPBIN_OLD"
+                          " for run this test")
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
@@ -566,6 +572,9 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         take delta backup with new binary and 2 external directories
         merge delta backup and restore it
         """
+        if not self.probackup_old_path:
+            self.skipTest("You must specify PGPROBACKUPBIN_OLD"
+                          " for run this test")
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
@@ -687,6 +696,9 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
     # @unittest.skip("skip")
     def test_external_merge(self):
         """"""
+        if not self.probackup_old_path:
+            self.skipTest("You must specify PGPROBACKUPBIN_OLD"
+                          " for run this test")
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
