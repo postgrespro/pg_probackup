@@ -21,11 +21,11 @@ endif
 #PG_VERSIONS = $(PG_VERSIONS_DEFAULT)
 #endif
 
-pkg: prepare_builddir build/all
+pkg: check_env build/prepare build/all
 	@echo Build for all platform: done
 #	echo "HELLO"
 
-prepare_builddir:
+check_env:
 	@if [ -z ${PBK_VERSION} ] ; then \
            echo "Env variable PBK_VERSION is not set" ; \
            false ; \
@@ -40,26 +40,14 @@ prepare_builddir:
            echo "Env variable PBK_HASH is not set" ; \
            false ; \
      fi
-	mkdir -p $(BUILDDIR)
 
-#rpm: prepare_builddir $(BUILDDIR)/packaging/rpm/SPECS/$(SPEC)
-#	mkdir -p $(BUILDDIR)/packaging/rpm/RPMS $(BUILDDIR)/packaging/rpm/BUILD $(BUILDDIR)/packaging/rpm/SRPMS
-#	rpmbuild -ba --define '_topdir $(BUILDDIR)/packaging/rpm'\
-#		$(BUILDDIR)/packaging/rpm/SPECS/$(SPEC)
-#	cp -av $(BUILDDIR)/packaging/rpm/RPMS/noarch/mamonsu*.rpm .
+build/prepare:
+	mkdir -p build
 
-#build/prepare:
-#	mkdir -p build
-#	touch build/prepare
+build/clean: build/prepare
+	rm -f build/build*
 
-#build/all: build/debian build/ubuntu build/centos build/oraclelinux build/rhel build/alt build/pkg_suse 
-#	@echo Build for all platform: done
-#	touch build/all
-
-#build/all: build/debian build/ubuntu build/centos
-#	@echo Packaging is done
-
-build/all: build/alt
+build/all: build/debian build/ubuntu build/centos build/oraclelinux build/rhel build/alt build/suse
 	@echo Packaging is done
 
 ### DEBIAN
@@ -107,7 +95,7 @@ include packaging/Makefile.debian
 include packaging/Makefile.ubuntu
 
 # CENTOS
-build/centos: build/centos_6 build/centos_7 build/centos_7 #build/rpm_repo_package_centos
+build/centos: build/centos_6 build/centos_7 build/centos_8 #build/rpm_repo_package_centos
 	@echo Centos: done
 
 build/centos_6: build/centos_6_9.5 build/centos_6_9.6 build/centos_6_10 build/centos_6_11 build/centos_6_12 build/centos_6_13
@@ -120,7 +108,7 @@ build/centos_8: build/centos_8_9.5 build/centos_8_9.6 build/centos_8_10 build/ce
 	@echo Centos 8: done
 
 # Oracle Linux
-build/oraclelinux: build/oraclelinux_6 build/oraclelinux_7 build/oraclelinux_7 #build/rpm_repo_package_oraclelinux
+build/oraclelinux: build/oraclelinux_6 build/oraclelinux_7 build/oraclelinux_8 #build/rpm_repo_package_oraclelinux
 	@echo Oraclelinux: done
 
 build/oraclelinux_6: build/oraclelinux_6_9.5 build/oraclelinux_6_9.6 build/oraclelinux_6_10 build/oraclelinux_6_11 build/oraclelinux_6_12 build/oraclelinux_6_13
@@ -190,7 +178,29 @@ endef
 
 include packaging/Makefile.alt
 
-# Suse Linux
+# SUSE Linux
+build/suse: build/suse_15.1 build/suse_15.2
+	@echo Suse: done
+
+build/suse_15.1: build/suse_15.1_9.5 build/suse_15.1_9.6 build/suse_15.1_10 build/suse_15.1_11 build/suse_15.1_12 build/suse_15.1_13
+	@echo Rhel 15.1: done
+
+build/suse_15.2: build/suse_15.2_9.5 build/suse_15.2_9.6 build/suse_15.2_10 build/suse_15.2_11 build/suse_15.2_12 build/suse_15.2_13
+	@echo Rhel 15.1: done
+
+define build_suse
+	docker rm -f $1_$2_probackup_$(PKG_NAME_SUFFIX)$(PBK_VERSION) >> /dev/null 2>&1 ; \
+	docker run \
+		-v $(WORKDIR)/packaging:/app/in \
+		-v $(WORKDIR)/build/data/$(PBK_PKG_REPO)/$1/$2/pg_probackup-$(PKG_NAME_SUFFIX)$4/$(PBK_VERSION):/app/out \
+		-e "DISTRIB=$1" -e "DISTRIB_VERSION=$2" -e "CODENAME=$3" -e "PG_VERSION=$4" -e "PG_FULL_VERSION=$5" \
+		-e "PKG_HASH=$(PBK_HASH)" -e "PKG_URL=$(PBK_GIT_REPO)" -e "PKG_RELEASE=$(PBK_RELEASE)" -e "PKG_NAME=pg_probackup-$(PKG_NAME_SUFFIX)$4" \
+		-e "PKG_VERSION=$(PBK_VERSION)" -e "PBK_EDITION=$(PBK_EDITION)" -e "PBK_EDITION_FULL=$(PBK_EDITION_FULL)" \
+		--name $1_$2_probackup_$(PKG_NAME_SUFFIX)$(PBK_VERSION) \
+		--rm pgpro/$1:$2 /app/in/scripts/suse.sh
+endef
+
+include packaging/Makefile.suse
 
 #### REPO BUILD ####
 #

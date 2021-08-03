@@ -1,7 +1,7 @@
 ```
 export PBK_VERSION=2.4.17
-export PG_VERSIONS=9.5
 export PBK_HASH=57f871accce2604
+export PBK_RELEASE=1
 export PBK_EDITION=std
 make pkg
 ```

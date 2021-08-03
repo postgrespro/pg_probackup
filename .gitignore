@@ -54,6 +54,9 @@
 /make_dockerfile.sh
 /backup_restore.sh
 
+# Packaging
+/build
+
 # Misc
 .python-version
 .vscode
