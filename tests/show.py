@@ -341,12 +341,7 @@ class ShowTest(ProbackupTest, unittest.TestCase):
         output_local = self.show_pb(
             backup_dir, 'node', as_json=False, backup_id=backup_local_id)
 
-        if self.remote:
-            backup_remote_id = self.backup_node(backup_dir, 'node', node)
-        else:
-            backup_remote_id = self.backup_node(
-                backup_dir, 'node', node,
-                options=['--remote-proto=ssh', '--remote-host=localhost'])
+        backup_remote_id = self.backup_node(backup_dir, 'node', node)
 
         output_remote = self.show_pb(
             backup_dir, 'node', as_json=False, backup_id=backup_remote_id)
@@ -373,13 +368,8 @@ class ShowTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node', as_json=False, backup_id=backup_local_id)
         self.delete_pb(backup_dir, 'node', backup_local_id)
 
-        if self.remote:
-            backup_remote_id = self.backup_node(
-                backup_dir, 'node', node, backup_type='delta')
-        else:
-            backup_remote_id = self.backup_node(
-                backup_dir, 'node', node, backup_type='delta',
-                options=['--remote-proto=ssh', '--remote-host=localhost'])
+        backup_remote_id = self.backup_node(
+            backup_dir, 'node', node, backup_type='delta')
 
         output_remote = self.show_pb(
             backup_dir, 'node', as_json=False, backup_id=backup_remote_id)
@@ -403,13 +393,8 @@ class ShowTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node', as_json=False, backup_id=backup_local_id)
         self.delete_pb(backup_dir, 'node', backup_local_id)
 
-        if self.remote:
-            backup_remote_id = self.backup_node(
-                backup_dir, 'node', node, backup_type='page')
-        else:
-            backup_remote_id = self.backup_node(
-                backup_dir, 'node', node, backup_type='page',
-                options=['--remote-proto=ssh', '--remote-host=localhost'])
+        backup_remote_id = self.backup_node(
+            backup_dir, 'node', node, backup_type='page')
 
         output_remote = self.show_pb(
             backup_dir, 'node', as_json=False, backup_id=backup_remote_id)

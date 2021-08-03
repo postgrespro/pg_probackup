@@ -224,8 +224,6 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         make archive master, take full and page archive backups from master,
         set replica, make archive backup from replica
         """
-        if not self.remote:
-            self.skipTest("You must enable PGPROBACKUP_SSH_REMOTE for run this test")
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         master = self.make_simple_node(
