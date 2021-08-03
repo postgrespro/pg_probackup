@@ -54,15 +54,15 @@ make -s -j$(nproc) install
 #make -s -j$(nproc) -C 'src/interfaces' install
 make -s -j$(nproc) -C contrib/ install
 
-if [ "$PG_PROBACKUP_PTRACK" = "on" ]; then
-    echo "############### Compiling Ptrack:"
-    make USE_PGXS=1 top_srcdir=$PG_SRC -C ../ptrack install
-fi
-
 # Override default Postgres instance
 export PATH=$PGHOME/bin:$PATH
 export LD_LIBRARY_PATH=$PGHOME/lib
 export PG_CONFIG=$(which pg_config)
+
+if [ "$PG_PROBACKUP_PTRACK" = "on" ]; then
+    echo "############### Compiling Ptrack:"
+    make USE_PGXS=1 -C ../ptrack install
+fi
 
 # Get amcheck if missing
 if [ ! -d "contrib/amcheck" ]; then
