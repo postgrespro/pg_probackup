@@ -189,7 +189,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'],
-            pg_options={'TimeZone': 'Europe/Moscow'})
+            pg_options={'TimeZone': 'GMT'})
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
@@ -202,7 +202,9 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         backup_id = self.backup_node(backup_dir, 'node', node)
 
-        target_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        target_time = node.execute(
+            "postgres", "SELECT to_char(now(), 'YYYY-MM-DD HH24:MI:SS+00')"
+        )[0][0]
         pgbench = node.pgbench(
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         pgbench.wait()
@@ -2843,6 +2845,9 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         """
         old binary should be of version < 2.2.0
         """
+        if not self.probackup_old_path:
+            self.skipTest("You must specify PGPROBACKUPBIN_OLD"
+                          " for run this test")
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
@@ -2946,6 +2951,9 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         """
         old binary should be of version < 2.2.0
         """
+        if not self.probackup_old_path:
+            self.skipTest("You must specify PGPROBACKUPBIN_OLD"
+                          " for run this test")
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
@@ -3621,7 +3629,9 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         pg_probackup version must be 12 or greater
         """
-
+        if not self.probackup_old_path:
+            self.skipTest("You must specify PGPROBACKUPBIN_OLD"
+                          " for run this test")
         if self.pg_config_version < self.version_to_num('12.0'):
            return unittest.skip('You need PostgreSQL >= 12 for this test')
 
