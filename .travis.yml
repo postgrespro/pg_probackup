@@ -47,7 +47,7 @@ env:
 
 jobs:
     allow_failures:
-         - env: PG_BRANCH=master
+        - if: env(PG_BRANCH) = master
 #        - if: env(MODE) IN (archive, backup, delta, locking, merge, replica, retention, restore)
 
 # Only run CI for master branch commits to limit our travis usage
