@@ -164,11 +164,17 @@ include packaging/Makefile.oraclelinux
 
 
 # Alt Linux
-build/alt: build/alt_7 #build/alt_8 build/alt_9
+build/alt: build/alt_7 build/alt_8 build/alt_9
 	@echo Alt Linux: done
 
 build/alt_7: build/alt_7_9.5 build/alt_7_9.6 build/alt_7_10 build/alt_7_11 build/alt_7_12 build/alt_7_13
 	@echo Alt Linux 7: done
+
+build/alt_8: build/alt_8_9.5 build/alt_8_9.6 build/alt_8_10 build/alt_8_11 build/alt_8_12 build/alt_8_13
+	@echo Alt Linux 8: done
+
+build/alt_9: build/alt_9_9.5 build/alt_9_9.6 build/alt_9_10 build/alt_9_11 build/alt_9_12 build/alt_9_13
+	@echo Alt Linux 9: done
 
 define build_alt
 	docker rm -f $1_$2_probackup_$(PKG_NAME_SUFFIX)$(PBK_VERSION) >> /dev/null 2>&1 ; \
@@ -184,6 +190,7 @@ endef
 
 include packaging/Makefile.alt
 
+# Suse Linux
 
 #### REPO BUILD ####
 #

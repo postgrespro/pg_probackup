@@ -20,7 +20,7 @@ build/rhel_6_12:
 	touch build/rhel_6_12
 
 build/rhel_6_13:
-	$(call build_rpm,rhel,6,6Server,13,13.3)
+	$(call build_rpm,rhel,6,6Server,13,13.2)
 	touch build/rhel_6_13
 
 # RHEL 7
@@ -45,7 +45,7 @@ build/rhel_7_12:
 	touch build/rhel_7_12
 
 build/rhel_7_13:
-	$(call build_rpm,rhel,7,7Server,13,13.3)
+	$(call build_rpm,rhel,7,7Server,13,13.2)
 	touch build/rhel_7_13
 
 # RHEL 8
@@ -70,5 +70,5 @@ build/rhel_8_12:
 	touch build/rhel_8_12
 
 build/rhel_8_13:
-	$(call build_rpm,rhel,8,8Server,13,13.3)
+	$(call build_rpm,rhel,8,8Server,13,13.2)
 	touch build/rhel_8_13

@@ -20,7 +20,7 @@ build/centos_6_12:
 	touch build/centos_6_12
 
 build/centos_6_13:
-	$(call build_rpm,centos,6,,13,13.3)
+	$(call build_rpm,centos,6,,13,13.2)
 	touch build/centos_6_13
 
 # CENTOS 7
@@ -45,7 +45,7 @@ build/centos_7_12:
 	touch build/centos_7_12
 
 build/centos_7_13:
-	$(call build_rpm,centos,7,,13,13.3)
+	$(call build_rpm,centos,7,,13,13.2)
 	touch build/centos_7_13
 
 # CENTOS 8
@@ -70,5 +70,5 @@ build/centos_8_12:
 	touch build/centos_8_12
 
 build/centos_8_13:
-	$(call build_rpm,centos,8,,13,13.3)
+	$(call build_rpm,centos,8,,13,13.2)
 	touch build/centos_8_13

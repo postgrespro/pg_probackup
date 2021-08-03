@@ -20,7 +20,7 @@ build/debian_8_12:
 	touch build/debian_8_12
 
 build/debian_8_13:
-	$(call build_deb,debian,8,jessie,13,13.3)
+	$(call build_deb,debian,8,jessie,13,13.2)
 	touch build/debian_8_13
 
 # DEBIAN 9
@@ -45,7 +45,7 @@ build/debian_9_12:
 	touch build/debian_9_12
 
 build/debian_9_13:
-	$(call build_deb,debian,9,stretch,13,13.3)
+	$(call build_deb,debian,9,stretch,13,13.2)
 	touch build/debian_9_13
 
 # DEBIAN 10
@@ -70,5 +70,5 @@ build/debian_10_12:
 	touch build/debian_10_12
 
 build/debian_10_13:
-	$(call build_deb,debian,10,buster,13,13.3)
+	$(call build_deb,debian,10,buster,13,13.2)
 	touch build/debian_10_13

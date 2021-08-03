@@ -20,7 +20,7 @@ build/ubuntu_20.04_12:
 	touch build/ubuntu_20.04_12
 
 build/ubuntu_20.04_13:
-	$(call build_deb,ubuntu,20.04,focal,13,13.3)
+	$(call build_deb,ubuntu,20.04,focal,13,13.2)
 	touch build/ubuntu_20.04_13
 
 # UBUNTU 18.04
@@ -45,7 +45,7 @@ build/ubuntu_18.04_12:
 	touch build/ubuntu_18.04_12
 
 build/ubuntu_18.04_13:
-	$(call build_deb,ubuntu,18.04,bionic,13,13.3)
+	$(call build_deb,ubuntu,18.04,bionic,13,13.2)
 	touch build/ubuntu_18.04_13
 
 # UBUNTU 16.04
@@ -70,7 +70,7 @@ build/ubuntu_16.04_12:
 	touch build/ubuntu_16.04_12
 
 build/ubuntu_16.04_13:
-	$(call build_deb,ubuntu,16.04,xenial,13,13.3)
+	$(call build_deb,ubuntu,16.04,xenial,13,13.2)
 	touch build/ubuntu_16.04_13
 
 # UBUNTU 14.04
@@ -95,5 +95,5 @@ build/ubuntu_14.04_12:
 	touch build/ubuntu_14.04_12
 
 build/ubuntu_14.04_13:
-	$(call build_deb,ubuntu,14.04,trusty,13,13.3)
+	$(call build_deb,ubuntu,14.04,trusty,13,13.2)
 	touch build/ubuntu_14.04_13

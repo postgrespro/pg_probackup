@@ -20,7 +20,7 @@ build/oraclelinux_6_12:
 	touch build/oraclelinux_6_12
 
 build/oraclelinux_6_13:
-	$(call build_rpm,oraclelinux,6,,13,13.3)
+	$(call build_rpm,oraclelinux,6,,13,13.2)
 	touch build/oraclelinux_6_13
 
 # ORACLE LINUX 7
@@ -45,7 +45,7 @@ build/oraclelinux_7_12:
 	touch build/oraclelinux_7_12
 
 build/oraclelinux_7_13:
-	$(call build_rpm,oraclelinux,7,,13,13.3)
+	$(call build_rpm,oraclelinux,7,,13,13.2)
 	touch build/oraclelinux_7_13
 
 # ORACLE LINUX 8
@@ -70,5 +70,5 @@ build/oraclelinux_8_12:
 	touch build/oraclelinux_8_12
 
 build/oraclelinux_8_13:
-	$(call build_rpm,oraclelinux,8,,13,13.3)
+	$(call build_rpm,oraclelinux,8,,13,13.2)
 	touch build/oraclelinux_8_13
