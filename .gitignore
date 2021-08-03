@@ -56,6 +56,7 @@
 
 # Packaging
 /build
+/packaging/tarballs/pgpro.tar.bz2
 
 # Misc
 .python-version

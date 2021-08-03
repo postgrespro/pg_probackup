@@ -47,14 +47,14 @@ build/prepare:
 build/clean: build/prepare
 	rm -f build/build*
 
-build/all: build/debian build/ubuntu build/centos build/oraclelinux build/rhel build/alt build/suse
+build/all: build/debian build/centos #build/ubuntu build/centos build/oraclelinux build/rhel build/alt build/suse
 	@echo Packaging is done
 
 ### DEBIAN
-build/debian: build/debian_8 build/debian_9 build/debian_10
+build/debian: build/debian_8 #build/debian_9 build/debian_10
 	@echo Debian: done
 
-build/debian_8: build/debian_8_9.5 build/debian_8_9.6 build/debian_8_10 build/debian_8_11 build/debian_8_12 build/debian_8_13
+build/debian_8: build/debian_8_9.5 #build/debian_8_9.6 build/debian_8_10 build/debian_8_11 build/debian_8_12 build/debian_8_13
 	@echo Debian 8: done
 
 build/debian_9: build/debian_9_9.5 build/debian_9_9.6 build/debian_9_10 build/debian_9_11 build/debian_9_12 build/debian_9_13
@@ -95,10 +95,10 @@ include packaging/Makefile.debian
 include packaging/Makefile.ubuntu
 
 # CENTOS
-build/centos: build/centos_6 build/centos_7 build/centos_8 #build/rpm_repo_package_centos
+build/centos: build/centos_6 #build/centos_7 build/centos_8 #build/rpm_repo_package_centos
 	@echo Centos: done
 
-build/centos_6: build/centos_6_9.5 build/centos_6_9.6 build/centos_6_10 build/centos_6_11 build/centos_6_12 build/centos_6_13
+build/centos_6: build/centos_6_9.5 #build/centos_6_9.6 build/centos_6_10 build/centos_6_11 build/centos_6_12 build/centos_6_13
 	@echo Centos 6: done
 
 build/centos_7: build/centos_7_9.5 build/centos_7_9.6 build/centos_7_10 build/centos_7_11 build/centos_7_12 build/centos_7_13
@@ -203,27 +203,40 @@ endef
 include packaging/Makefile.suse
 
 #### REPO BUILD ####
-#
-#define build_rpm_repo_pkg
-#	docker run -v "$(WORKDIR)":/app/in \
-#		-v "$(WORKDIR)/build/pkg/keys":/app/out \
-#		-e "VERSION=$(VERSION)" -e "DISTRIB=$1" -e "DISTRIB_VERSION=$2" \
-#		--rm $1:$2 /app/in/packaging/scripts/repo_rpm.sh
-#endef
 
-#build/rpm_repo_package_centos:
-#	$(call build_rpm_repo_pkg,centos,7)
-#	touch build/rpm_repo_package_centos
-#
+repo: repo/debian repo/centos #repo/ubuntu repo/centos repo/finish
+	@echo Build repo for all platform: done
 
-#repo/all: repo/debian repo/ubuntu repo/centos repo/finish
-#	@echo Build repo for all platform: done
-#	touch build/repo_all
-#
-#repo/debian: repo/debian_8 repo/debian_9 repo/debian_10
-#	@echo Build repo for debian platforms: done
-#	touch build/repo_debian
-#
+repo/debian: build/repo_debian_8 repo/debian_9 repo/debian_10
+	@echo Build repo for debian platforms: done
+
+build/repo_debian_8:
+	$(call build_repo_deb,debian,8,jessie)
+	touch build/repo_debian_8
+
+build/repo_debian_9:
+	$(call build_repo_deb,debian,9,stretch)
+	touch build/repo_debian_9
+
+build/repo_debian_10:
+	$(call build_repo_deb,debian,10,buster)
+	touch build/repo_debian_10
+
+repo/centos: build/repo_centos_6 build/repo_centos_7 build/repo_centos_8
+	@echo Build repo for centos platforms: done
+
+build/repo_centos_6:
+	$(call build_repo_rpm,centos,6,,)
+	touch build/repo_centos_6
+
+build/repo_centos_7:
+	$(call build_repo_rpm,centos,7,,)
+	touch build/repo_centos_7
+
+build/repo_centos_8:
+	$(call build_repo_rpm,centos,8,,)
+	touch build/repo_centos_8
+
 #repo/ubuntu: repo/ubuntu_16_04 repo/ubuntu_18_04
 #	@echo Build repo for ubuntu platforms: done
 #	touch build/repo_ubuntu
@@ -288,3 +301,27 @@ include packaging/Makefile.suse
 #	--rm $1:$2 bash -exc "cp -av /app/in/*rpm /app/www/mamonsu/keys && cd /app/www/mamonsu/ && \
 #	ln -s $(VERSION) latest"
 #endef
+
+define build_repo_deb
+	docker rm -f $1_$2_pbk_repo >> /dev/null 2>&1 ; \
+	docker run \
+		-v $(WORKDIR)/packaging/repo:/app/repo \
+		-v $(WORKDIR)/build/data/www:/app/www \
+		-v $(WORKDIR)/build/data/$(PBK_PKG_REPO)/$1/$2:/app/in \
+		-e "DISTRIB=$1" -e "DISTRIB_VERSION=$2" -e "CODENAME=$3" \
+		-e "PBK_PKG_REPO=$(PBK_PKG_REPO)" -e "PBK_EDITION=$(PBK_EDITION)" \
+		--name $1_$2_pbk_repo \
+		--rm pgpro/repo /app/repo/scripts/deb.sh
+endef
+
+define build_repo_rpm
+	docker rm -f $1_$2_pbk_repo >> /dev/null 2>&1 ; \
+	docker run \
+		-v $(WORKDIR)/packaging/repo:/app/repo \
+		-v $(WORKDIR)/build/data/www:/app/www \
+		-v $(WORKDIR)/build/data/$(PBK_PKG_REPO)/$1/$2:/app/in \
+		-e "DISTRIB=$1" -e "DISTRIB_VERSION=$2" -e "CODENAME=$3" \
+		-e "PBK_PKG_REPO=$(PBK_PKG_REPO)" -e "PBK_EDITION=$(PBK_EDITION)" \
+		--name $1_$2_pbk_repo \
+		--rm pgpro/repo /app/repo/scripts/rpm.sh
+endef
