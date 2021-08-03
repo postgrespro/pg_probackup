@@ -31,7 +31,7 @@ cd /root/build
 rpm --rebuilddb && yum clean all
 
 # Copy rpmbuild
-cp -rv /app/in/packaging/specs/rpm/rpmbuild /root/
+cp -rv /app/in/specs/rpm/rpmbuild /root/
 
 # download pbk
 git clone $PKG_URL pg_probackup-${PKG_VERSION}
@@ -66,9 +66,7 @@ if [[ ${PBK_EDITION} == '' ]] ; then
 		then sed -i "s/@SHORT_CODENAME@/Oracle/" pg_probackup.repo
 	fi
 else
-#	cp /app/tarballs/postgrespro-${EDITION}-${PG_FULL_VERSION}.tar.bz2 /root/rpmbuild/SOURCES/
-#	cp /app/in/packaging/tarballs/pgpro.tar.bz2
-	tar -xf /app/in/packaging/tarballs/pgpro.tar.bz2 -C /root/rpmbuild/SOURCES/
+	tar -xf /app/in/tarballs/pgpro.tar.bz2 -C /root/rpmbuild/SOURCES/
 	cd /root/rpmbuild/SOURCES/pgpro
 
 	PGPRO_TOC=$(echo ${PG_FULL_VERSION} | sed 's|\.|_|g')

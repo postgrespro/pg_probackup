@@ -22,3 +22,53 @@ build/centos_6_12:
 build/centos_6_13:
 	$(call build_rpm,centos,6,,13,13.3)
 	touch build/centos_6_13
+
+# CENTOS 7
+build/centos_7_9.5:
+	$(call build_rpm,centos,7,,9.5,9.5.25)
+	touch build/centos_7_9.5
+
+build/centos_7_9.6:
+	$(call build_rpm,centos,7,,9.6,9.6.21)
+	touch build/centos_7_9.6
+
+build/centos_7_10:
+	$(call build_rpm,centos,7,,10,10.16)
+	touch build/centos_7_10
+
+build/centos_7_11:
+	$(call build_rpm,centos,7,,11,11.11)
+	touch build/centos_7_11
+
+build/centos_7_12:
+	$(call build_rpm,centos,7,,12,12.6)
+	touch build/centos_7_12
+
+build/centos_7_13:
+	$(call build_rpm,centos,7,,13,13.3)
+	touch build/centos_7_13
+
+# CENTOS 8
+build/centos_8_9.5:
+	$(call build_rpm,centos,8,,9.5,9.5.25)
+	touch build/centos_8_9.5
+
+build/centos_8_9.6:
+	$(call build_rpm,centos,8,,9.6,9.6.21)
+	touch build/centos_8_9.6
+
+build/centos_8_10:
+	$(call build_rpm,centos,8,,10,10.16)
+	touch build/centos_8_10
+
+build/centos_8_11:
+	$(call build_rpm,centos,8,,11,11.11)
+	touch build/centos_8_11
+
+build/centos_8_12:
+	$(call build_rpm,centos,8,,12,12.6)
+	touch build/centos_8_12
+
+build/centos_8_13:
+	$(call build_rpm,centos,8,,13,13.3)
+	touch build/centos_8_13

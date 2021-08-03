@@ -46,7 +46,7 @@ if [[ ${PBK_EDITION} == '' ]] ; then
 fi
 
 cd /root/build/${PKG_NAME}_${PKG_VERSION}
-cp -av /app/in/packaging/specs/deb/pg_probackup/debian ./
+cp -av /app/in/specs/deb/pg_probackup/debian ./
 if [[ ${PBK_EDITION} == '' ]] ; then
     sed -i "s/@PKG_NAME@/${PKG_NAME}/g" debian/changelog
     sed -i "s/@PKG_VERSION@/${PKG_VERSION}/g" debian/changelog
@@ -114,7 +114,7 @@ if [[ ${PBK_EDITION} == '' ]] ; then
     cd /root/build/${PKG_NAME}_${PKG_VERSION}
     tar -xf /root/build/dsc/${PKG_NAME}_${PKG_VERSION}.orig-postgresql${PG_TOC}.tar.bz2
 else
-    tar -xf /app/in/packaging/tarballs/pgpro.tar.bz2 -C /root/build/dsc/
+    tar -xf /app/in/tarballs/pgpro.tar.bz2 -C /root/build/dsc/
     cd /root/build/dsc/pgpro
 
     PGPRO_TOC=$(echo ${PG_FULL_VERSION} | sed 's|\.|_|g')
