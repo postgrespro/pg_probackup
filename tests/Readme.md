@@ -30,7 +30,9 @@ Specify path to pg_probackup binary file. By default tests use <Path to Git repo
 Remote backup depends on key authentication to local machine via ssh as current user.
  export PGPROBACKUP_SSH_REMOTE=ON
 
-Run tests that are relied on advanced debugging features. For this mode, pg_probackup should be compiled without optimizations.
+Run tests that are relied on advanced debugging features. For this mode, pg_probackup should be compiled without optimizations. For example:
+CFLAGS="-O0" ./configure --prefix=/path/to/prefix --enable-debug --enable-cassert --enable-depend --enable-tap-tests
+
  export PGPROBACKUP_GDB=ON
 
 Run suit of basic simple tests:
