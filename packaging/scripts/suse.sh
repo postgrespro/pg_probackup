@@ -42,11 +42,6 @@ rm -rf pg_probackup-${PKG_VERSION}
 # Download PostgreSQL source
 wget -q http://ftp.postgresql.org/pub/source/v${PG_FULL_VERSION}/postgresql-${PG_FULL_VERSION}.tar.bz2 -O /root/rpmbuild/SOURCES/postgresql-${PG_VERSION}.tar.bz2
 
-#mv pg_probackup-${PKG_VERSION}.tar.bz2 /usr/src/packages/SOURCES/
-#mv postgresql-${PG_VERSION}.tar.bz2 /usr/src/packages/SOURCES/
-#cp -av /root/rpmbuild/SOURCES/GPG-KEY-PG_PROBACKUP /usr/src/packages/SOURCES/GPG-KEY-PG_PROBACKUP
-#cp -av /root/rpmbuild/SOURCES/pg_probackup.repo /usr/src/packages/SOURCES/pg_probackup.repo
-
 rm -rf /usr/src/packages
 ln -s /root/rpmbuild /usr/src/packages
 
@@ -91,9 +86,5 @@ rpmbuild -ba pg_probackup-repo.spec
 
 # write artefacts to out directory
 rm -rf /app/out/*
-#sleep 100500
+
 cp -arv /root/rpmbuild/{RPMS,SRPMS} /app/out
-#mkdir -p /app/out/RPMS/x86_64
-#mkdir -p /app/out/RPMS/noarch
-#cp -arv /usr/src/packages/RPMS/x86_64/*rpm /app/out/RPMS/x86_64/
-#cp -arv /usr/src/packages/RPMS/noarch/*rpm /app/out/RPMS/noarch/

@@ -14,3 +14,7 @@ tar -cjSf pgpro.tar.bz2 pgpro
 ```
 
 To build repo the gpg keys for package signing must be present ...
+Repo must be build with 1 thread:
+```
+make repo -j1
+```
