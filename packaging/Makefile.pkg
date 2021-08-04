@@ -74,10 +74,10 @@ include packaging/pkg/Makefile.debian
 include packaging/pkg/Makefile.ubuntu
 
 # CENTOS
-build/centos: build/centos_6 #build/centos_7 build/centos_8 #build/rpm_repo_package_centos
+build/centos: build/centos_6 build/centos_7 build/centos_8 #build/rpm_repo_package_centos
 	@echo Centos: done
 
-build/centos_6: build/centos_6_9.5 #build/centos_6_9.6 build/centos_6_10 build/centos_6_11 build/centos_6_12 build/centos_6_13
+build/centos_6: build/centos_6_9.5 build/centos_6_9.6 build/centos_6_10 build/centos_6_11 build/centos_6_12 build/centos_6_13
 	@echo Centos 6: done
 
 build/centos_7: build/centos_7_9.5 build/centos_7_9.6 build/centos_7_10 build/centos_7_11 build/centos_7_12 build/centos_7_13

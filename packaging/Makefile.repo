@@ -119,13 +119,6 @@ repo_finish:
 	sudo ln -rfs build/data/www/$(PBK_PKG_REPO)/rpm/${PBK_VERSION} build/data/www/$(PBK_PKG_REPO)/rpm/latest
 	sudo ln -rfs build/data/www/$(PBK_PKG_REPO)/srpm/${PBK_VERSION} build/data/www/$(PBK_PKG_REPO)/srpm/latest
 
-#define repo_finish
-#	docker run -v $(WORKDIR)/build/pkg/keys:/app/in -v $(WORKDIR)/build/www:/app/www \
-#	-e "DISTRIB=$1" -e "DISTRIB_VERSION=$2" -e "CODENAME=$3" \
-#	--rm $1:$2 bash -exc "cp -av /app/in/*rpm /app/www/mamonsu/keys && cd /app/www/mamonsu/ && \
-#	ln -s $(VERSION) latest"
-#endef
-
 define build_repo_deb
 	docker rm -f $1_$2_pbk_repo >> /dev/null 2>&1 ; \
 	docker run \
