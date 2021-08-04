@@ -30,8 +30,8 @@ cp -arv /app/repo/$PBK_PKG_REPO/gnupg /root/.gnupg
 chmod -R 0600 /root/.gnupg
 chown -R root:root /root/.gnupg
 
-for pkg in $(ls); do
-	for pkg_full_version in $(ls ./$pkg); do
+for pkg in $(ls ${INPUT_DIR}); do
+	for pkg_full_version in $(ls ${INPUT_DIR}/$pkg); do
 
 		cp $INPUT_DIR/$pkg/$pkg_full_version/RPMS/noarch/pg_probackup-repo-*.noarch.rpm \
 			$KEYS_DIR/pg_probackup-repo-$DISTRIB.noarch.rpm

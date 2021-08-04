@@ -56,7 +56,9 @@
 
 # Packaging
 /build
-/packaging/tarballs/pgpro.tar.bz2
+/packaging/pkg/tarballs/pgpro.tar.bz2
+/packaging/repo/pg_probackup
+/packaging/repo/pg_probackup-forks
 
 # Misc
 .python-version

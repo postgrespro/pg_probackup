@@ -57,11 +57,11 @@ for pkg in $(ls); do
 
 		# rpm --addsign $RPM_DIR/repodata/repomd.xml
 		# rpm --addsign $SRPM_DIR/repodata/repomd.xml
+
+        gpg --batch --yes -a --detach-sign $RPM_DIR/repodata/repomd.xml
+        gpg --batch --yes -a --detach-sign $SRPM_DIR/repodata/repomd.xml
+
+        cp -a /root/.gnupg/key.public $RPM_DIR/repodata/repomd.xml.key
+        cp -a /root/.gnupg/key.public $SRPM_DIR/repodata/repomd.xml.key
 	done
 done
-
-gpg -a --detach-sign $RPM_DIR/repodata/repomd.xml
-gpg -a --detach-sign $SRPM_DIR/repodata/repomd.xml
-
-cp -a /root/.gnupg/key.public $RPM_DIR/repodata/repomd.xml.key
-cp -a /root/.gnupg/key.public $SRPM_DIR/repodata/repomd.xml.key

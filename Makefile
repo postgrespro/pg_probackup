@@ -81,4 +81,21 @@ ifeq ($(PORTNAME), aix)
 	CC=xlc_r
 endif
 
+check_env:
+	@if [ -z ${PBK_VERSION} ] ; then \
+           echo "Env variable PBK_VERSION is not set" ; \
+           false ; \
+     fi
+
+	@if [ -z ${PBK_RELEASE} ] ; then \
+           echo "Env variable PBK_RELEASE is not set" ; \
+           false ; \
+     fi
+
+	@if [ -z ${PBK_HASH} ] ; then \
+           echo "Env variable PBK_HASH is not set" ; \
+           false ; \
+     fi
+
 include packaging/Makefile.pkg
+include packaging/Makefile.repo

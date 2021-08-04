@@ -17,37 +17,17 @@ else
 	PKG_NAME_SUFFIX =
 endif
 
-#ifndef $(PG_VERSIONS)
-#PG_VERSIONS = $(PG_VERSIONS_DEFAULT)
-#endif
 
 pkg: check_env build/prepare build/all
 	@echo Build for all platform: done
-#	echo "HELLO"
-
-check_env:
-	@if [ -z ${PBK_VERSION} ] ; then \
-           echo "Env variable PBK_VERSION is not set" ; \
-           false ; \
-     fi
-	
-	@if [ -z ${PBK_RELEASE} ] ; then \
-           echo "Env variable PBK_RELEASE is not set" ; \
-           false ; \
-     fi
-
-	@if [ -z ${PBK_HASH} ] ; then \
-           echo "Env variable PBK_HASH is not set" ; \
-           false ; \
-     fi
 
 build/prepare:
 	mkdir -p build
 
 build/clean: build/prepare
-	rm -f build/build*
+	find build/ -maxdepth 1 -type f -exec rm -f {} \;
 
-build/all: build/debian build/centos #build/ubuntu build/centos build/oraclelinux build/rhel build/alt build/suse
+build/all: build/debian build/ubuntu build/centos build/oraclelinux build/rhel build/alt build/suse
 	@echo Packaging is done
 
 ### DEBIAN
@@ -82,7 +62,7 @@ build/ubuntu_20.04: build/ubuntu_20.04_9.5 build/ubuntu_20.04_9.6 build/ubuntu_2
 define build_deb
 	docker rm -f $1_$2_probackup_$(PKG_NAME_SUFFIX)$(PBK_VERSION) >> /dev/null 2>&1 ; \
 	docker run \
-		-v $(WORKDIR)/packaging:/app/in \
+		-v $(WORKDIR)/packaging/pkg:/app/in \
 		-v $(WORKDIR)/build/data/$(PBK_PKG_REPO)/$1/$2/pg-probackup-$(PKG_NAME_SUFFIX)$4/$(PBK_VERSION):/app/out \
 		-e "DISTRIB=$1" -e "DISTRIB_VERSION=$2" -e "CODENAME=$3" -e "PG_VERSION=$4" -e "PG_FULL_VERSION=$5" \
 		-e "PKG_HASH=$(PBK_HASH)" -e "PKG_URL=$(PBK_GIT_REPO)" -e "PKG_RELEASE=$(PBK_RELEASE)" -e "PKG_NAME=pg-probackup-$(PKG_NAME_SUFFIX)$4" \
@@ -91,8 +71,8 @@ define build_deb
 		--rm pgpro/$1:$2 /app/in/scripts/deb.sh
 endef
 
-include packaging/Makefile.debian
-include packaging/Makefile.ubuntu
+include packaging/pkg/Makefile.debian
+include packaging/pkg/Makefile.ubuntu
 
 # CENTOS
 build/centos: build/centos_6 #build/centos_7 build/centos_8 #build/rpm_repo_package_centos
@@ -137,7 +117,7 @@ build/rhel_8: build/rhel_8_9.5 build/rhel_8_9.6 build/rhel_8_10 build/rhel_8_11 
 define build_rpm
 	docker rm -f $1_$2_probackup_$(PKG_NAME_SUFFIX)$(PBK_VERSION) >> /dev/null 2>&1 ; \
 	docker run \
-		-v $(WORKDIR)/packaging:/app/in \
+		-v $(WORKDIR)/packaging/pkg:/app/in \
 		-v $(WORKDIR)/build/data/$(PBK_PKG_REPO)/$1/$2/pg_probackup-$(PKG_NAME_SUFFIX)$4/$(PBK_VERSION):/app/out \
 		-e "DISTRIB=$1" -e "DISTRIB_VERSION=$2" -e "CODENAME=$3" -e "PG_VERSION=$4" -e "PG_FULL_VERSION=$5" \
 		-e "PKG_HASH=$(PBK_HASH)" -e "PKG_URL=$(PBK_GIT_REPO)" -e "PKG_RELEASE=$(PBK_RELEASE)" -e "PKG_NAME=pg_probackup-$(PKG_NAME_SUFFIX)$4" \
@@ -146,9 +126,9 @@ define build_rpm
 		--rm pgpro/$1:$2 /app/in/scripts/rpm.sh
 endef
 
-include packaging/Makefile.centos
-include packaging/Makefile.rhel
-include packaging/Makefile.oraclelinux
+include packaging/pkg/Makefile.centos
+include packaging/pkg/Makefile.rhel
+include packaging/pkg/Makefile.oraclelinux
 
 
 # Alt Linux
@@ -167,7 +147,7 @@ build/alt_9: build/alt_9_9.5 build/alt_9_9.6 build/alt_9_10 build/alt_9_11 build
 define build_alt
 	docker rm -f $1_$2_probackup_$(PKG_NAME_SUFFIX)$(PBK_VERSION) >> /dev/null 2>&1 ; \
 	docker run \
-		-v $(WORKDIR)/packaging:/app/in \
+		-v $(WORKDIR)/packaging/pkg:/app/in \
 		-v $(WORKDIR)/build/data/$(PBK_PKG_REPO)/$1/$2/pg_probackup-$(PKG_NAME_SUFFIX)$4/$(PBK_VERSION):/app/out \
 		-e "DISTRIB=$1" -e "DISTRIB_VERSION=$2" -e "CODENAME=$3" -e "PG_VERSION=$4" -e "PG_FULL_VERSION=$5" \
 		-e "PKG_HASH=$(PBK_HASH)" -e "PKG_URL=$(PBK_GIT_REPO)" -e "PKG_RELEASE=$(PBK_RELEASE)" -e "PKG_NAME=pg_probackup-$(PKG_NAME_SUFFIX)$4" \
@@ -176,7 +156,7 @@ define build_alt
 		--rm pgpro/$1:$2 /app/in/scripts/alt.sh
 endef
 
-include packaging/Makefile.alt
+include packaging/pkg/Makefile.alt
 
 # SUSE Linux
 build/suse: build/suse_15.1 build/suse_15.2
@@ -191,7 +171,7 @@ build/suse_15.2: build/suse_15.2_9.5 build/suse_15.2_9.6 build/suse_15.2_10 buil
 define build_suse
 	docker rm -f $1_$2_probackup_$(PKG_NAME_SUFFIX)$(PBK_VERSION) >> /dev/null 2>&1 ; \
 	docker run \
-		-v $(WORKDIR)/packaging:/app/in \
+		-v $(WORKDIR)/packaging/pkg:/app/in \
 		-v $(WORKDIR)/build/data/$(PBK_PKG_REPO)/$1/$2/pg_probackup-$(PKG_NAME_SUFFIX)$4/$(PBK_VERSION):/app/out \
 		-e "DISTRIB=$1" -e "DISTRIB_VERSION=$2" -e "CODENAME=$3" -e "PG_VERSION=$4" -e "PG_FULL_VERSION=$5" \
 		-e "PKG_HASH=$(PBK_HASH)" -e "PKG_URL=$(PBK_GIT_REPO)" -e "PKG_RELEASE=$(PBK_RELEASE)" -e "PKG_NAME=pg_probackup-$(PKG_NAME_SUFFIX)$4" \
@@ -200,176 +180,4 @@ define build_suse
 		--rm pgpro/$1:$2 /app/in/scripts/suse.sh
 endef
 
-include packaging/Makefile.suse
-
-#### REPO BUILD ####
-
-repo: repo/debian repo/ubuntu repo/centos repo/rhel repo/oraclelinux repo/alt repo/suse
-	@echo Build repo for all platform: done
-
-# Debian
-repo/debian: build/repo_debian_8 repo/debian_9 repo/debian_10
-	@echo Build repo for debian platforms: done
-
-build/repo_debian_8:
-	$(call build_repo_deb,debian,8,jessie)
-	touch build/repo_debian_8
-
-build/repo_debian_9:
-	$(call build_repo_deb,debian,9,stretch)
-	touch build/repo_debian_9
-
-build/repo_debian_10:
-	$(call build_repo_deb,debian,10,buster)
-	touch build/repo_debian_10
-
-# Ubuntu
-repo/ubuntu: build/repo_ubuntu_14.04 build/repo_ubuntu_16.04 build/repo_ubuntu_18.04 build/repo_ubuntu_20.04
-	@echo Build repo for ubuntu platforms: done
-
-build/repo_ubuntu_14.04:
-	$(call build_repo_deb,ubuntu,14.04,trusty)
-	touch build/repo_ubuntu_14.04
-
-build/repo_ubuntu_16.04:
-	$(call build_repo_deb,ubuntu,16.04,xenial)
-	touch build/repo_ubuntu_16.04
-
-build/repo_ubuntu_18.04:
-	$(call build_repo_deb,ubuntu,18.04,bionic)
-	touch build/repo_ubuntu_18.04
-
-build/repo_ubuntu_20.04:
-	$(call build_repo_deb,ubuntu,20.04,focal)
-	touch build/repo_ubuntu_20.04
-
-# Centos
-repo/centos: build/repo_centos_6 build/repo_centos_7 build/repo_centos_8
-	@echo Build repo for centos platforms: done
-
-build/repo_centos_6:
-	$(call build_repo_rpm,centos,6,,)
-	touch build/repo_centos_6
-
-build/repo_centos_7:
-	$(call build_repo_rpm,centos,7,,)
-	touch build/repo_centos_7
-
-build/repo_centos_8:
-	$(call build_repo_rpm,centos,8,,)
-	touch build/repo_centos_8
-
-# Oraclelinux
-repo/oraclelinux: build/repo_oraclelinux_6 build/repo_oraclelinux_7 build/repo_oraclelinux_8
-	@echo Build repo for oraclelinux platforms: done
-
-build/repo_oraclelinux_6:
-	$(call build_repo_rpm,oraclelinux,6,,)
-	touch build/repo_oraclelinux_6
-
-build/repo_oraclelinux_7:
-	$(call build_repo_rpm,oraclelinux,7,,)
-	touch build/repo_oraclelinux_7
-
-build/repo_oraclelinux_8:
-	$(call build_repo_rpm,oraclelinux,8,,)
-	touch build/repo_oraclelinux_8
-
-# RHEL
-repo/rhel: build/repo_rhel_6 build/repo_rhel_7 build/repo_rhel_8
-	@echo Build repo for rhel platforms: done
-
-build/repo_rhel_6:
-	$(call build_repo_rpm,rhel,6,,)
-	touch build/repo_rhel_6
-
-build/repo_rhel_7:
-	$(call build_repo_rpm,rhel,7,,)
-	touch build/repo_rhel_7
-
-build/repo_rhel_8:
-	$(call build_repo_rpm,rhel,8,,)
-	touch build/repo_rhel_8
-
-# ALT
-repo/alt: build/repo_alt_7 build/repo_alt_8 build/repo_alt_9
-	@echo Build repo for alt platforms: done
-
-build/repo_alt_7:
-	$(call build_repo_alt,alt,7,,)
-	touch build/repo_alt_7
-
-build/repo_alt_8:
-	$(call build_repo_alt,alt,8,,)
-	touch build/repo_alt_8
-
-build/repo_alt_9:
-	$(call build_repo_alt,alt,9,,)
-	touch build/repo_alt_9
-
-# SUSE
-repo/suse: build/repo_suse_15.1 build/repo_suse_15.2
-	@echo Build repo for suse platforms: done
-
-build/repo_suse_15.1:
-	$(call build_repo_suse,suse,15.1,,)
-	touch build/repo_suse_15.1
-
-build/repo_suse_15.2:
-	$(call build_repo_suse,suse,15.2,,)
-	touch build/repo_suse_15.2
-#
-#define repo_finish
-#	docker run -v $(WORKDIR)/build/pkg/keys:/app/in -v $(WORKDIR)/build/www:/app/www \
-#	-e "DISTRIB=$1" -e "DISTRIB_VERSION=$2" -e "CODENAME=$3" \
-#	--rm $1:$2 bash -exc "cp -av /app/in/*rpm /app/www/mamonsu/keys && cd /app/www/mamonsu/ && \
-#	ln -s $(VERSION) latest"
-#endef
-
-define build_repo_deb
-	docker rm -f $1_$2_pbk_repo >> /dev/null 2>&1 ; \
-	docker run \
-		-v $(WORKDIR)/packaging/repo:/app/repo \
-		-v $(WORKDIR)/build/data/www:/app/www \
-		-v $(WORKDIR)/build/data/$(PBK_PKG_REPO)/$1/$2:/app/in \
-		-e "DISTRIB=$1" -e "DISTRIB_VERSION=$2" -e "CODENAME=$3" \
-		-e "PBK_PKG_REPO=$(PBK_PKG_REPO)" -e "PBK_EDITION=$(PBK_EDITION)" \
-		--name $1_$2_pbk_repo \
-		--rm pgpro/repo /app/repo/scripts/deb.sh
-endef
-
-define build_repo_rpm
-	docker rm -f $1_$2_pbk_repo >> /dev/null 2>&1 ; \
-	docker run \
-		-v $(WORKDIR)/packaging/repo:/app/repo \
-		-v $(WORKDIR)/build/data/www:/app/www \
-		-v $(WORKDIR)/build/data/$(PBK_PKG_REPO)/$1/$2:/app/in \
-		-e "DISTRIB=$1" -e "DISTRIB_VERSION=$2" -e "CODENAME=$3" \
-		-e "PBK_PKG_REPO=$(PBK_PKG_REPO)" -e "PBK_EDITION=$(PBK_EDITION)" \
-		--name $1_$2_pbk_repo \
-		--rm pgpro/repo /app/repo/scripts/rpm.sh
-endef
-
-define build_repo_alt
-	docker rm -f $1_$2_pbk_repo >> /dev/null 2>&1 ; \
-	docker run \
-		-v $(WORKDIR)/packaging/repo:/app/repo \
-		-v $(WORKDIR)/build/data/www:/app/www \
-		-v $(WORKDIR)/build/data/$(PBK_PKG_REPO)/$1/$2:/app/in \
-		-e "DISTRIB=$1" -e "DISTRIB_VERSION=$2" -e "CODENAME=$3" \
-		-e "PBK_PKG_REPO=$(PBK_PKG_REPO)" -e "PBK_EDITION=$(PBK_EDITION)" \
-		--name $1_$2_pbk_repo \
-		--rm pgpro/$1:$2 /app/repo/scripts/alt.sh
-endef
-
-define build_repo_suse
-	docker rm -f $1_$2_pbk_repo >> /dev/null 2>&1 ; \
-	docker run \
-		-v $(WORKDIR)/packaging/repo:/app/repo \
-		-v $(WORKDIR)/build/data/www:/app/www \
-		-v $(WORKDIR)/build/data/$(PBK_PKG_REPO)/$1/$2:/app/in \
-		-e "DISTRIB=$1" -e "DISTRIB_VERSION=$2" -e "CODENAME=$3" \
-		-e "PBK_PKG_REPO=$(PBK_PKG_REPO)" -e "PBK_EDITION=$(PBK_EDITION)" \
-		--name $1_$2_pbk_repo \
-		--rm pgpro/$1:$2 /app/repo/scripts/suse.sh
-endef
+include packaging/pkg/Makefile.suse
