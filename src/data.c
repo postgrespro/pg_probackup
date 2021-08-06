@@ -646,12 +646,11 @@ cleanup:
 }
 
 /*
- * Backup data file in the from_root directory to the to_root directory with
+ * Catchup data file in the from_root directory to the to_root directory with
  * same relative path. If prev_backup_start_lsn is not NULL, only pages with
  * higher lsn will be copied.
  * Not just copy file, but read it block by block (use bitmap in case of
- * incremental backup), validate checksum, optionally compress and write to
- * backup with special header.
+ * incremental catchup), validate checksum.
  */
 void
 catchup_data_file(pgFile *file, const char *from_fullpath, const char *to_fullpath,

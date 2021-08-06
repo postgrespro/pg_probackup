@@ -355,6 +355,7 @@ typedef struct
 	XLogRecPtr	sync_lsn;
 	BackupMode	backup_mode;
 	int	thread_num;
+	size_t	transfered_bytes;
 	bool	completed;
 } catchup_thread_runner_arg;
 
@@ -443,6 +444,7 @@ catchup_thread_runner(void *arg)
 			continue;
 		}
 
+		arguments->transfered_bytes += file->write_size;
 		elog(VERBOSE, "File \"%s\". Copied "INT64_FORMAT " bytes",
 						from_fullpath, file->write_size);
 	}
@@ -458,8 +460,10 @@ catchup_thread_runner(void *arg)
 
 /*
  * main multithreaded copier
+ * returns size of transfered data file
+ * or -1 in case of error
  */
-static bool
+static ssize_t
 catchup_multithreaded_copy(int num_threads,
 	PGNodeInfo *source_node_info,
 	const char *source_pgdata_path,
@@ -474,6 +478,7 @@ catchup_multithreaded_copy(int num_threads,
 	pthread_t	*threads;
 
 	bool all_threads_successful = true;
+	ssize_t transfered_bytes_result = 0;
 	int	i;
 
 	/* init thread args */
@@ -488,6 +493,7 @@ catchup_multithreaded_copy(int num_threads,
 			.sync_lsn = sync_lsn,
 			.backup_mode = backup_mode,
 			.thread_num = i + 1,
+			.transfered_bytes = 0,
 			.completed = false,
 		};
 
@@ -505,11 +511,12 @@ catchup_multithreaded_copy(int num_threads,
 	{
 		pthread_join(threads[i], NULL);
 		all_threads_successful &= threads_args[i].completed;
+		transfered_bytes_result += threads_args[i].transfered_bytes;
 	}
 
 	free(threads);
 	free(threads_args);
-	return all_threads_successful;
+	return all_threads_successful ? transfered_bytes_result : -1;
 }
 
 /*
@@ -575,8 +582,9 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 
 	/* for fancy reporting */
 	time_t		start_time, end_time;
-	char		pretty_time[20];
-	char		pretty_bytes[20];
+	ssize_t		transfered_datafiles_bytes = 0;
+	ssize_t		transfered_walfiles_bytes = 0;
+	char		pretty_source_bytes[20];
 
 	source_conn = catchup_collect_info(&source_node_info, source_pgdata, dest_pgdata);
 	catchup_preflight_checks(&source_node_info, source_conn, source_pgdata, dest_pgdata);
@@ -666,9 +674,10 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 	fio_disconnect();
 
 	//REVIEW Do we want to do similar calculation for dest?
+	//REVIEW_ANSWER what for?
 	current.pgdata_bytes += calculate_datasize_of_filelist(source_filelist);
-	pretty_size(current.pgdata_bytes, pretty_bytes, lengthof(pretty_bytes));
-	elog(INFO, "Source PGDATA size: %s", pretty_bytes);
+	pretty_size(current.pgdata_bytes, pretty_source_bytes, lengthof(pretty_source_bytes));
+	elog(INFO, "Source PGDATA size: %s", pretty_source_bytes);
 
 	/*
 	 * Sort pathname ascending. It is necessary to create intermediate
@@ -864,10 +873,11 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 	/* run copy threads */
 	elog(INFO, "Start transferring data files");
 	time(&start_time);
-	catchup_isok = catchup_multithreaded_copy(num_threads, &source_node_info,
+	transfered_datafiles_bytes = catchup_multithreaded_copy(num_threads, &source_node_info,
 		source_pgdata, dest_pgdata,
 		source_filelist, dest_filelist,
 		dest_redo.lsn, current.backup_mode);
+	catchup_isok = transfered_datafiles_bytes != -1;
 
 	/* at last copy control file */
 	if (catchup_isok)
@@ -878,17 +888,22 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 		join_path_components(to_fullpath, dest_pgdata, source_pg_control_file->rel_path);
 		copy_pgcontrol_file(from_fullpath, FIO_DB_HOST,
 				to_fullpath, FIO_LOCAL_HOST, source_pg_control_file);
+		transfered_datafiles_bytes += source_pg_control_file->size;
 	}
 
-	time(&end_time);
-	pretty_time_interval(difftime(end_time, start_time),
+	if (!catchup_isok)
+	{
+		char	pretty_time[20];
+		char	pretty_transfered_data_bytes[20];
+
+		time(&end_time);
+		pretty_time_interval(difftime(end_time, start_time),
 						 pretty_time, lengthof(pretty_time));
-	if (catchup_isok)
-		elog(INFO, "Data files are transferred, time elapsed: %s",
-			pretty_time);
-	else
-		elog(ERROR, "Data files transferring failed, time elapsed: %s",
-			pretty_time);
+		pretty_size(transfered_datafiles_bytes, pretty_transfered_data_bytes, lengthof(pretty_transfered_data_bytes));
+
+		elog(ERROR, "Catchup failed. Transfered bytes: %s, time elapsed: %s",
+			pretty_transfered_data_bytes, pretty_time);
+	}
 
 	/* Notify end of backup */
 	{
@@ -902,6 +917,7 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 		pg_silent_client_messages(source_conn);
 
 		//REVIEW. Do we want to support pg 9.5? I suppose we never test it...
+		//REVIEW_ANSWER: we test 9.5 in travis every commit
 		//Maybe check it and error out early?
 		/* Create restore point
 		 * Only if backup is from master.
@@ -954,8 +970,24 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 	}
 #endif
 
-	if(wait_WAL_streaming_end(NULL))
-		elog(ERROR, "WAL streaming failed");
+	/* wait for end of wal streaming and calculate wal size transfered */
+	{
+		parray *wal_files_list = NULL;
+		wal_files_list = parray_new();
+
+		if(wait_WAL_streaming_end(wal_files_list))
+			elog(ERROR, "WAL streaming failed");
+
+                for (i = 0; i < parray_num(wal_files_list); i++)
+		{
+			pgFile *file = (pgFile *) parray_get(wal_files_list, i);
+			transfered_walfiles_bytes += file->size;
+		}
+
+		parray_walk(wal_files_list, pgFileFree);
+		parray_free(wal_files_list);
+		wal_files_list = NULL;
+	}
 
 	//REVIEW Please add a comment about these lsns. It is a crutial part of the algorithm.
 	current.recovery_xid = stop_backup_result.snapshot_xid;
@@ -983,14 +1015,32 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 	/* close ssh session in main thread */
 	fio_disconnect();
 
-	/* Sync all copied files unless '--no-sync' flag is used */
-	if (catchup_isok)
+	/* fancy reporting */
 	{
-		if (sync_dest_files)
-			catchup_sync_destination_files(dest_pgdata, FIO_LOCAL_HOST, source_filelist, source_pg_control_file);
-		else
-			elog(WARNING, "Files are not synced to disk");
+		char	pretty_transfered_data_bytes[20];
+		char	pretty_transfered_wal_bytes[20];
+		char	pretty_time[20];
+
+		time(&end_time);
+		pretty_time_interval(difftime(end_time, start_time),
+							 pretty_time, lengthof(pretty_time));
+		pretty_size(transfered_datafiles_bytes, pretty_transfered_data_bytes, lengthof(pretty_transfered_data_bytes));
+		pretty_size(transfered_walfiles_bytes, pretty_transfered_wal_bytes, lengthof(pretty_transfered_wal_bytes));
+
+		elog(INFO, "Databases synchronized. Transfered datafiles size: %s, transfered wal size: %s, time elapsed: %s",
+			pretty_transfered_data_bytes, pretty_transfered_wal_bytes, pretty_time);
+
+		if (current.backup_mode != BACKUP_MODE_FULL)
+			elog(INFO, "Catchup incremental ratio (less is better): %.f%% (%s/%s)",
+				((float) transfered_datafiles_bytes / current.pgdata_bytes) * 100,
+				pretty_transfered_data_bytes, pretty_source_bytes);
 	}
+
+	/* Sync all copied files unless '--no-sync' flag is used */
+	if (sync_dest_files)
+		catchup_sync_destination_files(dest_pgdata, FIO_LOCAL_HOST, source_filelist, source_pg_control_file);
+	else
+		elog(WARNING, "Files are not synced to disk");
 
 	/* Cleanup */
 	if (dest_filelist)
@@ -1001,9 +1051,6 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 	parray_walk(source_filelist, pgFileFree);
 	parray_free(source_filelist);
 	pgFileFree(source_pg_control_file);
-
-	//REVIEW: Are we going to do that before release?
-	/* TODO: show the amount of transfered data in bytes and calculate incremental ratio */
 
 	return 0;
 }
