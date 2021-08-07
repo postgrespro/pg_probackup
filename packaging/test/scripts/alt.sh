@@ -26,7 +26,7 @@ events {
 http {
     server {
         listen   80 default;
-        root /var/www;
+        root /app/www;
     }
 }
 EOF
@@ -38,6 +38,11 @@ EOF
 export PGDATA=/var/lib/pgsql/${PG_VERSION}/data
 
 # install old packages
+echo "rpm https://repo.postgrespro.ru/pg_probackup/rpm/latest/altlinux-p7 x86_64 vanilla" > /etc/apt/sources.list.d/pg_probackup.list
+apt-get update
+apt-get install ${PKG_NAME} ${PKG_NAME}-debuginfo -y
+${PKG_NAME} --help
+${PKG_NAME} --version
 
 # install new packages
 echo "127.0.0.1 repo.postgrespro.ru" >> /etc/hosts
@@ -51,8 +56,9 @@ ${PKG_NAME} --version
 
 exit 0
 
+# TODO: run init, add-instance, backup and restore
 su postgres -c "/usr/pgsql-${PG_VERSION}/bin/pgbench --no-vacuum -t 1000 -c 1"
-su postgres -c "${PKG_NAME} backup --instance=node -b page -B /tmp/backup -D ${PGDATA} --no-sync"
+su postgres -c "${PKG_NAME} backup --instance=node -b page -B /tmp/backup -D ${PGDATA} --no-sync --compress"
 su postgres -c "${PKG_NAME} show --instance=node -B /tmp/backup -D ${PGDATA}"
 
 su postgres -c "/usr/pgsql-${PG_VERSION}/bin/pg_ctl stop -D ${PGDATA}"

@@ -72,7 +72,7 @@ events {
 http {
     server {
         listen   80 default;
-        root /var/www;
+        root /app/www;
     }
 }
 EOF
@@ -131,34 +131,7 @@ sleep 5
 
 echo "select count(*) from pgbench_accounts;" | su postgres -c "/usr/lib/postgresql${PG_TOG}/bin/psql" || exit 1
 
-#else
-#    echo "127.0.0.1 repo.postgrespro.ru" >> /etc/hosts
-#    rpm -ivh http://repo.postgrespro.ru/pg_probackup/keys/pg_probackup-repo-${DISTRIB}.noarch.rpm
-#    yum install -y ${PKG_NAME}
-#    ${PKG_NAME} --help
-#    su postgres -c "/usr/lib/postgresql${PG_TOG}/bin/initdb -k -D ${PGDATA}"
-#    su postgres -c "${PKG_NAME} init -B /tmp/backup"
-#    su postgres -c "${PKG_NAME} add-instance --instance=node -B /tmp/backup -D ${PGDATA}"
-#    echo "wal_level=hot_standby" >> ${PGDATA}/postgresql.auto.conf
-#    echo "archive_mode=on" >> ${PGDATA}/postgresql.auto.conf
-#    echo "archive_command='${PKG_NAME} archive-push -B /tmp/backup --instance=node --wal-file-path %p --wal-file-name %f'" >> ${PGDATA}/postgresql.auto.conf
-#    su postgres -c "/usr/lib/postgresql${PG_TOG}/bin/pg_ctl start -D ${PGDATA}"
-#    sleep 5
-#    su postgres -c "${PKG_NAME} backup --instance=node --compress -b full -B /tmp/backup -D ${PGDATA}"
-#    su postgres -c "/usr/lib/postgresql${PG_TOG}/bin/pgbench --no-vacuum -i -s 10"
-#    su postgres -c "${PKG_NAME} backup --instance=node -b page -B /tmp/backup -D ${PGDATA}"
-#    su postgres -c "/usr/lib/postgresql${PG_TOG}/bin/pgbench --no-vacuum -t 1000 -c 1"
-#    su postgres -c "${PKG_NAME} backup --instance=node -b page -B /tmp/backup -D ${PGDATA}"
-#    su postgres -c "${PKG_NAME} show --instance=node -B /tmp/backup -D ${PGDATA}"
-#    su postgres -c "/usr/lib/postgresql${PG_TOG}/bin/pg_ctl stop -D ${PGDATA}"
-#    rm -rf ${PGDATA}
-#    su postgres -c "${PKG_NAME} restore --instance=node -B /tmp/backup -D ${PGDATA}"
-#    su postgres -c "/usr/lib/postgresql${PG_TOG}/bin/pg_ctl start -D ${PGDATA}"
-#    sleep 10
-#    echo "select count(*) from pgbench_accounts;" | su postgres -c "/usr/lib/postgresql${PG_TOG}/bin/psql" || exit 1
-#fi
-
-exit 0 # while PG12 is not working
+exit 0
 
 # SRC PACKAGE
 cd /mnt
