@@ -27,20 +27,19 @@
 /*
  * Catchup routines
  */
-static PGconn *catchup_collect_info(PGNodeInfo *source_node_info, const char *source_pgdata, const char *dest_pgdata);
+static PGconn *catchup_init_state(PGNodeInfo *source_node_info, const char *source_pgdata, const char *dest_pgdata);
 static void catchup_preflight_checks(PGNodeInfo *source_node_info, PGconn *source_conn, const char *source_pgdata, 
 					const char *dest_pgdata);
 static void catchup_check_tablespaces_existance_in_tbsmapping(PGconn *conn);
 static parray* catchup_get_tli_history(ConnectionOptions *conn_opt, TimeLineID tli);
 
-//REVIEW The name of this function looks strange to me.
-//Maybe catchup_init_state() or catchup_setup() will do better?
-//I'd also suggest to wrap all these fields into some CatchupState, but it isn't urgent.
+//REVIEW I'd also suggest to wrap all these fields into some CatchupState, but it isn't urgent.
+//REVIEW_ANSWER what for?
 /*
  * Prepare for work: fill some globals, open connection to source database
  */
 static PGconn *
-catchup_collect_info(PGNodeInfo	*source_node_info, const char *source_pgdata, const char *dest_pgdata)
+catchup_init_state(PGNodeInfo	*source_node_info, const char *source_pgdata, const char *dest_pgdata)
 {
 	PGconn		*source_conn;
 
@@ -586,25 +585,11 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 	ssize_t		transfered_walfiles_bytes = 0;
 	char		pretty_source_bytes[20];
 
-	source_conn = catchup_collect_info(&source_node_info, source_pgdata, dest_pgdata);
+	source_conn = catchup_init_state(&source_node_info, source_pgdata, dest_pgdata);
 	catchup_preflight_checks(&source_node_info, source_conn, source_pgdata, dest_pgdata);
 
 	elog(LOG, "Database catchup start");
 
-	{
-		char		label[1024];
-		/* notify start of backup to PostgreSQL server */
-		time2iso(label, lengthof(label), current.start_time, false);
-		strncat(label, " with pg_probackup", lengthof(label) -
-				strlen(" with pg_probackup"));
-
-		/* Call pg_start_backup function in PostgreSQL connect */
-		pg_start_backup(label, smooth_checkpoint, &current, &source_node_info, source_conn);
-		elog(LOG, "pg_start_backup START LSN %X/%X", (uint32) (current.start_lsn >> 32), (uint32) (current.start_lsn));
-	}
-
-	//REVIEW I wonder, if we can move this piece above and call before pg_start backup()?
-	//It seems to be a part of setup phase.
 	if (current.backup_mode != BACKUP_MODE_FULL)
 	{
 		dest_filelist = parray_new();
@@ -624,8 +609,6 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 		 */
 	}
 
-	//REVIEW I wonder, if we can move this piece above and call before pg_start backup()?
-	//It seems to be a part of setup phase.
 	/*
 	 * TODO: move to separate function to use in both backup.c and catchup.c
 	 */
@@ -640,6 +623,18 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 						(uint32) (ptrack_lsn >> 32), (uint32) (ptrack_lsn),
 						(uint32) (dest_redo.lsn >> 32),
 						(uint32) (dest_redo.lsn));
+	}
+
+	{
+		char		label[1024];
+		/* notify start of backup to PostgreSQL server */
+		time2iso(label, lengthof(label), current.start_time, false);
+		strncat(label, " with pg_probackup", lengthof(label) -
+				strlen(" with pg_probackup"));
+
+		/* Call pg_start_backup function in PostgreSQL connect */
+		pg_start_backup(label, smooth_checkpoint, &current, &source_node_info, source_conn);
+		elog(LOG, "pg_start_backup START LSN %X/%X", (uint32) (current.start_lsn >> 32), (uint32) (current.start_lsn));
 	}
 
 	/* Check that dest_redo.lsn is less than current.start_lsn */
@@ -978,7 +973,7 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 		if (wait_WAL_streaming_end(wal_files_list))
 			elog(ERROR, "WAL streaming failed");
 
-                for (i = 0; i < parray_num(wal_files_list); i++)
+		for (i = 0; i < parray_num(wal_files_list); i++)
 		{
 			pgFile *file = (pgFile *) parray_get(wal_files_list, i);
 			transfered_walfiles_bytes += file->size;
