@@ -115,9 +115,12 @@ build/repo_suse_15.2:
 	touch build/repo_suse_15.2
 
 repo_finish:
-	cd build/data/www/$(PBK_PKG_REPO)/rpm
-	sudo ln -rfs build/data/www/$(PBK_PKG_REPO)/rpm/${PBK_VERSION} build/data/www/$(PBK_PKG_REPO)/rpm/latest
-	sudo ln -rfs build/data/www/$(PBK_PKG_REPO)/srpm/${PBK_VERSION} build/data/www/$(PBK_PKG_REPO)/srpm/latest
+#	cd build/data/www/$(PBK_PKG_REPO)/
+	cd $(BUILDDIR)/data/www/$(PBK_PKG_REPO)/rpm/ && ln -sf $(PBK_VERSION) latest
+	cd $(BUILDDIR)/data/www/$(PBK_PKG_REPO)/srpm/ && ln -sf $(PBK_VERSION) latest
+
+#	sudo ln -rfs build/data/www/$(PBK_PKG_REPO)/rpm/${PBK_VERSION} build/data/www/$(PBK_PKG_REPO)/rpm/latest
+#	sudo ln -rfs build/data/www/$(PBK_PKG_REPO)/srpm/${PBK_VERSION} build/data/www/$(PBK_PKG_REPO)/srpm/latest
 
 define build_repo_deb
 	docker rm -f $1_$2_pbk_repo >> /dev/null 2>&1 ; \
