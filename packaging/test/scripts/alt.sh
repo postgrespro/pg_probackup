@@ -1,10 +1,5 @@
 #!/usr/bin/env bash
 
-# Copyright Notice:
-# © (C) Postgres Professional 2015-2016 http://www.postgrespro.ru/
-# Distributed under Apache License 2.0
-# Распространяется по лицензии Apache 2.0
-
 set -xe
 set -o pipefail
 
@@ -13,6 +8,7 @@ ulimit -n 1024
 apt-get clean -y
 apt-get update -y
 apt-get install nginx su -y
+apt-get install apt-transport-https ca-certificates -y
 
 adduser nginx
 
@@ -40,7 +36,7 @@ export PGDATA=/var/lib/pgsql/${PG_VERSION}/data
 # install old packages
 echo "rpm http://repo.postgrespro.ru/pg_probackup/rpm/latest/altlinux-p7 x86_64 vanilla" > /etc/apt/sources.list.d/pg_probackup.list
 apt-get update
-apt-get install ${PKG_NAME} ${PKG_NAME}-debuginfo -y
+apt-get install ${PKG_NAME} -y
 ${PKG_NAME} --help
 ${PKG_NAME} --version
 
@@ -50,7 +46,7 @@ echo "rpm http://repo.postgrespro.ru/pg_probackup/rpm/latest/altlinux-p${DISTRIB
 echo "rpm [p${DISTRIB_VERSION}] http://mirror.yandex.ru/altlinux p${DISTRIB_VERSION}/branch/x86_64 debuginfo" > /etc/apt/sources.list.d/debug.list
 
 apt-get update -y
-apt-get install ${PKG_NAME} ${PKG_NAME}-debuginfo -y
+apt-get install ${PKG_NAME} -y
 ${PKG_NAME} --help
 ${PKG_NAME} --version
 
