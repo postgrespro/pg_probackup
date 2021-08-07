@@ -17,18 +17,6 @@ PG_TOG=$(echo $PG_VERSION | sed 's|\.||g')
 export DEBIAN_FRONTEND=noninteractive
 echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selections
 
-#if [ ${DISTRIB} == 'ubuntu' ] && [ ${DISTRIB_VERSION} == '14.04' ] && [ ${PG_TOG} == '12' ]; then
-#  exit 0
-#fi
-#
-#if [ ${DISTRIB} == 'ubuntu' ] && [ ${DISTRIB_VERSION} == '14.04' ] && [ ${PG_TOG} == '13' ]; then
-#  exit 0
-#fi
-
-#if [ ${CODENAME} == 'jessie' ]; then
-#printf "deb http://archive.debian.org/debian/ jessie main\ndeb-src http://archive.debian.org/debian/ jessie main\ndeb http://security.debian.org jessie/updates main\ndeb-src http://security.debian.org jessie/updates main" > /etc/apt/sources.list
-#fi
-
 apt-get -qq update
 apt-get -qq install -y wget nginx gnupg lsb-release
 #apt-get -qq install -y libterm-readline-gnu-perl dialog gnupg procps

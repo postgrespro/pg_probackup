@@ -15,11 +15,8 @@ build/test_debian_10: build/test_debian_9_9.6 build/test_debian_9_10 build/test_
 	@echo Debian 10: done
 
 ### UBUNTU
-build/test_ubuntu: build/test_ubuntu_14.04 build/test_ubuntu_16.04 build/test_ubuntu_18.04 build/test_ubuntu_20.04
+build/test_ubuntu: build/test_ubuntu_16.04 build/test_ubuntu_18.04 build/test_ubuntu_20.04
 	@echo Ubuntu: done
-
-build/test_ubuntu_14.04: build/test_ubuntu_14.04_9.6 build/test_ubuntu_14.04_10 build/test_ubuntu_14.04_11 build/test_ubuntu_14.04_12 build/test_ubuntu_14.04_13
-	@echo Ubuntu 14.04: 
 
 build/test_ubuntu_16.04: build/test_ubuntu_16.04_9.6 build/test_ubuntu_16.04_10 build/test_ubuntu_16.04_11 build/test_ubuntu_16.04_12 build/test_ubuntu_16.04_13
 	@echo Ubuntu 16.04: done
