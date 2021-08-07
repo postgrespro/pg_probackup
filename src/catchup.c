@@ -379,6 +379,9 @@ catchup_thread_runner(void *arg)
 		if (S_ISDIR(file->mode))
 			continue;
 
+		if (file->excluded)
+			continue;
+
 		if (!pg_atomic_test_set_flag(&file->lock))
 			continue;
 
@@ -537,7 +540,7 @@ catchup_sync_destination_files(const char* pgdata_path, fio_location location, p
 		pgFile *file = (pgFile *) parray_get(filelist, i);
 
 		/* TODO: sync directory ? */
-		if (S_ISDIR(file->mode))
+		if (S_ISDIR(file->mode) || file->excluded)
 			continue;
 
 		Assert(file->external_dir_num == 0);
@@ -560,10 +563,49 @@ catchup_sync_destination_files(const char* pgdata_path, fio_location location, p
 }
 
 /*
+ * Filter filelist helper function (used to process --exclude-path's)
+ * filelist -- parray of pgFile *, can't be NULL
+ * exclude_absolute_paths_list -- sorted parray of char * (absolute paths, starting with '/'), can be NULL
+ * exclude_relative_paths_list -- sorted parray of char * (relative paths), can be NULL
+ * logging_string -- helper parameter, used for generating verbose log messages ("Source" or "Destination")
+ */
+static void
+filter_filelist(parray *filelist, const char *pgdata,
+	parray *exclude_absolute_paths_list, parray *exclude_relative_paths_list,
+	const char *logging_string)
+{
+	int i;
+
+	if (exclude_absolute_paths_list == NULL && exclude_relative_paths_list == NULL)
+		return;
+
+	for (i = 0; i < parray_num(filelist); ++i)
+	{
+		char	full_path[MAXPGPATH];
+		pgFile *file = (pgFile *) parray_get(filelist, i);
+		join_path_components(full_path, pgdata, file->rel_path);
+
+		if (
+			(exclude_absolute_paths_list != NULL
+			&& parray_bsearch(exclude_absolute_paths_list, full_path, pgPrefixCompareString)!= NULL
+			) || (
+			exclude_relative_paths_list != NULL
+			&& parray_bsearch(exclude_relative_paths_list, file->rel_path, pgPrefixCompareString)!= NULL)
+			)
+		{
+			elog(LOG, "%s file \"%s\" excluded with --exclude-path option", logging_string, full_path);
+			file->excluded = true;
+		}
+	}
+}
+
+/*
  * Entry point of pg_probackup CATCHUP subcommand.
+ * exclude_*_paths_list are parray's of char *
  */
 int
-do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, bool sync_dest_files)
+do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, bool sync_dest_files,
+	parray *exclude_absolute_paths_list, parray *exclude_relative_paths_list)
 {
 	PGconn		*source_conn = NULL;
 	PGNodeInfo	source_node_info;
@@ -588,6 +630,12 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 	source_conn = catchup_init_state(&source_node_info, source_pgdata, dest_pgdata);
 	catchup_preflight_checks(&source_node_info, source_conn, source_pgdata, dest_pgdata);
 
+	/* we need to sort --exclude_path's for future searching */
+	if (exclude_absolute_paths_list != NULL)
+		parray_qsort(exclude_absolute_paths_list, pgCompareString);
+	if (exclude_relative_paths_list != NULL)
+		parray_qsort(exclude_relative_paths_list, pgCompareString);
+
 	elog(LOG, "Database catchup start");
 
 	if (current.backup_mode != BACKUP_MODE_FULL)
@@ -595,6 +643,7 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 		dest_filelist = parray_new();
 		dir_list_file(dest_filelist, dest_pgdata,
 			true, true, false, backup_logs, true, 0, FIO_LOCAL_HOST);
+		filter_filelist(dest_filelist, dest_pgdata, exclude_absolute_paths_list, exclude_relative_paths_list, "Destination");
 
 		// fill dest_redo.lsn and dest_redo.tli
 		get_redo(dest_pgdata, FIO_LOCAL_HOST, &dest_redo);
@@ -662,17 +711,10 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 					  true, true, false, backup_logs, true, 0, FIO_LOCAL_HOST);
 
 	//REVIEW FIXME. Let's fix that before release.
-	// TODO filter pg_xlog/wal?
 	// TODO what if wal is not a dir (symlink to a dir)?
 
 	/* close ssh session in main thread */
 	fio_disconnect();
-
-	//REVIEW Do we want to do similar calculation for dest?
-	//REVIEW_ANSWER what for?
-	current.pgdata_bytes += calculate_datasize_of_filelist(source_filelist);
-	pretty_size(current.pgdata_bytes, pretty_source_bytes, lengthof(pretty_source_bytes));
-	elog(INFO, "Source PGDATA size: %s", pretty_source_bytes);
 
 	/*
 	 * Sort pathname ascending. It is necessary to create intermediate
@@ -687,8 +729,24 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 	 */
 	parray_qsort(source_filelist, pgFileCompareRelPathWithExternal);
 
-	/* Extract information about files in source_filelist parsing their names:*/
-	parse_filelist_filenames(source_filelist, source_pgdata);
+	//REVIEW Do we want to do similar calculation for dest?
+	//REVIEW_ANSWER what for?
+	{
+		ssize_t	source_bytes = 0;
+		char	pretty_bytes[20];
+
+		source_bytes += calculate_datasize_of_filelist(source_filelist);
+
+		/* Extract information about files in source_filelist parsing their names:*/
+		parse_filelist_filenames(source_filelist, source_pgdata);
+		filter_filelist(source_filelist, source_pgdata, exclude_absolute_paths_list, exclude_relative_paths_list, "Source");
+
+		current.pgdata_bytes += calculate_datasize_of_filelist(source_filelist);
+
+		pretty_size(current.pgdata_bytes, pretty_source_bytes, lengthof(pretty_source_bytes));
+		pretty_size(source_bytes - current.pgdata_bytes, pretty_bytes, lengthof(pretty_bytes));
+		elog(INFO, "Source PGDATA size: %s (excluded %s)", pretty_source_bytes, pretty_bytes);
+	}
 
 	elog(LOG, "Start LSN (source): %X/%X, TLI: %X",
 			(uint32) (current.start_lsn >> 32), (uint32) (current.start_lsn),
@@ -729,7 +787,7 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 		pgFile	   *file = (pgFile *) parray_get(source_filelist, i);
 		char parent_dir[MAXPGPATH];
 
-		if (!S_ISDIR(file->mode))
+		if (!S_ISDIR(file->mode) || file->excluded)
 			continue;
 
 		/*
@@ -812,6 +870,7 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 	/*
 	 * remove absent source files in dest (dropped tables, etc...)
 	 * note: global/pg_control will also be deleted here
+         * mark dest files (that excluded with source --exclude-path) also for exclusion
 	 */
 	if (current.backup_mode != BACKUP_MODE_FULL)
 	{
@@ -821,21 +880,22 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 		{
 			bool     redundant = true;
 			pgFile	*file = (pgFile *) parray_get(dest_filelist, i);
+			pgFile	**src_file = NULL;
 
 			//TODO optimize it and use some merge-like algorithm
 			//instead of bsearch for each file.
-			if (parray_bsearch(source_filelist, file, pgFileCompareRelPathWithExternal))
+			src_file = (pgFile **) parray_bsearch(source_filelist, file, pgFileCompareRelPathWithExternal);
+
+			if (src_file!= NULL && !(*src_file)->excluded && file->excluded)
+				(*src_file)->excluded = true;
+
+			if (src_file!= NULL || file->excluded)
 				redundant = false;
 
-			/* pg_filenode.map are always restored, because it's crc cannot be trusted */
+			/* pg_filenode.map are always copied, because it's crc cannot be trusted */
 			Assert(file->external_dir_num == 0);
 			if (pg_strcasecmp(file->name, RELMAPPER_FILENAME) == 0)
 				redundant = true;
-
-			//REVIEW This check seems unneded. Anyway we delete only redundant stuff below.
-			/* do not delete the useful internal directories */
-			if (S_ISDIR(file->mode) && !redundant)
-				continue;
 
 			/* if file does not exists in destination list, then we can safely unlink it */
 			if (redundant)
@@ -843,7 +903,6 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 				char		fullpath[MAXPGPATH];
 
 				join_path_components(fullpath, dest_pgdata, file->rel_path);
-
 				fio_delete(file->mode, fullpath, FIO_DB_HOST);
 				elog(VERBOSE, "Deleted file \"%s\"", fullpath);
 
@@ -896,7 +955,7 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 						 pretty_time, lengthof(pretty_time));
 		pretty_size(transfered_datafiles_bytes, pretty_transfered_data_bytes, lengthof(pretty_transfered_data_bytes));
 
-		elog(ERROR, "Catchup failed. Transfered bytes: %s, time elapsed: %s",
+		elog(ERROR, "Catchup failed. Transfered: %s, time elapsed: %s",
 			pretty_transfered_data_bytes, pretty_time);
 	}
 

@@ -282,6 +282,7 @@ typedef struct pgFile
 	pg_crc32 hdr_crc;		/* CRC value of header file: name_hdr */
 	pg_off_t hdr_off;       /* offset in header map */
 	int      hdr_size;      /* length of headers */
+	bool	excluded;	/* excluded via --exclude-path option */
 } pgFile;
 
 typedef struct page_map_entry
@@ -847,7 +848,8 @@ extern void process_block_change(ForkNumber forknum, RelFileNode rnode,
 								 BlockNumber blkno);
 
 /* in catchup.c */
-extern int do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, bool sync_dest_files);
+extern int do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, bool sync_dest_files,
+	parray *exclude_absolute_paths_list, parray *exclude_relative_paths_list);
 
 /* in restore.c */
 extern int do_restore_or_validate(InstanceState *instanceState,
@@ -1062,11 +1064,15 @@ extern pg_crc32 pgFileGetCRCgz(const char *file_path, bool use_crc32c, bool miss
 
 extern int pgFileMapComparePath(const void *f1, const void *f2);
 extern int pgFileCompareName(const void *f1, const void *f2);
+extern int pgFileCompareNameWithString(const void *f1, const void *f2);
+extern int pgFileCompareRelPathWithString(const void *f1, const void *f2);
 extern int pgFileCompareRelPathWithExternal(const void *f1, const void *f2);
 extern int pgFileCompareRelPathWithExternalDesc(const void *f1, const void *f2);
 extern int pgFileCompareLinked(const void *f1, const void *f2);
 extern int pgFileCompareSize(const void *f1, const void *f2);
 extern int pgFileCompareSizeDesc(const void *f1, const void *f2);
+extern int pgCompareString(const void *str1, const void *str2);
+extern int pgPrefixCompareString(const void *str1, const void *str2);
 extern int pgCompareOid(const void *f1, const void *f2);
 extern void pfilearray_clear_locks(parray *file_list);
 

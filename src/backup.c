@@ -2350,7 +2350,7 @@ calculate_datasize_of_filelist(parray *filelist)
 	{
 		pgFile	   *file = (pgFile *) parray_get(filelist, i);
 
-		if (file->external_dir_num != 0)
+		if (file->external_dir_num != 0 || file->excluded)
 			continue;
 
 		if (S_ISDIR(file->mode))

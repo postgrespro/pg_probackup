@@ -119,6 +119,9 @@ bool skip_external_dirs = false;
 /* array for datnames, provided via db-include and db-exclude */
 static parray *datname_exclude_list = NULL;
 static parray *datname_include_list = NULL;
+/* arrays for --exclude-path's */
+static parray *exclude_absolute_paths_list = NULL;
+static parray *exclude_relative_paths_list = NULL;
 
 /* checkdb options */
 bool need_amcheck = false;
@@ -177,6 +180,7 @@ static void compress_init(ProbackupSubcmd const subcmd);
 
 static void opt_datname_exclude_list(ConfigOption *opt, const char *arg);
 static void opt_datname_include_list(ConfigOption *opt, const char *arg);
+static void opt_exclude_path(ConfigOption *opt, const char *arg);
 
 /*
  * Short name should be non-printable ASCII character.
@@ -211,6 +215,7 @@ static ConfigOption cmd_options[] =
 	/* catchup options */
 	{ 's', 239, "source-pgdata",		&catchup_source_pgdata,	SOURCE_CMD_STRICT },
 	{ 's', 240, "destination-pgdata",	&catchup_destination_pgdata,	SOURCE_CMD_STRICT },
+	{ 'f', 'x', "exclude-path",		opt_exclude_path,	SOURCE_CMD_STRICT },
 	/* restore options */
 	{ 's', 136, "recovery-target-time",	&target_time,	SOURCE_CMD_STRICT },
 	{ 's', 137, "recovery-target-xid",	&target_xid,	SOURCE_CMD_STRICT },
@@ -840,7 +845,8 @@ main(int argc, char *argv[])
 								 no_validate, no_sync, backup_logs);
 			}
 		case CATCHUP_CMD:
-			return do_catchup(catchup_source_pgdata, catchup_destination_pgdata, num_threads, !no_sync);
+			return do_catchup(catchup_source_pgdata, catchup_destination_pgdata, num_threads, !no_sync,
+				exclude_absolute_paths_list, exclude_relative_paths_list);
 		case RESTORE_CMD:
 			return do_restore_or_validate(instanceState, current.backup_id,
 							recovery_target_options,
@@ -1005,39 +1011,45 @@ compress_init(ProbackupSubcmd const subcmd)
 	}
 }
 
+static void
+opt_parser_add_to_parray_helper(parray **list, const char *str)
+{
+	char *elem = NULL;
+
+	if (*list == NULL)
+		*list =  parray_new();
+
+	elem = pgut_malloc(strlen(str) + 1);
+	strcpy(elem, str);
+
+	parray_append(*list, elem);
+}
+
 /* Construct array of datnames, provided by user via db-exclude option */
 void
 opt_datname_exclude_list(ConfigOption *opt, const char *arg)
 {
-	char *dbname = NULL;
-
-	if (!datname_exclude_list)
-		datname_exclude_list =  parray_new();
-
-	dbname = pgut_malloc(strlen(arg) + 1);
-
 	/* TODO add sanity for database name */
-	strcpy(dbname, arg);
-
-	parray_append(datname_exclude_list, dbname);
+	opt_parser_add_to_parray_helper(&datname_exclude_list, arg);
 }
 
 /* Construct array of datnames, provided by user via db-include option */
 void
 opt_datname_include_list(ConfigOption *opt, const char *arg)
 {
-	char *dbname = NULL;
-
-	if (!datname_include_list)
-		datname_include_list =  parray_new();
-
-	dbname = pgut_malloc(strlen(arg) + 1);
-
-	if (strcmp(dbname, "tempate0") == 0 ||
-		strcmp(dbname, "tempate1") == 0)
+	if (strcmp(arg, "tempate0") == 0 ||
+		strcmp(arg, "tempate1") == 0)
 		elog(ERROR, "Databases 'template0' and 'template1' cannot be used for partial restore or validation");
 
-	strcpy(dbname, arg);
+	opt_parser_add_to_parray_helper(&datname_include_list, arg);
+}
 
-	parray_append(datname_include_list, dbname);
+/* Parse --exclude-path option */
+void
+opt_exclude_path(ConfigOption *opt, const char *arg)
+{
+	if (is_absolute_path(arg))
+		opt_parser_add_to_parray_helper(&exclude_absolute_paths_list, arg);
+	else
+		opt_parser_add_to_parray_helper(&exclude_relative_paths_list, arg);
 }

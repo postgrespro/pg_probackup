@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 import signal
 import unittest
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
@@ -1228,5 +1229,205 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
                     e.message,
                     '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
 
+        #self.assertEqual(1, 0, 'Stop test')
+        self.del_test_dir(module_name, self.fname)
+
+#########################################
+# --exclude-path
+#########################################
+    def test_catchup_with_exclude_path(self):
+        """
+        various syntetic tests for --exclude-path option
+        """
+        # preparation
+        src_pg = self.make_simple_node(
+            base_dir = os.path.join(module_name, self.fname, 'src'),
+            set_replication = True
+            )
+        src_pg.slow_start()
+
+        # test 1
+        os.mkdir(os.path.join(src_pg.data_dir, 'src_usefull_dir'))
+        with open(os.path.join(os.path.join(src_pg.data_dir, 'src_usefull_dir', 'src_garbage_file')), 'w') as f:
+            f.write('garbage')
+            f.flush()
+            f.close
+        os.mkdir(os.path.join(src_pg.data_dir, 'src_garbage_dir'))
+        with open(os.path.join(os.path.join(src_pg.data_dir, 'src_garbage_dir', 'src_garbage_file')), 'w') as f:
+            f.write('garbage')
+            f.flush()
+            f.close
+
+        dst_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'dst'))
+        self.catchup_node(
+            backup_mode = 'FULL',
+            source_pgdata = src_pg.data_dir,
+            destination_node = dst_pg,
+            options = [
+                '-d', 'postgres', '-p', str(src_pg.port), '--stream',
+                '--exclude-path={0}'.format(os.path.join(src_pg.data_dir, 'src_usefull_dir', 'src_garbage_file')),
+                '-x', '{0}'.format(os.path.join(src_pg.data_dir, 'src_garbage_dir')),
+                ]
+            )
+
+        self.assertTrue(Path(os.path.join(dst_pg.data_dir, 'src_usefull_dir')).exists())
+        self.assertFalse(Path(os.path.join(dst_pg.data_dir, 'src_usefull_dir', 'src_garbage_file')).exists())
+        self.assertFalse(Path(os.path.join(dst_pg.data_dir, 'src_garbage_dir')).exists())
+
+        self.set_replica(src_pg, dst_pg)
+        dst_options = {}
+        dst_options['port'] = str(dst_pg.port)
+        self.set_auto_conf(dst_pg, dst_options)
+        dst_pg.slow_start(replica = True)
+        dst_pg.stop()
+
+        # test 2
+        os.mkdir(os.path.join(dst_pg.data_dir, 'dst_garbage_dir'))
+        os.mkdir(os.path.join(dst_pg.data_dir, 'dst_usefull_dir'))
+        with open(os.path.join(os.path.join(dst_pg.data_dir, 'dst_usefull_dir', 'dst_usefull_file')), 'w') as f:
+            f.write('gems')
+            f.flush()
+            f.close
+
+        self.catchup_node(
+            backup_mode = 'DELTA',
+            source_pgdata = src_pg.data_dir,
+            destination_node = dst_pg,
+            options = [
+                '-d', 'postgres', '-p', str(src_pg.port), '--stream',
+                '--exclude-path=src_usefull_dir/src_garbage_file',
+                '--exclude-path=src_garbage_dir',
+                '--exclude-path={0}'.format(os.path.join(dst_pg.data_dir, 'dst_usefull_dir')),
+                ]
+            )
+
+        self.assertTrue(Path(os.path.join(dst_pg.data_dir, 'src_usefull_dir')).exists())
+        self.assertFalse(Path(os.path.join(dst_pg.data_dir, 'src_usefull_dir', 'src_garbage_file')).exists())
+        self.assertFalse(Path(os.path.join(dst_pg.data_dir, 'src_garbage_dir')).exists())
+        self.assertFalse(Path(os.path.join(dst_pg.data_dir, 'dst_garbage_dir')).exists())
+        self.assertTrue(Path(os.path.join(dst_pg.data_dir, 'dst_usefull_dir', 'dst_usefull_file')).exists())
+
+        #self.assertEqual(1, 0, 'Stop test')
+        src_pg.stop()
+        self.del_test_dir(module_name, self.fname)
+
+    def test_config_exclusion(self):
+        """
+        Test that catchup can preserve dest replication config
+        """
+        # preparation 1: source
+        src_pg = self.make_simple_node(
+            base_dir = os.path.join(module_name, self.fname, 'src'),
+            set_replication = True,
+            pg_options = { 'wal_log_hints': 'on' }
+            )
+        src_pg.slow_start()
+        src_pg.safe_psql(
+            "postgres",
+            "CREATE TABLE ultimate_question(answer int)")
+
+        # preparation 2: make lagging behind replica
+        dst_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'dst'))
+        self.catchup_node(
+            backup_mode = 'FULL',
+            source_pgdata = src_pg.data_dir,
+            destination_node = dst_pg,
+            options = ['-d', 'postgres', '-p', str(src_pg.port), '--stream']
+            )
+        self.set_replica(src_pg, dst_pg)
+        dst_options = {}
+        dst_options['port'] = str(dst_pg.port)
+        self.set_auto_conf(dst_pg, dst_options)
+        dst_pg.slow_start(replica = True)
+        dst_pg.stop()
+
+        # preparation 3: make changes on master (source)
+        src_pg.pgbench_init(scale = 10)
+        pgbench = src_pg.pgbench(options=['-T', '2', '--no-vacuum'])
+        pgbench.wait()
+
+        # test 1: do delta catchup with relative exclusion paths
+        self.catchup_node(
+            backup_mode = 'DELTA',
+            source_pgdata = src_pg.data_dir,
+            destination_node = dst_pg,
+            options = [
+                '-d', 'postgres', '-p', str(src_pg.port), '--stream',
+                '--exclude-path=postgresql.conf',
+                '--exclude-path=postgresql.auto.conf',
+                '--exclude-path=recovery.conf',
+                ]
+            )
+
+        # run&recover catchup'ed instance
+        # don't set destination db port and recover options
+        dst_pg.slow_start(replica = True)
+
+        # check: run verification query
+        src_pg.safe_psql("postgres", "INSERT INTO ultimate_question VALUES(42)")
+        src_query_result = src_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
+        dst_query_result = dst_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
+        self.assertEqual(src_query_result, dst_query_result, 'Different answer from copy')
+
+        # preparation 4: make changes on master (source)
+        dst_pg.stop()
+        #src_pg.pgbench_init(scale = 10)
+        pgbench = src_pg.pgbench(options=['-T', '2', '--no-vacuum'])
+        pgbench.wait()
+
+        # test 2: do delta catchup with absolute source exclusion paths
+        self.catchup_node(
+            backup_mode = 'DELTA',
+            source_pgdata = src_pg.data_dir,
+            destination_node = dst_pg,
+            options = [
+                '-d', 'postgres', '-p', str(src_pg.port), '--stream',
+                '--exclude-path={0}/postgresql.conf'.format(src_pg.data_dir),
+                '--exclude-path={0}/postgresql.auto.conf'.format(src_pg.data_dir),
+                '--exclude-path={0}/recovery.conf'.format(src_pg.data_dir),
+                ]
+            )
+
+        # run&recover catchup'ed instance
+        # don't set destination db port and recover options
+        dst_pg.slow_start(replica = True)
+
+        # check: run verification query
+        src_pg.safe_psql("postgres", "INSERT INTO ultimate_question VALUES(2*42)")
+        src_query_result = src_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
+        dst_query_result = dst_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
+        self.assertEqual(src_query_result, dst_query_result, 'Different answer from copy')
+
+        # preparation 5: make changes on master (source)
+        dst_pg.stop()
+        pgbench = src_pg.pgbench(options=['-T', '2', '--no-vacuum'])
+        pgbench.wait()
+
+        # test 3: do delta catchup with absolute destination exclusion paths
+        self.catchup_node(
+            backup_mode = 'DELTA',
+            source_pgdata = src_pg.data_dir,
+            destination_node = dst_pg,
+            options = [
+                '-d', 'postgres', '-p', str(src_pg.port), '--stream',
+                '--exclude-path={0}/postgresql.conf'.format(dst_pg.data_dir),
+                '--exclude-path={0}/postgresql.auto.conf'.format(dst_pg.data_dir),
+                '--exclude-path={0}/recovery.conf'.format(dst_pg.data_dir),
+                ]
+            )
+
+        # run&recover catchup'ed instance
+        # don't set destination db port and recover options
+        dst_pg.slow_start(replica = True)
+
+        # check: run verification query
+        src_pg.safe_psql("postgres", "INSERT INTO ultimate_question VALUES(3*42)")
+        src_query_result = src_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
+        dst_query_result = dst_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
+        self.assertEqual(src_query_result, dst_query_result, 'Different answer from copy')
+
+        # Cleanup
+        src_pg.stop()
+        dst_pg.stop()
         #self.assertEqual(1, 0, 'Stop test')
         self.del_test_dir(module_name, self.fname)
