@@ -53,11 +53,8 @@ build/test_centos_8: build/test_centos_8_9.6 build/test_centos_8_10 build/test_c
 	@echo Centos 8: done
 
 # Oracle Linux
-build/test_oraclelinux: build/test_oraclelinux_6 build/test_oraclelinux_7 build/test_oraclelinux_8
+build/test_oraclelinux: build/test_oraclelinux_7 build/test_oraclelinux_8
 	@echo Oraclelinux: done
-
-build/test_oraclelinux_6: build/test_oraclelinux_6_9.6 build/test_oraclelinux_6_10 build/test_oraclelinux_6_11 build/test_oraclelinux_6_12 build/test_oraclelinux_6_13
-	@echo Oraclelinux 6: done
 
 build/test_oraclelinux_7: build/test_oraclelinux_7_9.6 build/test_oraclelinux_7_10 build/test_oraclelinux_7_11 build/test_oraclelinux_7_12 build/test_oraclelinux_7_13
 	@echo Oraclelinux 7: done
