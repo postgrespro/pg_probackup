@@ -31,7 +31,7 @@ http {
 }
 EOF
 
-/etc/init.d/nginx start
+nginx -s reload || (pkill -9 nginx || nginx -c /etc/nginx/nginx.conf &)
 
 # install POSTGRESQL
 
