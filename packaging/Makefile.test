@@ -31,7 +31,7 @@ define test_deb
 	docker rm -f $1_$2_probackup_$(PKG_NAME_SUFFIX)$(PBK_VERSION) >> /dev/null 2>&1 ; \
 	docker run \
 		-v $(WORKDIR)/packaging/test:/app/in \
-		-v $(BUILDDIR)/data/www/$(PBK_PKG_REPO):/app/www \
+		-v $(BUILDDIR)/data/www:/app/www \
 		-e "DISTRIB=$1" -e "DISTRIB_VERSION=$2" -e "CODENAME=$3" -e "PG_VERSION=$4" -e "PG_FULL_VERSION=$5" \
 		-e "PKG_HASH=$(PBK_HASH)" -e "PKG_URL=$(PBK_GIT_REPO)" -e "PKG_RELEASE=$(PBK_RELEASE)" -e "PKG_NAME=pg-probackup-$(PKG_NAME_SUFFIX)$4" \
 		-e "PKG_VERSION=$(PBK_VERSION)" -e "PBK_EDITION=$(PBK_EDITION)" -e "PBK_EDITION_FULL=$(PBK_EDITION_FULL)" \
@@ -79,7 +79,7 @@ define test_rpm
 	docker rm -f $1_$2_probackup_$(PKG_NAME_SUFFIX)$(PBK_VERSION) >> /dev/null 2>&1 ; \
 	docker run \
 		-v $(WORKDIR)/packaging/test:/app/in \
-		-v $(BUILDDIR)/data/www/$(PBK_PKG_REPO):/app/www \
+		-v $(BUILDDIR)/data/www:/app/www \
 		-e "DISTRIB=$1" -e "DISTRIB_VERSION=$2" -e "CODENAME=$3" -e "PG_VERSION=$4" -e "PG_FULL_VERSION=$5" \
 		-e "PKG_HASH=$(PBK_HASH)" -e "PKG_URL=$(PBK_GIT_REPO)" -e "PKG_RELEASE=$(PBK_RELEASE)" -e "PKG_NAME=pg_probackup-$(PKG_NAME_SUFFIX)$4" \
 		-e "PKG_VERSION=$(PBK_VERSION)" -e "PBK_EDITION=$(PBK_EDITION)" -e "PBK_EDITION_FULL=$(PBK_EDITION_FULL)" \
@@ -109,7 +109,7 @@ define test_alt
 	docker rm -f $1_$2_probackup_$(PKG_NAME_SUFFIX)$(PBK_VERSION) >> /dev/null 2>&1 ; \
 	docker run \
 		-v $(WORKDIR)/packaging/test:/app/in \
-		-v $(BUILDDIR)/data/www/$(PBK_PKG_REPO):/app/www \
+		-v $(BUILDDIR)/data/www:/app/www \
 		-e "DISTRIB=$1" -e "DISTRIB_VERSION=$2" -e "CODENAME=$3" -e "PG_VERSION=$4" -e "PG_FULL_VERSION=$5" \
 		-e "PKG_HASH=$(PBK_HASH)" -e "PKG_URL=$(PBK_GIT_REPO)" -e "PKG_RELEASE=$(PBK_RELEASE)" -e "PKG_NAME=pg_probackup-$(PKG_NAME_SUFFIX)$4" \
 		-e "PKG_VERSION=$(PBK_VERSION)" -e "PBK_EDITION=$(PBK_EDITION)" -e "PBK_EDITION_FULL=$(PBK_EDITION_FULL)" \
@@ -133,7 +133,7 @@ define test_suse
 	docker rm -f $1_$2_probackup_$(PKG_NAME_SUFFIX)$(PBK_VERSION) >> /dev/null 2>&1 ; \
 	docker run \
 		-v $(WORKDIR)/packaging/test:/app/in \
-		-v $(BUILDDIR)/data/www/$(PBK_PKG_REPO):/app/www \
+		-v $(BUILDDIR)/data/www:/app/www \
 		-e "DISTRIB=$1" -e "DISTRIB_VERSION=$2" -e "CODENAME=$3" -e "PG_VERSION=$4" -e "PG_FULL_VERSION=$5" \
 		-e "PKG_HASH=$(PBK_HASH)" -e "PKG_URL=$(PBK_GIT_REPO)" -e "PKG_RELEASE=$(PBK_RELEASE)" -e "PKG_NAME=pg_probackup-$(PKG_NAME_SUFFIX)$4" \
 		-e "PKG_VERSION=$(PBK_VERSION)" -e "PBK_EDITION=$(PBK_EDITION)" -e "PBK_EDITION_FULL=$(PBK_EDITION_FULL)" \
