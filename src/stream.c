@@ -176,6 +176,11 @@ checkpoint_timeout(PGconn *backup_conn)
  * PG 9.5-10
  * CreateReplicationSlot(PGconn *conn, const char *slot_name, const char *plugin,
  *                                           bool is_physical, bool slot_exists_ok)
+ * NOTE: PG 9.6 and 10 support reserve_wal in
+ * pg_catalog.pg_create_physical_replication_slot(slot_name name [, immediately_reserve boolean])
+ * and
+ * CREATE_REPLICATION_SLOT slot_name { PHYSICAL [ RESERVE_WAL ] | LOGICAL output_plugin }
+ * replication protocol command, but CreateReplicationSlot() C function doesn't
  */
 static bool
 CreateReplicationSlot_compat(PGconn *conn, const char *slot_name, const char *plugin,
