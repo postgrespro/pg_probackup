@@ -1,3 +1,18 @@
+ifeq ($(PBK_EDITION),std)
+	PBK_PKG_REPO = pg_probackup-forks
+	PBK_EDITION_FULL = Standart
+	PKG_NAME_SUFFIX = std-
+else ifeq ($(PBK_EDITION),ent)
+	PBK_PKG_REPO = pg_probackup-forks
+	PBK_EDITION_FULL = Enterprise
+	PKG_NAME_SUFFIX = ent-
+else
+	PBK_PKG_REPO = pg_probackup
+	PBK_EDITION_FULL =
+	PBK_EDITION =
+	PKG_NAME_SUFFIX =
+endif
+
 check_env:
 	@if [ -z ${PBK_VERSION} ] ; then \
            echo "Env variable PBK_VERSION is not set" ; \
@@ -13,21 +28,6 @@ check_env:
            echo "Env variable PBK_HASH is not set" ; \
            false ; \
      fi
-
-ifeq ($(PBK_EDITION),std)
-	PBK_PKG_REPO = pg_probackup-forks
-	PBK_EDITION_FULL = Standart
-	PKG_NAME_SUFFIX = std-
-else ifeq ($(PBK_EDITION),ent)
-	PBK_PKG_REPO = pg_probackup-forks
-	PBK_EDITION_FULL = Enterprise
-	PKG_NAME_SUFFIX = ent-
-else
-	PBK_PKG_REPO = pg_probackup
-	PBK_EDITION_FULL =
-	PBK_EDITION =
-	PKG_NAME_SUFFIX =
-endif
 
 pkg: check_env build/prepare build/all
 	@echo Build for all platform: done
