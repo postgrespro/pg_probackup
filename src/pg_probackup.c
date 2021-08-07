@@ -78,8 +78,8 @@ pid_t       my_pid = 0;
 __thread int  my_thread_num = 1;
 bool		progress = false;
 bool		no_sync = false;
-char	   *replication_slot = NULL;
 #if PG_VERSION_NUM >= 100000
+char	   *replication_slot = NULL;
 bool		temp_slot = false;
 #endif
 bool create_permanent_slot = false;
@@ -791,10 +791,10 @@ main(int argc, char *argv[])
 		elog(ERROR, "You cannot specify \"--no-validate\" option with the \"%s\" command",
 			get_subcmd_name(backup_subcmd));
 
+#if PG_VERSION_NUM >= 100000
 	if (temp_slot && create_permanent_slot)
 		elog(ERROR, "You cannot specify \"--create-permanent-slot\" option with the \"--temp-slot\" option");
 
-#if PG_VERSION_NUM >= 100000
 	/* if slot name was not provided for temp slot, use default slot name */
 	if (!replication_slot && temp_slot)
 		replication_slot = DEFAULT_TEMP_SLOT_NAME;

@@ -223,8 +223,13 @@ StreamLog(void *arg)
 	stream_stop_begin = 0;
 
 	/* Create repslot */
+#if PG_VERSION_NUM >= 100000
 	if (temp_slot || create_permanent_slot)
 		if (!CreateReplicationSlot_compat(stream_arg->conn, replication_slot, NULL, temp_slot, true, false))
+#else
+	if (create_permanent_slot)
+		if (!CreateReplicationSlot_compat(stream_arg->conn, replication_slot, NULL, false, true, false))
+#endif
 		{
 			interrupted = true;
 			elog(ERROR, "Couldn't create physical replication slot %s", replication_slot);
@@ -237,7 +242,11 @@ StreamLog(void *arg)
 		elog(LOG, "started streaming WAL at %X/%X (timeline %u) using%s slot %s",
 			(uint32) (stream_arg->startpos >> 32), (uint32) stream_arg->startpos,
 			stream_arg->starttli,
+#if PG_VERSION_NUM >= 100000
 			temp_slot ? " temporary" : "",
+#else
+			"",
+#endif
 			replication_slot);
 	else
 		elog(LOG, "started streaming WAL at %X/%X (timeline %u)",
