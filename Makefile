@@ -1,4 +1,7 @@
 PROGRAM = pg_probackup
+WORKDIR ?= $(CURDIR)
+BUILDDIR = $(WORKDIR)/build/
+PBK_GIT_REPO = http://github.com/postgrespro/pg_probackup
 
 # utils
 OBJS = src/utils/configuration.o src/utils/json.o src/utils/logger.o \
@@ -81,21 +84,6 @@ ifeq ($(PORTNAME), aix)
 	CC=xlc_r
 endif
 
-check_env:
-	@if [ -z ${PBK_VERSION} ] ; then \
-           echo "Env variable PBK_VERSION is not set" ; \
-           false ; \
-     fi
-
-	@if [ -z ${PBK_RELEASE} ] ; then \
-           echo "Env variable PBK_RELEASE is not set" ; \
-           false ; \
-     fi
-
-	@if [ -z ${PBK_HASH} ] ; then \
-           echo "Env variable PBK_HASH is not set" ; \
-           false ; \
-     fi
-
 include packaging/Makefile.pkg
 include packaging/Makefile.repo
+include packaging/Makefile.test

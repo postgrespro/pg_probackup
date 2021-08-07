@@ -1,6 +1,18 @@
-WORKDIR ?= $(CURDIR)
-BUILDDIR = $(WORKDIR)/build/
-PBK_GIT_REPO = http://github.com/postgrespro/pg_probackup
+check_env:
+	@if [ -z ${PBK_VERSION} ] ; then \
+           echo "Env variable PBK_VERSION is not set" ; \
+           false ; \
+     fi
+
+	@if [ -z ${PBK_RELEASE} ] ; then \
+           echo "Env variable PBK_RELEASE is not set" ; \
+           false ; \
+     fi
+
+	@if [ -z ${PBK_HASH} ] ; then \
+           echo "Env variable PBK_HASH is not set" ; \
+           false ; \
+     fi
 
 ifeq ($(PBK_EDITION),std)
 	PBK_PKG_REPO = pg_probackup-forks

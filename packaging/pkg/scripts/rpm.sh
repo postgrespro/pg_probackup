@@ -53,7 +53,7 @@ if [[ ${PBK_EDITION} == '' ]] ; then
 	sed -i "s/@PG_VERSION@/${PKG_VERSION}/" pg_probackup.repo
 
 	# Download PostgreSQL source
-	wget http://ftp.postgresql.org/pub/source/v${PG_FULL_VERSION}/postgresql-${PG_FULL_VERSION}.tar.bz2 -O /root/rpmbuild/SOURCES/postgresql-${PG_VERSION}.tar.bz2
+	wget -q http://ftp.postgresql.org/pub/source/v${PG_FULL_VERSION}/postgresql-${PG_FULL_VERSION}.tar.bz2 -O /root/rpmbuild/SOURCES/postgresql-${PG_VERSION}.tar.bz2
 
 	# change to build dir
 	cd /root/rpmbuild/SOURCES

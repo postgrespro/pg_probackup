@@ -1,3 +1,4 @@
+Example:
 ```
 export PBK_VERSION=2.4.17
 export PBK_HASH=57f871accce2604
@@ -14,7 +15,7 @@ tar -cjSf pgpro.tar.bz2 pgpro
 ```
 
 To build repo the gpg keys for package signing must be present ...
-Repo must be build with 1 thread:
+Repo must be build using 1 thread (due to debian bullshit):
 ```
 make repo -j1
 ```

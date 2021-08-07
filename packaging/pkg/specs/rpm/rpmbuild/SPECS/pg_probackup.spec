@@ -23,7 +23,7 @@ Backup tool for PostgreSQL.
 
 %build
 mv %{_builddir}/pg_probackup-%{version} contrib/pg_probackup
-./configure --enable-debug
+./configure --enable-debug --without-readline
 make -C 'src/common'
 make -C 'src/port'
 make -C 'src/interfaces'
