@@ -19,9 +19,9 @@ if [ ${DISTRIB} == 'rhel' ] && [ ${PG_TOG} == '13' ]; then # no packages for PG1
     exit 0
 fi
 
-if [ ${DISTRIB} == 'oraclelinux' ] &&  [ ${DISTRIB_VERSION} == '6' ] && [ ${PG_TOG} == '13' ]; then # no packages for PG13 on PGDG
-    exit 0
-fi
+#if [ ${DISTRIB} == 'oraclelinux' ] &&  [ ${DISTRIB_VERSION} == '6' ] && [ ${PG_TOG} == '13' ]; then # no packages for PG13 on PGDG
+#    exit 0
+#fi
 
 if [ ${DISTRIB_VERSION} == '6' ]; then
     yum install -y https://nginx.org/packages/rhel/6/x86_64/RPMS/nginx-1.8.1-1.el6.ngx.x86_64.rpm
@@ -54,7 +54,7 @@ events {
 http {
     server {
         listen   80 default;
-        root /var/www;
+        root /app/www;
     }
 }
 EOF

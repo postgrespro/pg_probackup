@@ -43,11 +43,8 @@ include packaging/test/Makefile.debian
 include packaging/test/Makefile.ubuntu
 
 # CENTOS
-build/test_centos: build/test_centos_6 build/test_centos_7 build/test_centos_8
+build/test_centos: build/test_centos_7 build/test_centos_8
 	@echo Centos: done
-
-build/test_centos_6: build/test_centos_6_9.6 build/test_centos_6_10 build/test_centos_6_11 build/test_centos_6_12 build/test_centos_6_13
-	@echo Centos 6: done
 
 build/test_centos_7: build/test_centos_7_9.6 build/test_centos_7_10 build/test_centos_7_11 build/test_centos_7_12 build/test_centos_7_13
 	@echo Centos 7: done
