@@ -8,7 +8,6 @@ ulimit -n 1024
 apt-get clean -y
 apt-get update -y
 apt-get install nginx su -y
-apt-get install apt-transport-https ca-certificates -y
 
 adduser nginx
 
