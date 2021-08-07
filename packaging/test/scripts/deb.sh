@@ -17,17 +17,13 @@ PG_TOG=$(echo $PG_VERSION | sed 's|\.||g')
 export DEBIAN_FRONTEND=noninteractive
 echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selections
 
-if [ ${DISTRIB} == 'ubuntu' ] && [ ${DISTRIB_VERSION} == '14.04' ] && [ ${PG_TOG} == '12' ]; then
-  exit 0
-fi
-
-if [ ${DISTRIB} == 'ubuntu' ] && [ ${DISTRIB_VERSION} == '14.04' ] && [ ${PG_TOG} == '13' ]; then
-  exit 0
-fi
-
-if [ ${DISTRIB} == 'debian' ] && [ ${DISTRIB_VERSION} == '8' ] && [ ${PG_TOG} == '13' ]; then
-  exit 0
-fi
+#if [ ${DISTRIB} == 'ubuntu' ] && [ ${DISTRIB_VERSION} == '14.04' ] && [ ${PG_TOG} == '12' ]; then
+#  exit 0
+#fi
+#
+#if [ ${DISTRIB} == 'ubuntu' ] && [ ${DISTRIB_VERSION} == '14.04' ] && [ ${PG_TOG} == '13' ]; then
+#  exit 0
+#fi
 
 #if [ ${CODENAME} == 'jessie' ]; then
 #printf "deb http://archive.debian.org/debian/ jessie main\ndeb-src http://archive.debian.org/debian/ jessie main\ndeb http://security.debian.org jessie/updates main\ndeb-src http://security.debian.org jessie/updates main" > /etc/apt/sources.list
@@ -66,15 +62,14 @@ nginx -s reload || (pkill -9 nginx || nginx -c /etc/nginx/nginx.conf &)
   apt-get install -y postgresql-${PG_VERSION}
 #fi
 
-## install pg_probackup from current public repo
-##if [ $CODENAME != 'cosmic' ]; then # Bionic do not have package in repo
-#echo "deb [arch=amd64] http://repo.postgrespro.ru/pg_probackup/deb/ $(lsb_release -cs) main-$(lsb_release -cs)" >\
-#  /etc/apt/sources.list.d/pg_probackup-old.list
-#wget -O - http://repo.postgrespro.ru/pg_probackup/keys/GPG-KEY-PG_PROBACKUP | apt-key add - && apt-get update
-#
-#apt-get install -y pg-probackup-${PG_VERSION}
-#pg_probackup-${PG_VERSION} --help
-#pg_probackup-${PG_VERSION} --version
+# install pg_probackup from current public repo
+echo "deb [arch=amd64] http://repo.postgrespro.ru/pg_probackup/deb/ $(lsb_release -cs) main-$(lsb_release -cs)" >\
+  /etc/apt/sources.list.d/pg_probackup-old.list
+wget -O - http://repo.postgrespro.ru/pg_probackup/keys/GPG-KEY-PG_PROBACKUP | apt-key add - && apt-get update
+
+apt-get install -y pg-probackup-${PG_VERSION}
+pg_probackup-${PG_VERSION} --help
+pg_probackup-${PG_VERSION} --version
 
 # Artful do no have PostgreSQL packages at all, Precise do not have PostgreSQL 10
 #if [ ${CODENAME} == 'precise' ] && [ ${PG_VERSION} != '10' ] && [ ${PG_VERSION} != '11' ]; then
