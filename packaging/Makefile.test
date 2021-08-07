@@ -91,16 +91,9 @@ include packaging/test/Makefile.centos
 include packaging/test/Makefile.rhel
 include packaging/test/Makefile.oraclelinux
 
-
 # Alt Linux
-build/test_alt: build/test_alt_7 build/test_alt_8 build/test_alt_9
+build/test_alt: build/test_alt_9
 	@echo Alt Linux: done
-
-build/test_alt_7: build/test_alt_7_9.6 build/test_alt_7_10 build/test_alt_7_11 build/test_alt_7_12 build/test_alt_7_13
-	@echo Alt Linux 7: done
-
-build/test_alt_8: build/test_alt_8_9.6 build/test_alt_8_10 build/test_alt_8_11 build/test_alt_8_12 build/test_alt_8_13
-	@echo Alt Linux 8: done
 
 build/test_alt_9: build/test_alt_9_9.6 build/test_alt_9_10 build/test_alt_9_11 build/test_alt_9_12 build/test_alt_9_13
 	@echo Alt Linux 9: done
