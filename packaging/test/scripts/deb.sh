@@ -75,8 +75,8 @@ pg_probackup-${PG_VERSION} --version
 #if [ ${CODENAME} == 'precise' ] && [ ${PG_VERSION} != '10' ] && [ ${PG_VERSION} != '11' ]; then
   export PGDATA=/var/lib/postgresql/${PG_VERSION}/data
   su postgres -c "/usr/lib/postgresql/${PG_VERSION}/bin/initdb -k -D ${PGDATA}"
-#  su postgres -c "pg_probackup-${PG_VERSION} init -B /tmp/backup"
-#  su postgres -c "pg_probackup-${PG_VERSION} add-instance --instance=node -B /tmp/backup -D ${PGDATA}"
+  su postgres -c "pg_probackup-${PG_VERSION} init -B /tmp/backup"
+  su postgres -c "pg_probackup-${PG_VERSION} add-instance --instance=node -B /tmp/backup -D ${PGDATA}"
 
   echo "wal_level=hot_standby" >> ${PGDATA}/postgresql.auto.conf
   echo "fsync=off" >> ${PGDATA}/postgresql.auto.conf
@@ -85,12 +85,12 @@ pg_probackup-${PG_VERSION} --version
 
   su postgres -c "/usr/lib/postgresql/${PG_VERSION}/bin/pg_ctl start -D ${PGDATA}"
   sleep 5
-#  su postgres -c "pg_probackup-${PG_VERSION} backup --instance=node -b full -B /tmp/backup -D ${PGDATA} --no-sync"
-#  su postgres -c "pg_probackup-${PG_VERSION} show --instance=node -B /tmp/backup -D ${PGDATA}"
-#  su postgres -c "pg_probackup-${PG_VERSION} show --instance=node -B /tmp/backup --archive -D ${PGDATA}"
+  su postgres -c "pg_probackup-${PG_VERSION} backup --instance=node -b full -B /tmp/backup -D ${PGDATA} --no-sync"
+  su postgres -c "pg_probackup-${PG_VERSION} show --instance=node -B /tmp/backup -D ${PGDATA}"
+  su postgres -c "pg_probackup-${PG_VERSION} show --instance=node -B /tmp/backup --archive -D ${PGDATA}"
 
   su postgres -c "/usr/lib/postgresql/${PG_VERSION}/bin/pgbench --no-vacuum -i -s 5"
-#  su postgres -c "pg_probackup-${PG_VERSION} backup --instance=node -b page -B /tmp/backup -D ${PGDATA} --no-sync"
+  su postgres -c "pg_probackup-${PG_VERSION} backup --instance=node -b page -B /tmp/backup -D ${PGDATA} --no-sync"
 #fi
 
 # install new packages
