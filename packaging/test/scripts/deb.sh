@@ -111,9 +111,9 @@ pg_probackup-${PG_VERSION} --version
 #  su postgres -c "${PKG_NAME} init -B /tmp/backup"
 #  su postgres -c "${PKG_NAME} add-instance --instance=node -B /tmp/backup -D ${PGDATA}"
 
-  su postgres -c "pg_probackup-${PG_VERSION} init -B /tmp/backup"
-  su postgres -c "pg_probackup-${PG_VERSION} add-instance --instance=node -B /tmp/backup -D ${PGDATA}"
-  su postgres -c "pg_probackup-${PG_VERSION} backup --instance=node --compress -b full -B /tmp/backup -D ${PGDATA} --no-sync"
+#  su postgres -c "pg_probackup-${PG_VERSION} init -B /tmp/backup"
+#  su postgres -c "pg_probackup-${PG_VERSION} add-instance --instance=node -B /tmp/backup -D ${PGDATA}"
+  su postgres -c "pg_probackup-${PG_VERSION} backup --instance=node --compress -b delta -B /tmp/backup -D ${PGDATA} --no-sync"
   su postgres -c "/usr/lib/postgresql/${PG_VERSION}/bin/pgbench --no-vacuum -t 1000 -c 1"
   su postgres -c "pg_probackup-${PG_VERSION} backup --instance=node -b page -B /tmp/backup -D ${PGDATA} --no-sync"
   su postgres -c "pg_probackup-${PG_VERSION} show --instance=node -B /tmp/backup -D ${PGDATA}"
