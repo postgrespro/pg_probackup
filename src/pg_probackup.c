@@ -78,10 +78,11 @@ pid_t       my_pid = 0;
 __thread int  my_thread_num = 1;
 bool		progress = false;
 bool		no_sync = false;
-#if PG_VERSION_NUM >= 100000
 char	   *replication_slot = NULL;
-#endif
+#if PG_VERSION_NUM >= 100000
 bool		temp_slot = false;
+#endif
+bool create_permanent_slot = false;
 
 /* backup options */
 bool         backup_logs = false;
@@ -198,7 +199,10 @@ static ConfigOption cmd_options[] =
 	{ 'f', 'b', "backup-mode",		opt_backup_mode,	SOURCE_CMD_STRICT },
 	{ 'b', 'C', "smooth-checkpoint", &smooth_checkpoint,	SOURCE_CMD_STRICT },
 	{ 's', 'S', "slot",				&replication_slot,	SOURCE_CMD_STRICT },
+#if PG_VERSION_NUM >= 100000
 	{ 'b', 181, "temp-slot",		&temp_slot,			SOURCE_CMD_STRICT },
+#endif
+	{ 'b', 'P', "create-permanent-slot",	&create_permanent_slot,	SOURCE_CMD_STRICT },
 	{ 'b', 182, "delete-wal",		&delete_wal,		SOURCE_CMD_STRICT },
 	{ 'b', 183, "delete-expired",	&delete_expired,	SOURCE_CMD_STRICT },
 	{ 'b', 184, "merge-expired",	&merge_expired,		SOURCE_CMD_STRICT },
@@ -786,6 +790,17 @@ main(int argc, char *argv[])
 	if (backup_subcmd == VALIDATE_CMD && restore_params->no_validate)
 		elog(ERROR, "You cannot specify \"--no-validate\" option with the \"%s\" command",
 			get_subcmd_name(backup_subcmd));
+
+	if (temp_slot && create_permanent_slot)
+		elog(ERROR, "You cannot specify \"--create-permanent-slot\" option with the \"--temp-slot\" option");
+
+#if PG_VERSION_NUM >= 100000
+	/* if slot name was not provided for temp slot, use default slot name */
+	if (!replication_slot && temp_slot)
+		replication_slot = DEFAULT_TEMP_SLOT_NAME;
+#endif
+	if (!replication_slot && create_permanent_slot)
+		replication_slot = DEFAULT_PERMANENT_SLOT_NAME;
 
 	if (num_threads < 1)
 		num_threads = 1;

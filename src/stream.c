@@ -160,6 +160,51 @@ checkpoint_timeout(PGconn *backup_conn)
 }
 
 /*
+ * CreateReplicationSlot_compat() -- wrapper for CreateReplicationSlot() used in StreamLog()
+ * src/bin/pg_basebackup/streamutil.c
+ * CreateReplicationSlot() has different signatures on different PG versions:
+ * PG 15
+ * bool
+ * CreateReplicationSlot(PGconn *conn, const char *slot_name, const char *plugin,
+ *                                           bool is_temporary, bool is_physical, bool reserve_wal,
+ *                                           bool slot_exists_ok, bool two_phase)
+ * PG 11-14
+ * bool
+ * CreateReplicationSlot(PGconn *conn, const char *slot_name, const char *plugin,
+ *                                           bool is_temporary, bool is_physical, bool reserve_wal,
+ *                                           bool slot_exists_ok)
+ * PG 9.5-10
+ * CreateReplicationSlot(PGconn *conn, const char *slot_name, const char *plugin,
+ *                                           bool is_physical, bool slot_exists_ok)
+ */
+static bool
+CreateReplicationSlot_compat(PGconn *conn, const char *slot_name, const char *plugin,
+                                          bool is_temporary, bool is_physical,
+                                          bool slot_exists_ok)
+{
+#if PG_VERSION_NUM >= 150000
+	return CreateReplicationSlot(conn, slot_name, plugin, is_temporary, is_physical,
+		/* reserve_wal = */ true, slot_exists_ok, /* two_phase = */ false);
+#elif PG_VERSION_NUM >= 110000
+	return CreateReplicationSlot(conn, slot_name, plugin, is_temporary, is_physical,
+		/* reserve_wal = */ true, slot_exists_ok);
+#elif PG_VERSION_NUM >= 100000
+	/*
+	 * PG-10 doesn't support creating temp_slot by calling CreateReplicationSlot(), but
+	 * it will be created by setting StreamCtl.temp_slot later in StreamLog()
+	 */
+	if (!is_temporary)
+		return CreateReplicationSlot(conn, slot_name, plugin, /*is_temporary,*/ is_physical, /*reserve_wal,*/ slot_exists_ok);
+	else
+		return true;
+#else
+	/* these parameters not supported in PG < 10 */
+	Assert(!is_temporary);
+	return CreateReplicationSlot(conn, slot_name, plugin, /*is_temporary,*/ is_physical, /*reserve_wal,*/ slot_exists_ok);
+#endif
+}
+
+/*
  * Start the log streaming
  */
 static void *
@@ -177,31 +222,27 @@ StreamLog(void *arg)
 	/* Initialize timeout */
 	stream_stop_begin = 0;
 
-#if PG_VERSION_NUM >= 100000
-	/* if slot name was not provided for temp slot, use default slot name */
-	if (!replication_slot && temp_slot)
-		replication_slot = "pg_probackup_slot";
-#endif
-
-
-#if PG_VERSION_NUM >= 150000
-	/* Create temp repslot */
-	if (temp_slot)
-		CreateReplicationSlot(stream_arg->conn, replication_slot,
-			NULL, temp_slot, true, true, false, false);
-#elif PG_VERSION_NUM >= 110000
-	/* Create temp repslot */
-	if (temp_slot)
-		CreateReplicationSlot(stream_arg->conn, replication_slot,
-			NULL, temp_slot, true, true, false);
-#endif
+	/* Create repslot */
+	if (temp_slot || create_permanent_slot)
+		if (!CreateReplicationSlot_compat(stream_arg->conn, replication_slot, NULL, temp_slot, true, false))
+		{
+			interrupted = true;
+			elog(ERROR, "Couldn't create physical replication slot %s", replication_slot);
+		}
 
 	/*
 	 * Start the replication
 	 */
-	elog(LOG, "started streaming WAL at %X/%X (timeline %u)",
-		 (uint32) (stream_arg->startpos >> 32), (uint32) stream_arg->startpos,
-		  stream_arg->starttli);
+	if (replication_slot)
+		elog(LOG, "started streaming WAL at %X/%X (timeline %u) using%s slot %s",
+			(uint32) (stream_arg->startpos >> 32), (uint32) stream_arg->startpos,
+			stream_arg->starttli,
+			temp_slot ? " temporary" : "",
+			replication_slot);
+	else
+		elog(LOG, "started streaming WAL at %X/%X (timeline %u)",
+			 (uint32) (stream_arg->startpos >> 32), (uint32) stream_arg->startpos,
+			  stream_arg->starttli);
 
 #if PG_VERSION_NUM >= 90600
 	{
@@ -212,6 +253,11 @@ StreamLog(void *arg)
 		ctl.startpos = stream_arg->startpos;
 		ctl.timeline = stream_arg->starttli;
 		ctl.sysidentifier = NULL;
+		ctl.stream_stop = stop_streaming;
+		ctl.standby_message_timeout = standby_message_timeout;
+		ctl.partial_suffix = NULL;
+		ctl.synchronous = false;
+		ctl.mark_done = false;
 
 #if PG_VERSION_NUM >= 100000
 		ctl.walmethod = CreateWalDirectoryMethod(
@@ -224,19 +270,14 @@ StreamLog(void *arg)
 		ctl.do_sync = false; /* We sync all files at the end of backup */
 //		ctl.mark_done        /* for future use in s3 */
 #if PG_VERSION_NUM >= 100000 && PG_VERSION_NUM < 110000
+		/* StreamCtl.temp_slot used only for PG-10, in PG>10, temp_slots are created by calling CreateReplicationSlot() */
 		ctl.temp_slot = temp_slot;
-#endif
-#else
+#endif /* PG_VERSION_NUM >= 100000 && PG_VERSION_NUM < 110000 */
+#else /* PG_VERSION_NUM < 100000 */
 		ctl.basedir = (char *) stream_arg->basedir;
-#endif
+#endif /* PG_VERSION_NUM >= 100000 */
 
-		ctl.stream_stop = stop_streaming;
-		ctl.standby_message_timeout = standby_message_timeout;
-		ctl.partial_suffix = NULL;
-		ctl.synchronous = false;
-		ctl.mark_done = false;
-
-		if(ReceiveXlogStream(stream_arg->conn, &ctl) == false)
+		if (ReceiveXlogStream(stream_arg->conn, &ctl) == false)
 		{
 			interrupted = true;
 			elog(ERROR, "Problem in receivexlog");
@@ -244,38 +285,42 @@ StreamLog(void *arg)
 
 #if PG_VERSION_NUM >= 100000
 		if (!ctl.walmethod->finish())
+		{
+			interrupted = true;
 			elog(ERROR, "Could not finish writing WAL files: %s",
 				 strerror(errno));
-#endif
+		}
+#endif /* PG_VERSION_NUM >= 100000 */
 	}
-#else
-	if(ReceiveXlogStream(stream_arg->conn, stream_arg->startpos, stream_arg->starttli,
+#else /* PG_VERSION_NUM < 90600 */
+	/* PG-9.5 */
+	if (ReceiveXlogStream(stream_arg->conn, stream_arg->startpos, stream_arg->starttli,
 						NULL, (char *) stream_arg->basedir, stop_streaming,
 						standby_message_timeout, NULL, false, false) == false)
 	{
 		interrupted = true;
 		elog(ERROR, "Problem in receivexlog");
 	}
-#endif
+#endif /* PG_VERSION_NUM >= 90600 */
 
-    /* be paranoid and sort xlog_files_list,
-     * so if stop_lsn segno is already in the list,
-     * then list must be sorted to detect duplicates.
-     */
-    parray_qsort(xlog_files_list, pgFileCompareRelPathWithExternal);
+	/* be paranoid and sort xlog_files_list,
+	 * so if stop_lsn segno is already in the list,
+	 * then list must be sorted to detect duplicates.
+	 */
+	parray_qsort(xlog_files_list, pgFileCompareRelPathWithExternal);
 
-    /* Add the last segment to the list */
-    add_walsegment_to_filelist(xlog_files_list, stream_arg->starttli,
+	/* Add the last segment to the list */
+	add_walsegment_to_filelist(xlog_files_list, stream_arg->starttli,
                                stop_stream_lsn, (char *) stream_arg->basedir,
                                instance_config.xlog_seg_size);
 
-    /* append history file to walsegment filelist */
-    add_history_file_to_filelist(xlog_files_list, stream_arg->starttli, (char *) stream_arg->basedir);
+	/* append history file to walsegment filelist */
+	add_history_file_to_filelist(xlog_files_list, stream_arg->starttli, (char *) stream_arg->basedir);
 
-    /*
-     * TODO: remove redundant WAL segments
-     * walk pg_wal and remove files with segno greater that of stop_lsn`s segno +1
-     */
+	/*
+	 * TODO: remove redundant WAL segments
+	 * walk pg_wal and remove files with segno greater that of stop_lsn`s segno +1
+	 */
 
 	elog(LOG, "finished streaming WAL at %X/%X (timeline %u)",
 		 (uint32) (stop_stream_lsn >> 32), (uint32) stop_stream_lsn, stream_arg->starttli);

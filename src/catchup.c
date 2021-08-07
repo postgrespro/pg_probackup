@@ -975,7 +975,7 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 		parray *wal_files_list = NULL;
 		wal_files_list = parray_new();
 
-		if(wait_WAL_streaming_end(wal_files_list))
+		if (wait_WAL_streaming_end(wal_files_list))
 			elog(ERROR, "WAL streaming failed");
 
                 for (i = 0; i < parray_num(wal_files_list); i++)

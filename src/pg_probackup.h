@@ -86,6 +86,10 @@ extern const char  *PROGRAM_EMAIL;
 #define HEADER_MAP  			"page_header_map"
 #define HEADER_MAP_TMP  		"page_header_map_tmp"
 
+/* default replication slot names */
+#define DEFAULT_TEMP_SLOT_NAME	 "pg_probackup_slot";
+#define DEFAULT_PERMANENT_SLOT_NAME	 "pg_probackup_perm_slot";
+
 /* Timeout defaults */
 #define ARCHIVE_TIMEOUT_DEFAULT		300
 #define REPLICA_TIMEOUT_DEFAULT		300
@@ -771,11 +775,12 @@ extern bool		stream_wal;
 extern bool		show_color;
 extern bool		progress;
 extern bool     is_archive_cmd; /* true for archive-{get,push} */
-#if PG_VERSION_NUM >= 100000
 /* In pre-10 'replication_slot' is defined in receivelog.h */
 extern char	   *replication_slot;
-#endif
+#if PG_VERSION_NUM >= 100000
 extern bool 	temp_slot;
+#endif
+extern bool create_permanent_slot;
 
 /* backup options */
 extern bool		smooth_checkpoint;

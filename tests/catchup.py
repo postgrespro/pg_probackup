@@ -1093,3 +1093,139 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         # Cleanup
         dst_pg.stop()
         self.del_test_dir(module_name, self.fname)
+
+#########################################
+# Test replication slot logic
+#
+#   -S, --slot=SLOTNAME                        replication slot to use
+#       --temp-slot                                    use temporary replication slot
+#   -P  --create-permanent-slot              create permanent replication slot
+#       --primary-slot-name=SLOTNAME value for primary_slot_name parameter
+#
+# 1. if "--slot" is used - try to use already existing slot with given name
+# 2. if "--slot" and "--create-permanent-slot" used - try to create permanent slot and use it.
+# 3. If "--create-permanent-slot " flag is used without "--slot" option - use generic slot name like "pg_probackup_perm_slot"
+# 4. If "--create-permanent-slot " flag is used and permanent slot already exists - fail with error.
+# 5. "--create-permanent-slot" and "--temp-slot" flags cannot be used together.
+# 6. "--primary-slot-name" and `-R` are used to create replication configuration ( as in restore command )
+#########################################
+    def test_catchup_with_replication_slot(self):
+        """
+        """
+        # preparation
+        src_pg = self.make_simple_node(
+            base_dir = os.path.join(module_name, self.fname, 'src'),
+            set_replication = True
+            )
+        src_pg.slow_start()
+
+        # 1a. --slot option
+        dst_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'dst_1a'))
+        try:
+            self.catchup_node(
+                backup_mode = 'FULL',
+                source_pgdata = src_pg.data_dir,
+                destination_node = dst_pg,
+                options = [
+                    '-d', 'postgres', '-p', str(src_pg.port), '--stream',
+                    '--slot=nonexistentslot_1a'
+                    ]
+                )
+            self.assertEqual(1, 0, "Expecting Error because replication slot does not exist.\n Output: {0} \n CMD: {1}".format(
+                repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                'ERROR:  replication slot "nonexistentslot_1a" does not exist',
+                e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
+
+	# 1b. --slot option
+        dst_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'dst_1b'))
+        src_pg.safe_psql("postgres", "SELECT pg_catalog.pg_create_physical_replication_slot('existentslot_1b')")
+        self.catchup_node(
+            backup_mode = 'FULL',
+            source_pgdata = src_pg.data_dir,
+            destination_node = dst_pg,
+            options = [
+                '-d', 'postgres', '-p', str(src_pg.port), '--stream',
+                '--slot=existentslot_1b'
+                ]
+            )
+
+        # 2a. --slot --create-permanent-slot
+        dst_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'dst_2a'))
+        self.catchup_node(
+            backup_mode = 'FULL',
+            source_pgdata = src_pg.data_dir,
+            destination_node = dst_pg,
+            options = [
+                '-d', 'postgres', '-p', str(src_pg.port), '--stream',
+                '--slot=nonexistentslot_2a',
+                '--create-permanent-slot'
+                ]
+            )
+
+        # 2b. and 4. --slot --create-permanent-slot
+        dst_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'dst_2b'))
+        src_pg.safe_psql("postgres", "SELECT pg_catalog.pg_create_physical_replication_slot('existentslot_2b')")
+        try:
+            self.catchup_node(
+                backup_mode = 'FULL',
+                source_pgdata = src_pg.data_dir,
+                destination_node = dst_pg,
+                options = [
+                    '-d', 'postgres', '-p', str(src_pg.port), '--stream',
+                    '--slot=existentslot_2b',
+                    '--create-permanent-slot'
+                    ]
+                )
+            self.assertEqual(1, 0, "Expecting Error because replication slot already exist.\n Output: {0} \n CMD: {1}".format(
+                repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                'ERROR:  replication slot "existentslot_2b" already exists',
+                e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
+
+        # 3. --create-permanent-slot --slot
+        dst_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'dst_3'))
+        self.catchup_node(
+            backup_mode = 'FULL',
+            source_pgdata = src_pg.data_dir,
+            destination_node = dst_pg,
+            options = [
+                '-d', 'postgres', '-p', str(src_pg.port), '--stream',
+                '--create-permanent-slot'
+                ]
+            )
+        slot_name = src_pg.safe_psql(
+            "postgres",
+            "SELECT slot_name FROM pg_catalog.pg_replication_slots "
+            "WHERE slot_name NOT LIKE '%existentslot%' "
+            "AND slot_type = 'physical'"
+            ).decode('utf-8').rstrip()
+        self.assertEqual(slot_name, 'pg_probackup_perm_slot', 'Slot name mismatch')
+
+        # 5. --create-permanent-slot --temp-slot
+        dst_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'dst_5'))
+        try:
+            self.catchup_node(
+                backup_mode = 'FULL',
+                source_pgdata = src_pg.data_dir,
+                destination_node = dst_pg,
+                options = [
+                    '-d', 'postgres', '-p', str(src_pg.port), '--stream',
+                    '--create-permanent-slot',
+                    '--temp-slot'
+                    ]
+                )
+            self.assertEqual(1, 0, "Expecting Error because conflicting options --create-permanent-slot and --temp-slot used together\n Output: {0} \n CMD: {1}".format(
+                repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                'ERROR: You cannot specify "--create-permanent-slot" option with the "--temp-slot" option',
+                e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
+
+        #self.assertEqual(1, 0, 'Stop test')
+        self.del_test_dir(module_name, self.fname)
