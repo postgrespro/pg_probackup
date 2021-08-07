@@ -1,0 +1,5 @@
+FROM oraclelinux:6
+RUN yum install -y tar wget rpm-build yum-utils
+RUN yum install -y gcc make perl libicu-devel glibc-devel bison flex
+RUN yum install -y git openssl
+RUN yum upgrade -y

@@ -1,0 +1,74 @@
+# ORACLE LINUX 6
+build/test_oraclelinux_6_9.5:
+	$(call test_rpm,oraclelinux,6,,9.5,9.5.25)
+	touch build/test_oraclelinux_6_9.5
+
+build/test_oraclelinux_6_9.6:
+	$(call test_rpm,oraclelinux,6,,9.6,9.6.21)
+	touch build/test_oraclelinux_6_9.6
+
+build/test_oraclelinux_6_10:
+	$(call test_rpm,oraclelinux,6,,10,10.16)
+	touch build/test_oraclelinux_6_10
+
+build/test_oraclelinux_6_11:
+	$(call test_rpm,oraclelinux,6,,11,11.11)
+	touch build/test_oraclelinux_6_11
+
+build/test_oraclelinux_6_12:
+	$(call test_rpm,oraclelinux,6,,12,12.6)
+	touch build/test_oraclelinux_6_12
+
+build/test_oraclelinux_6_13:
+	$(call test_rpm,oraclelinux,6,,13,13.2)
+	touch build/test_oraclelinux_6_13
+
+# ORACLE LINUX 7
+build/test_oraclelinux_7_9.5:
+	$(call test_rpm,oraclelinux,7,,9.5,9.5.25)
+	touch build/test_oraclelinux_7_9.5
+
+build/test_oraclelinux_7_9.6:
+	$(call test_rpm,oraclelinux,7,,9.6,9.6.21)
+	touch build/test_oraclelinux_7_9.6
+
+build/test_oraclelinux_7_10:
+	$(call test_rpm,oraclelinux,7,,10,10.16)
+	touch build/test_oraclelinux_7_10
+
+build/test_oraclelinux_7_11:
+	$(call test_rpm,oraclelinux,7,,11,11.11)
+	touch build/test_oraclelinux_7_11
+
+build/test_oraclelinux_7_12:
+	$(call test_rpm,oraclelinux,7,,12,12.6)
+	touch build/test_oraclelinux_7_12
+
+build/test_oraclelinux_7_13:
+	$(call test_rpm,oraclelinux,7,,13,13.2)
+	touch build/test_oraclelinux_7_13
+
+# ORACLE LINUX 8
+build/test_oraclelinux_8_9.5:
+	$(call test_rpm,oraclelinux,8,,9.5,9.5.25)
+	touch build/test_oraclelinux_8_9.5
+
+build/test_oraclelinux_8_9.6:
+	$(call test_rpm,oraclelinux,8,,9.6,9.6.21)
+	touch build/test_oraclelinux_8_9.6
+
+build/test_oraclelinux_8_10:
+	$(call test_rpm,oraclelinux,8,,10,10.16)
+	touch build/test_oraclelinux_8_10
+
+build/test_oraclelinux_8_11:
+	$(call test_rpm,oraclelinux,8,,11,11.11)
+	touch build/test_oraclelinux_8_11
+
+build/test_oraclelinux_8_12:
+	$(call test_rpm,oraclelinux,8,,12,12.6)
+	touch build/test_oraclelinux_8_12
+
+build/test_oraclelinux_8_13:
+	$(call test_rpm,oraclelinux,8,,13,13.2)
+	touch build/test_oraclelinux_8_13

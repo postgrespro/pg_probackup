@@ -1,0 +1,74 @@
+# DEBIAN 8
+build/test_debian_8_9.5:
+	$(call test_deb,debian,8,jessie,9.5,9.5.25)
+	touch build/test_debian_8_9.5
+
+build/test_debian_8_9.6:
+	$(call test_deb,debian,8,jessie,9.6,9.6.21)
+	touch build/test_debian_8_9.6
+
+build/test_debian_8_10:
+	$(call test_deb,debian,8,jessie,10,10.16)
+	touch build/test_debian_8_10
+
+build/test_debian_8_11:
+	$(call test_deb,debian,8,jessie,11,11.11)
+	touch build/test_debian_8_11
+
+build/test_debian_8_12:
+	$(call test_deb,debian,8,jessie,12,12.6)
+	touch build/test_debian_8_12
+
+build/test_debian_8_13:
+	$(call test_deb,debian,8,jessie,13,13.2)
+	touch build/test_debian_8_13
+
+# DEBIAN 9
+build/test_debian_9_9.5:
+	$(call test_deb,debian,9,stretch,9.5,9.5.25)
+	touch build/test_debian_9_9.5
+
+build/test_debian_9_9.6:
+	$(call test_deb,debian,9,stretch,9.6,9.6.21)
+	touch build/test_debian_9_9.6
+
+build/test_debian_9_10:
+	$(call test_deb,debian,9,stretch,10,10.16)
+	touch build/test_debian_9_10
+
+build/test_debian_9_11:
+	$(call test_deb,debian,9,stretch,11,11.11)
+	touch build/test_debian_9_11
+
+build/test_debian_9_12:
+	$(call test_deb,debian,9,stretch,12,12.6)
+	touch build/test_debian_9_12
+
+build/test_debian_9_13:
+	$(call test_deb,debian,9,stretch,13,13.2)
+	touch build/test_debian_9_13
+
+# DEBIAN 10
+build/test_debian_10_9.5:
+	$(call test_deb,debian,10,buster,9.5,9.5.25)
+	touch build/test_debian_10_9.5
+
+build/test_debian_10_9.6:
+	$(call test_deb,debian,10,buster,9.6,9.6.21)
+	touch build/test_debian_10_9.6
+
+build/test_debian_10_10:
+	$(call test_deb,debian,10,buster,10,10.16)
+	touch build/test_debian_10_10
+
+build/test_debian_10_11:
+	$(call test_deb,debian,10,buster,11,11.11)
+	touch build/test_debian_10_11
+
+build/test_debian_10_12:
+	$(call test_deb,debian,10,buster,12,12.6)
+	touch build/test_debian_10_12
+
+build/test_debian_10_13:
+	$(call test_deb,debian,10,buster,13,13.2)
+	touch build/test_debian_10_13
