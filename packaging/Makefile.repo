@@ -59,11 +59,11 @@ repo/oraclelinux: build/repo_oraclelinux_6 build/repo_oraclelinux_7 build/repo_o
 	@echo Build repo for oraclelinux platforms: done
 
 build/repo_oraclelinux_6:
-	$(call build_repo_rpm,oraclelinux,6,,)
+	$(call build_repo_rpm,oraclelinux,6,6Server)
 	touch build/repo_oraclelinux_6
 
 build/repo_oraclelinux_7:
-	$(call build_repo_rpm,oraclelinux,7,,)
+	$(call build_repo_rpm,oraclelinux,7,7Server)
 	touch build/repo_oraclelinux_7
 
 build/repo_oraclelinux_8:
@@ -75,11 +75,11 @@ repo/rhel: build/repo_rhel_6 build/repo_rhel_7 build/repo_rhel_8
 	@echo Build repo for rhel platforms: done
 
 build/repo_rhel_6:
-	$(call build_repo_rpm,rhel,6,,)
+	$(call build_repo_rpm,rhel,6,6Server)
 	touch build/repo_rhel_6
 
 build/repo_rhel_7:
-	$(call build_repo_rpm,rhel,7,,)
+	$(call build_repo_rpm,rhel,7,7Server)
 	touch build/repo_rhel_7
 
 build/repo_rhel_8:
