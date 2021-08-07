@@ -1,8 +1,4 @@
 # ALT 7
-build/test_alt_7_9.5:
-	$(call test_alt,alt,7,,9.5,9.5.25)
-	touch build/test_alt_7_9.5
-
 build/test_alt_7_9.6:
 	$(call test_alt,alt,7,,9.6,9.6.21)
 	touch build/test_alt_7_9.6
@@ -24,10 +20,6 @@ build/test_alt_7_13:
 	touch build/test_alt_7_13
 
 # ALT 8
-build/test_alt_8_9.5:
-	$(call test_alt,alt,8,,9.5,9.5.25)
-	touch build/test_alt_8_9.5
-
 build/test_alt_8_9.6:
 	$(call test_alt,alt,8,,9.6,9.6.21)
 	touch build/test_alt_8_9.6
@@ -49,10 +41,6 @@ build/test_alt_8_13:
 	touch build/test_alt_8_13
 
 # ALT 9
-build/test_alt_9_9.5:
-	$(call test_alt,alt,9,,9.5,9.5.25)
-	touch build/test_alt_9_9.5
-
 build/test_alt_9_9.6:
 	$(call test_alt,alt,9,,9.6,9.6.21)
 	touch build/test_alt_9_9.6

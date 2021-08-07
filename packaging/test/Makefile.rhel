@@ -1,8 +1,4 @@
 # RHEL 6
-build/test_rhel_6_9.5:
-	$(call test_rpm,rhel,6,6Server,9.5,9.5.25)
-	touch build/test_rhel_6_9.5
-
 build/test_rhel_6_9.6:
 	$(call test_rpm,rhel,6,6Server,9.6,9.6.21)
 	touch build/test_rhel_6_9.6
@@ -24,10 +20,6 @@ build/test_rhel_6_13:
 	touch build/test_rhel_6_13
 
 # RHEL 7
-build/test_rhel_7_9.5:
-	$(call test_rpm,rhel,7,7Server,9.5,9.5.25)
-	touch build/test_rhel_7_9.5
-
 build/test_rhel_7_9.6:
 	$(call test_rpm,rhel,7,7Server,9.6,9.6.21)
 	touch build/test_rhel_7_9.6
@@ -49,10 +41,6 @@ build/test_rhel_7_13:
 	touch build/test_rhel_7_13
 
 # RHEL 8
-build/test_rhel_8_9.5:
-	$(call test_rpm,rhel,8,8Server,9.5,9.5.25)
-	touch build/test_rhel_8_9.5
-
 build/test_rhel_8_9.6:
 	$(call test_rpm,rhel,8,8Server,9.6,9.6.21)
 	touch build/test_rhel_8_9.6

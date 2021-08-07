@@ -1,8 +1,4 @@
 # CENTOS 6
-build/test_centos_6_9.5:
-	$(call test_rpm,centos,6,,9.5,9.5.25)
-	touch build/test_centos_6_9.5
-
 build/test_centos_6_9.6:
 	$(call test_rpm,centos,6,,9.6,9.6.21)
 	touch build/test_centos_6_9.6
@@ -24,10 +20,6 @@ build/test_centos_6_13:
 	touch build/test_centos_6_13
 
 # CENTOS 7
-build/test_centos_7_9.5:
-	$(call test_rpm,centos,7,,9.5,9.5.25)
-	touch build/test_centos_7_9.5
-
 build/test_centos_7_9.6:
 	$(call test_rpm,centos,7,,9.6,9.6.21)
 	touch build/test_centos_7_9.6
@@ -49,10 +41,6 @@ build/test_centos_7_13:
 	touch build/test_centos_7_13
 
 # CENTOS 8
-build/test_centos_8_9.5:
-	$(call test_rpm,centos,8,,9.5,9.5.25)
-	touch build/test_centos_8_9.5
-
 build/test_centos_8_9.6:
 	$(call test_rpm,centos,8,,9.6,9.6.21)
 	touch build/test_centos_8_9.6
