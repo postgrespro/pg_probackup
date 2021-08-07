@@ -1415,9 +1415,6 @@ class BackupTest(ProbackupTest, unittest.TestCase):
     # @unittest.skip("skip")
     def test_basic_temp_slot_for_stream_backup(self):
         """"""
-        if self.get_version(node) < self.version_to_num('10.0'):
-            return unittest.skip('You need PostgreSQL >= 10 for this test')
-
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
@@ -1425,6 +1422,9 @@ class BackupTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={'max_wal_size': '40MB'})
+
+        if self.get_version(node) < self.version_to_num('10.0'):
+            return unittest.skip('You need PostgreSQL >= 10 for this test')
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
