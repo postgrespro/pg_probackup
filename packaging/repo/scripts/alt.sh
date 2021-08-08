@@ -32,55 +32,31 @@ cp -arv /app/repo/$PBK_PKG_REPO/gnupg /root/.gnupg
 chmod -R 0600 /root/.gnupg
 for pkg in $(ls); do
 	for pkg_full_version in $(ls ./$pkg); do
+
+		# THere is no std/ent packages for PG 9.5
+		if [[ ${pkg} == 'pg_probackup-std-9.5' ]] || [[ ${pkg} == 'pg_probackup-ent-9.5' ]] ; then
+			continue;
+		fi
+
 		RPM_DIR=${OUT_DIR}/rpm/${pkg_full_version}/altlinux-p${DISTRIB_VERSION}/x86_64/RPMS.${REPO_SUFFIX}
-		SRPM_DIR=${OUT_DIR}/srpm/${pkg_full_version}/altlinux-p${DISTRIB_VERSION}/x86_64/SRPMS.${REPO_SUFFIX}
-
 		mkdir -p "$RPM_DIR"
-		mkdir -p "$SRPM_DIR"
-
 		cp -arv $INPUT_DIR/$pkg/$pkg_full_version/RPMS/x86_64/* $RPM_DIR/
-		cp -arv $INPUT_DIR/$pkg/$pkg_full_version/SRPMS/* $SRPM_DIR/
 
 		genbasedir --architecture=x86_64 --architectures=x86_64 --origin=repo.postgrespro.ru \
 		--label="${FORK} backup utility pg_probackup" --description "${FORK} pg_probackup repo" \
 		--version=$pkg_full_version --bloat --progress --create \
 		--topdir=${OUT_DIR}/rpm/${pkg_full_version}/altlinux-p${DISTRIB_VERSION} x86_64 ${REPO_SUFFIX}
 
-		genbasedir --architecture=x86_64 --architectures=x86_64 --origin=repo.postgrespro.ru \
-		--label="${FORK} backup utility pg_probackup sources" --description "${FORK} pg_probackup repo" \
-		--version=$pkg_full_version --bloat --progress --create \
-		--topdir=${OUT_DIR}/srpm/${pkg_full_version}/altlinux-p${DISTRIB_VERSION} x86_64 ${REPO_SUFFIX}
+		# SRPM is available only for vanilla
+		if [[ ${PBK_EDITION} == '' ]] ; then
+			SRPM_DIR=${OUT_DIR}/srpm/${pkg_full_version}/altlinux-p${DISTRIB_VERSION}/x86_64/SRPMS.${REPO_SUFFIX}
+			mkdir -p "$SRPM_DIR"
+			cp -arv $INPUT_DIR/$pkg/$pkg_full_version/SRPMS/* $SRPM_DIR/
 
-		# genbasedir --bloat --progress --create \
-		# --topdir=${OUT_DIR}/$repo_name/rpm/${pkg_full_version}/altlinux-p${DISTRIB_VERSION} x86_64 vanilla
-
-		# genbasedir --bloat --progress --create \
-		# --topdir=${OUT_DIR}/$repo_name/srpm/${pkg_full_version}/altlinux-p${DISTRIB_VERSION} x86_64 vanilla
+			genbasedir --architecture=x86_64 --architectures=x86_64 --origin=repo.postgrespro.ru \
+			--label="${FORK} backup utility pg_probackup sources" --description "${FORK} pg_probackup repo" \
+			--version=$pkg_full_version --bloat --progress --create \
+			--topdir=${OUT_DIR}/srpm/${pkg_full_version}/altlinux-p${DISTRIB_VERSION} x86_64 ${REPO_SUFFIX}
+		fi
 	done
 done
-
-#	if [[ $repo_name == 'pg_probackup-forks' ]]
-#	then
-#		cd $INPUT_DIR/$repo_name
-#		cp -arv /app/src/$repo_name/gnupg /root/.gnupg
-#		chmod -R 0600 /root/.gnupg
-#		for pkg in $(ls); do
-#			for pkg_full_version in $(ls ./$pkg); do
-#				RPM_DIR=${OUT_DIR}/$repo_name/rpm/${pkg_full_version}/altlinux-p${DISTRIB_VERSION}/x86_64/RPMS.forks
-#
-#				# rm -rf "$RPM_DIR" && mkdir -p "$RPM_DIR"
-#				mkdir -p "$RPM_DIR"
-#
-#				cp -arv $INPUT_DIR/$repo_name/$pkg/$pkg_full_version/RPMS/x86_64/* $RPM_DIR/
-#
-#				genbasedir --architecture=x86_64 --architectures=x86_64 --origin=repo.postgrespro.ru \
-#				--label='PostgrePro backup utility pg_probackup' --description 'PostgresPro pg_probackup repo' \
-#				--version=$pkg_full_version --bloat --progress --create \
-#				--topdir=${OUT_DIR}/$repo_name/rpm/${pkg_full_version}/altlinux-p${DISTRIB_VERSION} x86_64 forks
-#
-##				genbasedir --bloat --progress --create \
-##				--topdir=${OUT_DIR}/$repo_name/rpm/${pkg_full_version}/altlinux-p${DISTRIB_VERSION} x86_64 forks
-#			done
-#		done
-#		rm -rf /root/.gnupg
-#	fi
