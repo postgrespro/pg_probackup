@@ -116,7 +116,7 @@ if [[ ${PBK_EDITION} == '' ]] ; then
 
 	# build pg_probackup
 	rpmbuild -bs pg_probackup.spec
-	rpmbuild -ba pg_probackup.spec #2>&1 | tee -ai /app/out/build.log
+	rpmbuild -ba pg_probackup.spec
 
 	# build repo files
 	rpmbuild -bs pg_probackup-repo.spec
@@ -129,7 +129,10 @@ else
 	# install dependencies
 	yum-builddep -y pg_probackup-pgpro.spec
 	# build pg_probackup
-	rpmbuild -ba pg_probackup-pgpro.spec #2>&1 | tee -ai /app/out/build.log
+	rpmbuild -ba pg_probackup-pgpro.spec
+
+	# build repo files
+	rpmbuild -ba pg_probackup-repo-forks.spec
 
 	# write artefacts to out directory
 	rm -rf /app/out/*

@@ -11,31 +11,12 @@ set -o pipefail
 # fix https://github.com/moby/moby/issues/23137
 ulimit -n 1024
 
+# currenctly we do not build std|ent packages for Suse
+if [[ ${PBK_EDITION} != '' ]] ; then
+	exit 0
+fi
+
 PG_TOG=$(echo $PG_VERSION | sed 's|\.||g')
-
-# if [ ${PG_TOG} == '11' ]
-#     then
-#         exit 0
-# fi
-# 
-# if [ ${PG_TOG} == '13' ]
-#     then
-#         exit 0
-# fi
-# 
-# if [ ${PG_TOG} == '95' ]
-#     then
-#         exit 0
-# fi
-
-# yum upgrade -y || echo 'some packages in docker failed to upgrade'
-# yum install -y sudo
-
-#if [ ${DISTRIB} == 'centos' ] && [ ${DISTRIB_VERSION} == '8' ]; then
-#  yum install epel-release -y
-#else
-#  rpm -ivh https://dl.fedoraproject.org/pub/epel/epel-release-latest-${DISTRIB_VERSION}.noarch.rpm
-#fi
 
 if [ ${PG_TOG} == '13' ]; then # no packages for PG13 
     exit 0

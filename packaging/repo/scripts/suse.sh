@@ -12,6 +12,11 @@ set -o pipefail
 # fix https://github.com/moby/moby/issues/23137
 ulimit -n 1024
 
+# currenctly we do not build std|ent packages for Suse
+if [[ ${PBK_EDITION} != '' ]] ; then
+	exit 0
+fi
+
 export INPUT_DIR=/app/in #dir with builded rpm
 export OUT_DIR=/app/www/${PBK_PKG_REPO}
 export KEYS_DIR=$OUT_DIR/keys

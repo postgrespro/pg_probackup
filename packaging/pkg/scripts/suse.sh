@@ -15,6 +15,11 @@
 set -xe
 set -o pipefail
 
+# currenctly we do not build std|ent packages for Suse
+if [[ ${PBK_EDITION} != '' ]] ; then
+	exit 0
+fi
+
 # fix https://github.com/moby/moby/issues/23137
 ulimit -n 1024
 zypper clean
