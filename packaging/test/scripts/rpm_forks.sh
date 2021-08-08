@@ -55,7 +55,7 @@ events {
 http {
     server {
         listen   80 default;
-        root /var/www;
+        root /app/www;
     }
 }
 EOF
