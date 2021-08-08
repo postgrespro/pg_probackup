@@ -43,19 +43,18 @@ for pkg in $(ls ${INPUT_DIR}); do
 
 		[ ! -z "$CODENAME" ] && export DISTRIB_VERSION=$CODENAME
 		RPM_DIR=$OUT_DIR/rpm/$pkg_full_version/${DISTRIB}-${DISTRIB_VERSION}-x86_64
-		SRPM_DIR=$OUT_DIR/srpm/$pkg_full_version/${DISTRIB}-${DISTRIB_VERSION}-x86_64
-
-		# rm -rf "$RPM_DIR" && mkdir -p "$RPM_DIR"
-		# rm -rf "$SRPM_DIR" && mkdir -p "$SRPM_DIR"
 		mkdir -p "$RPM_DIR"
-		mkdir -p "$SRPM_DIR"
-
 		cp -arv $INPUT_DIR/$pkg/$pkg_full_version/RPMS/x86_64/* $RPM_DIR/
-		cp -arv $INPUT_DIR/$pkg/$pkg_full_version/SRPMS/* $SRPM_DIR/
-
 		for f in $(ls $RPM_DIR/*.rpm); do rpm --addsign $f || exit 1; done
-		for f in $(ls $SRPM_DIR/*.rpm); do rpm --addsign $f || exit 1; done
 		createrepo $RPM_DIR/
-		createrepo $SRPM_DIR/
+
+		if [[ ${PBK_EDITION} == '' ]] ; then
+			SRPM_DIR=$OUT_DIR/srpm/$pkg_full_version/${DISTRIB}-${DISTRIB_VERSION}-x86_64
+			mkdir -p "$SRPM_DIR"
+			cp -arv $INPUT_DIR/$pkg/$pkg_full_version/SRPMS/* $SRPM_DIR/
+			for f in $(ls $SRPM_DIR/*.rpm); do rpm --addsign $f || exit 1; done
+			createrepo $SRPM_DIR/
+		fi
+
 	done
 done
