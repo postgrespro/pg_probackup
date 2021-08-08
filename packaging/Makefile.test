@@ -1,3 +1,11 @@
+ifeq ($(PBK_EDITION),std)
+	SCRIPT_SUFFIX = _forks
+else ifeq ($(PBK_EDITION),ent)
+	SCRIPT_SUFFIX = _forks
+else
+	SCRIPT_SUFFIX =
+endif
+
 test: build/test_all
 	@echo Test for all platform: done
 
@@ -36,7 +44,7 @@ define test_deb
 		-e "PKG_HASH=$(PBK_HASH)" -e "PKG_URL=$(PBK_GIT_REPO)" -e "PKG_RELEASE=$(PBK_RELEASE)" -e "PKG_NAME=pg-probackup-$(PKG_NAME_SUFFIX)$4" \
 		-e "PKG_VERSION=$(PBK_VERSION)" -e "PBK_EDITION=$(PBK_EDITION)" -e "PBK_EDITION_FULL=$(PBK_EDITION_FULL)" \
 		--name $1_$2_probackup_$(PKG_NAME_SUFFIX)$(PBK_VERSION)_pg_$5 \
-		--rm pgpro/$1:$2 /app/in/scripts/deb.sh
+		--rm pgpro/$1:$2 /app/in/scripts/deb$(SCRIPT_SUFFIX).sh
 endef
 
 include packaging/test/Makefile.debian
@@ -84,7 +92,7 @@ define test_rpm
 		-e "PKG_HASH=$(PBK_HASH)" -e "PKG_URL=$(PBK_GIT_REPO)" -e "PKG_RELEASE=$(PBK_RELEASE)" -e "PKG_NAME=pg_probackup-$(PKG_NAME_SUFFIX)$4" \
 		-e "PKG_VERSION=$(PBK_VERSION)" -e "PBK_EDITION=$(PBK_EDITION)" -e "PBK_EDITION_FULL=$(PBK_EDITION_FULL)" \
 		--name $1_$2_probackup_$(PKG_NAME_SUFFIX)$(PBK_VERSION)_pg_$5 \
-		--rm pgpro/$1:$2 /app/in/scripts/rpm.sh
+		--rm pgpro/$1:$2 /app/in/scripts/rpm$(SCRIPT_SUFFIX).sh
 endef
 
 include packaging/test/Makefile.centos
@@ -107,7 +115,7 @@ define test_alt
 		-e "PKG_HASH=$(PBK_HASH)" -e "PKG_URL=$(PBK_GIT_REPO)" -e "PKG_RELEASE=$(PBK_RELEASE)" -e "PKG_NAME=pg_probackup-$(PKG_NAME_SUFFIX)$4" \
 		-e "PKG_VERSION=$(PBK_VERSION)" -e "PBK_EDITION=$(PBK_EDITION)" -e "PBK_EDITION_FULL=$(PBK_EDITION_FULL)" \
 		--name $1_$2_probackup_$(PKG_NAME_SUFFIX)$(PBK_VERSION)_pg_$5 \
-		--rm pgpro/$1:$2 /app/in/scripts/alt.sh
+		--rm pgpro/$1:$2 /app/in/scripts/alt$(SCRIPT_SUFFIX).sh
 endef
 
 include packaging/test/Makefile.alt
@@ -131,7 +139,7 @@ define test_suse
 		-e "PKG_HASH=$(PBK_HASH)" -e "PKG_URL=$(PBK_GIT_REPO)" -e "PKG_RELEASE=$(PBK_RELEASE)" -e "PKG_NAME=pg_probackup-$(PKG_NAME_SUFFIX)$4" \
 		-e "PKG_VERSION=$(PBK_VERSION)" -e "PBK_EDITION=$(PBK_EDITION)" -e "PBK_EDITION_FULL=$(PBK_EDITION_FULL)" \
 		--name $1_$2_probackup_$(PKG_NAME_SUFFIX)$(PBK_VERSION)_pg_$5 \
-		--rm pgpro/$1:$2 /app/in/scripts/suse.sh
+		--rm pgpro/$1:$2 /app/in/scripts/suse$(SCRIPT_SUFFIX).sh
 endef
 
 include packaging/test/Makefile.suse
