@@ -13,7 +13,7 @@ ulimit -n 1024
 
 PG_TOG=$(echo $PG_VERSION | sed 's|\.||g')
 
-if [ ${PBK_EDITION} == 'ent' ]; then
+if [ ${PBK_PBK_EDITION} == 'ent' ]; then
     exit 0
 fi
 
@@ -71,7 +71,7 @@ yum install -y ${PKG_NAME}
 ${PKG_NAME} --help
 ${PKG_NAME} --version
 
-if [ $EDITION == 'std' ] ; then
+if [ $PBK_EDITION == 'std' ] ; then
 
     # install POSTGRESQL
     # rpm -ivh https://download.postgresql.org/pub/repos/yum/reporpms/EL-${DISTRIB_VERSION}-x86_64/pgdg-redhat-repo-latest.noarch.rpm
@@ -120,11 +120,11 @@ sed -i "s/https/http/g" /etc/yum.repos.d/pg_probackup-forks.repo
 
 # yum update -y ${PKG_NAME}
 yum install -y ${PKG_NAME}
-sleep 1
+
 ${PKG_NAME} --help
 ${PKG_NAME} --version
 
-if [ $EDITION == 'ent' ]; then
+if [ $PBK_EDITION == 'ent' ]; then
     exit 0
 fi
 
