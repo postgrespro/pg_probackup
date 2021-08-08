@@ -11,7 +11,7 @@ set -o pipefail
 # fix https://github.com/moby/moby/issues/23137
 ulimit -n 1024
 
-if [ ${EDITION} == 'ent' ]; then
+if [ ${PBK_EDITION} == 'ent' ]; then
     exit 0
 fi
 
@@ -57,7 +57,7 @@ if [ ${PG_VERSION} == '9.6' ]; then
 fi
 
 # install POSTGRESPRO
-if [ ${EDITION} == 'std' ]; then
+if [ ${PBK_EDITION} == 'std' ]; then
   sh -c 'echo "deb https://repo.postgrespro.ru/pgpro-${PG_VERSION}/${DISTRIB}/ $(lsb_release -cs) main" > /etc/apt/sources.list.d/pgpro.list'
   wget --quiet -O - https://repo.postgrespro.ru/pgpro-${PG_VERSION}/keys/GPG-KEY-POSTGRESPRO | apt-key add -
   apt-get update -y
@@ -78,31 +78,31 @@ echo "deb [arch=amd64] http://repo.postgrespro.ru/pg_probackup-forks/deb/ $(lsb_
   /etc/apt/sources.list.d/pg_probackup-old.list
 wget -O - http://repo.postgrespro.ru/pg_probackup-forks/keys/GPG-KEY-PG_PROBACKUP | apt-key add - && apt-get update
 
-apt-get install -y pg-probackup-${EDITION}-${PG_VERSION}
-pg_probackup-${EDITION}-${PG_VERSION} --help
-pg_probackup-${EDITION}-${PG_VERSION} --version
+apt-get install -y pg-probackup-${PBK_EDITION}-${PG_VERSION}
+pg_probackup-${PBK_EDITION}-${PG_VERSION} --help
+pg_probackup-${PBK_EDITION}-${PG_VERSION} --version
 
 
-if [ ${EDITION} == 'std' ]; then
+if [ ${PBK_EDITION} == 'std' ]; then
   export PGDATA=/tmp/data
   su postgres -c "${BINDIR}/initdb -k -D ${PGDATA}"
-  su postgres -c "pg_probackup-${EDITION}-${PG_VERSION} init -B /tmp/backup"
-  su postgres -c "pg_probackup-${EDITION}-${PG_VERSION} add-instance --instance=node -B /tmp/backup -D ${PGDATA}"
+  su postgres -c "pg_probackup-${PBK_EDITION}-${PG_VERSION} init -B /tmp/backup"
+  su postgres -c "pg_probackup-${PBK_EDITION}-${PG_VERSION} add-instance --instance=node -B /tmp/backup -D ${PGDATA}"
 
   echo "wal_level=hot_standby" >> ${PGDATA}/postgresql.auto.conf
   echo "fsync=off" >> ${PGDATA}/postgresql.auto.conf
   echo "archive_mode=on" >> ${PGDATA}/postgresql.auto.conf
-  echo "archive_command='pg_probackup-${EDITION}-${PG_VERSION} archive-push --no-sync -B /tmp/backup compress --instance=node --wal-file-path %p --wal-file-name %f'" >> ${PGDATA}/postgresql.auto.conf
+  echo "archive_command='pg_probackup-${PBK_EDITION}-${PG_VERSION} archive-push --no-sync -B /tmp/backup compress --instance=node --wal-file-path %p --wal-file-name %f'" >> ${PGDATA}/postgresql.auto.conf
 
   su postgres -c "${BINDIR}/pg_ctl stop -w -t 60 -D /var/lib/pgpro/std-${PG_VERSION}/data" || echo "it is all good"
   su postgres -c "${BINDIR}/pg_ctl start -D ${PGDATA}"
   sleep 5
-  su postgres -c "pg_probackup-${EDITION}-${PG_VERSION} backup --instance=node -b full -B /tmp/backup -D ${PGDATA} --no-sync"
-  su postgres -c "pg_probackup-${EDITION}-${PG_VERSION} show --instance=node -B /tmp/backup -D ${PGDATA}"
-  su postgres -c "pg_probackup-${EDITION}-${PG_VERSION} show --instance=node -B /tmp/backup -D ${PGDATA} --archive"
+  su postgres -c "pg_probackup-${PBK_EDITION}-${PG_VERSION} backup --instance=node -b full -B /tmp/backup -D ${PGDATA} --no-sync"
+  su postgres -c "pg_probackup-${PBK_EDITION}-${PG_VERSION} show --instance=node -B /tmp/backup -D ${PGDATA}"
+  su postgres -c "pg_probackup-${PBK_EDITION}-${PG_VERSION} show --instance=node -B /tmp/backup -D ${PGDATA} --archive"
 
   su postgres -c "${BINDIR}/pgbench --no-vacuum -i -s 5"
-  su postgres -c "pg_probackup-${EDITION}-${PG_VERSION} backup --instance=node -b page -B /tmp/backup -D ${PGDATA} --no-sync"
+  su postgres -c "pg_probackup-${PBK_EDITION}-${PG_VERSION} backup --instance=node -b page -B /tmp/backup -D ${PGDATA} --no-sync"
 fi
 
 # install new packages
@@ -111,42 +111,42 @@ echo "deb [arch=amd64] http://test.postgrespro.ru/pg_probackup-forks/deb/ $(lsb_
 wget -O - http://test.postgrespro.ru/pg_probackup-forks/keys/GPG-KEY-PG_PROBACKUP | apt-key add -
 apt-get update -y
 
-#if [ ${EDITION} == 'std' ] && [ ${PG_VERSION} == '9.6' ]; then
-#  apt-get install -y libpq5 pg-probackup-${EDITION}-${PG_VERSION}
+#if [ ${PBK_EDITION} == 'std' ] && [ ${PG_VERSION} == '9.6' ]; then
+#  apt-get install -y libpq5 pg-probackup-${PBK_EDITION}-${PG_VERSION}
 #else
-#  apt-get install -y pg-probackup-${EDITION}-${PG_VERSION}
+#  apt-get install -y pg-probackup-${PBK_EDITION}-${PG_VERSION}
 #fi
 
-apt-get install -y pg-probackup-${EDITION}-${PG_VERSION}
+apt-get install -y pg-probackup-${PBK_EDITION}-${PG_VERSION}
 
 # in Ent 11 and 10 because of PQselect vanilla libpq5 is incompatible with Ent pg_probackup
-if [ ${EDITION} == 'ent' ]; then
+if [ ${PBK_EDITION} == 'ent' ]; then
   if [ ${PG_VERSION} == '11' ] || [ ${PG_VERSION} == '10' ] || [ ${PG_VERSION} == '9.6' ]; then
     exit 0
   fi
 fi
 
-pg_probackup-${EDITION}-${PG_VERSION} --help
-pg_probackup-${EDITION}-${PG_VERSION} --version
+pg_probackup-${PBK_EDITION}-${PG_VERSION} --help
+pg_probackup-${PBK_EDITION}-${PG_VERSION} --version
 
-if [ ${EDITION} == 'ent' ]; then
+if [ ${PBK_EDITION} == 'ent' ]; then
   exit 0
 fi
 
-if [ ${EDITION} == 'std' ] && [ ${PG_VERSION} == '9.6' ]; then
+if [ ${PBK_EDITION} == 'std' ] && [ ${PG_VERSION} == '9.6' ]; then
   exit 0
 fi
 
 
 #if [ ${CODENAME} == 'precise' ] && [ ${PG_VERSION} != '10' ] && [ ${PG_VERSION} != '11' ]; then
   su postgres -c "${BINDIR}/pgbench --no-vacuum -t 1000 -c 1"
-  su postgres -c "pg_probackup-${EDITION}-${PG_VERSION} backup --instance=node -b page -B /tmp/backup -D ${PGDATA}"
-  su postgres -c "pg_probackup-${EDITION}-${PG_VERSION} show --instance=node -B /tmp/backup -D ${PGDATA}"
+  su postgres -c "pg_probackup-${PBK_EDITION}-${PG_VERSION} backup --instance=node -b page -B /tmp/backup -D ${PGDATA}"
+  su postgres -c "pg_probackup-${PBK_EDITION}-${PG_VERSION} show --instance=node -B /tmp/backup -D ${PGDATA}"
 
   su postgres -c "${BINDIR}/pg_ctl stop -w -t 60 -D ${PGDATA}"
   rm -rf ${PGDATA}
 
-  su postgres -c "pg_probackup-${EDITION}-${PG_VERSION} restore --instance=node -B /tmp/backup -D ${PGDATA}"
+  su postgres -c "pg_probackup-${PBK_EDITION}-${PG_VERSION} restore --instance=node -B /tmp/backup -D ${PGDATA}"
   su postgres -c "${BINDIR}/pg_ctl start -w -t 60 -D ${PGDATA}"
 
 sleep 5

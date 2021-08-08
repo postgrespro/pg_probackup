@@ -10,7 +10,7 @@ set -o pipefail
 
 ulimit -n 1024
 
-if [ ${EDITION} == 'ent' ]; then
+if [ ${PBK_EDITION} == 'ent' ]; then
     exit 0
 fi
 

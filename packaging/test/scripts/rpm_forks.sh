@@ -13,7 +13,7 @@ ulimit -n 1024
 
 PG_TOG=$(echo $PG_VERSION | sed 's|\.||g')
 
-if [ ${EDITION} == 'ent' ]; then
+if [ ${PBK_EDITION} == 'ent' ]; then
     exit 0
 fi
 
