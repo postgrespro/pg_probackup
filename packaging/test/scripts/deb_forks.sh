@@ -11,6 +11,9 @@ set -o pipefail
 # fix https://github.com/moby/moby/issues/23137
 ulimit -n 1024
 
+# TODO: remove after release
+exit 0
+
 if [ ${PBK_EDITION} == 'ent' ]; then
     exit 0
 fi
