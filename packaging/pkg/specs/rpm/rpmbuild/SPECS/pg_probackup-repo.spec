@@ -1,4 +1,3 @@
-%global pgsql_major       @PG_VERSION@
 %global version           @PKG_VERSION@
 %global release           @PKG_RELEASE@
 

@@ -62,8 +62,8 @@ else
 fi
 
 
-cd /root/rpmbuild/SOURCES
-sed -i "s/@PG_VERSION@/${PKG_VERSION}/" pg_probackup.repo
+#cd /root/rpmbuild/SOURCES
+#sed -i "s/@PG_VERSION@/${PKG_VERSION}/" pg_probackup.repo
 
 # build postgresql
 echo '%_allow_root_build      yes' > /root/.rpmmacros

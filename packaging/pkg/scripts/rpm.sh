@@ -49,14 +49,11 @@ else
 fi
 
 if [[ ${PBK_EDITION} == '' ]] ; then
-	cd /root/rpmbuild/SOURCES/
-	sed -i "s/@PG_VERSION@/${PKG_VERSION}/" pg_probackup.repo
 
 	# Download PostgreSQL source
 	wget -q http://ftp.postgresql.org/pub/source/v${PG_FULL_VERSION}/postgresql-${PG_FULL_VERSION}.tar.bz2 -O /root/rpmbuild/SOURCES/postgresql-${PG_VERSION}.tar.bz2
 
-	# change to build dir
-	cd /root/rpmbuild/SOURCES
+	cd /root/rpmbuild/SOURCES/
 	sed -i "s/@DISTRIB@/${DISTRIB}/" pg_probackup.repo
 	if [ $DISTRIB == 'centos' ]
 		then sed -i "s/@SHORT_CODENAME@/Centos/" pg_probackup.repo
@@ -78,6 +75,15 @@ else
 	rm -rf .git
 
 	cd /root/rpmbuild/SOURCES/
+	sed -i "s/@DISTRIB@/${DISTRIB}/" pg_probackup-forks.repo
+	if [ $DISTRIB == 'centos' ]
+		then sed -i "s/@SHORT_CODENAME@/Centos/" pg_probackup-forks.repo
+	elif [ $DISTRIB == 'rhel' ]
+		then sed -i "s/@SHORT_CODENAME@/RedHat/" pg_probackup-forks.repo
+	elif [ $DISTRIB == 'oraclelinux' ]
+		then sed -i "s/@SHORT_CODENAME@/Oracle/" pg_probackup-forks.repo
+	fi
+
 	mv pgpro postgrespro-${PBK_EDITION}-${PG_FULL_VERSION}
 	chown -R root:root postgrespro-${PBK_EDITION}-${PG_FULL_VERSION}
 
@@ -92,7 +98,6 @@ if [[ ${PBK_EDITION} == '' ]] ; then
 	sed -i "s/@PG_VERSION@/${PG_VERSION}/" pg_probackup.spec
 	sed -i "s/@PG_FULL_VERSION@/${PG_FULL_VERSION}/" pg_probackup.spec
 
-	sed -i "s/@PG_VERSION@/${PG_VERSION}/" pg_probackup-repo.spec
 	sed -i "s/@PKG_VERSION@/${PKG_VERSION}/" pg_probackup-repo.spec
 	sed -i "s/@PKG_RELEASE@/${PKG_RELEASE}/" pg_probackup-repo.spec
 else
@@ -107,6 +112,9 @@ else
 	if [ ${PG_VERSION} != '9.6' ]; then
     	sed -i "s|@PREFIX@|/opt/pgpro/${EDITION}-${PG_VERSION}|g" pg_probackup-pgpro.spec
 	fi
+
+	sed -i "s/@PKG_VERSION@/${PKG_VERSION}/" pg_probackup-repo-forks.spec
+	sed -i "s/@PKG_RELEASE@/${PKG_RELEASE}/" pg_probackup-repo-forks.spec
 fi
 
 if [[ ${PBK_EDITION} == '' ]] ; then
