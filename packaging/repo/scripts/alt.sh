@@ -18,17 +18,23 @@ export OUT_DIR=/app/www/${PBK_PKG_REPO}
 apt-get update -y
 apt-get install -qq -y apt-repo-tools gnupg rsync perl less wget
 
+if [[ ${PBK_EDITION} == '' ]] ; then
+	REPO_SUFFIX='vanilla'
+	FORK='PostgreSQL'
+else
+	REPO_SUFFIX='forks'
+	FORK='PostgresPro'
+fi
+
 cd $INPUT_DIR
 
 cp -arv /app/repo/$PBK_PKG_REPO/gnupg /root/.gnupg
 chmod -R 0600 /root/.gnupg
 for pkg in $(ls); do
 	for pkg_full_version in $(ls ./$pkg); do
-		RPM_DIR=${OUT_DIR}/rpm/${pkg_full_version}/altlinux-p${DISTRIB_VERSION}/x86_64/RPMS.vanilla
-		SRPM_DIR=${OUT_DIR}/srpm/${pkg_full_version}/altlinux-p${DISTRIB_VERSION}/x86_64/SRPMS.vanilla
+		RPM_DIR=${OUT_DIR}/rpm/${pkg_full_version}/altlinux-p${DISTRIB_VERSION}/x86_64/RPMS.${REPO_SUFFIX}
+		SRPM_DIR=${OUT_DIR}/srpm/${pkg_full_version}/altlinux-p${DISTRIB_VERSION}/x86_64/SRPMS.${REPO_SUFFIX}
 
-		# rm -rf "$RPM_DIR" && mkdir -p "$RPM_DIR"
-		# rm -rf "$SRPM_DIR" && mkdir -p "$SRPM_DIR"
 		mkdir -p "$RPM_DIR"
 		mkdir -p "$SRPM_DIR"
 
@@ -36,14 +42,14 @@ for pkg in $(ls); do
 		cp -arv $INPUT_DIR/$pkg/$pkg_full_version/SRPMS/* $SRPM_DIR/
 
 		genbasedir --architecture=x86_64 --architectures=x86_64 --origin=repo.postgrespro.ru \
-		--label='PostgreSQL backup utility pg_probackup' --description 'PostgreSQL pg_probackup repo' \
+		--label="${FORK} backup utility pg_probackup" --description "${FORK} pg_probackup repo" \
 		--version=$pkg_full_version --bloat --progress --create \
-		--topdir=${OUT_DIR}/rpm/${pkg_full_version}/altlinux-p${DISTRIB_VERSION} x86_64 vanilla
+		--topdir=${OUT_DIR}/rpm/${pkg_full_version}/altlinux-p${DISTRIB_VERSION} x86_64 ${REPO_SUFFIX}
 
 		genbasedir --architecture=x86_64 --architectures=x86_64 --origin=repo.postgrespro.ru \
-		--label='PostgreSQL backup utility pg_probackup sources' --description 'PostgreSQL pg_probackup repo' \
+		--label="${FORK} backup utility pg_probackup sources" --description "${FORK} pg_probackup repo" \
 		--version=$pkg_full_version --bloat --progress --create \
-		--topdir=${OUT_DIR}/srpm/${pkg_full_version}/altlinux-p${DISTRIB_VERSION} x86_64 vanilla
+		--topdir=${OUT_DIR}/srpm/${pkg_full_version}/altlinux-p${DISTRIB_VERSION} x86_64 ${REPO_SUFFIX}
 
 		# genbasedir --bloat --progress --create \
 		# --topdir=${OUT_DIR}/$repo_name/rpm/${pkg_full_version}/altlinux-p${DISTRIB_VERSION} x86_64 vanilla
