@@ -61,7 +61,6 @@ if [ ${PBK_EDITION} == 'std' ]; then
   sh -c 'echo "deb https://repo.postgrespro.ru/pgpro-${PG_VERSION}/${DISTRIB}/ $(lsb_release -cs) main" > /etc/apt/sources.list.d/pgpro.list'
   wget --quiet -O - https://repo.postgrespro.ru/pgpro-${PG_VERSION}/keys/GPG-KEY-POSTGRESPRO | apt-key add -
   apt-get update -y
-#  apt-get install -y postgrespro-std-${PG_VERSION}
 
   if [[ ${PG_VERSION} == '9.6' ]]; then
       apt-get install -y postgrespro-${PG_VERSION}
@@ -71,6 +70,8 @@ if [ ${PBK_EDITION} == 'std' ]; then
       BINDIR="/opt/pgpro/std-${PG_VERSION}/bin"
       export LD_LIBRARY_PATH=/opt/pgpro/std-${PG_VERSION}/lib/
   fi
+
+  apt-get install libpq5 -y
 fi
 
 # install pg_probackup from current public repo
