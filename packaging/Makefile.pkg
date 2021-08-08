@@ -36,9 +36,9 @@ build/prepare:
 	mkdir -p build
 
 build/clean: build/prepare
-	find build/ -maxdepth 1 -type f -exec rm -f {} \;
+	find $(BUILDDIR) -maxdepth 1 -type f -exec rm -f {} \;
 
-build/all: build/debian build/ubuntu build/centos build/oraclelinux build/rhel build/alt build/suse
+build/all: build/debian build/ubuntu build/centos build/oraclelinux build/alt build/suse # build/rhel
 	@echo Packaging is done
 
 ### DEBIAN
@@ -59,7 +59,7 @@ build/ubuntu: build/ubuntu_14.04 build/ubuntu_16.04 build/ubuntu_18.04 build/ubu
 	@echo Ubuntu: done
 
 build/ubuntu_14.04: build/ubuntu_14.04_9.5 build/ubuntu_14.04_9.6 build/ubuntu_14.04_10 build/ubuntu_14.04_11 build/ubuntu_14.04_12 build/ubuntu_14.04_13
-	@echo Ubuntu 14.04: 
+	@echo Ubuntu 14.04: done
 
 build/ubuntu_16.04: build/ubuntu_16.04_9.5 build/ubuntu_16.04_9.6 build/ubuntu_16.04_10 build/ubuntu_16.04_11 build/ubuntu_16.04_12 build/ubuntu_16.04_13
 	@echo Ubuntu 16.04: done

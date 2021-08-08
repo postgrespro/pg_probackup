@@ -1,5 +1,5 @@
 #### REPO BUILD ####
-repo: check_env repo/debian repo/ubuntu repo/centos repo/rhel repo/oraclelinux repo/alt repo/suse repo_finish
+repo: check_env repo/debian repo/ubuntu repo/centos repo/oraclelinux repo/alt repo/suse repo_finish #repo/rhel
 	@echo Build repo for all platform: done
 
 # Debian

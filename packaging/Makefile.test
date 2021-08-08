@@ -1,7 +1,7 @@
 test: build/test_all
 	@echo Test for all platform: done
 
-build/test_all: build/test_debian build/test_ubuntu build/test_centos build/test_oraclelinux build/test_alt build/test_suse build/test_rhel
+build/test_all: build/test_debian build/test_ubuntu build/test_centos build/test_oraclelinux build/test_alt build/test_suse # build/test_rhel
 	@echo Package testing is done
 
 ### DEBIAN
