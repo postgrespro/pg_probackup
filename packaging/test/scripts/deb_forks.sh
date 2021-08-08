@@ -15,6 +15,10 @@ if [ ${PBK_EDITION} == 'ent' ]; then
     exit 0
 fi
 
+if [ ${PBK_EDITION} == 'std' ] && [ ${PG_VERSION} == '9.6' ]; then
+    exit 0
+fi
+
 # upgrade and utils
 # export parameters
 export DEBIAN_FRONTEND=noninteractive
@@ -49,29 +53,15 @@ http {
 EOF
 nginx -s reload || (pkill -9 nginx || nginx -c /etc/nginx/nginx.conf &)
 
-# add postgresql repo
-if [ ${PG_VERSION} == '9.6' ]; then
-  sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt/ $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
-  wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | apt-key add -
-  apt-get update -y
-fi
-
 # install POSTGRESPRO
 if [ ${PBK_EDITION} == 'std' ]; then
   sh -c 'echo "deb https://repo.postgrespro.ru/pgpro-${PG_VERSION}/${DISTRIB}/ $(lsb_release -cs) main" > /etc/apt/sources.list.d/pgpro.list'
   wget --quiet -O - https://repo.postgrespro.ru/pgpro-${PG_VERSION}/keys/GPG-KEY-POSTGRESPRO | apt-key add -
   apt-get update -y
 
-  if [[ ${PG_VERSION} == '9.6' ]]; then
-      apt-get install -y postgrespro-${PG_VERSION}
-      BINDIR="/usr/lib/postgresql/${PG_VERSION}/bin"
-  else
-      apt-get install -y postgrespro-std-${PG_VERSION}
-      BINDIR="/opt/pgpro/std-${PG_VERSION}/bin"
-      export LD_LIBRARY_PATH=/opt/pgpro/std-${PG_VERSION}/lib/
-  fi
-
-  apt-get install libpq5 -y
+  apt-get install -y postgrespro-std-${PG_VERSION}
+  BINDIR="/opt/pgpro/std-${PG_VERSION}/bin"
+  export LD_LIBRARY_PATH=/opt/pgpro/std-${PG_VERSION}/lib/
 fi
 
 # install pg_probackup from current public repo
