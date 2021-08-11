@@ -3465,7 +3465,8 @@ pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replace
            <command>catchup</command> takes configuration files, such as
            <filename>postgresql.conf</filename>, <filename>postgresql.auto.conf</filename>,
            or <filename>pg_hba.conf</filename>, from the source server and overwrites them
-           on the target server.
+           on the target server. <option>--exclude-path</option> option allows you to keep
+           the configuration files intact.
           </para>
         </listitem>
       </itemizedlist>
@@ -3495,9 +3496,8 @@ pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replace
     </para>
 
     <para>
-      Before cloning/synchronizing a <productname>PostgreSQL</productname> instance, ensure that the source
-      instance server is running and accepting connections and that the destination instance
-      was shut down cleanly. To clone/sync the instance, on the server with the destination instance, run the following command:
+      To clone/sync a <productname>PostgreSQL</productname> instance, on the server with the destination instance, you can run
+      the <xref linkend="pbk-catchup"/> command as follows:
     </para>
     <programlisting>
 pg_probackup catchup -b <replaceable>catchup-mode</replaceable> --source-pgdata=<replaceable>path_to_pgdata_on_remote_server</replaceable> --destination-pgdata=<replaceable>path_to_local_dir</replaceable> --stream [<replaceable>connection_options</replaceable>] [<replaceable>remote_options</replaceable>]
@@ -3525,13 +3525,27 @@ pg_probackup catchup -b <replaceable>catchup-mode</replaceable> --source-pgdata=
           PTRACK — tracking page changes on the fly,
           only reads and copies pages that have changed since the point of divergence
           of the source and destination instances.
+          <warning>
+            <para>
+             PTRACK WAL delivery mode for <option>catchup</option> requires <application>PTRACK</application>
+             not earlier than 2.0 and hence, <productname>PostgreSQL</productname> not earlier than 11.
+            </para>
+          </warning>
         </para>
       </listitem>
     </itemizedlist>
     <para>
+      By specifying the <option>--stream</option> option, you can set
+      <link linkend="pbk-stream-mode">STREAM</link> WAL delivery mode
+      of copying, which will include all the necessary WAL files by streaming them from
+      the instance server via replication protocol.
+    </para>
+    <para>
       You can use <link linkend="pbk-connection-opts">connection_options</link> to specify
       the connection to the source database cluster. If it is located on a different server,
       also specify <link linkend="pbk-remote-server-opts">remote_options</link>.
+    </para>
+    <para>  
       If the source database cluster contains tablespaces that must be located in
       a different directory, additionally specify the <option>--tablespace-mapping</option>
       option:
@@ -3548,8 +3562,9 @@ pg_probackup catchup -b <replaceable>catchup-mode</replaceable> --source-pgdata=
       For example, assume that a remote standby server with the <productname>PostgreSQL</productname> instance having <filename>/replica-pgdata</filename> data directory has fallen behind. To sync this instance with the one in <filename>/master-pgdata</filename> data directory, you can run
       the <command>catchup</command> command in the <literal>PTRACK</literal> mode on four parallel threads as follows:
       <programlisting>
-pg_probackup catchup --source-pgdata=/master-pgdata --destination-pgdata=/replica-pgdata -p 5432 -d postgres -U remote-postgres-user --stream --backup-mode=PTRACK --remote-host=remote-hostname --remote-user=remote-unix-username -j 4
+pg_probackup catchup --source-pgdata=/master-pgdata --destination-pgdata=/replica-pgdata -p 5432 -d postgres -U remote-postgres-user --stream --backup-mode=PTRACK --remote-host=remote-hostname --remote-user=remote-unix-username -j 4 --exclude-path=postgresql.conf --exclude-path=postgresql.auto.conf --exclude-path=pg_hba.conf --exclude-path=pg_ident.conf
 </programlisting>
+      Note that configuration files will not be overwritten during synchronization.
     </para>
     <para>
       Another example shows how you can add a new remote standby server with the <productname>PostgreSQL</productname> data directory <filename>/replica-pgdata</filename> by running the <command>catchup</command> command in the <literal>FULL</literal> mode
@@ -4438,7 +4453,9 @@ pg_probackup archive-get -B <replaceable>backup_dir</replaceable> --instance <re
 pg_probackup catchup -b <replaceable>catchup_mode</replaceable>
 --source-pgdata=<replaceable>path_to_pgdata_on_remote_server</replaceable>
 --destination-pgdata=<replaceable>path_to_local_dir</replaceable>
-[--help] [--stream] [-j <replaceable>num_threads</replaceable>]
+[--help] [-j | --threads=<replaceable>num_threads</replaceable>] [--stream]
+[--temp-slot] [-P | --create-permanent-slot] [-S | --slot=<replaceable>slot_name</replaceable>]
+[--exclude-path=<replaceable>PATHNAME</replaceable>]
 [-T <replaceable>OLDDIR</replaceable>=<replaceable>NEWDIR</replaceable>]
 [<replaceable>connection_options</replaceable>] [<replaceable>remote_options</replaceable>]
 </programlisting>
@@ -4472,6 +4489,12 @@ pg_probackup catchup -b <replaceable>catchup_mode</replaceable>
             <literal>PTRACK</literal> — tracking page changes on the fly,
             only reads and copies pages that have changed since the point of divergence
             of the source and destination instances.
+            <warning>
+              <para>
+               PTRACK WAL delivery mode for <option>catchup</option> requires <application>PTRACK</application>
+               not earlier than 2.0 and hence, <productname>PostgreSQL</productname> not earlier than 11.
+              </para>
+            </warning>
           </para>
         </listitem>
       </itemizedlist>
@@ -4498,6 +4521,17 @@ pg_probackup catchup -b <replaceable>catchup_mode</replaceable>
       </varlistentry>
 
       <varlistentry>
+<term><option>-j <replaceable>num_threads</replaceable></option></term>
+<term><option>--threads=<replaceable>num_threads</replaceable></option></term>
+      <listitem>
+      <para>
+        Sets the number of parallel threads for
+        <command>catchup</command> process.
+      </para>
+      </listitem>
+      </varlistentry>
+
+      <varlistentry>
 <term><option>--stream</option></term>
       <listitem>
       <para>
@@ -4509,12 +4543,62 @@ pg_probackup catchup -b <replaceable>catchup_mode</replaceable>
       </varlistentry>
 
       <varlistentry>
-<term><option>-j <replaceable>num_threads</replaceable></option></term>
-<term><option>--threads=<replaceable>num_threads</replaceable></option></term>
+<term><option>-x</option>=<replaceable>path_prefix</replaceable></term>
+<term><option>--exclude-path</option>=<replaceable>path_prefix</replaceable></term>
       <listitem>
       <para>
-        Sets the number of parallel threads for
-        <command>catchup</command> process.
+        Specifies a prefix for files to exclude from the synchronization of <productname>PostgreSQL</productname>
+        instances during copying. The prefix can be either a path reative to the data directory of an instance or
+        an absolute path. The path can be on the source or destination server.
+        If the prefix specifies a directory,
+        all files in this directory will not be synchronized.
+        <warning>
+        <para>
+          This option is dangerous since excluding files from synchronization can result in
+          incomplete synchronization; use with care.
+        </para>
+        </warning>
+      </para>
+      </listitem>
+      </varlistentry>
+
+      <varlistentry>
+<term><option>--stream</option></term>
+      <listitem>
+      <para>
+        Copies the instance in <link linkend="pbk-stream-mode">STREAM</link> WAL delivery mode,
+        including all the necessary WAL files by streaming them from
+        the instance server via replication protocol.
+      </para>
+      </listitem>
+      </varlistentry>
+
+      <varlistentry>
+<term><option>--temp-slot</option></term>
+      <listitem>
+      <para>
+        Creates a <emphasis>temporary</emphasis> physical replication slot for streaming
+        WAL from the source <productname>PostgreSQL</productname> instance. It ensures that
+        all the loningCreates a <emphasis>permanent</emphasis> physical replication slot for streaming
+        WAL from the source <productname>PostgreSQL</productname> instance. It ensures that
+        all the required WAL segments remain available if WAL is
+        rotated while copying is in progress. This flag can only be
+        used together with the <option>--stream</option> flag and
+        cannot be used together with the <option>--temp-slot</option> flag.
+        The default slot name is <literal>pg_probackup_perm_slot</literal>,
+        which can be changed using the <option>--slot</option>/<option>-S</option> option.
+      </para>
+      </listitem>
+      </varlistentry>
+
+      <varlistentry>
+<term><option>-S <replaceable>slot_name</replaceable></option></term>
+<term><option>--slot=<replaceable>slot_name</replaceable></option></term>
+      <listitem>
+      <para>
+        Specifies the replication slot for WAL streaming. This option
+        can only be used together with the <option>--stream</option>
+        flag.
       </para>
       </listitem>
       </varlistentry>
