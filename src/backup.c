@@ -1159,7 +1159,7 @@ get_database_map(PGconn *conn)
 	 */
 	res = pgut_execute_extended(conn,
 						  "SELECT oid, datname FROM pg_catalog.pg_database "
-						  "WHERE datname NOT IN ('template1', 'template0')",
+						  "WHERE datname NOT IN ('template1'::name, 'template0'::name)",
 						  0, NULL, true, true);
 
 	/* Don't error out, simply return NULL. See comment above. */

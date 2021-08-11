@@ -169,7 +169,7 @@ get_ptrack_version(PGconn *backup_conn, PGNodeInfo *nodeInfo)
 
 	res_db = pgut_execute(backup_conn,
 						  "SELECT extnamespace::regnamespace, extversion "
-						  "FROM pg_catalog.pg_extension WHERE extname = 'ptrack'",
+						  "FROM pg_catalog.pg_extension WHERE extname = 'ptrack'::name",
 						  0, NULL);
 
 	if (PQntuples(res_db) > 0)
