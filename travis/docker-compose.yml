@@ -1,7 +1,11 @@
+version: "3.7"
 tests:
-    build: .
-        cap_add:
-            - SYS_PTRACE
+    build:
+        context: .
+
+    cap_add:
+        - SYS_PTRACE
+
     security-opt:
         - seccomp=unconfined
 
