@@ -287,6 +287,16 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
         self.wait_until_replica_catch_with_master(master, replica)
 
+        master.pgbench_init(scale=5)
+        # Continuous making some changes on master,
+        # because WAL archiving on replica in idle DB in PostgreSQL is broken:
+        # replica will not archive the previous WAL until it receives new records in the next WAL file,
+        # this "lazy" archiving can be seen in src/backend/replication/walreceiver.c:XLogWalRcvWrite()
+        # (see !XLByteInSeg checking and XLogArchiveNotify() calling).
+        pgbench = master.pgbench(
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            options=['-T', '3', '-c', '1', '--no-vacuum'])
+
         backup_id = self.backup_node(
             backup_dir, 'replica', replica,
             options=[
@@ -294,6 +304,9 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
                 '--master-host=localhost',
                 '--master-db=postgres',
                 '--master-port={0}'.format(master.port)])
+
+        pgbench.wait()
+        pgbench.stdout.close()
 
         self.validate_pb(backup_dir, 'replica')
         self.assertEqual(
@@ -317,8 +330,6 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         # Change data on master, make PAGE backup from replica,
         # restore taken backup and check that restored data equal
         # to original data
-        master.pgbench_init(scale=5)
-
         pgbench = master.pgbench(
             options=['-T', '30', '-c', '2', '--no-vacuum'])
 
