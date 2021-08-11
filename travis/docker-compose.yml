@@ -1,2 +1,7 @@
 tests:
     build: .
+    security-opt:
+        - seccomp=unconfined
+
+cap_add:
+    - SYS_PTRACE
