@@ -1,11 +1,12 @@
 version: "3.7"
-tests:
-    build:
-        context: .
+services:
+    tests:
+        build:
+            context: .
 
-    cap_add:
-        - SYS_PTRACE
+        cap_add:
+            - SYS_PTRACE
 
-    security-opt:
-        - seccomp=unconfined
+        security-opt:
+            - seccomp=unconfined
 
