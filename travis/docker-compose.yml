@@ -7,6 +7,6 @@ services:
         cap_add:
             - SYS_PTRACE
 
-        security-opt:
+        security_opt:
             - seccomp=unconfined
 
