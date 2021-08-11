@@ -21,8 +21,12 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         over the course of several switchovers
         https://www.postgresql.org/message-id/54b059d4-2b48-13a4-6f43-95a087c92367%40postgrespro.ru
         """
-
         fname = self.id().split('.')[3]
+        if self.get_version(master) < self.version_to_num('9.6.0'):
+            self.del_test_dir(module_name, fname)
+            return unittest.skip(
+                'Skipped because backup from replica is not supported in PG 9.5')
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node1 = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node1'),
@@ -1320,6 +1324,11 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         t1 --F---D1--D2--
         """
         fname = self.id().split('.')[3]
+        if self.get_version(master) < self.version_to_num('9.6.0'):
+            self.del_test_dir(module_name, fname)
+            return unittest.skip(
+                'Skipped because backup from replica is not supported in PG 9.5')
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node1 = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node1'),
@@ -1440,6 +1449,11 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         t1 --F---P1--P2--
         """
         fname = self.id().split('.')[3]
+        if self.get_version(master) < self.version_to_num('9.6.0'):
+            self.del_test_dir(module_name, fname)
+            return unittest.skip(
+                'Skipped because backup from replica is not supported in PG 9.5')
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node1 = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node1'),
@@ -1560,6 +1574,11 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         """
         """
         fname = self.id().split('.')[3]
+        if self.get_version(master) < self.version_to_num('9.6.0'):
+            self.del_test_dir(module_name, fname)
+            return unittest.skip(
+                'Skipped because backup from replica is not supported in PG 9.5')
+
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         master = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'master'),
