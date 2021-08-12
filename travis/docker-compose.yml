@@ -10,6 +10,8 @@ services:
         security_opt:
             - seccomp=unconfined
 
-        sysctls:
-            kernel.yama.ptrace_scope: 0
+        # don't work
+        #sysctls:
+        #    kernel.yama.ptrace_scope: 0
+        privileged: true
 
