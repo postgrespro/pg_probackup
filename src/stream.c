@@ -229,10 +229,10 @@ StreamLog(void *arg)
 
 	/* Create repslot */
 #if PG_VERSION_NUM >= 100000
-	if (temp_slot || create_permanent_slot)
+	if (temp_slot || perm_slot)
 		if (!CreateReplicationSlot_compat(stream_arg->conn, replication_slot, NULL, temp_slot, true, false))
 #else
-	if (create_permanent_slot)
+	if (perm_slot)
 		if (!CreateReplicationSlot_compat(stream_arg->conn, replication_slot, NULL, false, true, false))
 #endif
 		{

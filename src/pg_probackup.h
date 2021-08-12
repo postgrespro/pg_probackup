@@ -781,7 +781,7 @@ extern char	   *replication_slot;
 #if PG_VERSION_NUM >= 100000
 extern bool 	temp_slot;
 #endif
-extern bool create_permanent_slot;
+extern bool perm_slot;
 
 /* backup options */
 extern bool		smooth_checkpoint;

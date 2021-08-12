@@ -82,7 +82,7 @@ bool		no_sync = false;
 char	   *replication_slot = NULL;
 bool		temp_slot = false;
 #endif
-bool create_permanent_slot = false;
+bool perm_slot = false;
 
 /* backup options */
 bool         backup_logs = false;
@@ -206,7 +206,7 @@ static ConfigOption cmd_options[] =
 #if PG_VERSION_NUM >= 100000
 	{ 'b', 181, "temp-slot",		&temp_slot,			SOURCE_CMD_STRICT },
 #endif
-	{ 'b', 'P', "create-permanent-slot",	&create_permanent_slot,	SOURCE_CMD_STRICT },
+	{ 'b', 'P', "perm-slot",	&perm_slot,	SOURCE_CMD_STRICT },
 	{ 'b', 182, "delete-wal",		&delete_wal,		SOURCE_CMD_STRICT },
 	{ 'b', 183, "delete-expired",	&delete_expired,	SOURCE_CMD_STRICT },
 	{ 'b', 184, "merge-expired",	&merge_expired,		SOURCE_CMD_STRICT },
@@ -797,14 +797,14 @@ main(int argc, char *argv[])
 			get_subcmd_name(backup_subcmd));
 
 #if PG_VERSION_NUM >= 100000
-	if (temp_slot && create_permanent_slot)
-		elog(ERROR, "You cannot specify \"--create-permanent-slot\" option with the \"--temp-slot\" option");
+	if (temp_slot && perm_slot)
+		elog(ERROR, "You cannot specify \"--perm-slot\" option with the \"--temp-slot\" option");
 
 	/* if slot name was not provided for temp slot, use default slot name */
 	if (!replication_slot && temp_slot)
 		replication_slot = DEFAULT_TEMP_SLOT_NAME;
 #endif
-	if (!replication_slot && create_permanent_slot)
+	if (!replication_slot && perm_slot)
 		replication_slot = DEFAULT_PERMANENT_SLOT_NAME;
 
 	if (num_threads < 1)

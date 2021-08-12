@@ -251,7 +251,7 @@ help_pg_probackup(void)
 	printf(_("\n  %s catchup  -b catchup-mode\n"), PROGRAM_NAME);
 	printf(_("                 --source-pgdata=path_to_pgdata_on_remote_server\n"));
 	printf(_("                 --destination-pgdata=path_to_local_dir\n"));
-	printf(_("                 [--stream [-S slot-name]] [--temp-slot | --create-permanent-slot]\n"));
+	printf(_("                 [--stream [-S slot-name]] [--temp-slot | --perm-slot]\n"));
 	printf(_("                 [-j num-threads]\n"));
 	printf(_("                 [-T OLDDIR=NEWDIR]\n"));
 	printf(_("                 [--exclude-path=path_prefix]\n"));
@@ -1032,7 +1032,7 @@ help_catchup(void)
 	printf(_("\n%s catchup  -b catchup-mode\n"), PROGRAM_NAME);
 	printf(_("                 --source-pgdata=path_to_pgdata_on_remote_server\n"));
 	printf(_("                 --destination-pgdata=path_to_local_dir\n"));
-	printf(_("                 [--stream [-S slot-name]] [--temp-slot | --create-permanent-slot]\n"));
+	printf(_("                 [--stream [-S slot-name]] [--temp-slot | --perm-slot]\n"));
 	printf(_("                 [-j num-threads]\n"));
 	printf(_("                 [-T OLDDIR=NEWDIR]\n"));
 	printf(_("                 [--exclude-path=path_prefix]\n"));
@@ -1047,7 +1047,7 @@ help_catchup(void)
 	printf(_("      --stream                     stream the transaction log (only supported mode)\n"));
 	printf(_("  -S, --slot=SLOTNAME              replication slot to use\n"));
 	printf(_("      --temp-slot                  use temporary replication slot\n"));
-	printf(_("  -P  --create-permanent-slot      create permanent replication slot\n"));
+	printf(_("  -P  --perm-slot                  create permanent replication slot\n"));
 
 	printf(_("  -j, --threads=NUM                number of parallel threads\n"));
 

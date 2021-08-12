@@ -4454,7 +4454,7 @@ pg_probackup catchup -b <replaceable>catchup_mode</replaceable>
 --source-pgdata=<replaceable>path_to_pgdata_on_remote_server</replaceable>
 --destination-pgdata=<replaceable>path_to_local_dir</replaceable>
 [--help] [-j | --threads=<replaceable>num_threads</replaceable>] [--stream]
-[--temp-slot] [-P | --create-permanent-slot] [-S | --slot=<replaceable>slot_name</replaceable>]
+[--temp-slot] [-P | --perm-slot] [-S | --slot=<replaceable>slot_name</replaceable>]
 [--exclude-path=<replaceable>PATHNAME</replaceable>]
 [-T <replaceable>OLDDIR</replaceable>=<replaceable>NEWDIR</replaceable>]
 [<replaceable>connection_options</replaceable>] [<replaceable>remote_options</replaceable>]

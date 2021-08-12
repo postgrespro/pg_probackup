@@ -1100,15 +1100,14 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
 #
 #   -S, --slot=SLOTNAME                        replication slot to use
 #       --temp-slot                                    use temporary replication slot
-#   -P  --create-permanent-slot              create permanent replication slot
+#   -P  --perm-slot              create permanent replication slot
 #       --primary-slot-name=SLOTNAME value for primary_slot_name parameter
 #
 # 1. if "--slot" is used - try to use already existing slot with given name
-# 2. if "--slot" and "--create-permanent-slot" used - try to create permanent slot and use it.
-# 3. If "--create-permanent-slot " flag is used without "--slot" option - use generic slot name like "pg_probackup_perm_slot"
-# 4. If "--create-permanent-slot " flag is used and permanent slot already exists - fail with error.
-# 5. "--create-permanent-slot" and "--temp-slot" flags cannot be used together.
-# 6. "--primary-slot-name" and `-R` are used to create replication configuration ( as in restore command )
+# 2. if "--slot" and "--perm-slot" used - try to create permanent slot and use it.
+# 3. If "--perm-slot " flag is used without "--slot" option - use generic slot name like "pg_probackup_perm_slot"
+# 4. If "--perm-slot " flag is used and permanent slot already exists - fail with error.
+# 5. "--perm-slot" and "--temp-slot" flags cannot be used together.
 #########################################
     def test_catchup_with_replication_slot(self):
         """
@@ -1153,7 +1152,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
                 ]
             )
 
-        # 2a. --slot --create-permanent-slot
+        # 2a. --slot --perm-slot
         dst_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'dst_2a'))
         self.catchup_node(
             backup_mode = 'FULL',
@@ -1162,11 +1161,11 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             options = [
                 '-d', 'postgres', '-p', str(src_pg.port), '--stream',
                 '--slot=nonexistentslot_2a',
-                '--create-permanent-slot'
+                '--perm-slot'
                 ]
             )
 
-        # 2b. and 4. --slot --create-permanent-slot
+        # 2b. and 4. --slot --perm-slot
         dst_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'dst_2b'))
         src_pg.safe_psql("postgres", "SELECT pg_catalog.pg_create_physical_replication_slot('existentslot_2b')")
         try:
@@ -1177,7 +1176,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
                 options = [
                     '-d', 'postgres', '-p', str(src_pg.port), '--stream',
                     '--slot=existentslot_2b',
-                    '--create-permanent-slot'
+                    '--perm-slot'
                     ]
                 )
             self.assertEqual(1, 0, "Expecting Error because replication slot already exist.\n Output: {0} \n CMD: {1}".format(
@@ -1188,7 +1187,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
                 e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
 
-        # 3. --create-permanent-slot --slot
+        # 3. --perm-slot --slot
         dst_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'dst_3'))
         self.catchup_node(
             backup_mode = 'FULL',
@@ -1196,7 +1195,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             destination_node = dst_pg,
             options = [
                 '-d', 'postgres', '-p', str(src_pg.port), '--stream',
-                '--create-permanent-slot'
+                '--perm-slot'
                 ]
             )
         slot_name = src_pg.safe_psql(
@@ -1207,7 +1206,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             ).decode('utf-8').rstrip()
         self.assertEqual(slot_name, 'pg_probackup_perm_slot', 'Slot name mismatch')
 
-        # 5. --create-permanent-slot --temp-slot (PG>=10)
+        # 5. --perm-slot --temp-slot (PG>=10)
         if self.get_version(src_pg) >= self.version_to_num('10.0'):
             dst_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'dst_5'))
             try:
@@ -1217,15 +1216,15 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
                     destination_node = dst_pg,
                     options = [
                         '-d', 'postgres', '-p', str(src_pg.port), '--stream',
-                        '--create-permanent-slot',
+                        '--perm-slot',
                         '--temp-slot'
                         ]
                     )
-                self.assertEqual(1, 0, "Expecting Error because conflicting options --create-permanent-slot and --temp-slot used together\n Output: {0} \n CMD: {1}".format(
+                self.assertEqual(1, 0, "Expecting Error because conflicting options --perm-slot and --temp-slot used together\n Output: {0} \n CMD: {1}".format(
                     repr(self.output), self.cmd))
             except ProbackupException as e:
                 self.assertIn(
-                    'ERROR: You cannot specify "--create-permanent-slot" option with the "--temp-slot" option',
+                    'ERROR: You cannot specify "--perm-slot" option with the "--temp-slot" option',
                     e.message,
                     '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
 
