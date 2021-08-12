@@ -726,6 +726,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             output)
 
         # Clean after yourself
+        gdb_checkpointer.kill()
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
@@ -1105,6 +1106,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         self.compare_pgdata(pgdata, pgdata_restored)
 
         # Clean after yourself
+        gdb_checkpointer.kill()
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
