@@ -3412,19 +3412,19 @@ pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replace
     <title>Cloning and Synchronizing <productname>PostgreSQL</productname> Instance</title>
     <para>
       <application>pg_probackup</application> can create a copy of a <productname>PostgreSQL</productname>
-      instance directly, without using the backup catalog. To do this, you can run <xref linkend="pbk-catchup"/> command.
+      instance directly, without using the backup catalog. To do this, you can run the <xref linkend="pbk-catchup"/> command.
       It can be useful in the following cases:
       <itemizedlist>
         <listitem>
           <para>To add a new standby server.</para>
           <para>Usually, <ulink url="https://postgrespro.com/docs/postgresql/current/app-pgbasebackup">pg_basebackup</ulink>
           is used to create a copy of a <productname>PostgreSQL</productname> instance. If the data directory of the destination instance
-          is empty, <command>catchup</command> command works similarly, but it can be faster if run in parallel mode.</para>
+          is empty, the <command>catchup</command> command works similarly, but it can be faster if run in parallel mode.</para>
         </listitem>
         <listitem>
           <para>To have a fallen-behind standby server <quote>catch up</quote> with master.</para>
           <para>Under high write load, replicas may fail to replay WAL fast enough to keep up with master and hence may lag behind.
-          A usual solution to create a new replica and switch to it requires a lot of extra space and data transfer. <command>catchup</command>
+          A usual solution to create a new replica and switch to it requires a lot of extra space and data transfer. The <command>catchup</command>
           command allows you to update an existing replica much faster by bringing differences from master.</para>
         </listitem>
       </itemizedlist>
@@ -3465,7 +3465,7 @@ pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replace
            <command>catchup</command> takes configuration files, such as
            <filename>postgresql.conf</filename>, <filename>postgresql.auto.conf</filename>,
            or <filename>pg_hba.conf</filename>, from the source server and overwrites them
-           on the target server. <option>--exclude-path</option> option allows you to keep
+           on the target server. The <option>--exclude-path</option> option allows you to keep
            the configuration files intact.
           </para>
         </listitem>
@@ -3496,7 +3496,9 @@ pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replace
     </para>
 
     <para>
-      To clone/sync a <productname>PostgreSQL</productname> instance, on the server with the destination instance, you can run
+      Before cloning/synchronizing a <productname>PostgreSQL</productname> instance, ensure that the source
+      instance server is running and accepting connections. To clone/sync a <productname>PostgreSQL</productname> instance,
+      on the server with the destination instance, you can run
       the <xref linkend="pbk-catchup"/> command as follows:
     </para>
     <programlisting>
@@ -3527,7 +3529,7 @@ pg_probackup catchup -b <replaceable>catchup-mode</replaceable> --source-pgdata=
           of the source and destination instances.
           <warning>
             <para>
-             PTRACK WAL delivery mode for <option>catchup</option> requires <application>PTRACK</application>
+             PTRACK catchup mode requires <application>PTRACK</application>
              not earlier than 2.0 and hence, <productname>PostgreSQL</productname> not earlier than 11.
             </para>
           </warning>
@@ -3545,7 +3547,7 @@ pg_probackup catchup -b <replaceable>catchup-mode</replaceable> --source-pgdata=
       the connection to the source database cluster. If it is located on a different server,
       also specify <link linkend="pbk-remote-server-opts">remote_options</link>.
     </para>
-    <para>  
+    <para>
       If the source database cluster contains tablespaces that must be located in
       a different directory, additionally specify the <option>--tablespace-mapping</option>
       option:
@@ -3564,7 +3566,7 @@ pg_probackup catchup -b <replaceable>catchup-mode</replaceable> --source-pgdata=
       <programlisting>
 pg_probackup catchup --source-pgdata=/master-pgdata --destination-pgdata=/replica-pgdata -p 5432 -d postgres -U remote-postgres-user --stream --backup-mode=PTRACK --remote-host=remote-hostname --remote-user=remote-unix-username -j 4 --exclude-path=postgresql.conf --exclude-path=postgresql.auto.conf --exclude-path=pg_hba.conf --exclude-path=pg_ident.conf
 </programlisting>
-      Note that configuration files will not be overwritten during synchronization.
+      Note that in this example, the configuration files will not be overwritten during synchronization.
     </para>
     <para>
       Another example shows how you can add a new remote standby server with the <productname>PostgreSQL</productname> data directory <filename>/replica-pgdata</filename> by running the <command>catchup</command> command in the <literal>FULL</literal> mode
@@ -4491,7 +4493,7 @@ pg_probackup catchup -b <replaceable>catchup_mode</replaceable>
             of the source and destination instances.
             <warning>
               <para>
-               PTRACK WAL delivery mode for <option>catchup</option> requires <application>PTRACK</application>
+               PTRACK catchup mode requires <application>PTRACK</application>
                not earlier than 2.0 and hence, <productname>PostgreSQL</productname> not earlier than 11.
               </para>
             </warning>
@@ -4578,11 +4580,24 @@ pg_probackup catchup -b <replaceable>catchup_mode</replaceable>
       <listitem>
       <para>
         Creates a <emphasis>temporary</emphasis> physical replication slot for streaming
-        WAL from the source <productname>PostgreSQL</productname> instance. It ensures that
-        all the loningCreates a <emphasis>permanent</emphasis> physical replication slot for streaming
-        WAL from the source <productname>PostgreSQL</productname> instance. It ensures that
+        WAL from the <productname>PostgreSQL</productname> instance being copied. It ensures that
         all the required WAL segments remain available if WAL is
-        rotated while copying is in progress. This flag can only be
+        rotated while the backup is in progress. This flag can only be
+        used together with the <option>--stream</option> flag and
+        cannot be used together with the <option>--perm-slot</option> flag.
+        The default slot name is <literal>pg_probackup_slot</literal>,
+        which can be changed using the <option>--slot</option>/<option>-S</option> option.
+      </para>
+      </listitem>
+      </varlistentry>
+
+      <varlistentry>
+<term><option>-P</option></term>
+<term><option>--perm-slot</option></term>
+      <listitem>
+      <para>
+        Creates a <emphasis>permanent</emphasis> physical replication slot for streaming
+        WAL from the <productname>PostgreSQL</productname> instance being copied. This flag can only be
         used together with the <option>--stream</option> flag and
         cannot be used together with the <option>--temp-slot</option> flag.
         The default slot name is <literal>pg_probackup_perm_slot</literal>,
