@@ -928,7 +928,7 @@ check_server_version(PGconn *conn, PGNodeInfo *nodeInfo)
 			 nodeInfo->server_version_str, "9.6");
 
 	if (nodeInfo->pgpro_support)
-		res = pgut_execute(conn, "SELECT pgpro_edition()", 0, NULL);
+		res = pgut_execute(conn, "SELECT pg_catalog.pgpro_edition()", 0, NULL);
 
 	/*
 	 * Check major version of connected PostgreSQL and major version of
@@ -1120,7 +1120,7 @@ pgpro_support(PGconn *conn)
 	PGresult   *res;
 
 	res = pgut_execute(conn,
-						  "SELECT proname FROM pg_proc WHERE proname='pgpro_edition'",
+						  "SELECT proname FROM pg_catalog.pg_proc WHERE proname='pgpro_edition'::name AND pronamespace='pg_catalog'::regnamespace::oid",
 						  0, NULL);
 
 	if (PQresultStatus(res) == PGRES_TUPLES_OK &&
@@ -1159,7 +1159,7 @@ get_database_map(PGconn *conn)
 	 */
 	res = pgut_execute_extended(conn,
 						  "SELECT oid, datname FROM pg_catalog.pg_database "
-						  "WHERE datname NOT IN ('template1', 'template0')",
+						  "WHERE datname NOT IN ('template1'::name, 'template0'::name)",
 						  0, NULL, true, true);
 
 	/* Don't error out, simply return NULL. See comment above. */

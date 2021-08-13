@@ -20,6 +20,12 @@
 #include "common/string.h"
 #endif
 
+#if PG_VERSION_NUM >= 100000
+#include "common/connect.h"
+#else
+#include "fe_utils/connect.h"
+#endif
+
 #include <time.h>
 
 #include "pgut.h"
@@ -257,7 +263,7 @@ pgut_connect(const char *host, const char *port,
 			pthread_lock(&atexit_callback_disconnect_mutex);
 			pgut_atexit_push(pgut_disconnect_callback, conn);
 			pthread_mutex_unlock(&atexit_callback_disconnect_mutex);
-			return conn;
+			break;
 		}
 
 		if (conn && PQconnectionNeedsPassword(conn) && prompt_password)
@@ -279,6 +285,28 @@ pgut_connect(const char *host, const char *port,
 		PQfinish(conn);
 		return NULL;
 	}
+
+	/*
+	 * Fix for CVE-2018-1058. This code was taken with small modification from
+	 * src/bin/pg_basebackup/streamutil.c:GetConnection()
+	 */
+	if (dbname != NULL)
+	{
+		PGresult   *res;
+
+		res = PQexec(conn, ALWAYS_SECURE_SEARCH_PATH_SQL);
+		if (PQresultStatus(res) != PGRES_TUPLES_OK)
+		{
+			elog(ERROR, "could not clear search_path: %s",
+						 PQerrorMessage(conn));
+			PQclear(res);
+			PQfinish(conn);
+			return NULL;
+		}
+		PQclear(res);
+	}
+
+	return conn;
 }
 
 PGconn *
