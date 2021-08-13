@@ -338,14 +338,14 @@ typedef enum ShowFormat
 #define BYTES_INVALID		(-1) /* file didn`t changed since previous backup, DELTA backup do not rely on it */
 #define FILE_NOT_FOUND		(-2) /* file disappeared during backup */
 #define BLOCKNUM_INVALID	(-1)
-#define PROGRAM_VERSION	"2.5.0"
+#define PROGRAM_VERSION	"2.5.1"
 
 /* update when remote agent API or behaviour changes */
-#define AGENT_PROTOCOL_VERSION 20500
-#define AGENT_PROTOCOL_VERSION_STR "2.5.0"
+#define AGENT_PROTOCOL_VERSION 20501
+#define AGENT_PROTOCOL_VERSION_STR "2.5.1"
 
 /* update only when changing storage format */
-#define STORAGE_FORMAT_VERSION "2.5.0"
+#define STORAGE_FORMAT_VERSION "2.4.4"
 
 typedef struct ConnectionOptions
 {
