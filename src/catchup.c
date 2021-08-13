@@ -423,12 +423,7 @@ catchup_thread_runner(void *arg)
 			catchup_data_file(file, from_fullpath, to_fullpath,
 								 arguments->sync_lsn,
 								 arguments->backup_mode,
-								 NONE_COMPRESS,
-								 0,
 								 arguments->nodeInfo->checksum_version,
-								 arguments->nodeInfo->ptrack_version_num,
-								 arguments->nodeInfo->ptrack_schema,
-								 false,
 								 dest_file != NULL ? dest_file->size : 0);
 		}
 		else
@@ -437,6 +432,7 @@ catchup_thread_runner(void *arg)
 								 arguments->backup_mode, current.parent_backup, true);
 		}
 
+		/* file went missing during catchup */
 		if (file->write_size == FILE_NOT_FOUND)
 			continue;
 
@@ -522,7 +518,7 @@ catchup_multithreaded_copy(int num_threads,
 }
 
 /*
- *
+ * Sync every file in destination directory to disk
  */
 static void
 catchup_sync_destination_files(const char* pgdata_path, fio_location location, parray *filelist, pgFile *pg_control_file)
@@ -539,7 +535,12 @@ catchup_sync_destination_files(const char* pgdata_path, fio_location location, p
 	{
 		pgFile *file = (pgFile *) parray_get(filelist, i);
 
-		/* TODO: sync directory ? */
+		/* TODO: sync directory ?
+		 * - at first glance we can rely on fs journaling,
+		 *   which is enabled by default on most platforms
+		 * - but PG itself is not relying on fs, its durable_sync
+		 *   includes directory sync
+		 */
 		if (S_ISDIR(file->mode) || file->excluded)
 			continue;
 
@@ -659,13 +660,13 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 	}
 
 	/*
+	 * Make sure that sync point is withing ptrack tracking range
 	 * TODO: move to separate function to use in both backup.c and catchup.c
 	 */
 	if (current.backup_mode == BACKUP_MODE_DIFF_PTRACK)
 	{
 		XLogRecPtr	ptrack_lsn = get_last_ptrack_lsn(source_conn, &source_node_info);
 
-		// new ptrack is more robust and checks Start LSN
 		if (ptrack_lsn > dest_redo.lsn || ptrack_lsn == InvalidXLogRecPtr)
 			elog(ERROR, "LSN from ptrack_control in source %X/%X is greater than checkpoint LSN in destination %X/%X.\n"
 						"You can perform only FULL catchup.",
@@ -686,7 +687,7 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 		elog(LOG, "pg_start_backup START LSN %X/%X", (uint32) (current.start_lsn >> 32), (uint32) (current.start_lsn));
 	}
 
-	/* Check that dest_redo.lsn is less than current.start_lsn */
+	/* Sanity: source cluster must be "in future" relatively to dest cluster */
 	if (current.backup_mode != BACKUP_MODE_FULL &&
 		dest_redo.lsn > current.start_lsn)
 			elog(ERROR, "Current START LSN %X/%X is lower than SYNC LSN %X/%X, "
@@ -698,7 +699,7 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 	join_path_components(dest_xlog_path, dest_pgdata, PG_XLOG_DIR);
 	fio_mkdir(dest_xlog_path, DIR_PERMISSION, FIO_LOCAL_HOST);
 	start_WAL_streaming(source_conn, dest_xlog_path, &instance_config.conn_opt,
-						current.start_lsn, current.tli);
+						current.start_lsn, current.tli, false);
 
 	source_filelist = parray_new();
 
@@ -712,6 +713,11 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 
 	//REVIEW FIXME. Let's fix that before release.
 	// TODO what if wal is not a dir (symlink to a dir)?
+	// - Currently backup/restore transform pg_wal symlink to directory
+	//   so the problem is not only with catchup.
+	//   if we want to make it right - we must provide the way
+	//   for symlink remapping during restore and catchup.
+	//   By default everything must be left as it is.
 
 	/* close ssh session in main thread */
 	fio_disconnect();
@@ -779,7 +785,7 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 	 * We iterate over source_filelist and for every directory with parent 'pg_tblspc'
 	 * we must lookup this directory name in tablespace map.
 	 * If we got a match, we treat this directory as tablespace.
-	 * It means that we create directory specified in tablespace_map and
+	 * It means that we create directory specified in tablespace map and
 	 * original directory created as symlink to it.
 	 */
 	for (i = 0; i < parray_num(source_filelist); i++)
@@ -867,10 +873,22 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 		source_pg_control_file = parray_remove(source_filelist, control_file_elem_index);
 	}
 
+	/* TODO before public release: must be more careful with pg_control.
+	 *       when running catchup or incremental restore
+	 *       cluster is actually in two states
+	 *       simultaneously - old and new, so
+	 *       it must contain both pg_control files
+	 *       describing those states: global/pg_control_old, global/pg_control_new
+	 *       1. This approach will provide us with means of
+	 *          robust detection of previos failures and thus correct operation retrying (or forbidding).
+	 *       2. We will have the ability of preventing instance from starting
+	 *          in the middle of our operations.
+	 */
+
 	/*
 	 * remove absent source files in dest (dropped tables, etc...)
 	 * note: global/pg_control will also be deleted here
-         * mark dest files (that excluded with source --exclude-path) also for exclusion
+	 * mark dest files (that excluded with source --exclude-path) also for exclusion
 	 */
 	if (current.backup_mode != BACKUP_MODE_FULL)
 	{
@@ -906,7 +924,7 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 				fio_delete(file->mode, fullpath, FIO_DB_HOST);
 				elog(VERBOSE, "Deleted file \"%s\"", fullpath);
 
-				/* shrink pgdata list */
+				/* shrink dest pgdata list */
 				pgFileFree(file);
 				parray_remove(dest_filelist, i);
 				i--;
@@ -970,18 +988,6 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 
 		pg_silent_client_messages(source_conn);
 
-		//REVIEW. Do we want to support pg 9.5? I suppose we never test it...
-		//REVIEW_ANSWER: we test 9.5 in travis every commit
-		//Maybe check it and error out early?
-		/* Create restore point
-		 * Only if backup is from master.
-		 * For PG 9.5 create restore point only if pguser is superuser.
-		 */
-		if (!current.from_replica &&
-			!(source_node_info.server_version < 90600 &&
-			  !source_node_info.is_superuser)) //TODO: check correctness
-			pg_create_restore_point(source_conn, current.start_time);
-
 		/* Execute pg_stop_backup using PostgreSQL connection */
 		pg_stop_backup_send(source_conn, source_node_info.server_version, current.from_replica, exclusive_backup, &stop_backup_query_text);
 
@@ -1041,21 +1047,6 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 		parray_walk(wal_files_list, pgFileFree);
 		parray_free(wal_files_list);
 		wal_files_list = NULL;
-	}
-
-	//REVIEW Please add a comment about these lsns. It is a crutial part of the algorithm.
-	current.recovery_xid = stop_backup_result.snapshot_xid;
-
-	elog(LOG, "Getting the Recovery Time from WAL");
-
-	/* iterate over WAL from stop_backup lsn to start_backup lsn */
-	if (!read_recovery_info(dest_xlog_path, current.tli,
-						instance_config.xlog_seg_size,
-						current.start_lsn, current.stop_lsn,
-						&current.recovery_time))
-	{
-		elog(LOG, "Failed to find Recovery Time in WAL, forced to trust current_timestamp");
-		current.recovery_time = stop_backup_result.invocation_time;
 	}
 
 	/*

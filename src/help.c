@@ -124,7 +124,7 @@ help_pg_probackup(void)
 
 	printf(_("\n  %s backup -B backup-path -b backup-mode --instance=instance_name\n"), PROGRAM_NAME);
 	printf(_("                 [-D pgdata-path] [-C]\n"));
-	printf(_("                 [--stream [-S slot-name]] [--temp-slot]\n"));
+	printf(_("                 [--stream [-S slot-name] [--temp-slot]]\n"));
 	printf(_("                 [--backup-pg-log] [-j num-threads] [--progress]\n"));
 	printf(_("                 [--no-validate] [--skip-block-validation]\n"));
 	printf(_("                 [--external-dirs=external-directories-paths]\n"));
@@ -251,7 +251,7 @@ help_pg_probackup(void)
 	printf(_("\n  %s catchup  -b catchup-mode\n"), PROGRAM_NAME);
 	printf(_("                 --source-pgdata=path_to_pgdata_on_remote_server\n"));
 	printf(_("                 --destination-pgdata=path_to_local_dir\n"));
-	printf(_("                 [--stream [-S slot-name]] [--temp-slot | --perm-slot]\n"));
+	printf(_("                 [--stream [-S slot-name] [--temp-slot | --perm-slot]]\n"));
 	printf(_("                 [-j num-threads]\n"));
 	printf(_("                 [-T OLDDIR=NEWDIR]\n"));
 	printf(_("                 [--exclude-path=path_prefix]\n"));
@@ -296,7 +296,7 @@ help_backup(void)
 {
 	printf(_("\n%s backup -B backup-path -b backup-mode --instance=instance_name\n"), PROGRAM_NAME);
 	printf(_("                 [-D pgdata-path] [-C]\n"));
-	printf(_("                 [--stream [-S slot-name] [--temp-slot]\n"));
+	printf(_("                 [--stream [-S slot-name] [--temp-slot]]\n"));
 	printf(_("                 [--backup-pg-log] [-j num-threads] [--progress]\n"));
 	printf(_("                 [--no-validate] [--skip-block-validation]\n"));
 	printf(_("                 [-E external-directories-paths]\n"));

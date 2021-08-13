@@ -59,6 +59,7 @@ static pthread_t stream_thread;
 static StreamThreadArg stream_thread_arg = {"", NULL, 1};
 
 static parray *xlog_files_list = NULL;
+static bool do_crc = true;
 
 static void IdentifySystem(StreamThreadArg *stream_thread_arg);
 static int checkpoint_timeout(PGconn *backup_conn);
@@ -628,8 +629,10 @@ parse_tli_history_buffer(char *history, TimeLineID tli)
  */
 void
 start_WAL_streaming(PGconn *backup_conn, char *stream_dst_path, ConnectionOptions *conn_opt,
-					XLogRecPtr startpos, TimeLineID starttli)
+					XLogRecPtr startpos, TimeLineID starttli, bool is_backup)
 {
+	/* calculate crc only when running backup, catchup has no need for it */
+	do_crc = is_backup;
 	/* How long we should wait for streaming end after pg_stop_backup */
 	stream_stop_timeout = checkpoint_timeout(backup_conn);
 	//TODO Add a comment about this calculation
@@ -713,15 +716,16 @@ add_walsegment_to_filelist(parray *filelist, uint32 timeline, XLogRecPtr xlogpos
 
     if (existing_file)
     {
-        (*existing_file)->crc = pgFileGetCRC(wal_segment_fullpath, true, false);
+        if (do_crc)
+            (*existing_file)->crc = pgFileGetCRC(wal_segment_fullpath, true, false);
         (*existing_file)->write_size = xlog_seg_size;
         (*existing_file)->uncompressed_size = xlog_seg_size;
 
         return;
     }
 
-    /* calculate crc */
-    file->crc = pgFileGetCRC(wal_segment_fullpath, true, false);
+    if (do_crc)
+        file->crc = pgFileGetCRC(wal_segment_fullpath, true, false);
 
     /* Should we recheck it using stat? */
     file->write_size = xlog_seg_size;
@@ -751,7 +755,8 @@ add_history_file_to_filelist(parray *filelist, uint32 timeline, char *basedir)
     file = pgFileNew(fullpath, relpath, false, 0, FIO_BACKUP_HOST);
 
     /* calculate crc */
-    file->crc = pgFileGetCRC(fullpath, true, false);
+    if (do_crc)
+        file->crc = pgFileGetCRC(fullpath, true, false);
     file->write_size = file->size;
     file->uncompressed_size = file->size;
 
