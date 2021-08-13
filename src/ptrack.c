@@ -51,7 +51,7 @@ get_ptrack_version(PGconn *backup_conn, PGNodeInfo *nodeInfo)
 
 	res_db = pgut_execute(backup_conn,
 						  "SELECT extnamespace::regnamespace, extversion "
-						  "FROM pg_catalog.pg_extension WHERE extname = 'ptrack'",
+						  "FROM pg_catalog.pg_extension WHERE extname = 'ptrack'::name",
 						  0, NULL);
 
 	if (PQntuples(res_db) > 0)
@@ -69,7 +69,7 @@ get_ptrack_version(PGconn *backup_conn, PGNodeInfo *nodeInfo)
 		/* ptrack 1.x is supported, save version */
 		PQclear(res_db);
 		res_db = pgut_execute(backup_conn,
-							  "SELECT proname FROM pg_proc WHERE proname='ptrack_version'",
+							  "SELECT proname FROM pg_catalog.pg_proc WHERE proname='ptrack_version'::name",
 							  0, NULL);
 
 		if (PQntuples(res_db) == 0)
