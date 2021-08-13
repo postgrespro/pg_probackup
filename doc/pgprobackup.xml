@@ -143,7 +143,7 @@ doc/src/sgml/pgprobackup.sgml
    <arg choice="plain"><option>--wal-file-name</option> <replaceable>wal_file_name</replaceable></arg>
    <arg rep="repeat"><replaceable>option</replaceable></arg>
   </cmdsynopsis>
-  <cmdsynopsis condition="12+">
+  <cmdsynopsis>
    <command>pg_probackup</command>
    <arg choice="plain"><option>catchup</option></arg>
    <arg choice="plain"><option>-b</option> <replaceable>catchup_mode</replaceable></arg>
@@ -291,7 +291,7 @@ doc/src/sgml/pgprobackup.sgml
         Partial restore: restoring only the specified databases.
       </para>
     </listitem>
-    <listitem condition="12+">
+    <listitem>
       <para>
         Catchup: cloning a <productname>PostgreSQL</productname> instance for a fallen-behind standby server to <quote>catch up</quote> with master.
       </para>
@@ -1089,7 +1089,7 @@ GRANT SELECT ON TABLE pg_catalog.pg_database TO backup;
             mode: <xref linkend="pbk-add-instance"/>,
             <xref linkend="pbk-backup"/>,
             <xref linkend="pbk-restore"/>,
-            <phrase condition="12+"><xref linkend="pbk-catchup"/>,</phrase>
+            <xref linkend="pbk-catchup"/>,
             <xref linkend="pbk-archive-push"/>, and
             <xref linkend="pbk-archive-get"/>.
           </para>
@@ -2089,7 +2089,7 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
       <xref linkend="pbk-restore"/>,
       <xref linkend="pbk-merge"/>,
       <xref linkend="pbk-delete"/>,
-      <phrase condition="12+"><xref linkend="pbk-catchup"/>,</phrase>
+      <xref linkend="pbk-catchup"/>,
       <xref linkend="pbk-checkdb"/> and
       <xref linkend="pbk-validate"/> processes can be
       executed on several parallel threads. This can significantly
@@ -3408,7 +3408,7 @@ pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replace
 
 </refsect2>
 
-  <refsect2 id="pbk-creating-backup-to-catchup" condition="12+">
+  <refsect2 id="pbk-creating-backup-to-catchup">
     <title>Cloning and Synchronizing <productname>PostgreSQL</productname> Instance</title>
     <para>
       <application>pg_probackup</application> can create a copy of a <productname>PostgreSQL</productname>
@@ -4449,7 +4449,7 @@ pg_probackup archive-get -B <replaceable>backup_dir</replaceable> --instance <re
       </para>
     </refsect3>
 
-    <refsect3 id="pbk-catchup" xreflabel="catchup" condition="12+">
+    <refsect3 id="pbk-catchup" xreflabel="catchup">
       <title>catchup</title>
       <programlisting>
 pg_probackup catchup -b <replaceable>catchup_mode</replaceable>
@@ -5188,7 +5188,7 @@ pg_probackup catchup -b <replaceable>catchup_mode</replaceable>
       <para>
         You can use these options together with
         <xref linkend="pbk-backup"/>
-        <phrase condition="12+">, <xref linkend="pbk-catchup"/>,</phrase> and
+        , <xref linkend="pbk-catchup"/>, and
         <xref linkend="pbk-checkdb"/> commands.
       </para>
       <para>
@@ -5479,7 +5479,7 @@ pg_probackup catchup -b <replaceable>catchup_mode</replaceable>
         used with <xref linkend="pbk-add-instance"/>,
         <xref linkend="pbk-set-config"/>,
         <xref linkend="pbk-backup"/>,
-        <phrase condition="12+"><xref linkend="pbk-catchup"/>,</phrase>
+        <xref linkend="pbk-catchup"/>,
         <xref linkend="pbk-restore"/>,
         <xref linkend="pbk-archive-push"/>, and
         <xref linkend="pbk-archive-get"/> commands.
