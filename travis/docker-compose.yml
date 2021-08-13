@@ -1,2 +1,17 @@
-tests:
-    build: .
+version: "3.7"
+services:
+    tests:
+        build:
+            context: .
+
+        cap_add:
+            - SYS_PTRACE
+
+        security_opt:
+            - seccomp=unconfined
+
+        # don't work
+        #sysctls:
+        #    kernel.yama.ptrace_scope: 0
+        privileged: true
+
