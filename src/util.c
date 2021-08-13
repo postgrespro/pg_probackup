@@ -167,7 +167,7 @@ get_current_timeline(PGconn *conn)
 	char	   *val;
 
 	res = pgut_execute_extended(conn,
-				   "SELECT timeline_id FROM pg_control_checkpoint()", 0, NULL, true, true);
+				   "SELECT timeline_id FROM pg_catalog.pg_control_checkpoint()", 0, NULL, true, true);
 
 	if (PQresultStatus(res) == PGRES_TUPLES_OK)
 		val = PQgetvalue(res, 0, 0);

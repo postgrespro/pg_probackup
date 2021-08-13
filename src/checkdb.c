@@ -357,10 +357,10 @@ get_index_list(const char *dbname, bool first_db_with_amcheck,
 
 	res = pgut_execute(db_conn, "SELECT "
 								"extname, nspname, extversion "
-								"FROM pg_namespace n "
-								"JOIN pg_extension e "
+								"FROM pg_catalog.pg_namespace n "
+								"JOIN pg_catalog.pg_extension e "
 								"ON n.oid=e.extnamespace "
-								"WHERE e.extname IN ('amcheck', 'amcheck_next') "
+								"WHERE e.extname IN ('amcheck'::name, 'amcheck_next'::name) "
 								"ORDER BY extversion DESC "
 								"LIMIT 1",
 								0, NULL);
@@ -556,8 +556,8 @@ do_amcheck(ConnectionOptions conn_opt, PGconn *conn)
 
 	res_db = pgut_execute(conn,
 						"SELECT datname, oid, dattablespace "
-						"FROM pg_database "
-						"WHERE datname NOT IN ('template0', 'template1')",
+						"FROM pg_catalog.pg_database "
+						"WHERE datname NOT IN ('template0'::name, 'template1'::name)",
 						  0, NULL);
 
 	/* we don't need this connection anymore */

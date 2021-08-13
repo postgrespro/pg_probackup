@@ -82,6 +82,12 @@ which pg_config
 echo "############### pg_config:"
 pg_config
 
+# Show kernel parameters
+echo "############### kernel params:"
+cat /proc/sys/kernel/yama/ptrace_scope
+sudo sysctl kernel.yama.ptrace_scope=0
+cat /proc/sys/kernel/yama/ptrace_scope
+
 # Build and install pg_probackup (using PG_CPPFLAGS and SHLIB_LINK for gcov)
 echo "############### Compiling and installing pg_probackup:"
 # make USE_PGXS=1 PG_CPPFLAGS="-coverage" SHLIB_LINK="-coverage" top_srcdir=$CUSTOM_PG_SRC install
