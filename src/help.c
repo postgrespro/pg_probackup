@@ -1053,7 +1053,7 @@ help_catchup(void)
 
 	printf(_("  -T, --tablespace-mapping=OLDDIR=NEWDIR\n"));
 	printf(_("                                   relocate the tablespace from directory OLDDIR to NEWDIR\n"));
-	printf(_("  -x, --exclude-path=path_prefix   files with path_prefix (absolute or relative to pgdata) will be\n"));
+	printf(_("  -x, --exclude-path=path_prefix   files with path_prefix (relative to pgdata) will be\n"));
 	printf(_("                                   excluded from catchup (can be used multiple times)\n"));
 	printf(_("                                   Dangerous option! Use at your own risk!\n"));
 

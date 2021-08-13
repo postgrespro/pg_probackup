@@ -4550,8 +4550,8 @@ pg_probackup catchup -b <replaceable>catchup_mode</replaceable>
       <listitem>
       <para>
         Specifies a prefix for files to exclude from the synchronization of <productname>PostgreSQL</productname>
-        instances during copying. The prefix must contain a path reative to the data directory of an instance<!--or
-        an absolute path-->. The path can be on the source or destination server.
+        instances during copying. The prefix must contain a path relative to the data directory of an instance<!--or
+        an absolute path. The path can be on the source or destination server-->.
         If the prefix specifies a directory,
         all files in this directory will not be synchronized.
         <warning>

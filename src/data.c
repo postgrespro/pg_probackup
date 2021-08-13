@@ -2218,7 +2218,8 @@ send_pages(const char *to_fullpath, const char *from_fullpath,
 /*
  * Copy local data file just as send_pages but without attaching additional header and compression
  */
-int copy_pages(const char *to_fullpath, const char *from_fullpath,
+int
+copy_pages(const char *to_fullpath, const char *from_fullpath,
 			   pgFile *file, XLogRecPtr sync_lsn,
 			   uint32 checksum_version, bool use_pagemap,
 			   BackupMode backup_mode)
