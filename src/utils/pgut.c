@@ -962,9 +962,18 @@ pgut_strndup(const char *str, size_t n)
 	if (str == NULL)
 		return NULL;
 
+#if _POSIX_C_SOURCE >= 200809L
 	if ((ret = strndup(str, n)) == NULL)
 		elog(ERROR, "could not duplicate string \"%s\": %s",
 			str, strerror(errno));
+#else /* WINDOWS doesn't have strndup() */
+        if ((ret = malloc(n + 1)) == NULL)
+		elog(ERROR, "could not duplicate string \"%s\": %s",
+			str, strerror(errno));
+
+        memcpy(ret, str, n);
+        ret[n] = '\0';
+#endif
 	return ret;
 }
 
