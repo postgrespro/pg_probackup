@@ -123,19 +123,24 @@ pg_is_ptrack_enabled(PGconn *backup_conn, int ptrack_version_num)
 	PGresult   *res_db;
 	bool		result = false;
 
-	if (ptrack_version_num == 200)
-	{
-		res_db = pgut_execute(backup_conn, "SHOW ptrack_map_size", 0, NULL);
-		result = strcmp(PQgetvalue(res_db, 0, 0), "0") != 0;
-	}
-	else
+	if (ptrack_version_num > 200)
 	{
 		res_db = pgut_execute(backup_conn, "SHOW ptrack.map_size", 0, NULL);
 		result = strcmp(PQgetvalue(res_db, 0, 0), "0") != 0 &&
 				 strcmp(PQgetvalue(res_db, 0, 0), "-1") != 0;
+		PQclear(res_db);
+	}
+	else if (ptrack_version_num == 200)
+	{
+		res_db = pgut_execute(backup_conn, "SHOW ptrack_map_size", 0, NULL);
+		result = strcmp(PQgetvalue(res_db, 0, 0), "0") != 0;
+		PQclear(res_db);
+	}
+	else
+	{
+		result = false;
 	}
 
-	PQclear(res_db);
 	return result;
 }
 

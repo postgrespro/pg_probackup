@@ -263,7 +263,7 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 		fio_mkdir(stream_xlog_path, DIR_PERMISSION, FIO_BACKUP_HOST);
 
 		start_WAL_streaming(backup_conn, stream_xlog_path, &instance_config.conn_opt,
-							current.start_lsn, current.tli);
+							current.start_lsn, current.tli, true);
 
 		/* Make sure that WAL streaming is working
 		 * PAGE backup in stream mode is waited twice, first for
@@ -2051,8 +2051,6 @@ backup_files(void *arg)
 							 instance_config.compress_alg,
 							 instance_config.compress_level,
 							 arguments->nodeInfo->checksum_version,
-							 arguments->nodeInfo->ptrack_version_num,
-							 arguments->nodeInfo->ptrack_schema,
 							 arguments->hdr_map, false);
 		}
 		else
@@ -2350,7 +2348,7 @@ calculate_datasize_of_filelist(parray *filelist)
 	{
 		pgFile	   *file = (pgFile *) parray_get(filelist, i);
 
-		if (file->external_dir_num != 0)
+		if (file->external_dir_num != 0 || file->excluded)
 			continue;
 
 		if (S_ISDIR(file->mode))

@@ -124,7 +124,7 @@ help_pg_probackup(void)
 
 	printf(_("\n  %s backup -B backup-path -b backup-mode --instance=instance_name\n"), PROGRAM_NAME);
 	printf(_("                 [-D pgdata-path] [-C]\n"));
-	printf(_("                 [--stream [-S slot-name]] [--temp-slot]\n"));
+	printf(_("                 [--stream [-S slot-name] [--temp-slot]]\n"));
 	printf(_("                 [--backup-pg-log] [-j num-threads] [--progress]\n"));
 	printf(_("                 [--no-validate] [--skip-block-validation]\n"));
 	printf(_("                 [--external-dirs=external-directories-paths]\n"));
@@ -251,9 +251,10 @@ help_pg_probackup(void)
 	printf(_("\n  %s catchup  -b catchup-mode\n"), PROGRAM_NAME);
 	printf(_("                 --source-pgdata=path_to_pgdata_on_remote_server\n"));
 	printf(_("                 --destination-pgdata=path_to_local_dir\n"));
-	printf(_("                 [--stream [-S slot-name]] [--temp-slot]\n"));
+	printf(_("                 [--stream [-S slot-name] [--temp-slot | --perm-slot]]\n"));
 	printf(_("                 [-j num-threads]\n"));
 	printf(_("                 [-T OLDDIR=NEWDIR]\n"));
+	printf(_("                 [--exclude-path=path_prefix]\n"));
 	printf(_("                 [-d dbname] [-h host] [-p port] [-U username]\n"));
 	printf(_("                 [-w --no-password] [-W --password]\n"));
 	printf(_("                 [--remote-proto] [--remote-host]\n"));
@@ -295,7 +296,7 @@ help_backup(void)
 {
 	printf(_("\n%s backup -B backup-path -b backup-mode --instance=instance_name\n"), PROGRAM_NAME);
 	printf(_("                 [-D pgdata-path] [-C]\n"));
-	printf(_("                 [--stream [-S slot-name] [--temp-slot]\n"));
+	printf(_("                 [--stream [-S slot-name] [--temp-slot]]\n"));
 	printf(_("                 [--backup-pg-log] [-j num-threads] [--progress]\n"));
 	printf(_("                 [--no-validate] [--skip-block-validation]\n"));
 	printf(_("                 [-E external-directories-paths]\n"));
@@ -1031,9 +1032,10 @@ help_catchup(void)
 	printf(_("\n%s catchup  -b catchup-mode\n"), PROGRAM_NAME);
 	printf(_("                 --source-pgdata=path_to_pgdata_on_remote_server\n"));
 	printf(_("                 --destination-pgdata=path_to_local_dir\n"));
-	printf(_("                 [--stream [-S slot-name]] [--temp-slot]\n"));
+	printf(_("                 [--stream [-S slot-name]] [--temp-slot | --perm-slot]\n"));
 	printf(_("                 [-j num-threads]\n"));
 	printf(_("                 [-T OLDDIR=NEWDIR]\n"));
+	printf(_("                 [--exclude-path=path_prefix]\n"));
 	printf(_("                 [-d dbname] [-h host] [-p port] [-U username]\n"));
 	printf(_("                 [-w --no-password] [-W --password]\n"));
 	printf(_("                 [--remote-proto] [--remote-host]\n"));
@@ -1045,11 +1047,15 @@ help_catchup(void)
 	printf(_("      --stream                     stream the transaction log (only supported mode)\n"));
 	printf(_("  -S, --slot=SLOTNAME              replication slot to use\n"));
 	printf(_("      --temp-slot                  use temporary replication slot\n"));
+	printf(_("  -P  --perm-slot                  create permanent replication slot\n"));
 
 	printf(_("  -j, --threads=NUM                number of parallel threads\n"));
 
 	printf(_("  -T, --tablespace-mapping=OLDDIR=NEWDIR\n"));
 	printf(_("                                   relocate the tablespace from directory OLDDIR to NEWDIR\n"));
+	printf(_("  -x, --exclude-path=path_prefix   files with path_prefix (relative to pgdata) will be\n"));
+	printf(_("                                   excluded from catchup (can be used multiple times)\n"));
+	printf(_("                                   Dangerous option! Use at your own risk!\n"));
 
 	printf(_("\n  Connection options:\n"));
 	printf(_("  -U, --pguser=USERNAME            user name to connect as (default: current local user)\n"));

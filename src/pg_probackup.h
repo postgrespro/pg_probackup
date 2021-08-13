@@ -86,6 +86,10 @@ extern const char  *PROGRAM_EMAIL;
 #define HEADER_MAP  			"page_header_map"
 #define HEADER_MAP_TMP  		"page_header_map_tmp"
 
+/* default replication slot names */
+#define DEFAULT_TEMP_SLOT_NAME	 "pg_probackup_slot";
+#define DEFAULT_PERMANENT_SLOT_NAME	 "pg_probackup_perm_slot";
+
 /* Timeout defaults */
 #define ARCHIVE_TIMEOUT_DEFAULT		300
 #define REPLICA_TIMEOUT_DEFAULT		300
@@ -278,6 +282,7 @@ typedef struct pgFile
 	pg_crc32 hdr_crc;		/* CRC value of header file: name_hdr */
 	pg_off_t hdr_off;       /* offset in header map */
 	int      hdr_size;      /* length of headers */
+	bool	excluded;	/* excluded via --exclude-path option */
 } pgFile;
 
 typedef struct page_map_entry
@@ -771,11 +776,12 @@ extern bool		stream_wal;
 extern bool		show_color;
 extern bool		progress;
 extern bool     is_archive_cmd; /* true for archive-{get,push} */
-#if PG_VERSION_NUM >= 100000
 /* In pre-10 'replication_slot' is defined in receivelog.h */
 extern char	   *replication_slot;
-#endif
+#if PG_VERSION_NUM >= 100000
 extern bool 	temp_slot;
+#endif
+extern bool perm_slot;
 
 /* backup options */
 extern bool		smooth_checkpoint;
@@ -842,7 +848,8 @@ extern void process_block_change(ForkNumber forknum, RelFileNode rnode,
 								 BlockNumber blkno);
 
 /* in catchup.c */
-extern int do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, bool sync_dest_files);
+extern int do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, bool sync_dest_files,
+	parray *exclude_absolute_paths_list, parray *exclude_relative_paths_list);
 
 /* in restore.c */
 extern int do_restore_or_validate(InstanceState *instanceState,
@@ -1057,11 +1064,15 @@ extern pg_crc32 pgFileGetCRCgz(const char *file_path, bool use_crc32c, bool miss
 
 extern int pgFileMapComparePath(const void *f1, const void *f2);
 extern int pgFileCompareName(const void *f1, const void *f2);
+extern int pgFileCompareNameWithString(const void *f1, const void *f2);
+extern int pgFileCompareRelPathWithString(const void *f1, const void *f2);
 extern int pgFileCompareRelPathWithExternal(const void *f1, const void *f2);
 extern int pgFileCompareRelPathWithExternalDesc(const void *f1, const void *f2);
 extern int pgFileCompareLinked(const void *f1, const void *f2);
 extern int pgFileCompareSize(const void *f1, const void *f2);
 extern int pgFileCompareSizeDesc(const void *f1, const void *f2);
+extern int pgCompareString(const void *str1, const void *str2);
+extern int pgPrefixCompareString(const void *str1, const void *str2);
 extern int pgCompareOid(const void *f1, const void *f2);
 extern void pfilearray_clear_locks(parray *file_list);
 
@@ -1071,14 +1082,11 @@ extern bool check_data_file(ConnectionArgs *arguments, pgFile *file,
 
 
 extern void catchup_data_file(pgFile *file, const char *from_fullpath, const char *to_fullpath,
-								 XLogRecPtr prev_backup_start_lsn, BackupMode backup_mode,
-								 CompressAlg calg, int clevel, uint32 checksum_version,
-								 int ptrack_version_num, const char *ptrack_schema,
-								 bool is_merge, size_t prev_size);
+								 XLogRecPtr sync_lsn, BackupMode backup_mode,
+								 uint32 checksum_version, size_t prev_size);
 extern void backup_data_file(pgFile *file, const char *from_fullpath, const char *to_fullpath,
 							 XLogRecPtr prev_backup_start_lsn, BackupMode backup_mode,
 							 CompressAlg calg, int clevel, uint32 checksum_version,
-							 int ptrack_version_num, const char *ptrack_schema,
 							 HeaderMap *hdr_map, bool missing_ok);
 extern void backup_non_data_file(pgFile *file, pgFile *prev_file,
 								 const char *from_fullpath, const char *to_fullpath,
@@ -1197,11 +1205,11 @@ extern FILE* open_local_file_rw(const char *to_fullpath, char **out_buf, uint32 
 extern int send_pages(const char *to_fullpath, const char *from_fullpath,
 					  pgFile *file, XLogRecPtr prev_backup_start_lsn, CompressAlg calg, int clevel,
 					  uint32 checksum_version, bool use_pagemap, BackupPageHeader2 **headers,
-					  BackupMode backup_mode, int ptrack_version_num, const char *ptrack_schema);
+					  BackupMode backup_mode);
 extern int copy_pages(const char *to_fullpath, const char *from_fullpath,
 					  pgFile *file, XLogRecPtr prev_backup_start_lsn,
 					  uint32 checksum_version, bool use_pagemap,
-					  BackupMode backup_mode, int ptrack_version_num, const char *ptrack_schema);
+					  BackupMode backup_mode);
 
 /* FIO */
 extern void setMyLocation(ProbackupSubcmd const subcmd);
@@ -1212,8 +1220,7 @@ extern int fio_send_pages(const char *to_fullpath, const char *from_fullpath, pg
 	                      BackupPageHeader2 **headers);
 extern int fio_copy_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
 	                      XLogRecPtr horizonLsn, int calg, int clevel, uint32 checksum_version,
-	                      bool use_pagemap, BlockNumber *err_blknum, char **errormsg,
-	                      BackupPageHeader2 **headers);
+	                      bool use_pagemap, BlockNumber *err_blknum, char **errormsg);
 /* return codes for fio_send_pages */
 extern int fio_send_file_gz(const char *from_fullpath, const char *to_fullpath, FILE* out, char **errormsg);
 extern int fio_send_file(const char *from_fullpath, const char *to_fullpath, FILE* out,
@@ -1265,7 +1272,8 @@ datapagemap_print_debug(datapagemap_t *map);
 extern XLogRecPtr stop_backup_lsn;
 extern void start_WAL_streaming(PGconn *backup_conn, char *stream_dst_path,
 							   ConnectionOptions *conn_opt,
-							   XLogRecPtr startpos, TimeLineID starttli);
+							   XLogRecPtr startpos, TimeLineID starttli,
+							   bool is_backup);
 extern int wait_WAL_streaming_end(parray *backup_files_list);
 extern parray* parse_tli_history_buffer(char *history, TimeLineID tli);
 

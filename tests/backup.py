@@ -1421,8 +1421,10 @@ class BackupTest(ProbackupTest, unittest.TestCase):
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
-            pg_options={
-                'max_wal_size': '40MB', 'default_transaction_read_only': 'on'})
+            pg_options={'max_wal_size': '40MB'})
+
+        if self.get_version(node) < self.version_to_num('10.0'):
+            return unittest.skip('You need PostgreSQL >= 10 for this test')
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -1433,11 +1435,6 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.backup_node(
             backup_dir, 'node', node,
             options=['--stream', '--temp-slot'])
-
-        if self.get_version(node) < self.version_to_num('10.0'):
-            return unittest.skip('You need PostgreSQL >= 10 for this test')
-        else:
-            pg_receivexlog_path = self.get_bin_path('pg_receivewal')
 
         # FULL backup
         self.backup_node(
@@ -3274,7 +3271,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         # FULL backup
         self.backup_node(
             backup_dir, 'node', node,
-            options=['--stream', '--temp-slot'])
+            options=['--stream'])
 
         # DELTA backup
         self.backup_node(

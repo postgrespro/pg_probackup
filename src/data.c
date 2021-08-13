@@ -28,10 +28,10 @@
 typedef struct DataPage
 {
 	BackupPageHeader bph;
-	char		data[BLCKSZ];
+	char            data[BLCKSZ];
 } DataPage;
 
-static bool get_page_header(FILE *in, const char *fullpath, BackupPageHeader* bph,
+static bool get_page_header(FILE *in, const char *fullpath, BackupPageHeader *bph,
 							pg_crc32 *crc, bool use_crc32c);
 
 #ifdef HAVE_LIBZ
@@ -40,9 +40,9 @@ static int32
 zlib_compress(void *dst, size_t dst_size, void const *src, size_t src_size,
 			  int level)
 {
-	uLongf		compressed_size = dst_size;
-	int			rc = compress2(dst, &compressed_size, src, src_size,
-							   level);
+	uLongf 	compressed_size = dst_size;
+	int 	rc = compress2(dst, &compressed_size, src, src_size,
+					   level);
 
 	return rc == Z_OK ? compressed_size : rc;
 }
@@ -51,8 +51,8 @@ zlib_compress(void *dst, size_t dst_size, void const *src, size_t src_size,
 static int32
 zlib_decompress(void *dst, size_t dst_size, void const *src, size_t src_size)
 {
-	uLongf		dest_len = dst_size;
-	int			rc = uncompress(dst, &dest_len, src, src_size);
+	uLongf dest_len = dst_size;
+	int 	rc = uncompress(dst, &dest_len, src, src_size);
 
 	return rc == Z_OK ? dest_len : rc;
 }
@@ -63,7 +63,7 @@ zlib_decompress(void *dst, size_t dst_size, void const *src, size_t src_size)
  * written in the destination buffer, or -1 if compression fails.
  */
 int32
-do_compress(void* dst, size_t dst_size, void const* src, size_t src_size,
+do_compress(void *dst, size_t dst_size, void const *src, size_t src_size,
 			CompressAlg alg, int level, const char **errormsg)
 {
 	switch (alg)
@@ -73,13 +73,13 @@ do_compress(void* dst, size_t dst_size, void const* src, size_t src_size,
 			return -1;
 #ifdef HAVE_LIBZ
 		case ZLIB_COMPRESS:
-			{
-				int32		ret;
-				ret = zlib_compress(dst, dst_size, src, src_size, level);
-				if (ret < Z_OK && errormsg)
-					*errormsg = zError(ret);
-				return ret;
-			}
+		{
+			int32 ret;
+			ret = zlib_compress(dst, dst_size, src, src_size, level);
+			if (ret < Z_OK && errormsg)
+				*errormsg = zError(ret);
+			return ret;
+		}
 #endif
 		case PGLZ_COMPRESS:
 			return pglz_compress(src, src_size, dst, PGLZ_strategy_always);
@@ -93,25 +93,25 @@ do_compress(void* dst, size_t dst_size, void const* src, size_t src_size,
  * decompressed in the destination buffer, or -1 if decompression fails.
  */
 int32
-do_decompress(void* dst, size_t dst_size, void const* src, size_t src_size,
+do_decompress(void *dst, size_t dst_size, void const *src, size_t src_size,
 			  CompressAlg alg, const char **errormsg)
 {
 	switch (alg)
 	{
 		case NONE_COMPRESS:
 		case NOT_DEFINED_COMPRESS:
-		    if (errormsg)
+			if (errormsg)
 				*errormsg = "Invalid compression algorithm";
 			return -1;
 #ifdef HAVE_LIBZ
 		case ZLIB_COMPRESS:
-			{
-				int32		ret;
-				ret = zlib_decompress(dst, dst_size, src, src_size);
-				if (ret < Z_OK && errormsg)
-					*errormsg = zError(ret);
-				return ret;
-			}
+		{
+			int32 ret;
+			ret = zlib_decompress(dst, dst_size, src, src_size);
+			if (ret < Z_OK && errormsg)
+				*errormsg = zError(ret);
+			return ret;
+		}
 #endif
 		case PGLZ_COMPRESS:
 
@@ -124,7 +124,6 @@ do_decompress(void* dst, size_t dst_size, void const* src, size_t src_size,
 
 	return -1;
 }
-
 
 #define ZLIB_MAGIC 0x78
 
@@ -162,7 +161,7 @@ page_may_be_compressed(Page page, CompressAlg alg, uint32 backup_version)
 		/* For zlib we can check page magic:
 		 * https://stackoverflow.com/questions/9050260/what-does-a-zlib-header-look-like
 		 */
-		if (alg == ZLIB_COMPRESS && *(char*)page != ZLIB_MAGIC)
+		if (alg == ZLIB_COMPRESS && *(char *)page != ZLIB_MAGIC)
 		{
 			return false;
 		}
@@ -281,8 +280,6 @@ prepare_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 			 BackupMode backup_mode,
 			 Page page, bool strict,
 			 uint32 checksum_version,
-			 int ptrack_version_num,
-			 const char *ptrack_schema,
 			 const char *from_fullpath,
 			 PageState *page_st)
 {
@@ -404,8 +401,7 @@ prepare_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 			blknum, from_fullpath,
 			file->exists_in_prev ? "true" : "false",
 			(uint32) (page_st->lsn >> 32), (uint32) page_st->lsn,
-			(uint32) (prev_backup_start_lsn >> 32), (uint32) prev_backup_start_lsn
-			);
+			(uint32) (prev_backup_start_lsn >> 32), (uint32) prev_backup_start_lsn);
 		return SkipCurrentPage;
 	}
 
@@ -422,7 +418,7 @@ compress_and_backup_page(pgFile *file, BlockNumber blknum,
 {
 	int         compressed_size = 0;
 	size_t		write_buffer_size = 0;
-	char        write_buffer[BLCKSZ*2];  /* compressed page may require more space than uncompressed */
+	char		write_buffer[BLCKSZ*2]; /* compressed page may require more space than uncompressed */
 	BackupPageHeader* bph = (BackupPageHeader*)write_buffer;
 	const char *errormsg = NULL;
 
@@ -463,16 +459,13 @@ compress_and_backup_page(pgFile *file, BlockNumber blknum,
 	return compressed_size;
 }
 
-/* взята из compress_and_backup_page, но выпилена вся магия заголовков и компрессии, просто копирование 1-в-1 */
+/* Write page as-is. TODO: make it fastpath option in compress_and_backup_page() */
 static int
-copy_page(pgFile *file, BlockNumber blknum,
-						FILE *in, FILE *out, Page page,
-						const char *to_fullpath)
+write_page(pgFile *file, FILE *out, Page page)
 {
 	/* write data page */
 	if (fio_fwrite(out, page, BLCKSZ) != BLCKSZ)
-		elog(ERROR, "File: \"%s\", cannot write at block %u: %s",
-			 to_fullpath, blknum, strerror(errno));
+		return -1;
 
 	file->write_size += BLCKSZ;
 	file->uncompressed_size += BLCKSZ;
@@ -492,13 +485,12 @@ void
 backup_data_file(pgFile *file, const char *from_fullpath, const char *to_fullpath,
 				 XLogRecPtr prev_backup_start_lsn, BackupMode backup_mode,
 				 CompressAlg calg, int clevel, uint32 checksum_version,
-				 int ptrack_version_num, const char *ptrack_schema,
 				 HeaderMap *hdr_map, bool is_merge)
 {
 	int         rc;
 	bool        use_pagemap;
-	char       *errmsg = NULL;
-	BlockNumber	err_blknum = 0;
+	char	   *errmsg = NULL;
+	BlockNumber err_blknum = 0;
 	/* page headers */
 	BackupPageHeader2 *headers = NULL;
 
@@ -547,7 +539,7 @@ backup_data_file(pgFile *file, const char *from_fullpath, const char *to_fullpat
 	 * Such files should be fully copied.
 	 */
 
-	if 	(file->pagemap.bitmapsize == PageBitmapIsEmpty ||
+	if (file->pagemap.bitmapsize == PageBitmapIsEmpty ||
 		 file->pagemap_isabsent || !file->exists_in_prev ||
 		 !file->pagemap.bitmap)
 		use_pagemap = false;
@@ -557,7 +549,6 @@ backup_data_file(pgFile *file, const char *from_fullpath, const char *to_fullpat
 	/* Remote mode */
 	if (fio_is_remote(FIO_DB_HOST))
 	{
-
 		rc = fio_send_pages(to_fullpath, from_fullpath, file,
 							/* send prev backup START_LSN */
 							(backup_mode == BACKUP_MODE_DIFF_DELTA || backup_mode == BACKUP_MODE_DIFF_PTRACK) &&
@@ -576,7 +567,7 @@ backup_data_file(pgFile *file, const char *from_fullpath, const char *to_fullpat
 						(backup_mode == BACKUP_MODE_DIFF_DELTA || backup_mode == BACKUP_MODE_DIFF_PTRACK) &&
 						file->exists_in_prev ? prev_backup_start_lsn : InvalidXLogRecPtr,
 						calg, clevel, checksum_version, use_pagemap,
-						&headers, backup_mode, ptrack_version_num, ptrack_schema);
+						&headers, backup_mode);
 	}
 
 	/* check for errors */
@@ -646,30 +637,21 @@ cleanup:
 }
 
 /*
- * Backup data file in the from_root directory to the to_root directory with
- * same relative path. If prev_backup_start_lsn is not NULL, only pages with
+ * Catchup data file in the from_root directory to the to_root directory with
+ * same relative path. If sync_lsn is not NULL, only pages with equal or
  * higher lsn will be copied.
  * Not just copy file, but read it block by block (use bitmap in case of
- * incremental backup), validate checksum, optionally compress and write to
- * backup with special header.
+ * incremental catchup), validate page checksum.
  */
 void
 catchup_data_file(pgFile *file, const char *from_fullpath, const char *to_fullpath,
-				 XLogRecPtr prev_backup_start_lsn, BackupMode backup_mode,
-				 CompressAlg calg, int clevel, uint32 checksum_version,
-				 int ptrack_version_num, const char *ptrack_schema,
-				 bool is_merge, size_t prev_size)
+				  XLogRecPtr sync_lsn, BackupMode backup_mode,
+				  uint32 checksum_version, size_t prev_size)
 {
 	int         rc;
 	bool        use_pagemap;
 	char       *errmsg = NULL;
 	BlockNumber	err_blknum = 0;
-	/* page headers */
-	BackupPageHeader2 *headers = NULL;
-
-	/* sanity */
-	if (file->size % BLCKSZ != 0)
-		elog(WARNING, "File: \"%s\", invalid file size %zu", from_fullpath, file->size);
 
 	/*
 	 * Compute expected number of blocks in the file.
@@ -679,7 +661,7 @@ catchup_data_file(pgFile *file, const char *from_fullpath, const char *to_fullpa
 	file->n_blocks = file->size/BLCKSZ;
 
 	/*
-	 * Skip unchanged file only if it exists in previous backup.
+	 * Skip unchanged file only if it exists in destination directory.
 	 * This way we can correctly handle null-sized files which are
 	 * not tracked by pagemap and thus always marked as unchanged.
 	 */
@@ -688,8 +670,7 @@ catchup_data_file(pgFile *file, const char *from_fullpath, const char *to_fullpa
 		file->exists_in_prev && file->size == prev_size && !file->pagemap_isabsent)
 	{
 		/*
-		 * There are no changed blocks since last backup. We want to make
-		 * incremental backup, so we should exit.
+		 * There are none changed pages.
 		 */
 		file->write_size = BYTES_INVALID;
 		return;
@@ -699,16 +680,10 @@ catchup_data_file(pgFile *file, const char *from_fullpath, const char *to_fullpa
 	file->read_size = 0;
 	file->write_size = 0;
 	file->uncompressed_size = 0;
-	INIT_FILE_CRC32(true, file->crc);
 
 	/*
-	 * Read each page, verify checksum and write it to backup.
-	 * If page map is empty or file is not present in previous backup
-	 * backup all pages of the relation.
-	 *
-	 * In PTRACK 1.x there was a problem
-	 * of data files with missing _ptrack map.
-	 * Such files should be fully copied.
+	 * If page map is empty or file is not present in destination directory,
+	 * then copy backup all pages of the relation.
 	 */
 
 	if (file->pagemap.bitmapsize == PageBitmapIsEmpty ||
@@ -726,29 +701,28 @@ catchup_data_file(pgFile *file, const char *from_fullpath, const char *to_fullpa
 	{
 		rc = fio_copy_pages(to_fullpath, from_fullpath, file,
 							/* send prev backup START_LSN */
-							(backup_mode == BACKUP_MODE_DIFF_DELTA || backup_mode == BACKUP_MODE_DIFF_PTRACK) &&
-							file->exists_in_prev ? prev_backup_start_lsn : InvalidXLogRecPtr,
-							calg, clevel, checksum_version,
+							((backup_mode == BACKUP_MODE_DIFF_DELTA || backup_mode == BACKUP_MODE_DIFF_PTRACK) &&
+							  file->exists_in_prev) ? sync_lsn : InvalidXLogRecPtr,
+							NONE_COMPRESS, 1, checksum_version,
 							/* send pagemap if any */
 							use_pagemap,
 							/* variables for error reporting */
-							&err_blknum, &errmsg, &headers);
+							&err_blknum, &errmsg);
 	}
 	else
 	{
 		/* TODO: stop handling errors internally */
 		rc = copy_pages(to_fullpath, from_fullpath, file,
 						/* send prev backup START_LSN */
-						(backup_mode == BACKUP_MODE_DIFF_DELTA || backup_mode == BACKUP_MODE_DIFF_PTRACK) &&
-						file->exists_in_prev ? prev_backup_start_lsn : InvalidXLogRecPtr,
-						checksum_version, use_pagemap,
-						backup_mode, ptrack_version_num, ptrack_schema);
+						((backup_mode == BACKUP_MODE_DIFF_DELTA || backup_mode == BACKUP_MODE_DIFF_PTRACK) &&
+						  file->exists_in_prev) ? sync_lsn : InvalidXLogRecPtr,
+						checksum_version, use_pagemap, backup_mode);
 	}
 
 	/* check for errors */
 	if (rc == FILE_MISSING)
 	{
-		elog(is_merge ? ERROR : LOG, "File not found: \"%s\"", from_fullpath);
+		elog(LOG, "File not found: \"%s\"", from_fullpath);
 		file->write_size = FILE_NOT_FOUND;
 		goto cleanup;
 	}
@@ -784,11 +758,6 @@ catchup_data_file(pgFile *file, const char *from_fullpath, const char *to_fullpa
 
 	file->read_size = rc * BLCKSZ;
 
-	/* refresh n_blocks for FULL and DELTA */
-	if (backup_mode == BACKUP_MODE_FULL ||
-	    backup_mode == BACKUP_MODE_DIFF_DELTA)
-		file->n_blocks = file->read_size / BLCKSZ;
-
 	/* Determine that file didn`t changed in case of incremental catchup */
 	if (backup_mode != BACKUP_MODE_FULL &&
 		file->exists_in_prev &&
@@ -799,13 +768,8 @@ catchup_data_file(pgFile *file, const char *from_fullpath, const char *to_fullpa
 	}
 
 cleanup:
-
-	/* finish CRC calculation */
-	FIN_FILE_CRC32(true, file->crc);
-
 	pg_free(errmsg);
 	pg_free(file->pagemap.bitmap);
-	pg_free(headers);
 }
 
 /*
@@ -816,9 +780,9 @@ cleanup:
  */
 void
 backup_non_data_file(pgFile *file, pgFile *prev_file,
-				 const char *from_fullpath, const char *to_fullpath,
-				 BackupMode backup_mode, time_t parent_backup_time,
-				 bool missing_ok)
+					 const char *from_fullpath, const char *to_fullpath,
+					 BackupMode backup_mode, time_t parent_backup_time,
+					 bool missing_ok)
 {
 	/* special treatment for global/pg_control */
 	if (file->external_dir_num == 0 && strcmp(file->rel_path, XLOG_CONTROL_FILE) == 0)
@@ -891,7 +855,7 @@ restore_data_file(parray *parent_chain, pgFile *dest_file, FILE *out,
 		/* page headers */
 		BackupPageHeader2 *headers = NULL;
 
-		pgBackup   *backup = (pgBackup *) parray_get(parent_chain, backup_seq);
+		pgBackup *backup = (pgBackup *) parray_get(parent_chain, backup_seq);
 
 		if (use_bitmap)
 			backup_seq++;
@@ -899,7 +863,7 @@ restore_data_file(parray *parent_chain, pgFile *dest_file, FILE *out,
 			backup_seq--;
 
 		/* lookup file in intermediate backup */
-		res_file =  parray_bsearch(backup->files, dest_file, pgFileCompareRelPathWithExternal);
+		res_file = parray_bsearch(backup->files, dest_file, pgFileCompareRelPathWithExternal);
 		tmp_file = (res_file) ? *res_file : NULL;
 
 		/* Destination file is not exists yet at this moment */
@@ -951,13 +915,13 @@ restore_data_file(parray *parent_chain, pgFile *dest_file, FILE *out,
 		 * copy the file from backup.
 		 */
 		total_write_len += restore_data_file_internal(in, out, tmp_file,
-					  parse_program_version(backup->program_version),
-					  from_fullpath, to_fullpath, dest_file->n_blocks,
-					  use_bitmap ? &(dest_file)->pagemap : NULL,
-					  checksum_map, backup->checksum_version,
-					  /* shiftmap can be used only if backup state precedes the shift */
-					  backup->stop_lsn <= shift_lsn ? lsn_map : NULL,
-					  headers);
+													  parse_program_version(backup->program_version),
+													  from_fullpath, to_fullpath, dest_file->n_blocks,
+													  use_bitmap ? &(dest_file)->pagemap : NULL,
+													  checksum_map, backup->checksum_version,
+													  /* shiftmap can be used only if backup state precedes the shift */
+													  backup->stop_lsn <= shift_lsn ? lsn_map : NULL,
+													  headers);
 
 		if (fclose(in) != 0)
 			elog(ERROR, "Cannot close file \"%s\": %s", from_fullpath,
@@ -983,15 +947,15 @@ restore_data_file(parray *parent_chain, pgFile *dest_file, FILE *out,
  */
 size_t
 restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_version,
-					  const char *from_fullpath, const char *to_fullpath, int nblocks,
-					  datapagemap_t *map, PageState *checksum_map, int checksum_version,
-					  datapagemap_t *lsn_map, BackupPageHeader2 *headers)
+						   const char *from_fullpath, const char *to_fullpath, int nblocks,
+						   datapagemap_t *map, PageState *checksum_map, int checksum_version,
+						   datapagemap_t *lsn_map, BackupPageHeader2 *headers)
 {
 	BlockNumber	blknum = 0;
-	int  	n_hdr = -1;
-	size_t	write_len = 0;
-	off_t   cur_pos_out = 0;
-	off_t   cur_pos_in = 0;
+	int n_hdr = -1;
+	size_t write_len = 0;
+	off_t cur_pos_out = 0;
+	off_t cur_pos_in = 0;
 
 	/* should not be possible */
 	Assert(!(backup_version >= 20400 && file->n_headers <= 0));
@@ -1007,7 +971,7 @@ restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_vers
 	 * but should never happen in case of blocks from FULL backup.
 	 */
 	if (fio_fseek(out, cur_pos_out) < 0)
-			elog(ERROR, "Cannot seek block %u of \"%s\": %s",
+		elog(ERROR, "Cannot seek block %u of \"%s\": %s",
 				blknum, to_fullpath, strerror(errno));
 
 	for (;;)
@@ -1020,7 +984,7 @@ restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_vers
 		bool		is_compressed = false;
 
 		/* incremental restore vars */
-		uint16     page_crc = 0;
+		uint16 page_crc = 0;
 		XLogRecPtr page_lsn = InvalidXLogRecPtr;
 
 		/* check for interrupt */
@@ -1072,7 +1036,6 @@ restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_vers
 					 * Now we have to deal with backward compatibility.
 					 */
 					read_len = MAXALIGN(compressed_size);
-
 			}
 			else
 				break;
@@ -1183,8 +1146,7 @@ restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_vers
 		 * page_may_be_compressed() function.
 		 */
 		if (compressed_size != BLCKSZ
-			|| page_may_be_compressed(page.data, file->compress_alg,
-									  backup_version))
+			|| page_may_be_compressed(page.data, file->compress_alg, backup_version))
 		{
 			is_compressed = true;
 		}
@@ -1244,10 +1206,10 @@ restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_vers
  */
 void
 restore_non_data_file_internal(FILE *in, FILE *out, pgFile *file,
-					  const char *from_fullpath, const char *to_fullpath)
+							   const char *from_fullpath, const char *to_fullpath)
 {
-	size_t     read_len = 0;
-	char      *buf = pgut_malloc(STDIO_BUFSIZE); /* 64kB buffer */
+	size_t read_len = 0;
+	char  *buf = pgut_malloc(STDIO_BUFSIZE); /* 64kB buffer */
 
 	/* copy content */
 	for (;;)
@@ -1310,7 +1272,7 @@ restore_non_data_file(parray *parent_chain, pgBackup *dest_backup,
 		tmp_backup = dest_backup->parent_backup_link;
 		while (tmp_backup)
 		{
-			pgFile	   **res_file = NULL;
+			pgFile	**res_file = NULL;
 
 			/* lookup file in intermediate backup */
 			res_file =  parray_bsearch(tmp_backup->files, dest_file, pgFileCompareRelPathWithExternal);
@@ -1420,10 +1382,10 @@ backup_non_data_file_internal(const char *from_fullpath,
 							const char *to_fullpath, pgFile *file,
 							bool missing_ok)
 {
-	FILE       *in = NULL;
-	FILE       *out = NULL;
-	ssize_t     read_len = 0;
-	char	   *buf = NULL;
+	FILE	*in = NULL;
+	FILE	*out = NULL;
+	ssize_t  read_len = 0;
+	char	*buf = NULL;
 
 	INIT_FILE_CRC32(true, file->crc);
 
@@ -1553,7 +1515,7 @@ cleanup:
  */
 bool
 create_empty_file(fio_location from_location, const char *to_root,
-		  fio_location to_location, pgFile *file)
+				  fio_location to_location, pgFile *file)
 {
 	char		to_path[MAXPGPATH];
 	FILE	   *out;
@@ -1650,7 +1612,7 @@ check_data_file(ConnectionArgs *arguments, pgFile *file,
 	BlockNumber	nblocks = 0;
 	int			page_state;
 	char		curr_page[BLCKSZ];
-	bool 		is_valid = true;
+	bool		is_valid = true;
 
 	in = fopen(from_fullpath, PG_BINARY_R);
 	if (in == NULL)
@@ -1686,7 +1648,7 @@ check_data_file(ConnectionArgs *arguments, pgFile *file,
 		page_state = prepare_page(file, InvalidXLogRecPtr,
 								  blknum, in, BACKUP_MODE_FULL,
 								  curr_page, false, checksum_version,
-								  0, NULL, from_fullpath, &page_st);
+								  from_fullpath, &page_st);
 
 		if (page_state == PageIsTruncated)
 			break;
@@ -1744,9 +1706,9 @@ validate_file_pages(pgFile *file, const char *fullpath, XLogRecPtr stop_lsn,
 	while (true)
 	{
 		int		rc = 0;
-		size_t      len = 0;
+		size_t		len = 0;
 		DataPage	compressed_page; /* used as read buffer */
-		int	        compressed_size = 0;
+		int			compressed_size = 0;
 		DataPage	page;
 		BlockNumber blknum = 0;
 		PageState	page_st;
@@ -1834,7 +1796,7 @@ validate_file_pages(pgFile *file, const char *fullpath, XLogRecPtr stop_lsn,
 			|| page_may_be_compressed(compressed_page.data, file->compress_alg,
 									  backup_version))
 		{
-			int32		uncompressed_size = 0;
+			int32       uncompressed_size = 0;
 			const char *errormsg = NULL;
 
 			uncompressed_size = do_decompress(page.data, BLCKSZ,
@@ -1862,13 +1824,13 @@ validate_file_pages(pgFile *file, const char *fullpath, XLogRecPtr stop_lsn,
 			}
 
 			rc = validate_one_page(page.data,
-				                       file->segno * RELSEG_SIZE + blknum,
-									   stop_lsn, &page_st, checksum_version);
+								   file->segno * RELSEG_SIZE + blknum,
+								   stop_lsn, &page_st, checksum_version);
 		}
 		else
 			rc = validate_one_page(compressed_page.data,
-									   file->segno * RELSEG_SIZE + blknum,
-									   stop_lsn, &page_st, checksum_version);
+								   file->segno * RELSEG_SIZE + blknum,
+								   stop_lsn, &page_st, checksum_version);
 
 		switch (rc)
 		{
@@ -1986,11 +1948,11 @@ datapagemap_t *
 get_lsn_map(const char *fullpath, uint32 checksum_version,
 			int n_blocks, XLogRecPtr shift_lsn, BlockNumber segmentno)
 {
-	FILE           *in = NULL;
-	BlockNumber     blknum = 0;
-	char            read_buffer[BLCKSZ];
-	char            in_buf[STDIO_BUFSIZE];
-	datapagemap_t  *lsn_map = NULL;
+	FILE          *in = NULL;
+	BlockNumber	   blknum = 0;
+	char		   read_buffer[BLCKSZ];
+	char		   in_buf[STDIO_BUFSIZE];
+	datapagemap_t *lsn_map = NULL;
 
 	Assert(shift_lsn > 0);
 
@@ -2069,10 +2031,10 @@ get_page_header(FILE *in, const char *fullpath, BackupPageHeader* bph,
 		else if (read_len != 0 && feof(in))
 			elog(ERROR,
 				 "Odd size page found at offset %lu of \"%s\"",
-				  ftell(in), fullpath);
+				 ftello(in), fullpath);
 		else
 			elog(ERROR, "Cannot read header at offset %lu of \"%s\": %s",
-				 ftell(in), fullpath, strerror(errno));
+				 ftello(in), fullpath, strerror(errno));
 	}
 
 	/* In older versions < 2.4.0, when crc for file was calculated, header was
@@ -2117,7 +2079,7 @@ int
 send_pages(const char *to_fullpath, const char *from_fullpath,
 		   pgFile *file, XLogRecPtr prev_backup_start_lsn, CompressAlg calg, int clevel,
 		   uint32 checksum_version, bool use_pagemap, BackupPageHeader2 **headers,
-		   BackupMode backup_mode, int ptrack_version_num, const char *ptrack_schema)
+		   BackupMode backup_mode)
 {
 	FILE *in = NULL;
 	FILE *out = NULL;
@@ -2175,7 +2137,6 @@ send_pages(const char *to_fullpath, const char *from_fullpath,
 		int rc = prepare_page(file, prev_backup_start_lsn,
 							  blknum, in, backup_mode, curr_page,
 							  true, checksum_version,
-							  ptrack_version_num, ptrack_schema,
 							  from_fullpath, &page_st);
 
 		if (rc == PageIsTruncated)
@@ -2254,17 +2215,19 @@ send_pages(const char *to_fullpath, const char *from_fullpath,
 	return n_blocks_read;
 }
 
-/* copy local file (взята из send_pages, но используется простое копирование странички, без добавления заголовков и компрессии) */
+/*
+ * Copy local data file just as send_pages but without attaching additional header and compression
+ */
 int
 copy_pages(const char *to_fullpath, const char *from_fullpath,
-		   pgFile *file, XLogRecPtr sync_lsn,
-		   uint32 checksum_version, bool use_pagemap,
-		   BackupMode backup_mode, int ptrack_version_num, const char *ptrack_schema)
+			   pgFile *file, XLogRecPtr sync_lsn,
+			   uint32 checksum_version, bool use_pagemap,
+			   BackupMode backup_mode)
 {
 	FILE *in = NULL;
 	FILE *out = NULL;
-	char  curr_page[BLCKSZ];
-	int   n_blocks_read = 0;
+	char curr_page[BLCKSZ];
+	int n_blocks_read = 0;
 	BlockNumber blknum = 0;
 	datapagemap_iterator_t *iter = NULL;
 
@@ -2308,44 +2271,36 @@ copy_pages(const char *to_fullpath, const char *from_fullpath,
 	out = fio_fopen(to_fullpath, PG_BINARY_R "+", FIO_BACKUP_HOST);
 	if (out == NULL)
 		elog(ERROR, "Cannot open destination file \"%s\": %s",
-			to_fullpath, strerror(errno));
+			 to_fullpath, strerror(errno));
 
 	/* update file permission */
-	if (fio_chmod(to_fullpath, file->mode, FIO_BACKUP_HOST) == -1)
+	if (chmod(to_fullpath, file->mode) == -1)
 		elog(ERROR, "Cannot change mode of \"%s\": %s", to_fullpath,
-			strerror(errno));
+			 strerror(errno));
 
-	elog(VERBOSE, "ftruncate file \"%s\" to size %lu",
-			to_fullpath, file->size);
-	if (fio_ftruncate(out, file->size) == -1)
-		elog(ERROR, "Cannot ftruncate file \"%s\" to size %lu: %s",
-			to_fullpath, file->size, strerror(errno));
-
-	if (!fio_is_remote_file(out))
-	{
-		out_buf = pgut_malloc(STDIO_BUFSIZE);
-		setvbuf(out, out_buf, _IOFBF, STDIO_BUFSIZE);
-	}
+	/* Enable buffering for output file */
+	out_buf = pgut_malloc(STDIO_BUFSIZE);
+	setvbuf(out, out_buf, _IOFBF, STDIO_BUFSIZE);
 
 	while (blknum < file->n_blocks)
 	{
 		PageState page_st;
 		int rc = prepare_page(file, sync_lsn,
-									  blknum, in, backup_mode, curr_page,
-									  true, checksum_version,
-									  ptrack_version_num, ptrack_schema,
-									  from_fullpath, &page_st);
+							  blknum, in, backup_mode, curr_page,
+							  true, checksum_version,
+							  from_fullpath, &page_st);
 		if (rc == PageIsTruncated)
 			break;
 
 		else if (rc == PageIsOk)
 		{
-			if (fio_fseek(out, blknum * BLCKSZ) < 0)
-			{
-				elog(ERROR, "Cannot seek block %u of \"%s\": %s",
-					blknum, to_fullpath, strerror(errno));
-			}
-			copy_page(file, blknum, in, out, curr_page, to_fullpath);
+			if (fseek(out, blknum * BLCKSZ, SEEK_SET) != 0)
+				elog(ERROR, "Cannot seek to position %u in destination file \"%s\": %s",
+					 blknum * BLCKSZ, to_fullpath, strerror(errno));
+
+			if (write_page(file, out, curr_page) != BLCKSZ)
+				elog(ERROR, "File: \"%s\", cannot write at block %u: %s",
+					to_fullpath, blknum, strerror(errno));
 		}
 
 		n_blocks_read++;
@@ -2361,13 +2316,36 @@ copy_pages(const char *to_fullpath, const char *from_fullpath,
 			blknum++;
 	}
 
+	/* truncate output file if required */
+	if (fseek(out, 0, SEEK_END) != 0)
+		elog(ERROR, "Cannot seek to end of file position in destination file \"%s\": %s",
+			 to_fullpath, strerror(errno));
+	{
+		size_t pos = ftell(out);
+
+		if (pos < 0)
+			elog(ERROR, "Cannot get position in destination file \"%s\": %s",
+				 to_fullpath, strerror(errno));
+
+		if (pos != file->size)
+		{
+			if (fflush(out) != 0)
+				elog(ERROR, "Cannot flush destination file \"%s\": %s",
+					 to_fullpath, strerror(errno));
+
+			if (ftruncate(fileno(out), file->size) == -1)
+				elog(ERROR, "Cannot ftruncate file \"%s\" to size %lu: %s",
+					 to_fullpath, file->size, strerror(errno));
+		}
+	}
+
 	/* cleanup */
-	if (in && fclose(in))
+	if (fclose(in))
 		elog(ERROR, "Cannot close the source file \"%s\": %s",
 			 to_fullpath, strerror(errno));
 
-	/* close local output file */
-	if (out && fio_fclose(out))
+	/* close output file */
+	if (fclose(out))
 		elog(ERROR, "Cannot close the destination file \"%s\": %s",
 			 to_fullpath, strerror(errno));
 
@@ -2503,19 +2481,19 @@ write_page_headers(BackupPageHeader2 *headers, pgFile *file, HeaderMap *hdr_map,
 
 	/* when running merge we must write headers into temp map */
 	map_path = (is_merge) ? hdr_map->path_tmp : hdr_map->path;
-	read_len = (file->n_headers+1) * sizeof(BackupPageHeader2);
+	read_len = (file->n_headers + 1) * sizeof(BackupPageHeader2);
 
 	/* calculate checksums */
 	INIT_FILE_CRC32(true, file->hdr_crc);
 	COMP_FILE_CRC32(true, file->hdr_crc, headers, read_len);
 	FIN_FILE_CRC32(true, file->hdr_crc);
 
-	zheaders = pgut_malloc(read_len*2);
-	memset(zheaders, 0, read_len*2);
+	zheaders = pgut_malloc(read_len * 2);
+	memset(zheaders, 0, read_len * 2);
 
 	/* compress headers */
-	z_len = do_compress(zheaders, read_len*2, headers,
-					   read_len, ZLIB_COMPRESS, 1, &errormsg);
+	z_len = do_compress(zheaders, read_len * 2, headers,
+						read_len, ZLIB_COMPRESS, 1, &errormsg);
 
 	/* writing to header map must be serialized */
 	pthread_lock(&(hdr_map->mutex)); /* what if we crash while trying to obtain mutex? */
@@ -2559,7 +2537,7 @@ write_page_headers(BackupPageHeader2 *headers, pgFile *file, HeaderMap *hdr_map,
 	if (fwrite(zheaders, 1, z_len, hdr_map->fp) != z_len)
 		elog(ERROR, "Cannot write to file \"%s\": %s", map_path, strerror(errno));
 
-	file->hdr_size = z_len;   /* save the length of compressed headers */
+	file->hdr_size = z_len;	  /* save the length of compressed headers */
 	hdr_map->offset += z_len; /* update current offset in map */
 
 	/* End critical section */

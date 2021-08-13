@@ -121,8 +121,6 @@ typedef struct TablespaceCreatedList
 	TablespaceCreatedListCell *tail;
 } TablespaceCreatedList;
 
-static int pgCompareString(const void *str1, const void *str2);
-
 static char dir_check_file(pgFile *file, bool backup_logs);
 
 static void dir_list_file_internal(parray *files, pgFile *parent, const char *parent_dir,
@@ -224,6 +222,7 @@ pgFileInit(const char *rel_path)
 
 	// May be add?
 	// pg_atomic_clear_flag(file->lock);
+	file->excluded = false;
 	return file;
 }
 
@@ -426,6 +425,26 @@ pgFileCompareName(const void *f1, const void *f2)
 	return strcmp(f1p->name, f2p->name);
 }
 
+/* Compare pgFile->name with string in ascending order of ASCII code. */
+int
+pgFileCompareNameWithString(const void *f1, const void *f2)
+{
+	pgFile *f1p = *(pgFile **)f1;
+	char *f2s = *(char **)f2;
+
+	return strcmp(f1p->name, f2s);
+}
+
+/* Compare pgFile->rel_path with string in ascending order of ASCII code. */
+int
+pgFileCompareRelPathWithString(const void *f1, const void *f2)
+{
+	pgFile *f1p = *(pgFile **)f1;
+	char *f2s = *(char **)f2;
+
+	return strcmp(f1p->rel_path, f2s);
+}
+
 /*
  * Compare two pgFile with their relative path and external_dir_num in ascending
  * order of ASСII code.
@@ -492,10 +511,24 @@ pgFileCompareSizeDesc(const void *f1, const void *f2)
 	return -1 * pgFileCompareSize(f1, f2);
 }
 
-static int
+int
 pgCompareString(const void *str1, const void *str2)
 {
 	return strcmp(*(char **) str1, *(char **) str2);
+}
+
+/*
+ * From bsearch(3): "The compar routine is expected to have two argu‐
+ * ments  which  point  to  the key object and to an array member, in that order"
+ * But in practice this is opposite, so we took strlen from second string (search key)
+ * This is checked by tests.catchup.CatchupTest.test_catchup_with_exclude_path
+ */
+int
+pgPrefixCompareString(const void *str1, const void *str2)
+{
+	const char *s1 = *(char **) str1;
+	const char *s2 = *(char **) str2;
+	return strncmp(s1, s2, strlen(s2));
 }
 
 /* Compare two Oids */

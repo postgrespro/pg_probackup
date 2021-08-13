@@ -1963,8 +1963,7 @@ fio_send_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
 int
 fio_copy_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
 				   XLogRecPtr horizonLsn, int calg, int clevel, uint32 checksum_version,
-				   bool use_pagemap, BlockNumber* err_blknum, char **errormsg,
-				   BackupPageHeader2 **headers)
+				   bool use_pagemap, BlockNumber* err_blknum, char **errormsg)
 {
 	FILE *out = NULL;
 	char *out_buf = NULL;
@@ -2092,9 +2091,9 @@ fio_copy_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
 			/* receive headers if any */
 			if (hdr.size > 0)
 			{
-				*headers = pgut_malloc(hdr.size);
-				IO_CHECK(fio_read_all(fio_stdin, *headers, hdr.size), hdr.size);
-				file->n_headers = (hdr.size / sizeof(BackupPageHeader2)) -1;
+				char *tmp = pgut_malloc(hdr.size);
+				IO_CHECK(fio_read_all(fio_stdin, tmp, hdr.size), hdr.size);
+				pg_free(tmp);
 			}
 
 			break;

@@ -1256,7 +1256,7 @@ merge_data_file(parray *parent_chain, pgBackup *full_backup,
 	backup_data_file(tmp_file, to_fullpath_tmp1, to_fullpath_tmp2,
 				 InvalidXLogRecPtr, BACKUP_MODE_FULL,
 				 dest_backup->compress_alg, dest_backup->compress_level,
-				 dest_backup->checksum_version, 0, NULL,
+				 dest_backup->checksum_version,
 				 &(full_backup->hdr_map), true);
 
 	/* drop restored temp file */

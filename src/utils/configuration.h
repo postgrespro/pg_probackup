@@ -61,14 +61,14 @@ typedef char *(*option_get_fn) (ConfigOption *opt);
 
 /*
  * type:
- *	b: bool (true)
- *	B: bool (false)
+ *  b: bool (true)
+ *  B: bool (false)
  *  f: option_fn
- *	i: 32bit signed integer
- *	u: 32bit unsigned integer
- *	I: 64bit signed integer
- *	U: 64bit unsigned integer
- *	s: string
+ *  i: 32bit signed integer
+ *  u: 32bit unsigned integer
+ *  I: 64bit signed integer
+ *  U: 64bit unsigned integer
+ *  s: string
  *  t: time_t
  */
 struct ConfigOption
