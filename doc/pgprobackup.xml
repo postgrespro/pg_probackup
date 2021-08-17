@@ -5187,8 +5187,8 @@ pg_probackup catchup -b <replaceable>catchup_mode</replaceable>
       <title>Connection Options</title>
       <para>
         You can use these options together with
-        <xref linkend="pbk-backup"/>
-        , <xref linkend="pbk-catchup"/>, and
+        <xref linkend="pbk-backup"/>,
+        <xref linkend="pbk-catchup"/>, and
         <xref linkend="pbk-checkdb"/> commands.
       </para>
       <para>
