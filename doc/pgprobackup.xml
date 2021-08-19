@@ -2090,7 +2090,7 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
       <xref linkend="pbk-merge"/>,
       <xref linkend="pbk-delete"/>,
       <xref linkend="pbk-catchup"/>,
-      <xref linkend="pbk-checkdb"/> and
+      <xref linkend="pbk-checkdb"/>, and
       <xref linkend="pbk-validate"/> processes can be
       executed on several parallel threads. This can significantly
       speed up <application>pg_probackup</application> operation given enough resources (CPU
@@ -3502,7 +3502,7 @@ pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replace
       the <xref linkend="pbk-catchup"/> command as follows:
     </para>
     <programlisting>
-pg_probackup catchup -b <replaceable>catchup-mode</replaceable> --source-pgdata=<replaceable>path_to_pgdata_on_remote_server</replaceable> --destination-pgdata=<replaceable>path_to_local_dir</replaceable> --stream [<replaceable>connection_options</replaceable>] [<replaceable>remote_options</replaceable>]
+pg_probackup catchup -b <replaceable>catchup_mode</replaceable> --source-pgdata=<replaceable>path_to_pgdata_on_remote_server</replaceable> --destination-pgdata=<replaceable>path_to_local_dir</replaceable> --stream [<replaceable>connection_options</replaceable>] [<replaceable>remote_options</replaceable>]
 </programlisting>
     <para>
       Where <replaceable>catchup_mode</replaceable> can take one of the
@@ -3552,12 +3552,12 @@ pg_probackup catchup -b <replaceable>catchup-mode</replaceable> --source-pgdata=
       a different directory, additionally specify the <option>--tablespace-mapping</option>
       option:
      <programlisting>
-pg_probackup catchup -b <replaceable>catchup-mode</replaceable> --source-pgdata=<replaceable>path_to_pgdata_on_remote_server</replaceable> --destination-pgdata=<replaceable>path_to_local_dir</replaceable> --stream --tablespace-mapping=<replaceable>OLDDIR</replaceable>=<replaceable>NEWDIR</replaceable>
+pg_probackup catchup -b <replaceable>catchup_mode</replaceable> --source-pgdata=<replaceable>path_to_pgdata_on_remote_server</replaceable> --destination-pgdata=<replaceable>path_to_local_dir</replaceable> --stream --tablespace-mapping=<replaceable>OLDDIR</replaceable>=<replaceable>NEWDIR</replaceable>
 </programlisting>
       To run the <command>catchup</command> command on parallel threads, specify the number
       of threads with the <option>--threads</option> option:
      <programlisting>
-pg_probackup catchup -b <replaceable>catchup-mode</replaceable> --source-pgdata=<replaceable>path_to_pgdata_on_remote_server</replaceable> --destination-pgdata=<replaceable>path_to_local_dir</replaceable> --stream --threads=<replaceable>num_threads</replaceable>
+pg_probackup catchup -b <replaceable>catchup_mode</replaceable> --source-pgdata=<replaceable>path_to_pgdata_on_remote_server</replaceable> --destination-pgdata=<replaceable>path_to_local_dir</replaceable> --stream --threads=<replaceable>num_threads</replaceable>
 </programlisting>
     </para>
     <para>
@@ -4349,7 +4349,7 @@ pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replace
       <para>
         For details, see the sections
         <link linkend="pbk-deleting-backups">Deleting Backups</link>,
-        <link linkend="pbk-retention-opts">Retention Options</link> and
+        <link linkend="pbk-retention-opts">Retention Options</link>, and
         <link linkend="pbk-configuring-retention-policy">Configuring
         Retention Policy</link>.
       </para>
