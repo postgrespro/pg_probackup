@@ -42,7 +42,7 @@ static time_t stream_stop_begin = 0;
  */
 typedef struct
 {
-	const char *basedir;
+	char       basedir[MAXPGPATH];
 	PGconn	   *conn;
 
 	/*
@@ -638,7 +638,7 @@ start_WAL_streaming(PGconn *backup_conn, char *stream_dst_path, ConnectionOption
 	//TODO Add a comment about this calculation
 	stream_stop_timeout = stream_stop_timeout + stream_stop_timeout * 0.1;
 
-	stream_thread_arg.basedir = stream_dst_path;
+	strncpy(stream_thread_arg.basedir, stream_dst_path, sizeof(stream_thread_arg.basedir));
 
 	/*
 	 * Connect in replication mode to the server.
