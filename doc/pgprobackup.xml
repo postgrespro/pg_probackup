@@ -3423,7 +3423,7 @@ pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replace
         </listitem>
         <listitem>
           <para>To have a fallen-behind standby server <quote>catch up</quote> with master.</para>
-          <para>Under high write load, replicas may fail to replay WAL fast enough to keep up with master and hence may lag behind.
+          <para>Under write-intensive load, replicas may fail to replay WAL fast enough to keep up with master and hence may lag behind.
           A usual solution to create a new replica and switch to it requires a lot of extra space and data transfer. The <command>catchup</command>
           command allows you to update an existing replica much faster by bringing differences from master.</para>
         </listitem>
