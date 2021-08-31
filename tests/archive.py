@@ -1803,6 +1803,126 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure
+    def test_wal_file_path(self):
+        """
+        check that archive-push works correct with undefined
+        --wal-file-path
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+
+        # FULL
+        self.backup_node(backup_dir, 'node', node)
+        node.pgbench_init(scale=1)
+
+        node.cleanup()
+
+        if self.get_version(node) >= self.version_to_num('12.0'):
+            recovery_conf = os.path.join(node.data_dir, 'postgresql.auto.conf')
+        else:
+            recovery_conf = os.path.join(node.data_dir, 'recovery.conf')
+
+        with open(recovery_conf, 'r') as f:
+            recovery_content = f.read()
+
+        self.assertIn(
+            "restore_command = '\"{0}\" archive-push -B \"{1}\" --instance \"{2}\" "
+            "--wal-file-name=%f --remote-host=localhost "
+            "--remote-port=22 --remote-user={3}'".format(
+                self.probackup_path, backup_dir, 'node', self.user),
+            recovery_content)
+
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    # @unittest.expectedFailure
+    def test_wal_file_path_2(self):
+        """
+        check that archive-push works correct with --wal-file-path=%p as usual
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+
+        # FULL
+        self.backup_node(backup_dir, 'node', node)
+        node.pgbench_init(scale=1)
+
+        node.cleanup()
+
+        if self.get_version(node) >= self.version_to_num('12.0'):
+            recovery_conf = os.path.join(node.data_dir, 'postgresql.auto.conf')
+        else:
+            recovery_conf = os.path.join(node.data_dir, 'recovery.conf')
+
+        with open(recovery_conf, 'r') as f:
+            recovery_content = f.read()
+
+        self.assertIn(
+            "restore_command = '\"{0}\" archive-push -B \"{1}\" --instance \"{2}\" "
+            "--wal-file-path=%p --wal-file-name=%f --remote-host=localhost "
+            "--remote-port=22 --remote-user={3}'".format(
+                self.probackup_path, backup_dir, 'node', self.user),
+            recovery_content)
+
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    # @unittest.expectedFailure
+    def test_wal_file_path_3(self):
+        """
+        check that archive-push works correct with --wal-file-path setting by user
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+
+        # FULL
+        self.backup_node(backup_dir, 'node', node)
+        node.pgbench_init(scale=1)
+
+        node.cleanup()
+
+        if self.get_version(node) >= self.version_to_num('12.0'):
+            recovery_conf = os.path.join(node.data_dir, 'postgresql.auto.conf')
+        else:
+            recovery_conf = os.path.join(node.data_dir, 'recovery.conf')
+
+        with open(recovery_conf, 'r') as f:
+            recovery_content = f.read()
+
+        test_wal_filepath = self.probackup_path + "/test_walpath"
+
+        self.assertIn(
+            "restore_command = '\"{0}\" archive-push -B \"{1}\" --instance \"{2}\" "
+            "--wal-file-path={3} --wal-file-name=%f --remote-host=localhost "
+            "--remote-port=22 --remote-user={4}'".format(
+                self.probackup_path, backup_dir, 'node', test_wal_filepath, self.user),
+            recovery_content)
+
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    # @unittest.expectedFailure
     def test_hexadecimal_timeline(self):
         """
         Check that timelines are correct.
