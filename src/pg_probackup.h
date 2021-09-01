@@ -78,6 +78,7 @@ extern const char  *PROGRAM_EMAIL;
 #define HEADER_MAP_TMP  		"page_header_map_tmp"
 
 /* Timeout defaults */
+#define PARTIAL_WAL_TIMER			60
 #define ARCHIVE_TIMEOUT_DEFAULT		300
 #define REPLICA_TIMEOUT_DEFAULT		300
 #define LOCK_TIMEOUT				60
