@@ -184,15 +184,15 @@ class ProbackupTest(object):
         self.test_env['LC_MESSAGES'] = 'C'
         self.test_env['LC_TIME'] = 'C'
 
-        self.paranoia = False
-        if 'PG_PROBACKUP_PARANOIA' in self.test_env:
-            if self.test_env['PG_PROBACKUP_PARANOIA'] == 'ON':
-                self.paranoia = True
+        self.gdb = 'PGPROBACKUP_GDB' in os.environ and \
+              os.environ['PGPROBACKUP_GDB'] == 'ON'
 
-        self.archive_compress = False
-        if 'ARCHIVE_COMPRESSION' in self.test_env:
-            if self.test_env['ARCHIVE_COMPRESSION'] == 'ON':
-                self.archive_compress = True
+        self.paranoia = 'PG_PROBACKUP_PARANOIA' in self.test_env and \
+            self.test_env['PG_PROBACKUP_PARANOIA'] == 'ON'
+
+        self.archive_compress = 'ARCHIVE_COMPRESSION' in self.test_env and \
+            self.test_env['ARCHIVE_COMPRESSION'] == 'ON'
+
         try:
             testgres.configure_testgres(
                 cache_initdb=False,

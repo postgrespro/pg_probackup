@@ -450,6 +450,11 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
     # @unittest.skip("skip")
     def test_checkdb_sigint_handling(self):
         """"""
+        if not self.gdb:
+            self.skipTest(
+                "Specify PGPROBACKUP_GDB and build without "
+                "optimizations for run this test"
+            )
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(

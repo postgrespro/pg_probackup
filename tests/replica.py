@@ -21,13 +21,17 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         over the course of several switchovers
         https://www.postgresql.org/message-id/54b059d4-2b48-13a4-6f43-95a087c92367%40postgrespro.ru
         """
-
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node1 = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node1'),
             set_replication=True,
             initdb_params=['--data-checksums'])
+
+        if self.get_version(node1) < self.version_to_num('9.6.0'):
+            self.del_test_dir(module_name, fname)
+            return unittest.skip(
+                'Skipped because backup from replica is not supported in PG 9.5')
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node1', node1)
@@ -287,6 +291,16 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
         self.wait_until_replica_catch_with_master(master, replica)
 
+        master.pgbench_init(scale=5)
+        # Continuous making some changes on master,
+        # because WAL archiving on replica in idle DB in PostgreSQL is broken:
+        # replica will not archive the previous WAL until it receives new records in the next WAL file,
+        # this "lazy" archiving can be seen in src/backend/replication/walreceiver.c:XLogWalRcvWrite()
+        # (see !XLByteInSeg checking and XLogArchiveNotify() calling).
+        pgbench = master.pgbench(
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            options=['-T', '3', '-c', '1', '--no-vacuum'])
+
         backup_id = self.backup_node(
             backup_dir, 'replica', replica,
             options=[
@@ -294,6 +308,9 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
                 '--master-host=localhost',
                 '--master-db=postgres',
                 '--master-port={0}'.format(master.port)])
+
+        pgbench.wait()
+        pgbench.stdout.close()
 
         self.validate_pb(backup_dir, 'replica')
         self.assertEqual(
@@ -317,8 +334,6 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         # Change data on master, make PAGE backup from replica,
         # restore taken backup and check that restored data equal
         # to original data
-        master.pgbench_init(scale=5)
-
         pgbench = master.pgbench(
             options=['-T', '30', '-c', '2', '--no-vacuum'])
 
@@ -535,6 +550,11 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         start backup from replica, during backup promote replica
         check that backup is failed
         """
+        if not self.gdb:
+            self.skipTest(
+                "Specify PGPROBACKUP_GDB and build without "
+                "optimizations for run this test"
+            )
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         master = self.make_simple_node(
@@ -625,6 +645,11 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
     def test_replica_stop_lsn_null_offset(self):
         """
         """
+        if not self.gdb:
+            self.skipTest(
+                "Specify PGPROBACKUP_GDB and build without "
+                "optimizations for run this test"
+            )
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         master = self.make_simple_node(
@@ -701,12 +726,18 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             output)
 
         # Clean after yourself
+        gdb_checkpointer.kill()
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def test_replica_stop_lsn_null_offset_next_record(self):
         """
         """
+        if not self.gdb:
+            self.skipTest(
+                "Specify PGPROBACKUP_GDB and build without "
+                "optimizations for run this test"
+            )
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         master = self.make_simple_node(
@@ -976,6 +1007,11 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         make archive master, take full and page archive backups from master,
         set replica, make archive backup from replica
         """
+        if not self.gdb:
+            self.skipTest(
+                "Specify PGPROBACKUP_GDB and build without "
+                "optimizations for run this test"
+            )
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         master = self.make_simple_node(
@@ -1070,12 +1106,18 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         self.compare_pgdata(pgdata, pgdata_restored)
 
         # Clean after yourself
+        gdb_checkpointer.kill()
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def test_start_stop_lsn_in_the_same_segno(self):
         """
         """
+        if not self.gdb:
+            self.skipTest(
+                "Specify PGPROBACKUP_GDB and build without "
+                "optimizations for run this test"
+            )
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         master = self.make_simple_node(
@@ -1293,6 +1335,11 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
                 'checkpoint_timeout': '30s',
                 'archive_timeout': '30s'})
 
+        if self.get_version(node1) < self.version_to_num('9.6.0'):
+            self.del_test_dir(module_name, fname)
+            return unittest.skip(
+                'Skipped because backup from replica is not supported in PG 9.5')
+
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node1)
         self.set_config(
@@ -1413,6 +1460,11 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
                 'checkpoint_timeout': '30s',
                 'archive_timeout': '30s'})
 
+        if self.get_version(node1) < self.version_to_num('9.6.0'):
+            self.del_test_dir(module_name, fname)
+            return unittest.skip(
+                'Skipped because backup from replica is not supported in PG 9.5')
+
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node1)
         self.set_archiving(backup_dir, 'node', node1)
@@ -1529,6 +1581,11 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             base_dir=os.path.join(module_name, fname, 'master'),
             set_replication=True,
             initdb_params=['--data-checksums'])
+
+        if self.get_version(master) < self.version_to_num('9.6.0'):
+            self.del_test_dir(module_name, fname)
+            return unittest.skip(
+                'Skipped because backup from replica is not supported in PG 9.5')
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'master', master)

@@ -35,7 +35,7 @@ git clone https://github.com/postgres/postgres.git -b $PG_BRANCH --depth=1
 # Compile and install Postgres
 echo "############### Compiling Postgres:"
 cd postgres # Go to postgres dir
-./configure --prefix=$PGHOME --enable-debug --enable-cassert --enable-depend --enable-tap-tests
+CFLAGS="-O0" ./configure --prefix=$PGHOME --enable-debug --enable-cassert --enable-depend --enable-tap-tests
 make -s -j$(nproc) install
 #make -s -j$(nproc) -C 'src/common' install
 #make -s -j$(nproc) -C 'src/port' install
@@ -64,6 +64,12 @@ which pg_config
 # Show pg_config just in case
 echo "############### pg_config:"
 pg_config
+
+# Show kernel parameters
+echo "############### kernel params:"
+cat /proc/sys/kernel/yama/ptrace_scope
+sudo sysctl kernel.yama.ptrace_scope=0
+cat /proc/sys/kernel/yama/ptrace_scope
 
 # Build and install pg_probackup (using PG_CPPFLAGS and SHLIB_LINK for gcov)
 echo "############### Compiling and installing pg_probackup:"
