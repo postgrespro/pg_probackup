@@ -1810,34 +1810,35 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         """
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.set_archiving
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
-            initdb_params=['--data-checksums'])
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'archive_mode': 'on'})
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node, compress=True)
+        archive_command = '\"{0}\" archive-push -B \"{1}\" --instance \"{2}\" --wal-file-name=%f'.format(
+            self.probackup_path, backup_dir, 'node')
+        self.set_auto_conf(
+                node,
+                {'archive_command': archive_command})
+
+        node.slow_start()
 
         # FULL
         self.backup_node(backup_dir, 'node', node)
-        node.pgbench_init(scale=1)
 
-        node.cleanup()
+        log_file = os.path.join(node.logs_dir, 'postgresql.log')
+        with open(log_file, 'r') as f:
+            log_content = f.read()
 
-        if self.get_version(node) >= self.version_to_num('12.0'):
-            recovery_conf = os.path.join(node.data_dir, 'postgresql.auto.conf')
-        else:
-            recovery_conf = os.path.join(node.data_dir, 'recovery.conf')
+        self.assertIn('Required parameter is not specified: --wal_file_path', log_content)
 
-        with open(recovery_conf, 'r') as f:
-            recovery_content = f.read()
-
-        self.assertIn(
-            "restore_command = '\"{0}\" archive-push -B \"{1}\" --instance \"{2}\" "
-            "--wal-file-name=%f --remote-host=localhost "
-            "--remote-port=22 --remote-user={3}'".format(
-                self.probackup_path, backup_dir, 'node', self.user),
-            recovery_content)
+        self.assertIn('pg_probackup archive-push completed successfully', log_content)
 
         self.del_test_dir(module_name, fname)
 
@@ -1852,32 +1853,25 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
-            initdb_params=['--data-checksums'])
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'archive_mode': 'on',
+                'archive_command': 'exit 0'})
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node, compress=True)
+
+        node.slow_start()
 
         # FULL
-        self.backup_node(backup_dir, 'node', node)
-        node.pgbench_init(scale=1)
+        self.backup_node(backup_dir, 'node', node, options=['--stream'])
 
-        node.cleanup()
+        log_file = os.path.join(node.logs_dir, 'postgresql.log')
+        with open(log_file, 'r') as f:
+            log_content = f.read()
 
-        if self.get_version(node) >= self.version_to_num('12.0'):
-            recovery_conf = os.path.join(node.data_dir, 'postgresql.auto.conf')
-        else:
-            recovery_conf = os.path.join(node.data_dir, 'recovery.conf')
-
-        with open(recovery_conf, 'r') as f:
-            recovery_content = f.read()
-
-        self.assertIn(
-            "restore_command = '\"{0}\" archive-push -B \"{1}\" --instance \"{2}\" "
-            "--wal-file-path=%p --wal-file-name=%f --remote-host=localhost "
-            "--remote-port=22 --remote-user={3}'".format(
-                self.probackup_path, backup_dir, 'node', self.user),
-            recovery_content)
-
+        self.assertIn('pg_probackup archive-push completed successfully', log_content)
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
@@ -1891,33 +1885,32 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
-            initdb_params=['--data-checksums'])
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'archive_mode': 'on'})
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node, compress=True)
+        walfilepath = backup_dir + '/..'
+        archive_command = '\"{0}\" archive-push -B \"{1}\"'.format(self.probackup_path, backup_dir)
+        archive_command += '--instance \"{0}\"'.format('node')
+        archive_command += ' --wal-file-path=\"{0}\" --wal-file-name=%f'.format(walfilepath)
+
+        self.set_auto_conf(
+                node,
+                {'archive_command': archive_command})
+
+        node.slow_start()
 
         # FULL
         self.backup_node(backup_dir, 'node', node)
-        node.pgbench_init(scale=1)
 
-        node.cleanup()
+        log_file = os.path.join(node.logs_dir, 'postgresql.log')
+        with open(log_file, 'r') as f:
+            log_content = f.read()
 
-        if self.get_version(node) >= self.version_to_num('12.0'):
-            recovery_conf = os.path.join(node.data_dir, 'postgresql.auto.conf')
-        else:
-            recovery_conf = os.path.join(node.data_dir, 'recovery.conf')
-
-        with open(recovery_conf, 'r') as f:
-            recovery_content = f.read()
-
-        test_wal_filepath = self.probackup_path + "/test_walpath"
-
-        self.assertIn(
-            "restore_command = '\"{0}\" archive-push -B \"{1}\" --instance \"{2}\" "
-            "--wal-file-path={3} --wal-file-name=%f --remote-host=localhost "
-            "--remote-port=22 --remote-user={4}'".format(
-                self.probackup_path, backup_dir, 'node', test_wal_filepath, self.user),
-            recovery_content)
+        self.assertIn('wal_file_path is setted by user', log_content)
 
         self.del_test_dir(module_name, fname)
 
