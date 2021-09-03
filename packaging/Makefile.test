@@ -13,14 +13,17 @@ build/test_all: build/test_debian build/test_ubuntu build/test_centos build/test
 	@echo Package testing is done
 
 ### DEBIAN
-build/test_debian: build/test_debian_9 build/test_debian_10
+build/test_debian: build/test_debian_9 build/test_debian_10 build/test_debian_11
 	@echo Debian: done
 
 build/test_debian_9: build/test_debian_9_9.6 build/test_debian_9_10 build/test_debian_9_11 build/test_debian_9_12 build/test_debian_9_13
 	@echo Debian 9: done
 
-build/test_debian_10: build/test_debian_9_9.6 build/test_debian_9_10 build/test_debian_9_11 build/test_debian_9_12 build/test_debian_9_13
+build/test_debian_10: build/test_debian_10_9.6 build/test_debian_10_10 build/test_debian_10_11 build/test_debian_10_12 build/test_debian_10_13
 	@echo Debian 10: done
+
+build/test_debian_11: build/test_debian_11_9.6 build/test_debian_11_10 build/test_debian_11_11 build/test_debian_11_12 build/test_debian_11_13
+	@echo Debian 11: done
 
 ### UBUNTU
 build/test_ubuntu: build/test_ubuntu_16.04 build/test_ubuntu_18.04 build/test_ubuntu_20.04

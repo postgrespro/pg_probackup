@@ -72,3 +72,28 @@ build/debian_10_12:
 build/debian_10_13:
 	$(call build_deb,debian,10,buster,13,13.2)
 	touch build/debian_10_13
+
+# DEBIAN 11
+build/debian_11_9.5:
+	$(call build_deb,debian,11,bullseye,9.5,9.5.25)
+	touch build/debian_11_9.5
+
+build/debian_11_9.6:
+	$(call build_deb,debian,11,bullseye,9.6,9.6.21)
+	touch build/debian_11_9.6
+
+build/debian_11_10:
+	$(call build_deb,debian,11,bullseye,10,10.16)
+	touch build/debian_11_10
+
+build/debian_11_11:
+	$(call build_deb,debian,11,bullseye,11,11.11)
+	touch build/debian_11_11
+
+build/debian_11_12:
+	$(call build_deb,debian,11,bullseye,12,12.6)
+	touch build/debian_11_12
+
+build/debian_11_13:
+	$(call build_deb,debian,11,bullseye,13,13.2)
+	touch build/debian_11_13

@@ -3,7 +3,7 @@ repo: check_env repo/debian repo/ubuntu repo/centos repo/oraclelinux repo/alt re
 	@echo Build repo for all platform: done
 
 # Debian
-repo/debian: build/repo_debian_8 build/repo_debian_9 build/repo_debian_10
+repo/debian: build/repo_debian_8 build/repo_debian_9 build/repo_debian_10 build/repo_debian_11
 	@echo Build repo for debian platforms: done
 
 build/repo_debian_8:
@@ -17,6 +17,10 @@ build/repo_debian_9:
 build/repo_debian_10:
 	$(call build_repo_deb,debian,10,buster)
 	touch build/repo_debian_10
+
+build/repo_debian_11:
+	$(call build_repo_deb,debian,11,bullseye)
+	touch build/repo_debian_11
 
 # Ubuntu
 repo/ubuntu: build/repo_ubuntu_14.04 build/repo_ubuntu_16.04 build/repo_ubuntu_18.04 build/repo_ubuntu_20.04

@@ -42,7 +42,7 @@ build/all: build/debian build/ubuntu build/centos build/oraclelinux build/alt bu
 	@echo Packaging is done
 
 ### DEBIAN
-build/debian: build/debian_8 build/debian_9 build/debian_10
+build/debian: build/debian_8 build/debian_9 build/debian_10 build/debian_11
 	@echo Debian: done
 
 build/debian_8: build/debian_8_9.5 build/debian_8_9.6 build/debian_8_10 build/debian_8_11 build/debian_8_12 build/debian_8_13
@@ -51,8 +51,11 @@ build/debian_8: build/debian_8_9.5 build/debian_8_9.6 build/debian_8_10 build/de
 build/debian_9: build/debian_9_9.5 build/debian_9_9.6 build/debian_9_10 build/debian_9_11 build/debian_9_12 build/debian_9_13
 	@echo Debian 9: done
 
-build/debian_10: build/debian_9_9.5 build/debian_9_9.6 build/debian_9_10 build/debian_9_11 build/debian_9_12 build/debian_9_13
+build/debian_10: build/debian_10_9.5 build/debian_10_9.6 build/debian_10_10 build/debian_10_11 build/debian_10_12 build/debian_10_13
 	@echo Debian 10: done
+
+build/debian_11: build/debian_11_9.5 build/debian_11_9.6 build/debian_11_10 build/debian_11_11 build/debian_11_12 build/debian_11_13
+	@echo Debian 11: done
 
 ### UBUNTU
 build/ubuntu: build/ubuntu_14.04 build/ubuntu_16.04 build/ubuntu_18.04 build/ubuntu_20.04
