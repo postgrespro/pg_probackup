@@ -1,5 +1,7 @@
-FROM registry.access.redhat.com/rhel7
-RUN yum install -y tar wget rpm-build yum-utils
-RUN yum install -y gcc make perl libicu-devel glibc-devel bison flex
+FROM registry.access.redhat.com/ubi7
+RUN yum install -y http://mirror.centos.org/centos/7/os/x86_64/Packages/elfutils-0.176-5.el7.x86_64.rpm
+RUN yum install -y http://mirror.centos.org/centos/7/os/x86_64/Packages/rpm-build-4.11.3-45.el7.x86_64.rpm
+RUN yum install -y tar wget yum-utils
+RUN yum install -y gcc make perl libicu-devel glibc-devel
 RUN yum install -y git
 RUN yum upgrade -y

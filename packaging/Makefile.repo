@@ -39,12 +39,8 @@ build/repo_ubuntu_20.04:
 	touch build/repo_ubuntu_20.04
 
 # Centos
-repo/centos: build/repo_centos_6 build/repo_centos_7 build/repo_centos_8
+repo/centos: build/repo_centos_7 build/repo_centos_8
 	@echo Build repo for centos platforms: done
-
-build/repo_centos_6:
-	$(call build_repo_rpm,centos,6,,)
-	touch build/repo_centos_6
 
 build/repo_centos_7:
 	$(call build_repo_rpm,centos,7,,)
@@ -71,12 +67,8 @@ build/repo_oraclelinux_8:
 	touch build/repo_oraclelinux_8
 
 # RHEL
-repo/rhel: build/repo_rhel_6 build/repo_rhel_7 build/repo_rhel_8
+repo/rhel: build/repo_rhel_7 build/repo_rhel_8
 	@echo Build repo for rhel platforms: done
-
-build/repo_rhel_6:
-	$(call build_repo_rpm,rhel,6,6Server)
-	touch build/repo_rhel_6
 
 build/repo_rhel_7:
 	$(call build_repo_rpm,rhel,7,7Server)

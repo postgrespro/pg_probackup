@@ -13,7 +13,7 @@ License:        BSD
 Url:            http://postgrespro.ru/
 Source0:        http://ftp.postgresql.org/pub/source/v%{pgsql_full}/postgresql-%{pgsql_major}.tar.bz2
 Source1:        pg_probackup-%{version}.tar.bz2
-BuildRequires:  gcc make perl glibc-devel bison flex readline-devel openssl-devel gettext zlib-devel
+BuildRequires:  gcc make perl glibc-devel openssl-devel gettext zlib-devel
 
 %description
 Backup tool for PostgreSQL.

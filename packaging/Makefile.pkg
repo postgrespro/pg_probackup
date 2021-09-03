@@ -86,11 +86,8 @@ include packaging/pkg/Makefile.debian
 include packaging/pkg/Makefile.ubuntu
 
 # CENTOS
-build/centos: build/centos_6 build/centos_7 build/centos_8 #build/rpm_repo_package_centos
+build/centos: build/centos_7 build/centos_8 #build/rpm_repo_package_centos
 	@echo Centos: done
-
-build/centos_6: build/centos_6_9.5 build/centos_6_9.6 build/centos_6_10 build/centos_6_11 build/centos_6_12 build/centos_6_13
-	@echo Centos 6: done
 
 build/centos_7: build/centos_7_9.5 build/centos_7_9.6 build/centos_7_10 build/centos_7_11 build/centos_7_12 build/centos_7_13
 	@echo Centos 7: done
@@ -112,11 +109,8 @@ build/oraclelinux_8: build/oraclelinux_8_9.5 build/oraclelinux_8_9.6 build/oracl
 	@echo Oraclelinux 8: done
 
 # RHEL
-build/rhel: build/rhel_6 build/rhel_7 build/rhel_8 #build/rpm_repo_package_rhel
+build/rhel: build/rhel_7 build/rhel_8 #build/rpm_repo_package_rhel
 	@echo Rhel: done
-
-build/rhel_6: build/rhel_6_9.5 build/rhel_6_9.6 build/rhel_6_10 build/rhel_6_11 build/rhel_6_12 build/rhel_6_13
-	@echo Rhel 6: done
 
 build/rhel_7: build/rhel_7_9.5 build/rhel_7_9.6 build/rhel_7_10 build/rhel_7_11 build/rhel_7_12 build/rhel_7_13
 	@echo Rhel 7: done

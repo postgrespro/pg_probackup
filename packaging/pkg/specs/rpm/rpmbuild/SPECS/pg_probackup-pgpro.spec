@@ -18,8 +18,8 @@ Url:            http://postgrespro.ru/
 #Source1:        pg_probackup-%{version}.tar.bz2
 Source0:        postgrespro-%{edition}-%{pgsql_full}
 Source1:        pg_probackup-%{version}
-BuildRequires:  gcc make perl glibc-devel bison flex
-BuildRequires:  readline-devel openssl-devel gettext zlib-devel
+BuildRequires:  gcc make perl glibc-devel
+BuildRequires:  openssl-devel gettext zlib-devel
 
 
 %description
