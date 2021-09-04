@@ -140,6 +140,12 @@ sudo wget -O - https://repo.postgrespro.ru/pg_probackup-forks/keys/GPG-KEY-PG_PR
 sudo apt-get install pg-probackup-{std,ent}-{12,11,10,9.6}
 sudo apt-get install pg-probackup-{std,ent}-{12,11,10,9.6}-dbg
 
+#DEB Astra Linix Orel
+sudo sh -c 'echo "deb [arch=amd64] https://repo.postgrespro.ru/pg_probackup-forks/deb/ stretch main-stretch" > /etc/apt/sources.list.d/pg_probackup.list'
+sudo wget -O - https://repo.postgrespro.ru/pg_probackup-forks/keys/GPG-KEY-PG_PROBACKUP | sudo apt-key add - && sudo apt-get update
+sudo apt-get install pg-probackup-{std,ent}-{12,11,10,9.6}{-dbg,}
+
+
 #RPM Centos Packages
 rpm -ivh https://repo.postgrespro.ru/pg_probackup-forks/keys/pg_probackup-repo-forks-centos.noarch.rpm
 yum install pg_probackup-{std,ent}-{12,11,10,9.6}
