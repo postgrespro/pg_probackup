@@ -104,6 +104,8 @@ if [ "$MODE" = "basic" ]; then
     export PG_PROBACKUP_TEST_BASIC=ON
     python3 -m unittest -v tests
     python3 -m unittest -v tests.init
+elif [ "$MODE" = "full" ]; then
+    python3 -m unittest -v tests
 else
     python3 -m unittest -v tests.$MODE
 fi
