@@ -962,8 +962,7 @@ class ProbackupTest(object):
             '--instance={0}'.format(instance),
             # "-D", pgdata,
             '-p', '%i' % node.port,
-            '-d', datname,
-            '--progress'
+            '-d', datname
         ]
 
         if data_dir:

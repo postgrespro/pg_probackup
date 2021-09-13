@@ -1042,7 +1042,8 @@ class PageTest(ProbackupTest, unittest.TestCase):
         node.safe_psql(
             "postgres",
             "create table t3 as select i, "
-            "repeat(md5(i::text),5006056) as fat_attr "
+            # "repeat(md5(i::text),5006056) as fat_attr "
+            "repeat(md5(i::text),50) as fat_attr "
             "from generate_series(0,70) i")
 
         # Multi-thread PAGE backup
