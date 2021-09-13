@@ -47,7 +47,7 @@ def load_tests(loader, tests, pattern):
 #     suite.addTests(loader.loadTestsFromModule(page))
 #     suite.addTests(loader.loadTestsFromModule(pgpro560))
 #     suite.addTests(loader.loadTestsFromModule(pgpro589))
-#     suite.addTests(loader.loadTestsFromModule(pgpro2068))
+    suite.addTests(loader.loadTestsFromModule(pgpro2068))
 #     suite.addTests(loader.loadTestsFromModule(remote))
 #     suite.addTests(loader.loadTestsFromModule(replica))
 #     suite.addTests(loader.loadTestsFromModule(restore))
