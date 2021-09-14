@@ -23,6 +23,8 @@ tblspace_name_new = 'cfs_tblspace_new'
 
 
 class CfsRestoreBase(ProbackupTest, unittest.TestCase):
+    # --- Begin --- #
+    @unittest.skipUnless(ProbackupTest.enterprise, 'skip')
     def setUp(self):
         self.fname = self.id().split('.')[3]
         self.backup_dir = os.path.join(self.tmp_path, module_name, self.fname, 'backup')
@@ -68,6 +70,8 @@ class CfsRestoreBase(ProbackupTest, unittest.TestCase):
 class CfsRestoreNoencEmptyTablespaceTest(CfsRestoreBase):
     # @unittest.expectedFailure
     # @unittest.skip("skip")
+    # --- Begin --- #
+    @unittest.skipUnless(ProbackupTest.enterprise, 'skip')
     def test_restore_empty_tablespace_from_fullbackup(self):
         """
         Case: Restore empty tablespace from valid full backup.
@@ -110,6 +114,8 @@ class CfsRestoreNoencEmptyTablespaceTest(CfsRestoreBase):
 
 
 class CfsRestoreNoencTest(CfsRestoreBase):
+    # --- Begin --- #
+    @unittest.skipUnless(ProbackupTest.enterprise, 'skip')
     def add_data_in_cluster(self):
         self.node.safe_psql(
             "postgres",

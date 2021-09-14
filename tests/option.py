@@ -12,11 +12,13 @@ class OptionTest(ProbackupTest, unittest.TestCase):
     # @unittest.expectedFailure
     def test_help_1(self):
         """help options"""
-        with open(os.path.join(self.dir_path, "expected/option_help.out"), "rb") as help_out:
-            self.assertEqual(
-                self.run_pb(["--help"]),
-                help_out.read().decode("utf-8")
-            )
+        if self.version_to_num(self.probackup_version) == 20501:
+
+            with open(os.path.join(self.dir_path, "expected/option_help2_5_1.out"), "rb") as help_out:
+                self.assertEqual(self.run_pb(["--help"]), help_out.read().decode("utf-8"))
+        else:
+            with open(os.path.join(self.dir_path, "expected/option_help.out"), "rb") as help_out:
+                self.assertEqual(self.run_pb(["--help"]), help_out.read().decode("utf-8"))
 
     # @unittest.skip("skip")
     def test_version_2(self):

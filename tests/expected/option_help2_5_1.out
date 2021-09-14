@@ -1,0 +1,183 @@
+
+pg_probackup - utility to manage backup/recovery of PostgreSQL database.
+
+  pg_probackup help [COMMAND]
+
+  pg_probackup version
+
+  pg_probackup init -B backup-path
+
+  pg_probackup set-config -B backup-path --instance=instance_name
+                 [-D pgdata-path]
+                 [--external-dirs=external-directories-paths]
+                 [--log-level-console=log-level-console]
+                 [--log-level-file=log-level-file]
+                 [--log-filename=log-filename]
+                 [--error-log-filename=error-log-filename]
+                 [--log-directory=log-directory]
+                 [--log-rotation-size=log-rotation-size]
+                 [--log-rotation-age=log-rotation-age]
+                 [--retention-redundancy=retention-redundancy]
+                 [--retention-window=retention-window]
+                 [--wal-depth=wal-depth]
+                 [--compress-algorithm=compress-algorithm]
+                 [--compress-level=compress-level]
+                 [--archive-timeout=timeout]
+                 [-d dbname] [-h host] [-p port] [-U username]
+                 [--remote-proto] [--remote-host]
+                 [--remote-port] [--remote-path] [--remote-user]
+                 [--ssh-options]
+                 [--restore-command=cmdline] [--archive-host=destination]
+                 [--archive-port=port] [--archive-user=username]
+                 [--help]
+
+  pg_probackup set-backup -B backup-path --instance=instance_name
+                 -i backup-id [--ttl=interval] [--expire-time=timestamp]
+                 [--note=text]
+                 [--help]
+
+  pg_probackup show-config -B backup-path --instance=instance_name
+                 [--format=format]
+                 [--help]
+
+  pg_probackup backup -B backup-path -b backup-mode --instance=instance_name
+                 [-D pgdata-path] [-C]
+                 [--stream [-S slot-name] [--temp-slot]]
+                 [--backup-pg-log] [-j num-threads] [--progress]
+                 [--no-validate] [--skip-block-validation]
+                 [--external-dirs=external-directories-paths]
+                 [--no-sync]
+                 [--log-level-console=log-level-console]
+                 [--log-level-file=log-level-file]
+                 [--log-filename=log-filename]
+                 [--error-log-filename=error-log-filename]
+                 [--log-directory=log-directory]
+                 [--log-rotation-size=log-rotation-size]
+                 [--log-rotation-age=log-rotation-age] [--no-color]
+                 [--delete-expired] [--delete-wal] [--merge-expired]
+                 [--retention-redundancy=retention-redundancy]
+                 [--retention-window=retention-window]
+                 [--wal-depth=wal-depth]
+                 [--compress]
+                 [--compress-algorithm=compress-algorithm]
+                 [--compress-level=compress-level]
+                 [--archive-timeout=archive-timeout]
+                 [-d dbname] [-h host] [-p port] [-U username]
+                 [-w --no-password] [-W --password]
+                 [--remote-proto] [--remote-host]
+                 [--remote-port] [--remote-path] [--remote-user]
+                 [--ssh-options]
+                 [--ttl=interval] [--expire-time=timestamp] [--note=text]
+                 [--help]
+
+  pg_probackup restore -B backup-path --instance=instance_name
+                 [-D pgdata-path] [-i backup-id] [-j num-threads]
+                 [--recovery-target-time=time|--recovery-target-xid=xid
+                  |--recovery-target-lsn=lsn [--recovery-target-inclusive=boolean]]
+                 [--recovery-target-timeline=timeline]
+                 [--recovery-target=immediate|latest]
+                 [--recovery-target-name=target-name]
+                 [--recovery-target-action=pause|promote|shutdown]
+                 [--restore-command=cmdline]
+                 [-R | --restore-as-replica] [--force]
+                 [--primary-conninfo=primary_conninfo]
+                 [-S | --primary-slot-name=slotname]
+                 [--no-validate] [--skip-block-validation]
+                 [-T OLDDIR=NEWDIR] [--progress]
+                 [--external-mapping=OLDDIR=NEWDIR]
+                 [--skip-external-dirs] [--no-sync]
+                 [-I | --incremental-mode=none|checksum|lsn]
+                 [--db-include | --db-exclude]
+                 [--remote-proto] [--remote-host]
+                 [--remote-port] [--remote-path] [--remote-user]
+                 [--ssh-options]
+                 [--archive-host=hostname]
+                 [--archive-port=port] [--archive-user=username]
+                 [--help]
+
+  pg_probackup validate -B backup-path [--instance=instance_name]
+                 [-i backup-id] [--progress] [-j num-threads]
+                 [--recovery-target-time=time|--recovery-target-xid=xid
+                  |--recovery-target-lsn=lsn [--recovery-target-inclusive=boolean]]
+                 [--recovery-target-timeline=timeline]
+                 [--recovery-target-name=target-name]
+                 [--skip-block-validation]
+                 [--help]
+
+  pg_probackup checkdb [-B backup-path] [--instance=instance_name]
+                 [-D pgdata-path] [--progress] [-j num-threads]
+                 [--amcheck] [--skip-block-validation]
+                 [--heapallindexed]
+                 [--help]
+
+  pg_probackup show -B backup-path
+                 [--instance=instance_name [-i backup-id]]
+                 [--format=format] [--archive]
+                 [--no-color] [--help]
+
+  pg_probackup delete -B backup-path --instance=instance_name
+                 [-j num-threads] [--progress]
+                 [--retention-redundancy=retention-redundancy]
+                 [--retention-window=retention-window]
+                 [--wal-depth=wal-depth]
+                 [-i backup-id | --delete-expired | --merge-expired | --status=backup_status]
+                 [--delete-wal]
+                 [--dry-run] [--no-validate] [--no-sync]
+                 [--help]
+
+  pg_probackup merge -B backup-path --instance=instance_name
+                 -i backup-id [--progress] [-j num-threads]
+                 [--no-validate] [--no-sync]
+                 [--help]
+
+  pg_probackup add-instance -B backup-path -D pgdata-path
+                 --instance=instance_name
+                 [--external-dirs=external-directories-paths]
+                 [--remote-proto] [--remote-host]
+                 [--remote-port] [--remote-path] [--remote-user]
+                 [--ssh-options]
+                 [--help]
+
+  pg_probackup del-instance -B backup-path
+                 --instance=instance_name
+                 [--help]
+
+  pg_probackup archive-push -B backup-path --instance=instance_name
+                 --wal-file-name=wal-file-name
+                 [-j num-threads] [--batch-size=batch_size]
+                 [--archive-timeout=timeout]
+                 [--no-ready-rename] [--no-sync]
+                 [--overwrite] [--compress]
+                 [--compress-algorithm=compress-algorithm]
+                 [--compress-level=compress-level]
+                 [--remote-proto] [--remote-host]
+                 [--remote-port] [--remote-path] [--remote-user]
+                 [--ssh-options]
+                 [--help]
+
+  pg_probackup archive-get -B backup-path --instance=instance_name
+                 --wal-file-path=wal-file-path
+                 --wal-file-name=wal-file-name
+                 [-j num-threads] [--batch-size=batch_size]
+                 [--no-validate-wal]
+                 [--remote-proto] [--remote-host]
+                 [--remote-port] [--remote-path] [--remote-user]
+                 [--ssh-options]
+                 [--help]
+
+  pg_probackup catchup  -b catchup-mode
+                 --source-pgdata=path_to_pgdata_on_remote_server
+                 --destination-pgdata=path_to_local_dir
+                 [--stream [-S slot-name] [--temp-slot | --perm-slot]]
+                 [-j num-threads]
+                 [-T OLDDIR=NEWDIR]
+                 [--exclude-path=path_prefix]
+                 [-d dbname] [-h host] [-p port] [-U username]
+                 [-w --no-password] [-W --password]
+                 [--remote-proto] [--remote-host]
+                 [--remote-port] [--remote-path] [--remote-user]
+                 [--ssh-options]
+                 [--help]
+
+Read the website for details. <https://github.com/postgrespro/pg_probackup>
+Report bugs to <https://github.com/postgrespro/pg_probackup/issues>.
