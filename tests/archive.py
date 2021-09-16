@@ -1836,8 +1836,6 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         with open(log_file, 'r') as f:
             log_content = f.read()
 
-        self.assertIn('Required parameter is not specified: --wal_file_path', log_content)
-
         self.assertIn('pg_probackup archive-push completed successfully', log_content)
 
         self.del_test_dir(module_name, fname)
@@ -1855,17 +1853,29 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'archive_mode': 'on',
-                'archive_command': 'exit 0'})
+                'archive_mode': 'on'})
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node, compress=True)
+        archive_command = '\"{0}\" archive-push -B \"{1}\" --instance \"{2}\" --wal-file-path=%p --wal-file-name=%f'.format(
+            self.probackup_path, backup_dir, 'node')
+        self.set_auto_conf(
+                node,
+                {'archive_command': archive_command})
 
         node.slow_start()
+        node.safe_psql(
+            "postgres",
+            "create table t_heap as select i"
+            " as id from generate_series(0,100) i")
 
         # FULL
         self.backup_node(backup_dir, 'node', node, options=['--stream'])
+
+#        self.run_pb(["archive-push", "-B", backup_dir,
+#            "--instance=node", "-D", node.data_dir,
+#            "--wal-file-name=%%f"])#"--wal-file-path=%%p",
 
         log_file = os.path.join(node.logs_dir, 'postgresql.log')
         with open(log_file, 'r') as f:
@@ -1892,19 +1902,22 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node, compress=True)
-        walfilepath = backup_dir + '/..'
-        archive_command = '\"{0}\" archive-push -B \"{1}\"'.format(self.probackup_path, backup_dir)
-        archive_command += '--instance \"{0}\"'.format('node')
-        archive_command += ' --wal-file-path=\"{0}\" --wal-file-name=%f'.format(walfilepath)
 
-        self.set_auto_conf(
-                node,
-                {'archive_command': archive_command})
+        wal_dir = os.path.join(backup_dir, 'wal', 'node')
+        self.set_auto_conf(node, {'archive_command': "cp -r \"{0}\" \"{1}\"".format(backup_dir, wal_dir)})
 
         node.slow_start()
+        node.safe_psql(
+            "postgres",
+            "create table t_heap as select i"
+            " as id from generate_series(0,100) i")
 
         # FULL
-        self.backup_node(backup_dir, 'node', node)
+        self.backup_node(backup_dir, 'node', node, options=['--stream'])
+
+        self.run_pb(["archive-push", "-B", backup_dir,
+            "--instance=node", "-D", node.data_dir,
+            "--wal-file-path", wal_dir, "--wal-file-name=%f"])
 
         log_file = os.path.join(node.logs_dir, 'postgresql.log')
         with open(log_file, 'r') as f:
