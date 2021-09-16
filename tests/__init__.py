@@ -41,7 +41,7 @@ def load_tests(loader, tests, pattern):
     suite.addTests(loader.loadTestsFromModule(incr_restore))
     suite.addTests(loader.loadTestsFromModule(locking))
     suite.addTests(loader.loadTestsFromModule(logging))
-    suite.addTests(loader.loadTestsFromModule(merge))
+    # suite.addTests(loader.loadTestsFromModule(merge))
     suite.addTests(loader.loadTestsFromModule(option))
     suite.addTests(loader.loadTestsFromModule(page))
     suite.addTests(loader.loadTestsFromModule(pgpro560))
