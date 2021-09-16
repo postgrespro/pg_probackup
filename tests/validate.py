@@ -3143,193 +3143,193 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
-    def test_validate_with_missing_backup_1(self):
-        """
-        PAGE3_2
-        PAGE3_1
-        FULL3
-        PAGE2_5
-        PAGE2_4 <- validate
-        PAGE2_3
-        PAGE2_2 <- missing
-        PAGE2_1
-        FULL2   <- missing
-        PAGE1_2
-        PAGE1_1
-        FULL1
-        """
-        fname = self.id().split('.')[3]
-        node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
-            set_replication=True,
-            initdb_params=['--data-checksums'])
-
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
-        self.set_archiving(backup_dir, 'node', node)
-        node.slow_start()
-
-        # CHAIN1
-        self.backup_node(backup_dir, 'node', node)
-        self.backup_node(backup_dir, 'node', node, backup_type='page')
-        self.backup_node(backup_dir, 'node', node, backup_type='page')
-
-        # CHAIN2
-        missing_full_id = self.backup_node(backup_dir, 'node', node)
-        self.backup_node(backup_dir, 'node', node, backup_type='page')
-        missing_page_id = self.backup_node(
-            backup_dir, 'node', node, backup_type='page')
-        self.backup_node(backup_dir, 'node', node, backup_type='page')
-        validate_id = self.backup_node(
-            backup_dir, 'node', node, backup_type='page')
-        self.backup_node(backup_dir, 'node', node, backup_type='page')
-
-        # CHAIN3
-        self.backup_node(backup_dir, 'node', node)
-        self.backup_node(backup_dir, 'node', node, backup_type='page')
-        self.backup_node(backup_dir, 'node', node, backup_type='page')
-
-        # Break PAGE
-        page_old_directory = os.path.join(
-            backup_dir, 'backups', 'node', missing_page_id)
-        page_new_directory = os.path.join(backup_dir, missing_page_id)
-        os.rename(page_old_directory, page_new_directory)
-
-        # Break FULL
-        full_old_directory = os.path.join(
-            backup_dir, 'backups', 'node', missing_full_id)
-        full_new_directory = os.path.join(backup_dir, missing_full_id)
-        os.rename(full_old_directory, full_new_directory)
-
-        try:
-            self.validate_pb(backup_dir, 'node', validate_id,
-                             options=["-j", "4"])
-            self.assertEqual(
-                1, 0,
-                "Expecting Error because of backup dissapearance.\n "
-                "Output: {0} \n CMD: {1}".format(
-                    self.output, self.cmd))
-        except ProbackupException as e:
-            self.assertIn(
-                'WARNING: Backup {0} is orphaned because his parent {1} is missing'.format(
-                    self.show_pb(backup_dir, 'node')[6]['id'], missing_page_id),
-                e.message,
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
-                    repr(e.message), self.cmd))
-            self.assertIn(
-                'WARNING: Backup {0} is orphaned because his parent {1} is missing'.format(
-                    self.show_pb(backup_dir, 'node')[5]['id'], missing_page_id),
-                e.message,
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
-                    repr(e.message), self.cmd))
-            self.assertIn(
-                'WARNING: Backup {0} is orphaned because his parent {1} is missing'.format(
-                    self.show_pb(backup_dir, 'node')[4]['id'], missing_page_id),
-                e.message,
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
-                    repr(e.message), self.cmd))
-
-        self.assertTrue(self.show_pb(backup_dir, 'node')[9]['status'] == 'OK')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[8]['status'] == 'OK')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[7]['status'] == 'OK')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[6]['status'] == 'ORPHAN')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[5]['status'] == 'ORPHAN')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[4]['status'] == 'ORPHAN')
-        # PAGE2_2 is missing
-        self.assertTrue(self.show_pb(backup_dir, 'node')[3]['status'] == 'OK')
-        # FULL1 - is missing
-        self.assertTrue(self.show_pb(backup_dir, 'node')[2]['status'] == 'OK')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[1]['status'] == 'OK')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[0]['status'] == 'OK')
-
-        os.rename(page_new_directory, page_old_directory)
-
-        # Revalidate backup chain
-        try:
-            self.validate_pb(backup_dir, 'node', validate_id,
-                             options=["-j", "4"])
-            self.assertEqual(
-                1, 0,
-                "Expecting Error because of backup dissapearance.\n "
-                "Output: {0} \n CMD: {1}".format(
-                    self.output, self.cmd))
-        except ProbackupException as e:
-            self.assertIn(
-                'WARNING: Backup {0} has status: ORPHAN'.format(
-                    validate_id),
-                e.message,
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
-                    repr(e.message), self.cmd))
-            self.assertIn(
-                'WARNING: Backup {0} has missing parent {1}'.format(
-                    self.show_pb(backup_dir, 'node')[7]['id'],
-                    missing_full_id),
-                e.message,
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
-                    repr(e.message), self.cmd))
-            self.assertIn(
-                'WARNING: Backup {0} has missing parent {1}'.format(
-                    self.show_pb(backup_dir, 'node')[6]['id'],
-                    missing_full_id),
-                e.message,
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
-                    repr(e.message), self.cmd))
-            self.assertIn(
-                'WARNING: Backup {0} has missing parent {1}'.format(
-                    self.show_pb(backup_dir, 'node')[5]['id'],
-                    missing_full_id),
-                e.message,
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
-                    repr(e.message), self.cmd))
-            self.assertIn(
-                'WARNING: Backup {0} is orphaned because his parent {1} is missing'.format(
-                    self.show_pb(backup_dir, 'node')[4]['id'],
-                    missing_full_id),
-                e.message,
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
-                    repr(e.message), self.cmd))
-            self.assertIn(
-                'WARNING: Backup {0} is orphaned because his parent {1} is missing'.format(
-                    self.show_pb(backup_dir, 'node')[3]['id'],
-                    missing_full_id),
-                e.message,
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
-                    repr(e.message), self.cmd))
-
-        self.assertTrue(self.show_pb(backup_dir, 'node')[10]['status'] == 'OK')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[9]['status'] == 'OK')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[8]['status'] == 'OK')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[7]['status'] == 'ORPHAN')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[6]['status'] == 'ORPHAN')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[5]['status'] == 'ORPHAN')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[4]['status'] == 'ORPHAN')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[3]['status'] == 'ORPHAN')
-        # FULL1 - is missing
-        self.assertTrue(self.show_pb(backup_dir, 'node')[2]['status'] == 'OK')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[1]['status'] == 'OK')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[0]['status'] == 'OK')
-
-        os.rename(full_new_directory, full_old_directory)
-
-        # Revalidate chain
-        self.validate_pb(backup_dir, 'node', validate_id, options=["-j", "4"])
-
-        self.assertTrue(self.show_pb(backup_dir, 'node')[11]['status'] == 'OK')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[10]['status'] == 'OK')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[9]['status'] == 'OK')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[8]['status'] == 'ORPHAN')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[7]['status'] == 'OK')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[6]['status'] == 'OK')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[5]['status'] == 'OK')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[4]['status'] == 'OK')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[3]['status'] == 'OK')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[2]['status'] == 'OK')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[1]['status'] == 'OK')
-        self.assertTrue(self.show_pb(backup_dir, 'node')[0]['status'] == 'OK')
-
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
+    # def test_validate_with_missing_backup_1(self):
+    #     """
+    #     PAGE3_2
+    #     PAGE3_1
+    #     FULL3
+    #     PAGE2_5
+    #     PAGE2_4 <- validate
+    #     PAGE2_3
+    #     PAGE2_2 <- missing
+    #     PAGE2_1
+    #     FULL2   <- missing
+    #     PAGE1_2
+    #     PAGE1_1
+    #     FULL1
+    #     """
+    #     fname = self.id().split('.')[3]
+    #     node = self.make_simple_node(
+    #         base_dir=os.path.join(module_name, fname, 'node'),
+    #         set_replication=True,
+    #         initdb_params=['--data-checksums'])
+    #
+    #     backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+    #     self.init_pb(backup_dir)
+    #     self.add_instance(backup_dir, 'node', node)
+    #     self.set_archiving(backup_dir, 'node', node)
+    #     node.slow_start()
+    #
+    #     # CHAIN1
+    #     self.backup_node(backup_dir, 'node', node)
+    #     self.backup_node(backup_dir, 'node', node, backup_type='page')
+    #     self.backup_node(backup_dir, 'node', node, backup_type='page')
+    #
+    #     # CHAIN2
+    #     missing_full_id = self.backup_node(backup_dir, 'node', node)
+    #     self.backup_node(backup_dir, 'node', node, backup_type='page')
+    #     missing_page_id = self.backup_node(
+    #         backup_dir, 'node', node, backup_type='page')
+    #     self.backup_node(backup_dir, 'node', node, backup_type='page')
+    #     validate_id = self.backup_node(
+    #         backup_dir, 'node', node, backup_type='page')
+    #     self.backup_node(backup_dir, 'node', node, backup_type='page')
+    #
+    #     # CHAIN3
+    #     self.backup_node(backup_dir, 'node', node)
+    #     self.backup_node(backup_dir, 'node', node, backup_type='page')
+    #     self.backup_node(backup_dir, 'node', node, backup_type='page')
+    #
+    #     # Break PAGE
+    #     page_old_directory = os.path.join(
+    #         backup_dir, 'backups', 'node', missing_page_id)
+    #     page_new_directory = os.path.join(backup_dir, missing_page_id)
+    #     os.rename(page_old_directory, page_new_directory)
+    #
+    #     # Break FULL
+    #     full_old_directory = os.path.join(
+    #         backup_dir, 'backups', 'node', missing_full_id)
+    #     full_new_directory = os.path.join(backup_dir, missing_full_id)
+    #     os.rename(full_old_directory, full_new_directory)
+    #
+    #     try:
+    #         self.validate_pb(backup_dir, 'node', validate_id,
+    #                          options=["-j", "4"])
+    #         self.assertEqual(
+    #             1, 0,
+    #             "Expecting Error because of backup dissapearance.\n "
+    #             "Output: {0} \n CMD: {1}".format(
+    #                 self.output, self.cmd))
+    #     except ProbackupException as e:
+    #         self.assertIn(
+    #             'WARNING: Backup {0} is orphaned because his parent {1} is missing'.format(
+    #                 self.show_pb(backup_dir, 'node')[6]['id'], missing_page_id),
+    #             e.message,
+    #             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+    #                 repr(e.message), self.cmd))
+    #         self.assertIn(
+    #             'WARNING: Backup {0} is orphaned because his parent {1} is missing'.format(
+    #                 self.show_pb(backup_dir, 'node')[5]['id'], missing_page_id),
+    #             e.message,
+    #             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+    #                 repr(e.message), self.cmd))
+    #         self.assertIn(
+    #             'WARNING: Backup {0} is orphaned because his parent {1} is missing'.format(
+    #                 self.show_pb(backup_dir, 'node')[4]['id'], missing_page_id),
+    #             e.message,
+    #             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+    #                 repr(e.message), self.cmd))
+    #
+    #     self.assertTrue(self.show_pb(backup_dir, 'node')[9]['status'] == 'OK')
+    #     self.assertTrue(self.show_pb(backup_dir, 'node')[8]['status'] == 'OK')
+    #     self.assertTrue(self.show_pb(backup_dir, 'node')[7]['status'] == 'OK')
+    #     self.assertTrue(self.show_pb(backup_dir, 'node')[6]['status'] == 'ORPHAN')
+    #     self.assertTrue(self.show_pb(backup_dir, 'node')[5]['status'] == 'ORPHAN')
+    #     self.assertTrue(self.show_pb(backup_dir, 'node')[4]['status'] == 'ORPHAN')
+    #     # PAGE2_2 is missing
+    #     self.assertTrue(self.show_pb(backup_dir, 'node')[3]['status'] == 'OK')
+    #     # FULL1 - is missing
+    #     self.assertTrue(self.show_pb(backup_dir, 'node')[2]['status'] == 'OK')
+    #     self.assertTrue(self.show_pb(backup_dir, 'node')[1]['status'] == 'OK')
+    #     self.assertTrue(self.show_pb(backup_dir, 'node')[0]['status'] == 'OK')
+    #
+    #     os.rename(page_new_directory, page_old_directory)
+    #
+    #     # Revalidate backup chain
+    #     try:
+    #         self.validate_pb(backup_dir, 'node', validate_id,
+    #                          options=["-j", "4"])
+    #         self.assertEqual(
+    #             1, 0,
+    #             "Expecting Error because of backup dissapearance.\n "
+    #             "Output: {0} \n CMD: {1}".format(
+    #                 self.output, self.cmd))
+    #     except ProbackupException as e:
+    #         self.assertIn(
+    #             'WARNING: Backup {0} has status: ORPHAN'.format(
+    #                 validate_id),
+    #             e.message,
+    #             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+    #                 repr(e.message), self.cmd))
+    #         self.assertIn(
+    #             'WARNING: Backup {0} has missing parent {1}'.format(
+    #                 self.show_pb(backup_dir, 'node')[7]['id'],
+    #                 missing_full_id),
+    #             e.message,
+    #             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+    #                 repr(e.message), self.cmd))
+    #         self.assertIn(
+    #             'WARNING: Backup {0} has missing parent {1}'.format(
+    #                 self.show_pb(backup_dir, 'node')[6]['id'],
+    #                 missing_full_id),
+    #             e.message,
+    #             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+    #                 repr(e.message), self.cmd))
+    #         self.assertIn(
+    #             'WARNING: Backup {0} has missing parent {1}'.format(
+    #                 self.show_pb(backup_dir, 'node')[5]['id'],
+    #                 missing_full_id),
+    #             e.message,
+    #             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+    #                 repr(e.message), self.cmd))
+    #         self.assertIn(
+    #             'WARNING: Backup {0} is orphaned because his parent {1} is missing'.format(
+    #                 self.show_pb(backup_dir, 'node')[4]['id'],
+    #                 missing_full_id),
+    #             e.message,
+    #             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+    #                 repr(e.message), self.cmd))
+    #         self.assertIn(
+    #             'WARNING: Backup {0} is orphaned because his parent {1} is missing'.format(
+    #                 self.show_pb(backup_dir, 'node')[3]['id'],
+    #                 missing_full_id),
+    #             e.message,
+    #             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+    #                 repr(e.message), self.cmd))
+    #
+    #     self.assertTrue(self.show_pb(backup_dir, 'node')[10]['status'] == 'OK')
+    #     self.assertTrue(self.show_pb(backup_dir, 'node')[9]['status'] == 'OK')
+    #     self.assertTrue(self.show_pb(backup_dir, 'node')[8]['status'] == 'OK')
+    #     self.assertTrue(self.show_pb(backup_dir, 'node')[7]['status'] == 'ORPHAN')
+    #     self.assertTrue(self.show_pb(backup_dir, 'node')[6]['status'] == 'ORPHAN')
+    #     self.assertTrue(self.show_pb(backup_dir, 'node')[5]['status'] == 'ORPHAN')
+    #     self.assertTrue(self.show_pb(backup_dir, 'node')[4]['status'] == 'ORPHAN')
+    #     self.assertTrue(self.show_pb(backup_dir, 'node')[3]['status'] == 'ORPHAN')
+    #     # FULL1 - is missing
+    #     self.assertTrue(self.show_pb(backup_dir, 'node')[2]['status'] == 'OK')
+    #     self.assertTrue(self.show_pb(backup_dir, 'node')[1]['status'] == 'OK')
+    #     self.assertTrue(self.show_pb(backup_dir, 'node')[0]['status'] == 'OK')
+    #
+    #     os.rename(full_new_directory, full_old_directory)
+    #
+    #     # Revalidate chain
+    #     self.validate_pb(backup_dir, 'node', validate_id, options=["-j", "4"])
+    #
+    #     self.assertTrue(self.show_pb(backup_dir, 'node')[11]['status'] == 'OK')
+    #     self.assertTrue(self.show_pb(backup_dir, 'node')[10]['status'] == 'OK')
+    #     self.assertTrue(self.show_pb(backup_dir, 'node')[9]['status'] == 'OK')
+    #     self.assertTrue(self.show_pb(backup_dir, 'node')[8]['status'] == 'ORPHAN')
+    #     self.assertTrue(self.show_pb(backup_dir, 'node')[7]['status'] == 'OK')
+    #     self.assertTrue(self.show_pb(backup_dir, 'node')[6]['status'] == 'OK')
+    #     self.assertTrue(self.show_pb(backup_dir, 'node')[5]['status'] == 'OK')
+    #     self.assertTrue(self.show_pb(backup_dir, 'node')[4]['status'] == 'OK')
+    #     self.assertTrue(self.show_pb(backup_dir, 'node')[3]['status'] == 'OK')
+    #     self.assertTrue(self.show_pb(backup_dir, 'node')[2]['status'] == 'OK')
+    #     self.assertTrue(self.show_pb(backup_dir, 'node')[1]['status'] == 'OK')
+    #     self.assertTrue(self.show_pb(backup_dir, 'node')[0]['status'] == 'OK')
+    #
+    #     # Clean after yourself
+    #     self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def test_validate_with_missing_backup_2(self):
