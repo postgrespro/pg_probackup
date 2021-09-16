@@ -886,90 +886,90 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
-    def test_merge_delta_delete(self):
-        """
-        Make node, create tablespace with table, take full backup,
-        alter tablespace location, take delta backup, merge full and delta,
-        restore database.
-        """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
-        node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
-            set_replication=True, initdb_params=['--data-checksums'],
-            pg_options={
-                'checkpoint_timeout': '30s',
-            }
-        )
-
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
-        self.set_archiving(backup_dir, 'node', node)
-        node.slow_start()
-
-        self.create_tblspace_in_node(node, 'somedata')
-
-        # FULL backup
-        self.backup_node(backup_dir, 'node', node, options=["--stream"])
-
-        node.safe_psql(
-            "postgres",
-            "create table t_heap tablespace somedata as select i as id,"
-            " md5(i::text) as text, md5(i::text)::tsvector as tsvector"
-            " from generate_series(0,100) i"
-        )
-
-        node.safe_psql(
-            "postgres",
-            "delete from t_heap"
-        )
-
-        node.safe_psql(
-            "postgres",
-            "vacuum t_heap"
-        )
-
-        # DELTA BACKUP
-        self.backup_node(
-            backup_dir, 'node', node,
-            backup_type='delta',
-            options=["--stream"]
-        )
-
-        if self.paranoia:
-            pgdata = self.pgdata_content(node.data_dir)
-
-        backup_id = self.show_pb(backup_dir, "node")[1]["id"]
-        self.merge_backup(backup_dir, "node", backup_id, options=["-j", "4"])
-
-        # RESTORE
-        node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored')
-        )
-        node_restored.cleanup()
-
-        self.restore_node(
-            backup_dir, 'node', node_restored,
-            options=[
-                "-j", "4",
-                "-T", "{0}={1}".format(
-                    self.get_tblspace_path(node, 'somedata'),
-                    self.get_tblspace_path(node_restored, 'somedata')
-                )
-            ]
-        )
-
-        # GET RESTORED PGDATA AND COMPARE
-        if self.paranoia:
-            pgdata_restored = self.pgdata_content(node_restored.data_dir)
-            self.compare_pgdata(pgdata, pgdata_restored)
-
-        # START RESTORED NODE
-        self.set_auto_conf(node_restored, {'port': node_restored.port})
-        node_restored.slow_start()
-
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
+    # def test_merge_delta_delete(self):
+    #     """
+    #     Make node, create tablespace with table, take full backup,
+    #     alter tablespace location, take delta backup, merge full and delta,
+    #     restore database.
+    #     """
+    #     fname = self.id().split('.')[3]
+    #     backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+    #     node = self.make_simple_node(
+    #         base_dir=os.path.join(module_name, fname, 'node'),
+    #         set_replication=True, initdb_params=['--data-checksums'],
+    #         pg_options={
+    #             'checkpoint_timeout': '30s',
+    #         }
+    #     )
+    #
+    #     self.init_pb(backup_dir)
+    #     self.add_instance(backup_dir, 'node', node)
+    #     self.set_archiving(backup_dir, 'node', node)
+    #     node.slow_start()
+    #
+    #     self.create_tblspace_in_node(node, 'somedata')
+    #
+    #     # FULL backup
+    #     self.backup_node(backup_dir, 'node', node, options=["--stream"])
+    #
+    #     node.safe_psql(
+    #         "postgres",
+    #         "create table t_heap tablespace somedata as select i as id,"
+    #         " md5(i::text) as text, md5(i::text)::tsvector as tsvector"
+    #         " from generate_series(0,100) i"
+    #     )
+    #
+    #     node.safe_psql(
+    #         "postgres",
+    #         "delete from t_heap"
+    #     )
+    #
+    #     node.safe_psql(
+    #         "postgres",
+    #         "vacuum t_heap"
+    #     )
+    #
+    #     # DELTA BACKUP
+    #     self.backup_node(
+    #         backup_dir, 'node', node,
+    #         backup_type='delta',
+    #         options=["--stream"]
+    #     )
+    #
+    #     if self.paranoia:
+    #         pgdata = self.pgdata_content(node.data_dir)
+    #
+    #     backup_id = self.show_pb(backup_dir, "node")[1]["id"]
+    #     self.merge_backup(backup_dir, "node", backup_id, options=["-j", "4"])
+    #
+    #     # RESTORE
+    #     node_restored = self.make_simple_node(
+    #         base_dir=os.path.join(module_name, fname, 'node_restored')
+    #     )
+    #     node_restored.cleanup()
+    #
+    #     self.restore_node(
+    #         backup_dir, 'node', node_restored,
+    #         options=[
+    #             "-j", "4",
+    #             "-T", "{0}={1}".format(
+    #                 self.get_tblspace_path(node, 'somedata'),
+    #                 self.get_tblspace_path(node_restored, 'somedata')
+    #             )
+    #         ]
+    #     )
+    #
+    #     # GET RESTORED PGDATA AND COMPARE
+    #     if self.paranoia:
+    #         pgdata_restored = self.pgdata_content(node_restored.data_dir)
+    #         self.compare_pgdata(pgdata, pgdata_restored)
+    #
+    #     # START RESTORED NODE
+    #     self.set_auto_conf(node_restored, {'port': node_restored.port})
+    #     node_restored.slow_start()
+    #
+    #     # Clean after yourself
+    #     self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def test_continue_failed_merge(self):

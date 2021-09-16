@@ -1062,7 +1062,8 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         master.safe_psql(
             'postgres',
             'CREATE TABLE t1 AS '
-            'SELECT i, repeat(md5(i::text),5006056) AS fat_attr '
+            #'SELECT i, repeat(md5(i::text),5006056) AS fat_attr '
+            'SELECT i, repeat(md5(i::text),500) AS fat_attr '
             'FROM generate_series(0,10) i')
 
         self.wait_until_replica_catch_with_master(master, replica)
@@ -1162,7 +1163,8 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         master.safe_psql(
             'postgres',
             'CREATE TABLE t1 AS '
-            'SELECT i, repeat(md5(i::text),5006056) AS fat_attr '
+            # 'SELECT i, repeat(md5(i::text),5006056) AS fat_attr '
+            'SELECT i, repeat(md5(i::text),500) AS fat_attr '
             'FROM generate_series(0,10) i')
 
         master.safe_psql(
@@ -1235,7 +1237,8 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         master.safe_psql(
             'postgres',
             'CREATE TABLE t1 AS '
-            'SELECT i, repeat(md5(i::text),5006056) AS fat_attr '
+            # 'SELECT i, repeat(md5(i::text),5006056) AS fat_attr '
+            'SELECT i, repeat(md5(i::text),500) AS fat_attr '
             'FROM generate_series(0,10) i')
 
         self.wait_until_replica_catch_with_master(master, replica)
@@ -1304,7 +1307,8 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         master.safe_psql(
             'postgres',
             'CREATE TABLE t1 AS '
-            'SELECT i, repeat(md5(i::text),5006056) AS fat_attr '
+            # 'SELECT i, repeat(md5(i::text),5006056) AS fat_attr '
+            'SELECT i, repeat(md5(i::text),500) AS fat_attr '
             'FROM generate_series(0,1) i')
 
         self.wait_until_replica_catch_with_master(master, replica)
@@ -1366,14 +1370,16 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         node1.safe_psql(
             'postgres',
             'CREATE TABLE t1 AS '
-            'SELECT i, repeat(md5(i::text),5006056) AS fat_attr '
+            # 'SELECT i, repeat(md5(i::text),5006056) AS fat_attr '
+            'SELECT i, repeat(md5(i::text),500) AS fat_attr '
             'FROM generate_series(0,20) i')
         self.wait_until_replica_catch_with_master(node1, node2)
 
         node1.safe_psql(
             'postgres',
             'CREATE TABLE t2 AS '
-            'SELECT i, repeat(md5(i::text),5006056) AS fat_attr '
+            # 'SELECT i, repeat(md5(i::text),5006056) AS fat_attr '
+            'SELECT i, repeat(md5(i::text),500) AS fat_attr '
             'FROM generate_series(0,20) i')
         self.wait_until_replica_catch_with_master(node1, node2)
 
@@ -1395,7 +1401,8 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         node2.safe_psql(
             'postgres',
             'CREATE TABLE t3 AS '
-            'SELECT i, repeat(md5(i::text),5006056) AS fat_attr '
+            #'SELECT i, repeat(md5(i::text),5006056) AS fat_attr '
+            'SELECT i, repeat(md5(i::text),500) AS fat_attr '
             'FROM generate_series(0,20) i')
 
         # node1 is now replica
@@ -1418,7 +1425,8 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         node2.safe_psql(
             'postgres',
             'CREATE TABLE t4 AS '
-            'SELECT i, repeat(md5(i::text),5006056) AS fat_attr '
+            #'SELECT i, repeat(md5(i::text),5006056) AS fat_attr '
+            'SELECT i, repeat(md5(i::text),500) AS fat_attr '
             'FROM generate_series(0,30) i')
         self.wait_until_replica_catch_with_master(node2, node1)
 
@@ -1491,14 +1499,16 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         node1.safe_psql(
             'postgres',
             'CREATE TABLE t1 AS '
-            'SELECT i, repeat(md5(i::text),5006056) AS fat_attr '
+            #'SELECT i, repeat(md5(i::text),5006056) AS fat_attr '
+            'SELECT i, repeat(md5(i::text),500) AS fat_attr '
             'FROM generate_series(0,20) i')
         self.wait_until_replica_catch_with_master(node1, node2)
 
         node1.safe_psql(
             'postgres',
             'CREATE TABLE t2 AS '
-            'SELECT i, repeat(md5(i::text),5006056) AS fat_attr '
+            #'SELECT i, repeat(md5(i::text),5006056) AS fat_attr '
+            'SELECT i, repeat(md5(i::text),500) AS fat_attr '
             'FROM generate_series(0,20) i')
         self.wait_until_replica_catch_with_master(node1, node2)
 
@@ -1520,7 +1530,8 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         node2.safe_psql(
             'postgres',
             'CREATE TABLE t3 AS '
-            'SELECT i, repeat(md5(i::text),5006056) AS fat_attr '
+            #'SELECT i, repeat(md5(i::text),5006056) AS fat_attr '
+            'SELECT i, repeat(md5(i::text),500) AS fat_attr '
             'FROM generate_series(0,20) i')
 
         # node1 is now replica
@@ -1543,7 +1554,8 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         node2.safe_psql(
             'postgres',
             'CREATE TABLE t4 AS '
-            'SELECT i, repeat(md5(i::text),5006056) AS fat_attr '
+            #'SELECT i, repeat(md5(i::text),5006056) AS fat_attr '
+            'SELECT i, repeat(md5(i::text),500) AS fat_attr '
             'FROM generate_series(0,30) i')
         self.wait_until_replica_catch_with_master(node2, node1)
 
@@ -1609,7 +1621,8 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         master.safe_psql(
             'postgres',
             'CREATE TABLE t1 AS '
-            'SELECT i, repeat(md5(i::text),5006056) AS fat_attr '
+            # 'SELECT i, repeat(md5(i::text),5006056) AS fat_attr '
+            'SELECT i, repeat(md5(i::text),500) AS fat_attr '
             'FROM generate_series(0,20) i')
         self.wait_until_replica_catch_with_master(master, replica)
 
@@ -1622,7 +1635,8 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         master.safe_psql(
             'postgres',
             'CREATE TABLE t2 AS '
-            'SELECT i, repeat(md5(i::text),5006056) AS fat_attr '
+            # 'SELECT i, repeat(md5(i::text),5006056) AS fat_attr '
+            'SELECT i, repeat(md5(i::text),500) AS fat_attr '
             'FROM generate_series(0,20) i')
         self.wait_until_replica_catch_with_master(master, replica)
 
