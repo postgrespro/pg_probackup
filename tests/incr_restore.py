@@ -2283,7 +2283,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         for line in db_list_splitted:
             print("16.1")
             print(type(line))
-            line = json.loads(str(line))
+            line = json.loads(line.decode("utf-8"))
             print("16.2")
             print(type(line))
             db_list[line['datname']] = line['oid']
