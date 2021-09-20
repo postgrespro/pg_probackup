@@ -539,7 +539,7 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
             "REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM PUBLIC; "
             "REVOKE ALL ON SCHEMA pg_catalog from PUBLIC; "
             "REVOKE ALL ON ALL TABLES IN SCHEMA pg_catalog FROM PUBLIC; "
-            "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA pg_catalog FROM PUBLIC; "
+            # "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA pg_catalog FROM PUBLIC; "
             "REVOKE ALL ON ALL SEQUENCES IN SCHEMA pg_catalog FROM PUBLIC; "
             "REVOKE ALL ON SCHEMA information_schema from PUBLIC; "
             "REVOKE ALL ON ALL TABLES IN SCHEMA information_schema FROM PUBLIC; "
