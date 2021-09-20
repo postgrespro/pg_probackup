@@ -2233,77 +2233,62 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
 
     def test_incremental_partial_restore_exclude_tablespace_checksum(self):
         """"""
-        print("1")
+
         fname = self.id().split('.')[3]
-        print("2")
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
-        print("3")
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'])
-        print("4")
+
         self.init_pb(backup_dir)
-        print("5")
         self.add_instance(backup_dir, 'node', node)
-        print("6")
         self.set_archiving(backup_dir, 'node', node)
-        print("7")
         node.slow_start()
-        print("8")
+
         # cat_version = node.get_control_data()["Catalog version number"]
         # version_specific_dir = 'PG_' + node.major_version_str + '_' + cat_version
-
         # PG_10_201707211
         # pg_tblspc/33172/PG_9.5_201510051/16386/
-        print("9")
+
         self.create_tblspace_in_node(node, 'somedata')
-        print("10")
         node_tablespace = self.get_tblspace_path(node, 'somedata')
-        print("11")
         tbl_oid = node.safe_psql(
             'postgres',
             "SELECT oid "
             "FROM pg_tablespace "
             "WHERE spcname = 'somedata'").rstrip()
-        print("12")
+
         for i in range(1, 10, 1):
             node.safe_psql(
                 'postgres',
                 'CREATE database db{0} tablespace somedata'.format(i))
-        print("13")
+
         db_list_raw = node.safe_psql(
             'postgres',
             'SELECT to_json(a) '
             'FROM (SELECT oid, datname FROM pg_database) a').rstrip()
-        print("14")
+
         db_list_splitted = db_list_raw.splitlines()
-        print("15")
+
         db_list = {}
-        print("16")
         for line in db_list_splitted:
-            print("16.1")
-            print(type(line))
             line = json.loads(line.decode("utf-8"))
-            print("16.2")
-            print(type(line))
             db_list[line['datname']] = line['oid']
-            print("16.3")
-        print("17")
         # FULL backup
         backup_id = self.backup_node(backup_dir, 'node', node)
-        print("18")
+
         # node1
         node1 = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node1'))
         node1.cleanup()
         node1_tablespace = self.get_tblspace_path(node1, 'somedata')
-        print("19")
+
         # node2
         node2 = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node2'))
         node2.cleanup()
         node2_tablespace = self.get_tblspace_path(node2, 'somedata')
-        print("20")
+
         # in node2 restore full backup
         self.restore_node(
             backup_dir, 'node',
@@ -2319,9 +2304,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
                 "--db-exclude=db5",
                 "-T", "{0}={1}".format(
                     node_tablespace, node1_tablespace)])
-        print("22")
         pgdata1 = self.pgdata_content(node1.data_dir)
-        print("23")
         # partial incremental restore into node2
         try:
             self.restore_node(
@@ -2344,7 +2327,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
                 e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
-        print("24")
+
         self.restore_node(
             backup_dir, 'node',
             node2, options=[
@@ -2353,37 +2336,34 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
                 "--db-exclude=db5",
                 "-T", "{0}={1}".format(
                     node_tablespace, node2_tablespace)])
-        print("25")
+
         pgdata2 = self.pgdata_content(node2.data_dir)
-        print("26")
         self.compare_pgdata(pgdata1, pgdata2)
-        print("27")
         self.set_auto_conf(node2, {'port': node2.port})
         node2.slow_start()
-        print("28")
+
         node2.safe_psql(
             'postgres',
             'select 1')
-        print("29")
+
         try:
             node2.safe_psql(
                 'db1',
                 'select 1')
         except QueryException as e:
             self.assertIn('FATAL', e.message)
-        print("30")
+
         try:
             node2.safe_psql(
                 'db5',
                 'select 1')
         except QueryException as e:
             self.assertIn('FATAL', e.message)
-        print("31")
+
         with open(node2.pg_log_file, 'r') as f:
             output = f.read()
-        print("32")
         self.assertNotIn('PANIC', output)
-        print("33")
+
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
