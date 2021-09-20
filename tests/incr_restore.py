@@ -2281,8 +2281,13 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         db_list = {}
         print("16")
         for line in db_list_splitted:
+            print("16.1")
+            print(type(line))
             line = json.loads(line)
+            print("16.2")
+            print(type(line))
             db_list[line['datname']] = line['oid']
+            print("16.3")
         print("17")
         # FULL backup
         backup_id = self.backup_node(backup_dir, 'node', node)
