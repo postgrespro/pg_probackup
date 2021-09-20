@@ -2276,12 +2276,11 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
             'SELECT to_json(a) '
             'FROM (SELECT oid, datname FROM pg_database) a').rstrip()
         print("14")
-        print(str(db_list_raw))
         db_list_splitted = db_list_raw.splitlines()
         print("15")
         db_list = {}
         print("16")
-        for line in str(db_list_splitted):
+        for line in db_list_splitted:
             line = json.loads(line)
             db_list[line['datname']] = line['oid']
         print("17")
