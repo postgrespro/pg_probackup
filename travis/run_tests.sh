@@ -105,7 +105,7 @@ if [ "$MODE" = "basic" ]; then
     python3 -m unittest -v tests
     python3 -m unittest -v tests.init
 elif [ "$MODE" = "full" ]; then
-    python3 -m unittest -v tests
+    python3 -m unittest -v tests.incr_restore.IncrRestoreTest.test_incremental_partial_restore_exclude_checksum
 else
     python3 -m unittest -v tests.$MODE
 fi
