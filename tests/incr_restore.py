@@ -2043,7 +2043,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
 
         db_list = {}
         for line in db_list_splitted:
-            line = json.loads(line)
+            line = json.loads(line.decode("utf-8"))
             db_list[line['datname']] = line['oid']
 
         node.pgbench_init(scale=20)
@@ -2148,7 +2148,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
 
         db_list = {}
         for line in db_list_splitted:
-            line = json.loads(line)
+            line = json.loads(line.decode("utf-8"))
             db_list[line['datname']] = line['oid']
 
         node.pgbench_init(scale=20)
@@ -2295,7 +2295,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
             node2, options=[
                 "-T", "{0}={1}".format(
                     node_tablespace, node2_tablespace)])
-        print("21")
+
         # partial restore into node1
         self.restore_node(
             backup_dir, 'node',
