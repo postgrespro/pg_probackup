@@ -176,7 +176,7 @@ class AuthTest(unittest.TestCase):
             cls.node.slow_start()
         except StartNodeException:
             raise unittest.skip("Node hasn't started")
-        #
+
         cls.node.safe_psql(
             "postgres",
             "CREATE ROLE backup WITH LOGIN PASSWORD 'password'; "
