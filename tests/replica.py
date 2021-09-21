@@ -1412,7 +1412,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node', node1, node1.data_dir,
             backup_id=delta1_id,
             options=[
-                '--recovery-target-timeline=2',
+                # '--recovery-target-timeline=2',
                 '--recovery-target=latest'])
 
         # Settings for Replica
