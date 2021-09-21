@@ -2008,7 +2008,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                 "REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM PUBLIC; "
                 "REVOKE ALL ON SCHEMA pg_catalog from PUBLIC; "
                 "REVOKE ALL ON ALL TABLES IN SCHEMA pg_catalog FROM PUBLIC; "
-                # "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA pg_catalog FROM PUBLIC; "
+                "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA pg_catalog FROM PUBLIC; "
                 "REVOKE ALL ON ALL SEQUENCES IN SCHEMA pg_catalog FROM PUBLIC; "
                 "REVOKE ALL ON SCHEMA information_schema from PUBLIC; "
                 "REVOKE ALL ON ALL TABLES IN SCHEMA information_schema FROM PUBLIC; "
@@ -2019,7 +2019,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                 "GRANT USAGE ON SCHEMA pg_catalog TO backup; "
                 "GRANT SELECT ON TABLE pg_catalog.pg_proc TO backup; "
                 "GRANT SELECT ON TABLE pg_catalog.pg_extension TO backup; "
-                "GRANT SELECT ON TABLE pg_catalog.pg_database TO backup; " # for partial restore, checkdb and ptrack
+                "GRANT SELECT ON TABLE pg_catalog.pg_database TO backup; "  # for partial restore, checkdb and ptrack
                 "GRANT EXECUTE ON FUNCTION pg_catalog.nameeq(name, name) TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.textout(text) TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.timestamptz(timestamp with time zone, integer) TO backup; "
@@ -2052,7 +2052,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                 "GRANT USAGE ON SCHEMA pg_catalog TO backup; "
                 "GRANT SELECT ON TABLE pg_catalog.pg_extension TO backup; "
                 "GRANT SELECT ON TABLE pg_catalog.pg_proc TO backup; "
-                "GRANT SELECT ON TABLE pg_catalog.pg_database TO backup; " # for partial restore, checkdb and ptrack
+                "GRANT SELECT ON TABLE pg_catalog.pg_database TO backup; "  # for partial restore, checkdb and ptrack
                 "GRANT EXECUTE ON FUNCTION pg_catalog.nameeq(name, name) TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.textout(text) TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.timestamptz(timestamp with time zone, integer) TO backup; "
@@ -2090,7 +2090,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                 "GRANT SELECT ON TABLE pg_catalog.pg_extension TO backup; "
                 "GRANT SELECT ON TABLE pg_catalog.pg_proc TO backup; "
                 "GRANT SELECT ON TABLE pg_catalog.pg_extension TO backup; "
-                "GRANT SELECT ON TABLE pg_catalog.pg_database TO backup; " # for partial restore, checkdb and ptrack
+                "GRANT SELECT ON TABLE pg_catalog.pg_database TO backup; "  # for partial restore, checkdb and ptrack
                 "GRANT EXECUTE ON FUNCTION pg_catalog.nameeq(name, name) TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup; "
@@ -2107,15 +2107,14 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         if self.ptrack:
             if node.major_version < 12:
                 for fname in [
-                        'pg_catalog.oideq(oid, oid)',
-                        'pg_catalog.ptrack_version()',
-                        'pg_catalog.pg_ptrack_clear()',
-                        'pg_catalog.pg_ptrack_control_lsn()',
-                        'pg_catalog.pg_ptrack_get_and_clear_db(oid, oid)',
-                        'pg_catalog.pg_ptrack_get_and_clear(oid, oid)',
-                        'pg_catalog.pg_ptrack_get_block_2(oid, oid, oid, bigint)',
-                        'pg_catalog.pg_stop_backup()']:
-
+                    'pg_catalog.oideq(oid, oid)',
+                    'pg_catalog.ptrack_version()',
+                    'pg_catalog.pg_ptrack_clear()',
+                    'pg_catalog.pg_ptrack_control_lsn()',
+                    'pg_catalog.pg_ptrack_get_and_clear_db(oid, oid)',
+                    'pg_catalog.pg_ptrack_get_and_clear(oid, oid)',
+                    'pg_catalog.pg_ptrack_get_block_2(oid, oid, oid, bigint)',
+                    'pg_catalog.pg_stop_backup()']:
                     node.safe_psql(
                         "backupdb",
                         "GRANT EXECUTE ON FUNCTION {0} "
