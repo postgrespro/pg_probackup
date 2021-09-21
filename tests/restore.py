@@ -2509,7 +2509,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         db_list = {}
         for line in db_list_splitted:
-            line = json.loads(line)
+            line = json.loads(line.decode("utf-8"))
             db_list[line['datname']] = line['oid']
 
         # FULL backup
@@ -2748,7 +2748,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         db_list = {}
         for line in db_list_splitted:
-            line = json.loads(line)
+            line = json.loads(line.decode("utf-8"))
             db_list[line['datname']] = line['oid']
 
         # FULL backup
@@ -3280,7 +3280,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
                 "REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM PUBLIC; "
                 "REVOKE ALL ON SCHEMA pg_catalog from PUBLIC; "
                 "REVOKE ALL ON ALL TABLES IN SCHEMA pg_catalog FROM PUBLIC; "
-                "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA pg_catalog FROM PUBLIC; "
+                # "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA pg_catalog FROM PUBLIC; "
                 "REVOKE ALL ON ALL SEQUENCES IN SCHEMA pg_catalog FROM PUBLIC; "
                 "REVOKE ALL ON SCHEMA information_schema from PUBLIC; "
                 "REVOKE ALL ON ALL TABLES IN SCHEMA information_schema FROM PUBLIC; "
