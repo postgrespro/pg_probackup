@@ -2140,7 +2140,10 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         target_name = 'savepoint'
 
-        target_time = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S %z")
+        t1 = datetime.now()
+        t2 = t1.astimezone()
+        target_time = t2.strftime("%Y-%m-%d %H:%M:%S %z")
+
         with node.connect("postgres") as con:
             res = con.execute(
                 "INSERT INTO tbl0005 VALUES ('inserted') RETURNING (xmin)")
