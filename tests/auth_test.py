@@ -185,7 +185,7 @@ class AuthTest(unittest.TestCase):
             "GRANT EXECUTE ON FUNCTION pg_is_in_recovery() TO backup; "
             "GRANT EXECUTE ON FUNCTION pg_start_backup(text, boolean, boolean) TO backup; "
             "GRANT EXECUTE ON FUNCTION pg_stop_backup() TO backup; "
-            "GRANT EXECUTE ON FUNCTION pg_stop_backup(boolean) TO backup; "
+            "GRANT EXECUTE ON FUNCTION pg_stop_backup(boolean, boolean) TO backup; "
             "GRANT EXECUTE ON FUNCTION pg_create_restore_point(text) TO backup; "
             "GRANT EXECUTE ON FUNCTION pg_switch_xlog() TO backup; "
             "GRANT EXECUTE ON FUNCTION txid_current() TO backup; "
