@@ -1410,10 +1410,11 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         # kludge "backup_id=delta1_id"
         self.restore_node(
             backup_dir, 'node', node1, node1.data_dir,
-            backup_id=delta1_id,
-            options=[
+            backup_id=delta1_id
+            # options=[
                 # '--recovery-target-timeline=2',
-                '--recovery-target=latest'])
+                # '--recovery-target=latest']
+        )
 
         # Settings for Replica
         self.set_replica(node2, node1)
