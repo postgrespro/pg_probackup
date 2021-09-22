@@ -190,8 +190,8 @@ class AuthTest(unittest.TestCase):
             "GRANT EXECUTE ON FUNCTION txid_current() TO backup; "
             "GRANT EXECUTE ON FUNCTION txid_current_snapshot() TO backup; "
             "GRANT EXECUTE ON FUNCTION txid_snapshot_xmax(txid_snapshot) TO backup; "
-            "GRANT EXECUTE ON FUNCTION pg_ptrack_clear() TO backup; "
-            "GRANT EXECUTE ON FUNCTION pg_ptrack_get_and_clear(oid, oid) TO backup;")
+
+            )
         cls.pgpass_file = os.path.join(os.path.expanduser('~'), '.pgpass')
 
     @classmethod
