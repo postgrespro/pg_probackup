@@ -4,14 +4,14 @@ from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 import subprocess
 import sys
 from time import sleep
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import hashlib
 import shutil
 import json
 from shutil import copyfile
 from testgres import QueryException, StartNodeException
 from stat import S_ISDIR
-import pytz
+
 
 module_name = 'restore'
 
@@ -2140,7 +2140,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         target_name = 'savepoint'
 
-        t1 = datetime.now(pytz.timezone("UTC"))
+        t1 = datetime.now(timezone.utc)
         t2 = datetime.now()
         tz = abs(t2.hour - t1.hour);
         if tz < 10:
