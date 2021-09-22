@@ -11,7 +11,7 @@ import json
 from shutil import copyfile
 from testgres import QueryException, StartNodeException
 from stat import S_ISDIR
-
+import pytz
 
 module_name = 'restore'
 
@@ -2140,9 +2140,15 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         target_name = 'savepoint'
 
-        t1 = datetime.now()
-        t2 = t1.astimezone()
-        target_time = t2.strftime("%Y-%m-%d %H:%M:%S %z")
+        t1 = datetime.now(pytz.timezone("UTC"))
+        t2 = datetime.now()
+        tz = abs(t2.hour - t1.hour);
+        if tz < 10:
+            dat_postfix = '+0' + str(tz) + '00'
+        else:
+            dat_postfix = '+' + str(tz) + '00'
+        target_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S %z") + dat_postfix
+
 
         with node.connect("postgres") as con:
             res = con.execute(
