@@ -93,19 +93,19 @@ echo "############### Compiling and installing pg_probackup:"
 # make USE_PGXS=1 PG_CPPFLAGS="-coverage" SHLIB_LINK="-coverage" top_srcdir=$CUSTOM_PG_SRC install
 make USE_PGXS=1 top_srcdir=$PG_SRC install
 
-if [ "PGPROBACKUP_OLD" = "on" ]
-  # Build and install old pg_probackup
-  echo "############### Compiling and installing pg_probackup old:"
-  cd ..
-  mkdir "old_probackup"
-  cd old_probackup/
-  git clone https://github.com/postgrespro/pg_probackup.git
-  cd pg_probackup/
-  git checkout ${PGPROBACKUP_OLD_V}
-  make USE_PGXS=1 top_srcdir=$PG_SRC install
-  cd ../..
-  export PGPROBACKUPBIN_OLD=`pwd`
-fi
+#if [ "PGPROBACKUP_OLD" = "on" ]
+#  # Build and install old pg_probackup
+#  echo "############### Compiling and installing pg_probackup old:"
+#  cd ..
+#  mkdir "old_probackup"
+#  cd old_probackup/
+#  git clone https://github.com/postgrespro/pg_probackup.git
+#  cd pg_probackup/
+#  git checkout ${PGPROBACKUP_OLD_V}
+#  make USE_PGXS=1 top_srcdir=$PG_SRC install
+#  cd ../..
+#  export PGPROBACKUPBIN_OLD=`pwd`
+#fi
 
 # Setup python environment
 echo "############### Setting up python env:"
