@@ -97,7 +97,7 @@ make USE_PGXS=1 top_srcdir=$PG_SRC install
 #  # Build and install old pg_probackup
 #  echo "############### Compiling and installing pg_probackup old:"
 #  cd ..
-#  mkdir "old_probackup"
+#  mkdir old_probackup
 #  cd old_probackup/
 #  git clone https://github.com/postgrespro/pg_probackup.git
 #  cd pg_probackup/
