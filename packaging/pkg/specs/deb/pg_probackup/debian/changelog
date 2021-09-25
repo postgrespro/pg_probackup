@@ -1,0 +1,11 @@
+@PKG_NAME@ (@PKG_VERSION@-@PKG_RELEASE@.@PKG_HASH@.@CODENAME@) @CODENAME@; urgency=medium
+
+  * @PKG_VERSION@
+
+ -- Grigory Smolkin <g.smolkin@postgrespro.ru>  Wed, 9 Feb 2018 10:22:08 +0300
+
+@PKG_NAME@ (2.0.14-1.@CODENAME@) @CODENAME@; urgency=medium
+
+  * Initial package
+
+ -- Grigory Smolkin <g.smolkin@postgrespro.ru>  Fri, 29 Jan 2018 10:22:08 +0300

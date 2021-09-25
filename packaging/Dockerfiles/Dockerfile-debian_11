@@ -1,0 +1,7 @@
+FROM debian:11
+RUN apt-get update -y
+RUN apt-get install -y devscripts
+RUN apt-get install -y dpkg-dev lsb-release git equivs wget vim
+RUN apt-get install -y cmake bison flex libboost-all-dev
+RUN apt-get install -y reprepro
+RUN apt-get upgrade -y
