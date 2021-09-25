@@ -98,7 +98,7 @@ echo "############### Setting up python env:"
 python3 -m virtualenv pyenv
 source pyenv/bin/activate
 pip3 install testgres
-
+#
 echo "############### Testing:"
 if [ "$MODE" = "basic" ]; then
     export PG_PROBACKUP_TEST_BASIC=ON
