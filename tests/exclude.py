@@ -181,8 +181,7 @@ class ExcludeTest(ProbackupTest, unittest.TestCase):
 
         self.backup_node(
             backup_dir, 'node', node, backup_type='delta',
-            options=['--stream']
-        )
+            options=['--stream'])
 
         pgdata = self.pgdata_content(node.data_dir)
 
@@ -197,6 +196,67 @@ class ExcludeTest(ProbackupTest, unittest.TestCase):
         # Physical comparison
         pgdata_restored = self.pgdata_content(node_restored.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_exclude_unlogged_tables_2(self):
+        """
+        make node, create unlogged, take FULL, check
+        that unlogged was not backed up
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                "shared_buffers": "10MB"})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        for backup_type in ['full', 'delta', 'page']:
+
+            if backup_type == 'full':
+                node.safe_psql(
+                    'postgres',
+                    'create unlogged table test as select generate_series(0,20050000)::text')
+            else:
+                node.safe_psql(
+                    'postgres',
+                    'insert into test select generate_series(0,20050000)::text')
+
+            rel_path = node.safe_psql(
+                'postgres',
+                "select pg_relation_filepath('test')").decode('utf-8').rstrip()
+
+            backup_id = self.backup_node(
+                backup_dir, 'node', node,
+                backup_type=backup_type, options=['--stream'])
+
+            filelist = self.get_backup_filelist(
+                backup_dir, 'node', backup_id)
+
+            self.assertNotIn(
+                rel_path, filelist,
+                "Unlogged table was not excluded")
+
+            self.assertNotIn(
+                rel_path + '.1', filelist,
+                "Unlogged table was not excluded")
+
+            self.assertNotIn(
+                rel_path + '.2', filelist,
+                "Unlogged table was not excluded")
+
+            self.assertNotIn(
+                rel_path + '.3', filelist,
+                "Unlogged table was not excluded")
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
