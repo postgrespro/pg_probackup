@@ -91,9 +91,8 @@ cat /proc/sys/kernel/yama/ptrace_scope
 echo "############### Compiling and installing pg_probackup old:"
 mkdir pg_old
 cd pg_old
-git clone https://github.com/postgrespro/pg_probackup.git
+git clone https://github.com/postgrespro/pg_probackup.git -b ${OLD_BIN}
 cd pg_probackup
-git checkout ${OLD_BIN}
 make USE_PGXS=1 top_srcdir=$PG_SRC install
 cd ../..
 export PGPROBACKUPBIN_OLD=/pg/testdir/pg_old/pg_probackup/pg_probackup
