@@ -145,8 +145,51 @@ do_archive_push(InstanceConfig *instance, char *wal_file_path,
 	parray     *batch_files = NULL;
 	int         n_threads;
 
+	char xlog_wal_path[MAXPGPATH];
+
 	if (wal_file_name == NULL)
-		elog(INFO, "Required parameter is not specified: --wal-file-name %%f");
+		elog(ERROR, "Required parameter is not specified: --wal-file-name %%f");
+
+	join_path_components(xlog_wal_path, PG_XLOG_DIR, wal_file_name);
+
+	if (wal_file_path == NULL)
+	{
+		elog(INFO, "Required parameter is not specified: --wal_file_path %%p "
+					"Setting wal-file-path by default");
+		wal_file_path = xlog_wal_path;
+	}
+
+ 	if (strcmp(wal_file_path, xlog_wal_path)!=0)
+	{
+		char	backup_wal_file_path[MAXPGPATH];
+		char	absolute_wal_file_path[MAXPGPATH];
+
+		join_path_components(absolute_wal_file_path, current_dir, wal_file_path);
+		join_path_components(backup_wal_file_path, instance->arclog_path, wal_file_name);
+
+ 		elog(INFO, "wal_file_path is setted by user %s", wal_file_path);
+		if (instance->compress_alg == PGLZ_COMPRESS)
+			elog(ERROR, "pglz compression is not supported");
+
+#ifdef HAVE_LIBZ
+		if (instance->compress_alg == ZLIB_COMPRESS)
+			is_compress = IsXLogFileName(wal_file_name);
+ #endif
+
+		push_wal_file(absolute_wal_file_path, backup_wal_file_path, is_compress,
+					overwrite, instance->compress_level);
+		elog(INFO, "pg_probackup archive-push completed successfully");
+
+		return;
+	}
+
+	/* Create 'archlog_path' directory. Do nothing if it already exists. */
+	//fio_mkdir(instance->arclog_path, DIR_PERMISSION, FIO_BACKUP_HOST);
+
+#ifdef HAVE_LIBZ
+	if (instance->compress_alg == ZLIB_COMPRESS)
+		is_compress = true;
+#endif
 
 	if (!getcwd(current_dir, sizeof(current_dir)))
 		elog(ERROR, "getcwd() error");
@@ -160,189 +203,139 @@ do_archive_push(InstanceConfig *instance, char *wal_file_path,
 	if (system_id != instance->system_identifier)
 		elog(ERROR, "Refuse to push WAL segment %s into archive. Instance parameters mismatch."
 					"Instance '%s' should have SYSTEM_ID = " UINT64_FORMAT " instead of " UINT64_FORMAT,
-					wal_file_name, instance->name, instance->system_identifier, system_id);
+				wal_file_name, instance->name, instance->system_identifier, system_id);
 
 	if (instance->compress_alg == PGLZ_COMPRESS)
 		elog(ERROR, "Cannot use pglz for WAL compression");
 
-	/* */
-	elog(INFO, "instance %s", instance->backup_instance_path);
-	elog(INFO, "wal_file_path %s", wal_file_path);
-	if ((instance->backup_instance_path == wal_file_path) || (wal_file_path == NULL))
+	join_path_components(pg_xlog_dir, current_dir, XLOGDIR);
+	join_path_components(archive_status_dir, pg_xlog_dir, "archive_status");
+
+	/*  Setup filelist and locks */
+	batch_files = setup_push_filelist(archive_status_dir, wal_file_name, batch_size);
+
+	n_threads = num_threads;
+	if (num_threads > parray_num(batch_files))
+		n_threads = parray_num(batch_files);
+
+	elog(INFO, "pg_probackup archive-push WAL file: %s, "
+					"threads: %i/%i, batch: %lu/%i, compression: %s",
+						wal_file_name, n_threads, num_threads,
+						parray_num(batch_files), batch_size,
+						is_compress ? "zlib" : "none");
+
+	num_threads = n_threads;
+
+	/* Single-thread push
+	 * We don`t want to start multi-thread push, if number of threads in equal to 1,
+	 * or the number of files ready to push is small.
+	 * Multithreading in remote mode isn`t cheap,
+	 * establishing ssh connection can take 100-200ms, so running and terminating
+	 * one thread using generic multithread approach can take
+	 * almost as much time as copying itself.
+	 * TODO: maybe we should be more conservative and force single thread
+	 * push if batch_files array is small.
+	 */
+	if (num_threads == 1 || (parray_num(batch_files) == 1))
 	{
-		if(wal_file_path == NULL)
-		{
-			elog(INFO, "Required parameter is not specified: --wal-file-path. Set by default");
-			wal_file_path = instance->backup_instance_path;
-		}
-
-		join_path_components(pg_xlog_dir, current_dir, XLOGDIR);
-		join_path_components(archive_status_dir, pg_xlog_dir, "archive_status");
-
-		/* Create 'archlog_path' directory. Do nothing if it already exists. */
-		//fio_mkdir(instance->arclog_path, DIR_PERMISSION, FIO_BACKUP_HOST);
-
-#ifdef HAVE_LIBZ
-		if (instance->compress_alg == ZLIB_COMPRESS)
-			is_compress = true;
-#endif
-
-		/*  Setup filelist and locks */
-		batch_files = setup_push_filelist(archive_status_dir, wal_file_name, batch_size);
-
-		n_threads = num_threads;
-		if (num_threads > parray_num(batch_files))
-			n_threads = parray_num(batch_files);
-
-		elog(INFO, "pg_probackup archive-push WAL file: %s, "
-						"threads: %i/%i, batch: %lu/%i, compression: %s",
-							wal_file_name, n_threads, num_threads,
-							parray_num(batch_files), batch_size,
-							is_compress ? "zlib" : "none");
-
-		num_threads = n_threads;
-
-		/* Single-thread push
-		* We don`t want to start multi-thread push, if number of threads in equal to 1,
-		* or the number of files ready to push is small.
-		* Multithreading in remote mode isn`t cheap,
-		* establishing ssh connection can take 100-200ms, so running and terminating
-		* one thread using generic multithread approach can take
-		* almost as much time as copying itself.
-		* TODO: maybe we should be more conservative and force single thread
-		* push if batch_files array is small.
-		*/
-		if (num_threads == 1 || (parray_num(batch_files) == 1))
-		{
-			INSTR_TIME_SET_CURRENT(start_time);
-			for (i = 0; i < parray_num(batch_files); i++)
-			{
-				int rc;
-				WALSegno *xlogfile = (WALSegno *) parray_get(batch_files, i);
-
-				rc = push_file(xlogfile, archive_status_dir,
-							pg_xlog_dir, instance->arclog_path,
-							overwrite, no_sync,
-							instance->archive_timeout,
-							no_ready_rename || (strcmp(xlogfile->name, wal_file_name) == 0) ? true : false,
-							is_compress && IsXLogFileName(xlogfile->name) ? true : false,
-							instance->compress_level);
-				if (rc == 0)
-					n_total_pushed++;
-				else
-					n_total_skipped++;
-			}
-
-			push_isok = true;
-			goto push_done;
-		}
-
-		/* init thread args with its own segno */
-		threads = (pthread_t *) palloc(sizeof(pthread_t) * num_threads);
-		threads_args = (archive_push_arg *) palloc(sizeof(archive_push_arg) * num_threads);
-
-		for (i = 0; i < num_threads; i++)
-		{
-			archive_push_arg *arg = &(threads_args[i]);
-
-			arg->first_filename = wal_file_name;
-			arg->archive_dir = instance->arclog_path;
-			arg->pg_xlog_dir = pg_xlog_dir;
-			arg->archive_status_dir = archive_status_dir;
-			arg->overwrite = overwrite;
-			arg->compress = is_compress;
-			arg->no_sync = no_sync;
-			arg->no_ready_rename = no_ready_rename;
-			arg->archive_timeout = instance->archive_timeout;
-
-			arg->compress_alg = instance->compress_alg;
-			arg->compress_level = instance->compress_level;
-
-			arg->files = batch_files;
-			arg->n_pushed = 0;
-			arg->n_skipped = 0;
-
-			arg->thread_num = i+1;
-			/* By default there are some error */
-			arg->ret = 1;
-		}
-
-		/* Run threads */
 		INSTR_TIME_SET_CURRENT(start_time);
-		for (i = 0; i < num_threads; i++)
+		for (i = 0; i < parray_num(batch_files); i++)
 		{
-			archive_push_arg *arg = &(threads_args[i]);
-			pthread_create(&threads[i], NULL, push_files, arg);
+			int rc;
+			WALSegno *xlogfile = (WALSegno *) parray_get(batch_files, i);
+
+			rc = push_file(xlogfile, archive_status_dir,
+						   pg_xlog_dir, instance->arclog_path,
+						   overwrite, no_sync,
+						   instance->archive_timeout,
+						   no_ready_rename || (strcmp(xlogfile->name, wal_file_name) == 0) ? true : false,
+						   is_compress && IsXLogFileName(xlogfile->name) ? true : false,
+						   instance->compress_level);
+			if (rc == 0)
+				n_total_pushed++;
+			else
+				n_total_skipped++;
 		}
 
-		/* Wait threads */
-		for (i = 0; i < num_threads; i++)
-		{
-			pthread_join(threads[i], NULL);
-			if (threads_args[i].ret == 1)
-			{
-				push_isok = false;
-				n_total_failed++;
-			}
+		push_isok = true;
+		goto push_done;
+	}
 
-			n_total_pushed += threads_args[i].n_pushed;
-			n_total_skipped += threads_args[i].n_skipped;
+	/* init thread args with its own segno */
+	threads = (pthread_t *) palloc(sizeof(pthread_t) * num_threads);
+	threads_args = (archive_push_arg *) palloc(sizeof(archive_push_arg) * num_threads);
+
+	for (i = 0; i < num_threads; i++)
+	{
+		archive_push_arg *arg = &(threads_args[i]);
+
+		arg->first_filename = wal_file_name;
+		arg->archive_dir = instance->arclog_path;
+		arg->pg_xlog_dir = pg_xlog_dir;
+		arg->archive_status_dir = archive_status_dir;
+		arg->overwrite = overwrite;
+		arg->compress = is_compress;
+		arg->no_sync = no_sync;
+		arg->no_ready_rename = no_ready_rename;
+		arg->archive_timeout = instance->archive_timeout;
+
+		arg->compress_alg = instance->compress_alg;
+		arg->compress_level = instance->compress_level;
+
+		arg->files = batch_files;
+		arg->n_pushed = 0;
+		arg->n_skipped = 0;
+
+		arg->thread_num = i+1;
+		/* By default there are some error */
+		arg->ret = 1;
+	}
+
+	/* Run threads */
+	INSTR_TIME_SET_CURRENT(start_time);
+	for (i = 0; i < num_threads; i++)
+	{
+		archive_push_arg *arg = &(threads_args[i]);
+		pthread_create(&threads[i], NULL, push_files, arg);
+	}
+
+	/* Wait threads */
+	for (i = 0; i < num_threads; i++)
+	{
+		pthread_join(threads[i], NULL);
+		if (threads_args[i].ret == 1)
+		{
+			push_isok = false;
+			n_total_failed++;
 		}
 
-		/* Note, that we are leaking memory here,
-		* because pushing into archive is a very
-		* time-sensetive operation, so we skip freeing stuff.
-		*/
+		n_total_pushed += threads_args[i].n_pushed;
+		n_total_skipped += threads_args[i].n_skipped;
+	}
+
+	/* Note, that we are leaking memory here,
+	 * because pushing into archive is a very
+	 * time-sensetive operation, so we skip freeing stuff.
+	 */
 
 push_done:
-		fio_disconnect();
-		/* calculate elapsed time */
-		INSTR_TIME_SET_CURRENT(end_time);
-		INSTR_TIME_SUBTRACT(end_time, start_time);
-		push_time = INSTR_TIME_GET_DOUBLE(end_time);
-		pretty_time_interval(push_time, pretty_time_str, 20);
+	fio_disconnect();
+	/* calculate elapsed time */
+	INSTR_TIME_SET_CURRENT(end_time);
+	INSTR_TIME_SUBTRACT(end_time, start_time);
+	push_time = INSTR_TIME_GET_DOUBLE(end_time);
+	pretty_time_interval(push_time, pretty_time_str, 20);
 
-		if (push_isok)
-			/* report number of files pushed into archive */
-			elog(INFO, "pg_probackup archive-push completed successfully, "
-						"pushed: %u, skipped: %u, time elapsed: %s",
-						n_total_pushed, n_total_skipped, pretty_time_str);
-		else
-			elog(ERROR, "pg_probackup archive-push failed, "
-						"pushed: %i, skipped: %u, failed: %u, time elapsed: %s",
-						n_total_pushed, n_total_skipped, n_total_failed,
-						pretty_time_str);
-	}
+	if (push_isok)
+		/* report number of files pushed into archive */
+		elog(INFO, "pg_probackup archive-push completed successfully, "
+					"pushed: %u, skipped: %u, time elapsed: %s",
+					n_total_pushed, n_total_skipped, pretty_time_str);
 	else
-	{
-		/* If user passed a directory different from saved in pg_probackup.conf,
-		 * work according to the scheme with a single copy of files
-		 */
-		char	backup_wal_file_path[MAXPGPATH];
-		char	absolute_wal_file_path[MAXPGPATH];
-
-		/* Check that -j option is not set with --wal-file-path option and ignore it*/
-		if (num_threads > 1)
-			elog(ERROR, "Option -j is not working with user defined --wal-file-path. Ignore");
-
-		join_path_components(absolute_wal_file_path, current_dir, wal_file_path);
-		join_path_components(backup_wal_file_path, instance->arclog_path, wal_file_name);
-
-		elog(INFO, "pg_probackup archive-push from %s to %s", absolute_wal_file_path, backup_wal_file_path);
-
-		if (instance->compress_alg == PGLZ_COMPRESS)
-			elog(ERROR, "pglz compression is not supported");
-
-#ifdef HAVE_LIBZ
-		if (instance->compress_alg == ZLIB_COMPRESS)
-			is_compress = IsXLogFileName(wal_file_name);
-#endif
-
-		push_wal_file(absolute_wal_file_path, backup_wal_file_path, is_compress,
-					overwrite, instance->compress_level);
-		elog(INFO, "pg_probackup archive-push completed successfully");
-	}
-
+		elog(ERROR, "pg_probackup archive-push failed, "
+					"pushed: %i, skipped: %u, failed: %u, time elapsed: %s",
+					n_total_pushed, n_total_skipped, n_total_failed,
+					pretty_time_str);
 }
 
 /* ------------- INTERNAL FUNCTIONS ---------- */
@@ -1177,7 +1170,6 @@ get_gz_error(gzFile gzf, int errnum)
 		return errmsg;
 }
 #endif
-
 
 /*
  * compare CRC of two WAL files.
