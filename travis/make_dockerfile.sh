@@ -33,7 +33,7 @@ sed \
 	-e 's/${PG_VERSION}/'${PG_VERSION}/g \
 	-e 's/${PG_BRANCH}/'${PG_BRANCH}/g \
 	-e 's/${MODE}/'${MODE}/g \
-	-e 's/${PTRACK_PATCH_PG_VERSION}/'${PTRACK_PATCH_PG_VERSION}/g \
 	-e 's/${OLD_BIN}/'${OLD_BIN}/g \
+	-e 's/${PTRACK_PATCH_PG_VERSION}/'${PTRACK_PATCH_PG_VERSION}/g \
 	-e 's/${PGPROBACKUP_GDB}/'${PGPROBACKUP_GDB}/g \
 Dockerfile.in > Dockerfile
