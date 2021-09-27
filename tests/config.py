@@ -56,7 +56,7 @@ class ConfigTest(ProbackupTest, unittest.TestCase):
     # @unittest.expectedFailure
     # @unittest.skip("skip")
     def test_corrupt_backup_content(self):
-        """corrupt backup_content.control"""
+        """corrupt backup_content.control2.4.10"""
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
