@@ -93,7 +93,7 @@ mkdir pg_old
 cd pg_old
 git clone https://github.com/postgrespro/pg_probackup.git
 cd pg_probackup
-git checkout 2.4.10
+git checkout ${OLD_BIN}
 make USE_PGXS=1 top_srcdir=$PG_SRC install
 cd ../..
 export PGPROBACKUPBIN_OLD=/pg/testdir/pg_old/pg_probackup/pg_probackup
