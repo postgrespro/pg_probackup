@@ -64,6 +64,15 @@ if [ "$PG_PROBACKUP_PTRACK" = "on" ]; then
     make USE_PGXS=1 -C ../ptrack install
 fi
 
+mkdir pg_old
+cd pg_old
+git clone https://github.com/postgrespro/pg_probackup.git
+cd pg_probackup
+git checkout 2.2.0
+export PGPROBACKUPBIN_OLD=`pwd`
+make USE_PGXS=1 top_srcdir=$PG_SRC install
+cd ../..
+
 # Get amcheck if missing
 if [ ! -d "contrib/amcheck" ]; then
     echo "############### Getting missing amcheck:"
