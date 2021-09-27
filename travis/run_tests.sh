@@ -86,6 +86,7 @@ pg_config
 echo "############### kernel params:"
 cat /proc/sys/kernel/yama/ptrace_scope
 sudo sysctl kernel.yama.ptrace_scope=0
+cat /proc/sys/kernel/yama/ptrace_scope
 
 echo "############### Compiling and installing pg_probackup old:"
 mkdir pg_old
