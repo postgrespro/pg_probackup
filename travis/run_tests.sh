@@ -89,7 +89,7 @@ sudo sysctl kernel.yama.ptrace_scope=0
 cat /proc/sys/kernel/yama/ptrace_scope
 
 mkdir pg_old
-cd pg_old
+#cd pg_old
 #git clone https://github.com/postgrespro/pg_probackup.git
 #cd pg_probackup
 #git checkout 2.2.0
