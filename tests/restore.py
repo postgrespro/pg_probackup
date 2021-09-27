@@ -2859,6 +2859,8 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         """
         old binary should be of version < 2.2.0
         """
+        if self.version_to_num(self.old_probackup_version) >= self.version_to_num('2.2.0'):
+            self.skipTest('old binary should be of version < 2.2.0')
         if not self.probackup_old_path:
             self.skipTest("You must specify PGPROBACKUPBIN_OLD"
                           " for run this test")
@@ -2965,6 +2967,8 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         """
         old binary should be of version < 2.2.0
         """
+        if self.version_to_num(self.old_probackup_version) >= self.version_to_num('2.2.0'):
+            self.skipTest('old binary should be of version < 2.2.0')
         if not self.probackup_old_path:
             self.skipTest("You must specify PGPROBACKUPBIN_OLD"
                           " for run this test")
@@ -3667,7 +3671,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
            return unittest.skip('You need PostgreSQL >= 12 for this test')
 
         if self.version_to_num(self.old_probackup_version) >= self.version_to_num('2.4.5'):
-            self.assertTrue(False, 'You need pg_probackup < 2.4.5 for this test')
+            self.skipTest('pg_probackup should be of version < 2.4.5')
 
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
