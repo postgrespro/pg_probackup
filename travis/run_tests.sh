@@ -109,6 +109,7 @@ python3 -m virtualenv pyenv
 source pyenv/bin/activate
 pip3 install testgres
 
+echo $PGPROBACKUPBIN_OLD
 echo "############### Testing:"
 if [ "$MODE" = "basic" ]; then
     export PG_PROBACKUP_TEST_BASIC=ON
