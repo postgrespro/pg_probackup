@@ -23,7 +23,7 @@ if [ -z ${PGPROBACKUP_GDB+x} ]; then
 fi
 
 if [ -z ${OLD_BIN+x} ]; then
-	OLD_BIN=OFF
+	OLD_BIN=off
 fi
 
 echo PG_VERSION=${PG_VERSION}
