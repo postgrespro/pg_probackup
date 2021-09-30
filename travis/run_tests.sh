@@ -88,16 +88,16 @@ cat /proc/sys/kernel/yama/ptrace_scope
 sudo sysctl kernel.yama.ptrace_scope=0
 cat /proc/sys/kernel/yama/ptrace_scope
 
-if ["$OLD_BIN" != "off"]; then
-    echo "############### Compiling and installing pg_probackup old:"
-    mkdir pg_old
-    cd pg_old
-    git clone https://github.com/postgrespro/pg_probackup.git -b ${OLD_BIN}
-    cd pg_probackup
-    make USE_PGXS=1 top_srcdir=$PG_SRC install
-    cd ../..
-    export PGPROBACKUPBIN_OLD=/pg/testdir/pg_old/pg_probackup/pg_probackup
-fi
+
+echo "############### Compiling and installing pg_probackup old:"
+mkdir pg_old
+cd pg_old
+git clone https://github.com/postgrespro/pg_probackup.git -b 2.4.10
+cd pg_probackup
+make USE_PGXS=1 top_srcdir=$PG_SRC install
+cd ../..
+export PGPROBACKUPBIN_OLD=/pg/testdir/pg_old/pg_probackup/pg_probackup
+
 
 # Build and install pg_probackup (using PG_CPPFLAGS and SHLIB_LINK for gcov)
 echo "############### Compiling and installing pg_probackup:"
