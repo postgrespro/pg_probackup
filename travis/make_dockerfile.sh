@@ -22,6 +22,10 @@ if [ -z ${PGPROBACKUP_GDB+x} ]; then
 	PGPROBACKUP_GDB=ON
 fi
 
+if [ -z ${OLD_BIN+x} ]; then
+	OLD_BIN=OFF
+fi
+
 echo PG_VERSION=${PG_VERSION}
 echo PG_BRANCH=${PG_BRANCH}
 echo MODE=${MODE}

@@ -88,7 +88,7 @@ cat /proc/sys/kernel/yama/ptrace_scope
 sudo sysctl kernel.yama.ptrace_scope=0
 cat /proc/sys/kernel/yama/ptrace_scope
 
-if ["$PTRACK_PATCH_PG_VERSION" != "off"]; then
+if ["$OLD_BIN" != "off"]; then
     echo "############### Compiling and installing pg_probackup old:"
     mkdir pg_old
     cd pg_old
