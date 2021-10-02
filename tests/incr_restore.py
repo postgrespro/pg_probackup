@@ -790,9 +790,10 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         self.backup_node(backup_dir, 'node', node_1,
             data_dir=node_1.data_dir, backup_type='page')
 
-        node_1.stop()
+        node_1.safe_psql(
+            'postgres',
+            'checkpoint')
         pgdata = self.pgdata_content(node_1.data_dir)
-        node_1.slow_start()
 
         self.restore_node(
             backup_dir, 'node', node,
