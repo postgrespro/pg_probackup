@@ -2043,7 +2043,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
 
         db_list = {}
         for line in db_list_splitted:
-            line = json.loads(line)
+            line = json.loads(line.decode("utf-8"))
             db_list[line['datname']] = line['oid']
 
         node.pgbench_init(scale=20)
@@ -2148,7 +2148,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
 
         db_list = {}
         for line in db_list_splitted:
-            line = json.loads(line)
+            line = json.loads(line.decode("utf-8"))
             db_list[line['datname']] = line['oid']
 
         node.pgbench_init(scale=20)
@@ -2233,6 +2233,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
 
     def test_incremental_partial_restore_exclude_tablespace_checksum(self):
         """"""
+
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
@@ -2246,14 +2247,11 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
 
         # cat_version = node.get_control_data()["Catalog version number"]
         # version_specific_dir = 'PG_' + node.major_version_str + '_' + cat_version
-
         # PG_10_201707211
         # pg_tblspc/33172/PG_9.5_201510051/16386/
 
         self.create_tblspace_in_node(node, 'somedata')
-
         node_tablespace = self.get_tblspace_path(node, 'somedata')
-
         tbl_oid = node.safe_psql(
             'postgres',
             "SELECT oid "
@@ -2274,9 +2272,8 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
 
         db_list = {}
         for line in db_list_splitted:
-            line = json.loads(line)
+            line = json.loads(line.decode("utf-8"))
             db_list[line['datname']] = line['oid']
-
         # FULL backup
         backup_id = self.backup_node(backup_dir, 'node', node)
 
@@ -2307,9 +2304,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
                 "--db-exclude=db5",
                 "-T", "{0}={1}".format(
                     node_tablespace, node1_tablespace)])
-
         pgdata1 = self.pgdata_content(node1.data_dir)
-
         # partial incremental restore into node2
         try:
             self.restore_node(
@@ -2343,9 +2338,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
                     node_tablespace, node2_tablespace)])
 
         pgdata2 = self.pgdata_content(node2.data_dir)
-
         self.compare_pgdata(pgdata1, pgdata2)
-
         self.set_auto_conf(node2, {'port': node2.port})
         node2.slow_start()
 
@@ -2369,7 +2362,6 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
 
         with open(node2.pg_log_file, 'r') as f:
             output = f.read()
-
         self.assertNotIn('PANIC', output)
 
         # Clean after yourself
