@@ -4,7 +4,7 @@ from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 import subprocess
 import sys
 from time import sleep
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import hashlib
 import shutil
 import json
@@ -2140,7 +2140,16 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         target_name = 'savepoint'
 
-        target_time = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S %z")
+        t1 = datetime.now(timezone.utc)
+        t2 = datetime.now()
+        tz = abs(t2.hour - t1.hour);
+        if tz < 10:
+            dat_postfix = '+0' + str(tz) + '00'
+        else:
+            dat_postfix = '+' + str(tz) + '00'
+        target_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S %z") + dat_postfix
+
+
         with node.connect("postgres") as con:
             res = con.execute(
                 "INSERT INTO tbl0005 VALUES ('inserted') RETURNING (xmin)")
@@ -2509,7 +2518,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         db_list = {}
         for line in db_list_splitted:
-            line = json.loads(line)
+            line = json.loads(line.decode("utf-8"))
             db_list[line['datname']] = line['oid']
 
         # FULL backup
@@ -2748,7 +2757,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         db_list = {}
         for line in db_list_splitted:
-            line = json.loads(line)
+            line = json.loads(line.decode("utf-8"))
             db_list[line['datname']] = line['oid']
 
         # FULL backup
@@ -2850,6 +2859,8 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         """
         old binary should be of version < 2.2.0
         """
+        if self.version_to_num(self.old_probackup_version) >= self.version_to_num('2.2.0'):
+            self.skipTest('old binary should be of version < 2.2.0')
         if not self.probackup_old_path:
             self.skipTest("You must specify PGPROBACKUPBIN_OLD"
                           " for run this test")
@@ -2956,6 +2967,8 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         """
         old binary should be of version < 2.2.0
         """
+        if self.version_to_num(self.old_probackup_version) >= self.version_to_num('2.2.0'):
+            self.skipTest('old binary should be of version < 2.2.0')
         if not self.probackup_old_path:
             self.skipTest("You must specify PGPROBACKUPBIN_OLD"
                           " for run this test")
@@ -3280,7 +3293,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
                 "REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM PUBLIC; "
                 "REVOKE ALL ON SCHEMA pg_catalog from PUBLIC; "
                 "REVOKE ALL ON ALL TABLES IN SCHEMA pg_catalog FROM PUBLIC; "
-                "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA pg_catalog FROM PUBLIC; "
+                # "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA pg_catalog FROM PUBLIC; "
                 "REVOKE ALL ON ALL SEQUENCES IN SCHEMA pg_catalog FROM PUBLIC; "
                 "REVOKE ALL ON SCHEMA information_schema from PUBLIC; "
                 "REVOKE ALL ON ALL TABLES IN SCHEMA information_schema FROM PUBLIC; "
@@ -3291,7 +3304,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
                 "GRANT USAGE ON SCHEMA pg_catalog TO backup; "
                 "GRANT SELECT ON TABLE pg_catalog.pg_proc TO backup; "
                 "GRANT SELECT ON TABLE pg_catalog.pg_extension TO backup; "
-                "GRANT SELECT ON TABLE pg_catalog.pg_database TO backup; " # for partial restore, checkdb and ptrack
+                # "GRANT SELECT ON TABLE pg_catalog.pg_database TO backup; " # for partial restore, checkdb and ptrack
                 "GRANT EXECUTE ON FUNCTION pg_catalog.nameeq(name, name) TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup; "
@@ -3658,7 +3671,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
            return unittest.skip('You need PostgreSQL >= 12 for this test')
 
         if self.version_to_num(self.old_probackup_version) >= self.version_to_num('2.4.5'):
-            self.assertTrue(False, 'You need pg_probackup < 2.4.5 for this test')
+            self.skipTest('pg_probackup should be of version < 2.4.5')
 
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
