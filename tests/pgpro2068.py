@@ -8,7 +8,6 @@ import shutil
 import signal
 from testgres import ProcessType
 
-
 module_name = '2068'
 
 
