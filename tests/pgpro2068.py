@@ -60,13 +60,29 @@ class BugTest(ProbackupTest, unittest.TestCase):
             {'port': replica.port, 'restart_after_crash': 'off'})
 
         # we need those later
-        node.safe_psql(
-            "postgres",
-            "CREATE EXTENSION plpython3u")
+        try:
+            # we need those later
+            node.safe_psql(
+                "postgres",
+                "CREATE EXTENSION plpython3u")
+        except:
+            node.stop()
+            self.del_test_dir(module_name, fname)
+            self.skipTest(
+                "Install extension plpython3u "
+                "for run this test"
+            )
 
-        node.safe_psql(
-            "postgres",
-            "CREATE EXTENSION pageinspect")
+        try:
+            node.safe_psql(
+                "postgres",
+                "CREATE EXTENSION pageinspect")
+        except:
+            node.stop()
+            self.del_test_dir(module_name, fname)
+            self.skipTest(
+                "Install extension pageinspect "
+                "for run this test")
 
         replica.slow_start(replica=True)
 

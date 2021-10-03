@@ -1179,7 +1179,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         log_file = os.path.join(backup_dir, 'log', 'pg_probackup.log')
         with open(log_file, 'r') as f:
             log_content = f.read()
-            self.assertNotIn(
+            self.assertIn(
                 'Interrupted while locking backup', log_content)
 
         # Clean after yourself
