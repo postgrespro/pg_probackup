@@ -164,10 +164,15 @@ do_archive_push(InstanceConfig *instance, char *wal_file_path,
 		char	backup_wal_file_path[MAXPGPATH];
 		char	absolute_wal_file_path[MAXPGPATH];
 
-		join_path_components(absolute_wal_file_path, current_dir, wal_file_path);
+		join_path_components(absolute_wal_file_path, wal_file_path, wal_file_name);
 		join_path_components(backup_wal_file_path, instance->arclog_path, wal_file_name);
 
  		elog(INFO, "wal_file_path is setted by user %s", wal_file_path);
+
+		if ((batch_size > 1)||(num_threads > 1))
+			elog(WARNING, "Options -j and --batch-size are ignored "
+				"with --wal-file-path setted by user");
+
 		if (instance->compress_alg == PGLZ_COMPRESS)
 			elog(ERROR, "pglz compression is not supported");
 
@@ -959,6 +964,9 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 #endif
 		to_path_p = to_path;
 
+//	elog(INFO, "from_path %s", from_path);
+//	Assert(0);
+
 	/* open file for read */
 	in = fio_fopen(from_path, PG_BINARY_R, FIO_DB_HOST);
 	if (in == NULL)
@@ -1065,6 +1073,8 @@ push_wal_file(const char *from_path, const char *to_path, bool is_compress,
 		ssize_t		read_len = 0;
 
 		read_len = fio_fread(in, buf, sizeof(buf));
+
+//		Assert(0);
 
 		if (read_len < 0)
 		{
