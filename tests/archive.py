@@ -1873,10 +1873,6 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         # FULL
         self.backup_node(backup_dir, 'node', node, options=['--stream'])
 
-#        self.run_pb(["archive-push", "-B", backup_dir,
-#            "--instance=node", "-D", node.data_dir,
-#            "--wal-file-name=%%f"])#"--wal-file-path=%%p",
-
         log_file = os.path.join(node.logs_dir, 'postgresql.log')
         with open(log_file, 'r') as f:
             log_content = f.read()
@@ -1903,27 +1899,41 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node, compress=True)
 
-        wal_dir = os.path.join(backup_dir, 'wal', 'node')
-        self.set_auto_conf(node, {'archive_command': "cp -r \"{0}\" \"{1}\"".format(backup_dir, wal_dir)})
+        wal_dir = os.path.join(self.tmp_path, module_name, fname, 'wal_dir')
+        os.mkdir(wal_dir)
+        self.set_config(
+            backup_dir, 'node',
+            options=['--log-level-file=VERBOSE'])
+        self.set_auto_conf(node, {'archive_command': "cp -v %p {0}/%f".format(wal_dir)})
 
         node.slow_start()
         node.safe_psql(
             "postgres",
             "create table t_heap as select i"
-            " as id from generate_series(0,100) i")
+            " as id from generate_series(0,1000) i")
 
         # FULL
         self.backup_node(backup_dir, 'node', node, options=['--stream'])
 
+        node.safe_psql(
+            "postgres",
+            "insert into t_heap select i"
+            " as id from generate_series(0,1000) i")
+        self.backup_node(backup_dir, 'node', node,
+            options=['--stream'])
+
+        filename = '000000010000000000000001'
+
         self.run_pb(["archive-push", "-B", backup_dir,
             "--instance=node", "-D", node.data_dir,
-            "--wal-file-path", wal_dir, "--wal-file-name=%f"])
+            "--wal-file-path", wal_dir, "--wal-file-name", filename])
 
-        log_file = os.path.join(node.logs_dir, 'postgresql.log')
+        log_file = os.path.join(
+            backup_dir, 'log', 'pg_probackup.log')
         with open(log_file, 'r') as f:
             log_content = f.read()
 
-        self.assertIn('wal_file_path is setted by user', log_content)
+        self.assertIn('pg_probackup archive-push completed successfully', log_content)
 
         self.del_test_dir(module_name, fname)
 
