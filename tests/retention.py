@@ -2635,9 +2635,15 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         # Take third FULL BACKUP
         self.backup_node(backup_dir, 'node', node)
 
+        print(self.show_pb(
+            backup_dir, 'node', as_json=False, as_text=True))
+
         # Purge backups if their summ size more than 100 Mb
         self.delete_expired(
-            backup_dir, 'node', options=['--retention-size=100', '--expired'])
+            backup_dir, 'node', options=['--retention-size=200', '--expired'])
+
+        print(self.show_pb(
+            backup_dir, 'node', as_json=False, as_text=True))
 
         # We should get all 3 backups saved
         self.assertEqual(len(self.show_pb(backup_dir, 'node')), 3)
@@ -2672,13 +2678,13 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         # Purge backups if their summ size more than 10 Mb
         self.delete_expired(
-            backup_dir, 'node', options=['--retention-size=10'])
-
-        # We should get all 3 backups removed
-        self.assertEqual(len(self.show_pb(backup_dir, 'node')), 0)
+            backup_dir, 'node', options=['--retention-size=1', '--expired'])
 
         print(self.show_pb(
             backup_dir, 'node', as_json=False, as_text=True))
+
+        # We should get only 1 backup saved
+        self.assertEqual(len(self.show_pb(backup_dir, 'node')), 0)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
