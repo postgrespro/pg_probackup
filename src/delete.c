@@ -256,8 +256,8 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 				}
 			}
 
-			if ((instance_config.retention_size > 0) && 
-				(total_backups_size > instance_config.retention_size * 1024))
+			if ((instance_config.retention_size > 0) &&
+				(total_backups_size <= instance_config.retention_size * 1024 * 1024))
 			{
 				if (!size_backup_list)
 					size_backup_list = parray_new();
@@ -335,6 +335,7 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 			(((instance_config.retention_redundancy == 0) || !redundancy_keep) &&
 			((instance_config.retention_size == 0) || !size_keep)))
 		{
+			elog(INFO, "Check if backup %s in needed by retention", base36enc(backup->start_time));
 			/* This backup is not guarded by retention
 			 *
 			 * Redundancy = 1
@@ -474,7 +475,7 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 				actual_window,
 				pinning_window ? pinning_window : instance_config.retention_window,
 				(float)total_backups_size/(1024L * 1024L * 1024L),
-				(float)instance_config.retention_size/(1024L * 1024L),
+				(float)instance_config.retention_size, // /(1024L * 1024L),
 				action);
 
 		/* Only valid full backups are count to something */
