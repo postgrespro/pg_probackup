@@ -614,6 +614,8 @@ GRANT EXECUTE ON FUNCTION pg_catalog.pg_switch_xlog() TO backup;
 GRANT EXECUTE ON FUNCTION pg_catalog.txid_current() TO backup;
 GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup;
 GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;
+GRANT EXECUTE ON FUNCTION pg_catalog.set_config(text, text, boolean) TO backup;
+GRANT EXECUTE ON FUNCTION pg_catalog.oideq(oid, oid) TO backup;
 COMMIT;
 </programlisting>
     <para>
@@ -634,6 +636,8 @@ GRANT EXECUTE ON FUNCTION pg_catalog.txid_current() TO backup;
 GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup;
 GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;
 GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_checkpoint() TO backup;
+GRANT EXECUTE ON FUNCTION pg_catalog.set_config(text, text, boolean) TO backup;
+GRANT EXECUTE ON FUNCTION pg_catalog.oideq(oid, oid) TO backup;
 COMMIT;
 </programlisting>
     <para>
@@ -654,6 +658,8 @@ GRANT EXECUTE ON FUNCTION pg_catalog.txid_current() TO backup;
 GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup;
 GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;
 GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_checkpoint() TO backup;
+GRANT EXECUTE ON FUNCTION pg_catalog.set_config(text, text, boolean) TO backup;
+GRANT EXECUTE ON FUNCTION pg_catalog.oideq(oid, oid) TO backup;
 COMMIT;
 </programlisting>
     <para>
@@ -5541,6 +5547,8 @@ GRANT EXECUTE ON FUNCTION pg_catalog.txid_current() TO backup;
 GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup;
 GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;
 GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_checkpoint() TO backup;
+GRANT EXECUTE ON FUNCTION pg_catalog.set_config(text, text, boolean) TO backup;
+GRANT EXECUTE ON FUNCTION pg_catalog.oideq(oid, oid) TO backup;
 COMMIT;
 </programlisting>
       </step>
