@@ -83,6 +83,12 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             pg_options={
                 'checkpoint_timeout': '30s'}
             )
+
+        if self.get_version(node) < self.version_to_num('9.6.0'):
+            self.del_test_dir(module_name, fname)
+            return unittest.skip(
+                'Skipped because pg_control_checkpoint() is not supported in PG 9.5')
+
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -693,6 +699,11 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
                 'checkpoint_timeout': '30s',
                 'max_wal_size': '32MB'})
 
+        if self.get_version(master) < self.version_to_num('9.6.0'):
+            self.del_test_dir(module_name, fname)
+            return unittest.skip(
+                'Skipped because backup from replica is not supported in PG 9.5')
+
         self.init_pb(backup_dir)
         # ADD INSTANCE 'MASTER'
         self.add_instance(backup_dir, 'master', master)
@@ -818,6 +829,12 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             pg_options={
                 'archive_timeout': '10s'}
             )
+
+        if self.get_version(master) < self.version_to_num('9.6.0'):
+            self.del_test_dir(module_name, fname)
+            return unittest.skip(
+                'Skipped because backup from replica is not supported in PG 9.5')
+
         replica = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'replica'))
         replica.cleanup()
@@ -907,6 +924,11 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             pg_options={
                 'checkpoint_timeout': '30s',
                 'archive_timeout': '10s'})
+
+        if self.get_version(master) < self.version_to_num('9.6.0'):
+            self.del_test_dir(module_name, fname)
+            return unittest.skip(
+                'Skipped because backup from replica is not supported in PG 9.5')
 
         replica = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'replica'))
@@ -2144,6 +2166,11 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
+
+        if self.get_version(node) < self.version_to_num('9.6.0'):
+            self.del_test_dir(module_name, fname)
+            return unittest.skip(
+                'Skipped because backup from replica is not supported in PG 9.5')
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
