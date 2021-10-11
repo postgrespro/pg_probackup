@@ -1,0 +1,20 @@
+# ALT 9
+build/test_alt_9_9.6:
+	$(call test_alt,alt,9,,9.6,9.6.21)
+	touch build/test_alt_9_9.6
+
+build/test_alt_9_10:
+	$(call test_alt,alt,9,,10,10.17)
+	touch build/test_alt_9_10
+
+build/test_alt_9_11:
+	$(call test_alt,alt,9,,11,11.11)
+	touch build/test_alt_9_11
+
+build/test_alt_9_12:
+	$(call test_alt,alt,9,,12,12.6)
+	touch build/test_alt_9_12
+
+build/test_alt_9_13:
+	$(call test_alt,alt,9,,13,13.2)
+	touch build/test_alt_9_13

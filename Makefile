@@ -1,4 +1,7 @@
 PROGRAM = pg_probackup
+WORKDIR ?= $(CURDIR)
+BUILDDIR = $(WORKDIR)/build/
+PBK_GIT_REPO = http://github.com/postgrespro/pg_probackup
 
 # utils
 OBJS = src/utils/configuration.o src/utils/json.o src/utils/logger.o \
@@ -80,3 +83,7 @@ src/walmethods.h: $(srchome)/src/bin/pg_basebackup/walmethods.h
 ifeq ($(PORTNAME), aix)
 	CC=xlc_r
 endif
+
+include packaging/Makefile.pkg
+include packaging/Makefile.repo
+include packaging/Makefile.test

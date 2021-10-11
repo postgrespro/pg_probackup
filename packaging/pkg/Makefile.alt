@@ -1,0 +1,74 @@
+# ALT 7
+build/alt_7_9.5:
+	$(call build_alt,alt,7,,9.5,9.5.25)
+	touch build/alt_7_9.5
+
+build/alt_7_9.6:
+	$(call build_alt,alt,7,,9.6,9.6.21)
+	touch build/alt_7_9.6
+
+build/alt_7_10:
+	$(call build_alt,alt,7,,10,10.17)
+	touch build/alt_7_10
+
+build/alt_7_11:
+	$(call build_alt,alt,7,,11,11.11)
+	touch build/alt_7_11
+
+build/alt_7_12:
+	$(call build_alt,alt,7,,12,12.6)
+	touch build/alt_7_12
+
+build/alt_7_13:
+	$(call build_alt,alt,7,,13,13.2)
+	touch build/alt_7_13
+
+# ALT 8
+build/alt_8_9.5:
+	$(call build_alt,alt,8,,9.5,9.5.25)
+	touch build/alt_8_9.5
+
+build/alt_8_9.6:
+	$(call build_alt,alt,8,,9.6,9.6.21)
+	touch build/alt_8_9.6
+
+build/alt_8_10:
+	$(call build_alt,alt,8,,10,10.17)
+	touch build/alt_8_10
+
+build/alt_8_11:
+	$(call build_alt,alt,8,,11,11.11)
+	touch build/alt_8_11
+
+build/alt_8_12:
+	$(call build_alt,alt,8,,12,12.6)
+	touch build/alt_8_12
+
+build/alt_8_13:
+	$(call build_alt,alt,8,,13,13.2)
+	touch build/alt_8_13
+
+# ALT 9
+build/alt_9_9.5:
+	$(call build_alt,alt,9,,9.5,9.5.25)
+	touch build/alt_9_9.5
+
+build/alt_9_9.6:
+	$(call build_alt,alt,9,,9.6,9.6.21)
+	touch build/alt_9_9.6
+
+build/alt_9_10:
+	$(call build_alt,alt,9,,10,10.17)
+	touch build/alt_9_10
+
+build/alt_9_11:
+	$(call build_alt,alt,9,,11,11.11)
+	touch build/alt_9_11
+
+build/alt_9_12:
+	$(call build_alt,alt,9,,12,12.6)
+	touch build/alt_9_12
+
+build/alt_9_13:
+	$(call build_alt,alt,9,,13,13.2)
+	touch build/alt_9_13

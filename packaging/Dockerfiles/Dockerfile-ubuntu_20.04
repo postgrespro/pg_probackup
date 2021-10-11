@@ -1,0 +1,8 @@
+FROM ubuntu:20.04
+ENV DEBIAN_FRONTEND noninteractive
+RUN ulimit -n 1024 && apt-get update -y
+RUN ulimit -n 1024 && apt-get install -y devscripts
+RUN ulimit -n 1024 && apt-get install -y dpkg-dev lsb-release git equivs wget vim
+RUN ulimit -n 1024 && apt-get install -y cmake bison flex libboost-all-dev
+RUN ulimit -n 1024 && apt-get install -y reprepro
+RUN ulimit -n 1024 && apt-get upgrade -y

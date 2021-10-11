@@ -1,0 +1,167 @@
+#### REPO BUILD ####
+repo: check_env repo/debian repo/ubuntu repo/centos repo/oraclelinux repo/alt repo/suse repo_finish #repo/rhel
+	@echo Build repo for all platform: done
+
+# Debian
+repo/debian: build/repo_debian_8 build/repo_debian_9 build/repo_debian_10 build/repo_debian_11
+	@echo Build repo for debian platforms: done
+
+build/repo_debian_8:
+	$(call build_repo_deb,debian,8,jessie)
+	touch build/repo_debian_8
+
+build/repo_debian_9:
+	$(call build_repo_deb,debian,9,stretch)
+	touch build/repo_debian_9
+
+build/repo_debian_10:
+	$(call build_repo_deb,debian,10,buster)
+	touch build/repo_debian_10
+
+build/repo_debian_11:
+	$(call build_repo_deb,debian,11,bullseye)
+	touch build/repo_debian_11
+
+# Ubuntu
+repo/ubuntu: build/repo_ubuntu_14.04 build/repo_ubuntu_16.04 build/repo_ubuntu_18.04 build/repo_ubuntu_20.04
+	@echo Build repo for ubuntu platforms: done
+
+build/repo_ubuntu_14.04:
+	$(call build_repo_deb,ubuntu,14.04,trusty)
+	touch build/repo_ubuntu_14.04
+
+build/repo_ubuntu_16.04:
+	$(call build_repo_deb,ubuntu,16.04,xenial)
+	touch build/repo_ubuntu_16.04
+
+build/repo_ubuntu_18.04:
+	$(call build_repo_deb,ubuntu,18.04,bionic)
+	touch build/repo_ubuntu_18.04
+
+build/repo_ubuntu_20.04:
+	$(call build_repo_deb,ubuntu,20.04,focal)
+	touch build/repo_ubuntu_20.04
+
+# Centos
+repo/centos: build/repo_centos_7 build/repo_centos_8
+	@echo Build repo for centos platforms: done
+
+build/repo_centos_7:
+	$(call build_repo_rpm,centos,7,,)
+	touch build/repo_centos_7
+
+build/repo_centos_8:
+	$(call build_repo_rpm,centos,8,,)
+	touch build/repo_centos_8
+
+# Oraclelinux
+repo/oraclelinux: build/repo_oraclelinux_6 build/repo_oraclelinux_7 build/repo_oraclelinux_8
+	@echo Build repo for oraclelinux platforms: done
+
+build/repo_oraclelinux_6:
+	$(call build_repo_rpm,oraclelinux,6,6Server)
+	touch build/repo_oraclelinux_6
+
+build/repo_oraclelinux_7:
+	$(call build_repo_rpm,oraclelinux,7,7Server)
+	touch build/repo_oraclelinux_7
+
+build/repo_oraclelinux_8:
+	$(call build_repo_rpm,oraclelinux,8,,)
+	touch build/repo_oraclelinux_8
+
+# RHEL
+repo/rhel: build/repo_rhel_7 build/repo_rhel_8
+	@echo Build repo for rhel platforms: done
+
+build/repo_rhel_7:
+	$(call build_repo_rpm,rhel,7,7Server)
+	touch build/repo_rhel_7
+
+build/repo_rhel_8:
+	$(call build_repo_rpm,rhel,8,,)
+	touch build/repo_rhel_8
+
+# ALT
+repo/alt: build/repo_alt_7 build/repo_alt_8 build/repo_alt_9
+	@echo Build repo for alt platforms: done
+
+build/repo_alt_7:
+	$(call build_repo_alt,alt,7,,)
+	touch build/repo_alt_7
+
+build/repo_alt_8:
+	$(call build_repo_alt,alt,8,,)
+	touch build/repo_alt_8
+
+build/repo_alt_9:
+	$(call build_repo_alt,alt,9,,)
+	touch build/repo_alt_9
+
+# SUSE
+repo/suse: build/repo_suse_15.1 build/repo_suse_15.2
+	@echo Build repo for suse platforms: done
+
+build/repo_suse_15.1:
+	$(call build_repo_suse,suse,15.1,,)
+	touch build/repo_suse_15.1
+
+build/repo_suse_15.2:
+	$(call build_repo_suse,suse,15.2,,)
+	touch build/repo_suse_15.2
+
+repo_finish:
+#	cd build/data/www/$(PBK_PKG_REPO)/
+	cd $(BUILDDIR)/data/www/$(PBK_PKG_REPO)/rpm && sudo ln -nsf $(PBK_VERSION) latest
+	cd $(BUILDDIR)/data/www/$(PBK_PKG_REPO)/srpm && sudo ln -nsf $(PBK_VERSION) latest
+
+#	sudo ln -rfs build/data/www/$(PBK_PKG_REPO)/rpm/${PBK_VERSION} build/data/www/$(PBK_PKG_REPO)/rpm/latest
+#	sudo ln -rfs build/data/www/$(PBK_PKG_REPO)/srpm/${PBK_VERSION} build/data/www/$(PBK_PKG_REPO)/srpm/latest
+
+define build_repo_deb
+	docker rm -f $1_$2_pbk_repo >> /dev/null 2>&1 ; \
+	docker run \
+		-v $(WORKDIR)/packaging/repo:/app/repo \
+		-v $(WORKDIR)/build/data/www:/app/www \
+		-v $(WORKDIR)/build/data/$(PBK_PKG_REPO)/$1/$2:/app/in \
+		-e "DISTRIB=$1" -e "DISTRIB_VERSION=$2" -e "CODENAME=$3" \
+		-e "PBK_PKG_REPO=$(PBK_PKG_REPO)" -e "PBK_EDITION=$(PBK_EDITION)" \
+		--name $1_$2_pbk_repo \
+		--rm pgpro/repo /app/repo/scripts/deb.sh
+endef
+
+define build_repo_rpm
+	docker rm -f $1_$2_pbk_repo >> /dev/null 2>&1 ; \
+	docker run \
+		-v $(WORKDIR)/packaging/repo:/app/repo \
+		-v $(WORKDIR)/build/data/www:/app/www \
+		-v $(WORKDIR)/build/data/$(PBK_PKG_REPO)/$1/$2:/app/in \
+		-e "DISTRIB=$1" -e "DISTRIB_VERSION=$2" -e "CODENAME=$3" \
+		-e "PBK_PKG_REPO=$(PBK_PKG_REPO)" -e "PBK_EDITION=$(PBK_EDITION)" \
+		--name $1_$2_pbk_repo \
+		--rm pgpro/repo /app/repo/scripts/rpm.sh
+endef
+
+define build_repo_alt
+	docker rm -f $1_$2_pbk_repo >> /dev/null 2>&1 ; \
+	docker run \
+		-v $(WORKDIR)/packaging/repo:/app/repo \
+		-v $(WORKDIR)/build/data/www:/app/www \
+		-v $(WORKDIR)/build/data/$(PBK_PKG_REPO)/$1/$2:/app/in \
+		-e "DISTRIB=$1" -e "DISTRIB_VERSION=$2" -e "CODENAME=$3" \
+		-e "PBK_PKG_REPO=$(PBK_PKG_REPO)" -e "PBK_EDITION=$(PBK_EDITION)" \
+		--name $1_$2_pbk_repo \
+		--rm pgpro/$1:$2 /app/repo/scripts/alt.sh
+endef
+
+define build_repo_suse
+	docker rm -f $1_$2_pbk_repo >> /dev/null 2>&1 ; \
+	docker run \
+		-v $(WORKDIR)/packaging/repo:/app/repo \
+		-v $(WORKDIR)/build/data/www:/app/www \
+		-v $(WORKDIR)/build/data/$(PBK_PKG_REPO)/$1/$2:/app/in \
+		-e "DISTRIB=$1" -e "DISTRIB_VERSION=$2" -e "CODENAME=$3" \
+		-e "PBK_PKG_REPO=$(PBK_PKG_REPO)" -e "PBK_EDITION=$(PBK_EDITION)" \
+		--name $1_$2_pbk_repo \
+		--rm pgpro/$1:$2 /app/repo/scripts/suse.sh
+endef

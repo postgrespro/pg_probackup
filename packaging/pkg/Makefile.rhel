@@ -1,0 +1,49 @@
+# RHEL 7
+build/rhel_7_9.5:
+	$(call build_rpm,rhel,7,7Server,9.5,9.5.25)
+	touch build/rhel_7_9.5
+
+build/rhel_7_9.6:
+	$(call build_rpm,rhel,7,7Server,9.6,9.6.21)
+	touch build/rhel_7_9.6
+
+build/rhel_7_10:
+	$(call build_rpm,rhel,7,7Server,10,10.16)
+	touch build/rhel_7_10
+
+build/rhel_7_11:
+	$(call build_rpm,rhel,7,7Server,11,11.11)
+	touch build/rhel_7_11
+
+build/rhel_7_12:
+	$(call build_rpm,rhel,7,7Server,12,12.6)
+	touch build/rhel_7_12
+
+build/rhel_7_13:
+	$(call build_rpm,rhel,7,7Server,13,13.2)
+	touch build/rhel_7_13
+
+# RHEL 8
+build/rhel_8_9.5:
+	$(call build_rpm,rhel,8,8Server,9.5,9.5.25)
+	touch build/rhel_8_9.5
+
+build/rhel_8_9.6:
+	$(call build_rpm,rhel,8,8Server,9.6,9.6.21)
+	touch build/rhel_8_9.6
+
+build/rhel_8_10:
+	$(call build_rpm,rhel,8,8Server,10,10.16)
+	touch build/rhel_8_10
+
+build/rhel_8_11:
+	$(call build_rpm,rhel,8,8Server,11,11.11)
+	touch build/rhel_8_11
+
+build/rhel_8_12:
+	$(call build_rpm,rhel,8,8Server,12,12.6)
+	touch build/rhel_8_12
+
+build/rhel_8_13:
+	$(call build_rpm,rhel,8,8Server,13,13.2)
+	touch build/rhel_8_13

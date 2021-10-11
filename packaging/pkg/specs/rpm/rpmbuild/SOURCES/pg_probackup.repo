@@ -1,0 +1,13 @@
+[pg_probackup]
+name=PG_PROBACKUP Packages for @SHORT_CODENAME@ Linux - $basearch
+baseurl=https://repo.postgrespro.ru/pg_probackup/rpm/latest/@DISTRIB@-$releasever-$basearch
+enabled=1
+gpgcheck=1
+gpgkey=file:///etc/pki/rpm-gpg/GPG-KEY-PG_PROBACKUP
+
+[pg_probackup-sources]
+name=PG_PROBACKUP Source Packages for @SHORT_CODENAME@ Linux - $basearch
+baseurl=https://repo.postgrespro.ru/pg_probackup/srpm/latest/@DISTRIB@-$releasever-$basearch
+enabled=1
+gpgcheck=1
+gpgkey=file:///etc/pki/rpm-gpg/GPG-KEY-PG_PROBACKUP
