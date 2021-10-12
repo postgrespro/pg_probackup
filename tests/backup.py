@@ -3276,9 +3276,11 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                 "\n Output: {0} \n CMD: {1}".format(
                     repr(self.output), self.cmd))
         except ProbackupException as e:
-            self.assertIn(
-                "FATAL:  must be superuser or replication role to start walsender",
+            # 9.5: ERROR:  must be superuser or replication role to run a backup
+            # >=9.6: FATAL:  must be superuser or replication role to start walsender
+            self.assertRegex(
                 e.message,
+                "ERROR:  must be superuser or replication role to run a backup|FATAL:  must be superuser or replication role to start walsender",
                 "\n Unexpected Error Message: {0}\n CMD: {1}".format(
                     repr(e.message), self.cmd))
 
