@@ -2504,13 +2504,13 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         db_list_raw = node.safe_psql(
             'postgres',
             'SELECT to_json(a) '
-            'FROM (SELECT oid, datname FROM pg_database) a').rstrip()
+            'FROM (SELECT oid, datname FROM pg_database) a').decode('utf-8').rstrip()
 
         db_list_splitted = db_list_raw.splitlines()
 
         db_list = {}
         for line in db_list_splitted:
-            line = json.loads(line.decode('utf-8'))
+            line = json.loads(line)
             db_list[line['datname']] = line['oid']
 
         # FULL backup
@@ -2641,7 +2641,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         db_list = {}
         for line in db_list_splitted:
-            line = json.loads(line.decode('utf-8'))
+            line = json.loads(line)
             db_list[line['datname']] = line['oid']
 
         # FULL backup
@@ -2743,7 +2743,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         db_list_raw = node.safe_psql(
             'postgres',
             'SELECT to_json(a) '
-            'FROM (SELECT oid, datname FROM pg_database) a').rstrip()
+            'FROM (SELECT oid, datname FROM pg_database) a').decode('utf-8').rstrip()
 
         db_list_splitted = db_list_raw.splitlines()
 
