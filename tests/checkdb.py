@@ -600,7 +600,33 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
                 'GRANT EXECUTE ON FUNCTION bt_index_check(regclass, bool) TO backup; '
                 'GRANT EXECUTE ON FUNCTION pg_catalog.set_config(text, text, boolean) TO backup;'
             )
-        # >= 10
+        # PG 10
+        elif self.get_version(node) > 100000 and self.get_version(node) < 110000:
+            node.safe_psql(
+                'backupdb',
+                'CREATE ROLE backup WITH LOGIN; '
+                'GRANT CONNECT ON DATABASE backupdb to backup; '
+                'GRANT USAGE ON SCHEMA pg_catalog TO backup; '
+                'GRANT USAGE ON SCHEMA public TO backup; '
+                'GRANT SELECT ON TABLE pg_catalog.pg_proc TO backup; '
+                'GRANT SELECT ON TABLE pg_catalog.pg_extension TO backup; '
+                'GRANT SELECT ON TABLE pg_catalog.pg_database TO backup; '
+                'GRANT SELECT ON TABLE pg_catalog.pg_am TO backup; '
+                'GRANT SELECT ON TABLE pg_catalog.pg_class TO backup; '
+                'GRANT SELECT ON TABLE pg_catalog.pg_index TO backup; '
+                'GRANT SELECT ON TABLE pg_catalog.pg_namespace TO backup; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.nameeq(name, name) TO backup; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.namene(name, name) TO backup; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.int8(integer) TO backup; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.oideq(oid, oid) TO backup; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.charne("char", "char") TO backup; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_system() TO backup; '
+                'GRANT EXECUTE ON FUNCTION bt_index_check(regclass) TO backup; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.set_config(text, text, boolean) TO backup;'
+            )
+        # >= 11
         else:
             node.safe_psql(
                 'backupdb',
