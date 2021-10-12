@@ -3404,10 +3404,14 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.assertIn(
             'WARNING: Valid full backup on current timeline 2 is not found, trying to look up on previous timelines',
             output)
-        
-        self.assertIn(
-            'WARNING: could not connect to database backupdb: FATAL:  must be superuser or replication role to start walsender',
-            output)
+
+        # Messages before 14
+        # 'WARNING: could not connect to database backupdb: FATAL:  must be superuser or replication role to start walsender'
+        # Messages for >=14
+        # 'WARNING: could not connect to database backupdb: connection to server on socket "/tmp/.s.PGSQL.30983" failed: FATAL:  must be superuser or replication role to start walsender'
+        self.assertRegex(
+            output,
+            r'WARNING: could not connect to database backupdb: (connection to server on socket "/tmp/.s.PGSQL.\d+" failed: ){0,1}FATAL:  must be superuser or replication role to start walsender')
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
