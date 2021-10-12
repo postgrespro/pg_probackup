@@ -3875,7 +3875,8 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
-    # @unittest.skip("skip")
+    # skip this test until https://github.com/postgrespro/pg_probackup/pull/399
+    @unittest.skip("skip")
     def test_restore_issue_313(self):
         """
         Check that partially restored PostgreSQL instance cannot be started
