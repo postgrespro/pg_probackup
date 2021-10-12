@@ -4,7 +4,7 @@ from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 import subprocess
 import sys
 from time import sleep
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import hashlib
 import shutil
 import json
@@ -2140,7 +2140,8 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         target_name = 'savepoint'
 
-        target_time = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S %z")
+        # in python-3.6+ it can be ...now()..astimezone()...
+        target_time = datetime.utcnow().replace(tzinfo=timezone.utc).astimezone().strftime("%Y-%m-%d %H:%M:%S %z")
         with node.connect("postgres") as con:
             res = con.execute(
                 "INSERT INTO tbl0005 VALUES ('inserted') RETURNING (xmin)")
@@ -2509,7 +2510,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         db_list = {}
         for line in db_list_splitted:
-            line = json.loads(line)
+            line = json.loads(line.decode('utf-8'))
             db_list[line['datname']] = line['oid']
 
         # FULL backup
@@ -2640,7 +2641,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         db_list = {}
         for line in db_list_splitted:
-            line = json.loads(line)
+            line = json.loads(line.decode('utf-8'))
             db_list[line['datname']] = line['oid']
 
         # FULL backup
