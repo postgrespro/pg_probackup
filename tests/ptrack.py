@@ -100,6 +100,10 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         self.set_archiving(backup_dir, 'node', node)
         node.slow_start()
 
+        node.safe_psql(
+            "postgres",
+            "CREATE EXTENSION ptrack")
+
         try:
             self.backup_node(backup_dir, 'node', node, backup_type="ptrack")
             # we should die here because exception is what we expect to happen
@@ -135,6 +139,10 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
         node.slow_start()
+
+        node.safe_psql(
+            "postgres",
+            "CREATE EXTENSION ptrack")
 
         self.backup_node(
             backup_dir, 'node', node,

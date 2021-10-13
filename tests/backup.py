@@ -1959,7 +1959,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
             node.safe_psql(
                 "backupdb",
                 "GRANT EXECUTE ON FUNCTION ptrack.ptrack_get_pagemapset(pg_lsn) TO backup; "
-                "GRANT EXECUTE ON FUNCTION 'ptrack.ptrack_init_lsn()' TO backup; ")
+                "GRANT EXECUTE ON FUNCTION ptrack.ptrack_init_lsn() TO backup;")
 
         if ProbackupTest.enterprise:
             node.safe_psql(
