@@ -23,6 +23,11 @@ if [[ ${PG_VERSION} == '9.5' ]] && [[ ${PBK_EDITION} != '' ]] ; then
     exit 0
 fi
 
+if [ -f /etc/centos-release ] ; then
+	sed -i 's|^baseurl=http://|baseurl=https://|g' /etc/yum.repos.d/*.repo
+	yum update -y
+fi
+
 # PACKAGES NEEDED
 yum install -y git wget bzip2 rpm-build
 
@@ -67,11 +72,11 @@ else
 	cd /root/rpmbuild/SOURCES/pgpro
 
 	PGPRO_TOC=$(echo ${PG_FULL_VERSION} | sed 's|\.|_|g')
-    if [[ ${PBK_EDITION} == 'std' ]] ; then
-        git checkout "PGPRO${PGPRO_TOC}_1"
-    else
-        git checkout "PGPROEE${PGPRO_TOC}_1"
-    fi
+	if [[ ${PBK_EDITION} == 'std' ]] ; then
+		git checkout "PGPRO${PGPRO_TOC}_1"
+	else
+		git checkout "PGPROEE${PGPRO_TOC}_1"
+	fi
 	rm -rf .git
 
 	cd /root/rpmbuild/SOURCES/
@@ -110,7 +115,7 @@ else
 	sed -i "s/@PG_FULL_VERSION@/${PG_FULL_VERSION}/" pg_probackup-pgpro.spec
 
 	if [ ${PG_VERSION} != '9.6' ]; then
-    	sed -i "s|@PREFIX@|/opt/pgpro/${EDITION}-${PG_VERSION}|g" pg_probackup-pgpro.spec
+		sed -i "s|@PREFIX@|/opt/pgpro/${EDITION}-${PG_VERSION}|g" pg_probackup-pgpro.spec
 	fi
 
 	sed -i "s/@PKG_VERSION@/${PKG_VERSION}/" pg_probackup-repo-forks.spec
@@ -145,4 +150,4 @@ else
 	# write artefacts to out directory
 	rm -rf /app/out/*
 	cp -arv /root/rpmbuild/RPMS /app/out
-fi 
+fi

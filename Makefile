@@ -1,7 +1,7 @@
 PROGRAM = pg_probackup
 WORKDIR ?= $(CURDIR)
 BUILDDIR = $(WORKDIR)/build/
-PBK_GIT_REPO = http://github.com/postgrespro/pg_probackup
+PBK_GIT_REPO = https://github.com/postgrespro/pg_probackup
 
 # utils
 OBJS = src/utils/configuration.o src/utils/json.o src/utils/logger.o \
