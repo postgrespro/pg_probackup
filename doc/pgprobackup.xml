@@ -606,6 +606,7 @@ BEGIN;
 CREATE ROLE backup WITH LOGIN;
 GRANT USAGE ON SCHEMA pg_catalog TO backup;
 GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup;
+GRANT EXECUTE ON FUNCTION pg_catalog.set_config(text, text, boolean) TO backup;
 GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup;
 GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean) TO backup;
 GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup() TO backup;
@@ -614,8 +615,6 @@ GRANT EXECUTE ON FUNCTION pg_catalog.pg_switch_xlog() TO backup;
 GRANT EXECUTE ON FUNCTION pg_catalog.txid_current() TO backup;
 GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup;
 GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;
-GRANT EXECUTE ON FUNCTION pg_catalog.set_config(text, text, boolean) TO backup;
-GRANT EXECUTE ON FUNCTION pg_catalog.oideq(oid, oid) TO backup;
 COMMIT;
 </programlisting>
     <para>
@@ -626,6 +625,7 @@ BEGIN;
 CREATE ROLE backup WITH LOGIN;
 GRANT USAGE ON SCHEMA pg_catalog TO backup;
 GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup;
+GRANT EXECUTE ON FUNCTION pg_catalog.set_config(text, text, boolean) TO backup;
 GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup;
 GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean, boolean) TO backup;
 GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup(boolean) TO backup;
@@ -636,8 +636,6 @@ GRANT EXECUTE ON FUNCTION pg_catalog.txid_current() TO backup;
 GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup;
 GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;
 GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_checkpoint() TO backup;
-GRANT EXECUTE ON FUNCTION pg_catalog.set_config(text, text, boolean) TO backup;
-GRANT EXECUTE ON FUNCTION pg_catalog.oideq(oid, oid) TO backup;
 COMMIT;
 </programlisting>
     <para>
@@ -648,6 +646,7 @@ BEGIN;
 CREATE ROLE backup WITH LOGIN;
 GRANT USAGE ON SCHEMA pg_catalog TO backup;
 GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup;
+GRANT EXECUTE ON FUNCTION pg_catalog.set_config(text, text, boolean) TO backup;
 GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup;
 GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean, boolean) TO backup;
 GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup(boolean, boolean) TO backup;
@@ -658,8 +657,6 @@ GRANT EXECUTE ON FUNCTION pg_catalog.txid_current() TO backup;
 GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup;
 GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;
 GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_checkpoint() TO backup;
-GRANT EXECUTE ON FUNCTION pg_catalog.set_config(text, text, boolean) TO backup;
-GRANT EXECUTE ON FUNCTION pg_catalog.oideq(oid, oid) TO backup;
 COMMIT;
 </programlisting>
     <para>
@@ -5537,6 +5534,7 @@ BEGIN;
 CREATE ROLE backup WITH LOGIN REPLICATION;
 GRANT USAGE ON SCHEMA pg_catalog TO backup;
 GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup;
+GRANT EXECUTE ON FUNCTION pg_catalog.set_config(text, text, boolean) TO backup;
 GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup;
 GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean, boolean) TO backup;
 GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup(boolean, boolean) TO backup;
@@ -5547,8 +5545,6 @@ GRANT EXECUTE ON FUNCTION pg_catalog.txid_current() TO backup;
 GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup;
 GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;
 GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_checkpoint() TO backup;
-GRANT EXECUTE ON FUNCTION pg_catalog.set_config(text, text, boolean) TO backup;
-GRANT EXECUTE ON FUNCTION pg_catalog.oideq(oid, oid) TO backup;
 COMMIT;
 </programlisting>
       </step>

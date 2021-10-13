@@ -562,14 +562,14 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
                 'GRANT SELECT ON TABLE pg_catalog.pg_index TO backup; '
                 'GRANT SELECT ON TABLE pg_catalog.pg_namespace TO backup; '
                 'GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.set_config(text, text, boolean) TO backup; '
                 'GRANT EXECUTE ON FUNCTION pg_catalog.nameeq(name, name) TO backup; '
                 'GRANT EXECUTE ON FUNCTION pg_catalog.namene(name, name) TO backup; '
                 'GRANT EXECUTE ON FUNCTION pg_catalog.int8(integer) TO backup; '
                 'GRANT EXECUTE ON FUNCTION pg_catalog.oideq(oid, oid) TO backup; '
                 'GRANT EXECUTE ON FUNCTION pg_catalog.charne("char", "char") TO backup; '
                 'GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup; '
-                'GRANT EXECUTE ON FUNCTION bt_index_check(regclass, bool) TO backup; ' # amcheck-next function
-                'GRANT EXECUTE ON FUNCTION pg_catalog.set_config(text, text, boolean) TO backup;'
+                'GRANT EXECUTE ON FUNCTION bt_index_check(regclass, bool) TO backup;' # amcheck-next function
             )
         # PG 9.6
         elif self.get_version(node) > 90600 and self.get_version(node) < 100000:
@@ -587,6 +587,7 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
                 'GRANT SELECT ON TABLE pg_catalog.pg_index TO backup; '
                 'GRANT SELECT ON TABLE pg_catalog.pg_namespace TO backup; '
                 'GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.set_config(text, text, boolean) TO backup; '
                 'GRANT EXECUTE ON FUNCTION pg_catalog.nameeq(name, name) TO backup; '
                 'GRANT EXECUTE ON FUNCTION pg_catalog.namene(name, name) TO backup; '
                 'GRANT EXECUTE ON FUNCTION pg_catalog.int8(integer) TO backup; '
@@ -595,8 +596,7 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
                 'GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup; '
                 'GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_system() TO backup; '
 #                'GRANT EXECUTE ON FUNCTION bt_index_check(regclass) TO backup; '
-                'GRANT EXECUTE ON FUNCTION bt_index_check(regclass, bool) TO backup; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.set_config(text, text, boolean) TO backup;'
+                'GRANT EXECUTE ON FUNCTION bt_index_check(regclass, bool) TO backup;'
             )
         # PG 10
         elif self.get_version(node) > 100000 and self.get_version(node) < 110000:
@@ -614,6 +614,7 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
                 'GRANT SELECT ON TABLE pg_catalog.pg_index TO backup; '
                 'GRANT SELECT ON TABLE pg_catalog.pg_namespace TO backup; '
                 'GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.set_config(text, text, boolean) TO backup; '
                 'GRANT EXECUTE ON FUNCTION pg_catalog.nameeq(name, name) TO backup; '
                 'GRANT EXECUTE ON FUNCTION pg_catalog.namene(name, name) TO backup; '
                 'GRANT EXECUTE ON FUNCTION pg_catalog.int8(integer) TO backup; '
@@ -621,8 +622,7 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
                 'GRANT EXECUTE ON FUNCTION pg_catalog.charne("char", "char") TO backup; '
                 'GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup; '
                 'GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_system() TO backup; '
-                'GRANT EXECUTE ON FUNCTION bt_index_check(regclass) TO backup; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.set_config(text, text, boolean) TO backup;'
+                'GRANT EXECUTE ON FUNCTION bt_index_check(regclass) TO backup;'
             )
         # >= 11
         else:
@@ -640,6 +640,7 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
                 'GRANT SELECT ON TABLE pg_catalog.pg_index TO backup; '
                 'GRANT SELECT ON TABLE pg_catalog.pg_namespace TO backup; '
                 'GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.set_config(text, text, boolean) TO backup; '
                 'GRANT EXECUTE ON FUNCTION pg_catalog.nameeq(name, name) TO backup; '
                 'GRANT EXECUTE ON FUNCTION pg_catalog.namene(name, name) TO backup; '
                 'GRANT EXECUTE ON FUNCTION pg_catalog.int8(integer) TO backup; '
@@ -648,8 +649,7 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
                 'GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup; '
                 'GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_system() TO backup; '
                 'GRANT EXECUTE ON FUNCTION bt_index_check(regclass) TO backup; '
-                'GRANT EXECUTE ON FUNCTION bt_index_check(regclass, bool) TO backup; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.set_config(text, text, boolean) TO backup;'
+                'GRANT EXECUTE ON FUNCTION bt_index_check(regclass, bool) TO backup;'
             )
 
         if ProbackupTest.enterprise:
