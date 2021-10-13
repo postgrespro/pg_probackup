@@ -43,7 +43,7 @@ env:
 #    - PG_VERSION=12 PG_BRANCH=REL_12_STABLE MODE=replica
 #    - PG_VERSION=12 PG_BRANCH=REL_12_STABLE MODE=retention
 #    - PG_VERSION=12 PG_BRANCH=REL_12_STABLE MODE=restore
-#    - PG_VERSION=15 PG_BRANCH=master
+    - PG_VERSION=15 PG_BRANCH=master
 
 jobs:
     allow_failures:
