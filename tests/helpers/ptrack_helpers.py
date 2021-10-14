@@ -980,12 +980,6 @@ class ProbackupTest(object):
         if not old_binary:
             cmd_list += ['--no-sync']
 
-        if self.verbose:
-            cmd_list += [
-                '--log-level-file=VERBOSE',
-                '--log-directory={0}'.format(node.logs_dir)
-            ]
-
         return self.run_pb(cmd_list + options, asynchronous, gdb, old_binary, return_id, env=env)
 
     def checkdb_node(
