@@ -1144,7 +1144,9 @@ get_backup_filelist(pgBackup *backup, bool strict)
 	{
 		elog(WARNING, "Invalid CRC of backup control file '%s': %u. Expected: %u",
 					 backup_filelist_path, content_crc, backup->content_crc);
-		return NULL;
+		parray_free(files);
+		files = NULL;
+
 	}
 
 	/* redundant sanity? */
