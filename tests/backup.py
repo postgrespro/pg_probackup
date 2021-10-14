@@ -57,16 +57,16 @@ class BackupTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node', node, backup_type="page")
 
         show_backup_1 = self.show_pb(backup_dir, 'node')[1]
-        self.assertEqual(show_backup['status'], "OK")
-        self.assertEqual(show_backup['backup-mode'], "PAGE")
+        self.assertEqual(show_backup_1['status'], "OK")
+        self.assertEqual(show_backup_1['backup-mode'], "PAGE")
 
         # delta backup mode
         delta_backup_id = self.backup_node(
             backup_dir, 'node', node, backup_type="delta")
 
         show_backup_2 = self.show_pb(backup_dir, 'node')[2]
-        self.assertEqual(show_backup['status'], "OK")
-        self.assertEqual(show_backup['backup-mode'], "DELTA")
+        self.assertEqual(show_backup_2['status'], "OK")
+        self.assertEqual(show_backup_2['backup-mode'], "DELTA")
 
         # Check parent backup
         self.assertEqual(
