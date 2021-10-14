@@ -32,6 +32,8 @@ static int grab_excl_lock_file(const char *backup_dir, const char *backup_id, bo
 static int grab_shared_lock_file(pgBackup *backup);
 static int wait_shared_owners(pgBackup *backup);
 
+
+static void unlink_lock_atexit(bool fatal, void *userdata);
 static void unlock_backup(const char *backup_dir, const char *backup_id, bool exclusive);
 static void release_excl_lock_file(const char *backup_dir);
 static void release_shared_lock_file(const char *backup_dir);
@@ -83,8 +85,8 @@ timelineInfoFree(void *tliInfo)
 }
 
 /* Iterate over locked backups and unlock them */
-static void
-unlink_lock_atexit(void)
+void
+unlink_lock_atexit(bool unused_fatal, void *unused_userdata)
 {
 	int	i;
 
@@ -94,7 +96,7 @@ unlink_lock_atexit(void)
 	for (i = 0; i < parray_num(locks); i++)
 	{
 		LockInfo *lock = (LockInfo *) parray_get(locks, i);
-		unlock_backup(lock->backup_dir, lock->backup_dir, lock->exclusive);
+		unlock_backup(lock->backup_dir, lock->backup_id, lock->exclusive);
 	}
 
 	parray_walk(locks, pg_free);
@@ -267,7 +269,7 @@ lock_backup(pgBackup *backup, bool strict, bool exclusive)
 	 */
 	if (!backup_lock_exit_hook_registered)
 	{
-		atexit(unlink_lock_atexit);
+		pgut_atexit_push(unlink_lock_atexit, NULL);
 		backup_lock_exit_hook_registered = true;
 	}
 
