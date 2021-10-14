@@ -1602,6 +1602,13 @@ class ProbackupTest(object):
         return self.version_to_num(
             testgres.get_pg_config()['VERSION'].split(" ")[1])
 
+    def get_ptrack_version(self, node):
+        version = node.safe_psql(
+            "postgres",
+            "SELECT extversion "
+                        "FROM pg_catalog.pg_extension WHERE extname = 'ptrack'").decode('utf-8').rstrip()
+        return self.version_to_num(version)
+
     def get_bin_path(self, binary):
         return testgres.get_bin_path(binary)
 

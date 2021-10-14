@@ -4465,16 +4465,10 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             "postgres",
             "CREATE EXTENSION ptrack")
 
-        # TODO: ptrack version must be 2.1
-        ptrack_version = node.safe_psql(
-            "postgres",
-            "SELECT extversion "
-			"FROM pg_catalog.pg_extension WHERE extname = 'ptrack'").decode('utf-8').rstrip()
-
-        self.assertEqual(
-            ptrack_version,
-            "2.1",
-            "You need ptrack 2.1 for this test")
+        self.assertGreaterEqual(
+            self.get_ptrack_version(node),
+            self.version_to_num("2.1"),
+            "You need ptrack >=2.1 for this test")
 
         # set map_size to a minimal value
         self.set_auto_conf(node, {'ptrack.map_size': '1'})
