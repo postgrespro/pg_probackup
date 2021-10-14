@@ -3619,7 +3619,8 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, self.fname, 'node'),
             set_replication=True,
-            ptrack_enable=True)
+            ptrack_enable=True,
+            pg_options={ 'wal_log_hints': 'on' })
 
         backup_dir = os.path.join(self.tmp_path, module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
