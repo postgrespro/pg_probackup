@@ -3615,7 +3615,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure
-    def test_ptrack_vacuum_full(self):
+    def test_ptrack_vacuum_full_2(self):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, self.fname, 'node'),
             set_replication=True,
