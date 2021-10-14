@@ -357,6 +357,11 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         self.set_replica(dst_pg, src_pg) # fake replication
         src_pg.slow_start(replica = True)
         src_pg.promote()
+
+        src_pg.safe_psql("postgres", "CHECKPOINT") # force postgres to update tli in 'SELECT timeline_id FROM pg_catalog.pg_control_checkpoint()'
+        src_tli = src_pg.safe_psql("postgres", "SELECT timeline_id FROM pg_catalog.pg_control_checkpoint()").decode('utf-8').rstrip()
+        self.assertEqual(src_tli, "2", "Postgres didn't update TLI after promote")
+
         src_pg.safe_psql("postgres", "CREATE TABLE ultimate_question AS SELECT 42 AS answer")
         src_query_result = src_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
 
