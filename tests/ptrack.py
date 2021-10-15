@@ -4441,11 +4441,14 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, self.fname)
 
-        # @unittest.skip("skip")
+    # @unittest.skip("skip")
     def test_horizon_lsn_ptrack(self):
         """
         https://github.com/postgrespro/pg_probackup/pull/386
         """
+        if not self.probackup_old_path:
+            self.skipTest("You must specify PGPROBACKUPBIN_OLD"
+                          " for run this test")
         self.assertLessEqual(
             self.version_to_num(self.old_probackup_version),
             self.version_to_num('2.4.15'),
