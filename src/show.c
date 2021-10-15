@@ -443,6 +443,36 @@ print_backup_json_object(PQExpBuffer buf, pgBackup *backup)
 		appendPQExpBuffer(buf, "%u", backup->content_crc);
 	}
 
+	/* print tablespaces list */
+	if (validate_tablespace_map(backup, true))
+	{
+		parray     *tablespaces = parray_new();
+		int i;
+
+		json_add_key(buf, "tablespaces", json_level);
+		json_add(buf, JT_BEGIN_ARRAY, &json_level);
+
+		read_tablespace_map(tablespaces, backup->root_dir);
+		for (i = 0; i < parray_num(tablespaces); i++)
+		{
+			pgFile *file = parray_get(tablespaces, i);
+			json_add(buf, JT_BEGIN_OBJECT, &json_level);
+			json_add_value(buf, "link-name", file->name, json_level, true);
+			json_add_value(buf, "link-path", file->linked, json_level, true);
+			json_add(buf, JT_END_OBJECT, &json_level);
+		}
+
+		/* End of tablespaces */
+		json_add(buf, JT_END_ARRAY, &json_level);
+
+		/* End of tablespaces object */
+		json_add(buf, JT_END_OBJECT, &json_level);
+
+		parray_walk(tablespaces, pgFileFree);
+		parray_free(tablespaces);
+	}
+
+	/* End of backup object */
 	json_add(buf, JT_END_OBJECT, &json_level);
 }
 
