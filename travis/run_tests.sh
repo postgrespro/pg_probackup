@@ -33,7 +33,7 @@ echo "############### Getting Postgres sources:"
 git clone https://github.com/postgres/postgres.git -b $PG_BRANCH --depth=1
 
 # Clone ptrack
-if [ "$PTRACK_PATCH_PG_VERSION" != "off" ]; then
+if [ "$PTRACK_PATCH_PG_BRANCH" != "off" ]; then
     git clone https://github.com/postgrespro/ptrack.git -b master --depth=1
     export PG_PROBACKUP_PTRACK=on
 else
@@ -45,7 +45,7 @@ fi
 echo "############### Compiling Postgres:"
 cd postgres # Go to postgres dir
 if [ "$PG_PROBACKUP_PTRACK" = "on" ]; then
-    git apply -3 ../ptrack/patches/REL_${PTRACK_PATCH_PG_VERSION}_STABLE-ptrack-core.diff
+    git apply -3 ../ptrack/patches/${PTRACK_PATCH_PG_BRANCH}-ptrack-core.diff
 fi
 CFLAGS="-O0" ./configure --prefix=$PGHOME --enable-debug --enable-cassert --enable-depend --enable-tap-tests
 make -s -j$(nproc) install
