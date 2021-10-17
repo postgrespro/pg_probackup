@@ -762,13 +762,6 @@ dir_check_file(pgFile *file, bool backup_logs)
 			}
 			else
 			{
-               /*
-                * snapfs files:
-                * RELFILENODE.BLOCKNO.snapmap.SNAPID
-                * RELFILENODE.BLOCKNO.snap.SNAPID
-                */
-               if (strstr(file->name, "snap") != NULL)
-                       return true;
 
 				len = strlen(file->name);
 				/* reloid.cfm */
