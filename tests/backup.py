@@ -3234,9 +3234,11 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         # 'WARNING: could not connect to database backupdb: FATAL:  must be superuser or replication role to start walsender'
         # Messages for >=14
         # 'WARNING: could not connect to database backupdb: connection to server on socket "/tmp/.s.PGSQL.30983" failed: FATAL:  must be superuser or replication role to start walsender'
+        # 'WARNING: could not connect to database backupdb: connection to server at "localhost" (127.0.0.1), port 29732 failed: FATAL:  must be superuser or replication role to start walsender'
         self.assertRegex(
             output,
-            r'WARNING: could not connect to database backupdb: (connection to server on socket "/tmp/.s.PGSQL.\d+" failed: ){0,1}FATAL:  must be superuser or replication role to start walsender')
+            r'WARNING: could not connect to database backupdb: (connection to server (on socket "/tmp/.s.PGSQL.\d+"|at "localhost" \(127.0.0.1\), port \d+) failed: ){0,1}'
+            'FATAL:  must be superuser or replication role to start walsender')
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
