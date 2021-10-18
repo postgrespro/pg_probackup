@@ -762,20 +762,31 @@ dir_check_file(pgFile *file, bool backup_logs)
 			if (fork_name)
 			{
 				/* Auxiliary fork of the relfile */
-				if (strcmp(fork_name, "vm") == 0)
+				if (strcmp(fork_name, "_vm") == 0)
 					file->forkName = vm;
 
-				else if (strcmp(fork_name, "fsm") == 0)
+				else if (strcmp(fork_name, "_fsm") == 0)
 					file->forkName = fsm;
 
-				else if (strcmp(fork_name, "cfm") == 0)
+				else if (strcmp(fork_name, "_cfm") == 0)
 					file->forkName = cfm;
 
-				else if (strcmp(fork_name, "ptrack") == 0)
+				else if (strcmp(fork_name, "_ptrack") == 0)
 					file->forkName = ptrack;
 
-				else if (strcmp(fork_name, "init") == 0)
+				else if (strcmp(fork_name, "_init") == 0)
 					file->forkName = init;
+
+				// extract relOid for certain forks
+				if (file->forkName == vm ||
+					file->forkName == fsm ||
+					file->forkName == init ||
+					file->forkName == cfm)
+				{
+					// sanity
+					if (sscanf(file->name, "%u_*", &(file->relOid)) != 1)
+						file->relOid = 0;
+				}
 
 				/* Do not backup ptrack files */
 				if (file->forkName == ptrack)

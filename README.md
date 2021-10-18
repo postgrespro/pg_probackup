@@ -66,7 +66,7 @@ For detailed release plans check [Milestones](https://github.com/postgrespro/pg_
 
 ## Installation and Setup
 ### Windows Installation
-Installers are available in release **assets**. [Latests](https://github.com/postgrespro/pg_probackup/releases/2.4.9).
+Installers are available in release **assets**. [Latests](https://github.com/postgrespro/pg_probackup/releases/2.4.15).
 
 ### Linux Installation
 #### pg_probackup for vanilla PostgreSQL
@@ -81,6 +81,11 @@ sudo apt-get install pg-probackup-{14,13,12,11,10,9.6}-dbg
 sudo sh -c 'echo "deb-src [arch=amd64] https://repo.postgrespro.ru/pg_probackup/deb/ $(lsb_release -cs) main-$(lsb_release -cs)" >>\
   /etc/apt/sources.list.d/pg_probackup.list' && sudo apt-get update
 sudo apt-get source pg-probackup-{14,13,12,11,10,9.6}
+
+#DEB Astra Linix Orel
+sudo sh -c 'echo "deb [arch=amd64] https://repo.postgrespro.ru/pg_probackup/deb/ stretch main-stretch" > /etc/apt/sources.list.d/pg_probackup.list'
+sudo wget -O - https://repo.postgrespro.ru/pg_probackup/keys/GPG-KEY-PG_PROBACKUP | sudo apt-key add - && sudo apt-get update
+sudo apt-get install pg-probackup-{13,12,11,10,9.6,9.5}{-dbg,}
 
 #RPM Centos Packages
 rpm -ivh https://repo.postgrespro.ru/pg_probackup/keys/pg_probackup-repo-centos.noarch.rpm
@@ -134,6 +139,12 @@ sudo sh -c 'echo "deb [arch=amd64] https://repo.postgrespro.ru/pg_probackup-fork
 sudo wget -O - https://repo.postgrespro.ru/pg_probackup-forks/keys/GPG-KEY-PG_PROBACKUP | sudo apt-key add - && sudo apt-get update
 sudo apt-get install pg-probackup-{std,ent}-{13,12,11,10,9.6}
 sudo apt-get install pg-probackup-{std,ent}-{13,12,11,10,9.6}-dbg
+
+#DEB Astra Linix Orel
+sudo sh -c 'echo "deb [arch=amd64] https://repo.postgrespro.ru/pg_probackup-forks/deb/ stretch main-stretch" > /etc/apt/sources.list.d/pg_probackup.list'
+sudo wget -O - https://repo.postgrespro.ru/pg_probackup-forks/keys/GPG-KEY-PG_PROBACKUP | sudo apt-key add - && sudo apt-get update
+sudo apt-get install pg-probackup-{std,ent}-{12,11,10,9.6}{-dbg,}
+
 
 #RPM Centos Packages
 rpm -ivh https://repo.postgrespro.ru/pg_probackup-forks/keys/pg_probackup-repo-forks-centos.noarch.rpm

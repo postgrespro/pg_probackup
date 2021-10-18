@@ -1865,10 +1865,12 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                 "GRANT SELECT ON TABLE pg_catalog.pg_proc TO backup; "
                 "GRANT SELECT ON TABLE pg_catalog.pg_extension TO backup; "
                 "GRANT SELECT ON TABLE pg_catalog.pg_database TO backup; " # for partial restore, checkdb and ptrack
+                "GRANT EXECUTE ON FUNCTION pg_catalog.oideq(oid, oid) TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.nameeq(name, name) TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.textout(text) TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.timestamptz(timestamp with time zone, integer) TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.set_config(text, text, boolean) TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean) TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup() TO backup; "
@@ -1898,10 +1900,12 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                 "GRANT SELECT ON TABLE pg_catalog.pg_extension TO backup; "
                 "GRANT SELECT ON TABLE pg_catalog.pg_proc TO backup; "
                 "GRANT SELECT ON TABLE pg_catalog.pg_database TO backup; " # for partial restore, checkdb and ptrack
+                "GRANT EXECUTE ON FUNCTION pg_catalog.oideq(oid, oid) TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.nameeq(name, name) TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.textout(text) TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.timestamptz(timestamp with time zone, integer) TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.set_config(text, text, boolean) TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_system() TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean, boolean) TO backup; "
@@ -1936,8 +1940,10 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                 "GRANT SELECT ON TABLE pg_catalog.pg_proc TO backup; "
                 "GRANT SELECT ON TABLE pg_catalog.pg_extension TO backup; "
                 "GRANT SELECT ON TABLE pg_catalog.pg_database TO backup; " # for partial restore, checkdb and ptrack
+                "GRANT EXECUTE ON FUNCTION pg_catalog.oideq(oid, oid) TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.nameeq(name, name) TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.set_config(text, text, boolean) TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_system() TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean, boolean) TO backup; "
@@ -3076,10 +3082,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         if ProbackupTest.enterprise:
             node.safe_psql(
                 "backupdb",
-                "GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_edition() TO backup")
-
-            node.safe_psql(
-                "backupdb",
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_edition() TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_version() TO backup")
         
         sleep(2)
@@ -3097,9 +3100,11 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                 "\n Output: {0} \n CMD: {1}".format(
                     repr(self.output), self.cmd))
         except ProbackupException as e:
-            self.assertIn(
-                "FATAL:  must be superuser or replication role to start walsender",
+            # 9.5: ERROR:  must be superuser or replication role to run a backup
+            # >=9.6: FATAL:  must be superuser or replication role to start walsender
+            self.assertRegex(
                 e.message,
+                "ERROR:  must be superuser or replication role to run a backup|FATAL:  must be superuser or replication role to start walsender",
                 "\n Unexpected Error Message: {0}\n CMD: {1}".format(
                     repr(e.message), self.cmd))
 
@@ -3157,7 +3162,8 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                 "GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean) TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup() TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup; "
-                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;")
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;"
+            )
         # PG 9.6
         elif self.get_version(node) > 90600 and self.get_version(node) < 100000:
             node.safe_psql(
@@ -3180,7 +3186,8 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                 "GRANT EXECUTE ON FUNCTION pg_catalog.pg_switch_xlog() TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.pg_last_xlog_replay_location() TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup; "
-                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;")
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;"
+            )
         # >= 10
         else:
             node.safe_psql(
@@ -3208,10 +3215,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         if ProbackupTest.enterprise:
             node.safe_psql(
                 "backupdb",
-                "GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_edition() TO backup")
-
-            node.safe_psql(
-                "backupdb",
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_edition() TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_version() TO backup")
 
         replica.promote()
@@ -3225,10 +3229,14 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.assertIn(
             'WARNING: Valid full backup on current timeline 2 is not found, trying to look up on previous timelines',
             output)
-        
-        self.assertIn(
-            'WARNING: could not connect to database backupdb: FATAL:  must be superuser or replication role to start walsender',
-            output)
+
+        # Messages before 14
+        # 'WARNING: could not connect to database backupdb: FATAL:  must be superuser or replication role to start walsender'
+        # Messages for >=14
+        # 'WARNING: could not connect to database backupdb: connection to server on socket "/tmp/.s.PGSQL.30983" failed: FATAL:  must be superuser or replication role to start walsender'
+        self.assertRegex(
+            output,
+            r'WARNING: could not connect to database backupdb: (connection to server on socket "/tmp/.s.PGSQL.\d+" failed: ){0,1}FATAL:  must be superuser or replication role to start walsender')
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)

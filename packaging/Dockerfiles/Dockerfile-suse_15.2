@@ -1,0 +1,4 @@
+FROM opensuse/leap:15.2
+RUN ulimit -n 1024 && zypper install -y tar wget rpm-build
+RUN ulimit -n 1024 && zypper install -y gcc make perl libicu-devel glibc-devel bison flex
+RUN ulimit -n 1024 && zypper install -y git rsync

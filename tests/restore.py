@@ -4,7 +4,7 @@ from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 import subprocess
 import sys
 from time import sleep
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import hashlib
 import shutil
 import json
@@ -2135,7 +2135,8 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         target_name = 'savepoint'
 
-        target_time = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S %z")
+        # in python-3.6+ it can be ...now()..astimezone()...
+        target_time = datetime.utcnow().replace(tzinfo=timezone.utc).astimezone().strftime("%Y-%m-%d %H:%M:%S %z")
         with node.connect("postgres") as con:
             res = con.execute(
                 "INSERT INTO tbl0005 VALUES ('inserted') RETURNING (xmin)")
@@ -2498,7 +2499,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         db_list_raw = node.safe_psql(
             'postgres',
             'SELECT to_json(a) '
-            'FROM (SELECT oid, datname FROM pg_database) a').rstrip()
+            'FROM (SELECT oid, datname FROM pg_database) a').decode('utf-8').rstrip()
 
         db_list_splitted = db_list_raw.splitlines()
 
@@ -2737,7 +2738,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         db_list_raw = node.safe_psql(
             'postgres',
             'SELECT to_json(a) '
-            'FROM (SELECT oid, datname FROM pg_database) a').rstrip()
+            'FROM (SELECT oid, datname FROM pg_database) a').decode('utf-8').rstrip()
 
         db_list_splitted = db_list_raw.splitlines()
 
@@ -3217,10 +3218,12 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
                 "GRANT SELECT ON TABLE pg_catalog.pg_proc TO backup; "
                 "GRANT SELECT ON TABLE pg_catalog.pg_extension TO backup; "
                 "GRANT SELECT ON TABLE pg_catalog.pg_database TO backup; " # for partial restore, checkdb and ptrack
+                "GRANT EXECUTE ON FUNCTION pg_catalog.oideq(oid, oid) TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.nameeq(name, name) TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.textout(text) TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.timestamptz(timestamp with time zone, integer) TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.set_config(text, text, boolean) TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean) TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup() TO backup; "
@@ -3250,10 +3253,12 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
                 "GRANT SELECT ON TABLE pg_catalog.pg_proc TO backup; "
                 "GRANT SELECT ON TABLE pg_catalog.pg_extension TO backup; "
                 "GRANT SELECT ON TABLE pg_catalog.pg_database TO backup; " # for partial restore, checkdb and ptrack
+                "GRANT EXECUTE ON FUNCTION pg_catalog.oideq(oid, oid) TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.nameeq(name, name) TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.textout(text) TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.timestamptz(timestamp with time zone, integer) TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.set_config(text, text, boolean) TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_system() TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean, boolean) TO backup; "
@@ -3287,8 +3292,10 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
                 "GRANT SELECT ON TABLE pg_catalog.pg_proc TO backup; "
                 "GRANT SELECT ON TABLE pg_catalog.pg_extension TO backup; "
                 "GRANT SELECT ON TABLE pg_catalog.pg_database TO backup; " # for partial restore, checkdb and ptrack
+                "GRANT EXECUTE ON FUNCTION pg_catalog.oideq(oid, oid) TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.nameeq(name, name) TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.set_config(text, text, boolean) TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_system() TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean, boolean) TO backup; "
@@ -3846,7 +3853,8 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
-    # @unittest.skip("skip")
+    # skip this test until https://github.com/postgrespro/pg_probackup/pull/399
+    @unittest.skip("skip")
     def test_restore_issue_313(self):
         """
         Check that partially restored PostgreSQL instance cannot be started
