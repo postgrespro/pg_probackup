@@ -42,8 +42,8 @@ Regardless of the chosen backup type, all backups taken with `pg_probackup` supp
 
 `PTRACK` backup support provided via following options:
 * vanilla PostgreSQL 11, 12, 13, 14 with [ptrack extension](https://github.com/postgrespro/ptrack)
-* Postgres Pro Standard 9.6, 10, 11, 12, 13
-* Postgres Pro Enterprise 9.6, 10, 11, 12, 13
+* Postgres Pro Standard 11, 12, 13
+* Postgres Pro Enterprise 11, 12, 13
 
 ## Limitations
 
