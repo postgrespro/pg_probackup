@@ -312,15 +312,10 @@ class ProbackupTest(object):
         self.ptrack = False
         if 'PG_PROBACKUP_PTRACK' in self.test_env:
             if self.test_env['PG_PROBACKUP_PTRACK'] == 'ON':
-                self.ptrack = True
+                if self.pg_config_version >= self.version_to_num('11.0'):
+                    self.ptrack = True
 
         os.environ["PGAPPNAME"] = "pg_probackup"
-
-        if self.ptrack:
-            self.assertGreaterEqual(
-                self.pg_config_version,
-                self.version_to_num('11.0'),
-                "ptrack testing require PostgreSQL >= 11")
 
     @property
     def pg_config_version(self):

@@ -79,13 +79,17 @@ get_ptrack_version(PGconn *backup_conn, PGNodeInfo *nodeInfo)
 			return;
 		}
 
-		res_db = pgut_execute(backup_conn,
+		/*
+		 * it's ok not to have permission to call this old function in PGPRO-11 version (ok_error = true)
+		 * see deprication notice https://postgrespro.com/docs/postgrespro/11/release-pro-11-9-1
+		 */
+		res_db = pgut_execute_extended(backup_conn,
 							  "SELECT pg_catalog.ptrack_version()",
-							  0, NULL);
+							  0, NULL, true, true);
 		if (PQntuples(res_db) == 0)
 		{
-			/* TODO: Something went wrong, should we error out here? */
 			PQclear(res_db);
+			elog(WARNING, "Can't call pg_catalog.ptrack_version(), it is assumed that there is no ptrack extension installed.");
 			return;
 		}
 		ptrack_version_str = PQgetvalue(res_db, 0, 0);
