@@ -3210,6 +3210,8 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
                         idx_ptrack[i]['type'],
                         idx_ptrack[i]['column']))
 
+        comparision_exclusion = self.get_known_bugs_comparision_exclusion_dict(node)
+
         node.safe_psql('postgres', 'vacuum t_heap')
         node.safe_psql('postgres', 'checkpoint')
 
@@ -3253,7 +3255,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         self.restore_node(backup_dir, 'node', node)
 
         pgdata_restored = self.pgdata_content(node.data_dir)
-        self.compare_pgdata(pgdata, pgdata_restored)
+        self.compare_pgdata(pgdata, pgdata_restored, comparision_exclusion)
 
         # Clean after yourself
         self.del_test_dir(module_name, self.fname)
@@ -3403,6 +3405,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
                         idx_ptrack[i]['type'],
                         idx_ptrack[i]['column']))
 
+        comparision_exclusion = self.get_known_bugs_comparision_exclusion_dict(node)
         node.safe_psql('postgres', 'checkpoint')
 
         self.backup_node(
@@ -3438,7 +3441,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         self.restore_node(backup_dir, 'node', node)
 
         pgdata_restored = self.pgdata_content(node.data_dir)
-        self.compare_pgdata(pgdata, pgdata_restored)
+        self.compare_pgdata(pgdata, pgdata_restored, comparision_exclusion)
 
         # Clean after yourself
         self.del_test_dir(module_name, self.fname)
@@ -3579,6 +3582,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
                         i, idx_ptrack[i]['relation'],
                         idx_ptrack[i]['type'], idx_ptrack[i]['column']))
 
+        comparision_exclusion = self.get_known_bugs_comparision_exclusion_dict(node)
         node.safe_psql('postgres', 'checkpoint')
 
         self.backup_node(
@@ -3614,7 +3618,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         self.restore_node(backup_dir, 'node', node)
 
         pgdata_restored = self.pgdata_content(node.data_dir)
-        self.compare_pgdata(pgdata, pgdata_restored)
+        self.compare_pgdata(pgdata, pgdata_restored, comparision_exclusion)
 
         # Clean after yourself
         self.del_test_dir(module_name, self.fname)

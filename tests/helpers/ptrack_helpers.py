@@ -1714,8 +1714,30 @@ class ProbackupTest(object):
 
         return directory_dict
 
-    def compare_pgdata(self, original_pgdata, restored_pgdata):
-        """ return dict with directory content. DO IT BEFORE RECOVERY"""
+    def get_known_bugs_comparision_exclusion_dict(self, node):
+        """ get dict of known datafiles difference, that can be used in compare_pgdata() """
+        comparision_exclusion_dict = dict()
+
+        # bug in spgist metapage update (PGPRO-5707)
+        spgist_filelist = node.safe_psql(
+            "postgres",
+            "SELECT pg_catalog.pg_relation_filepath(pg_class.oid) "
+            "FROM pg_am, pg_class "
+            "WHERE pg_am.amname = 'spgist' "
+            "AND pg_class.relam = pg_am.oid"
+            ).decode('utf-8').rstrip().splitlines()
+        for filename in spgist_filelist:
+            comparision_exclusion_dict[filename] = set([0])
+
+        return comparision_exclusion_dict
+
+
+    def compare_pgdata(self, original_pgdata, restored_pgdata, exclusion_dict = dict()):
+        """
+        return dict with directory content. DO IT BEFORE RECOVERY
+        exclusion_dict is used for exclude files (and it block_no) from comparision
+        it is a dict with relative filenames as keys and set of block numbers as values
+        """
         fail = False
         error_message = 'Restored PGDATA is not equal to original!\n'
 
@@ -1777,16 +1799,17 @@ class ProbackupTest(object):
                     original_pgdata['files'][file]['md5'] !=
                     restored_pgdata['files'][file]['md5']
                 ):
-                    fail = True
-                    error_message += (
-                        '\nFile Checksumm mismatch.\n'
-                        'File_old: {0}\nChecksumm_old: {1}\n'
-                        'File_new: {2}\nChecksumm_new: {3}\n').format(
-                        os.path.join(original_pgdata['pgdata'], file),
-                        original_pgdata['files'][file]['md5'],
-                        os.path.join(restored_pgdata['pgdata'], file),
-                        restored_pgdata['files'][file]['md5']
-                    )
+                    if file not in exclusion_dict:
+                        fail = True
+                        error_message += (
+                            '\nFile Checksum mismatch.\n'
+                            'File_old: {0}\nChecksum_old: {1}\n'
+                            'File_new: {2}\nChecksum_new: {3}\n').format(
+                            os.path.join(original_pgdata['pgdata'], file),
+                            original_pgdata['files'][file]['md5'],
+                            os.path.join(restored_pgdata['pgdata'], file),
+                            restored_pgdata['files'][file]['md5']
+                        )
 
                     if original_pgdata['files'][file]['is_datafile']:
                         for page in original_pgdata['files'][file]['md5_per_page']:
@@ -1802,13 +1825,16 @@ class ProbackupTest(object):
                                     )
                                 continue
 
-                            if original_pgdata['files'][file][
-                                'md5_per_page'][page] != restored_pgdata[
-                                    'files'][file]['md5_per_page'][page]:
+                            if not (file in exclusion_dict and page in exclusion_dict[file]):
+                                if (
+                                    original_pgdata['files'][file]['md5_per_page'][page] !=
+                                    restored_pgdata['files'][file]['md5_per_page'][page]
+                                ):
+                                    fail = True
                                     error_message += (
-                                        '\n Page checksumm mismatch: {0}\n '
-                                        ' PAGE Checksumm_old: {1}\n '
-                                        ' PAGE Checksumm_new: {2}\n '
+                                        '\n Page checksum mismatch: {0}\n '
+                                        ' PAGE Checksum_old: {1}\n '
+                                        ' PAGE Checksum_new: {2}\n '
                                         ' File: {3}\n'
                                     ).format(
                                         page,
