@@ -455,8 +455,8 @@ print_backup_json_object(PQExpBuffer buf, pgBackup *backup)
 		{
 			pgFile *file = parray_get(tablespaces, i);
 			json_add(buf, JT_BEGIN_OBJECT, &json_level);
-			json_add_value(buf, "link-name", file->name, json_level, true);
-			json_add_value(buf, "link-path", file->linked, json_level, true);
+			json_add_value(buf, "oid", file->name, json_level, true);
+			json_add_value(buf, "path", file->linked, json_level, true);
 			json_add(buf, JT_END_OBJECT, &json_level);
 		}
 
