@@ -10,8 +10,6 @@
 
 #include "pg_probackup.h"
 
-#include "catalog/pg_control.h"
-
 #include <time.h>
 
 #include <unistd.h>
@@ -174,7 +172,7 @@ get_current_timeline(PGconn *conn)
 	if (PQresultStatus(res) == PGRES_TUPLES_OK)
 		val = PQgetvalue(res, 0, 0);
 	else
-		return get_current_timeline_from_control(false);
+		return get_current_timeline_from_control(instance_config.pgdata, FIO_DB_HOST, false);
 
 	if (!parse_uint32(val, &tli, 0))
 	{
@@ -182,7 +180,7 @@ get_current_timeline(PGconn *conn)
 		elog(WARNING, "Invalid value of timeline_id %s", val);
 
 		/* TODO 3.0 remove it and just error out */
-		return get_current_timeline_from_control(false);
+		return get_current_timeline_from_control(instance_config.pgdata, FIO_DB_HOST, false);
 	}
 
 	return tli;
@@ -190,15 +188,15 @@ get_current_timeline(PGconn *conn)
 
 /* Get timeline from pg_control file */
 TimeLineID
-get_current_timeline_from_control(bool safe)
+get_current_timeline_from_control(const char *pgdata_path, fio_location location, bool safe)
 {
 	ControlFileData ControlFile;
 	char       *buffer;
 	size_t      size;
 
 	/* First fetch file... */
-	buffer = slurpFile(instance_config.pgdata, XLOG_CONTROL_FILE, &size,
-					   safe, FIO_DB_HOST);
+	buffer = slurpFile(pgdata_path, XLOG_CONTROL_FILE, &size,
+					   safe, location);
 	if (safe && buffer == NULL)
 		return 0;
 
@@ -249,14 +247,14 @@ get_checkpoint_location(PGconn *conn)
 }
 
 uint64
-get_system_identifier(const char *pgdata_path)
+get_system_identifier(const char *pgdata_path, fio_location location)
 {
 	ControlFileData ControlFile;
 	char	   *buffer;
 	size_t		size;
 
 	/* First fetch file... */
-	buffer = slurpFile(pgdata_path, XLOG_CONTROL_FILE, &size, false, FIO_DB_HOST);
+	buffer = slurpFile(pgdata_path, XLOG_CONTROL_FILE, &size, false, location);
 	if (buffer == NULL)
 		return 0;
 	digestControlFile(&ControlFile, buffer, size);
@@ -299,7 +297,7 @@ get_remote_system_identifier(PGconn *conn)
 }
 
 uint32
-get_xlog_seg_size(char *pgdata_path)
+get_xlog_seg_size(const char *pgdata_path)
 {
 #if PG_VERSION_NUM >= 110000
 	ControlFileData ControlFile;
@@ -351,15 +349,31 @@ get_pgcontrol_checksum(const char *pgdata_path)
 	return ControlFile.crc;
 }
 
+DBState
+get_system_dbstate(const char *pgdata_path, fio_location location)
+{
+	ControlFileData ControlFile;
+	char	   *buffer;
+	size_t		size;
+
+	buffer = slurpFile(pgdata_path, XLOG_CONTROL_FILE, &size, false, location);
+	if (buffer == NULL)
+		return 0;
+	digestControlFile(&ControlFile, buffer, size);
+	pg_free(buffer);
+
+	return ControlFile.state;
+}
+
 void
-get_redo(const char *pgdata_path, RedoParams *redo)
+get_redo(const char *pgdata_path, fio_location pgdata_location, RedoParams *redo)
 {
 	ControlFileData ControlFile;
 	char	   *buffer;
 	size_t		size;
 
 	/* First fetch file... */
-	buffer = slurpFile(pgdata_path, XLOG_CONTROL_FILE, &size, false, FIO_DB_HOST);
+	buffer = slurpFile(pgdata_path, XLOG_CONTROL_FILE, &size, false, pgdata_location);
 
 	digestControlFile(&ControlFile, buffer, size);
 	pg_free(buffer);
@@ -514,6 +528,29 @@ status2str(BackupStatus status)
 		return "UNKNOWN";
 
 	return statusName[status];
+}
+
+const char *
+status2str_color(BackupStatus status)
+{
+	char *status_str = pgut_malloc(20);
+
+	/* UNKNOWN */
+	if (status == BACKUP_STATUS_INVALID)
+		snprintf(status_str, 20, "%s%s%s", TC_YELLOW_BOLD, "UNKNOWN", TC_RESET);
+	/* CORRUPT, ERROR and ORPHAN */
+	else if (status == BACKUP_STATUS_CORRUPT || status == BACKUP_STATUS_ERROR ||
+			 status == BACKUP_STATUS_ORPHAN)
+		snprintf(status_str, 20, "%s%s%s", TC_RED_BOLD, statusName[status], TC_RESET);
+	/* MERGING, MERGED, DELETING and DELETED */
+	else if (status == BACKUP_STATUS_MERGING || status == BACKUP_STATUS_MERGED ||
+			 status == BACKUP_STATUS_DELETING || status == BACKUP_STATUS_DELETED)
+		snprintf(status_str, 20, "%s%s%s", TC_YELLOW_BOLD, statusName[status], TC_RESET);
+	/* OK and DONE */
+	else
+		snprintf(status_str, 20, "%s%s%s", TC_GREEN_BOLD, statusName[status], TC_RESET);
+
+	return status_str;
 }
 
 BackupStatus

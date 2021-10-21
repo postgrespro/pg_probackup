@@ -2,13 +2,16 @@
  *
  * help.c
  *
- * Copyright (c) 2017-2019, Postgres Professional
+ * Copyright (c) 2017-2021, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */
 
+#include <assert.h>
 #include "pg_probackup.h"
 
+static void help_nocmd(void);
+static void help_internal(void);
 static void help_init(void);
 static void help_backup(void);
 static void help_restore(void);
@@ -24,58 +27,63 @@ static void help_del_instance(void);
 static void help_archive_push(void);
 static void help_archive_get(void);
 static void help_checkdb(void);
+static void help_help(void);
+static void help_version(void);
+static void help_catchup(void);
 
 void
-help_command(char *command)
+help_print_version(void)
 {
-	if (strcmp(command, "init") == 0)
-		help_init();
-	else if (strcmp(command, "backup") == 0)
-		help_backup();
-	else if (strcmp(command, "restore") == 0)
-		help_restore();
-	else if (strcmp(command, "validate") == 0)
-		help_validate();
-	else if (strcmp(command, "show") == 0)
-		help_show();
-	else if (strcmp(command, "delete") == 0)
-		help_delete();
-	else if (strcmp(command, "merge") == 0)
-		help_merge();
-	else if (strcmp(command, "set-backup") == 0)
-		help_set_backup();
-	else if (strcmp(command, "set-config") == 0)
-		help_set_config();
-	else if (strcmp(command, "show-config") == 0)
-		help_show_config();
-	else if (strcmp(command, "add-instance") == 0)
-		help_add_instance();
-	else if (strcmp(command, "del-instance") == 0)
-		help_del_instance();
-	else if (strcmp(command, "archive-push") == 0)
-		help_archive_push();
-	else if (strcmp(command, "archive-get") == 0)
-		help_archive_get();
-	else if (strcmp(command, "checkdb") == 0)
-		help_checkdb();
-	else if (strcmp(command, "--help") == 0
-			 || strcmp(command, "help") == 0
-			 || strcmp(command, "-?") == 0
-			 || strcmp(command, "--version") == 0
-			 || strcmp(command, "version") == 0
-			 || strcmp(command, "-V") == 0)
-		printf(_("No help page for \"%s\" command. Try pg_probackup help\n"), command);
-	else
-		printf(_("Unknown command \"%s\". Try pg_probackup help\n"), command);
-	exit(0);
+#ifdef PGPRO_VERSION
+	fprintf(stdout, "%s %s (Postgres Pro %s %s)\n",
+			PROGRAM_NAME, PROGRAM_VERSION,
+			PGPRO_VERSION, PGPRO_EDITION);
+#else
+	fprintf(stdout, "%s %s (PostgreSQL %s)\n",
+			PROGRAM_NAME, PROGRAM_VERSION, PG_VERSION);
+#endif
+}
+
+void
+help_command(ProbackupSubcmd const subcmd)
+{
+	typedef void (* help_function_ptr)(void);
+	/* Order is important, keep it in sync with utils/configuration.h:enum ProbackupSubcmd declaration */
+	static help_function_ptr const help_functions[] =
+	{
+		&help_nocmd,
+		&help_init,
+		&help_add_instance,
+		&help_del_instance,
+		&help_archive_push,
+		&help_archive_get,
+		&help_backup,
+		&help_restore,
+		&help_validate,
+		&help_delete,
+		&help_merge,
+		&help_show,
+		&help_set_config,
+		&help_set_backup,
+		&help_show_config,
+		&help_checkdb,
+		&help_internal, // SSH_CMD
+		&help_internal, // AGENT_CMD
+		&help_help,
+		&help_version,
+		&help_catchup,
+	};
+
+	Assert((int)subcmd < sizeof(help_functions) / sizeof(help_functions[0]));
+        help_functions[(int)subcmd]();
 }
 
 void
 help_pg_probackup(void)
 {
-	printf(_("\n%s - utility to manage backup/recovery of PostgreSQL database.\n\n"), PROGRAM_NAME);
+	printf(_("\n%s - utility to manage backup/recovery of PostgreSQL database.\n"), PROGRAM_NAME);
 
-	printf(_("  %s help [COMMAND]\n"), PROGRAM_NAME);
+	printf(_("\n  %s help [COMMAND]\n"), PROGRAM_NAME);
 
 	printf(_("\n  %s version\n"), PROGRAM_NAME);
 
@@ -116,7 +124,7 @@ help_pg_probackup(void)
 
 	printf(_("\n  %s backup -B backup-path -b backup-mode --instance=instance_name\n"), PROGRAM_NAME);
 	printf(_("                 [-D pgdata-path] [-C]\n"));
-	printf(_("                 [--stream [-S slot-name]] [--temp-slot]\n"));
+	printf(_("                 [--stream [-S slot-name] [--temp-slot]]\n"));
 	printf(_("                 [--backup-pg-log] [-j num-threads] [--progress]\n"));
 	printf(_("                 [--no-validate] [--skip-block-validation]\n"));
 	printf(_("                 [--external-dirs=external-directories-paths]\n"));
@@ -127,7 +135,7 @@ help_pg_probackup(void)
 	printf(_("                 [--error-log-filename=error-log-filename]\n"));
 	printf(_("                 [--log-directory=log-directory]\n"));
 	printf(_("                 [--log-rotation-size=log-rotation-size]\n"));
-	printf(_("                 [--log-rotation-age=log-rotation-age]\n"));
+	printf(_("                 [--log-rotation-age=log-rotation-age] [--no-color]\n"));
 	printf(_("                 [--delete-expired] [--delete-wal] [--merge-expired]\n"));
 	printf(_("                 [--retention-redundancy=retention-redundancy]\n"));
 	printf(_("                 [--retention-window=retention-window]\n"));
@@ -188,7 +196,7 @@ help_pg_probackup(void)
 	printf(_("\n  %s show -B backup-path\n"), PROGRAM_NAME);
 	printf(_("                 [--instance=instance_name [-i backup-id]]\n"));
 	printf(_("                 [--format=format] [--archive]\n"));
-	printf(_("                 [--help]\n"));
+	printf(_("                 [--no-color] [--help]\n"));
 
 	printf(_("\n  %s delete -B backup-path --instance=instance_name\n"), PROGRAM_NAME);
 	printf(_("                 [-j num-threads] [--progress]\n"));
@@ -240,6 +248,20 @@ help_pg_probackup(void)
 	printf(_("                 [--ssh-options]\n"));
 	printf(_("                 [--help]\n"));
 
+	printf(_("\n  %s catchup  -b catchup-mode\n"), PROGRAM_NAME);
+	printf(_("                 --source-pgdata=path_to_pgdata_on_remote_server\n"));
+	printf(_("                 --destination-pgdata=path_to_local_dir\n"));
+	printf(_("                 [--stream [-S slot-name] [--temp-slot | --perm-slot]]\n"));
+	printf(_("                 [-j num-threads]\n"));
+	printf(_("                 [-T OLDDIR=NEWDIR]\n"));
+	printf(_("                 [--exclude-path=path_prefix]\n"));
+	printf(_("                 [-d dbname] [-h host] [-p port] [-U username]\n"));
+	printf(_("                 [-w --no-password] [-W --password]\n"));
+	printf(_("                 [--remote-proto] [--remote-host]\n"));
+	printf(_("                 [--remote-port] [--remote-path] [--remote-user]\n"));
+	printf(_("                 [--ssh-options]\n"));
+	printf(_("                 [--help]\n"));
+
 	if ((PROGRAM_URL || PROGRAM_EMAIL))
 	{
 		printf("\n");
@@ -248,7 +270,18 @@ help_pg_probackup(void)
 		if (PROGRAM_EMAIL)
 			printf("Report bugs to <%s>.\n", PROGRAM_EMAIL);
 	}
-	exit(0);
+}
+
+static void
+help_nocmd(void)
+{
+	printf(_("\nUnknown command. Try pg_probackup help\n\n"));
+}
+
+static void
+help_internal(void)
+{
+	printf(_("\nThis command is intended for internal use\n\n"));
 }
 
 static void
@@ -263,7 +296,7 @@ help_backup(void)
 {
 	printf(_("\n%s backup -B backup-path -b backup-mode --instance=instance_name\n"), PROGRAM_NAME);
 	printf(_("                 [-D pgdata-path] [-C]\n"));
-	printf(_("                 [--stream [-S slot-name] [--temp-slot]\n"));
+	printf(_("                 [--stream [-S slot-name] [--temp-slot]]\n"));
 	printf(_("                 [--backup-pg-log] [-j num-threads] [--progress]\n"));
 	printf(_("                 [--no-validate] [--skip-block-validation]\n"));
 	printf(_("                 [-E external-directories-paths]\n"));
@@ -274,7 +307,7 @@ help_backup(void)
 	printf(_("                 [--error-log-filename=error-log-filename]\n"));
 	printf(_("                 [--log-directory=log-directory]\n"));
 	printf(_("                 [--log-rotation-size=log-rotation-size]\n"));
-	printf(_("                 [--log-rotation-age=log-rotation-age]\n"));
+	printf(_("                 [--log-rotation-age=log-rotation-age] [--no-color]\n"));
 	printf(_("                 [--delete-expired] [--delete-wal] [--merge-expired]\n"));
 	printf(_("                 [--retention-redundancy=retention-redundancy]\n"));
 	printf(_("                 [--retention-window=retention-window]\n"));
@@ -330,6 +363,7 @@ help_backup(void)
 	printf(_("      --log-rotation-age=log-rotation-age\n"));
 	printf(_("                                   rotate logfile if its age exceeds this value; 0 disables; (default: 0)\n"));
 	printf(_("                                   available units: 'ms', 's', 'min', 'h', 'd' (default: min)\n"));
+	printf(_("      --no-color                   disable the coloring of error and warning console messages\n"));
 
 	printf(_("\n  Retention options:\n"));
 	printf(_("      --delete-expired             delete backups expired according to current\n"));
@@ -490,6 +524,7 @@ help_restore(void)
 	printf(_("      --log-rotation-age=log-rotation-age\n"));
 	printf(_("                                   rotate logfile if its age exceeds this value; 0 disables; (default: 0)\n"));
 	printf(_("                                   available units: 'ms', 's', 'min', 'h', 'd' (default: min)\n"));
+	printf(_("      --no-color                   disable the coloring of error and warning console messages\n"));
 
 	printf(_("\n  Remote options:\n"));
 	printf(_("      --remote-proto=protocol      remote protocol to use\n"));
@@ -555,7 +590,8 @@ help_validate(void)
 	printf(_("                                   available units: 'kB', 'MB', 'GB', 'TB' (default: kB)\n"));
 	printf(_("      --log-rotation-age=log-rotation-age\n"));
 	printf(_("                                   rotate logfile if its age exceeds this value; 0 disables; (default: 0)\n"));
-	printf(_("                                   available units: 'ms', 's', 'min', 'h', 'd' (default: min)\n\n"));
+	printf(_("                                   available units: 'ms', 's', 'min', 'h', 'd' (default: min)\n"));
+	printf(_("      --no-color                   disable the coloring of error and warning console messages\n\n"));
 }
 
 static void
@@ -600,6 +636,7 @@ help_checkdb(void)
 	printf(_("      --log-rotation-age=log-rotation-age\n"));
 	printf(_("                                   rotate logfile if its age exceeds this value; 0 disables; (default: 0)\n"));
 	printf(_("                                   available units: 'ms', 's', 'min', 'h', 'd' (default: min)\n"));
+	printf(_("      --no-color                   disable the coloring of error and warning console messages\n"));
 
 	printf(_("\n  Connection options:\n"));
 	printf(_("  -U, --pguser=USERNAME            user name to connect as (default: current local user)\n"));
@@ -621,7 +658,8 @@ help_show(void)
 	printf(_("      --instance=instance_name     show info about specific instance\n"));
 	printf(_("  -i, --backup-id=backup-id        show info about specific backups\n"));
 	printf(_("      --archive                    show WAL archive information\n"));
-	printf(_("      --format=format              show format=PLAIN|JSON\n\n"));
+	printf(_("      --format=format              show format=PLAIN|JSON\n"));
+	printf(_("      --no-color                   disable the coloring for plain format\n\n"));
 }
 
 static void
@@ -677,7 +715,8 @@ help_delete(void)
 	printf(_("                                   available units: 'kB', 'MB', 'GB', 'TB' (default: kB)\n"));
 	printf(_("      --log-rotation-age=log-rotation-age\n"));
 	printf(_("                                   rotate logfile if its age exceeds this value; 0 disables; (default: 0)\n"));
-	printf(_("                                   available units: 'ms', 's', 'min', 'h', 'd' (default: min)\n\n"));
+	printf(_("                                   available units: 'ms', 's', 'min', 'h', 'd' (default: min)\n"));
+	printf(_("      --no-color                   disable the coloring of error and warning console messages\n\n"));
 }
 
 static void
@@ -722,7 +761,8 @@ help_merge(void)
 	printf(_("                                   available units: 'kB', 'MB', 'GB', 'TB' (default: kB)\n"));
 	printf(_("      --log-rotation-age=log-rotation-age\n"));
 	printf(_("                                   rotate logfile if its age exceeds this value; 0 disables; (default: 0)\n"));
-	printf(_("                                   available units: 'ms', 's', 'min', 'h', 'd' (default: min)\n\n"));
+	printf(_("                                   available units: 'ms', 's', 'min', 'h', 'd' (default: min)\n"));
+	printf(_("      --no-color                   disable the coloring of error and warning console messages\n\n"));
 }
 
 static void
@@ -959,6 +999,71 @@ help_archive_get(void)
 	printf(_("      --batch-size=NUM             number of files to be prefetched\n"));
 	printf(_("      --prefetch-dir=path          location of the store area for prefetched WAL files\n"));
 	printf(_("      --no-validate-wal            skip validation of prefetched WAL file before using it\n"));
+
+	printf(_("\n  Remote options:\n"));
+	printf(_("      --remote-proto=protocol      remote protocol to use\n"));
+	printf(_("                                   available options: 'ssh', 'none' (default: ssh)\n"));
+	printf(_("      --remote-host=hostname       remote host address or hostname\n"));
+	printf(_("      --remote-port=port           remote host port (default: 22)\n"));
+	printf(_("      --remote-path=path           path to directory with pg_probackup binary on remote host\n"));
+	printf(_("                                   (default: current binary path)\n"));
+	printf(_("      --remote-user=username       user name for ssh connection (default: current user)\n"));
+	printf(_("      --ssh-options=ssh_options    additional ssh options (default: none)\n"));
+	printf(_("                                   (example: --ssh-options='-c cipher_spec -F configfile')\n\n"));
+}
+
+static void
+help_help(void)
+{
+	printf(_("\n%s help [command]\n"), PROGRAM_NAME);
+	printf(_("%s command --help\n\n"), PROGRAM_NAME);
+}
+
+static void
+help_version(void)
+{
+	printf(_("\n%s version\n"), PROGRAM_NAME);
+	printf(_("%s --version\n\n"), PROGRAM_NAME);
+}
+
+static void
+help_catchup(void)
+{
+	printf(_("\n%s catchup  -b catchup-mode\n"), PROGRAM_NAME);
+	printf(_("                 --source-pgdata=path_to_pgdata_on_remote_server\n"));
+	printf(_("                 --destination-pgdata=path_to_local_dir\n"));
+	printf(_("                 [--stream [-S slot-name]] [--temp-slot | --perm-slot]\n"));
+	printf(_("                 [-j num-threads]\n"));
+	printf(_("                 [-T OLDDIR=NEWDIR]\n"));
+	printf(_("                 [--exclude-path=path_prefix]\n"));
+	printf(_("                 [-d dbname] [-h host] [-p port] [-U username]\n"));
+	printf(_("                 [-w --no-password] [-W --password]\n"));
+	printf(_("                 [--remote-proto] [--remote-host]\n"));
+	printf(_("                 [--remote-port] [--remote-path] [--remote-user]\n"));
+	printf(_("                 [--ssh-options]\n"));
+	printf(_("                 [--help]\n\n"));
+
+	printf(_("  -b, --backup-mode=catchup-mode   catchup mode=FULL|DELTA|PTRACK\n"));
+	printf(_("      --stream                     stream the transaction log (only supported mode)\n"));
+	printf(_("  -S, --slot=SLOTNAME              replication slot to use\n"));
+	printf(_("      --temp-slot                  use temporary replication slot\n"));
+	printf(_("  -P  --perm-slot                  create permanent replication slot\n"));
+
+	printf(_("  -j, --threads=NUM                number of parallel threads\n"));
+
+	printf(_("  -T, --tablespace-mapping=OLDDIR=NEWDIR\n"));
+	printf(_("                                   relocate the tablespace from directory OLDDIR to NEWDIR\n"));
+	printf(_("  -x, --exclude-path=path_prefix   files with path_prefix (relative to pgdata) will be\n"));
+	printf(_("                                   excluded from catchup (can be used multiple times)\n"));
+	printf(_("                                   Dangerous option! Use at your own risk!\n"));
+
+	printf(_("\n  Connection options:\n"));
+	printf(_("  -U, --pguser=USERNAME            user name to connect as (default: current local user)\n"));
+	printf(_("  -d, --pgdatabase=DBNAME          database to connect (default: username)\n"));
+	printf(_("  -h, --pghost=HOSTNAME            database server host or socket directory(default: 'local socket')\n"));
+	printf(_("  -p, --pgport=PORT                database server port (default: 5432)\n"));
+	printf(_("  -w, --no-password                never prompt for password\n"));
+	printf(_("  -W, --password                   force password prompt\n\n"));
 
 	printf(_("\n  Remote options:\n"));
 	printf(_("      --remote-proto=protocol      remote protocol to use\n"));

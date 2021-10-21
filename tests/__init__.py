@@ -7,7 +7,7 @@ from . import init, merge, option, show, compatibility, \
     compression, page, ptrack, archive, exclude, cfs_backup, cfs_restore, \
     cfs_validate_backup, auth_test, time_stamp, logging, \
     locking, remote, external, config, checkdb, set_backup, incr_restore, \
-    CVE_2018_1058
+    catchup, CVE_2018_1058
 
 
 def load_tests(loader, tests, pattern):
@@ -24,6 +24,7 @@ def load_tests(loader, tests, pattern):
 #    suite.addTests(loader.loadTestsFromModule(auth_test))
     suite.addTests(loader.loadTestsFromModule(archive))
     suite.addTests(loader.loadTestsFromModule(backup))
+    suite.addTests(loader.loadTestsFromModule(catchup))
     if 'PGPROBACKUPBIN_OLD' in os.environ and os.environ['PGPROBACKUPBIN_OLD']:
         suite.addTests(loader.loadTestsFromModule(compatibility))
     suite.addTests(loader.loadTestsFromModule(checkdb))

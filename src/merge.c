@@ -69,7 +69,7 @@ static bool is_forward_compatible(parray *parent_chain);
  * - Remove unnecessary files, which doesn't exist in the target backup anymore
  */
 void
-do_merge(time_t backup_id, bool no_validate, bool no_sync)
+do_merge(InstanceState *instanceState, time_t backup_id, bool no_validate, bool no_sync)
 {
 	parray	   *backups;
 	parray	   *merge_list = parray_new();
@@ -81,13 +81,13 @@ do_merge(time_t backup_id, bool no_validate, bool no_sync)
 	if (backup_id == INVALID_BACKUP_ID)
 		elog(ERROR, "required parameter is not specified: --backup-id");
 
-	if (instance_name == NULL)
+	if (instanceState == NULL)
 		elog(ERROR, "required parameter is not specified: --instance");
 
 	elog(INFO, "Merge started");
 
 	/* Get list of all backups sorted in order of descending start time */
-	backups = catalog_get_backup_list(instance_name, INVALID_BACKUP_ID);
+	backups = catalog_get_backup_list(instanceState, INVALID_BACKUP_ID);
 
 	/* Find destination backup first */
 	for (i = 0; i < parray_num(backups); i++)
@@ -406,7 +406,7 @@ do_merge(time_t backup_id, bool no_validate, bool no_sync)
 	catalog_lock_backup_list(merge_list, parray_num(merge_list) - 1, 0, true, true);
 
 	/* do actual merge */
-	merge_chain(merge_list, full_backup, dest_backup, no_validate, no_sync);
+	merge_chain(instanceState, merge_list, full_backup, dest_backup, no_validate, no_sync);
 
 	if (!no_validate)
 		pgBackupValidate(full_backup, NULL);
@@ -436,7 +436,8 @@ do_merge(time_t backup_id, bool no_validate, bool no_sync)
  * that chain is ok.
  */
 void
-merge_chain(parray *parent_chain, pgBackup *full_backup, pgBackup *dest_backup,
+merge_chain(InstanceState *instanceState,
+			parray *parent_chain, pgBackup *full_backup, pgBackup *dest_backup,
 			bool no_validate, bool no_sync)
 {
 	int			i;
@@ -603,7 +604,7 @@ merge_chain(parray *parent_chain, pgBackup *full_backup, pgBackup *dest_backup,
 			write_backup(backup, true);
 		}
 		else
-			write_backup_status(backup, BACKUP_STATUS_MERGING, instance_name, true);
+			write_backup_status(backup, BACKUP_STATUS_MERGING, true);
 	}
 
 	/* Construct path to database dir: /backup_dir/instance_name/FULL/database */
@@ -853,13 +854,9 @@ merge_rename:
 	else
 	{
 		/* Ugly */
-		char 	backups_dir[MAXPGPATH];
-		char 	instance_dir[MAXPGPATH];
 		char 	destination_path[MAXPGPATH];
 
-		join_path_components(backups_dir, backup_path, BACKUPS_DIR);
-		join_path_components(instance_dir, backups_dir, instance_name);
-		join_path_components(destination_path, instance_dir,
+		join_path_components(destination_path, instanceState->instance_backup_subdir_path,
 							base36enc(full_backup->merge_dest_backup));
 
 		elog(LOG, "Rename %s to %s", full_backup->root_dir, destination_path);
@@ -1256,10 +1253,10 @@ merge_data_file(parray *parent_chain, pgBackup *full_backup,
 	 * 2 backups of old versions, where n_blocks is missing.
 	 */
 
-	backup_data_file(NULL, tmp_file, to_fullpath_tmp1, to_fullpath_tmp2,
+	backup_data_file(tmp_file, to_fullpath_tmp1, to_fullpath_tmp2,
 				 InvalidXLogRecPtr, BACKUP_MODE_FULL,
 				 dest_backup->compress_alg, dest_backup->compress_level,
-				 dest_backup->checksum_version, 0, NULL,
+				 dest_backup->checksum_version,
 				 &(full_backup->hdr_map), true);
 
 	/* drop restored temp file */

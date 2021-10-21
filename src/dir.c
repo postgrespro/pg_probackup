@@ -28,7 +28,7 @@
  * start so they are not included in backups.  The directories themselves are
  * kept and included as empty to preserve access permissions.
  */
-const char *pgdata_exclude_dir[] =
+static const char *pgdata_exclude_dir[] =
 {
 	PG_XLOG_DIR,
 	/*
@@ -120,8 +120,6 @@ typedef struct TablespaceCreatedList
 	TablespaceCreatedListCell *head;
 	TablespaceCreatedListCell *tail;
 } TablespaceCreatedList;
-
-static int pgCompareString(const void *str1, const void *str2);
 
 static char dir_check_file(pgFile *file, bool backup_logs);
 
@@ -222,6 +220,9 @@ pgFileInit(const char *rel_path)
 	/* Number of blocks backed up during backup */
 	file->n_headers = 0;
 
+	// May be add?
+	// pg_atomic_clear_flag(file->lock);
+	file->excluded = false;
 	return file;
 }
 
@@ -424,6 +425,26 @@ pgFileCompareName(const void *f1, const void *f2)
 	return strcmp(f1p->name, f2p->name);
 }
 
+/* Compare pgFile->name with string in ascending order of ASCII code. */
+int
+pgFileCompareNameWithString(const void *f1, const void *f2)
+{
+	pgFile *f1p = *(pgFile **)f1;
+	char *f2s = *(char **)f2;
+
+	return strcmp(f1p->name, f2s);
+}
+
+/* Compare pgFile->rel_path with string in ascending order of ASCII code. */
+int
+pgFileCompareRelPathWithString(const void *f1, const void *f2)
+{
+	pgFile *f1p = *(pgFile **)f1;
+	char *f2s = *(char **)f2;
+
+	return strcmp(f1p->rel_path, f2s);
+}
+
 /*
  * Compare two pgFile with their relative path and external_dir_num in ascending
  * order of ASСII code.
@@ -483,10 +504,31 @@ pgFileCompareSize(const void *f1, const void *f2)
 		return 0;
 }
 
-static int
+/* Compare two pgFile with their size in descending order */
+int
+pgFileCompareSizeDesc(const void *f1, const void *f2)
+{
+	return -1 * pgFileCompareSize(f1, f2);
+}
+
+int
 pgCompareString(const void *str1, const void *str2)
 {
 	return strcmp(*(char **) str1, *(char **) str2);
+}
+
+/*
+ * From bsearch(3): "The compar routine is expected to have two argu‐
+ * ments  which  point  to  the key object and to an array member, in that order"
+ * But in practice this is opposite, so we took strlen from second string (search key)
+ * This is checked by tests.catchup.CatchupTest.test_catchup_with_exclude_path
+ */
+int
+pgPrefixCompareString(const void *str1, const void *str2)
+{
+	const char *s1 = *(char **) str1;
+	const char *s2 = *(char **) str2;
+	return strncmp(s1, s2, strlen(s2));
 }
 
 /* Compare two Oids */
@@ -675,26 +717,16 @@ dir_check_file(pgFile *file, bool backup_logs)
 		 */
 		if (sscanf_res == 2 && strcmp(tmp_rel_path, TABLESPACE_VERSION_DIRECTORY) != 0)
 			return CHECK_FALSE;
-
-		if (sscanf_res == 3 && S_ISDIR(file->mode) &&
-			strcmp(tmp_rel_path, TABLESPACE_VERSION_DIRECTORY) == 0)
-			file->is_database = true;
 	}
 	else if (path_is_prefix_of_path("global", file->rel_path))
 	{
 		file->tblspcOid = GLOBALTABLESPACE_OID;
-
-		if (S_ISDIR(file->mode) && strcmp(file->name, "global") == 0)
-			file->is_database = true;
 	}
 	else if (path_is_prefix_of_path("base", file->rel_path))
 	{
 		file->tblspcOid = DEFAULTTABLESPACE_OID;
 
 		sscanf(file->rel_path, "base/%u/", &(file->dbOid));
-
-		if (S_ISDIR(file->mode) && strcmp(file->name, "base") != 0)
-			file->is_database = true;
 	}
 
 	/* Do not backup ptrack_init files */
@@ -899,7 +931,7 @@ dir_list_file_internal(parray *files, pgFile *parent, const char *parent_dir,
  *
  * Copy of function get_tablespace_mapping() from pg_basebackup.c.
  */
-static const char *
+const char *
 get_tablespace_mapping(const char *dir)
 {
 	TablespaceListCell *cell;
@@ -1454,7 +1486,7 @@ get_external_remap(char *current_dir)
  *
  * Returns true if the value was found in the line.
  */
-static bool
+bool
 get_control_value(const char *str, const char *name,
 				  char *value_str, int64 *value_int64, bool is_mandatory)
 {
@@ -1576,123 +1608,6 @@ bad_format:
 	elog(ERROR, "%s file has invalid format in line %s",
 		 DATABASE_FILE_LIST, str);
 	return false;	/* Make compiler happy */
-}
-
-/*
- * Construct parray of pgFile from the backup content list.
- * If root is not NULL, path will be absolute path.
- */
-parray *
-dir_read_file_list(const char *root, const char *external_prefix,
-				   const char *file_txt, fio_location location, pg_crc32 expected_crc)
-{
-	FILE    *fp;
-	parray  *files;
-	char     buf[BLCKSZ];
-	char     stdio_buf[STDIO_BUFSIZE];
-	pg_crc32 content_crc = 0;
-
-	fp = fio_open_stream(file_txt, location);
-	if (fp == NULL)
-		elog(ERROR, "cannot open \"%s\": %s", file_txt, strerror(errno));
-
-	/* enable stdio buffering for local file */
-	if (!fio_is_remote(location))
-		setvbuf(fp, stdio_buf, _IOFBF, STDIO_BUFSIZE);
-
-	files = parray_new();
-
-	INIT_FILE_CRC32(true, content_crc);
-
-	while (fgets(buf, lengthof(buf), fp))
-	{
-		char		path[MAXPGPATH];
-		char		linked[MAXPGPATH];
-		char		compress_alg_string[MAXPGPATH];
-		int64		write_size,
-					mode,		/* bit length of mode_t depends on platforms */
-					is_datafile,
-					is_cfs,
-					external_dir_num,
-					crc,
-					segno,
-					n_blocks,
-					n_headers,
-					dbOid,		/* used for partial restore */
-					hdr_crc,
-					hdr_off,
-					hdr_size;
-		pgFile	   *file;
-
-		COMP_FILE_CRC32(true, content_crc, buf, strlen(buf));
-
-		get_control_value(buf, "path", path, NULL, true);
-		get_control_value(buf, "size", NULL, &write_size, true);
-		get_control_value(buf, "mode", NULL, &mode, true);
-		get_control_value(buf, "is_datafile", NULL, &is_datafile, true);
-		get_control_value(buf, "is_cfs", NULL, &is_cfs, false);
-		get_control_value(buf, "crc", NULL, &crc, true);
-		get_control_value(buf, "compress_alg", compress_alg_string, NULL, false);
-		get_control_value(buf, "external_dir_num", NULL, &external_dir_num, false);
-		get_control_value(buf, "dbOid", NULL, &dbOid, false);
-
-		file = pgFileInit(path);
-		file->write_size = (int64) write_size;
-		file->mode = (mode_t) mode;
-		file->is_datafile = is_datafile ? true : false;
-		file->is_cfs = is_cfs ? true : false;
-		file->crc = (pg_crc32) crc;
-		file->compress_alg = parse_compress_alg(compress_alg_string);
-		file->external_dir_num = external_dir_num;
-		file->dbOid = dbOid ? dbOid : 0;
-
-		/*
-		 * Optional fields
-		 */
-
-		if (get_control_value(buf, "linked", linked, NULL, false) && linked[0])
-		{
-			file->linked = pgut_strdup(linked);
-			canonicalize_path(file->linked);
-		}
-
-		if (get_control_value(buf, "segno", NULL, &segno, false))
-			file->segno = (int) segno;
-
-		if (get_control_value(buf, "n_blocks", NULL, &n_blocks, false))
-			file->n_blocks = (int) n_blocks;
-
-		if (get_control_value(buf, "n_headers", NULL, &n_headers, false))
-			file->n_headers = (int) n_headers;
-
-		if (get_control_value(buf, "hdr_crc", NULL, &hdr_crc, false))
-			file->hdr_crc = (pg_crc32) hdr_crc;
-
-		if (get_control_value(buf, "hdr_off", NULL, &hdr_off, false))
-			file->hdr_off = hdr_off;
-
-		if (get_control_value(buf, "hdr_size", NULL, &hdr_size, false))
-			file->hdr_size = (int) hdr_size;
-
-		parray_append(files, file);
-	}
-
-	FIN_FILE_CRC32(true, content_crc);
-
-	if (ferror(fp))
-		elog(ERROR, "Failed to read from file: \"%s\"", file_txt);
-
-	fio_close_stream(fp);
-
-	if (expected_crc != 0 &&
-		expected_crc != content_crc)
-	{
-		elog(WARNING, "Invalid CRC of backup control file '%s': %u. Expected: %u",
-				file_txt, content_crc, expected_crc);
-		return NULL;
-	}
-
-	return files;
 }
 
 /*
@@ -1904,7 +1819,6 @@ read_database_map(pgBackup *backup)
 	char		path[MAXPGPATH];
 	char		database_map_path[MAXPGPATH];
 
-//	pgBackupGetPath(backup, path, lengthof(path), DATABASE_DIR);
 	join_path_components(path, backup->root_dir, DATABASE_DIR);
 	join_path_components(database_map_path, path, DATABASE_MAP);
 
@@ -1980,4 +1894,18 @@ cleanup_tablespace(const char *path)
 
 	parray_walk(files, pgFileFree);
 	parray_free(files);
+}
+
+/*
+ * Clear the synchronisation locks in a parray of (pgFile *)'s
+ */
+void
+pfilearray_clear_locks(parray *file_list)
+{
+	int i;
+	for (i = 0; i < parray_num(file_list); i++)
+	{
+		pgFile *file = (pgFile *) parray_get(file_list, i);
+		pg_atomic_clear_flag(&file->lock);
+	}
 }

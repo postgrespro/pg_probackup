@@ -438,6 +438,11 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             'pg_probackup archive-push completed successfully',
             log_content)
 
+        # btw check that console coloring codes are not slipped into log file
+        self.assertNotIn('[0m', log_content)
+
+        print(log_content)
+
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
@@ -739,7 +744,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         # to original data
         master.psql(
             "postgres",
-            "insert into t_heap as select i as id, md5(i::text) as text, "
+            "insert into t_heap select i as id, md5(i::text) as text, "
             "md5(repeat(i::text,10))::tsvector as tsvector "
             "from generate_series(256,512) i")
         before = master.safe_psql("postgres", "SELECT * FROM t_heap")
@@ -774,7 +779,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         # to original data
         master.psql(
             "postgres",
-            "insert into t_heap as select i as id, md5(i::text) as text, "
+            "insert into t_heap select i as id, md5(i::text) as text, "
             "md5(repeat(i::text,10))::tsvector as tsvector "
             "from generate_series(512,80680) i")
 
@@ -975,7 +980,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
         master.psql(
             "postgres",
-            "insert into t_heap as select i as id, md5(i::text) as text, "
+            "insert into t_heap select i as id, md5(i::text) as text, "
             "md5(repeat(i::text,10))::tsvector as tsvector "
             "from generate_series(0,10000) i")
 

@@ -14,14 +14,15 @@
 #include <time.h>
 #include <unistd.h>
 
-static void delete_walfiles_in_tli(XLogRecPtr keep_lsn, timelineInfo *tli,
+static void delete_walfiles_in_tli(InstanceState *instanceState, XLogRecPtr keep_lsn, timelineInfo *tli,
 						uint32 xlog_seg_size, bool dry_run);
 static void do_retention_internal(parray *backup_list, parray *to_keep_list,
 									parray *to_purge_list);
-static void do_retention_merge(parray *backup_list, parray *to_keep_list,
-									parray *to_purge_list, bool no_validate, bool no_sync);
+static void do_retention_merge(InstanceState *instanceState, parray *backup_list,
+							   parray *to_keep_list, parray *to_purge_list,
+							   bool no_validate, bool no_sync);
 static void do_retention_purge(parray *to_keep_list, parray *to_purge_list);
-static void do_retention_wal(bool dry_run);
+static void do_retention_wal(InstanceState *instanceState, bool dry_run);
 
 // TODO: more useful messages for dry run.
 static bool backup_deleted = false;   /* At least one backup was deleted */
@@ -29,7 +30,7 @@ static bool backup_merged = false;    /* At least one merge was enacted */
 static bool wal_deleted = false;      /* At least one WAL segments was deleted */
 
 void
-do_delete(time_t backup_id)
+do_delete(InstanceState *instanceState, time_t backup_id)
 {
 	int			i;
 	parray	   *backup_list,
@@ -39,7 +40,7 @@ do_delete(time_t backup_id)
 	char		size_to_delete_pretty[20];
 
 	/* Get complete list of backups */
-	backup_list = catalog_get_backup_list(instance_name, INVALID_BACKUP_ID);
+	backup_list = catalog_get_backup_list(instanceState, INVALID_BACKUP_ID);
 
 	delete_list = parray_new();
 
@@ -105,7 +106,7 @@ do_delete(time_t backup_id)
 
 	/* Clean WAL segments */
 	if (delete_wal)
-		do_retention_wal(dry_run);
+		do_retention_wal(instanceState, dry_run);
 
 	/* cleanup */
 	parray_free(delete_list);
@@ -123,7 +124,7 @@ do_delete(time_t backup_id)
  * which FULL backup should be keeped for redundancy obligation(only valid do),
  * but if invalid backup is not guarded by retention - it is removed
  */
-void do_retention(bool no_validate, bool no_sync)
+void do_retention(InstanceState *instanceState, bool no_validate, bool no_sync)
 {
 	parray	   *backup_list = NULL;
 	parray	   *to_keep_list = parray_new();
@@ -139,7 +140,7 @@ void do_retention(bool no_validate, bool no_sync)
 	MyLocation = FIO_LOCAL_HOST;
 
 	/* Get a complete list of backups. */
-	backup_list = catalog_get_backup_list(instance_name, INVALID_BACKUP_ID);
+	backup_list = catalog_get_backup_list(instanceState, INVALID_BACKUP_ID);
 
 	if (parray_num(backup_list) == 0)
 		backup_list_is_empty = true;
@@ -172,14 +173,14 @@ void do_retention(bool no_validate, bool no_sync)
 		do_retention_internal(backup_list, to_keep_list, to_purge_list);
 
 	if (merge_expired && !dry_run && !backup_list_is_empty)
-		do_retention_merge(backup_list, to_keep_list, to_purge_list, no_validate, no_sync);
+		do_retention_merge(instanceState, backup_list, to_keep_list, to_purge_list, no_validate, no_sync);
 
 	if (delete_expired && !dry_run && !backup_list_is_empty)
 		do_retention_purge(to_keep_list, to_purge_list);
 
 	/* TODO: some sort of dry run for delete_wal */
 	if (delete_wal)
-		do_retention_wal(dry_run);
+		do_retention_wal(instanceState, dry_run);
 
 	/* TODO: consider dry-run flag */
 
@@ -406,7 +407,7 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 		/* TODO: add ancestor(chain full backup) ID */
 		elog(INFO, "Backup %s, mode: %s, status: %s. Redundancy: %i/%i, Time Window: %ud/%ud. %s",
 				base36enc(backup->start_time),
-				pgBackupGetBackupMode(backup),
+				pgBackupGetBackupMode(backup, false),
 				status2str(backup->status),
 				cur_full_backup_num,
 				instance_config.retention_redundancy,
@@ -424,7 +425,8 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 
 /* Merge partially expired incremental chains */
 static void
-do_retention_merge(parray *backup_list, parray *to_keep_list, parray *to_purge_list,
+do_retention_merge(InstanceState *instanceState, parray *backup_list,
+				   parray *to_keep_list, parray *to_purge_list,
 				   bool no_validate, bool no_sync)
 {
 	int i;
@@ -542,9 +544,8 @@ do_retention_merge(parray *backup_list, parray *to_keep_list, parray *to_purge_l
 		 *
 		 * Merge incremental chain from PAGE3 into FULL.
 		 */
-
 		keep_backup = parray_get(merge_list, 0);
-		merge_chain(merge_list, full_backup, keep_backup, no_validate, no_sync);
+		merge_chain(instanceState, merge_list, full_backup, keep_backup, no_validate, no_sync);
 		backup_merged = true;
 
 		for (j = parray_num(merge_list) - 2; j >= 0; j--)
@@ -657,12 +658,13 @@ do_retention_purge(parray *to_keep_list, parray *to_purge_list)
  * and delete them.
  */
 static void
-do_retention_wal(bool dry_run)
+do_retention_wal(InstanceState *instanceState, bool dry_run)
 {
 	parray 		*tli_list;
 	int i;
 
-	tli_list = catalog_get_timelines(&instance_config);
+	//TODO check that instanceState is not NULL
+	tli_list = catalog_get_timelines(instanceState, &instance_config);
 
 	for (i = 0; i < parray_num(tli_list); i++)
 	{
@@ -701,22 +703,22 @@ do_retention_wal(bool dry_run)
 		{
 			if (instance_config.wal_depth >= 0 && !(XLogRecPtrIsInvalid(tlinfo->anchor_lsn)))
 			{
-				delete_walfiles_in_tli(tlinfo->anchor_lsn,
+				delete_walfiles_in_tli(instanceState, tlinfo->anchor_lsn,
 								tlinfo, instance_config.xlog_seg_size, dry_run);
 			}
 			else
 			{
-				delete_walfiles_in_tli(tlinfo->oldest_backup->start_lsn,
+				delete_walfiles_in_tli(instanceState, tlinfo->oldest_backup->start_lsn,
 								tlinfo, instance_config.xlog_seg_size, dry_run);
 			}
 		}
 		else
 		{
 			if (instance_config.wal_depth >= 0 && !(XLogRecPtrIsInvalid(tlinfo->anchor_lsn)))
-				delete_walfiles_in_tli(tlinfo->anchor_lsn,
+				delete_walfiles_in_tli(instanceState, tlinfo->anchor_lsn,
 								tlinfo, instance_config.xlog_seg_size, dry_run);
 			else
-				delete_walfiles_in_tli(InvalidXLogRecPtr,
+				delete_walfiles_in_tli(instanceState, InvalidXLogRecPtr,
 								tlinfo, instance_config.xlog_seg_size, dry_run);
 		}
 	}
@@ -758,7 +760,7 @@ delete_backup_files(pgBackup *backup)
 	 * Update STATUS to BACKUP_STATUS_DELETING in preparation for the case which
 	 * the error occurs before deleting all backup files.
 	 */
-	write_backup_status(backup, BACKUP_STATUS_DELETING, instance_name, false);
+	write_backup_status(backup, BACKUP_STATUS_DELETING, false);
 
 	/* list files to be deleted */
 	files = parray_new();
@@ -812,7 +814,7 @@ delete_backup_files(pgBackup *backup)
  * Q: Maybe we should stop treating partial WAL segments as second-class citizens?
  */
 static void
-delete_walfiles_in_tli(XLogRecPtr keep_lsn, timelineInfo *tlinfo,
+delete_walfiles_in_tli(InstanceState *instanceState, XLogRecPtr keep_lsn, timelineInfo *tlinfo,
 								uint32 xlog_seg_size, bool dry_run)
 {
 	XLogSegNo   FirstToDeleteSegNo;
@@ -937,7 +939,7 @@ delete_walfiles_in_tli(XLogRecPtr keep_lsn, timelineInfo *tlinfo,
 		{
 			char wal_fullpath[MAXPGPATH];
 
-			join_path_components(wal_fullpath, instance_config.arclog_path, wal_file->file.name);
+			join_path_components(wal_fullpath, instanceState->instance_wal_subdir_path, wal_file->file.name);
 
 			/* save segment from purging */
 			if (instance_config.wal_depth >= 0 && wal_file->keep)
@@ -974,15 +976,13 @@ delete_walfiles_in_tli(XLogRecPtr keep_lsn, timelineInfo *tlinfo,
 
 /* Delete all backup files and wal files of given instance. */
 int
-do_delete_instance(void)
+do_delete_instance(InstanceState *instanceState)
 {
 	parray		*backup_list;
 	int 		i;
-	char		instance_config_path[MAXPGPATH];
-
 
 	/* Delete all backups. */
-	backup_list = catalog_get_backup_list(instance_name, INVALID_BACKUP_ID);
+	backup_list = catalog_get_backup_list(instanceState, INVALID_BACKUP_ID);
 
 	catalog_lock_backup_list(backup_list, 0, parray_num(backup_list) - 1, true, true);
 
@@ -997,32 +997,31 @@ do_delete_instance(void)
 	parray_free(backup_list);
 
 	/* Delete all wal files. */
-	pgut_rmtree(arclog_path, false, true);
+	pgut_rmtree(instanceState->instance_wal_subdir_path, false, true);
 
 	/* Delete backup instance config file */
-	join_path_components(instance_config_path, backup_instance_path, BACKUP_CATALOG_CONF_FILE);
-	if (remove(instance_config_path))
+	if (remove(instanceState->instance_config_path))
 	{
-		elog(ERROR, "Can't remove \"%s\": %s", instance_config_path,
+		elog(ERROR, "Can't remove \"%s\": %s", instanceState->instance_config_path,
 			strerror(errno));
 	}
 
 	/* Delete instance root directories */
-	if (rmdir(backup_instance_path) != 0)
-		elog(ERROR, "Can't remove \"%s\": %s", backup_instance_path,
+	if (rmdir(instanceState->instance_backup_subdir_path) != 0)
+		elog(ERROR, "Can't remove \"%s\": %s", instanceState->instance_backup_subdir_path,
 			strerror(errno));
 
-	if (rmdir(arclog_path) != 0)
-		elog(ERROR, "Can't remove \"%s\": %s", arclog_path,
+	if (rmdir(instanceState->instance_wal_subdir_path) != 0)
+		elog(ERROR, "Can't remove \"%s\": %s", instanceState->instance_wal_subdir_path,
 			strerror(errno));
 
-	elog(INFO, "Instance '%s' successfully deleted", instance_name);
+	elog(INFO, "Instance '%s' successfully deleted", instanceState->instance_name);
 	return 0;
 }
 
 /* Delete all backups of given status in instance */
 void
-do_delete_status(InstanceConfig *instance_config, const char *status)
+do_delete_status(InstanceState *instanceState, InstanceConfig *instance_config, const char *status)
 {
 	int         i;
 	parray     *backup_list, *delete_list;
@@ -1045,11 +1044,11 @@ do_delete_status(InstanceConfig *instance_config, const char *status)
 	 */
 	pretty_status = status2str(status_for_delete);
 
-	backup_list = catalog_get_backup_list(instance_config->name, INVALID_BACKUP_ID);
+	backup_list = catalog_get_backup_list(instanceState, INVALID_BACKUP_ID);
 
 	if (parray_num(backup_list) == 0)
 	{
-		elog(WARNING, "Instance '%s' has no backups", instance_config->name);
+		elog(WARNING, "Instance '%s' has no backups", instanceState->instance_name);
 		return;
 	}
 
@@ -1108,12 +1107,12 @@ do_delete_status(InstanceConfig *instance_config, const char *status)
 	if (!dry_run && n_deleted > 0)
 		elog(INFO, "Successfully deleted %i %s from instance '%s'",
 			n_deleted, n_deleted == 1 ? "backup" : "backups",
-			instance_config->name);
+			instanceState->instance_name);
 
 
 	if (n_found == 0)
 		elog(WARNING, "Instance '%s' has no backups with status '%s'",
-			instance_config->name, pretty_status);
+			instanceState->instance_name, pretty_status);
 
 	// we don`t do WAL purge here, because it is impossible to correctly handle
 	// dry-run case.

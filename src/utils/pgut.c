@@ -3,7 +3,7 @@
  * pgut.c
  *
  * Portions Copyright (c) 2009-2013, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
- * Portions Copyright (c) 2017-2019, Postgres Professional
+ * Portions Copyright (c) 2017-2021, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */
@@ -951,6 +951,29 @@ pgut_strdup(const char *str)
 	if ((ret = strdup(str)) == NULL)
 		elog(ERROR, "could not duplicate string \"%s\": %s",
 			str, strerror(errno));
+	return ret;
+}
+
+char *
+pgut_strndup(const char *str, size_t n)
+{
+	char *ret;
+
+	if (str == NULL)
+		return NULL;
+
+#if _POSIX_C_SOURCE >= 200809L
+	if ((ret = strndup(str, n)) == NULL)
+		elog(ERROR, "could not duplicate string \"%s\": %s",
+			str, strerror(errno));
+#else /* WINDOWS doesn't have strndup() */
+        if ((ret = malloc(n + 1)) == NULL)
+		elog(ERROR, "could not duplicate string \"%s\": %s",
+			str, strerror(errno));
+
+        memcpy(ret, str, n);
+        ret[n] = '\0';
+#endif
 	return ret;
 }
 
