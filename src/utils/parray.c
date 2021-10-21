@@ -175,7 +175,7 @@ parray_rm(parray *array, const void *key, int(*compare)(const void *, const void
 size_t
 parray_num(const parray *array)
 {
-	return array->used;
+	return array!= NULL ? array->used : (size_t) 0;
 }
 
 void
@@ -196,6 +196,13 @@ void *
 parray_bsearch(parray *array, const void *key, int(*compare)(const void *, const void *))
 {
 	return bsearch(&key, array->data, array->used, sizeof(void *), compare);
+}
+
+int
+parray_bsearch_index(parray *array, const void *key, int(*compare)(const void *, const void *))
+{
+	void **elem = parray_bsearch(array, key, compare);
+	return elem != NULL ? elem - array->data : -1;
 }
 
 /* checks that parray contains element */

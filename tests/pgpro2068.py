@@ -144,7 +144,7 @@ class BugTest(ProbackupTest, unittest.TestCase):
 DO
 $$
 relations = plpy.execute("select class.oid from pg_class class WHERE class.relkind IN ('r', 'i', 't', 'm')  and class.relpersistence = 'p'")
-current_xlog_lsn = plpy.execute("SELECT min_recovery_end_lsn as lsn FROM pg_control_recovery()")[0]['lsn']
+current_xlog_lsn = plpy.execute("SELECT min_recovery_end_location as lsn FROM pg_control_recovery()")[0]['lsn']
 plpy.notice('CURRENT LSN: {0}'.format(current_xlog_lsn))
 found_corruption = False
 for relation in relations:
@@ -158,7 +158,7 @@ for relation in relations:
         found_corruption = True
 if found_corruption:
     plpy.error('Found Corruption')
-$$ LANGUAGE plpythonu;
+$$ LANGUAGE plpython3u;
 '''
         else:
             script = '''

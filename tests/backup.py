@@ -18,14 +18,10 @@ class BackupTest(ProbackupTest, unittest.TestCase):
     # PGPRO-707
     def test_backup_modes_archive(self):
         """standart backup modes with ARCHIVE WAL method"""
-        if not self.ptrack:
-            return unittest.skip('Skipped because ptrack support is disabled')
-
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
-            initdb_params=['--data-checksums'],
-            ptrack_enable=True)
+            initdb_params=['--data-checksums'])
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
@@ -33,12 +29,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.set_archiving(backup_dir, 'node', node)
         node.slow_start()
 
-        if node.major_version >= 12:
-            node.safe_psql(
-                "postgres",
-                "CREATE EXTENSION ptrack")
-
-        backup_id = self.backup_node(backup_dir, 'node', node)
+        full_backup_id = self.backup_node(backup_dir, 'node', node)
         show_backup = self.show_pb(backup_dir, 'node')[0]
 
         self.assertEqual(show_backup['status'], "OK")
@@ -47,7 +38,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         # postmaster.pid and postmaster.opts shouldn't be copied
         excluded = True
         db_dir = os.path.join(
-            backup_dir, "backups", 'node', backup_id, "database")
+            backup_dir, "backups", 'node', full_backup_id, "database")
 
         for f in os.listdir(db_dir):
             if (
@@ -64,31 +55,30 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         page_backup_id = self.backup_node(
             backup_dir, 'node', node, backup_type="page")
 
-        # print self.show_pb(node)
-        show_backup = self.show_pb(backup_dir, 'node')[1]
-        self.assertEqual(show_backup['status'], "OK")
-        self.assertEqual(show_backup['backup-mode'], "PAGE")
+        show_backup_1 = self.show_pb(backup_dir, 'node')[1]
+        self.assertEqual(show_backup_1['status'], "OK")
+        self.assertEqual(show_backup_1['backup-mode'], "PAGE")
+
+        # delta backup mode
+        delta_backup_id = self.backup_node(
+            backup_dir, 'node', node, backup_type="delta")
+
+        show_backup_2 = self.show_pb(backup_dir, 'node')[2]
+        self.assertEqual(show_backup_2['status'], "OK")
+        self.assertEqual(show_backup_2['backup-mode'], "DELTA")
 
         # Check parent backup
         self.assertEqual(
-            backup_id,
+            full_backup_id,
             self.show_pb(
                 backup_dir, 'node',
-                backup_id=show_backup['id'])["parent-backup-id"])
+                backup_id=show_backup_1['id'])["parent-backup-id"])
 
-        # ptrack backup mode
-        self.backup_node(backup_dir, 'node', node, backup_type="ptrack")
-
-        show_backup = self.show_pb(backup_dir, 'node')[2]
-        self.assertEqual(show_backup['status'], "OK")
-        self.assertEqual(show_backup['backup-mode'], "PTRACK")
-
-        # Check parent backup
         self.assertEqual(
             page_backup_id,
             self.show_pb(
                 backup_dir, 'node',
-                backup_id=show_backup['id'])["parent-backup-id"])
+                backup_id=show_backup_2['id'])["parent-backup-id"])
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -118,26 +108,17 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     def test_incremental_backup_without_full(self):
-        """page-level backup without validated full backup"""
-        if not self.ptrack:
-            return unittest.skip('Skipped because ptrack support is disabled')
-
+        """page backup without validated full backup"""
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
-            initdb_params=['--data-checksums'],
-            ptrack_enable=True)
+            initdb_params=['--data-checksums'])
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
         node.slow_start()
-
-        if node.major_version >= 12:
-            node.safe_psql(
-                "postgres",
-                "CREATE EXTENSION ptrack")
 
         try:
             self.backup_node(backup_dir, 'node', node, backup_type="page")
@@ -154,27 +135,8 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                 "\n Unexpected Error Message: {0}\n CMD: {1}".format(
                     repr(e.message), self.cmd))
 
-        try:
-            self.backup_node(backup_dir, 'node', node, backup_type="ptrack")
-            # we should die here because exception is what we expect to happen
-            self.assertEqual(
-                1, 0,
-                "Expecting Error because page backup should not be possible "
-                "without valid full backup.\n Output: {0} \n CMD: {1}".format(
-                    repr(self.output), self.cmd))
-        except ProbackupException as e:
-            self.assertTrue(
-                "WARNING: Valid full backup on current timeline 1 is not found" in e.message and
-                "ERROR: Create new full backup before an incremental one" in e.message,
-                "\n Unexpected Error Message: {0}\n CMD: {1}".format(
-                    repr(e.message), self.cmd))
-
         self.assertEqual(
             self.show_pb(backup_dir, 'node')[0]['status'],
-            "ERROR")
-
-        self.assertEqual(
-            self.show_pb(backup_dir, 'node')[1]['status'],
             "ERROR")
 
         # Clean after yourself
@@ -242,63 +204,18 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
-    def test_ptrack_threads(self):
-        """ptrack multi thread backup mode"""
-        if not self.ptrack:
-            return unittest.skip('Skipped because ptrack support is disabled')
-
-        fname = self.id().split('.')[3]
-        node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
-            initdb_params=['--data-checksums'],
-            ptrack_enable=True)
-
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
-        self.set_archiving(backup_dir, 'node', node)
-        node.slow_start()
-
-        if node.major_version >= 12:
-            node.safe_psql(
-                "postgres",
-                "CREATE EXTENSION ptrack")
-
-        self.backup_node(
-            backup_dir, 'node', node,
-            backup_type="full", options=["-j", "4"])
-        self.assertEqual(self.show_pb(backup_dir, 'node')[0]['status'], "OK")
-
-        self.backup_node(
-            backup_dir, 'node', node,
-            backup_type="ptrack", options=["-j", "4"])
-        self.assertEqual(self.show_pb(backup_dir, 'node')[0]['status'], "OK")
-
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
-    # @unittest.skip("skip")
-    def test_ptrack_threads_stream(self):
-        """ptrack multi thread backup mode and stream"""
-        if not self.ptrack:
-            return unittest.skip('Skipped because ptrack support is disabled')
-
+    def test_delta_threads_stream(self):
+        """delta multi thread backup mode and stream"""
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
-            initdb_params=['--data-checksums'],
-            ptrack_enable=True)
+            initdb_params=['--data-checksums'])
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
-
-        if node.major_version >= 12:
-            node.safe_psql(
-                "postgres",
-                "CREATE EXTENSION ptrack")
 
         self.backup_node(
             backup_dir, 'node', node, backup_type="full",
@@ -307,7 +224,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(self.show_pb(backup_dir, 'node')[0]['status'], "OK")
         self.backup_node(
             backup_dir, 'node', node,
-            backup_type="ptrack", options=["-j", "4", "--stream"])
+            backup_type="delta", options=["-j", "4", "--stream"])
         self.assertEqual(self.show_pb(backup_dir, 'node')[1]['status'], "OK")
 
         # Clean after yourself
@@ -1460,76 +1377,6 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
-    def test_drop_rel_during_backup_ptrack(self):
-        """"""
-        if not self.ptrack:
-            return unittest.skip('Skipped because ptrack support is disabled')
-
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
-        node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
-            set_replication=True,
-            ptrack_enable=self.ptrack,
-            initdb_params=['--data-checksums'])
-
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
-        self.set_archiving(backup_dir, 'node', node)
-        node.slow_start()
-
-        if node.major_version >= 12:
-            node.safe_psql(
-                "postgres",
-                "CREATE EXTENSION ptrack")
-
-        node.safe_psql(
-            "postgres",
-            "create table t_heap as select i"
-            " as id from generate_series(0,100) i")
-
-        relative_path = node.safe_psql(
-            "postgres",
-            "select pg_relation_filepath('t_heap')").decode('utf-8').rstrip()
-
-        absolute_path = os.path.join(node.data_dir, relative_path)
-
-        # FULL backup
-        self.backup_node(backup_dir, 'node', node, options=['--stream'])
-
-        # PTRACK backup
-        gdb = self.backup_node(
-            backup_dir, 'node', node, backup_type='ptrack',
-            gdb=True, options=['--log-level-file=LOG'])
-
-        gdb.set_breakpoint('backup_files')
-        gdb.run_until_break()
-
-        # REMOVE file
-        os.remove(absolute_path)
-
-        # File removed, we can proceed with backup
-        gdb.continue_execution_until_exit()
-
-        pgdata = self.pgdata_content(node.data_dir)
-
-        with open(os.path.join(backup_dir, 'log', 'pg_probackup.log')) as f:
-            log_content = f.read()
-            self.assertTrue(
-                'LOG: File not found: "{0}"'.format(absolute_path) in log_content,
-                'File "{0}" should be deleted but it`s not'.format(absolute_path))
-
-        node.cleanup()
-        self.restore_node(backup_dir, 'node', node, options=["-j", "4"])
-
-        # Physical comparison
-        pgdata_restored = self.pgdata_content(node.data_dir)
-        self.compare_pgdata(pgdata, pgdata_restored)
-
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
-    # @unittest.skip("skip")
     def test_persistent_slot_for_stream_backup(self):
         """"""
         fname = self.id().split('.')[3]
@@ -1572,8 +1419,10 @@ class BackupTest(ProbackupTest, unittest.TestCase):
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
-            pg_options={
-                'max_wal_size': '40MB', 'default_transaction_read_only': 'on'})
+            pg_options={'max_wal_size': '40MB'})
+
+        if self.get_version(node) < self.version_to_num('10.0'):
+            return unittest.skip('You need PostgreSQL >= 10 for this test')
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -1584,11 +1433,6 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.backup_node(
             backup_dir, 'node', node,
             options=['--stream', '--temp-slot'])
-
-        if self.get_version(node) < self.version_to_num('10.0'):
-            return unittest.skip('You need PostgreSQL >= 10 for this test')
-        else:
-            pg_receivexlog_path = self.get_bin_path('pg_receivewal')
 
         # FULL backup
         self.backup_node(
@@ -1992,10 +1836,11 @@ class BackupTest(ProbackupTest, unittest.TestCase):
             'postgres',
             'CREATE DATABASE backupdb')
 
-        if self.ptrack and node.major_version >= 12:
+        if self.ptrack:
             node.safe_psql(
                 "backupdb",
-                "CREATE EXTENSION ptrack WITH SCHEMA pg_catalog")
+                "CREATE SCHEMA ptrack; "
+                "CREATE EXTENSION ptrack WITH SCHEMA ptrack")
 
         # PG 9.5
         if self.get_version(node) < 90600:
@@ -2111,32 +1956,14 @@ class BackupTest(ProbackupTest, unittest.TestCase):
             )
 
         if self.ptrack:
-            if node.major_version < 12:
-                for fname in [
-                        'pg_catalog.oideq(oid, oid)',
-                        'pg_catalog.ptrack_version()',
-                        'pg_catalog.pg_ptrack_clear()',
-                        'pg_catalog.pg_ptrack_control_lsn()',
-                        'pg_catalog.pg_ptrack_get_and_clear_db(oid, oid)',
-                        'pg_catalog.pg_ptrack_get_and_clear(oid, oid)',
-                        'pg_catalog.pg_ptrack_get_block_2(oid, oid, oid, bigint)',
-                        'pg_catalog.pg_stop_backup()']:
+            node.safe_psql(
+                 "backupdb",
+                 "GRANT USAGE ON SCHEMA ptrack TO backup")
 
-                    node.safe_psql(
-                        "backupdb",
-                        "GRANT EXECUTE ON FUNCTION {0} "
-                        "TO backup".format(fname))
-            else:
-                fnames = [
-                    'pg_catalog.ptrack_get_pagemapset(pg_lsn)',
-                    'pg_catalog.ptrack_init_lsn()'
-                ]
-
-                for fname in fnames:
-                    node.safe_psql(
-                        "backupdb",
-                        "GRANT EXECUTE ON FUNCTION {0} "
-                        "TO backup".format(fname))
+            node.safe_psql(
+                "backupdb",
+                "GRANT EXECUTE ON FUNCTION ptrack.ptrack_get_pagemapset(pg_lsn) TO backup; "
+                "GRANT EXECUTE ON FUNCTION ptrack.ptrack_init_lsn() TO backup;")
 
         if ProbackupTest.enterprise:
             node.safe_psql(
@@ -2396,7 +2223,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
             'postgres',
             'CREATE DATABASE backupdb')
 
-        if self.ptrack and node.major_version >= 12:
+        if self.ptrack:
             node.safe_psql(
                 'backupdb',
                 'CREATE EXTENSION ptrack')
@@ -3407,9 +3234,11 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         # 'WARNING: could not connect to database backupdb: FATAL:  must be superuser or replication role to start walsender'
         # Messages for >=14
         # 'WARNING: could not connect to database backupdb: connection to server on socket "/tmp/.s.PGSQL.30983" failed: FATAL:  must be superuser or replication role to start walsender'
+        # 'WARNING: could not connect to database backupdb: connection to server at "localhost" (127.0.0.1), port 29732 failed: FATAL:  must be superuser or replication role to start walsender'
         self.assertRegex(
             output,
-            r'WARNING: could not connect to database backupdb: (connection to server on socket "/tmp/.s.PGSQL.\d+" failed: ){0,1}FATAL:  must be superuser or replication role to start walsender')
+            r'WARNING: could not connect to database backupdb: (connection to server (on socket "/tmp/.s.PGSQL.\d+"|at "localhost" \(127.0.0.1\), port \d+) failed: ){0,1}'
+            'FATAL:  must be superuser or replication role to start walsender')
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -3450,7 +3279,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         # FULL backup
         self.backup_node(
             backup_dir, 'node', node,
-            options=['--stream', '--temp-slot'])
+            options=['--stream'])
 
         # DELTA backup
         self.backup_node(
@@ -3458,6 +3287,118 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 
         # PAGE backup
         self.backup_node(backup_dir, 'node', node, backup_type='page')
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_backup_atexit(self):
+        """"""
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            ptrack_enable=self.ptrack,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        node.pgbench_init(scale=5)
+
+        # Full backup in streaming mode
+        gdb = self.backup_node(
+            backup_dir, 'node', node,
+            options=['--stream', '--log-level-file=VERBOSE'], gdb=True)
+
+        # break at streaming start
+        gdb.set_breakpoint('backup_data_file')
+        gdb.run_until_break()
+
+        gdb.remove_all_breakpoints()
+        gdb._execute('signal SIGINT')
+        sleep(1)
+
+        self.assertEqual(
+            self.show_pb(
+                backup_dir, 'node')[0]['status'], 'ERROR')
+
+        with open(os.path.join(backup_dir, 'log', 'pg_probackup.log')) as f:
+            log_content = f.read()
+            #print(log_content)
+            self.assertIn(
+                'WARNING: backup in progress, stop backup',
+                log_content)
+            
+            self.assertIn(
+                'FROM pg_catalog.pg_stop_backup',
+                log_content)
+            
+            self.assertIn(
+                'setting its status to ERROR',
+                log_content)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_pg_stop_backup_missing_permissions(self):
+        """"""
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            ptrack_enable=self.ptrack,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        node.pgbench_init(scale=5)
+
+        self.simple_bootstrap(node, 'backup')
+
+        if self.get_version(node) < 90600:
+            node.safe_psql(
+                'postgres',
+                'REVOKE EXECUTE ON FUNCTION pg_catalog.pg_stop_backup() FROM backup')
+        elif self.get_version(node) > 90600 and self.get_version(node) < 100000:
+            node.safe_psql(
+                'postgres',
+                'REVOKE EXECUTE ON FUNCTION pg_catalog.pg_stop_backup(boolean) FROM backup')
+        else:
+            node.safe_psql(
+                'postgres',
+                'REVOKE EXECUTE ON FUNCTION pg_catalog.pg_stop_backup(boolean, boolean) FROM backup')
+
+        # Full backup in streaming mode
+        try:
+            self.backup_node(
+                backup_dir, 'node', node,
+                options=['--stream', '-U', 'backup'])
+            # we should die here because exception is what we expect to happen
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because of missing permissions on pg_stop_backup "
+                "\n Output: {0} \n CMD: {1}".format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                "ERROR:  permission denied for function pg_stop_backup",
+                e.message,
+                "\n Unexpected Error Message: {0}\n CMD: {1}".format(
+                    repr(e.message), self.cmd))
+            self.assertIn(
+                "query was: SELECT pg_catalog.txid_snapshot_xmax",
+                e.message,
+                "\n Unexpected Error Message: {0}\n CMD: {1}".format(
+                    repr(e.message), self.cmd))
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)

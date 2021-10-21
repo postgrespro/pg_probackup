@@ -153,7 +153,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         # to original data
         master.psql(
             "postgres",
-            "insert into t_heap as select i as id, md5(i::text) as text, "
+            "insert into t_heap select i as id, md5(i::text) as text, "
             "md5(repeat(i::text,10))::tsvector as tsvector "
             "from generate_series(256,512) i")
         before = master.safe_psql("postgres", "SELECT * FROM t_heap")
@@ -189,7 +189,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         # to original data
         master.psql(
             "postgres",
-            "insert into t_heap as select i as id, md5(i::text) as text, "
+            "insert into t_heap select i as id, md5(i::text) as text, "
             "md5(repeat(i::text,10))::tsvector as tsvector "
             "from generate_series(512,768) i")
 
@@ -283,7 +283,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         # equal to original data
         master.psql(
             "postgres",
-            "insert into t_heap as select i as id, md5(i::text) as text, "
+            "insert into t_heap select i as id, md5(i::text) as text, "
             "md5(repeat(i::text,10))::tsvector as tsvector "
             "from generate_series(256,25120) i")
 
@@ -980,15 +980,17 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
                 "\n Output: {0} \n CMD: {1}".format(
                     repr(self.output), self.cmd))
         except ProbackupException as e:
-            self.assertIn(
-                'LOG: Looking for LSN 0/4000060 in segment: 000000010000000000000004',
+            # vanilla -- 0/4000060
+            # pgproee -- 0/4000078
+            self.assertRegex(
                 e.message,
+                r'LOG: Looking for LSN (0/4000060|0/4000078) in segment: 000000010000000000000004',
                 "\n Unexpected Error Message: {0}\n CMD: {1}".format(
                     repr(e.message), self.cmd))
 
-            self.assertIn(
-                'INFO: Wait for LSN 0/4000060 in archived WAL segment',
+            self.assertRegex(
                 e.message,
+                r'INFO: Wait for LSN (0/4000060|0/4000078) in archived WAL segment',
                 "\n Unexpected Error Message: {0}\n CMD: {1}".format(
                     repr(e.message), self.cmd))
 

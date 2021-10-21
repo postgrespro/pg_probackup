@@ -113,7 +113,7 @@ static parray *setup_push_filelist(const char *archive_status_dir,
  * Where archlog_path is $BACKUP_PATH/wal/instance_name
  */
 void
-do_archive_push(InstanceConfig *instance, char *wal_file_path,
+do_archive_push(InstanceState *instanceState, InstanceConfig *instance, char *wal_file_path,
 				char *wal_file_name, int batch_size, bool overwrite,
 				bool no_sync, bool no_ready_rename)
 {
@@ -148,7 +148,7 @@ do_archive_push(InstanceConfig *instance, char *wal_file_path,
 		elog(ERROR, "getcwd() error");
 
 	/* verify that archive-push --instance parameter is valid */
-	system_id = get_system_identifier(current_dir);
+	system_id = get_system_identifier(current_dir, FIO_DB_HOST);
 
 	if (instance->pgdata == NULL)
 		elog(ERROR, "Cannot read pg_probackup.conf for this instance");
@@ -156,7 +156,7 @@ do_archive_push(InstanceConfig *instance, char *wal_file_path,
 	if (system_id != instance->system_identifier)
 		elog(ERROR, "Refuse to push WAL segment %s into archive. Instance parameters mismatch."
 					"Instance '%s' should have SYSTEM_ID = " UINT64_FORMAT " instead of " UINT64_FORMAT,
-				wal_file_name, instance->name, instance->system_identifier, system_id);
+				wal_file_name, instanceState->instance_name, instance->system_identifier, system_id);
 
 	if (instance->compress_alg == PGLZ_COMPRESS)
 		elog(ERROR, "Cannot use pglz for WAL compression");
@@ -165,7 +165,7 @@ do_archive_push(InstanceConfig *instance, char *wal_file_path,
 	join_path_components(archive_status_dir, pg_xlog_dir, "archive_status");
 
 	/* Create 'archlog_path' directory. Do nothing if it already exists. */
-	//fio_mkdir(instance->arclog_path, DIR_PERMISSION, FIO_BACKUP_HOST);
+	//fio_mkdir(instanceState->instance_wal_subdir_path, DIR_PERMISSION, FIO_BACKUP_HOST);
 
 #ifdef HAVE_LIBZ
 	if (instance->compress_alg == ZLIB_COMPRESS)
@@ -206,7 +206,7 @@ do_archive_push(InstanceConfig *instance, char *wal_file_path,
 			WALSegno *xlogfile = (WALSegno *) parray_get(batch_files, i);
 
 			rc = push_file(xlogfile, archive_status_dir,
-						   pg_xlog_dir, instance->arclog_path,
+						   pg_xlog_dir, instanceState->instance_wal_subdir_path,
 						   overwrite, no_sync,
 						   instance->archive_timeout,
 						   no_ready_rename || (strcmp(xlogfile->name, wal_file_name) == 0) ? true : false,
@@ -231,7 +231,7 @@ do_archive_push(InstanceConfig *instance, char *wal_file_path,
 		archive_push_arg *arg = &(threads_args[i]);
 
 		arg->first_filename = wal_file_name;
-		arg->archive_dir = instance->arclog_path;
+		arg->archive_dir = instanceState->instance_wal_subdir_path;
 		arg->pg_xlog_dir = pg_xlog_dir;
 		arg->archive_status_dir = archive_status_dir;
 		arg->overwrite = overwrite;
@@ -1009,7 +1009,7 @@ setup_push_filelist(const char *archive_status_dir, const char *first_file,
 
  */
 void
-do_archive_get(InstanceConfig *instance, const char *prefetch_dir_arg,
+do_archive_get(InstanceState *instanceState, InstanceConfig *instance, const char *prefetch_dir_arg,
 			   char *wal_file_path, char *wal_file_name, int batch_size,
 			   bool validate_wal)
 {
@@ -1047,8 +1047,8 @@ do_archive_get(InstanceConfig *instance, const char *prefetch_dir_arg,
 	join_path_components(absolute_wal_file_path, current_dir, wal_file_path);
 
 	/* full filepath to WAL file in archive directory.
-	 * backup_path/wal/instance_name/000000010000000000000001 */
-	join_path_components(backup_wal_file_path, instance->arclog_path, wal_file_name);
+	 * $BACKUP_PATH/wal/instance_name/000000010000000000000001 */
+	join_path_components(backup_wal_file_path, instanceState->instance_wal_subdir_path, wal_file_name);
 
 	INSTR_TIME_SET_CURRENT(start_time);
 	if (num_threads > batch_size)
@@ -1099,7 +1099,7 @@ do_archive_get(InstanceConfig *instance, const char *prefetch_dir_arg,
 			 * copy requested file directly from archive.
 			 */
 			if (!next_wal_segment_exists(tli, segno, prefetch_dir, instance->xlog_seg_size))
-				n_fetched = run_wal_prefetch(prefetch_dir, instance->arclog_path,
+				n_fetched = run_wal_prefetch(prefetch_dir, instanceState->instance_wal_subdir_path,
 											 tli, segno, num_threads, false, batch_size,
 											 instance->xlog_seg_size);
 
@@ -1138,7 +1138,7 @@ do_archive_get(InstanceConfig *instance, const char *prefetch_dir_arg,
 //			rmtree(prefetch_dir, false);
 
 			/* prefetch files */
-			n_fetched = run_wal_prefetch(prefetch_dir, instance->arclog_path,
+			n_fetched = run_wal_prefetch(prefetch_dir, instanceState->instance_wal_subdir_path,
 										 tli, segno, num_threads, true, batch_size,
 										 instance->xlog_seg_size);
 

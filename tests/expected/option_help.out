@@ -42,7 +42,7 @@ pg_probackup - utility to manage backup/recovery of PostgreSQL database.
 
   pg_probackup backup -B backup-path -b backup-mode --instance=instance_name
                  [-D pgdata-path] [-C]
-                 [--stream [-S slot-name]] [--temp-slot]
+                 [--stream [-S slot-name] [--temp-slot]]
                  [--backup-pg-log] [-j num-threads] [--progress]
                  [--no-validate] [--skip-block-validation]
                  [--external-dirs=external-directories-paths]
@@ -53,7 +53,7 @@ pg_probackup - utility to manage backup/recovery of PostgreSQL database.
                  [--error-log-filename=error-log-filename]
                  [--log-directory=log-directory]
                  [--log-rotation-size=log-rotation-size]
-                 [--log-rotation-age=log-rotation-age]
+                 [--log-rotation-age=log-rotation-age] [--no-color]
                  [--delete-expired] [--delete-wal] [--merge-expired]
                  [--retention-redundancy=retention-redundancy]
                  [--retention-window=retention-window]
@@ -113,7 +113,7 @@ pg_probackup - utility to manage backup/recovery of PostgreSQL database.
   pg_probackup show -B backup-path
                  [--instance=instance_name [-i backup-id]]
                  [--format=format] [--archive]
-                 [--help]
+                 [--no-color] [--help]
 
   pg_probackup delete -B backup-path --instance=instance_name
                  [-j num-threads] [--progress]
@@ -160,6 +160,20 @@ pg_probackup - utility to manage backup/recovery of PostgreSQL database.
                  --wal-file-name=wal-file-name
                  [-j num-threads] [--batch-size=batch_size]
                  [--no-validate-wal]
+                 [--remote-proto] [--remote-host]
+                 [--remote-port] [--remote-path] [--remote-user]
+                 [--ssh-options]
+                 [--help]
+
+  pg_probackup catchup  -b catchup-mode
+                 --source-pgdata=path_to_pgdata_on_remote_server
+                 --destination-pgdata=path_to_local_dir
+                 [--stream [-S slot-name] [--temp-slot | --perm-slot]]
+                 [-j num-threads]
+                 [-T OLDDIR=NEWDIR]
+                 [--exclude-path=path_prefix]
+                 [-d dbname] [-h host] [-p port] [-U username]
+                 [-w --no-password] [-W --password]
                  [--remote-proto] [--remote-host]
                  [--remote-port] [--remote-path] [--remote-user]
                  [--ssh-options]
