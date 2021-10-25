@@ -13,6 +13,7 @@ ulimit -n 1024
 
 PG_TOG=$(echo $PG_VERSION | sed 's|\.||g')
 
+yum update -y
 # yum upgrade -y || echo 'some packages in docker failed to upgrade'
 # yum install -y sudo
 if [ ${DISTRIB} == 'rhel' ] && [ ${PG_TOG} == '13' ]; then # no packages for PG13 on PGDG

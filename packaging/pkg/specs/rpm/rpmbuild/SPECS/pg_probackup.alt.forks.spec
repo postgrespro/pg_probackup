@@ -43,7 +43,7 @@ cd %{_topdir}/BUILD/postgrespro-%{edition}-%{pgsql_full}
 %if "%{pgsql_major}" == "9.6"
 ./configure --enable-debug
 %else
-./configure --enable-debug --prefix=%{prefix}
+./configure --enable-debug --disable-online-upgrade --prefix=%{prefix}
 %endif
 make -C 'src/common'
 make -C 'src/port'
