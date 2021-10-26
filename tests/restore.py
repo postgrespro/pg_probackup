@@ -4,7 +4,11 @@ from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 import subprocess
 import sys
 from time import sleep
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
+try:
+    from datetime import timezone
+except ImportError:  # py2compat
+    from pytz import timezone
 import hashlib
 import shutil
 import json
