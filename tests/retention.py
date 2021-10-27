@@ -2676,15 +2676,18 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         # Take third FULL BACKUP
         self.backup_node(backup_dir, 'node', node)
 
-        # Purge backups if their summ size more than 10 Mb
+        print(self.show_pb(
+            backup_dir, 'node', as_json=False, as_text=True))
+
+        # Purge backups if their summ size more than 50 Mb
         self.delete_expired(
-            backup_dir, 'node', options=['--retention-size=1', '--expired'])
+            backup_dir, 'node', options=['--retention-size=50', '--expired'])
 
         print(self.show_pb(
             backup_dir, 'node', as_json=False, as_text=True))
 
         # We should get only 1 backup saved
-        self.assertEqual(len(self.show_pb(backup_dir, 'node')), 0)
+        self.assertEqual(len(self.show_pb(backup_dir, 'node')), 1)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -2703,13 +2706,13 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         node.slow_start()
 
         self.set_config(
-            backup_dir, 'node', options=['--retention-size=25','--delete-expired'])
+            backup_dir, 'node', options=['--retention-size=250','--delete-expired'])
 
         # take FULL BACKUP
         self.backup_node(backup_dir, 'node', node)
 
         self.delete_expired(
-            backup_dir, 'node', options=['--retention-size=25', '--delete-expired'])
+            backup_dir, 'node', options=['--retention-size=250', '--delete-expired'])
 
         print(self.show_pb(
             backup_dir, 'node', as_json=False, as_text=True))
@@ -2718,7 +2721,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         self.backup_node(backup_dir, 'node', node)
 
         self.delete_expired(
-            backup_dir, 'node', options=['--retention-size=25', '--delete-expired'])
+            backup_dir, 'node', options=['--retention-size=250', '--delete-expired'])
 
         print(self.show_pb(
             backup_dir, 'node', as_json=False, as_text=True))
@@ -2733,7 +2736,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node', as_json=False, as_text=True))
 
         # We should get all 1 backups removed
-        self.assertEqual(len(self.show_pb(backup_dir, 'node')), 1)
+        self.assertEqual(len(self.show_pb(backup_dir, 'node')), 0)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
