@@ -15,14 +15,17 @@
 
 static int push_file_internal_uncompressed(const char *wal_file_name, const char *pg_xlog_dir,
 								  const char *archive_dir, bool overwrite, bool no_sync,
-								  uint32 archive_timeout);
+								  uint32 archive_timeout, xlogFileType type);
 #ifdef HAVE_LIBZ
 static int push_file_internal_gz(const char *wal_file_name, const char *pg_xlog_dir,
-									 const char *archive_dir, bool overwrite, bool no_sync,
-									 int compress_level, uint32 archive_timeout);
+								 const char *archive_dir, bool overwrite, bool no_sync,
+								 int compress_level, uint32 archive_timeout, xlogFileType type);
 #endif
 static void *push_files(void *arg);
 static void *get_files(void *arg);
+static bool
+get_wal_file_wrapper(const char *filename, const char *archive_root_dir,
+					 const char *to_fullpath, bool prefetch_mode);
 static bool get_wal_file(const char *filename, const char *from_path, const char *to_path,
 													bool prefetch_mode);
 static int get_wal_file_internal(const char *from_path, const char *to_path, FILE *out,
@@ -89,8 +92,9 @@ typedef struct
 
 typedef struct WALSegno
 {
-	char        name[MAXFNAMELEN];
-	volatile    pg_atomic_flag lock;
+	char         name[MAXFNAMELEN];
+	volatile     pg_atomic_flag lock;
+	xlogFileType type;
 } WALSegno;
 
 static int push_file(WALSegno *xlogfile, const char *archive_status_dir,
@@ -101,6 +105,28 @@ static int push_file(WALSegno *xlogfile, const char *archive_status_dir,
 
 static parray *setup_push_filelist(const char *archive_status_dir,
 								   const char *first_file, int batch_size);
+
+static xlogFileType
+get_xlogFileType(const char *filename)
+{
+
+	if IsXLogFileName(filename)
+		return SEGMENT;
+
+	else if IsPartialXLogFileName(filename)
+		return PARTIAL_SEGMENT;
+
+	else if IsBackupHistoryFileName(filename)
+		return BACKUP_HISTORY_FILE;
+
+	else if IsTLHistoryFileName(filename)
+		return HISTORY_FILE;
+
+	else if IsBackupHistoryFileName(filename)
+		return BACKUP_HISTORY_FILE;
+
+	return UNKNOWN;
+}
 
 /*
  * At this point, we already done one roundtrip to archive server
@@ -184,6 +210,8 @@ do_archive_push(InstanceState *instanceState, InstanceConfig *instance, char *wa
 						wal_file_name, n_threads, num_threads,
 						parray_num(batch_files), batch_size,
 						is_compress ? "zlib" : "none");
+
+	/* TODO: create subdirectories here, not in internal functions */
 
 	num_threads = n_threads;
 
@@ -366,12 +394,12 @@ push_file(WALSegno *xlogfile, const char *archive_status_dir,
 	if (!is_compress)
 		rc = push_file_internal_uncompressed(xlogfile->name, pg_xlog_dir,
 											 archive_dir, overwrite, no_sync,
-											 archive_timeout);
+											 archive_timeout, xlogfile->type);
 #ifdef HAVE_LIBZ
 	else
 		rc = push_file_internal_gz(xlogfile->name, pg_xlog_dir, archive_dir,
 								   overwrite, no_sync, compress_level,
-								   archive_timeout);
+								   archive_timeout, xlogfile->type);
 #endif
 
 	/* take '--no-ready-rename' flag into account */
@@ -408,13 +436,14 @@ push_file(WALSegno *xlogfile, const char *archive_status_dir,
 int
 push_file_internal_uncompressed(const char *wal_file_name, const char *pg_xlog_dir,
 								const char *archive_dir, bool overwrite, bool no_sync,
-								uint32 archive_timeout)
+								uint32 archive_timeout, xlogFileType type)
 {
 	FILE	   *in = NULL;
 	int			out = -1;
 	char       *buf = pgut_malloc(OUT_BUF_SIZE); /* 1MB buffer */
 	char		from_fullpath[MAXPGPATH];
 	char		to_fullpath[MAXPGPATH];
+	char        archive_subdir[MAXPGPATH];
 	/* partial handling */
 	struct stat		st;
 	char		to_fullpath_part[MAXPGPATH];
@@ -427,8 +456,16 @@ push_file_internal_uncompressed(const char *wal_file_name, const char *pg_xlog_d
 	/* from path */
 	join_path_components(from_fullpath, pg_xlog_dir, wal_file_name);
 	canonicalize_path(from_fullpath);
+
+	/* calculate subdir in WAL archive */
+	get_archive_subdir(archive_subdir, archive_dir, wal_file_name, type);
+
+	/* create subdirectory */
+	if (fio_mkdir(archive_subdir, DIR_PERMISSION, FIO_BACKUP_HOST) != 0)
+		elog(ERROR, "Cannot create subdirectory in WAL archive: '%s'", archive_subdir);
+
 	/* to path */
-	join_path_components(to_fullpath, archive_dir, wal_file_name);
+	join_path_components(to_fullpath, archive_subdir, wal_file_name);
 	canonicalize_path(to_fullpath);
 
 	/* Open source file for read */
@@ -647,7 +684,7 @@ part_opened:
 int
 push_file_internal_gz(const char *wal_file_name, const char *pg_xlog_dir,
 					  const char *archive_dir, bool overwrite, bool no_sync,
-					  int compress_level, uint32 archive_timeout)
+					  int compress_level, uint32 archive_timeout, xlogFileType type)
 {
 	FILE	   *in = NULL;
 	gzFile		out = NULL;
@@ -655,6 +692,7 @@ push_file_internal_gz(const char *wal_file_name, const char *pg_xlog_dir,
 	char		from_fullpath[MAXPGPATH];
 	char		to_fullpath[MAXPGPATH];
 	char		to_fullpath_gz[MAXPGPATH];
+	char        archive_subdir[MAXPGPATH];
 
 	/* partial handling */
 	struct stat		st;
@@ -669,8 +707,16 @@ push_file_internal_gz(const char *wal_file_name, const char *pg_xlog_dir,
 	/* from path */
 	join_path_components(from_fullpath, pg_xlog_dir, wal_file_name);
 	canonicalize_path(from_fullpath);
+
+	/* calculate subdir in WAL archive */
+	get_archive_subdir(archive_subdir, archive_dir, wal_file_name, type);
+
+	/* create subdirectory */
+	if (fio_mkdir(archive_subdir, DIR_PERMISSION, FIO_BACKUP_HOST) != 0)
+		elog(ERROR, "Cannot create subdirectory in WAL archive: '%s'", archive_subdir);
+
 	/* to path */
-	join_path_components(to_fullpath, archive_dir, wal_file_name);
+	join_path_components(to_fullpath, archive_subdir, wal_file_name);
 	canonicalize_path(to_fullpath);
 
 	/* destination file with .gz suffix */
@@ -940,14 +986,16 @@ setup_push_filelist(const char *archive_status_dir, const char *first_file,
 {
 	int i;
 	WALSegno *xlogfile = NULL;
-	parray  *status_files = NULL;
-	parray  *batch_files = parray_new();
+	parray   *status_files = NULL;
+	parray   *batch_files = parray_new();
 
 	/* guarantee that first filename is in batch list */
 	xlogfile = palloc(sizeof(WALSegno));
 	pg_atomic_init_flag(&xlogfile->lock);
 	snprintf(xlogfile->name, MAXFNAMELEN, "%s", first_file);
 	parray_append(batch_files, xlogfile);
+
+	xlogfile->type = get_xlogFileType(xlogfile->name);
 
 	if (batch_size < 2)
 		return batch_files;
@@ -980,6 +1028,8 @@ setup_push_filelist(const char *archive_status_dir, const char *first_file,
 		pg_atomic_init_flag(&xlogfile->lock);
 
 		snprintf(xlogfile->name, MAXFNAMELEN, "%s", filename);
+
+		xlogfile->type = get_xlogFileType(xlogfile->name);
 		parray_append(batch_files, xlogfile);
 
 		if (parray_num(batch_files) >= batch_size)
@@ -1048,7 +1098,7 @@ do_archive_get(InstanceState *instanceState, InstanceConfig *instance, const cha
 
 	/* full filepath to WAL file in archive directory.
 	 * $BACKUP_PATH/wal/instance_name/000000010000000000000001 */
-	join_path_components(backup_wal_file_path, instanceState->instance_wal_subdir_path, wal_file_name);
+	//join_path_components(backup_wal_file_path, instanceState->instance_wal_subdir_path, wal_file_name);
 
 	INSTR_TIME_SET_CURRENT(start_time);
 	if (num_threads > batch_size)
@@ -1177,7 +1227,7 @@ do_archive_get(InstanceState *instanceState, InstanceConfig *instance, const cha
 
 	while (fail_count < 3)
 	{
-		if (get_wal_file(wal_file_name, backup_wal_file_path, absolute_wal_file_path, false))
+		if (get_wal_file_wrapper(wal_file_name, instanceState->instance_wal_subdir_path, absolute_wal_file_path, false))
 		{
 			fail_count = 0;
 			elog(INFO, "pg_probackup archive-get copied WAL file %s", wal_file_name);
@@ -1260,7 +1310,7 @@ uint32 run_wal_prefetch(const char *prefetch_dir, const char *archive_dir,
 			/* It is ok, maybe requested batch is greater than the number of available
 			 * files in the archive
 			 */
-			if (!get_wal_file(xlogfile->name, from_fullpath, to_fullpath, true))
+			if (!get_wal_file_wrapper(xlogfile->name, archive_dir, to_fullpath, true))
 			{
 				elog(LOG, "Thread [%d]: Failed to prefetch WAL segment %s", 0, xlogfile->name);
 				break;
@@ -1334,7 +1384,7 @@ get_files(void *arg)
 		join_path_components(from_fullpath, args->archive_dir, xlogfile->name);
 		join_path_components(to_fullpath, args->prefetch_dir, xlogfile->name);
 
-		if (!get_wal_file(xlogfile->name, from_fullpath, to_fullpath, true))
+		if (!get_wal_file_wrapper(xlogfile->name, args->archive_dir, to_fullpath, true))
 		{
 			/* It is ok, maybe requested batch is greater than the number of available
 			 * files in the archive
@@ -1351,6 +1401,38 @@ get_files(void *arg)
 	fio_disconnect();
 
 	return NULL;
+}
+
+/*
+ * First we try to copy from WAL archive subdirectory:
+ * Failing that, try WAL archive root directory
+ */
+bool
+get_wal_file_wrapper(const char *filename, const char *archive_root_dir,
+					 const char *to_fullpath, bool prefetch_mode)
+{
+	bool         success = false;
+	char         archive_subdir[MAXPGPATH];
+	char         from_fullpath[MAXPGPATH];
+	xlogFileType type = get_xlogFileType(filename);
+
+	if (type == SEGMENT || type == PARTIAL_SEGMENT || type == BACKUP_HISTORY_FILE)
+	{
+		/* first try subdir ... */
+		get_archive_subdir(archive_subdir, archive_root_dir, filename, type);
+		join_path_components(from_fullpath, archive_subdir, filename);
+
+		success = get_wal_file(filename, from_fullpath, to_fullpath, prefetch_mode);
+	}
+
+	if (!success)
+	{
+		/* ... fallback to archive dir for backward compatibility purposes */
+		join_path_components(from_fullpath, archive_root_dir, filename);
+		success = get_wal_file(filename, from_fullpath, to_fullpath, prefetch_mode);
+	}
+
+	return success;
 }
 
 /*
@@ -1754,4 +1836,31 @@ uint32 maintain_prefetch(const char *prefetch_dir, XLogSegNo first_segno, uint32
 	closedir(dir);
 
 	return n_files;
+}
+
+/* Calculate subdir path in WAL archive directory. Example:
+ * 000000010000000200000013 -> 00000002
+ */
+void
+get_archive_subdir(char *archive_subdir, const char *archive_dir, const char *wal_file_name, xlogFileType type)
+{
+	if (type == SEGMENT || type == PARTIAL_SEGMENT || type == BACKUP_HISTORY_FILE)
+	{
+		int  rc = 0;
+		char tli[MAXFNAMELEN];
+		char log[MAXFNAMELEN];
+		char suffix[MAXFNAMELEN];
+
+		rc = sscanf(wal_file_name, "%08s%08s%s",
+						(char *) &tli, (char *) &log, (char *) &suffix);
+
+		if (rc == 3)
+		{
+			join_path_components(archive_subdir, archive_dir, log);
+			return;
+		}
+	}
+
+	/* for all other files just use root directory of WAL archive */
+	strcpy(archive_subdir, archive_dir);
 }

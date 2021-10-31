@@ -932,14 +932,15 @@ delete_walfiles_in_tli(InstanceState *instanceState, XLogRecPtr keep_lsn, timeli
 		if (interrupted)
 			elog(ERROR, "interrupted during WAL archive purge");
 
-		/* Any segment equal or greater than EndSegNo must be kept
+		/*
+		 * Any segment equal or greater than EndSegNo must be kept
 		 * unless it`s a 'purge all' scenario.
 		 */
 		if (purge_all || wal_file->segno < OldestToKeepSegNo)
 		{
 			char wal_fullpath[MAXPGPATH];
 
-			join_path_components(wal_fullpath, instanceState->instance_wal_subdir_path, wal_file->file.name);
+			join_path_components(wal_fullpath, instanceState->instance_wal_subdir_path, wal_file->file.rel_path);
 
 			/* save segment from purging */
 			if (instance_config.wal_depth >= 0 && wal_file->keep)
@@ -970,6 +971,26 @@ delete_walfiles_in_tli(InstanceState *instanceState, XLogRecPtr keep_lsn, timeli
 
 			wal_deleted = true;
 		}
+
+		//TODO: cleanup
+	}
+
+	/* Remove empty subdirectories */
+	if (!instanceState->wal_archive_subdirs)
+		return;
+
+	for (i = 0; i < parray_num(instanceState->wal_archive_subdirs); i++)
+	{
+		char fullpath[MAXPGPATH];
+		pgFile *file = (pgFile *) parray_get(instanceState->wal_archive_subdirs, i);
+
+		join_path_components(fullpath, instanceState->instance_wal_subdir_path, file->name);
+
+		if (dir_is_empty(fullpath, FIO_LOCAL_HOST))
+			pgFileDelete(file->mode, fullpath);
+
+		pgFileFree(file);
+		// TODO: maintain instanceState->wal_archive_subdirs
 	}
 }
 

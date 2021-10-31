@@ -1238,6 +1238,7 @@ wait_wal_lsn(const char *wal_segment_dir, XLogRecPtr target_lsn, bool is_start_l
 {
 	XLogSegNo	targetSegNo;
 	char		wal_segment_path[MAXPGPATH],
+				wal_segment_subdir[MAXPGPATH],
 				wal_segment[MAXFNAMELEN];
 	bool		file_exists = false;
 	uint32		try_count = 0,
@@ -1255,7 +1256,13 @@ wait_wal_lsn(const char *wal_segment_dir, XLogRecPtr target_lsn, bool is_start_l
 	GetXLogFileName(wal_segment, tli, targetSegNo,
 					instance_config.xlog_seg_size);
 
-	join_path_components(wal_segment_path, wal_segment_dir, wal_segment);
+	// obtain WAL archive subdir for ARCHIVE backup
+	if (!in_stream_dir)
+		get_archive_subdir(wal_segment_subdir, wal_segment_dir, wal_segment, SEGMENT);
+	else
+		strcpy(wal_segment_subdir, wal_segment_dir);
+
+	join_path_components(wal_segment_path, wal_segment_subdir, wal_segment);
 	/*
 	 * In pg_start_backup we wait for 'target_lsn' in 'pg_wal' directory if it is
 	 * stream and non-page backup. Page backup needs archived WAL files, so we

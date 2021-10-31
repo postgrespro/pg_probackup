@@ -115,6 +115,7 @@ typedef struct XLogReaderData
 	gzFile		 gz_xlogfile;
 	char		 gz_xlogpath[MAXPGPATH];
 #endif
+	bool         is_stream;
 } XLogReaderData;
 
 /* Function to process a WAL record */
@@ -172,7 +173,8 @@ static bool RunXLogThreads(const char *archivedir,
 						   bool consistent_read,
 						   xlog_record_function process_record,
 						   XLogRecTarget *last_rec,
-						   bool inclusive_endpoint);
+						   bool inclusive_endpoint,
+						   bool is_stream);
 //static XLogReaderState *InitXLogThreadRead(xlog_thread_arg *arg);
 static bool SwitchThreadToNextWal(XLogReaderState *xlogreader,
 								  xlog_thread_arg *arg);
@@ -254,7 +256,7 @@ extractPageMap(const char *archivedir, uint32 wal_seg_size,
 		extract_isok = RunXLogThreads(archivedir, 0, InvalidTransactionId,
 									  InvalidXLogRecPtr, end_tli, wal_seg_size,
 									  startpoint, endpoint, false, extractPageInfo,
-									  NULL, true);
+									  NULL, true, false);
 	else
 	{
 		/* We have to process WAL located on several different xlog intervals,
@@ -348,7 +350,7 @@ extractPageMap(const char *archivedir, uint32 wal_seg_size,
 			extract_isok = RunXLogThreads(archivedir, 0, InvalidTransactionId,
 									  InvalidXLogRecPtr, tmp_interval->tli, wal_seg_size,
 									  tmp_interval->begin_lsn, tmp_interval->end_lsn,
-									  false, extractPageInfo, NULL, inclusive_endpoint);
+									  false, extractPageInfo, NULL, inclusive_endpoint, false);
 			if (!extract_isok)
 				break;
 
@@ -377,7 +379,7 @@ validate_backup_wal_from_start_to_stop(pgBackup *backup,
 	got_endpoint = RunXLogThreads(archivedir, 0, InvalidTransactionId,
 								  InvalidXLogRecPtr, tli, xlog_seg_size,
 								  backup->start_lsn, backup->stop_lsn,
-								  false, NULL, NULL, true);
+								  false, NULL, NULL, true, backup->stream);
 
 	if (!got_endpoint)
 	{
@@ -490,7 +492,8 @@ validate_wal(pgBackup *backup, const char *archivedir,
 	all_wal = all_wal ||
 		RunXLogThreads(archivedir, target_time, target_xid, target_lsn,
 					   tli, wal_seg_size, backup->stop_lsn,
-					   InvalidXLogRecPtr, true, validateXLogRecord, &last_rec, true);
+					   InvalidXLogRecPtr, true, validateXLogRecord, &last_rec, true,
+					   backup->stream);
 	if (last_rec.rec_time > 0)
 		time2iso(last_timestamp, lengthof(last_timestamp),
 				 timestamptz_to_time_t(last_rec.rec_time), false);
@@ -1017,7 +1020,16 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 
 		GetXLogFileName(xlogfname, reader_data->tli, reader_data->xlogsegno, wal_seg_size);
 
-		join_path_components(reader_data->xlogpath, wal_archivedir, xlogfname);
+		if (reader_data->is_stream)
+			join_path_components(reader_data->xlogpath, wal_archivedir, xlogfname);
+		/* obtain WAL archive subdir for ARCHIVE backup */
+		else
+		{
+			char	archive_subdir[MAXPGPATH];
+			get_archive_subdir(archive_subdir, wal_archivedir, xlogfname, SEGMENT);
+			join_path_components(reader_data->xlogpath, archive_subdir, xlogfname);
+		}
+
 		snprintf(reader_data->gz_xlogpath, MAXPGPATH, "%s.gz", reader_data->xlogpath);
 
 		/* We fall back to using .partial segment in case if we are running
@@ -1191,7 +1203,7 @@ RunXLogThreads(const char *archivedir, time_t target_time,
 			   TransactionId target_xid, XLogRecPtr target_lsn, TimeLineID tli,
 			   uint32 segment_size, XLogRecPtr startpoint, XLogRecPtr endpoint,
 			   bool consistent_read, xlog_record_function process_record,
-			   XLogRecTarget *last_rec, bool inclusive_endpoint)
+			   XLogRecTarget *last_rec, bool inclusive_endpoint, bool is_stream)
 {
 	pthread_t  *threads;
 	xlog_thread_arg *thread_args;
@@ -1255,6 +1267,7 @@ RunXLogThreads(const char *archivedir, time_t target_time,
 						 consistent_read, false);
 		arg->reader_data.xlogsegno = segno_next;
 		arg->reader_data.thread_num = i + 1;
+		arg->reader_data.is_stream = is_stream;
 		arg->process_record = process_record;
 		arg->startpoint = startpoint;
 		arg->endpoint = endpoint;
@@ -1915,7 +1928,7 @@ bool validate_wal_segment(TimeLineID tli, XLogSegNo segno, const char *prefetch_
 
 	rc = RunXLogThreads(prefetch_dir, 0, InvalidTransactionId,
 						InvalidXLogRecPtr, tli, wal_seg_size,
-						startpoint, endpoint, false, NULL, NULL, true);
+						startpoint, endpoint, false, NULL, NULL, true, true);
 
 	num_threads = tmp_num_threads;
 

@@ -647,9 +647,11 @@ typedef struct lsnInterval
 
 typedef enum xlogFileType
 {
+	UNKNOWN,
 	SEGMENT,
-	TEMP_SEGMENT,
+	TEMP_SEGMENT, // '.part' segment created by archive-push 
 	PARTIAL_SEGMENT,
+	HISTORY_FILE,
 	BACKUP_HISTORY_FILE
 } xlogFileType;
 
@@ -814,6 +816,8 @@ typedef struct InstanceState
 	/* $BACKUP_PATH/backups/instance_name */
 	char		instance_wal_subdir_path[MAXPGPATH]; // previously global var arclog_path
 
+	parray     *wal_archive_subdirs;
+
 	/* TODO: Make it more specific */
 	PGconn *conn;
 
@@ -894,6 +898,7 @@ extern void do_archive_push(InstanceState *instanceState, InstanceConfig *instan
 						   bool no_sync, bool no_ready_rename);
 extern void do_archive_get(InstanceState *instanceState, InstanceConfig *instance, const char *prefetch_dir_arg, char *wal_file_path,
 						   char *wal_file_name, int batch_size, bool validate_wal);
+extern void get_archive_subdir(char *archive_subdir, const char * archive_dir, const char *wal_file_name, xlogFileType type);
 
 /* in configure.c */
 extern void do_show_config(void);

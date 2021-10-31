@@ -1628,6 +1628,7 @@ catalog_get_timelines(InstanceState *instanceState, InstanceConfig *instance)
 				else if (strcmp(suffix, "gz") != 0)
 				{
 					elog(WARNING, "unexpected WAL file name \"%s\"", file->name);
+					// TODO: free file
 					continue;
 				}
 			}
@@ -1724,8 +1725,18 @@ catalog_get_timelines(InstanceState *instanceState, InstanceConfig *instance)
 			parray_walk(timelines, pfree);
 			parray_free(timelines);
 		}
+		/* add WAL archive subdirectories to filelist (used only in delete) */
+		else if (S_ISDIR(file->mode) && strspn(file->rel_path, "0123456789ABCDEF") == 8)
+		{
+			if (instanceState->wal_archive_subdirs == NULL)
+				instanceState->wal_archive_subdirs = parray_new();
+			parray_append(instanceState->wal_archive_subdirs, file);
+		}
 		else
+		{
 			elog(WARNING, "unexpected WAL file name \"%s\"", file->name);
+			// TODO: free file
+		}
 	}
 
 	/* save information about backups belonging to each timeline */
