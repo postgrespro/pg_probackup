@@ -338,7 +338,7 @@ typedef enum ShowFormat
 #define BYTES_INVALID		(-1) /* file didn`t changed since previous backup, DELTA backup do not rely on it */
 #define FILE_NOT_FOUND		(-2) /* file disappeared during backup */
 #define BLOCKNUM_INVALID	(-1)
-#define PROGRAM_VERSION	"2.5.2"
+#define PROGRAM_VERSION	"2.5.3"
 
 /* update when remote agent API or behaviour changes */
 #define AGENT_PROTOCOL_VERSION 20501
@@ -1063,6 +1063,7 @@ extern void pgFileDelete(mode_t mode, const char *full_path);
 extern void fio_pgFileDelete(pgFile *file, const char *full_path);
 
 extern void pgFileFree(void *file);
+extern void pgXlogFileFree(void *xlogfile);
 
 extern pg_crc32 pgFileGetCRC(const char *file_path, bool use_crc32c, bool missing_ok);
 extern pg_crc32 pgFileGetCRCgz(const char *file_path, bool use_crc32c, bool missing_ok);
@@ -1142,9 +1143,9 @@ extern bool validate_wal_segment(TimeLineID tli, XLogSegNo segno,
 extern bool read_recovery_info(const char *archivedir, TimeLineID tli,
 							   uint32 seg_size,
 							   XLogRecPtr start_lsn, XLogRecPtr stop_lsn,
-							   time_t *recovery_time);
+							   time_t *recovery_time, bool honor_subdirs);
 extern bool wal_contains_lsn(const char *archivedir, XLogRecPtr target_lsn,
-							 TimeLineID target_tli, uint32 seg_size);
+							 TimeLineID target_tli, uint32 seg_size, bool honor_subdirs);
 extern XLogRecPtr get_prior_record_lsn(const char *archivedir, XLogRecPtr start_lsn,
 								   XLogRecPtr stop_lsn, TimeLineID tli,
 								   bool seek_prev_segment, uint32 seg_size);

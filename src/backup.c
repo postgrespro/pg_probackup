@@ -1238,7 +1238,7 @@ wait_wal_lsn(const char *wal_segment_dir, XLogRecPtr target_lsn, bool is_start_l
 {
 	XLogSegNo	targetSegNo;
 	char		wal_segment_path[MAXPGPATH],
-				wal_segment_subdir[MAXPGPATH],
+				wal_segment_subdir[MAXPGPATH], // used only to check file existence, not actual parsing
 				wal_segment[MAXFNAMELEN];
 	bool		file_exists = false;
 	uint32		try_count = 0,
@@ -1257,10 +1257,10 @@ wait_wal_lsn(const char *wal_segment_dir, XLogRecPtr target_lsn, bool is_start_l
 					instance_config.xlog_seg_size);
 
 	// obtain WAL archive subdir for ARCHIVE backup
-	if (!in_stream_dir)
-		get_archive_subdir(wal_segment_subdir, wal_segment_dir, wal_segment, SEGMENT);
-	else
+	if (in_stream_dir)
 		strcpy(wal_segment_subdir, wal_segment_dir);
+	else
+		get_archive_subdir(wal_segment_subdir, wal_segment_dir, wal_segment, SEGMENT);
 
 	join_path_components(wal_segment_path, wal_segment_subdir, wal_segment);
 	/*
@@ -1319,7 +1319,7 @@ wait_wal_lsn(const char *wal_segment_dir, XLogRecPtr target_lsn, bool is_start_l
 			 */
 			if (!XRecOffIsNull(target_lsn) &&
 				  wal_contains_lsn(wal_segment_dir, target_lsn, tli,
-									instance_config.xlog_seg_size))
+									instance_config.xlog_seg_size, !in_stream_dir))
 				/* Target LSN was found */
 			{
 				elog(LOG, "Found LSN: %X/%X", (uint32) (target_lsn >> 32), (uint32) target_lsn);
@@ -1915,7 +1915,8 @@ pg_stop_backup(InstanceState *instanceState, pgBackup *backup, PGconn *pg_startb
 	if (!read_recovery_info(xlog_path, backup->tli,
 						instance_config.xlog_seg_size,
 						backup->start_lsn, backup->stop_lsn,
-						&backup->recovery_time))
+						&backup->recovery_time,
+						!backup->stream))
 	{
 		elog(LOG, "Failed to find Recovery Time in WAL, forced to trust current_timestamp");
 		backup->recovery_time = stop_backup_result.invocation_time;

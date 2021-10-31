@@ -970,9 +970,12 @@ delete_walfiles_in_tli(InstanceState *instanceState, XLogRecPtr keep_lsn, timeli
 			}
 
 			wal_deleted = true;
-		}
 
-		//TODO: cleanup
+			/* cleanup */
+			pgXlogFileFree(wal_file);
+			parray_remove(tlinfo->xlog_filelist, i);
+			i--;
+		}
 	}
 
 	/* Remove empty subdirectories */
@@ -987,10 +990,12 @@ delete_walfiles_in_tli(InstanceState *instanceState, XLogRecPtr keep_lsn, timeli
 		join_path_components(fullpath, instanceState->instance_wal_subdir_path, file->name);
 
 		if (dir_is_empty(fullpath, FIO_LOCAL_HOST))
+		{
 			pgFileDelete(file->mode, fullpath);
-
-		pgFileFree(file);
-		// TODO: maintain instanceState->wal_archive_subdirs
+			pgFileFree(file);
+			parray_remove(instanceState->wal_archive_subdirs, i);
+			i--;
+		}
 	}
 }
 

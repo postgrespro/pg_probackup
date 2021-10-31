@@ -1298,6 +1298,8 @@ class ProbackupTest(object):
             overwrite=False, compress=True, old_binary=False,
             log_level=False, archive_timeout=False):
 
+        binary_path = self.probackup_path
+
         # parse postgresql.auto.conf
         options = {}
         if replica:
@@ -1306,13 +1308,16 @@ class ProbackupTest(object):
         else:
             options['archive_mode'] = 'on'
 
+        if old_binary:
+            binary_path = self.probackup_old_path
+
         if os.name == 'posix':
             options['archive_command'] = '"{0}" archive-push -B {1} --instance={2} '.format(
-                self.probackup_path, backup_dir, instance)
+                binary_path, backup_dir, instance)
 
         elif os.name == 'nt':
             options['archive_command'] = '"{0}" archive-push -B {1} --instance={2} '.format(
-                self.probackup_path.replace("\\","\\\\"),
+                binary_path.replace("\\","\\\\"),
                 backup_dir.replace("\\","\\\\"), instance)
 
         # don`t forget to kill old_binary after remote ssh release

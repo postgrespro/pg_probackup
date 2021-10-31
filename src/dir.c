@@ -405,6 +405,19 @@ pgFileFree(void *file)
 	pfree(file);
 }
 
+void
+pgXlogFileFree(void *xlogfile)
+{
+	xlogFile	*xlogfile_ptr;
+
+	if (xlogfile == NULL)
+		return;
+
+	xlogfile_ptr = (xlogFile *) xlogfile;
+
+	pg_free(xlogfile_ptr);
+}
+
 /* Compare two pgFile with their path in ascending order of ASCII code. */
 int
 pgFileMapComparePath(const void *f1, const void *f2)

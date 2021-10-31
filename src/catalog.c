@@ -1628,7 +1628,9 @@ catalog_get_timelines(InstanceState *instanceState, InstanceConfig *instance)
 				else if (strcmp(suffix, "gz") != 0)
 				{
 					elog(WARNING, "unexpected WAL file name \"%s\"", file->name);
-					// TODO: free file
+					pgFileFree(file);
+					parray_remove(xlog_files_list, i);
+					i--;
 					continue;
 				}
 			}
@@ -1735,7 +1737,9 @@ catalog_get_timelines(InstanceState *instanceState, InstanceConfig *instance)
 		else
 		{
 			elog(WARNING, "unexpected WAL file name \"%s\"", file->name);
-			// TODO: free file
+			pgFileFree(file);
+			parray_remove(xlog_files_list, i);
+			i--;
 		}
 	}
 
