@@ -1028,10 +1028,14 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 		GetXLogFileName(xlogfname, reader_data->tli, reader_data->xlogsegno, wal_seg_size);
 
 		/* obtain WAL archive subdir for ARCHIVE backup */
+		// TODO: move to separate function and rewrite it 
 		if (reader_data->honor_subdirs)
 		{
 			char	archive_subdir[MAXPGPATH];
 			get_archive_subdir(archive_subdir, wal_archivedir, xlogfname, SEGMENT);
+
+			/* default value for xlogpath for error message */
+			snprintf(reader_data->xlogpath, MAXPGPATH, "%s/%s", archive_subdir, xlogfname);
 
 			/* check existence of wal_dir/xlogid/segment.gz file ... */
 			snprintf(fullpath_gz, MAXPGPATH, "%s/%s.gz", archive_subdir, xlogfname);
@@ -1069,6 +1073,8 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 		/* use directory as-is */
 		else
 		{
+			/* default value for xlogpath for error message */
+			snprintf(reader_data->xlogpath, MAXPGPATH, "%s/%s", wal_archivedir, xlogfname);
 archive_dir:
 #ifdef HAVE_LIBZ
 			/* ... failing that check existence of wal_dir/segment.gz ... */
@@ -1130,7 +1136,6 @@ file_found:
 			elog(LOG, "Thread [%d]: Opening WAL segment \"%s\"",
 				 reader_data->thread_num, reader_data->xlogpath);
 
-			reader_data->xlogexists = true;
 			reader_data->xlogfile = fio_open(reader_data->xlogpath,
 											 O_RDONLY | PG_BINARY, FIO_LOCAL_HOST);
 
@@ -1141,6 +1146,8 @@ file_found:
 					 strerror(errno));
 				return -1;
 			}
+			else
+				reader_data->xlogexists = true;
 		}
 #ifdef HAVE_LIBZ
 		/* Try to open compressed WAL segment */
@@ -1149,7 +1156,6 @@ file_found:
 			elog(LOG, "Thread [%d]: Opening compressed WAL segment \"%s\"",
 				 reader_data->thread_num, reader_data->gz_xlogpath);
 
-			reader_data->xlogexists = true;
 			reader_data->gz_xlogfile = fio_gzopen(reader_data->gz_xlogpath,
 													  "rb", -1, FIO_LOCAL_HOST);
 			if (reader_data->gz_xlogfile == NULL)
@@ -1159,6 +1165,8 @@ file_found:
 					 strerror(errno));
 				return -1;
 			}
+			else
+				reader_data->xlogexists = true;
 		}
 #endif
 		/* Exit without error if WAL segment doesn't exist */
