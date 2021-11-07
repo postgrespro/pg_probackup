@@ -1237,16 +1237,11 @@ wait_wal_lsn(const char *wal_segment_dir, XLogRecPtr target_lsn, bool is_start_l
 			 int timeout_elevel, bool in_stream_dir)
 {
 	XLogSegNo	targetSegNo;
-	char		wal_segment_path[MAXPGPATH],
-//				wal_segment_subdir[MAXPGPATH], // used only to check file existence, not actual parsing
+	char		wal_segment_path[MAXPGPATH], /* used only for reporting */
 				wal_segment[MAXFNAMELEN];
 	uint32		try_count = 0,
 				timeout;
 	char		*wal_delivery_str = in_stream_dir ? "streamed":"archived";
-
-//#ifdef HAVE_LIBZ
-//	char		gz_wal_segment_path[MAXPGPATH];
-//#endif
 
 	/* Compute the name of the WAL file containing requested LSN */
 	GetXLogSegNo(target_lsn, targetSegNo, instance_config.xlog_seg_size);
@@ -1256,12 +1251,15 @@ wait_wal_lsn(const char *wal_segment_dir, XLogRecPtr target_lsn, bool is_start_l
 					instance_config.xlog_seg_size);
 
 	// obtain WAL archive subdir for ARCHIVE backup
-//	if (in_stream_dir)
-//		strcpy(wal_segment_subdir, wal_segment_dir);
-//	else
-//		get_archive_subdir(wal_segment_subdir, wal_segment_dir, wal_segment, SEGMENT);
-//
-//	join_path_components(wal_segment_path, wal_segment_subdir, wal_segment);
+	if (in_stream_dir)
+		join_path_components(wal_segment_path, wal_segment_dir, wal_segment);
+	else
+	{
+		char wal_segment_subdir[MAXPGPATH];
+		get_archive_subdir(wal_segment_subdir, wal_segment_dir, wal_segment, SEGMENT);
+		join_path_components(wal_segment_path, wal_segment_subdir, wal_segment);
+	}
+
 	/*
 	 * In pg_start_backup we wait for 'target_lsn' in 'pg_wal' directory if it is
 	 * stream and non-page backup. Page backup needs archived WAL files, so we
@@ -1281,11 +1279,6 @@ wait_wal_lsn(const char *wal_segment_dir, XLogRecPtr target_lsn, bool is_start_l
 	else
 		elog(LOG, "Looking for LSN %X/%X in segment: %s",
 			 (uint32) (target_lsn >> 32), (uint32) target_lsn, wal_segment);
-
-//#ifdef HAVE_LIBZ
-//	snprintf(gz_wal_segment_path, sizeof(gz_wal_segment_path), "%s.gz",
-//			 wal_segment_path);
-//#endif
 
 	/* Wait until target LSN is archived or streamed */
 	while (true)

@@ -2051,7 +2051,8 @@ static XLogReaderState* WalReaderAllocate(uint32 wal_seg_size, XLogReaderData *r
 
 /*
  * Is WAL file exists in archive directory
- * first check subdirectory, then fallback to archive directory
+ * for stream backup check uncompressed segment in wal_root_dir
+ * for archive backup first check subdirectory, then fallback to archive directory
  */
 bool IsWalFileExists(const char *wal_segment_name, const char *wal_root_dir, bool in_stream_dir)
 {
@@ -2098,11 +2099,11 @@ bool IsWalFileExists(const char *wal_segment_name, const char *wal_root_dir, boo
 	goto not_found;
 
 found_compressed_file:
-	elog(LOG, "Found WAL segment: %s", wal_file_fullpath);
+	elog(LOG, "Found compressed WAL segment: %s", wal_file_fullpath);
 	return true;
 
 found_uncompressed_file:
-	elog(LOG, "Found compressed WAL segment: %s", wal_file_fullpath_gz);
+	elog(LOG, "Found WAL segment: %s", wal_file_fullpath_gz);
 	return true;
 
 not_found:
