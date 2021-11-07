@@ -463,7 +463,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
 
-        wals_dir = os.path.join(backup_dir, 'wal', 'node')
+        wals_dir = os.path.join(backup_dir, 'wal', 'node', '00000000')
         if self.archive_compress:
             filename = '000000010000000000000001.gz'
             file = os.path.join(wals_dir, filename)
@@ -1469,7 +1469,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             self.assertTrue(timeline['status'], 'OK')
 
         # create holes in t3
-        wals_dir = os.path.join(backup_dir, 'wal', 'replica')
+        wals_dir = os.path.join(backup_dir, 'wal', 'replica', '00000000')
         wals = [
                 f for f in os.listdir(wals_dir) if os.path.isfile(os.path.join(wals_dir, f))
                 and not f.endswith('.backup') and not f.endswith('.history') and f.startswith('00000003')
@@ -1479,17 +1479,17 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         # check that t3 is ok
         self.show_archive(backup_dir)
 
-        file = os.path.join(backup_dir, 'wal', 'replica', '000000030000000000000017')
+        file = os.path.join(wals_dir, '000000030000000000000017')
         if self.archive_compress:
             file = file + '.gz'
         os.remove(file)
 
-        file = os.path.join(backup_dir, 'wal', 'replica', '000000030000000000000012')
+        file = os.path.join(wals_dir, '000000030000000000000012')
         if self.archive_compress:
             file = file + '.gz'
         os.remove(file)
 
-        file = os.path.join(backup_dir, 'wal', 'replica', '000000030000000000000013')
+        file = os.path.join(wals_dir, '000000030000000000000013')
         if self.archive_compress:
             file = file + '.gz'
         os.remove(file)
