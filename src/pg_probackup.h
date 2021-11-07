@@ -649,7 +649,7 @@ typedef enum xlogFileType
 {
 	UNKNOWN,
 	SEGMENT,
-	TEMP_SEGMENT, // '.part' segment created by archive-push 
+	TEMP_SEGMENT, // '.part' segment created by archive-push
 	PARTIAL_SEGMENT,
 	HISTORY_FILE,
 	BACKUP_HISTORY_FILE
@@ -1053,6 +1053,7 @@ extern int dir_create_dir(const char *path, mode_t mode, bool strict);
 extern bool dir_is_empty(const char *path, fio_location location);
 
 extern bool fileExists(const char *path, fio_location location);
+extern bool IsWalFileExists(const char *wal_segment_name, const char *archive_dir, bool in_stream_dir);
 extern size_t pgFileSize(const char *path);
 
 extern pgFile *pgFileNew(const char *path, const char *rel_path,

@@ -105,6 +105,7 @@ static int push_file(WALSegno *xlogfile, const char *archive_status_dir,
 
 static parray *setup_push_filelist(const char *archive_status_dir,
 								   const char *first_file, int batch_size);
+static parray *setup_archive_subdirs(parray *batch_files, const char *archive_dir);
 
 static xlogFileType
 get_xlogFileType(const char *filename)
@@ -165,6 +166,7 @@ do_archive_push(InstanceState *instanceState, InstanceConfig *instance, char *wa
 
 	/* files to push in multi-thread mode */
 	parray     *batch_files = NULL;
+	parray     *archive_subdirs = NULL;
 	int         n_threads;
 
 	if (wal_file_name == NULL)
@@ -211,7 +213,19 @@ do_archive_push(InstanceState *instanceState, InstanceConfig *instance, char *wa
 						parray_num(batch_files), batch_size,
 						is_compress ? "zlib" : "none");
 
-	/* TODO: create subdirectories here, not in internal functions */
+	/* Extract subdirectories */
+	archive_subdirs = setup_archive_subdirs(batch_files, instanceState->instance_wal_subdir_path);
+	if (archive_subdirs)
+	{
+		for (i = 0; i < parray_num(archive_subdirs); i++)
+		{
+			char *subdir = (char *) parray_get(archive_subdirs, i);
+			if (fio_mkdir(subdir, DIR_PERMISSION, FIO_BACKUP_HOST) != 0)
+				elog(ERROR, "Cannot create subdirectory in WAL archive: '%s'", subdir);
+			pg_free(subdir);
+		}
+		parray_free(archive_subdirs);
+	}
 
 	num_threads = n_threads;
 
@@ -460,10 +474,6 @@ push_file_internal_uncompressed(const char *wal_file_name, const char *pg_xlog_d
 	/* calculate subdir in WAL archive */
 	get_archive_subdir(archive_subdir, archive_dir, wal_file_name, type);
 
-	/* create subdirectory */
-	if (fio_mkdir(archive_subdir, DIR_PERMISSION, FIO_BACKUP_HOST) != 0)
-		elog(ERROR, "Cannot create subdirectory in WAL archive: '%s'", archive_subdir);
-
 	/* to path */
 	join_path_components(to_fullpath, archive_subdir, wal_file_name);
 	canonicalize_path(to_fullpath);
@@ -710,10 +720,6 @@ push_file_internal_gz(const char *wal_file_name, const char *pg_xlog_dir,
 
 	/* calculate subdir in WAL archive */
 	get_archive_subdir(archive_subdir, archive_dir, wal_file_name, type);
-
-	/* create subdirectory */
-	if (fio_mkdir(archive_subdir, DIR_PERMISSION, FIO_BACKUP_HOST) != 0)
-		elog(ERROR, "Cannot create subdirectory in WAL archive: '%s'", archive_subdir);
 
 	/* to path */
 	join_path_components(to_fullpath, archive_subdir, wal_file_name);
@@ -1863,4 +1869,42 @@ get_archive_subdir(char *archive_subdir, const char *archive_dir, const char *wa
 
 	/* for all other files just use root directory of WAL archive */
 	strcpy(archive_subdir, archive_dir);
+}
+
+/* Extract array of WAL archive subdirs using push filelist */
+parray*
+setup_archive_subdirs(parray *batch_files, const char *archive_dir)
+{
+	int     i;
+	parray *subdirs = NULL;
+	char   *cur_subdir = NULL;
+
+	/*
+	 * - Do we need to sort batch_files?
+	 * - No, we rely on sorting of status files
+	 */
+
+	for (i = 0; i < parray_num(batch_files); i++)
+	{
+		WALSegno *xlogfile = (WALSegno *) parray_get(batch_files, i);
+
+		if (xlogfile->type == SEGMENT || xlogfile->type == PARTIAL_SEGMENT || xlogfile->type == BACKUP_HISTORY_FILE)
+		{
+			char subdir[MAXPGPATH];
+
+			if (!subdirs)
+				subdirs = parray_new();
+
+			get_archive_subdir(subdir, archive_dir, xlogfile->name, xlogfile->type);
+
+			/* do not append the same subdir twice */
+			if (cur_subdir && strcmp(cur_subdir, subdir) == 0)
+				continue;
+
+			cur_subdir = pgut_strdup(subdir);
+			parray_append(subdirs, cur_subdir);
+		}
+	}
+
+	return subdirs;
 }

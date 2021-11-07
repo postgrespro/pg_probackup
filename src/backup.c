@@ -1238,16 +1238,15 @@ wait_wal_lsn(const char *wal_segment_dir, XLogRecPtr target_lsn, bool is_start_l
 {
 	XLogSegNo	targetSegNo;
 	char		wal_segment_path[MAXPGPATH],
-				wal_segment_subdir[MAXPGPATH], // used only to check file existence, not actual parsing
+//				wal_segment_subdir[MAXPGPATH], // used only to check file existence, not actual parsing
 				wal_segment[MAXFNAMELEN];
-	bool		file_exists = false;
 	uint32		try_count = 0,
 				timeout;
 	char		*wal_delivery_str = in_stream_dir ? "streamed":"archived";
 
-#ifdef HAVE_LIBZ
-	char		gz_wal_segment_path[MAXPGPATH];
-#endif
+//#ifdef HAVE_LIBZ
+//	char		gz_wal_segment_path[MAXPGPATH];
+//#endif
 
 	/* Compute the name of the WAL file containing requested LSN */
 	GetXLogSegNo(target_lsn, targetSegNo, instance_config.xlog_seg_size);
@@ -1257,12 +1256,12 @@ wait_wal_lsn(const char *wal_segment_dir, XLogRecPtr target_lsn, bool is_start_l
 					instance_config.xlog_seg_size);
 
 	// obtain WAL archive subdir for ARCHIVE backup
-	if (in_stream_dir)
-		strcpy(wal_segment_subdir, wal_segment_dir);
-	else
-		get_archive_subdir(wal_segment_subdir, wal_segment_dir, wal_segment, SEGMENT);
-
-	join_path_components(wal_segment_path, wal_segment_subdir, wal_segment);
+//	if (in_stream_dir)
+//		strcpy(wal_segment_subdir, wal_segment_dir);
+//	else
+//		get_archive_subdir(wal_segment_subdir, wal_segment_dir, wal_segment, SEGMENT);
+//
+//	join_path_components(wal_segment_path, wal_segment_subdir, wal_segment);
 	/*
 	 * In pg_start_backup we wait for 'target_lsn' in 'pg_wal' directory if it is
 	 * stream and non-page backup. Page backup needs archived WAL files, so we
@@ -1283,30 +1282,15 @@ wait_wal_lsn(const char *wal_segment_dir, XLogRecPtr target_lsn, bool is_start_l
 		elog(LOG, "Looking for LSN %X/%X in segment: %s",
 			 (uint32) (target_lsn >> 32), (uint32) target_lsn, wal_segment);
 
-#ifdef HAVE_LIBZ
-	snprintf(gz_wal_segment_path, sizeof(gz_wal_segment_path), "%s.gz",
-			 wal_segment_path);
-#endif
+//#ifdef HAVE_LIBZ
+//	snprintf(gz_wal_segment_path, sizeof(gz_wal_segment_path), "%s.gz",
+//			 wal_segment_path);
+//#endif
 
 	/* Wait until target LSN is archived or streamed */
 	while (true)
 	{
-		if (!file_exists)
-		{
-			file_exists = fileExists(wal_segment_path, FIO_BACKUP_HOST);
-
-			/* Try to find compressed WAL file */
-			if (!file_exists)
-			{
-#ifdef HAVE_LIBZ
-				file_exists = fileExists(gz_wal_segment_path, FIO_BACKUP_HOST);
-				if (file_exists)
-					elog(LOG, "Found compressed WAL segment: %s", wal_segment_path);
-#endif
-			}
-			else
-				elog(LOG, "Found WAL segment: %s", wal_segment_path);
-		}
+		bool file_exists = IsWalFileExists(wal_segment, wal_segment_dir, in_stream_dir);
 
 		if (file_exists)
 		{

@@ -2048,3 +2048,63 @@ static XLogReaderState* WalReaderAllocate(uint32 wal_seg_size, XLogReaderData *r
 	return XLogReaderAllocate(&SimpleXLogPageRead, reader_data);
 #endif
 }
+
+/*
+ * Is WAL file exists in archive directory
+ * first check subdirectory, then fallback to archive directory
+ */
+bool IsWalFileExists(const char *wal_segment_name, const char *wal_root_dir, bool in_stream_dir)
+{
+	char wal_file_fullpath[MAXPGPATH];
+	char wal_file_fullpath_gz[MAXPGPATH];
+	char wal_segment_subdir[MAXPGPATH];
+
+	if (in_stream_dir)
+	{
+		join_path_components(wal_file_fullpath, wal_root_dir, wal_segment_name);
+		if (fileExists(wal_file_fullpath, FIO_BACKUP_HOST))
+			goto found_uncompressed_file;
+
+		goto not_found;
+	}
+
+	/* obtain subdir in WAL archive */
+	get_archive_subdir(wal_segment_subdir, wal_root_dir, wal_segment_name, SEGMENT);
+
+	/* first try uncompressed segment in WAL archive subdir ... */
+	join_path_components(wal_file_fullpath, wal_segment_subdir, wal_segment_name);
+	if (fileExists(wal_file_fullpath, FIO_BACKUP_HOST))
+		goto found_uncompressed_file;
+
+#ifdef HAVE_LIBZ
+	/* ... fallback to compressed segment in WAL archive subdir ... */
+	snprintf(wal_file_fullpath_gz, MAXPGPATH, "%s.gz", wal_file_fullpath);
+	if (fileExists(wal_file_fullpath_gz, FIO_BACKUP_HOST))
+		goto found_compressed_file;
+#endif
+
+	/* ... fallback to uncompressed segment in archive dir ... */
+	join_path_components(wal_file_fullpath, wal_root_dir, wal_segment_name);
+	if (fileExists(wal_file_fullpath, FIO_BACKUP_HOST))
+		goto found_uncompressed_file;
+
+	/* ... fallback to compressed segment in archive dir */
+#ifdef HAVE_LIBZ
+	snprintf(wal_file_fullpath_gz, MAXPGPATH, "%s.gz", wal_file_fullpath);
+	if (fileExists(wal_file_fullpath_gz, FIO_BACKUP_HOST))
+		goto found_compressed_file;
+#endif
+
+	goto not_found;
+
+found_compressed_file:
+	elog(LOG, "Found WAL segment: %s", wal_file_fullpath);
+	return true;
+
+found_uncompressed_file:
+	elog(LOG, "Found compressed WAL segment: %s", wal_file_fullpath_gz);
+	return true;
+
+not_found:
+	return false;
+}
