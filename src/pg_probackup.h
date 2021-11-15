@@ -91,7 +91,6 @@ extern const char  *PROGRAM_EMAIL;
 #define DEFAULT_PERMANENT_SLOT_NAME	 "pg_probackup_perm_slot";
 
 /* Timeout defaults */
-#define PARTIAL_WAL_TIMER			60
 #define ARCHIVE_TIMEOUT_DEFAULT		300
 #define REPLICA_TIMEOUT_DEFAULT		300
 #define LOCK_TIMEOUT				60

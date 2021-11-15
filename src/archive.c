@@ -30,10 +30,10 @@ static int get_wal_file_internal(const char *from_path, const char *to_path, FIL
 #ifdef HAVE_LIBZ
 static const char *get_gz_error(gzFile gzf, int errnum);
 #endif
-// static void copy_file_attributes(const char *from_path,
-// 								 fio_location from_location,
-// 								 const char *to_path, fio_location to_location,
-// 								 bool unlink_on_error);
+//static void copy_file_attributes(const char *from_path,
+//								 fio_location from_location,
+//								 const char *to_path, fio_location to_location,
+//								 bool unlink_on_error);
 
 static bool next_wal_segment_exists(TimeLineID tli, XLogSegNo segno, const char *prefetch_dir, uint32 wal_seg_size);
 static uint32 run_wal_prefetch(const char *prefetch_dir, const char *archive_dir, TimeLineID tli,
@@ -120,6 +120,7 @@ do_archive_push(InstanceState *instanceState, InstanceConfig *instance, char *wa
 	uint64		i;
 	char		current_dir[MAXPGPATH];
 	char		pg_xlog_dir[MAXPGPATH];
+	char		xlog_wal_path[MAXPGPATH];
 	char		archive_status_dir[MAXPGPATH];
 	uint64		system_id;
 	bool		is_compress = false;
@@ -141,8 +142,6 @@ do_archive_push(InstanceState *instanceState, InstanceConfig *instance, char *wa
 	parray     *batch_files = NULL;
 	int         n_threads;
 
-	char xlog_wal_path[MAXPGPATH];
-
 	if (wal_file_name == NULL)
 		elog(ERROR, "Required parameter is not specified: --wal-file-name %%f");
 
@@ -150,14 +149,14 @@ do_archive_push(InstanceState *instanceState, InstanceConfig *instance, char *wa
 
 	if (wal_file_path == NULL)
 	{
-		elog(INFO, "Required parameter is not specified: --wal_file_path %%p "
+		elog(INFO, "Optional parameter is not specified: --wal_file_path %%p "
 					"Setting wal-file-path by default");
 		wal_file_path = xlog_wal_path;
 	}
 
- 	if (strcmp(wal_file_path, xlog_wal_path)!=0)
+	if (strcmp(wal_file_path, xlog_wal_path) != 0)
 	{
- 		elog(INFO, "wal_file_path is setted by user %s", wal_file_path);
+		elog(INFO, "wal_file_path is setted by user %s", wal_file_path);
 
 		join_path_components(pg_xlog_dir, instance->pgdata, XLOGDIR);
 	}
@@ -178,7 +177,7 @@ do_archive_push(InstanceState *instanceState, InstanceConfig *instance, char *wa
 		if (system_id != instance->system_identifier)
 			elog(ERROR, "Refuse to push WAL segment %s into archive. Instance parameters mismatch."
 						"Instance '%s' should have SYSTEM_ID = " UINT64_FORMAT " instead of " UINT64_FORMAT,
-					wal_file_name, instance->name, instance->system_identifier, system_id);
+					wal_file_name, instanceState->instance_name, instance->system_identifier, system_id);
 
 		if (instance->compress_alg == PGLZ_COMPRESS)
 			elog(ERROR, "Cannot use pglz for WAL compression");
@@ -927,30 +926,30 @@ get_gz_error(gzFile gzf, int errnum)
 }
 #endif
 
-// /* Copy file attributes */
-// static void
-// copy_file_attributes(const char *from_path, fio_location from_location,
-// 		  const char *to_path, fio_location to_location,
-// 		  bool unlink_on_error)
-// {
-// 	struct stat st;
-
-// 	if (fio_stat(from_path, &st, true, from_location) == -1)
-// 	{
-// 		if (unlink_on_error)
-// 			fio_unlink(to_path, to_location);
-// 		elog(ERROR, "Cannot stat file \"%s\": %s",
-// 			 from_path, strerror(errno));
-// 	}
-
-// 	if (fio_chmod(to_path, st.st_mode, to_location) == -1)
-// 	{
-// 		if (unlink_on_error)
-// 			fio_unlink(to_path, to_location);
-// 		elog(ERROR, "Cannot change mode of file \"%s\": %s",
-// 			 to_path, strerror(errno));
-// 	}
-// }
+/* Copy file attributes */
+//static void
+//copy_file_attributes(const char *from_path, fio_location from_location,
+//		  const char *to_path, fio_location to_location,
+//		  bool unlink_on_error)
+//{
+//	struct stat st;
+//
+//	if (fio_stat(from_path, &st, true, from_location) == -1)
+//	{
+//		if (unlink_on_error)
+//			fio_unlink(to_path, to_location);
+//		elog(ERROR, "Cannot stat file \"%s\": %s",
+//			 from_path, strerror(errno));
+//	}
+//
+//	if (fio_chmod(to_path, st.st_mode, to_location) == -1)
+//	{
+//		if (unlink_on_error)
+//			fio_unlink(to_path, to_location);
+//		elog(ERROR, "Cannot change mode of file \"%s\": %s",
+//			 to_path, strerror(errno));
+//	}
+//}
 
 /* Look for files with '.ready' suffix in archive_status directory
  * and pack such files into batch sized array.
