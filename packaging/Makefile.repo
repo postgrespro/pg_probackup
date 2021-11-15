@@ -113,6 +113,7 @@ build/repo_suse_15.2:
 repo_finish:
 #	cd build/data/www/$(PBK_PKG_REPO)/
 	cd $(BUILDDIR)/data/www/$(PBK_PKG_REPO)/rpm && sudo ln -nsf $(PBK_VERSION) latest
+	# following line only for vanilla
 	cd $(BUILDDIR)/data/www/$(PBK_PKG_REPO)/srpm && sudo ln -nsf $(PBK_VERSION) latest
 
 #	sudo ln -rfs build/data/www/$(PBK_PKG_REPO)/rpm/${PBK_VERSION} build/data/www/$(PBK_PKG_REPO)/rpm/latest

@@ -4,24 +4,28 @@ build/ubuntu_20.04_9.5:
 	touch build/ubuntu_20.04_9.5
 
 build/ubuntu_20.04_9.6:
-	$(call build_deb,ubuntu,20.04,focal,9.6,9.6.21)
+	$(call build_deb,ubuntu,20.04,focal,9.6,9.6.23)
 	touch build/ubuntu_20.04_9.6
 
 build/ubuntu_20.04_10:
-	$(call build_deb,ubuntu,20.04,focal,10,10.16)
+	$(call build_deb,ubuntu,20.04,focal,10,10.18)
 	touch build/ubuntu_20.04_10
 
 build/ubuntu_20.04_11:
-	$(call build_deb,ubuntu,20.04,focal,11,11.11)
+	$(call build_deb,ubuntu,20.04,focal,11,11.13)
 	touch build/ubuntu_20.04_11
 
 build/ubuntu_20.04_12:
-	$(call build_deb,ubuntu,20.04,focal,12,12.6)
+	$(call build_deb,ubuntu,20.04,focal,12,12.8)
 	touch build/ubuntu_20.04_12
 
 build/ubuntu_20.04_13:
-	$(call build_deb,ubuntu,20.04,focal,13,13.2)
+	$(call build_deb,ubuntu,20.04,focal,13,13.4)
 	touch build/ubuntu_20.04_13
+
+build/ubuntu_20.04_14:
+	$(call build_deb,ubuntu,20.04,focal,14,14.0)
+	touch build/ubuntu_20.04_14
 
 # UBUNTU 18.04
 build/ubuntu_18.04_9.5:
@@ -29,24 +33,28 @@ build/ubuntu_18.04_9.5:
 	touch build/ubuntu_18.04_9.5
 
 build/ubuntu_18.04_9.6:
-	$(call build_deb,ubuntu,18.04,bionic,9.6,9.6.21)
+	$(call build_deb,ubuntu,18.04,bionic,9.6,9.6.23)
 	touch build/ubuntu_18.04_9.6
 
 build/ubuntu_18.04_10:
-	$(call build_deb,ubuntu,18.04,bionic,10,10.16)
+	$(call build_deb,ubuntu,18.04,bionic,10,10.18)
 	touch build/ubuntu_18.04_10
 
 build/ubuntu_18.04_11:
-	$(call build_deb,ubuntu,18.04,bionic,11,11.11)
+	$(call build_deb,ubuntu,18.04,bionic,11,11.13)
 	touch build/ubuntu_18.04_11
 
 build/ubuntu_18.04_12:
-	$(call build_deb,ubuntu,18.04,bionic,12,12.6)
+	$(call build_deb,ubuntu,18.04,bionic,12,12.8)
 	touch build/ubuntu_18.04_12
 
 build/ubuntu_18.04_13:
-	$(call build_deb,ubuntu,18.04,bionic,13,13.2)
+	$(call build_deb,ubuntu,18.04,bionic,13,13.4)
 	touch build/ubuntu_18.04_13
+
+build/ubuntu_18.04_14:
+	$(call build_deb,ubuntu,18.04,bionic,14,14.0)
+	touch build/ubuntu_18.04_14
 
 # UBUNTU 16.04
 build/ubuntu_16.04_9.5:
@@ -54,24 +62,29 @@ build/ubuntu_16.04_9.5:
 	touch build/ubuntu_16.04_9.5
 
 build/ubuntu_16.04_9.6:
-	$(call build_deb,ubuntu,16.04,xenial,9.6,9.6.21)
+	$(call build_deb,ubuntu,16.04,xenial,9.6,9.6.23)
 	touch build/ubuntu_16.04_9.6
 
 build/ubuntu_16.04_10:
-	$(call build_deb,ubuntu,16.04,xenial,10,10.16)
+	$(call build_deb,ubuntu,16.04,xenial,10,10.18)
 	touch build/ubuntu_16.04_10
 
 build/ubuntu_16.04_11:
-	$(call build_deb,ubuntu,16.04,xenial,11,11.11)
+	$(call build_deb,ubuntu,16.04,xenial,11,11.13)
 	touch build/ubuntu_16.04_11
 
 build/ubuntu_16.04_12:
-	$(call build_deb,ubuntu,16.04,xenial,12,12.6)
+	$(call build_deb,ubuntu,16.04,xenial,12,12.8)
 	touch build/ubuntu_16.04_12
 
 build/ubuntu_16.04_13:
-	$(call build_deb,ubuntu,16.04,xenial,13,13.2)
+	$(call build_deb,ubuntu,16.04,xenial,13,13.4)
 	touch build/ubuntu_16.04_13
+
+build/ubuntu_16.04_14:
+	$(call build_deb,ubuntu,16.04,xenial,14,14.0)
+	touch build/ubuntu_16.04_14
+
 
 # UBUNTU 14.04
 build/ubuntu_14.04_9.5:
@@ -79,21 +92,25 @@ build/ubuntu_14.04_9.5:
 	touch build/ubuntu_14.04_9.5
 
 build/ubuntu_14.04_9.6:
-	$(call build_deb,ubuntu,14.04,trusty,9.6,9.6.21)
+	$(call build_deb,ubuntu,14.04,trusty,9.6,9.6.23)
 	touch build/ubuntu_14.04_9.6
 
 build/ubuntu_14.04_10:
-	$(call build_deb,ubuntu,14.04,trusty,10,10.16)
+	$(call build_deb,ubuntu,14.04,trusty,10,10.18)
 	touch build/ubuntu_14.04_10
 
 build/ubuntu_14.04_11:
-	$(call build_deb,ubuntu,14.04,trusty,11,11.11)
+	$(call build_deb,ubuntu,14.04,trusty,11,11.13)
 	touch build/ubuntu_14.04_11
 
 build/ubuntu_14.04_12:
-	$(call build_deb,ubuntu,14.04,trusty,12,12.6)
+	$(call build_deb,ubuntu,14.04,trusty,12,12.8)
 	touch build/ubuntu_14.04_12
 
 build/ubuntu_14.04_13:
-	$(call build_deb,ubuntu,14.04,trusty,13,13.2)
+	$(call build_deb,ubuntu,14.04,trusty,13,13.4)
 	touch build/ubuntu_14.04_13
+
+build/ubuntu_14.04_14:
+	$(call build_deb,ubuntu,14.04,trusty,14,14.0)
+	touch build/ubuntu_14.04_14

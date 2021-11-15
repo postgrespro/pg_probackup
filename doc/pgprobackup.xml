@@ -143,6 +143,14 @@ doc/src/sgml/pgprobackup.sgml
    <arg choice="plain"><option>--wal-file-name</option> <replaceable>wal_file_name</replaceable></arg>
    <arg rep="repeat"><replaceable>option</replaceable></arg>
   </cmdsynopsis>
+  <cmdsynopsis>
+   <command>pg_probackup</command>
+   <arg choice="plain"><option>catchup</option></arg>
+   <arg choice="plain"><option>-b</option> <replaceable>catchup_mode</replaceable></arg>
+   <arg choice="plain"><option>--source-pgdata</option>=<replaceable>path_to_pgdata_on_remote_server</replaceable></arg>
+   <arg choice="plain"><option>--destination-pgdata</option>=<replaceable>path_to_local_dir</replaceable></arg>
+   <arg rep="repeat"><replaceable>option</replaceable></arg>
+  </cmdsynopsis>
 
   </refsynopsisdiv>
 
@@ -281,6 +289,11 @@ doc/src/sgml/pgprobackup.sgml
     <listitem>
       <para>
         Partial restore: restoring only the specified databases.
+      </para>
+    </listitem>
+    <listitem>
+      <para>
+        Catchup: cloning a <productname>PostgreSQL</productname> instance for a fallen-behind standby server to <quote>catch up</quote> with master.
       </para>
     </listitem>
   </itemizedlist>
@@ -606,6 +619,7 @@ BEGIN;
 CREATE ROLE backup WITH LOGIN;
 GRANT USAGE ON SCHEMA pg_catalog TO backup;
 GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup;
+GRANT EXECUTE ON FUNCTION pg_catalog.set_config(text, text, boolean) TO backup;
 GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup;
 GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean) TO backup;
 GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup() TO backup;
@@ -624,6 +638,7 @@ BEGIN;
 CREATE ROLE backup WITH LOGIN;
 GRANT USAGE ON SCHEMA pg_catalog TO backup;
 GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup;
+GRANT EXECUTE ON FUNCTION pg_catalog.set_config(text, text, boolean) TO backup;
 GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup;
 GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean, boolean) TO backup;
 GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup(boolean) TO backup;
@@ -644,6 +659,7 @@ BEGIN;
 CREATE ROLE backup WITH LOGIN;
 GRANT USAGE ON SCHEMA pg_catalog TO backup;
 GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup;
+GRANT EXECUTE ON FUNCTION pg_catalog.set_config(text, text, boolean) TO backup;
 GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup;
 GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean, boolean) TO backup;
 GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup(boolean, boolean) TO backup;
@@ -1076,7 +1092,8 @@ GRANT SELECT ON TABLE pg_catalog.pg_database TO backup;
             mode: <xref linkend="pbk-add-instance"/>,
             <xref linkend="pbk-backup"/>,
             <xref linkend="pbk-restore"/>,
-            <xref linkend="pbk-archive-push"/>,
+            <xref linkend="pbk-catchup"/>,
+            <xref linkend="pbk-archive-push"/>, and
             <xref linkend="pbk-archive-get"/>.
           </para>
         </listitem>
@@ -1162,7 +1179,7 @@ GRANT SELECT ON TABLE pg_catalog.pg_database TO backup;
     </para>
     <note>
      <para>
-      PTRACK versions lower than 2.0 are deprecated. Postgres Pro Standard and Postgres Pro Enterprise
+      PTRACK versions lower than 2.0 are deprecated and not supported. Postgres Pro Standard and Postgres Pro Enterprise
       versions starting with 11.9.1 contain PTRACK 2.0. Upgrade your server to avoid issues in backups
       that you will take in future and be sure to take fresh backups of your clusters with the upgraded
       PTRACK since the backups taken with PTRACK 1.x might be corrupt.
@@ -1217,34 +1234,6 @@ CREATE EXTENSION ptrack;
      changing <varname>ptrack.map_size</varname>.
     </para>
    </note>
-
-    <para>
-     For older <productname>PostgreSQL</productname> versions,
-     PTRACK required taking backups in the exclusive mode
-     to provide exclusive access to bitmaps with changed blocks.
-     To set up PTRACK backups for <productname>PostgreSQL</productname> 10
-     or lower, do the following:
-    </para>
-    <orderedlist>
-      <listitem>
-        <para>
-          Set the <parameter>ptrack_enable</parameter> parameter to
-          <literal>on</literal>.
-        </para>
-      </listitem>
-      <listitem>
-        <para>
-          Grant the right to execute <application>PTRACK</application>
-          functions to the <literal>backup</literal> role
-          <emphasis role="strong">in every database</emphasis> of the
-          cluster:
-        </para>
-        <programlisting>
-GRANT EXECUTE ON FUNCTION pg_catalog.pg_ptrack_clear() TO backup;
-GRANT EXECUTE ON FUNCTION pg_catalog.pg_ptrack_get_and_clear(oid, oid) TO backup;
-</programlisting>
-      </listitem>
-    </orderedlist>
 
   </refsect2>
 </refsect1>
@@ -1459,6 +1448,7 @@ pg_probackup backup -B <replaceable>backup_dir</replaceable> --instance <replace
       </para>
     </refsect3>
   </refsect2>
+
   <refsect2 id="pbk-verifying-a-cluster">
     <title>Performing Cluster Verification</title>
     <para>
@@ -1534,6 +1524,7 @@ pg_probackup checkdb --amcheck --skip-block-validation [<replaceable>connection_
       higher cost of CPU, memory, and I/O consumption.
     </para>
   </refsect2>
+
   <refsect2 id="pbk-validating-backups">
     <title>Validating a Backup</title>
     <para>
@@ -2101,7 +2092,8 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
       <xref linkend="pbk-restore"/>,
       <xref linkend="pbk-merge"/>,
       <xref linkend="pbk-delete"/>,
-      <xref linkend="pbk-checkdb"/> and
+      <xref linkend="pbk-catchup"/>,
+      <xref linkend="pbk-checkdb"/>, and
       <xref linkend="pbk-validate"/> processes can be
       executed on several parallel threads. This can significantly
       speed up <application>pg_probackup</application> operation given enough resources (CPU
@@ -3418,6 +3410,175 @@ pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replace
     </para>
 
 </refsect2>
+
+  <refsect2 id="pbk-creating-backup-to-catchup">
+    <title>Cloning and Synchronizing <productname>PostgreSQL</productname> Instance</title>
+    <para>
+      <application>pg_probackup</application> can create a copy of a <productname>PostgreSQL</productname>
+      instance directly, without using the backup catalog. To do this, you can run the <xref linkend="pbk-catchup"/> command.
+      It can be useful in the following cases:
+      <itemizedlist>
+        <listitem>
+          <para>To add a new standby server.</para>
+          <para>Usually, <ulink url="https://postgrespro.com/docs/postgresql/current/app-pgbasebackup">pg_basebackup</ulink>
+          is used to create a copy of a <productname>PostgreSQL</productname> instance. If the data directory of the destination instance
+          is empty, the <command>catchup</command> command works similarly, but it can be faster if run in parallel mode.</para>
+        </listitem>
+        <listitem>
+          <para>To have a fallen-behind standby server <quote>catch up</quote> with master.</para>
+          <para>Under write-intensive load, replicas may fail to replay WAL fast enough to keep up with master and hence may lag behind.
+          A usual solution to create a new replica and switch to it requires a lot of extra space and data transfer. The <command>catchup</command>
+          command allows you to update an existing replica much faster by bringing differences from master.</para>
+        </listitem>
+      </itemizedlist>
+    </para>
+
+    <para>
+      <command>catchup</command> is different from other <application>pg_probackup</application>
+      operations:
+      <itemizedlist>
+        <listitem>
+          <para>
+           The backup catalog is not required.
+          </para>
+        </listitem>
+        <listitem>
+          <para>
+           STREAM WAL delivery mode is only supported.
+          </para>
+        </listitem>
+        <listitem>
+          <para>
+           Copying external directories
+           is not supported.
+          </para>
+        </listitem>
+        <listitem>
+          <para>
+           DDL commands
+           <ulink url="https://postgrespro.com/docs/postgresql/current/sql-createtablespace"
+           ><command>CREATE TABLESPACE</command></ulink
+           >/<ulink url="https://postgrespro.com/docs/postgresql/current/sql-droptablespace"
+           ><command>DROP TABLESPACE</command></ulink>
+           cannot be run simultaneously with <command>catchup</command>.
+          </para>
+        </listitem>
+        <listitem>
+          <para>
+           <command>catchup</command> takes configuration files, such as
+           <filename>postgresql.conf</filename>, <filename>postgresql.auto.conf</filename>,
+           or <filename>pg_hba.conf</filename>, from the source server and overwrites them
+           on the target server. The <option>--exclude-path</option> option allows you to keep
+           the configuration files intact.
+          </para>
+        </listitem>
+      </itemizedlist>
+    </para>
+
+    <para>
+     To prepare for cloning/synchronizing a <productname>PostgreSQL</productname> instance,
+     set up the source instance server as follows:
+      <itemizedlist>
+        <listitem>
+          <para>
+           <link linkend="pbk-configuring-the-database-cluster">Configure
+           the database cluster</link> for the instance to copy.
+          </para>
+        </listitem>
+        <listitem>
+          <para>
+           To copy from a remote server, <link linkend="pbk-configuring-the-remote-mode">configure the remote mode</link>.
+          </para>
+        </listitem>
+        <listitem>
+          <para>
+           To use the PTRACK catchup mode, <link linkend="pbk-setting-up-ptrack-backups">set up PTRACK backups</link>.
+          </para>
+        </listitem>
+      </itemizedlist>
+    </para>
+
+    <para>
+      Before cloning/synchronizing a <productname>PostgreSQL</productname> instance, ensure that the source
+      instance server is running and accepting connections. To clone/sync a <productname>PostgreSQL</productname> instance,
+      on the server with the destination instance, you can run
+      the <xref linkend="pbk-catchup"/> command as follows:
+    </para>
+    <programlisting>
+pg_probackup catchup -b <replaceable>catchup_mode</replaceable> --source-pgdata=<replaceable>path_to_pgdata_on_remote_server</replaceable> --destination-pgdata=<replaceable>path_to_local_dir</replaceable> --stream [<replaceable>connection_options</replaceable>] [<replaceable>remote_options</replaceable>]
+</programlisting>
+    <para>
+      Where <replaceable>catchup_mode</replaceable> can take one of the
+      following values: <literal>FULL</literal>, <literal>DELTA</literal>, or <literal>PTRACK</literal>.
+    </para>
+    <itemizedlist spacing="compact">
+      <listitem>
+        <para>
+          FULL — creates a full copy of the <productname>PostgreSQL</productname> instance.
+          The data directory of the destination instance must be empty for this mode.
+        </para>
+      </listitem>
+      <listitem>
+        <para>
+          DELTA — reads all data files in the data directory and
+          creates an incremental copy for pages that have changed
+          since the destination instance was shut down.
+        </para>
+      </listitem>
+      <listitem>
+        <para>
+          PTRACK — tracking page changes on the fly,
+          only reads and copies pages that have changed since the point of divergence
+          of the source and destination instances.
+          <warning>
+            <para>
+             PTRACK catchup mode requires <application>PTRACK</application>
+             not earlier than 2.0 and hence, <productname>PostgreSQL</productname> not earlier than 11.
+            </para>
+          </warning>
+        </para>
+      </listitem>
+    </itemizedlist>
+    <para>
+      By specifying the <option>--stream</option> option, you can set
+      <link linkend="pbk-stream-mode">STREAM</link> WAL delivery mode
+      of copying, which will include all the necessary WAL files by streaming them from
+      the instance server via replication protocol.
+    </para>
+    <para>
+      You can use <link linkend="pbk-connection-opts">connection_options</link> to specify
+      the connection to the source database cluster. If it is located on a different server,
+      also specify <link linkend="pbk-remote-server-opts">remote_options</link>.
+    </para>
+    <para>
+      If the source database cluster contains tablespaces that must be located in
+      a different directory, additionally specify the <option>--tablespace-mapping</option>
+      option:
+     <programlisting>
+pg_probackup catchup -b <replaceable>catchup_mode</replaceable> --source-pgdata=<replaceable>path_to_pgdata_on_remote_server</replaceable> --destination-pgdata=<replaceable>path_to_local_dir</replaceable> --stream --tablespace-mapping=<replaceable>OLDDIR</replaceable>=<replaceable>NEWDIR</replaceable>
+</programlisting>
+      To run the <command>catchup</command> command on parallel threads, specify the number
+      of threads with the <option>--threads</option> option:
+     <programlisting>
+pg_probackup catchup -b <replaceable>catchup_mode</replaceable> --source-pgdata=<replaceable>path_to_pgdata_on_remote_server</replaceable> --destination-pgdata=<replaceable>path_to_local_dir</replaceable> --stream --threads=<replaceable>num_threads</replaceable>
+</programlisting>
+    </para>
+    <para>
+      For example, assume that a remote standby server with the <productname>PostgreSQL</productname> instance having <filename>/replica-pgdata</filename> data directory has fallen behind. To sync this instance with the one in <filename>/master-pgdata</filename> data directory, you can run
+      the <command>catchup</command> command in the <literal>PTRACK</literal> mode on four parallel threads as follows:
+      <programlisting>
+pg_probackup catchup --source-pgdata=/master-pgdata --destination-pgdata=/replica-pgdata -p 5432 -d postgres -U remote-postgres-user --stream --backup-mode=PTRACK --remote-host=remote-hostname --remote-user=remote-unix-username -j 4 --exclude-path=postgresql.conf --exclude-path=postgresql.auto.conf --exclude-path=pg_hba.conf --exclude-path=pg_ident.conf
+</programlisting>
+      Note that in this example, the configuration files will not be overwritten during synchronization.
+    </para>
+    <para>
+      Another example shows how you can add a new remote standby server with the <productname>PostgreSQL</productname> data directory <filename>/replica-pgdata</filename> by running the <command>catchup</command> command in the <literal>FULL</literal> mode
+      on four parallel threads:
+<programlisting>
+pg_probackup catchup --source-pgdata=/master-pgdata --destination-pgdata=/replica-pgdata -p 5432 -d postgres -U remote-postgres-user --stream --backup-mode=FULL --remote-host=remote-hostname --remote-user=remote-unix-username -j 4
+</programlisting>
+    </para>
+  </refsect2>
 </refsect1>
 
 <refsect1 id="pbk-reference">
@@ -3576,7 +3737,7 @@ pg_probackup show-config -B <replaceable>backup_dir</replaceable> --instance <re
       <title>show</title>
       <programlisting>
 pg_probackup show -B <replaceable>backup_dir</replaceable>
-[--help] [--instance <replaceable>instance_name</replaceable> [-i <replaceable>backup_id</replaceable> | --archive]] [--format=plain|json]
+[--help] [--instance <replaceable>instance_name</replaceable> [-i <replaceable>backup_id</replaceable> | --archive]] [--format=plain|json] [--no-color]
 </programlisting>
       <para>
         Shows the contents of the backup catalog. If
@@ -3591,6 +3752,8 @@ pg_probackup show -B <replaceable>backup_dir</replaceable>
         plain text. You can specify the
         <literal>--format=json</literal> option to get the result
         in the <acronym>JSON</acronym> format.
+        If <literal>--no-color</literal> flag is used,
+        then the output is not colored.
       </para>
       <para>
         For details on usage, see the sections
@@ -4189,7 +4352,7 @@ pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replace
       <para>
         For details, see the sections
         <link linkend="pbk-deleting-backups">Deleting Backups</link>,
-        <link linkend="pbk-retention-opts">Retention Options</link> and
+        <link linkend="pbk-retention-opts">Retention Options</link>, and
         <link linkend="pbk-configuring-retention-policy">Configuring
         Retention Policy</link>.
       </para>
@@ -4286,6 +4449,203 @@ pg_probackup archive-get -B <replaceable>backup_dir</replaceable> --instance <re
 
       <para>
         For details, see section <link linkend="pbk-archiving-options">Archiving Options</link>.
+      </para>
+    </refsect3>
+
+    <refsect3 id="pbk-catchup" xreflabel="catchup">
+      <title>catchup</title>
+      <programlisting>
+pg_probackup catchup -b <replaceable>catchup_mode</replaceable>
+--source-pgdata=<replaceable>path_to_pgdata_on_remote_server</replaceable>
+--destination-pgdata=<replaceable>path_to_local_dir</replaceable>
+[--help] [-j | --threads=<replaceable>num_threads</replaceable>] [--stream]
+[--temp-slot] [-P | --perm-slot] [-S | --slot=<replaceable>slot_name</replaceable>]
+[--exclude-path=<replaceable>PATHNAME</replaceable>]
+[-T <replaceable>OLDDIR</replaceable>=<replaceable>NEWDIR</replaceable>]
+[<replaceable>connection_options</replaceable>] [<replaceable>remote_options</replaceable>]
+</programlisting>
+      <para>
+        Creates a copy of a <productname>PostgreSQL</productname>
+        instance without using the backup catalog.
+
+      <variablelist>
+      <varlistentry>
+<term><option>-b <replaceable>catchup_mode</replaceable></option></term>
+<term><option>--backup-mode=<replaceable>catchup_mode</replaceable></option></term>
+      <listitem>
+      <para>
+        Specifies the catchup mode to use. Possible values are:
+
+      <itemizedlist spacing="compact">
+        <listitem>
+          <para>
+            <literal>FULL</literal> — creates a full copy of the <productname>PostgreSQL</productname> instance.
+          </para>
+        </listitem>
+        <listitem>
+          <para>
+            <literal>DELTA</literal> — reads all data files in the data directory and
+            creates an incremental copy for pages that have changed
+            since the destination instance was shut down.
+          </para>
+        </listitem>
+        <listitem>
+          <para>
+            <literal>PTRACK</literal> — tracking page changes on the fly,
+            only reads and copies pages that have changed since the point of divergence
+            of the source and destination instances.
+            <warning>
+              <para>
+               PTRACK catchup mode requires <application>PTRACK</application>
+               not earlier than 2.0 and hence, <productname>PostgreSQL</productname> not earlier than 11.
+              </para>
+            </warning>
+          </para>
+        </listitem>
+      </itemizedlist>
+      </para>
+      </listitem>
+      </varlistentry>
+
+      <varlistentry>
+<term><option>--source-pgdata=<replaceable>path_to_pgdata_on_remote_server</replaceable></option></term>
+      <listitem>
+      <para>
+        Specifies the path to the data directory of the instance to be copied. The path can be local or remote.
+      </para>
+      </listitem>
+      </varlistentry>
+
+      <varlistentry>
+<term><option>--destination-pgdata=<replaceable>path_to_local_dir</replaceable></option></term>
+      <listitem>
+      <para>
+        Specifies the path to the local data directory to copy to.
+      </para>
+      </listitem>
+      </varlistentry>
+
+      <varlistentry>
+<term><option>-j <replaceable>num_threads</replaceable></option></term>
+<term><option>--threads=<replaceable>num_threads</replaceable></option></term>
+      <listitem>
+      <para>
+        Sets the number of parallel threads for
+        <command>catchup</command> process.
+      </para>
+      </listitem>
+      </varlistentry>
+
+      <varlistentry>
+<term><option>--stream</option></term>
+      <listitem>
+      <para>
+        Copies the instance in <link linkend="pbk-stream-mode">STREAM</link> WAL delivery mode,
+        including all the necessary WAL files by streaming them from
+        the instance server via replication protocol.
+      </para>
+      </listitem>
+      </varlistentry>
+
+      <varlistentry>
+<term><option>-x</option>=<replaceable>path_prefix</replaceable></term>
+<term><option>--exclude-path</option>=<replaceable>path_prefix</replaceable></term>
+      <listitem>
+      <para>
+        Specifies a prefix for files to exclude from the synchronization of <productname>PostgreSQL</productname>
+        instances during copying. The prefix must contain a path relative to the data directory of an instance<!--or
+        an absolute path. The path can be on the source or destination server-->.
+        If the prefix specifies a directory,
+        all files in this directory will not be synchronized.
+        <warning>
+        <para>
+          This option is dangerous since excluding files from synchronization can result in
+          incomplete synchronization; use with care.
+        </para>
+        </warning>
+      </para>
+      </listitem>
+      </varlistentry>
+
+      <varlistentry>
+<term><option>--stream</option></term>
+      <listitem>
+      <para>
+        Copies the instance in <link linkend="pbk-stream-mode">STREAM</link> WAL delivery mode,
+        including all the necessary WAL files by streaming them from
+        the instance server via replication protocol.
+      </para>
+      </listitem>
+      </varlistentry>
+
+      <varlistentry>
+<term><option>--temp-slot</option></term>
+      <listitem>
+      <para>
+        Creates a <emphasis>temporary</emphasis> physical replication slot for streaming
+        WAL from the <productname>PostgreSQL</productname> instance being copied. It ensures that
+        all the required WAL segments remain available if WAL is
+        rotated while the backup is in progress. This flag can only be
+        used together with the <option>--stream</option> flag and
+        cannot be used together with the <option>--perm-slot</option> flag.
+        The default slot name is <literal>pg_probackup_slot</literal>,
+        which can be changed using the <option>--slot</option>/<option>-S</option> option.
+      </para>
+      </listitem>
+      </varlistentry>
+
+      <varlistentry>
+<term><option>-P</option></term>
+<term><option>--perm-slot</option></term>
+      <listitem>
+      <para>
+        Creates a <emphasis>permanent</emphasis> physical replication slot for streaming
+        WAL from the <productname>PostgreSQL</productname> instance being copied. This flag can only be
+        used together with the <option>--stream</option> flag and
+        cannot be used together with the <option>--temp-slot</option> flag.
+        The default slot name is <literal>pg_probackup_perm_slot</literal>,
+        which can be changed using the <option>--slot</option>/<option>-S</option> option.
+      </para>
+      </listitem>
+      </varlistentry>
+
+      <varlistentry>
+<term><option>-S <replaceable>slot_name</replaceable></option></term>
+<term><option>--slot=<replaceable>slot_name</replaceable></option></term>
+      <listitem>
+      <para>
+        Specifies the replication slot for WAL streaming. This option
+        can only be used together with the <option>--stream</option>
+        flag.
+      </para>
+      </listitem>
+      </varlistentry>
+
+      <varlistentry>
+<term><option>-T <replaceable>OLDDIR</replaceable>=<replaceable>NEWDIR</replaceable></option></term>
+<term><option>--tablespace-mapping=<replaceable>OLDDIR</replaceable>=<replaceable>NEWDIR</replaceable></option></term>
+      <listitem>
+      <para>
+        Relocates the tablespace from the <replaceable>OLDDIR</replaceable> to the <replaceable>NEWDIR</replaceable>
+        directory at the time of recovery. Both <replaceable>OLDDIR</replaceable> and <replaceable>NEWDIR</replaceable> must
+        be absolute paths. If the path contains the equals sign (<literal>=</literal>),
+        escape it with a backslash. This option can be specified
+        multiple times for multiple tablespaces.
+      </para>
+      </listitem>
+      </varlistentry>
+
+      </variablelist>
+      </para>
+
+      <para>
+        Additionally, <link linkend="pbk-connection-opts">connection
+        options</link>, <link linkend="pbk-remote-server-opts">remote
+        mode options</link> can be used.
+      </para>
+      <para>
+        For details on usage, see the section
+        <link linkend="pbk-creating-backup-to-catchup">Cloning and Synchronizing <productname>PostgreSQL</productname> Instance</link>.
       </para>
     </refsect3>
   </refsect2>
@@ -4672,6 +5032,16 @@ pg_probackup archive-get -B <replaceable>backup_dir</replaceable> --instance <re
       </para>
       <para>
       <variablelist>
+
+      <varlistentry>
+<term><option>--no-color</option></term>
+      <listitem>
+      <para>
+        Disable coloring for console log messages of <literal>warning</literal> and <literal>error</literal> levels.
+      </para>
+      </listitem>
+      </varlistentry>
+
       <varlistentry>
 <term><option>--log-level-console=<replaceable>log_level</replaceable></option></term>
       <listitem>
@@ -4820,7 +5190,8 @@ pg_probackup archive-get -B <replaceable>backup_dir</replaceable> --instance <re
       <title>Connection Options</title>
       <para>
         You can use these options together with
-        <xref linkend="pbk-backup"/> and
+        <xref linkend="pbk-backup"/>,
+        <xref linkend="pbk-catchup"/>, and
         <xref linkend="pbk-checkdb"/> commands.
       </para>
       <para>
@@ -5111,6 +5482,7 @@ pg_probackup archive-get -B <replaceable>backup_dir</replaceable> --instance <re
         used with <xref linkend="pbk-add-instance"/>,
         <xref linkend="pbk-set-config"/>,
         <xref linkend="pbk-backup"/>,
+        <xref linkend="pbk-catchup"/>,
         <xref linkend="pbk-restore"/>,
         <xref linkend="pbk-archive-push"/>, and
         <xref linkend="pbk-archive-get"/> commands.
@@ -5531,6 +5903,7 @@ BEGIN;
 CREATE ROLE backup WITH LOGIN REPLICATION;
 GRANT USAGE ON SCHEMA pg_catalog TO backup;
 GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup;
+GRANT EXECUTE ON FUNCTION pg_catalog.set_config(text, text, boolean) TO backup;
 GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup;
 GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean, boolean) TO backup;
 GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup(boolean, boolean) TO backup;

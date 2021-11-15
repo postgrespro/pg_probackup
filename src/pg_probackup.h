@@ -3,12 +3,13 @@
  * pg_probackup.h: Backup/Recovery manager for PostgreSQL.
  *
  * Portions Copyright (c) 2009-2013, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
- * Portions Copyright (c) 2015-2018, Postgres Professional
+ * Portions Copyright (c) 2015-2021, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */
 #ifndef PG_PROBACKUP_H
 #define PG_PROBACKUP_H
+
 
 #include "postgres_fe.h"
 #include "libpq-fe.h"
@@ -16,6 +17,7 @@
 
 #include "access/xlog_internal.h"
 #include "utils/pg_crc.h"
+#include "catalog/pg_control.h"
 
 #if PG_VERSION_NUM >= 120000
 #include "common/logging.h"
@@ -39,11 +41,17 @@
 #include "datapagemap.h"
 #include "utils/thread.h"
 
+#include "pg_probackup_state.h"
+
+
 #ifdef WIN32
 #define __thread __declspec(thread)
 #else
 #include <pthread.h>
 #endif
+
+/* Wrap the code that we're going to delete after refactoring in this define*/
+#define REFACTORE_ME
 
 /* pgut client variables and full path */
 extern const char  *PROGRAM_NAME;
@@ -55,6 +63,7 @@ extern const char  *PROGRAM_EMAIL;
 /* Directory/File names */
 #define DATABASE_DIR			"database"
 #define BACKUPS_DIR				"backups"
+#define WAL_SUBDIR				"wal"
 #if PG_VERSION_NUM >= 100000
 #define PG_XLOG_DIR				"pg_wal"
 #define PG_LOG_DIR 				"log"
@@ -76,6 +85,10 @@ extern const char  *PROGRAM_EMAIL;
 #define DATABASE_MAP			"database_map"
 #define HEADER_MAP  			"page_header_map"
 #define HEADER_MAP_TMP  		"page_header_map_tmp"
+
+/* default replication slot names */
+#define DEFAULT_TEMP_SLOT_NAME	 "pg_probackup_slot";
+#define DEFAULT_PERMANENT_SLOT_NAME	 "pg_probackup_perm_slot";
 
 /* Timeout defaults */
 #define PARTIAL_WAL_TIMER			60
@@ -116,6 +129,23 @@ extern const char  *PROGRAM_EMAIL;
 /* Check if an XLogRecPtr value is pointed to 0 offset */
 #define XRecOffIsNull(xlrp) \
 		((xlrp) % XLOG_BLCKSZ == 0)
+
+/* Text Coloring macro */
+#define TC_LEN 11
+#define TC_RED "\033[0;31m"
+#define TC_RED_BOLD "\033[1;31m"
+#define TC_BLUE "\033[0;34m"
+#define TC_BLUE_BOLD "\033[1;34m"
+#define TC_GREEN "\033[0;32m"
+#define TC_GREEN_BOLD "\033[1;32m"
+#define TC_YELLOW "\033[0;33m"
+#define TC_YELLOW_BOLD "\033[1;33m"
+#define TC_MAGENTA "\033[0;35m"
+#define TC_MAGENTA_BOLD "\033[1;35m"
+#define TC_CYAN "\033[0;36m"
+#define TC_CYAN_BOLD "\033[1;36m"
+#define TC_RESET "\033[0m"
+
 
 typedef struct RedoParams
 {
@@ -240,7 +270,6 @@ typedef struct pgFile
 	int		segno;			/* Segment number for ptrack */
 	int		n_blocks;		/* number of blocks in the data file in data directory */
 	bool	is_cfs;			/* Flag to distinguish files compressed by CFS*/
-	bool	is_database;	/* Flag used strictly by ptrack 1.x backup */
 	int		external_dir_num;	/* Number of external directory. 0 if not external */
 	bool	exists_in_prev;		/* Mark files, both data and regular, that exists in previous backup */
 	CompressAlg		compress_alg;		/* compression algorithm applied to the file */
@@ -254,6 +283,7 @@ typedef struct pgFile
 	pg_crc32 hdr_crc;		/* CRC value of header file: name_hdr */
 	pg_off_t hdr_off;       /* offset in header map */
 	int      hdr_size;      /* length of headers */
+	bool	excluded;	/* excluded via --exclude-path option */
 } pgFile;
 
 typedef struct page_map_entry
@@ -309,11 +339,11 @@ typedef enum ShowFormat
 #define BYTES_INVALID		(-1) /* file didn`t changed since previous backup, DELTA backup do not rely on it */
 #define FILE_NOT_FOUND		(-2) /* file disappeared during backup */
 #define BLOCKNUM_INVALID	(-1)
-#define PROGRAM_VERSION	"2.4.17"
+#define PROGRAM_VERSION	"2.5.2"
 
 /* update when remote agent API or behaviour changes */
-#define AGENT_PROTOCOL_VERSION 20409
-#define AGENT_PROTOCOL_VERSION_STR "2.4.9"
+#define AGENT_PROTOCOL_VERSION 20501
+#define AGENT_PROTOCOL_VERSION_STR "2.5.1"
 
 /* update only when changing storage format */
 #define STORAGE_FORMAT_VERSION "2.4.4"
@@ -346,10 +376,6 @@ typedef struct ArchiveOptions
  */
 typedef struct InstanceConfig
 {
-	char		*name;
-	char		arclog_path[MAXPGPATH];
-	char		backup_instance_path[MAXPGPATH];
-
 	uint64		system_identifier;
 	uint32		xlog_seg_size;
 
@@ -359,7 +385,7 @@ typedef struct InstanceConfig
 	ConnectionOptions conn_opt;
 	ConnectionOptions master_conn_opt;
 
-	uint32		replica_timeout;
+	uint32		replica_timeout; //Deprecated. Not used anywhere
 
 	/* Wait timeout for WAL segment archiving */
 	uint32		archive_timeout;
@@ -401,7 +427,7 @@ typedef struct PGNodeInfo
 	char			server_version_str[100];
 
 	int				ptrack_version_num;
-	bool			is_ptrack_enable;
+	bool			is_ptrack_enabled;
 	const char		*ptrack_schema; /* used only for ptrack 2.x */
 
 } PGNodeInfo;
@@ -569,7 +595,6 @@ typedef struct
 	parray	   *external_dirs;
 	XLogRecPtr	prev_start_lsn;
 
-	ConnectionArgs conn_arg;
 	int			thread_num;
 	HeaderMap   *hdr_map;
 
@@ -579,7 +604,6 @@ typedef struct
 	 */
 	int			ret;
 } backup_files_arg;
-
 
 typedef struct timelineInfo timelineInfo;
 
@@ -659,21 +683,17 @@ typedef struct BackupPageHeader2
 	uint16      checksum;
 } BackupPageHeader2;
 
+typedef struct StopBackupCallbackParams
+{
+	PGconn	*conn;
+	int      server_version;
+} StopBackupCallbackParams;
+
 /* Special value for compressed_size field */
 #define PageIsOk		 0
 #define SkipCurrentPage -1
 #define PageIsTruncated -2
 #define PageIsCorrupted -3 /* used by checkdb */
-
-
-/*
- * return pointer that exceeds the length of prefix from character string.
- * ex. str="/xxx/yyy/zzz", prefix="/xxx/yyy", return="zzz".
- *
- * Deprecated. Do not use this in new code.
- */
-#define GetRelativePath(str, prefix) \
-	((strlen(str) <= strlen(prefix)) ? "" : str + strlen(prefix) + 1)
 
 /*
  * Return timeline, xlog ID and record offset from an LSN of the type
@@ -749,23 +769,20 @@ typedef struct BackupPageHeader2
 
 #define IsSshProtocol() (instance_config.remote.host && strcmp(instance_config.remote.proto, "ssh") == 0)
 
-/* directory options */
-extern char	   *backup_path;
-extern char		backup_instance_path[MAXPGPATH];
-extern char		arclog_path[MAXPGPATH];
-
 /* common options */
 extern pid_t    my_pid;
 extern __thread int my_thread_num;
 extern int		num_threads;
 extern bool		stream_wal;
+extern bool		show_color;
 extern bool		progress;
 extern bool     is_archive_cmd; /* true for archive-{get,push} */
-#if PG_VERSION_NUM >= 100000
 /* In pre-10 'replication_slot' is defined in receivelog.h */
 extern char	   *replication_slot;
-#endif
+#if PG_VERSION_NUM >= 100000
 extern bool 	temp_slot;
+#endif
+extern bool perm_slot;
 
 /* backup options */
 extern bool		smooth_checkpoint;
@@ -781,11 +798,32 @@ extern bool		delete_expired;
 extern bool		merge_expired;
 extern bool		dry_run;
 
-/* compression options */
-extern bool		compress_shortcut;
+/* ===== instanceState ===== */
 
-/* other options */
-extern char *instance_name;
+typedef struct InstanceState
+{
+	/* catalog, this instance belongs to */
+	CatalogState *catalog_state;
+
+	char		instance_name[MAXPGPATH]; //previously global var instance_name
+	/* $BACKUP_PATH/backups/instance_name */
+	char		instance_backup_subdir_path[MAXPGPATH];
+
+	/* $BACKUP_PATH/backups/instance_name/BACKUP_CATALOG_CONF_FILE */
+	char		instance_config_path[MAXPGPATH];
+	
+	/* $BACKUP_PATH/backups/instance_name */
+	char		instance_wal_subdir_path[MAXPGPATH]; // previously global var arclog_path
+
+	/* TODO: Make it more specific */
+	PGconn *conn;
+
+
+	//TODO split into some more meaningdul parts
+    InstanceConfig *config;
+} InstanceState;
+
+/* ===== instanceState (END) ===== */
 
 /* show options */
 extern ShowFormat show_format;
@@ -800,12 +838,8 @@ extern pgBackup current;
 /* argv of the process */
 extern char** commands_args;
 
-/* in dir.c */
-/* exclude directory list for $PGDATA file listing */
-extern const char *pgdata_exclude_dir[];
-
 /* in backup.c */
-extern int do_backup(pgSetBackupParams *set_backup_params,
+extern int do_backup(InstanceState *instanceState, pgSetBackupParams *set_backup_params,
 					 bool no_validate, bool no_sync, bool backup_logs);
 extern void do_checkdb(bool need_amcheck, ConnectionOptions conn_opt,
 				  char *pgdata);
@@ -814,16 +848,17 @@ extern const char *deparse_backup_mode(BackupMode mode);
 extern void process_block_change(ForkNumber forknum, RelFileNode rnode,
 								 BlockNumber blkno);
 
-extern char *pg_ptrack_get_block(ConnectionArgs *arguments,
-								 Oid dbOid, Oid tblsOid, Oid relOid,
-								 BlockNumber blknum, size_t *result_size,
-								 int ptrack_version_num, const char *ptrack_schema);
+/* in catchup.c */
+extern int do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, bool sync_dest_files,
+	parray *exclude_absolute_paths_list, parray *exclude_relative_paths_list);
+
 /* in restore.c */
-extern int do_restore_or_validate(time_t target_backup_id,
+extern int do_restore_or_validate(InstanceState *instanceState,
+					  time_t target_backup_id,
 					  pgRecoveryTarget *rt,
 					  pgRestoreParams *params,
 					  bool no_sync);
-extern bool satisfy_timeline(const parray *timelines, const pgBackup *backup);
+extern bool satisfy_timeline(const parray *timelines, TimeLineID tli, XLogRecPtr lsn);
 extern bool satisfy_recovery_target(const pgBackup *backup,
 									const pgRecoveryTarget *rt);
 extern pgRecoveryTarget *parseRecoveryTargetOptions(
@@ -838,41 +873,46 @@ extern parray *get_dbOid_exclude_list(pgBackup *backup, parray *datname_list,
 extern parray *get_backup_filelist(pgBackup *backup, bool strict);
 extern parray *read_timeline_history(const char *arclog_path, TimeLineID targetTLI, bool strict);
 extern bool tliIsPartOfHistory(const parray *timelines, TimeLineID tli);
+extern DestDirIncrCompatibility check_incremental_compatibility(const char *pgdata, uint64 system_identifier,
+																IncrRestoreMode incremental_mode);
 
 /* in merge.c */
-extern void do_merge(time_t backup_id, bool no_validate, bool no_sync);
+extern void do_merge(InstanceState *instanceState, time_t backup_id, bool no_validate, bool no_sync);
 extern void merge_backups(pgBackup *backup, pgBackup *next_backup);
-extern void merge_chain(parray *parent_chain, pgBackup *full_backup, pgBackup *dest_backup,
+extern void merge_chain(InstanceState *instanceState, parray *parent_chain,
+						pgBackup *full_backup, pgBackup *dest_backup,
 						bool no_validate, bool no_sync);
 
 extern parray *read_database_map(pgBackup *backup);
 
 /* in init.c */
-extern int do_init(void);
-extern int do_add_instance(InstanceConfig *instance);
+extern int do_init(CatalogState *catalogState);
+extern int do_add_instance(InstanceState *instanceState, InstanceConfig *instance);
 
 /* in archive.c */
-extern void do_archive_push(InstanceConfig *instance, char *wal_file_path,
+extern void do_archive_push(InstanceState *instanceState, InstanceConfig *instance, char *wal_file_path,
 						   char *wal_file_name, int batch_size, bool overwrite,
 						   bool no_sync, bool no_ready_rename);
-extern void do_archive_get(InstanceConfig *instance, const char *prefetch_dir_arg, char *wal_file_path,
+extern void do_archive_get(InstanceState *instanceState, InstanceConfig *instance, const char *prefetch_dir_arg, char *wal_file_path,
 						   char *wal_file_name, int batch_size, bool validate_wal);
 
 /* in configure.c */
 extern void do_show_config(void);
-extern void do_set_config(bool missing_ok);
+extern void do_set_config(InstanceState *instanceState, bool missing_ok);
 extern void init_config(InstanceConfig *config, const char *instance_name);
-extern InstanceConfig *readInstanceConfigFile(const char *instance_name);
+extern InstanceConfig *readInstanceConfigFile(InstanceState *instanceState);
 
 /* in show.c */
-extern int do_show(const char *instance_name, time_t requested_backup_id, bool show_archive);
+extern int do_show(CatalogState *catalogState, InstanceState *instanceState,
+				   time_t requested_backup_id, bool show_archive);
 
 /* in delete.c */
-extern void do_delete(time_t backup_id);
+extern void do_delete(InstanceState *instanceState, time_t backup_id);
 extern void delete_backup_files(pgBackup *backup);
-extern void do_retention(bool no_validate, bool no_sync);
-extern int do_delete_instance(void);
-extern void do_delete_status(InstanceConfig *instance_config, const char *status);
+extern void do_retention(InstanceState *instanceState, bool no_validate, bool no_sync);
+extern int do_delete_instance(InstanceState *instanceState);
+extern void do_delete_status(InstanceState *instanceState, 
+					InstanceConfig *instance_config, const char *status);
 
 /* in fetch.c */
 extern char *slurpFile(const char *datadir,
@@ -883,12 +923,13 @@ extern char *slurpFile(const char *datadir,
 extern char *fetchFile(PGconn *conn, const char *filename, size_t *filesize);
 
 /* in help.c */
+extern void help_print_version(void);
 extern void help_pg_probackup(void);
-extern void help_command(char *command);
+extern void help_command(ProbackupSubcmd const subcmd);
 
 /* in validate.c */
 extern void pgBackupValidate(pgBackup* backup, pgRestoreParams *params);
-extern int do_validate_all(void);
+extern int do_validate_all(CatalogState *catalogState, InstanceState *instanceState);
 extern int validate_one_page(Page page, BlockNumber absolute_blkno,
 							 XLogRecPtr stop_lsn, PageState *page_st,
 							 uint32 checksum_version);
@@ -909,14 +950,16 @@ extern parray* get_history_streaming(ConnectionOptions *conn_opt, TimeLineID tli
 extern pgBackup *read_backup(const char *root_dir);
 extern void write_backup(pgBackup *backup, bool strict);
 extern void write_backup_status(pgBackup *backup, BackupStatus status,
-								const char *instance_name, bool strict);
+								bool strict);
 extern void write_backup_data_bytes(pgBackup *backup);
 extern bool lock_backup(pgBackup *backup, bool strict, bool exclusive);
 
-extern const char *pgBackupGetBackupMode(pgBackup *backup);
+extern const char *pgBackupGetBackupMode(pgBackup *backup, bool show_color);
+extern void pgBackupGetBackupModeColor(pgBackup *backup, char *mode);
 
-extern parray *catalog_get_instance_list(void);
-extern parray *catalog_get_backup_list(const char *instance_name, time_t requested_backup_id);
+extern parray *catalog_get_instance_list(CatalogState *catalogState);
+
+extern parray *catalog_get_backup_list(InstanceState *instanceState, time_t requested_backup_id);
 extern void catalog_lock_backup_list(parray *backup_list, int from_idx,
 									 int to_idx, bool strict, bool exclusive);
 extern pgBackup *catalog_get_last_data_backup(parray *backup_list,
@@ -927,8 +970,8 @@ extern pgBackup *get_multi_timeline_parent(parray *backup_list, parray *tli_list
 						  InstanceConfig *instance);
 extern timelineInfo *timelineInfoNew(TimeLineID tli);
 extern void timelineInfoFree(void *tliInfo);
-extern parray *catalog_get_timelines(InstanceConfig *instance);
-extern void do_set_backup(const char *instance_name, time_t backup_id,
+extern parray *catalog_get_timelines(InstanceState *instanceState, InstanceConfig *instance);
+extern void do_set_backup(InstanceState *instanceState, time_t backup_id,
 							pgSetBackupParams *set_backup_params);
 extern void pin_backup(pgBackup	*target_backup,
 							pgSetBackupParams *set_backup_params);
@@ -937,13 +980,7 @@ extern void pgBackupWriteControl(FILE *out, pgBackup *backup, bool utc);
 extern void write_backup_filelist(pgBackup *backup, parray *files,
 								  const char *root, parray *external_list, bool sync);
 
-extern void pgBackupGetPath(const pgBackup *backup, char *path, size_t len,
-							const char *subdir);
-extern void pgBackupGetPath2(const pgBackup *backup, char *path, size_t len,
-							 const char *subdir1, const char *subdir2);
-extern void pgBackupGetPathInInstance(const char *instance_name,
-				 const pgBackup *backup, char *path, size_t len,
-				 const char *subdir1, const char *subdir2);
+
 extern void pgBackupCreateDir(pgBackup *backup, const char *backup_instance_path);
 extern void pgNodeInit(PGNodeInfo *node);
 extern void pgBackupInit(pgBackup *backup);
@@ -961,7 +998,6 @@ extern int scan_parent_chain(pgBackup *current_backup, pgBackup **result_backup)
 
 extern bool is_parent(time_t parent_backup_time, pgBackup *child_backup, bool inclusive);
 extern bool is_prolific(parray *backup_list, pgBackup *target_backup);
-extern int get_backup_index_number(parray *backup_list, pgBackup *backup);
 extern void append_children(parray *backup_list, pgBackup *target_backup, parray *append_list);
 extern bool launch_agent(void);
 extern void launch_ssh(char* argv[]);
@@ -974,10 +1010,13 @@ extern CompressAlg parse_compress_alg(const char *arg);
 extern const char* deparse_compress_alg(int alg);
 
 /* in dir.c */
+extern bool get_control_value(const char *str, const char *name,
+				  char *value_str, int64 *value_int64, bool is_mandatory);
 extern void dir_list_file(parray *files, const char *root, bool exclude,
 						  bool follow_symlink, bool add_root, bool backup_logs,
 						  bool skip_hidden, int external_dir_num, fio_location location);
 
+extern const char *get_tablespace_mapping(const char *dir);
 extern void create_data_directories(parray *dest_files,
 										const char *data_dir,
 										const char *backup_dir,
@@ -999,8 +1038,6 @@ extern void db_map_entry_free(void *map);
 
 extern void print_file_list(FILE *out, const parray *files, const char *root,
 							const char *external_prefix, parray *external_list);
-extern parray *dir_read_file_list(const char *root, const char *external_prefix,
-								  const char *file_txt, fio_location location, pg_crc32 expected_crc);
 extern parray *make_external_directory_list(const char *colon_separated_dirs,
 											bool remap);
 extern void free_dir_list(parray *list);
@@ -1028,22 +1065,30 @@ extern pg_crc32 pgFileGetCRCgz(const char *file_path, bool use_crc32c, bool miss
 
 extern int pgFileMapComparePath(const void *f1, const void *f2);
 extern int pgFileCompareName(const void *f1, const void *f2);
+extern int pgFileCompareNameWithString(const void *f1, const void *f2);
+extern int pgFileCompareRelPathWithString(const void *f1, const void *f2);
 extern int pgFileCompareRelPathWithExternal(const void *f1, const void *f2);
 extern int pgFileCompareRelPathWithExternalDesc(const void *f1, const void *f2);
 extern int pgFileCompareLinked(const void *f1, const void *f2);
 extern int pgFileCompareSize(const void *f1, const void *f2);
+extern int pgFileCompareSizeDesc(const void *f1, const void *f2);
+extern int pgCompareString(const void *str1, const void *str2);
+extern int pgPrefixCompareString(const void *str1, const void *str2);
 extern int pgCompareOid(const void *f1, const void *f2);
+extern void pfilearray_clear_locks(parray *file_list);
 
 /* in data.c */
 extern bool check_data_file(ConnectionArgs *arguments, pgFile *file,
 							const char *from_fullpath, uint32 checksum_version);
 
-extern void backup_data_file(ConnectionArgs* conn_arg, pgFile *file,
-								 const char *from_fullpath, const char *to_fullpath,
-								 XLogRecPtr prev_backup_start_lsn, BackupMode backup_mode,
-								 CompressAlg calg, int clevel, uint32 checksum_version,
-								 int ptrack_version_num, const char *ptrack_schema,
-								 HeaderMap *hdr_map, bool missing_ok);
+
+extern void catchup_data_file(pgFile *file, const char *from_fullpath, const char *to_fullpath,
+								 XLogRecPtr sync_lsn, BackupMode backup_mode,
+								 uint32 checksum_version, size_t prev_size);
+extern void backup_data_file(pgFile *file, const char *from_fullpath, const char *to_fullpath,
+							 XLogRecPtr prev_backup_start_lsn, BackupMode backup_mode,
+							 CompressAlg calg, int clevel, uint32 checksum_version,
+							 HeaderMap *hdr_map, bool missing_ok);
 extern void backup_non_data_file(pgFile *file, pgFile *prev_file,
 								 const char *from_fullpath, const char *to_fullpath,
 								 BackupMode backup_mode, time_t parent_backup_time,
@@ -1107,14 +1152,15 @@ extern XLogRecPtr get_next_record_lsn(const char *archivedir, XLogSegNo	segno, T
 
 /* in util.c */
 extern TimeLineID get_current_timeline(PGconn *conn);
-extern TimeLineID get_current_timeline_from_control(bool safe);
+extern TimeLineID get_current_timeline_from_control(const char *pgdata_path, fio_location location, bool safe);
 extern XLogRecPtr get_checkpoint_location(PGconn *conn);
-extern uint64 get_system_identifier(const char *pgdata_path);
+extern uint64 get_system_identifier(const char *pgdata_path, fio_location location);
 extern uint64 get_remote_system_identifier(PGconn *conn);
 extern uint32 get_data_checksum_version(bool safe);
 extern pg_crc32c get_pgcontrol_checksum(const char *pgdata_path);
-extern uint32 get_xlog_seg_size(char *pgdata_path);
-extern void get_redo(const char *pgdata_path, RedoParams *redo);
+extern DBState get_system_dbstate(const char *pgdata_path, fio_location location);
+extern uint32 get_xlog_seg_size(const char *pgdata_path);
+extern void get_redo(const char *pgdata_path, fio_location pgdata_location, RedoParams *redo);
 extern void set_min_recovery_point(pgFile *file, const char *backup_path,
 								   XLogRecPtr stop_backup_lsn);
 extern void copy_pgcontrol_file(const char *from_fullpath, fio_location from_location,
@@ -1122,6 +1168,7 @@ extern void copy_pgcontrol_file(const char *from_fullpath, fio_location from_loc
 
 extern void time2iso(char *buf, size_t len, time_t time, bool utc);
 extern const char *status2str(BackupStatus status);
+const char *status2str_color(BackupStatus status);
 extern BackupStatus str2status(const char *status);
 extern const char *base36enc(long unsigned int value);
 extern char *base36enc_dup(long unsigned int value);
@@ -1138,24 +1185,17 @@ extern void pretty_size(int64 size, char *buf, size_t len);
 extern void pretty_time_interval(double time, char *buf, size_t len);
 
 extern PGconn *pgdata_basic_setup(ConnectionOptions conn_opt, PGNodeInfo *nodeInfo);
-extern void check_system_identifiers(PGconn *conn, char *pgdata);
+extern void check_system_identifiers(PGconn *conn, const char *pgdata);
 extern void parse_filelist_filenames(parray *files, const char *root);
 
 /* in ptrack.c */
-extern void make_pagemap_from_ptrack_1(parray* files, PGconn* backup_conn);
 extern void make_pagemap_from_ptrack_2(parray* files, PGconn* backup_conn,
 									   const char *ptrack_schema,
 									   int ptrack_version_num,
 									   XLogRecPtr lsn);
-extern void pg_ptrack_clear(PGconn *backup_conn, int ptrack_version_num);
 extern void get_ptrack_version(PGconn *backup_conn, PGNodeInfo *nodeInfo);
-extern bool pg_ptrack_enable(PGconn *backup_conn, int ptrack_version_num);
-extern bool pg_ptrack_get_and_clear_db(Oid dbOid, Oid tblspcOid, PGconn *backup_conn);
-extern char *pg_ptrack_get_and_clear(Oid tablespace_oid,
-									 Oid db_oid,
-									 Oid rel_oid,
-									 size_t *result_size,
-									 PGconn *backup_conn);
+extern bool pg_is_ptrack_enabled(PGconn *backup_conn, int ptrack_version_num);
+
 extern XLogRecPtr get_last_ptrack_lsn(PGconn *backup_conn, PGNodeInfo *nodeInfo);
 extern parray * pg_ptrack_get_pagemapset(PGconn *backup_conn, const char *ptrack_schema,
 										 int ptrack_version_num, XLogRecPtr lsn);
@@ -1163,17 +1203,25 @@ extern parray * pg_ptrack_get_pagemapset(PGconn *backup_conn, const char *ptrack
 /* open local file to writing */
 extern FILE* open_local_file_rw(const char *to_fullpath, char **out_buf, uint32 buf_size);
 
-extern int send_pages(ConnectionArgs* conn_arg, const char *to_fullpath, const char *from_fullpath,
+extern int send_pages(const char *to_fullpath, const char *from_fullpath,
 					  pgFile *file, XLogRecPtr prev_backup_start_lsn, CompressAlg calg, int clevel,
 					  uint32 checksum_version, bool use_pagemap, BackupPageHeader2 **headers,
-					  BackupMode backup_mode, int ptrack_version_num, const char *ptrack_schema);
+					  BackupMode backup_mode);
+extern int copy_pages(const char *to_fullpath, const char *from_fullpath,
+					  pgFile *file, XLogRecPtr prev_backup_start_lsn,
+					  uint32 checksum_version, bool use_pagemap,
+					  BackupMode backup_mode);
 
 /* FIO */
+extern void setMyLocation(ProbackupSubcmd const subcmd);
 extern void fio_delete(mode_t mode, const char *fullpath, fio_location location);
 extern int fio_send_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
 	                      XLogRecPtr horizonLsn, int calg, int clevel, uint32 checksum_version,
 	                      bool use_pagemap, BlockNumber *err_blknum, char **errormsg,
 	                      BackupPageHeader2 **headers);
+extern int fio_copy_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
+	                      XLogRecPtr horizonLsn, int calg, int clevel, uint32 checksum_version,
+	                      bool use_pagemap, BlockNumber *err_blknum, char **errormsg);
 /* return codes for fio_send_pages */
 extern int fio_send_file_gz(const char *from_fullpath, const char *to_fullpath, FILE* out, char **errormsg);
 extern int fio_send_file(const char *from_fullpath, const char *to_fullpath, FILE* out,
@@ -1225,6 +1273,47 @@ datapagemap_print_debug(datapagemap_t *map);
 extern XLogRecPtr stop_backup_lsn;
 extern void start_WAL_streaming(PGconn *backup_conn, char *stream_dst_path,
 							   ConnectionOptions *conn_opt,
-							   XLogRecPtr startpos, TimeLineID starttli);
+							   XLogRecPtr startpos, TimeLineID starttli,
+							   bool is_backup);
 extern int wait_WAL_streaming_end(parray *backup_files_list);
+extern parray* parse_tli_history_buffer(char *history, TimeLineID tli);
+
+/* external variables and functions, implemented in backup.c */
+typedef struct PGStopBackupResult
+{
+	/*
+	 * We will use values of snapshot_xid and invocation_time if there are
+	 * no transactions between start_lsn and stop_lsn.
+	 */
+	TransactionId	snapshot_xid;
+	time_t		invocation_time;
+	/*
+	 * Fields that store pg_catalog.pg_stop_backup() result
+	 */
+	XLogRecPtr	lsn;
+	size_t		backup_label_content_len;
+	char		*backup_label_content;
+	size_t		tablespace_map_content_len;
+	char		*tablespace_map_content;
+} PGStopBackupResult;
+
+extern bool backup_in_progress;
+extern parray *backup_files_list;
+
+extern void pg_start_backup(const char *label, bool smooth, pgBackup *backup,
+							PGNodeInfo *nodeInfo, PGconn *conn);
+extern void pg_silent_client_messages(PGconn *conn);
+extern void pg_create_restore_point(PGconn *conn, time_t backup_start_time);
+extern void pg_stop_backup_send(PGconn *conn, int server_version, bool is_started_on_replica, bool is_exclusive, char **query_text);
+extern void pg_stop_backup_consume(PGconn *conn, int server_version,
+		bool is_exclusive, uint32 timeout, const char *query_text,
+		PGStopBackupResult *result);
+extern void pg_stop_backup_write_file_helper(const char *path, const char *filename, const char *error_msg_filename,
+		const void *data, size_t len, parray *file_list);
+extern XLogRecPtr wait_wal_lsn(const char *wal_segment_dir, XLogRecPtr lsn, bool is_start_lsn, TimeLineID tli,
+								bool in_prev_segment, bool segment_only,
+								int timeout_elevel, bool in_stream_dir);
+extern void wait_wal_and_calculate_stop_lsn(const char *xlog_path, XLogRecPtr stop_lsn, pgBackup *backup);
+extern int64 calculate_datasize_of_filelist(parray *filelist);
+
 #endif /* PG_PROBACKUP_H */

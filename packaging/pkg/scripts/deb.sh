@@ -11,20 +11,20 @@ set -o pipefail
 # fix https://github.com/moby/moby/issues/23137
 ulimit -n 1024
 
-# THere is no std/ent packages for PG 9.5
+# There is no std/ent packages for PG 9.5
 if [[ ${PG_VERSION} == '9.5' ]] && [[ ${PBK_EDITION} != '' ]] ; then
     exit 0
 fi
 
 # PACKAGES NEEDED
-apt-get update -y && apt-get install -y git wget bzip2 devscripts equivs
+apt-get --allow-releaseinfo-change update -y && apt-get install -y git wget bzip2 devscripts equivs
 
 # Prepare
 export DEBIAN_FRONTEND=noninteractive
 echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selections
 
 if [ ${CODENAME} == 'jessie' ]; then
-printf "deb http://archive.debian.org/debian/ jessie main\ndeb-src http://archive.debian.org/debian/ jessie main\ndeb http://security.debian.org jessie/updates main\ndeb-src http://security.debian.org jessie/updates main" > /etc/apt/sources.list
+    printf "deb http://archive.debian.org/debian/ jessie main\ndeb-src http://archive.debian.org/debian/ jessie main\ndeb http://security.debian.org jessie/updates main\ndeb-src http://security.debian.org jessie/updates main" > /etc/apt/sources.list
 fi
 
 apt-get -qq update -y

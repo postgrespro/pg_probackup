@@ -2,6 +2,38 @@
  *
  * pg_probackup.c: Backup/Recovery manager for PostgreSQL.
  *
+ * This is an entry point for the program.
+ * Parse command name and it's options, verify them and call a
+ * do_***() function that implements the command.
+ *
+ * Avoid using global variables in the code.
+ * Pass all needed information as funciton arguments:
+ *
+
+ *
+ * TODO (see pg_probackup_state.h):
+ *
+ * Functions that work with a backup catalog accept catalogState,
+ * which currently only contains pathes to backup catalog subdirectories
+ * + function specific options.
+ * 
+ * Functions that work with an instance accept instanceState argument, which
+ * includes catalogState, instance_name,
+ * info about pgdata associated with the instance (see pgState),
+ * various instance config options, and list of backups belonging to the instance.
+ * + function specific options.
+ * 
+ * Functions that work with multiple backups in the catalog
+ * accept instanceState and info needed to determine the range of backups to handle.
+ * + function specific options.
+ *
+ * Functions that work with a single backup accept backupState argument,
+ * which includes link to the instanceState, backup_id and backup-specific info.
+ * + function specific options.
+ *
+ * Functions that work with a postgreSQL instance (i.e. checkdb) accept pgState,
+ * which includes info about pgdata directory and connection.
+ *
  * Portions Copyright (c) 2009-2013, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
  * Portions Copyright (c) 2015-2019, Postgres Professional
  *
@@ -9,6 +41,7 @@
  */
 
 #include "pg_probackup.h"
+#include "pg_probackup_state.h"
 
 #include "pg_getopt.h"
 #include "streamutil.h"
@@ -27,46 +60,19 @@ const char  *PROGRAM_FULL_PATH = NULL;
 const char  *PROGRAM_URL = "https://github.com/postgrespro/pg_probackup";
 const char  *PROGRAM_EMAIL = "https://github.com/postgrespro/pg_probackup/issues";
 
-typedef enum ProbackupSubcmd
-{
-	NO_CMD = 0,
-	INIT_CMD,
-	ADD_INSTANCE_CMD,
-	DELETE_INSTANCE_CMD,
-	ARCHIVE_PUSH_CMD,
-	ARCHIVE_GET_CMD,
-	BACKUP_CMD,
-	RESTORE_CMD,
-	VALIDATE_CMD,
-	DELETE_CMD,
-	MERGE_CMD,
-	SHOW_CMD,
-	SET_CONFIG_CMD,
-	SET_BACKUP_CMD,
-	SHOW_CONFIG_CMD,
-	CHECKDB_CMD
-} ProbackupSubcmd;
-
-
+/* ================ catalogState =========== */
 /* directory options */
-char	   *backup_path = NULL;
-/*
- * path or to the data files in the backup catalog
- * $BACKUP_PATH/backups/instance_name
- */
-char		backup_instance_path[MAXPGPATH];
-/*
- * path or to the wal files in the backup catalog
- * $BACKUP_PATH/wal/instance_name
- */
-char		arclog_path[MAXPGPATH] = "";
+/* TODO make it local variable, pass as an argument to all commands that need it.  */
+static char	   *backup_path = NULL;
 
-/* colon separated external directories list ("/path1:/path2") */
-char	   *externaldir = NULL;
+static CatalogState *catalogState = NULL;
+/* ================ catalogState (END) =========== */
+
 /* common options */
-static char *backup_id_string = NULL;
 int			num_threads = 1;
 bool		stream_wal = false;
+bool		no_color = false;
+bool 		show_color = true;
 bool        is_archive_cmd = false;
 pid_t       my_pid = 0;
 __thread int  my_thread_num = 1;
@@ -74,14 +80,18 @@ bool		progress = false;
 bool		no_sync = false;
 #if PG_VERSION_NUM >= 100000
 char	   *replication_slot = NULL;
-#endif
 bool		temp_slot = false;
+#endif
+bool perm_slot = false;
 
 /* backup options */
 bool         backup_logs = false;
 bool         smooth_checkpoint;
 char        *remote_agent;
 static char *backup_note = NULL;
+/* catchup options */
+static char *catchup_source_pgdata = NULL;
+static char *catchup_destination_pgdata = NULL;
 /* restore options */
 static char		   *target_time = NULL;
 static char		   *target_xid = NULL;
@@ -109,6 +119,9 @@ bool skip_external_dirs = false;
 /* array for datnames, provided via db-include and db-exclude */
 static parray *datname_exclude_list = NULL;
 static parray *datname_include_list = NULL;
+/* arrays for --exclude-path's */
+static parray *exclude_absolute_paths_list = NULL;
+static parray *exclude_relative_paths_list = NULL;
 
 /* checkdb options */
 bool need_amcheck = false;
@@ -123,10 +136,14 @@ bool		force = false;
 bool		dry_run = false;
 static char *delete_status = NULL;
 /* compression options */
-bool 		compress_shortcut = false;
+static bool 		compress_shortcut = false;
 
-/* other options */
-char	   *instance_name;
+/* ================ instanceState =========== */
+static char	   *instance_name;
+
+static InstanceState *instanceState = NULL;
+
+/* ================ instanceState (END) =========== */
 
 /* archive push options */
 int		batch_size = 1;
@@ -148,9 +165,10 @@ int64 ttl = -1;
 static char *expire_time_string = NULL;
 static pgSetBackupParams *set_backup_params = NULL;
 
-/* current settings */
+/* ================ backupState =========== */
+static char *backup_id_string = NULL;
 pgBackup	current;
-static ProbackupSubcmd backup_subcmd = NO_CMD;
+/* ================ backupState (END) =========== */
 
 static bool help_opt = false;
 
@@ -158,10 +176,11 @@ static void opt_incr_restore_mode(ConfigOption *opt, const char *arg);
 static void opt_backup_mode(ConfigOption *opt, const char *arg);
 static void opt_show_format(ConfigOption *opt, const char *arg);
 
-static void compress_init(void);
+static void compress_init(ProbackupSubcmd const subcmd);
 
 static void opt_datname_exclude_list(ConfigOption *opt, const char *arg);
 static void opt_datname_include_list(ConfigOption *opt, const char *arg);
+static void opt_exclude_path(ConfigOption *opt, const char *arg);
 
 /*
  * Short name should be non-printable ASCII character.
@@ -178,17 +197,25 @@ static ConfigOption cmd_options[] =
 	{ 'b', 132, "progress",			&progress,			SOURCE_CMD_STRICT },
 	{ 's', 'i', "backup-id",		&backup_id_string,	SOURCE_CMD_STRICT },
 	{ 'b', 133, "no-sync",			&no_sync,			SOURCE_CMD_STRICT },
+	{ 'b', 134, "no-color",			&no_color,			SOURCE_CMD_STRICT },
 	/* backup options */
 	{ 'b', 180, "backup-pg-log",	&backup_logs,		SOURCE_CMD_STRICT },
 	{ 'f', 'b', "backup-mode",		opt_backup_mode,	SOURCE_CMD_STRICT },
 	{ 'b', 'C', "smooth-checkpoint", &smooth_checkpoint,	SOURCE_CMD_STRICT },
 	{ 's', 'S', "slot",				&replication_slot,	SOURCE_CMD_STRICT },
+#if PG_VERSION_NUM >= 100000
 	{ 'b', 181, "temp-slot",		&temp_slot,			SOURCE_CMD_STRICT },
+#endif
+	{ 'b', 'P', "perm-slot",	&perm_slot,	SOURCE_CMD_STRICT },
 	{ 'b', 182, "delete-wal",		&delete_wal,		SOURCE_CMD_STRICT },
 	{ 'b', 183, "delete-expired",	&delete_expired,	SOURCE_CMD_STRICT },
 	{ 'b', 184, "merge-expired",	&merge_expired,		SOURCE_CMD_STRICT },
 	{ 'b', 185, "dry-run",			&dry_run,			SOURCE_CMD_STRICT },
 	{ 's', 238, "note",				&backup_note,		SOURCE_CMD_STRICT },
+	/* catchup options */
+	{ 's', 239, "source-pgdata",		&catchup_source_pgdata,	SOURCE_CMD_STRICT },
+	{ 's', 240, "destination-pgdata",	&catchup_destination_pgdata,	SOURCE_CMD_STRICT },
+	{ 'f', 'x', "exclude-path",		opt_exclude_path,	SOURCE_CMD_STRICT },
 	/* restore options */
 	{ 's', 136, "recovery-target-time",	&target_time,	SOURCE_CMD_STRICT },
 	{ 's', 137, "recovery-target-xid",	&target_xid,	SOURCE_CMD_STRICT },
@@ -256,39 +283,25 @@ static ConfigOption cmd_options[] =
 	{ 0 }
 };
 
-static void
-setMyLocation(void)
-{
-
-#ifdef WIN32
-	if (IsSshProtocol())
-		elog(ERROR, "Currently remote operations on Windows are not supported");
-#endif
-
-	MyLocation = IsSshProtocol()
-		? (backup_subcmd == ARCHIVE_PUSH_CMD || backup_subcmd == ARCHIVE_GET_CMD)
-		   ? FIO_DB_HOST
-		   : (backup_subcmd == BACKUP_CMD || backup_subcmd == RESTORE_CMD || backup_subcmd == ADD_INSTANCE_CMD)
-		      ? FIO_BACKUP_HOST
-		      : FIO_LOCAL_HOST
-		: FIO_LOCAL_HOST;
-}
-
 /*
  * Entry point of pg_probackup command.
  */
 int
 main(int argc, char *argv[])
 {
-	char	   *command = NULL,
-			   *command_name;
+	char	   *command = NULL;
+	ProbackupSubcmd backup_subcmd = NO_CMD;
 
 	PROGRAM_NAME_FULL = argv[0];
+
+	/* Check terminal presense and initialize ANSI escape codes for Windows */
+	init_console();
 
 	/* Initialize current backup */
 	pgBackupInit(&current);
 
 	/* Initialize current instance configuration */
+	//TODO get git of this global variable craziness
 	init_config(&instance_config, instance_name);
 
 	PROGRAM_NAME = get_progname(argv[0]);
@@ -316,91 +329,59 @@ main(int argc, char *argv[])
 	/* Parse subcommands and non-subcommand options */
 	if (argc > 1)
 	{
-		if (strcmp(argv[1], "archive-push") == 0)
-			backup_subcmd = ARCHIVE_PUSH_CMD;
-		else if (strcmp(argv[1], "archive-get") == 0)
-			backup_subcmd = ARCHIVE_GET_CMD;
-		else if (strcmp(argv[1], "add-instance") == 0)
-			backup_subcmd = ADD_INSTANCE_CMD;
-		else if (strcmp(argv[1], "del-instance") == 0)
-			backup_subcmd = DELETE_INSTANCE_CMD;
-		else if (strcmp(argv[1], "init") == 0)
-			backup_subcmd = INIT_CMD;
-		else if (strcmp(argv[1], "backup") == 0)
-			backup_subcmd = BACKUP_CMD;
-		else if (strcmp(argv[1], "restore") == 0)
-			backup_subcmd = RESTORE_CMD;
-		else if (strcmp(argv[1], "validate") == 0)
-			backup_subcmd = VALIDATE_CMD;
-		else if (strcmp(argv[1], "delete") == 0)
-			backup_subcmd = DELETE_CMD;
-		else if (strcmp(argv[1], "merge") == 0)
-			backup_subcmd = MERGE_CMD;
-		else if (strcmp(argv[1], "show") == 0)
-			backup_subcmd = SHOW_CMD;
-		else if (strcmp(argv[1], "set-config") == 0)
-			backup_subcmd = SET_CONFIG_CMD;
-		else if (strcmp(argv[1], "set-backup") == 0)
-			backup_subcmd = SET_BACKUP_CMD;
-		else if (strcmp(argv[1], "show-config") == 0)
-			backup_subcmd = SHOW_CONFIG_CMD;
-		else if (strcmp(argv[1], "checkdb") == 0)
-			backup_subcmd = CHECKDB_CMD;
+		backup_subcmd = parse_subcmd(argv[1]);
+		switch(backup_subcmd)
+		{
+			case SSH_CMD:
 #ifdef WIN32
-		else if (strcmp(argv[1], "ssh") == 0)
-		    launch_ssh(argv);
-#endif
-		else if (strcmp(argv[1], "agent") == 0)
-		{
-			/* 'No forward compatibility' sanity:
-			 *   /old/binary  -> ssh execute -> /newer/binary agent version_num
-			 * If we are executed as an agent for older binary, then exit with error
-			 */
-			if (argc > 2)
-			{
-				elog(ERROR, "Version mismatch, pg_probackup binary with version '%s' "
-						"is launched as an agent for pg_probackup binary with version '%s'",
-						PROGRAM_VERSION, argv[2]);
-			}
-			fio_communicate(STDIN_FILENO, STDOUT_FILENO);
-			return 0;
-		}
-		else if (strcmp(argv[1], "--help") == 0 ||
-				 strcmp(argv[1], "-?") == 0 ||
-				 strcmp(argv[1], "help") == 0)
-		{
-			if (argc > 2)
-				help_command(argv[2]);
-			else
-				help_pg_probackup();
-		}
-		else if (strcmp(argv[1], "--version") == 0
-				 || strcmp(argv[1], "version") == 0
-				 || strcmp(argv[1], "-V") == 0)
-		{
-#ifdef PGPRO_VERSION
-			fprintf(stdout, "%s %s (Postgres Pro %s %s)\n",
-					PROGRAM_NAME, PROGRAM_VERSION,
-					PGPRO_VERSION, PGPRO_EDITION);
+				launch_ssh(argv);
+				break;
 #else
-			fprintf(stdout, "%s %s (PostgreSQL %s)\n",
-					PROGRAM_NAME, PROGRAM_VERSION, PG_VERSION);
+				elog(ERROR, "\"ssh\" command implemented only for Windows");
+				break;
 #endif
-			exit(0);
+			case AGENT_CMD:
+				/* 'No forward compatibility' sanity:
+				 *   /old/binary  -> ssh execute -> /newer/binary agent version_num
+				 * If we are executed as an agent for older binary, then exit with error
+				 */
+				if (argc > 2)
+					elog(ERROR, "Version mismatch, pg_probackup binary with version '%s' "
+							"is launched as an agent for pg_probackup binary with version '%s'",
+							PROGRAM_VERSION, argv[2]);
+				fio_communicate(STDIN_FILENO, STDOUT_FILENO);
+				return 0;
+			case HELP_CMD:
+				if (argc > 2)
+				{
+					/* 'pg_probackup help command' style */
+					help_command(parse_subcmd(argv[2]));
+					exit(0);
+				}
+				else
+				{
+					help_pg_probackup();
+					exit(0);
+				}
+				break;
+			case VERSION_CMD:
+				help_print_version();
+				exit(0);
+			case NO_CMD:
+				elog(ERROR, "Unknown subcommand \"%s\"", argv[1]);
+			default:
+				/* Silence compiler warnings */
+				break;
 		}
-		else
-			elog(ERROR, "Unknown subcommand \"%s\"", argv[1]);
 	}
-
-	if (backup_subcmd == NO_CMD)
-		elog(ERROR, "No subcommand specified");
+	else
+		elog(ERROR, "No subcommand specified. Please run with \"help\" argument to see possible subcommands.");
 
 	/*
 	 * Make command string before getopt_long() will call. It permutes the
 	 * content of argv.
 	 */
 	/* TODO why do we do that only for some commands? */
-	command_name = pstrdup(argv[1]);
 	if (backup_subcmd == BACKUP_CMD ||
 		backup_subcmd == RESTORE_CMD ||
 		backup_subcmd == VALIDATE_CMD ||
@@ -440,10 +421,20 @@ main(int argc, char *argv[])
 
 	pgut_init();
 
-	if (help_opt)
-		help_command(command_name);
+	if (no_color)
+		show_color = false;
 
-	/* backup_path is required for all pg_probackup commands except help and checkdb */
+	if (help_opt)
+	{
+		/* 'pg_probackup command --help' style */
+		help_command(backup_subcmd);
+		exit(0);
+	}
+
+	/* set location based on cmdline options only */
+	setMyLocation(backup_subcmd);
+
+	/* ===== catalogState ======*/
 	if (backup_path == NULL)
 	{
 		/*
@@ -451,11 +442,7 @@ main(int argc, char *argv[])
 		 * from environment variable
 		 */
 		backup_path = getenv("BACKUP_PATH");
-		if (backup_path == NULL && backup_subcmd != CHECKDB_CMD)
-			elog(ERROR, "required parameter not specified: BACKUP_PATH (-B, --backup-path)");
 	}
-
-	setMyLocation();
 
 	if (backup_path != NULL)
 	{
@@ -464,26 +451,52 @@ main(int argc, char *argv[])
 		/* Ensure that backup_path is an absolute path */
 		if (!is_absolute_path(backup_path))
 			elog(ERROR, "-B, --backup-path must be an absolute path");
+
+		catalogState = pgut_new(CatalogState);
+		strncpy(catalogState->catalog_path, backup_path, MAXPGPATH);
+		join_path_components(catalogState->backup_subdir_path,
+							catalogState->catalog_path, BACKUPS_DIR);
+		join_path_components(catalogState->wal_subdir_path,
+							catalogState->catalog_path, WAL_SUBDIR);
 	}
 
-	/* Ensure that backup_path is an absolute path */
-	if (backup_path && !is_absolute_path(backup_path))
-		elog(ERROR, "-B, --backup-path must be an absolute path");
+	/* backup_path is required for all pg_probackup commands except help, version, checkdb and catchup */
+	if (backup_path == NULL &&
+		backup_subcmd != CHECKDB_CMD &&
+		backup_subcmd != HELP_CMD &&
+		backup_subcmd != VERSION_CMD &&
+		backup_subcmd != CATCHUP_CMD)
+		elog(ERROR, "required parameter not specified: BACKUP_PATH (-B, --backup-path)");
 
+	/* ===== catalogState (END) ======*/
+
+	/* ===== instanceState ======*/
 
 	/*
 	 * Option --instance is required for all commands except
-	 * init, show, checkdb and validate
+	 * init, show, checkdb, validate and catchup
 	 */
 	if (instance_name == NULL)
 	{
 		if (backup_subcmd != INIT_CMD && backup_subcmd != SHOW_CMD &&
-			backup_subcmd != VALIDATE_CMD && backup_subcmd != CHECKDB_CMD)
+			backup_subcmd != VALIDATE_CMD && backup_subcmd != CHECKDB_CMD && backup_subcmd != CATCHUP_CMD)
 			elog(ERROR, "required parameter not specified: --instance");
 	}
 	else
-		/* Set instance name */
-		instance_config.name = pgut_strdup(instance_name);
+	{
+		instanceState = pgut_new(InstanceState);
+		instanceState->catalog_state = catalogState;
+
+		strncpy(instanceState->instance_name, instance_name, MAXPGPATH);
+		join_path_components(instanceState->instance_backup_subdir_path,
+							catalogState->backup_subdir_path, instanceState->instance_name);
+		join_path_components(instanceState->instance_wal_subdir_path,
+							catalogState->wal_subdir_path, instanceState->instance_name);
+		join_path_components(instanceState->instance_config_path,
+							 instanceState->instance_backup_subdir_path, BACKUP_CATALOG_CONF_FILE);
+
+	}
+	/* ===== instanceState (END) ======*/
 
 	/*
 	 * If --instance option was passed, construct paths for backup data and
@@ -491,28 +504,6 @@ main(int argc, char *argv[])
 	 */
 	if ((backup_path != NULL) && instance_name)
 	{
-		/*
-		 * Fill global variables used to generate pathes inside the instance's
-		 * backup catalog.
-		 * TODO replace global variables with InstanceConfig structure fields
-		 */
-		sprintf(backup_instance_path, "%s/%s/%s",
-				backup_path, BACKUPS_DIR, instance_name);
-		sprintf(arclog_path, "%s/%s/%s", backup_path, "wal", instance_name);
-
-		/*
-		 * Fill InstanceConfig structure fields used to generate pathes inside
-		 * the instance's backup catalog.
-		 * TODO continue refactoring to use these fields instead of global vars
-		 */
-		sprintf(instance_config.backup_instance_path, "%s/%s/%s",
-				backup_path, BACKUPS_DIR, instance_name);
-		canonicalize_path(instance_config.backup_instance_path);
-
-		sprintf(instance_config.arclog_path, "%s/%s/%s",
-				backup_path, "wal", instance_name);
-		canonicalize_path(instance_config.arclog_path);
-
 		/*
 		 * Ensure that requested backup instance exists.
 		 * for all commands except init, which doesn't take this parameter,
@@ -524,10 +515,11 @@ main(int argc, char *argv[])
 		{
 			struct stat st;
 
-			if (fio_stat(backup_instance_path, &st, true, FIO_BACKUP_HOST) != 0)
+			if (fio_stat(instanceState->instance_backup_subdir_path,
+						 &st, true, FIO_BACKUP_HOST) != 0)
 			{
 				elog(WARNING, "Failed to access directory \"%s\": %s",
-					backup_instance_path, strerror(errno));
+					instanceState->instance_backup_subdir_path, strerror(errno));
 
 				// TODO: redundant message, should we get rid of it?
 				elog(ERROR, "Instance '%s' does not exist in this backup catalog",
@@ -549,7 +541,6 @@ main(int argc, char *argv[])
 	 */
 	if (instance_name)
 	{
-		char		path[MAXPGPATH];
 		/* Read environment variables */
 		config_get_opt_env(instance_options);
 
@@ -557,15 +548,22 @@ main(int argc, char *argv[])
 		if (backup_subcmd != ADD_INSTANCE_CMD &&
 			backup_subcmd != ARCHIVE_GET_CMD)
 		{
-			join_path_components(path, backup_instance_path,
-								 BACKUP_CATALOG_CONF_FILE);
-
 			if (backup_subcmd == CHECKDB_CMD)
-				config_read_opt(path, instance_options, ERROR, true, true);
+				config_read_opt(instanceState->instance_config_path, instance_options, ERROR, true, true);
 			else
-				config_read_opt(path, instance_options, ERROR, true, false);
+				config_read_opt(instanceState->instance_config_path, instance_options, ERROR, true, false);
+
+			/*
+			 * We can determine our location only after reading the configuration file,
+			 * unless we are running arcive-push/archive-get - they are allowed to trust
+			 * cmdline only.
+			 */
+			setMyLocation(backup_subcmd);
 		}
-		setMyLocation();
+	}
+	else if (backup_subcmd == CATCHUP_CMD)
+	{
+		config_get_opt_env(instance_options);
 	}
 
 	/*
@@ -607,6 +605,13 @@ main(int argc, char *argv[])
 		(!instance_config.pgdata || !instance_name))
 		elog(ERROR, "Cannot save checkdb logs to a file. "
 			"You must specify --log-directory option when running checkdb with "
+			"--log-level-file option enabled.");
+
+	if (backup_subcmd == CATCHUP_CMD &&
+		instance_config.logger.log_level_file != LOG_OFF &&
+		instance_config.logger.log_directory == NULL)
+		elog(ERROR, "Cannot save catchup logs to a file. "
+			"You must specify --log-directory option when running catchup with "
 			"--log-level-file option enabled.");
 
 	/* Initialize logger */
@@ -667,7 +672,7 @@ main(int argc, char *argv[])
 			backup_subcmd != SET_BACKUP_CMD &&
 			backup_subcmd != SHOW_CMD)
 			elog(ERROR, "Cannot use -i (--backup-id) option together with the \"%s\" command",
-				 command_name);
+				 get_subcmd_name(backup_subcmd));
 
 		current.backup_id = base36dec(backup_id_string);
 		if (current.backup_id == 0)
@@ -700,7 +705,7 @@ main(int argc, char *argv[])
 
 		if (force && backup_subcmd != RESTORE_CMD)
 			elog(ERROR, "You cannot specify \"--force\" flag with the \"%s\" command",
-				command_name);
+				get_subcmd_name(backup_subcmd));
 
 		if (force)
 			no_validate = true;
@@ -767,10 +772,40 @@ main(int argc, char *argv[])
 		}
 	}
 
+	/* checking required options */
+	if (backup_subcmd == CATCHUP_CMD)
+	{
+		if (catchup_source_pgdata == NULL)
+			elog(ERROR, "You must specify \"--source-pgdata\" option with the \"%s\" command", get_subcmd_name(backup_subcmd));
+		if (catchup_destination_pgdata == NULL)
+			elog(ERROR, "You must specify \"--destination-pgdata\" option with the \"%s\" command", get_subcmd_name(backup_subcmd));
+		if (current.backup_mode == BACKUP_MODE_INVALID)
+			elog(ERROR, "Required parameter not specified: BACKUP_MODE (-b, --backup-mode)");
+		if (current.backup_mode != BACKUP_MODE_FULL && current.backup_mode != BACKUP_MODE_DIFF_PTRACK && current.backup_mode != BACKUP_MODE_DIFF_DELTA)
+			elog(ERROR, "Only \"FULL\", \"PTRACK\" and \"DELTA\" modes are supported with the \"%s\" command", get_subcmd_name(backup_subcmd));
+		if (!stream_wal)
+			elog(INFO, "--stream is required, forcing stream mode");
+		current.stream = stream_wal = true;
+		if (instance_config.external_dir_str)
+			elog(ERROR, "external directories not supported fom \"%s\" command", get_subcmd_name(backup_subcmd));
+		// TODO проверить instance_config.conn_opt
+	}
+
 	/* sanity */
 	if (backup_subcmd == VALIDATE_CMD && restore_params->no_validate)
 		elog(ERROR, "You cannot specify \"--no-validate\" option with the \"%s\" command",
-			command_name);
+			get_subcmd_name(backup_subcmd));
+
+#if PG_VERSION_NUM >= 100000
+	if (temp_slot && perm_slot)
+		elog(ERROR, "You cannot specify \"--perm-slot\" option with the \"--temp-slot\" option");
+
+	/* if slot name was not provided for temp slot, use default slot name */
+	if (!replication_slot && temp_slot)
+		replication_slot = DEFAULT_TEMP_SLOT_NAME;
+#endif
+	if (!replication_slot && perm_slot)
+		replication_slot = DEFAULT_PERMANENT_SLOT_NAME;
 
 	if (num_threads < 1)
 		num_threads = 1;
@@ -778,25 +813,25 @@ main(int argc, char *argv[])
 	if (batch_size < 1)
 		batch_size = 1;
 
-	compress_init();
+	compress_init(backup_subcmd);
 
 	/* do actual operation */
 	switch (backup_subcmd)
 	{
 		case ARCHIVE_PUSH_CMD:
-			do_archive_push(&instance_config, wal_file_path, wal_file_name,
+			do_archive_push(instanceState, &instance_config, wal_file_path, wal_file_name,
 							batch_size, file_overwrite, no_sync, no_ready_rename);
 			break;
 		case ARCHIVE_GET_CMD:
-			do_archive_get(&instance_config, prefetch_dir,
+			do_archive_get(instanceState, &instance_config, prefetch_dir,
 						   wal_file_path, wal_file_name, batch_size, !no_validate_wal);
 			break;
 		case ADD_INSTANCE_CMD:
-			return do_add_instance(&instance_config);
+			return do_add_instance(instanceState, &instance_config);
 		case DELETE_INSTANCE_CMD:
-			return do_delete_instance();
+			return do_delete_instance(instanceState);
 		case INIT_CMD:
-			return do_init();
+			return do_init(catalogState);
 		case BACKUP_CMD:
 			{
 				current.stream = stream_wal;
@@ -806,10 +841,14 @@ main(int argc, char *argv[])
 					elog(ERROR, "required parameter not specified: BACKUP_MODE "
 						 "(-b, --backup-mode)");
 
-				return do_backup(set_backup_params, no_validate, no_sync, backup_logs);
+				return do_backup(instanceState, set_backup_params,
+								 no_validate, no_sync, backup_logs);
 			}
+		case CATCHUP_CMD:
+			return do_catchup(catchup_source_pgdata, catchup_destination_pgdata, num_threads, !no_sync,
+				exclude_absolute_paths_list, exclude_relative_paths_list);
 		case RESTORE_CMD:
-			return do_restore_or_validate(current.backup_id,
+			return do_restore_or_validate(instanceState, current.backup_id,
 							recovery_target_options,
 							restore_params, no_sync);
 		case VALIDATE_CMD:
@@ -819,16 +858,16 @@ main(int argc, char *argv[])
 				if (datname_exclude_list || datname_include_list)
 					elog(ERROR, "You must specify parameter (-i, --backup-id) for partial validation");
 
-				return do_validate_all();
+				return do_validate_all(catalogState, instanceState);
 			}
 			else
 				/* PITR validation and, optionally, partial validation */
-				return do_restore_or_validate(current.backup_id,
+				return do_restore_or_validate(instanceState, current.backup_id,
 						  recovery_target_options,
 						  restore_params,
 						  no_sync);
 		case SHOW_CMD:
-			return do_show(instance_name, current.backup_id, show_archive);
+			return do_show(catalogState, instanceState, current.backup_id, show_archive);
 		case DELETE_CMD:
 
 			if (delete_expired && backup_id_string)
@@ -843,26 +882,26 @@ main(int argc, char *argv[])
 			if (!backup_id_string)
 			{
 				if (delete_status)
-					do_delete_status(&instance_config, delete_status);
+					do_delete_status(instanceState, &instance_config, delete_status);
 				else
-					do_retention(no_validate, no_sync);
+					do_retention(instanceState, no_validate, no_sync);
 			}
 			else
-					do_delete(current.backup_id);
+					do_delete(instanceState, current.backup_id);
 			break;
 		case MERGE_CMD:
-			do_merge(current.backup_id, no_validate, no_sync);
+			do_merge(instanceState, current.backup_id, no_validate, no_sync);
 			break;
 		case SHOW_CONFIG_CMD:
 			do_show_config();
 			break;
 		case SET_CONFIG_CMD:
-			do_set_config(false);
+			do_set_config(instanceState, false);
 			break;
 		case SET_BACKUP_CMD:
 			if (!backup_id_string)
 				elog(ERROR, "You must specify parameter (-i, --backup-id) for 'set-backup' command");
-			do_set_backup(instance_name, current.backup_id, set_backup_params);
+			do_set_backup(instanceState, current.backup_id, set_backup_params);
 			break;
 		case CHECKDB_CMD:
 			do_checkdb(need_amcheck,
@@ -871,6 +910,13 @@ main(int argc, char *argv[])
 		case NO_CMD:
 			/* Should not happen */
 			elog(ERROR, "Unknown subcommand");
+		case SSH_CMD:
+		case AGENT_CMD:
+			/* Может перейти на использование какого-нибудь do_agent() для однобразия? */
+		case HELP_CMD:
+		case VERSION_CMD:
+			/* Silence compiler warnings, these already handled earlier */
+			break;
 	}
 
 	return 0;
@@ -933,13 +979,13 @@ opt_show_format(ConfigOption *opt, const char *arg)
  * Initialize compress and sanity checks for compress.
  */
 static void
-compress_init(void)
+compress_init(ProbackupSubcmd const subcmd)
 {
 	/* Default algorithm is zlib */
 	if (compress_shortcut)
 		instance_config.compress_alg = ZLIB_COMPRESS;
 
-	if (backup_subcmd != SET_CONFIG_CMD)
+	if (subcmd != SET_CONFIG_CMD)
 	{
 		if (instance_config.compress_level != COMPRESS_LEVEL_DEFAULT
 			&& instance_config.compress_alg == NOT_DEFINED_COMPRESS)
@@ -953,7 +999,7 @@ compress_init(void)
 	if (instance_config.compress_alg == ZLIB_COMPRESS && instance_config.compress_level == 0)
 		elog(WARNING, "Compression level 0 will lead to data bloat!");
 
-	if (backup_subcmd == BACKUP_CMD || backup_subcmd == ARCHIVE_PUSH_CMD)
+	if (subcmd == BACKUP_CMD || subcmd == ARCHIVE_PUSH_CMD)
 	{
 #ifndef HAVE_LIBZ
 		if (instance_config.compress_alg == ZLIB_COMPRESS)
@@ -965,39 +1011,45 @@ compress_init(void)
 	}
 }
 
+static void
+opt_parser_add_to_parray_helper(parray **list, const char *str)
+{
+	char *elem = NULL;
+
+	if (*list == NULL)
+		*list =  parray_new();
+
+	elem = pgut_malloc(strlen(str) + 1);
+	strcpy(elem, str);
+
+	parray_append(*list, elem);
+}
+
 /* Construct array of datnames, provided by user via db-exclude option */
 void
 opt_datname_exclude_list(ConfigOption *opt, const char *arg)
 {
-	char *dbname = NULL;
-
-	if (!datname_exclude_list)
-		datname_exclude_list =  parray_new();
-
-	dbname = pgut_malloc(strlen(arg) + 1);
-
 	/* TODO add sanity for database name */
-	strcpy(dbname, arg);
-
-	parray_append(datname_exclude_list, dbname);
+	opt_parser_add_to_parray_helper(&datname_exclude_list, arg);
 }
 
 /* Construct array of datnames, provided by user via db-include option */
 void
 opt_datname_include_list(ConfigOption *opt, const char *arg)
 {
-	char *dbname = NULL;
-
-	if (!datname_include_list)
-		datname_include_list =  parray_new();
-
-	dbname = pgut_malloc(strlen(arg) + 1);
-
-	if (strcmp(dbname, "tempate0") == 0 ||
-		strcmp(dbname, "tempate1") == 0)
+	if (strcmp(arg, "tempate0") == 0 ||
+		strcmp(arg, "tempate1") == 0)
 		elog(ERROR, "Databases 'template0' and 'template1' cannot be used for partial restore or validation");
 
-	strcpy(dbname, arg);
+	opt_parser_add_to_parray_helper(&datname_include_list, arg);
+}
 
-	parray_append(datname_include_list, dbname);
+/* Parse --exclude-path option */
+void
+opt_exclude_path(ConfigOption *opt, const char *arg)
+{
+	if (is_absolute_path(arg))
+		opt_parser_add_to_parray_helper(&exclude_absolute_paths_list, arg);
+	else
+		opt_parser_add_to_parray_helper(&exclude_relative_paths_list, arg);
 }

@@ -42,7 +42,7 @@ mkdir %{_topdir}/SOURCES/pg_probackup-%{version}
 cd %{_topdir}/BUILD/postgrespro-%{edition}-%{pgsql_full}
 
 %if "%{pgsql_major}" == "9.6"
-./configure --enable-debug
+./configure --enable-debug --without-readline
 %else
 ./configure --enable-debug --without-readline --prefix=%{prefix}
 %endif

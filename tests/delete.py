@@ -203,10 +203,9 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
         self.set_archiving(backup_dir, 'node', node)
         node.slow_start()
 
-        if node.major_version >= 12:
-            node.safe_psql(
-                'postgres',
-                'CREATE EXTENSION ptrack')
+        node.safe_psql(
+            'postgres',
+            'CREATE EXTENSION ptrack')
 
         # full backup mode
         self.backup_node(backup_dir, 'node', node)

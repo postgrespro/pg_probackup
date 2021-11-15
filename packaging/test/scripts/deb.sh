@@ -17,6 +17,7 @@ PG_TOG=$(echo $PG_VERSION | sed 's|\.||g')
 export DEBIAN_FRONTEND=noninteractive
 echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selections
 
+#apt-get -qq --allow-releaseinfo-change update
 apt-get -qq update
 apt-get -qq install -y wget nginx gnupg lsb-release
 #apt-get -qq install -y libterm-readline-gnu-perl dialog gnupg procps
@@ -45,7 +46,7 @@ nginx -s reload || (pkill -9 nginx || nginx -c /etc/nginx/nginx.conf &)
 # install POSTGRESQL
 #if [ ${CODENAME} == 'precise' ] && [ ${PG_VERSION} != '10' ] && [ ${PG_VERSION} != '11' ]; then
   sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt/ $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
-  wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | apt-key add -
+  wget --no-check-certificate -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | apt-key add -
   apt-get update -y
   apt-get install -y postgresql-${PG_VERSION}
 #fi
