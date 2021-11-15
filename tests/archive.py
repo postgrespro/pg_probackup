@@ -1914,24 +1914,30 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         """
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
-            set_replication=True,
-            initdb_params=['--data-checksums'],
-            pg_options={
-                'archive_mode': 'on',
-                'wal_keep_size' : '0'})
+            initdb_params=['--data-checksums'])
+
+        node_pg_options = {}
+        if node.major_version >= 13:
+            node_pg_options['wal_keep_size'] = '0MB'
+        else:
+            node_pg_options['wal_keep_segments'] = '0'
+        self.set_auto_conf(node, node_pg_options)
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
-        self.set_archiving(backup_dir, 'node', node, compress=True)
 
-        wal_dir = os.path.join(self.tmp_path, module_name, fname, 'wal_dir')
-        os.mkdir(wal_dir)
-        self.set_config(
-            backup_dir, 'node',
-            options=['--log-level-file=VERBOSE'])
-        self.set_auto_conf(node, {'archive_command': "cp -v %p {0}/%f".format(wal_dir)})
+        wal_dir = os.path.join(self.tmp_path, module_name, fname, 'intermediate_dir')
+        shutil.rmtree(wal_dir, ignore_errors=True)
+        os.makedirs(wal_dir)
+        if os.name == 'posix':
+            self.set_archiving(backup_dir, 'node', node, custom_archive_command='cp -v %p {0}/%f'.format(wal_dir))
+        elif os.name == 'nt':
+            self.set_archiving(backup_dir, 'node', node, custom_archive_command='xcopy /F "%p" "{0}/%f"'.format(wal_dir.replace("\\","\\\\")))
+        else:
+            self.assertTrue(False, 'Unexpected os family')
 
         node.slow_start()
         node.safe_psql(
