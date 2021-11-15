@@ -119,9 +119,11 @@ do_archive_push(InstanceState *instanceState, InstanceConfig *instance, char *wa
 {
 	uint64		i;
 	char		current_dir[MAXPGPATH];
+	/* directory with wal files to be archived (usually instance pgdata/pg_wal) */
 	char		pg_xlog_dir[MAXPGPATH];
-	char		xlog_wal_path[MAXPGPATH];
+	/* usually instance pgdata/pg_wal/archive_status */
 	char		archive_status_dir[MAXPGPATH];
+	char		xlog_wal_path[MAXPGPATH];
 	uint64		system_id;
 	bool		is_compress = false;
 
