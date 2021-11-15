@@ -3,7 +3,7 @@
  * archive.c: -  pg_probackup specific archive commands for archive backups.
  *
  *
- * Portions Copyright (c) 2018-2019, Postgres Professional
+ * Portions Copyright (c) 2018-2021, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */
@@ -113,18 +113,13 @@ static parray *setup_push_filelist(const char *archive_status_dir,
  * Where archlog_path is $BACKUP_PATH/wal/instance_name
  */
 void
-do_archive_push(InstanceState *instanceState, InstanceConfig *instance, char *wal_file_path,
+do_archive_push(InstanceState *instanceState, InstanceConfig *instance, char *pg_xlog_dir,
 				char *wal_file_name, int batch_size, bool overwrite,
 				bool no_sync, bool no_ready_rename)
 {
 	uint64		i;
-	char		current_dir[MAXPGPATH];
-	/* directory with wal files to be archived (usually instance pgdata/pg_wal) */
-	char		pg_xlog_dir[MAXPGPATH];
-	/* usually instance pgdata/pg_wal/archive_status */
-	char		archive_status_dir[MAXPGPATH];
-	char		xlog_wal_path[MAXPGPATH];
-	uint64		system_id;
+	/* usually instance pgdata/pg_wal/archive_status, empty if no_ready_rename or batch_size == 1 */
+	char		archive_status_dir[MAXPGPATH] = "";
 	bool		is_compress = false;
 
 	/* arrays with meta info for multi threaded backup */
@@ -144,50 +139,8 @@ do_archive_push(InstanceState *instanceState, InstanceConfig *instance, char *wa
 	parray     *batch_files = NULL;
 	int         n_threads;
 
-	if (wal_file_name == NULL)
-		elog(ERROR, "Required parameter is not specified: --wal-file-name %%f");
-
-	join_path_components(xlog_wal_path, PG_XLOG_DIR, wal_file_name);
-
-	if (wal_file_path == NULL)
-	{
-		elog(INFO, "Optional parameter is not specified: --wal_file_path %%p "
-					"Setting wal-file-path by default");
-		wal_file_path = xlog_wal_path;
-	}
-
-	if (strcmp(wal_file_path, xlog_wal_path) != 0)
-	{
-		elog(INFO, "wal_file_path is setted by user %s", wal_file_path);
-
-		join_path_components(pg_xlog_dir, instance->pgdata, XLOGDIR);
-	}
-	else
-	{
-		/* Create 'archlog_path' directory. Do nothing if it already exists. */
-		//fio_mkdir(instance->arclog_path, DIR_PERMISSION, FIO_BACKUP_HOST);
-
-		if (!getcwd(current_dir, sizeof(current_dir)))
-			elog(ERROR, "getcwd() error");
-
-		/* verify that archive-push --instance parameter is valid */
-		system_id = get_system_identifier(current_dir, FIO_DB_HOST);
-
-		if (instance->pgdata == NULL)
-			elog(ERROR, "Cannot read pg_probackup.conf for this instance");
-
-		if (system_id != instance->system_identifier)
-			elog(ERROR, "Refuse to push WAL segment %s into archive. Instance parameters mismatch."
-						"Instance '%s' should have SYSTEM_ID = " UINT64_FORMAT " instead of " UINT64_FORMAT,
-					wal_file_name, instanceState->instance_name, instance->system_identifier, system_id);
-
-		if (instance->compress_alg == PGLZ_COMPRESS)
-			elog(ERROR, "Cannot use pglz for WAL compression");
-
-		join_path_components(pg_xlog_dir, current_dir, XLOGDIR);
-	}
-
-	join_path_components(archive_status_dir, pg_xlog_dir, "archive_status");
+	if (!no_ready_rename || batch_size > 1)
+		join_path_components(archive_status_dir, pg_xlog_dir, "archive_status");
 
 #ifdef HAVE_LIBZ
 	if (instance->compress_alg == ZLIB_COMPRESS)
@@ -226,12 +179,13 @@ do_archive_push(InstanceState *instanceState, InstanceConfig *instance, char *wa
 		{
 			int rc;
 			WALSegno *xlogfile = (WALSegno *) parray_get(batch_files, i);
+			bool first_wal = strcmp(xlogfile->name, wal_file_name) == 0;
 
-			rc = push_file(xlogfile, archive_status_dir,
+			rc = push_file(xlogfile, first_wal ? NULL : archive_status_dir,
 						   pg_xlog_dir, instanceState->instance_wal_subdir_path,
 						   overwrite, no_sync,
 						   instance->archive_timeout,
-						   no_ready_rename || (strcmp(xlogfile->name, wal_file_name) == 0) ? true : false,
+						   no_ready_rename || first_wal,
 						   is_compress && IsXLogFileName(xlogfile->name) ? true : false,
 						   instance->compress_level);
 			if (rc == 0)
@@ -255,7 +209,7 @@ do_archive_push(InstanceState *instanceState, InstanceConfig *instance, char *wa
 		arg->first_filename = wal_file_name;
 		arg->archive_dir = instanceState->instance_wal_subdir_path;
 		arg->pg_xlog_dir = pg_xlog_dir;
-		arg->archive_status_dir = archive_status_dir;
+		arg->archive_status_dir = (!no_ready_rename || batch_size > 1) ? archive_status_dir : NULL;
 		arg->overwrite = overwrite;
 		arg->compress = is_compress;
 		arg->no_sync = no_sync;
@@ -298,7 +252,7 @@ do_archive_push(InstanceState *instanceState, InstanceConfig *instance, char *wa
 
 	/* Note, that we are leaking memory here,
 	 * because pushing into archive is a very
-	 * time-sensetive operation, so we skip freeing stuff.
+	 * time-sensitive operation, so we skip freeing stuff.
 	 */
 
 push_done:
@@ -378,9 +332,6 @@ push_file(WALSegno *xlogfile, const char *archive_status_dir,
 		  int compress_level)
 {
 	int     rc;
-	char	wal_file_dummy[MAXPGPATH];
-
-	join_path_components(wal_file_dummy, archive_status_dir, xlogfile->name);
 
 	elog(LOG, "pushing file \"%s\"", xlogfile->name);
 
@@ -397,11 +348,13 @@ push_file(WALSegno *xlogfile, const char *archive_status_dir,
 #endif
 
 	/* take '--no-ready-rename' flag into account */
-	if (!no_ready_rename)
+	if (!no_ready_rename && archive_status_dir != NULL)
 	{
+		char	wal_file_dummy[MAXPGPATH];
 		char	wal_file_ready[MAXPGPATH];
 		char	wal_file_done[MAXPGPATH];
 
+		join_path_components(wal_file_dummy, archive_status_dir, xlogfile->name);
 		snprintf(wal_file_ready, MAXPGPATH, "%s.%s", wal_file_dummy, "ready");
 		snprintf(wal_file_done, MAXPGPATH, "%s.%s", wal_file_dummy, "done");
 

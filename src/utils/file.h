@@ -129,6 +129,7 @@ extern int     fio_mkdir(char const* path, int mode, fio_location location);
 extern int     fio_chmod(char const* path, int mode, fio_location location);
 extern int     fio_access(char const* path, int mode, fio_location location);
 extern int     fio_stat(char const* path, struct stat* st, bool follow_symlinks, fio_location location);
+extern bool    fio_is_same_file(char const* filename1, char const* filename2, bool follow_symlink, fio_location location);
 extern ssize_t fio_readlink(const char *path, char *value, size_t valsiz, fio_location location);
 extern DIR*    fio_opendir(char const* path, fio_location location);
 extern struct dirent * fio_readdir(DIR *dirp);

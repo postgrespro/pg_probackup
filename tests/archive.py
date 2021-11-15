@@ -1830,7 +1830,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure
-    def test_wal_file_path(self):
+    def test_undefined_wal_file_path(self):
         """
         check that archive-push works correct with undefined
         --wal-file-path
@@ -1840,51 +1840,12 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
-            initdb_params=['--data-checksums'],
-            pg_options={
-                'archive_mode': 'on'})
+            initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
-        self.set_archiving(backup_dir, 'node', node, compress=True)
+        self.set_archiving(backup_dir, 'node', node)
         archive_command = '\"{0}\" archive-push -B \"{1}\" --instance \"{2}\" --wal-file-name=%f'.format(
-            self.probackup_path, backup_dir, 'node')
-        self.set_auto_conf(
-                node,
-                {'archive_command': archive_command})
-
-        node.slow_start()
-
-        # FULL
-        self.backup_node(backup_dir, 'node', node)
-
-        log_file = os.path.join(node.logs_dir, 'postgresql.log')
-        with open(log_file, 'r') as f:
-            log_content = f.read()
-
-        self.assertIn('pg_probackup archive-push completed successfully', log_content)
-
-        self.del_test_dir(module_name, fname)
-
-    # @unittest.skip("skip")
-    # @unittest.expectedFailure
-    def test_wal_file_path_2(self):
-        """
-        check that archive-push works correct with --wal-file-path=%p as usual
-        """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
-        node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
-            set_replication=True,
-            initdb_params=['--data-checksums'],
-            pg_options={
-                'archive_mode': 'on'})
-
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
-        self.set_archiving(backup_dir, 'node', node, compress=True)
-        archive_command = '\"{0}\" archive-push -B \"{1}\" --instance \"{2}\" --wal-file-path=%p --wal-file-name=%f'.format(
             self.probackup_path, backup_dir, 'node')
         self.set_auto_conf(
                 node,
@@ -1894,21 +1855,17 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         node.safe_psql(
             "postgres",
             "create table t_heap as select i"
-            " as id from generate_series(0,100) i")
+            " as id from generate_series(0, 10) i")
+        self.switch_wal_segment(node)
 
-        # FULL
-        self.backup_node(backup_dir, 'node', node, options=['--stream'])
+        # check
+        self.assertEqual(self.show_archive(backup_dir, instance='node', tli=1)['min-segno'], '000000010000000000000001')
 
-        log_file = os.path.join(node.logs_dir, 'postgresql.log')
-        with open(log_file, 'r') as f:
-            log_content = f.read()
-
-        self.assertIn('pg_probackup archive-push completed successfully', log_content)
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure
-    def test_wal_file_path_3(self):
+    def test_intermediate_archiving(self):
         """
         check that archive-push works correct with --wal-file-path setting by user
         """
@@ -1935,7 +1892,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         if os.name == 'posix':
             self.set_archiving(backup_dir, 'node', node, custom_archive_command='cp -v %p {0}/%f'.format(wal_dir))
         elif os.name == 'nt':
-            self.set_archiving(backup_dir, 'node', node, custom_archive_command='xcopy /F "%p" "{0}/%f"'.format(wal_dir.replace("\\","\\\\")))
+            self.set_archiving(backup_dir, 'node', node, custom_archive_command='xcopy /F "%p" "{0}\\%f"'.format(wal_dir.replace("\\","\\\\")))
         else:
             self.assertTrue(False, 'Unexpected os family')
 
@@ -1943,30 +1900,52 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         node.safe_psql(
             "postgres",
             "create table t_heap as select i"
-            " as id from generate_series(0,1000) i")
+            " as id from generate_series(0, 10) i")
+        self.switch_wal_segment(node)
 
-        # FULL
-        self.backup_node(backup_dir, 'node', node, options=['--stream'])
-
-        node.safe_psql(
-            "postgres",
-            "insert into t_heap select i"
-            " as id from generate_series(0,1000) i")
-        self.backup_node(backup_dir, 'node', node,
-            options=['--stream'])
-
-        filename = '000000010000000000000001'
+        wal_segment = '000000010000000000000001'
 
         self.run_pb(["archive-push", "-B", backup_dir,
             "--instance=node", "-D", node.data_dir,
-            "--wal-file-path", wal_dir, "--wal-file-name", filename])
+            "--wal-file-path", "{0}/{1}".format(wal_dir, wal_segment), "--wal-file-name", wal_segment])
 
-        log_file = os.path.join(
-            backup_dir, 'log', 'pg_probackup.log')
-        with open(log_file, 'r') as f:
-            log_content = f.read()
+        self.assertEqual(self.show_archive(backup_dir, instance='node', tli=1)['min-segno'], wal_segment)
 
-        self.assertIn('pg_probackup archive-push completed successfully', log_content)
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    # @unittest.expectedFailure
+    def test_waldir_outside_pgdata_archiving(self):
+        """
+        check that archive-push works correct with symlinked waldir
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        external_wal_dir = os.path.join(self.tmp_path, module_name, fname, 'ext_wal_dir')
+        shutil.rmtree(external_wal_dir, ignore_errors=True)
+
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums', '--waldir={0}'.format(external_wal_dir)])
+
+        if self.get_version(node) < self.version_to_num('10.0'):
+            self.del_test_dir(module_name, fname)
+            return unittest.skip(
+                'Skipped because waldir outside pgdata is supported since PG 10')
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+
+        node.slow_start()
+        node.safe_psql(
+            "postgres",
+            "create table t_heap as select i"
+            " as id from generate_series(0, 10) i")
+        self.switch_wal_segment(node)
+
+        # check
+        self.assertEqual(self.show_archive(backup_dir, instance='node', tli=1)['min-segno'], '000000010000000000000001')
 
         self.del_test_dir(module_name, fname)
 

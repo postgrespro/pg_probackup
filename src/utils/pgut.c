@@ -977,6 +977,22 @@ pgut_strndup(const char *str, size_t n)
 	return ret;
 }
 
+/*
+ * Allocates new string, that contains part of filepath string minus trailing filename string
+ * If trailing filename string not found, returns copy of filepath.
+ * Result must be free by caller.
+ */
+char *
+pgut_str_strip_trailing_filename(const char *filepath, const char *filename)
+{
+	size_t	fp_len = strlen(filepath);
+	size_t	fn_len = strlen(filename);
+	if (strncmp(filepath + fp_len - fn_len, filename, fn_len) == 0)
+		return pgut_strndup(filepath, fp_len - fn_len);
+	else
+		return pgut_strndup(filepath, fp_len);
+}
+
 FILE *
 pgut_fopen(const char *path, const char *mode, bool missing_ok)
 {
