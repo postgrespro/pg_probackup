@@ -1919,6 +1919,10 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         """
         check that archive-push works correct with symlinked waldir
         """
+        if self.pg_config_version < self.version_to_num('10.0'):
+            return unittest.skip(
+                'Skipped because waldir outside pgdata is supported since PG 10')
+
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         external_wal_dir = os.path.join(self.tmp_path, module_name, fname, 'ext_wal_dir')
@@ -1927,11 +1931,6 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums', '--waldir={0}'.format(external_wal_dir)])
-
-        if self.get_version(node) < self.version_to_num('10.0'):
-            self.del_test_dir(module_name, fname)
-            return unittest.skip(
-                'Skipped because waldir outside pgdata is supported since PG 10')
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
