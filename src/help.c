@@ -985,8 +985,8 @@ static void
 help_archive_get(void)
 {
 	printf(_("\n%s archive-get -B backup-path --instance=instance_name\n"), PROGRAM_NAME);
-	printf(_("                 --wal-file-path=wal-file-path\n"));
 	printf(_("                 --wal-file-name=wal-file-name\n"));
+	printf(_("                 [--wal-file-path=wal-file-path]\n"));
 	printf(_("                 [-j num-threads] [--batch-size=batch_size]\n"));
 	printf(_("                 [--no-validate-wal]\n"));
 	printf(_("                 [--remote-proto] [--remote-host]\n"));
