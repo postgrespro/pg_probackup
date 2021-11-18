@@ -227,6 +227,7 @@ help_pg_probackup(void)
 
 	printf(_("\n  %s archive-push -B backup-path --instance=instance_name\n"), PROGRAM_NAME);
 	printf(_("                 --wal-file-name=wal-file-name\n"));
+	printf(_("                 [--wal-file-path=wal-file-path]\n"));
 	printf(_("                 [-j num-threads] [--batch-size=batch_size]\n"));
 	printf(_("                 [--archive-timeout=timeout]\n"));
 	printf(_("                 [--no-ready-rename] [--no-sync]\n"));
@@ -937,6 +938,7 @@ help_archive_push(void)
 {
 	printf(_("\n%s archive-push -B backup-path --instance=instance_name\n"), PROGRAM_NAME);
 	printf(_("                 --wal-file-name=wal-file-name\n"));
+	printf(_("                 [--wal-file-path=wal-file-path]\n"));
 	printf(_("                 [-j num-threads] [--batch-size=batch_size]\n"));
 	printf(_("                 [--archive-timeout=timeout]\n"));
 	printf(_("                 [--no-ready-rename] [--no-sync]\n"));
@@ -951,6 +953,8 @@ help_archive_push(void)
 	printf(_("      --instance=instance_name     name of the instance to delete\n"));
 	printf(_("      --wal-file-name=wal-file-name\n"));
 	printf(_("                                   name of the file to copy into WAL archive\n"));
+	printf(_("      --wal-file-path=wal-file-path\n"));
+	printf(_("                                   relative destination path of the WAL archive\n"));
 	printf(_("  -j, --threads=NUM                number of parallel threads\n"));
 	printf(_("      --batch-size=NUM             number of files to be copied\n"));
 	printf(_("      --archive-timeout=timeout    wait timeout before discarding stale temp file(default: 5min)\n"));
