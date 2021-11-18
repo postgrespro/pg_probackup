@@ -801,17 +801,21 @@ main(int argc, char *argv[])
 	{
 		/* Check archive-push parameters and construct archive_push_xlog_dir
 		 *
-		 * There are 3 cases:
+		 * There are 4 cases:
 		 * 1. no --wal-file-path specified -- use cwd, ./PG_XLOG_DIR for wal files
 		 * (and ./PG_XLOG_DIR/archive_status for .done files inside do_archive_push())
 		 * in this case we can use batches and threads
 		 * 2. --wal-file-path is specified and it is the same dir as stored in pg_probackup.conf (instance_config.pgdata)
 		 * in this case we can use this path, as well as batches and thread
-		 * 3. --wal-file-path is specified and it is different from instance_config.pgdata
+		 * 3. --wal-file-path is specified and it isn't same dir as stored in pg_probackup.conf but control file present with correct system_id
+		 * in this case we can use this path, as well as batches and thread
+		 * (replica for example, see test_archive_push_sanity)
+		 * 4. --wal-file-path is specified and it is different from instance_config.pgdata and no control file found
 		 * disable optimizations and work with user specified path
 		 */
 		bool	check_system_id = true;
 		uint64	system_id;
+		char	current_dir[MAXPGPATH];
 
 		if (wal_file_name == NULL)
 			elog(ERROR, "Required parameter is not specified: --wal-file-name %%f");
@@ -823,14 +827,13 @@ main(int argc, char *argv[])
 		if (instance_config.compress_alg == PGLZ_COMPRESS)
                         elog(ERROR, "Cannot use pglz for WAL compression");
 
+		if (!getcwd(current_dir, sizeof(current_dir)))
+			elog(ERROR, "getcwd() error");
+
 		if (wal_file_path == NULL)
 		{
 			/* 1st case */
-			char	current_dir[MAXPGPATH];
-			if (!getcwd(current_dir, sizeof(current_dir)))
-				elog(ERROR, "getcwd() error");
-
-			system_id = get_system_identifier(current_dir, FIO_DB_HOST);
+			system_id = get_system_identifier(current_dir, FIO_DB_HOST, false);
 			join_path_components(archive_push_xlog_dir, current_dir, XLOGDIR);
 		}
 		else
@@ -849,24 +852,31 @@ main(int argc, char *argv[])
 			if (fio_is_same_file(stripped_wal_file_path, archive_push_xlog_dir, true, FIO_DB_HOST))
 			{
 				/* 2nd case */
-				system_id = get_system_identifier(instance_config.pgdata, FIO_DB_HOST);
+				system_id = get_system_identifier(instance_config.pgdata, FIO_DB_HOST, false);
 				/* archive_push_xlog_dir already have right value */
 			}
 			else
 			{
-				/* 3rd case */
-				check_system_id = false;
 				if (strlen(stripped_wal_file_path) < MAXPGPATH)
 					strncpy(archive_push_xlog_dir, stripped_wal_file_path, MAXPGPATH);
 				else
 					elog(ERROR, "Value specified to --wal_file_path is too long");
 
-				if (batch_size > 1 || num_threads > 1 || !no_ready_rename)
+				system_id = get_system_identifier(current_dir, FIO_DB_HOST, true);
+				/* 3rd case if control file present -- i.e. system_id != 0 */
+
+				if (system_id == 0)
 				{
-					elog(WARNING, "Supplied --wal_file_path is outside pgdata, force safe values for options: --batch-size=1 -j 1 --no-ready-rename");
-					batch_size = 1;
-					num_threads = 1;
-					no_ready_rename = true;
+					/* 4th case */
+					check_system_id = false;
+
+					if (batch_size > 1 || num_threads > 1 || !no_ready_rename)
+					{
+						elog(WARNING, "Supplied --wal_file_path is outside pgdata, force safe values for options: --batch-size=1 -j 1 --no-ready-rename");
+						batch_size = 1;
+						num_threads = 1;
+						no_ready_rename = true;
+					}
 				}
 			}
 			pfree(stripped_wal_file_path);
