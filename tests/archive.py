@@ -1845,8 +1845,15 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
-        archive_command = '\"{0}\" archive-push -B \"{1}\" --instance \"{2}\" --wal-file-name=%f'.format(
-            self.probackup_path, backup_dir, 'node')
+        if os.name == 'posix':
+            archive_command = '\"{0}\" archive-push -B \"{1}\" --instance \"{2}\" --wal-file-name=%f'.format(
+                self.probackup_path, backup_dir, 'node')
+        elif os.name == 'nt':
+            archive_command = '\"{0}\" archive-push -B \"{1}\" --instance \"{2}\" --wal-file-name=%f'.format(
+                self.probackup_path, backup_dir, 'node').replace("\\","\\\\")
+        else:
+            self.assertTrue(False, 'Unexpected os family')
+
         self.set_auto_conf(
                 node,
                 {'archive_command': archive_command})
@@ -1892,7 +1899,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         if os.name == 'posix':
             self.set_archiving(backup_dir, 'node', node, custom_archive_command='cp -v %p {0}/%f'.format(wal_dir))
         elif os.name == 'nt':
-            self.set_archiving(backup_dir, 'node', node, custom_archive_command='xcopy /F "%p" "{0}\\%f"'.format(wal_dir.replace("\\","\\\\")))
+            self.set_archiving(backup_dir, 'node', node, custom_archive_command='copy /Y "%p" "{0}\\\\%f"'.format(wal_dir.replace("\\","\\\\")))
         else:
             self.assertTrue(False, 'Unexpected os family')
 
