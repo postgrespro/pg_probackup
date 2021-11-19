@@ -5368,9 +5368,9 @@ pg_probackup catchup -b <replaceable>catchup_mode</replaceable>
         Provides the path to the WAL file in
         <parameter>archive_command</parameter> and
         <parameter>restore_command</parameter>. Use the <literal>%p</literal>
-        variable as the value for this option or skip it for setting it according to
-        value from <filename>pg_probackup.conf</filename>.
-        Or explicitly specify the path to a file outside the PGDATA.
+        variable as the value for this option or explicitly specify the path to a file
+        outside of the data directory. If you skip this option, the path
+        specified in <filename>pg_probackup.conf</filename> will be used.
       </para>
       </listitem>
       </varlistentry>
@@ -5383,8 +5383,8 @@ pg_probackup catchup -b <replaceable>catchup_mode</replaceable>
         <parameter>archive_command</parameter> and
         <parameter>restore_command</parameter>. Use the <literal>%f</literal>
         variable as the value for this option for correct processing.
-        Or explicitly specify the filename if given a <option>--wal-file-path<option>
-        value outside the PGDATA.
+        If the value of <option>--wal-file-path</option> is a path
+        outside of the data directory, explicitly specify the filename.
       </para>
       </listitem>
       </varlistentry>
