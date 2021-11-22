@@ -247,15 +247,15 @@ get_checkpoint_location(PGconn *conn)
 }
 
 uint64
-get_system_identifier(const char *pgdata_path, fio_location location)
+get_system_identifier(const char *pgdata_path, fio_location location, bool safe)
 {
 	ControlFileData ControlFile;
 	char	   *buffer;
 	size_t		size;
 
 	/* First fetch file... */
-	buffer = slurpFile(pgdata_path, XLOG_CONTROL_FILE, &size, false, location);
-	if (buffer == NULL)
+	buffer = slurpFile(pgdata_path, XLOG_CONTROL_FILE, &size, safe, location);
+	if (safe && buffer == NULL)
 		return 0;
 	digestControlFile(&ControlFile, buffer, size);
 	pg_free(buffer);

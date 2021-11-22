@@ -35,7 +35,7 @@
  * which includes info about pgdata directory and connection.
  *
  * Portions Copyright (c) 2009-2013, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
- * Portions Copyright (c) 2015-2019, Postgres Professional
+ * Portions Copyright (c) 2015-2021, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */
@@ -151,6 +151,7 @@ static char *wal_file_path;
 static char *wal_file_name;
 static bool file_overwrite = false;
 static bool no_ready_rename = false;
+static char archive_push_xlog_dir[MAXPGPATH] = "";
 
 /* archive get options */
 static char *prefetch_dir;
@@ -788,13 +789,104 @@ main(int argc, char *argv[])
 		current.stream = stream_wal = true;
 		if (instance_config.external_dir_str)
 			elog(ERROR, "external directories not supported fom \"%s\" command", get_subcmd_name(backup_subcmd));
-		// TODO проверить instance_config.conn_opt
+		// TODO check instance_config.conn_opt
 	}
 
 	/* sanity */
 	if (backup_subcmd == VALIDATE_CMD && restore_params->no_validate)
 		elog(ERROR, "You cannot specify \"--no-validate\" option with the \"%s\" command",
 			get_subcmd_name(backup_subcmd));
+
+	if (backup_subcmd == ARCHIVE_PUSH_CMD)
+	{
+		/* Check archive-push parameters and construct archive_push_xlog_dir
+		 *
+		 * There are 4 cases:
+		 * 1. no --wal-file-path specified -- use cwd, ./PG_XLOG_DIR for wal files
+		 * (and ./PG_XLOG_DIR/archive_status for .done files inside do_archive_push())
+		 * in this case we can use batches and threads
+		 * 2. --wal-file-path is specified and it is the same dir as stored in pg_probackup.conf (instance_config.pgdata)
+		 * in this case we can use this path, as well as batches and thread
+		 * 3. --wal-file-path is specified and it isn't same dir as stored in pg_probackup.conf but control file present with correct system_id
+		 * in this case we can use this path, as well as batches and thread
+		 * (replica for example, see test_archive_push_sanity)
+		 * 4. --wal-file-path is specified and it is different from instance_config.pgdata and no control file found
+		 * disable optimizations and work with user specified path
+		 */
+		bool	check_system_id = true;
+		uint64	system_id;
+		char	current_dir[MAXPGPATH];
+
+		if (wal_file_name == NULL)
+			elog(ERROR, "Required parameter is not specified: --wal-file-name %%f");
+
+		if (instance_config.pgdata == NULL)
+			elog(ERROR, "Cannot read pg_probackup.conf for this instance");
+
+		/* TODO may be remove in preference of checking inside compress_init()? */
+		if (instance_config.compress_alg == PGLZ_COMPRESS)
+                        elog(ERROR, "Cannot use pglz for WAL compression");
+
+		if (!getcwd(current_dir, sizeof(current_dir)))
+			elog(ERROR, "getcwd() error");
+
+		if (wal_file_path == NULL)
+		{
+			/* 1st case */
+			system_id = get_system_identifier(current_dir, FIO_DB_HOST, false);
+			join_path_components(archive_push_xlog_dir, current_dir, XLOGDIR);
+		}
+		else
+		{
+			/*
+			 * Usually we get something like
+			 *   wal_file_path = "pg_wal/0000000100000000000000A1"
+			 *   wal_file_name = "0000000100000000000000A1"
+			 *   instance_config.pgdata = "/pgdata/.../node/data"
+			 * We need to strip wal_file_name from wal_file_path, add XLOGDIR to instance_config.pgdata
+			 * and compare this directories.
+			 * Note, that pg_wal can be symlink (see test_waldir_outside_pgdata_archiving)
+			 */
+			char	*stripped_wal_file_path = pgut_str_strip_trailing_filename(wal_file_path, wal_file_name);
+			join_path_components(archive_push_xlog_dir, instance_config.pgdata, XLOGDIR);
+			if (fio_is_same_file(stripped_wal_file_path, archive_push_xlog_dir, true, FIO_DB_HOST))
+			{
+				/* 2nd case */
+				system_id = get_system_identifier(instance_config.pgdata, FIO_DB_HOST, false);
+				/* archive_push_xlog_dir already have right value */
+			}
+			else
+			{
+				if (strlen(stripped_wal_file_path) < MAXPGPATH)
+					strncpy(archive_push_xlog_dir, stripped_wal_file_path, MAXPGPATH);
+				else
+					elog(ERROR, "Value specified to --wal_file_path is too long");
+
+				system_id = get_system_identifier(current_dir, FIO_DB_HOST, true);
+				/* 3rd case if control file present -- i.e. system_id != 0 */
+
+				if (system_id == 0)
+				{
+					/* 4th case */
+					check_system_id = false;
+
+					if (batch_size > 1 || num_threads > 1 || !no_ready_rename)
+					{
+						elog(WARNING, "Supplied --wal_file_path is outside pgdata, force safe values for options: --batch-size=1 -j 1 --no-ready-rename");
+						batch_size = 1;
+						num_threads = 1;
+						no_ready_rename = true;
+					}
+				}
+			}
+			pfree(stripped_wal_file_path);
+		}
+
+		if (check_system_id && system_id != instance_config.system_identifier)
+			elog(ERROR, "Refuse to push WAL segment %s into archive. Instance parameters mismatch."
+						"Instance '%s' should have SYSTEM_ID = " UINT64_FORMAT " instead of " UINT64_FORMAT,
+					wal_file_name, instanceState->instance_name, instance_config.system_identifier, system_id);
+	}
 
 #if PG_VERSION_NUM >= 100000
 	if (temp_slot && perm_slot)
@@ -819,7 +911,7 @@ main(int argc, char *argv[])
 	switch (backup_subcmd)
 	{
 		case ARCHIVE_PUSH_CMD:
-			do_archive_push(instanceState, &instance_config, wal_file_path, wal_file_name,
+			do_archive_push(instanceState, &instance_config, archive_push_xlog_dir, wal_file_name,
 							batch_size, file_overwrite, no_sync, no_ready_rename);
 			break;
 		case ARCHIVE_GET_CMD:
