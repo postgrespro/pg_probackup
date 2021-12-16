@@ -527,26 +527,30 @@ amcheck_one_index(check_indexes_arg *arguments,
 				 pg_indexEntry *ind)
 {
 	PGresult	*res;
-	char*		params[3];
-	static const char*	queries[] = {
+	char		*params[3];
+	static const char	*queries[] = {
 			"SELECT %s.bt_index_check(index => $1)",
 			"SELECT %s.bt_index_check(index => $1, heapallindexed => $2)",
 			"SELECT %s.bt_index_check(index => $1, heapallindexed => $2, checkunique => $3)",
 	};
 	int			params_count;
-	char*		query = NULL;
+	char		*query = NULL;
 
 	if (interrupted)
 		elog(ERROR, "Interrupted");
 
-	params[0] = palloc(64);
-
+#define INDEXRELID 0
+#define HEAPALLINDEXED 1
+#define CHECKUNIQUE 2
 	/* first argument is index oid */
-	sprintf(params[0], "%u", ind->indexrelid);
+	params[INDEXRELID] = palloc(64);
+	sprintf(params[INDEXRELID], "%u", ind->indexrelid);
 	/* second argument is heapallindexed */
-	params[1] = heapallindexed ? "true" : "false";
+	params[HEAPALLINDEXED] = heapallindexed ? "true" : "false";
 	/* third optional argument is checkunique */
-	params[2] = checkunique ? "true" : "false";
+	params[CHECKUNIQUE] = checkunique ? "true" : "false";
+#undef CHECKUNIQUE
+#undef HEAPALLINDEXED
 
 	params_count = ind->checkunique_is_supported ?
 			3 :
@@ -569,7 +573,7 @@ amcheck_one_index(check_indexes_arg *arguments,
 					   arguments->thread_num, arguments->conn_opt.pgdatabase,
 					   ind->namespace, ind->name, PQresultErrorMessage(res));
 
-		pfree(params[0]);
+		pfree(params[INDEXRELID]);
 		pfree(query);
 		PQclear(res);
 		return false;
@@ -579,7 +583,8 @@ amcheck_one_index(check_indexes_arg *arguments,
 				arguments->thread_num,
 				arguments->conn_opt.pgdatabase, ind->namespace, ind->name);
 
-	pfree(params[0]);
+	pfree(params[INDEXRELID]);
+#undef INDEXRELID
 	pfree(query);
 	PQclear(res);
 	return true;
