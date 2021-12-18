@@ -3169,7 +3169,7 @@ fio_delete(mode_t mode, const char *fullpath, fio_location location)
 
 	}
 	else
-		pgFileDelete(mode, fullpath);
+		pgFileDelete(mode, fullpath, ERROR);
 }
 
 static void
@@ -3177,7 +3177,7 @@ fio_delete_impl(mode_t mode, char *buf)
 {
 	char  *fullpath = (char*) buf;
 
-	pgFileDelete(mode, fullpath);
+	pgFileDelete(mode, fullpath, ERROR); /* TODO: must return rc, not error out internally */
 }
 
 /* Execute commands at remote host */

@@ -231,7 +231,7 @@ pgFileInit(const char *rel_path)
  * If the pgFile points directory, the directory must be empty.
  */
 void
-pgFileDelete(mode_t mode, const char *full_path)
+pgFileDelete(mode_t mode, const char *full_path, int elevel)
 {
 	if (S_ISDIR(mode))
 	{
@@ -242,7 +242,7 @@ pgFileDelete(mode_t mode, const char *full_path)
 			else if (errno == ENOTDIR)	/* could be symbolic link */
 				goto delete_file;
 
-			elog(ERROR, "Cannot remove directory \"%s\": %s",
+			elog(elevel, "Cannot remove directory \"%s\": %s",
 				full_path, strerror(errno));
 		}
 		return;
@@ -253,7 +253,7 @@ delete_file:
 	{
 		if (errno == ENOENT)
 			return;
-		elog(ERROR, "Cannot remove file \"%s\": %s", full_path,
+		elog(elevel, "Cannot remove file \"%s\": %s", full_path,
 			strerror(errno));
 	}
 }
@@ -825,6 +825,179 @@ dir_check_file(pgFile *file, bool backup_logs)
 
 	return CHECK_TRUE;
 }
+
+/*
+ * List files, symbolic links and directories in the directory "root" and add
+ * pgFile objects to "files".  We add "root" to "files" if add_root is true.
+ *
+ * When follow_symlink is true, symbolic link is ignored and only file or
+ * directory linked to will be listed.
+ *
+ * TODO: make it strictly local
+ */
+//void
+//dir_list_archive(parray *files, const char *root, fio_location location)
+//{
+//	int         rc = 0;
+//	pgFile     *root_file = NULL;
+//	bool        follow_symlink = true;
+//	bool        skip_hidden = true
+//	const char *errormsg = NULL;
+//
+//	root_file = pgFileNew(root, "", follow_symlink, 0, location);
+//
+//	/* directory was deleted */
+//	if (file == NULL)
+//		return;
+//
+//	if fio_is_remote(fio_location)
+//		rc = fio_dir_list_archive_internal(files, root_file, root, follow_symlink,
+//										   skip_hidden, location);
+//	else
+//		rc = dir_list_archive_internal(files, root_file, root, follow_symlink,
+//									   skip_hidden, location);
+//
+//	pgFileFree(file);
+//}
+
+/*
+ * Get content of root dir, separate dirs into array
+ * walk dirs on parallel threads.
+ * Return codes:
+ * 	-1 ERROR encountrered
+ */
+//int
+//dir_list_archive_internal(parray *files, pgFile *parent, const char *parent_dir,
+//					   bool follow_symlink, bool skip_hidden, int external_dir_num,
+//					   fio_location location, char **errormsg)
+//{
+//	DIR			  *dir;
+//	struct dirent *dent;
+//	parray        *dirs;
+//
+//	/* Open directory and list contents */
+//	dir = opendir(parent_dir);
+//	if (dir == NULL)
+//	{
+//		if (errno == ENOENT)
+//		{
+//			/* Maybe the directory was removed */
+//			return;
+//		}
+//
+//		*errormsg = pgut_malloc(ERRMSG_MAX_LEN);
+//		snprintf(*errormsg, ERRMSG_MAX_LEN, "Cannot open directory \"%s\": %s", parent_dir, strerror(errno));
+//		return -1;
+//	}
+//
+//	errno = 0;
+//	while ((dent = readdir(dir)))
+//	{
+//		pgFile	   *file;
+//		char		child[MAXPGPATH];
+//		char		rel_child[MAXPGPATH];
+//		char		check_res;
+//
+//		join_path_components(child, parent_dir, dent->d_name);
+//		join_path_components(rel_child, parent->rel_path, dent->d_name);
+//
+//		file = pgFileNew(child, rel_child, follow_symlink, external_dir_num,
+//						 location);
+//		if (file == NULL)
+//			continue;
+//
+//		/* Skip entries point current dir or parent dir */
+//		if (S_ISDIR(file->mode) &&
+//			(strcmp(dent->d_name, ".") == 0 || strcmp(dent->d_name, "..") == 0))
+//		{
+//			pgFileFree(file);
+//			continue;
+//		}
+//
+//		/* skip hidden files and directories */
+//		if (skip_hidden && file->name[0] == '.')
+//		{
+//			//elog(WARNING, "Skip hidden file: '%s'", child);
+//			pgFileFree(file);
+//			continue;
+//		}
+//
+//		/*
+//		 * Add only files, directories and links. Skip sockets and other
+//		 * unexpected file formats.
+//		 */
+//		if (!S_ISDIR(file->mode) && !S_ISREG(file->mode))
+//		{
+//			pgFileFree(file);
+//			continue;
+//		}
+//
+//		parray_append(files, file);
+//
+//		/*
+//		 * If the entry is a directory call dir_list_file_internal()
+//		 * recursively.
+//		 */
+//		if (S_ISDIR(file->mode))
+//			parray_append(dirs, file);
+//	}
+//
+//	if (errno && errno != ENOENT)
+//	{
+//
+//		*errormsg = pgut_malloc(ERRMSG_MAX_LEN);
+//		snprintf(*errormsg, ERRMSG_MAX_LEN, "Cannot read directory \"%s\": %s",
+//				parent_dir, strerror(errno_tmp));
+//
+//		closedir(dir);
+//		return -1;
+//	}
+//
+//	closedir(dir);
+//
+//	/* parse directories on multiple parallel threads */
+//	/* init thread args with own file lists */
+//	threads = (pthread_t *) palloc(sizeof(pthread_t) * num_threads);
+//	threads_args = (backup_files_arg *) palloc(sizeof(backup_files_arg)*num_threads);
+//
+//	for (i = 0; i < num_threads; i++)
+//	{
+//		backup_files_arg *arg = &(threads_args[i]);
+//
+//		arg->nodeInfo = nodeInfo;
+//		arg->from_root = instance_config.pgdata;
+//		arg->to_root = current.database_dir;
+//		arg->external_prefix = external_prefix;
+//		arg->external_dirs = external_dirs;
+//		arg->files_list = backup_files_list;
+//		arg->prev_filelist = prev_backup_filelist;
+//		arg->prev_start_lsn = prev_backup_start_lsn;
+//		arg->hdr_map = &(current.hdr_map);
+//		arg->thread_num = i+1;
+//		/* By default there are some error */
+//		arg->ret = 1;
+//	}
+//
+//	/* Run threads */
+//	thread_interrupted = false;
+//	elog(INFO, "Start transferring data files");
+//	time(&start_time);
+//	for (i = 0; i < num_threads; i++)
+//	{
+//		backup_files_arg *arg = &(threads_args[i]);
+//
+//		elog(VERBOSE, "Start thread num: %i", i);
+//		pthread_create(&threads[i], NULL, backup_files, arg);
+//	}
+//
+//	/* Wait threads */
+//	for (i = 0; i < num_threads; i++)
+//	{
+//		pthread_join(threads[i], NULL);
+//		if (threads_args[i].ret == 1)
+//			backup_isok = false;
+//	}
+//}
 
 /*
  * List files in parent->path directory.  If "exclude" is true do not add into
@@ -1919,6 +2092,20 @@ pfilearray_clear_locks(parray *file_list)
 	for (i = 0; i < parray_num(file_list); i++)
 	{
 		pgFile *file = (pgFile *) parray_get(file_list, i);
+		pg_atomic_clear_flag(&file->lock);
+	}
+}
+
+/*
+ * Clear the synchronisation locks in a parray of (xlogFile *)'s
+ */
+void
+xlogfilearray_clear_locks(parray *xlog_list)
+{
+	int i;
+	for (i = 0; i < parray_num(xlog_list); i++)
+	{
+		xlogFile *file = (xlogFile *) parray_get(xlog_list, i);
 		pg_atomic_clear_flag(&file->lock);
 	}
 }

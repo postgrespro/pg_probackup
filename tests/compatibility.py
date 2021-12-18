@@ -615,6 +615,11 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         merge them with new binary.
         old binary version =< 2.2.7
         """
+        if self.version_to_num(self.old_probackup_version) > self.version_to_num('2.2.7'):
+            self.assertTrue(
+                False,
+                'You need pg_probackup old_binary =< 2.2.7 for this test')
+
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(

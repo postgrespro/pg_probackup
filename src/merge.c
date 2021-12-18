@@ -809,7 +809,7 @@ merge_chain(InstanceState *instanceState,
 			/* We need full path, file object has relative path */
 			join_path_components(full_file_path, full_database_dir, full_file->rel_path);
 
-			pgFileDelete(full_file->mode, full_file_path);
+			pgFileDelete(full_file->mode, full_file_path, ERROR);
 			elog(VERBOSE, "Deleted \"%s\"", full_file_path);
 		}
 	}
@@ -1143,7 +1143,7 @@ remove_dir_with_files(const char *path)
 
 		join_path_components(full_path, path, file->rel_path);
 
-		pgFileDelete(file->mode, full_path);
+		pgFileDelete(file->mode, full_path, ERROR);
 		elog(VERBOSE, "Deleted \"%s\"", full_path);
 	}
 

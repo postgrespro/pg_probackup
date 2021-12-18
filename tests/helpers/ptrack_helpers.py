@@ -1239,7 +1239,8 @@ class ProbackupTest(object):
             options=[], old_binary=False, gdb=False, asynchronous=False):
         cmd_list = [
             'delete',
-            '-B', backup_dir
+            '-B', backup_dir,
+            '-j', '10'
         ]
 
         cmd_list += ['--instance={0}'.format(instance)]
@@ -1253,7 +1254,8 @@ class ProbackupTest(object):
         cmd_list = [
             'delete',
             '-B', backup_dir,
-            '--instance={0}'.format(instance)
+            '--instance={0}'.format(instance),
+            '-j', '10'
         ]
         return self.run_pb(cmd_list + options, old_binary=old_binary)
 

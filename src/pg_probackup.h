@@ -662,6 +662,8 @@ typedef struct xlogFile
 	xlogFileType type;
 	bool         keep; /* Used to prevent removal of WAL segments
                         * required by ARCHIVE backups. */
+	bool         deleted;
+	volatile     pg_atomic_flag lock;/* lock for synchronization of parallel threads  */
 } xlogFile;
 
 
@@ -1060,7 +1062,7 @@ extern pgFile *pgFileNew(const char *path, const char *rel_path,
 						 bool follow_symlink, int external_dir_num,
 						 fio_location location);
 extern pgFile *pgFileInit(const char *rel_path);
-extern void pgFileDelete(mode_t mode, const char *full_path);
+extern void pgFileDelete(mode_t mode, const char *full_path, int elevel);
 extern void fio_pgFileDelete(pgFile *file, const char *full_path);
 
 extern void pgFileFree(void *file);
@@ -1082,6 +1084,7 @@ extern int pgCompareString(const void *str1, const void *str2);
 extern int pgPrefixCompareString(const void *str1, const void *str2);
 extern int pgCompareOid(const void *f1, const void *f2);
 extern void pfilearray_clear_locks(parray *file_list);
+extern void xlogfilearray_clear_locks(parray *xlog_list);
 
 /* in data.c */
 extern bool check_data_file(ConnectionArgs *arguments, pgFile *file,

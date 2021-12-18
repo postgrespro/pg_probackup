@@ -1727,7 +1727,10 @@ catalog_get_timelines(InstanceState *instanceState, InstanceConfig *instance)
 			parray_walk(timelines, pfree);
 			parray_free(timelines);
 		}
-		/* add WAL archive subdirectories to filelist (used only in delete) */
+		/*
+		 * Add WAL archive subdirectories to filelist (used only in delete)
+		 * TODO: currently only directory with 8-character name is treated as WAL subdir, is it ok?
+		 */
 		else if (S_ISDIR(file->mode) && strspn(file->rel_path, "0123456789ABCDEF") == 8)
 		{
 			if (instanceState->wal_archive_subdirs == NULL)
@@ -1760,6 +1763,9 @@ catalog_get_timelines(InstanceState *instanceState, InstanceConfig *instance)
 				parray_append(tlinfo->backups, backup);
 			}
 		}
+
+		/* setup locks */
+		xlogfilearray_clear_locks(tlinfo->xlog_filelist);
 	}
 
 	/* determine oldest backup and closest backup for every timeline */
