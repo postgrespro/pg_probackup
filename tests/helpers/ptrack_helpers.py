@@ -1298,9 +1298,8 @@ class ProbackupTest(object):
     def set_archiving(
             self, backup_dir, instance, node, replica=False,
             overwrite=False, compress=True, old_binary=False,
-            log_level=False, archive_timeout=False):
-
-        binary_path = self.probackup_path
+            log_level=False, archive_timeout=False,
+            custom_archive_command=None):
 
         # parse postgresql.auto.conf
         options = {}
@@ -1310,48 +1309,52 @@ class ProbackupTest(object):
         else:
             options['archive_mode'] = 'on'
 
-        if old_binary:
-            binary_path = self.probackup_old_path
+        if custom_archive_command is None:
+            if old_binary:
+                binary_path = self.probackup_old_path
+            else:
+                binary_path = self.probackup_path
 
-        if os.name == 'posix':
-            options['archive_command'] = '"{0}" archive-push -B {1} --instance={2} '.format(
-                binary_path, backup_dir, instance)
+            if os.name == 'posix':
+                options['archive_command'] = '"{0}" archive-push -B {1} --instance={2} '.format(
+                    binary_path, backup_dir, instance)
 
-        elif os.name == 'nt':
-            options['archive_command'] = '"{0}" archive-push -B {1} --instance={2} '.format(
-                binary_path.replace("\\","\\\\"),
-                backup_dir.replace("\\","\\\\"), instance)
+            elif os.name == 'nt':
+                options['archive_command'] = '"{0}" archive-push -B {1} --instance={2} '.format(
+                    self.probackup_path.replace("\\","\\\\"),
+                    backup_dir.replace("\\","\\\\"), instance)
 
-        # don`t forget to kill old_binary after remote ssh release
-        if self.remote and not old_binary:
-            options['archive_command'] += '--remote-proto=ssh '
-            options['archive_command'] += '--remote-host=localhost '
+            # don`t forget to kill old_binary after remote ssh release
+            if self.remote and not old_binary:
+                options['archive_command'] += '--remote-proto=ssh '
+                options['archive_command'] += '--remote-host=localhost '
 
-        if self.archive_compress and compress:
-            options['archive_command'] += '--compress '
+            if self.archive_compress and compress:
+                options['archive_command'] += '--compress '
 
-        if overwrite:
-            options['archive_command'] += '--overwrite '
+            if overwrite:
+                options['archive_command'] += '--overwrite '
 
-        options['archive_command'] += '--log-level-console=VERBOSE '
-        options['archive_command'] += '-j 5 '
-        options['archive_command'] += '--batch-size 10 '
-        options['archive_command'] += '--no-sync '
+            options['archive_command'] += '--log-level-console=VERBOSE '
+            options['archive_command'] += '-j 5 '
+            options['archive_command'] += '--batch-size 10 '
+            options['archive_command'] += '--no-sync '
 
-        if archive_timeout:
-            options['archive_command'] += '--archive-timeout={0} '.format(
-                archive_timeout)
+            if archive_timeout:
+                options['archive_command'] += '--archive-timeout={0} '.format(
+                    archive_timeout)
 
-        if os.name == 'posix':
-            options['archive_command'] += '--wal-file-path=%p --wal-file-name=%f'
+            if os.name == 'posix':
+                options['archive_command'] += '--wal-file-path=%p --wal-file-name=%f'
 
-        elif os.name == 'nt':
-            options['archive_command'] += '--wal-file-path="%p" --wal-file-name="%f"'
+            elif os.name == 'nt':
+                options['archive_command'] += '--wal-file-path="%p" --wal-file-name="%f"'
 
-        if log_level:
-            options['archive_command'] += ' --log-level-console={0}'.format(log_level)
-            options['archive_command'] += ' --log-level-file={0} '.format(log_level)
-
+            if log_level:
+                options['archive_command'] += ' --log-level-console={0}'.format(log_level)
+                options['archive_command'] += ' --log-level-file={0} '.format(log_level)
+        else: # custom_archive_command is not None
+            options['archive_command'] = custom_archive_command
 
         self.set_auto_conf(node, options)
 

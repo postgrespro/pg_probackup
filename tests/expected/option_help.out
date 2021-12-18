@@ -144,6 +144,7 @@ pg_probackup - utility to manage backup/recovery of PostgreSQL database.
 
   pg_probackup archive-push -B backup-path --instance=instance_name
                  --wal-file-name=wal-file-name
+                 [--wal-file-path=wal-file-path]
                  [-j num-threads] [--batch-size=batch_size]
                  [--archive-timeout=timeout]
                  [--no-ready-rename] [--no-sync]

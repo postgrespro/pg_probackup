@@ -48,7 +48,7 @@ catchup_init_state(PGNodeInfo	*source_node_info, const char *source_pgdata, cons
 
 	/* Get WAL segments size and system ID of source PG instance */
 	instance_config.xlog_seg_size = get_xlog_seg_size(source_pgdata);
-	instance_config.system_identifier = get_system_identifier(source_pgdata, FIO_DB_HOST);
+	instance_config.system_identifier = get_system_identifier(source_pgdata, FIO_DB_HOST, false);
 	current.start_time = time(NULL);
 
 	strlcpy(current.program_version, PROGRAM_VERSION, sizeof(current.program_version));
@@ -163,7 +163,7 @@ catchup_preflight_checks(PGNodeInfo *source_node_info, PGconn *source_conn,
 		uint64	source_conn_id, source_id, dest_id;
 
 		source_conn_id = get_remote_system_identifier(source_conn);
-		source_id = get_system_identifier(source_pgdata, FIO_DB_HOST); /* same as instance_config.system_identifier */
+		source_id = get_system_identifier(source_pgdata, FIO_DB_HOST, false); /* same as instance_config.system_identifier */
 
 		if (source_conn_id != source_id)
 			elog(ERROR, "Database identifiers mismatch: we connected to DB id %lu, but in \"%s\" we found id %lu",
@@ -171,7 +171,7 @@ catchup_preflight_checks(PGNodeInfo *source_node_info, PGconn *source_conn,
 
 		if (current.backup_mode != BACKUP_MODE_FULL)
 		{
-			dest_id = get_system_identifier(dest_pgdata, FIO_LOCAL_HOST);
+			dest_id = get_system_identifier(dest_pgdata, FIO_LOCAL_HOST, false);
 			if (source_conn_id != dest_id)
 			elog(ERROR, "Database identifiers mismatch: we connected to DB id %lu, but in \"%s\" we found id %lu",
 				source_conn_id, dest_pgdata, dest_id);

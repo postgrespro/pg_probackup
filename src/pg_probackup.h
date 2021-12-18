@@ -895,7 +895,7 @@ extern int do_init(CatalogState *catalogState);
 extern int do_add_instance(InstanceState *instanceState, InstanceConfig *instance);
 
 /* in archive.c */
-extern void do_archive_push(InstanceState *instanceState, InstanceConfig *instance, char *wal_file_path,
+extern void do_archive_push(InstanceState *instanceState, InstanceConfig *instance, char *pg_xlog_dir,
 						   char *wal_file_name, int batch_size, bool overwrite,
 						   bool no_sync, bool no_ready_rename);
 extern void do_archive_get(InstanceState *instanceState, InstanceConfig *instance, const char *prefetch_dir_arg, char *wal_file_path,
@@ -1163,7 +1163,7 @@ extern XLogRecPtr get_next_record_lsn(const char *archivedir, XLogSegNo	segno, T
 extern TimeLineID get_current_timeline(PGconn *conn);
 extern TimeLineID get_current_timeline_from_control(const char *pgdata_path, fio_location location, bool safe);
 extern XLogRecPtr get_checkpoint_location(PGconn *conn);
-extern uint64 get_system_identifier(const char *pgdata_path, fio_location location);
+extern uint64 get_system_identifier(const char *pgdata_path, fio_location location, bool safe);
 extern uint64 get_remote_system_identifier(PGconn *conn);
 extern uint32 get_data_checksum_version(bool safe);
 extern pg_crc32c get_pgcontrol_checksum(const char *pgdata_path);

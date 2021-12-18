@@ -1837,6 +1837,133 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure
+    def test_undefined_wal_file_path(self):
+        """
+        check that archive-push works correct with undefined
+        --wal-file-path
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        if os.name == 'posix':
+            archive_command = '\"{0}\" archive-push -B \"{1}\" --instance \"{2}\" --wal-file-name=%f'.format(
+                self.probackup_path, backup_dir, 'node')
+        elif os.name == 'nt':
+            archive_command = '\"{0}\" archive-push -B \"{1}\" --instance \"{2}\" --wal-file-name=%f'.format(
+                self.probackup_path, backup_dir, 'node').replace("\\","\\\\")
+        else:
+            self.assertTrue(False, 'Unexpected os family')
+
+        self.set_auto_conf(
+                node,
+                {'archive_command': archive_command})
+
+        node.slow_start()
+        node.safe_psql(
+            "postgres",
+            "create table t_heap as select i"
+            " as id from generate_series(0, 10) i")
+        self.switch_wal_segment(node)
+
+        # check
+        self.assertEqual(self.show_archive(backup_dir, instance='node', tli=1)['min-segno'], '000000010000000000000001')
+
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    # @unittest.expectedFailure
+    def test_intermediate_archiving(self):
+        """
+        check that archive-push works correct with --wal-file-path setting by user
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'])
+
+        node_pg_options = {}
+        if node.major_version >= 13:
+            node_pg_options['wal_keep_size'] = '0MB'
+        else:
+            node_pg_options['wal_keep_segments'] = '0'
+        self.set_auto_conf(node, node_pg_options)
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+
+        wal_dir = os.path.join(self.tmp_path, module_name, fname, 'intermediate_dir')
+        shutil.rmtree(wal_dir, ignore_errors=True)
+        os.makedirs(wal_dir)
+        if os.name == 'posix':
+            self.set_archiving(backup_dir, 'node', node, custom_archive_command='cp -v %p {0}/%f'.format(wal_dir))
+        elif os.name == 'nt':
+            self.set_archiving(backup_dir, 'node', node, custom_archive_command='copy /Y "%p" "{0}\\\\%f"'.format(wal_dir.replace("\\","\\\\")))
+        else:
+            self.assertTrue(False, 'Unexpected os family')
+
+        node.slow_start()
+        node.safe_psql(
+            "postgres",
+            "create table t_heap as select i"
+            " as id from generate_series(0, 10) i")
+        self.switch_wal_segment(node)
+
+        wal_segment = '000000010000000000000001'
+
+        self.run_pb(["archive-push", "-B", backup_dir,
+            "--instance=node", "-D", node.data_dir,
+            "--wal-file-path", "{0}/{1}".format(wal_dir, wal_segment), "--wal-file-name", wal_segment])
+
+        self.assertEqual(self.show_archive(backup_dir, instance='node', tli=1)['min-segno'], wal_segment)
+
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    # @unittest.expectedFailure
+    def test_waldir_outside_pgdata_archiving(self):
+        """
+        check that archive-push works correct with symlinked waldir
+        """
+        if self.pg_config_version < self.version_to_num('10.0'):
+            return unittest.skip(
+                'Skipped because waldir outside pgdata is supported since PG 10')
+
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        external_wal_dir = os.path.join(self.tmp_path, module_name, fname, 'ext_wal_dir')
+        shutil.rmtree(external_wal_dir, ignore_errors=True)
+
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums', '--waldir={0}'.format(external_wal_dir)])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+
+        node.slow_start()
+        node.safe_psql(
+            "postgres",
+            "create table t_heap as select i"
+            " as id from generate_series(0, 10) i")
+        self.switch_wal_segment(node)
+
+        # check
+        self.assertEqual(self.show_archive(backup_dir, instance='node', tli=1)['min-segno'], '000000010000000000000001')
+
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    # @unittest.expectedFailure
     def test_hexadecimal_timeline(self):
         """
         Check that timelines are correct.
