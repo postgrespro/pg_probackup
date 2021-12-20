@@ -598,6 +598,16 @@ main(int argc, char *argv[])
 		instance_config.pgdata == NULL)
 			elog(ERROR, "required parameter not specified: --instance");
 
+	/* Check checkdb command options consistency */
+	if (backup_subcmd == CHECKDB_CMD &&
+		!need_amcheck)
+	{
+		if (heapallindexed)
+			elog(ERROR, "--heapallindexed can only be used with --amcheck option");
+		if (checkunique)
+			elog(ERROR, "--checkunique can only be used with --amcheck option");
+	}
+
 	/* Usually checkdb for file logging requires log_directory
 	 * to be specified explicitly, but if backup_dir and instance name are provided,
 	 * checkdb can use the usual default values or values from config
