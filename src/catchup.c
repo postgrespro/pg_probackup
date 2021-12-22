@@ -203,6 +203,8 @@ catchup_preflight_checks(PGNodeInfo *source_node_info, PGconn *source_conn,
 
 		/* fill dest_redo.lsn and dest_redo.tli */
 		get_redo(dest_pgdata, FIO_LOCAL_HOST, &dest_redo);
+		elog(VERBOSE, "source.tli = %X, dest_redo.lsn = %X/%X, dest_redo.tli = %X",
+			current.tli, (uint32) (dest_redo.lsn >> 32), (uint32) dest_redo.lsn, dest_redo.tli);
 
 		if (current.tli != 1)
 		{
