@@ -615,6 +615,8 @@ parse_tli_history_buffer(char *history, TimeLineID tli)
 			if (!result)
 				result = parray_new();
 			parray_append(result, entry);
+			elog(VERBOSE, "parse_tli_history_buffer() found entry: tli = %X, end = %X/%X",
+				tli, switchpoint_hi, switchpoint_lo);
 
 			/* we ignore the remainder of each line */
 		}

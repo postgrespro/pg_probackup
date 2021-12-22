@@ -203,6 +203,8 @@ catchup_preflight_checks(PGNodeInfo *source_node_info, PGconn *source_conn,
 
 		/* fill dest_redo.lsn and dest_redo.tli */
 		get_redo(dest_pgdata, FIO_LOCAL_HOST, &dest_redo);
+		elog(VERBOSE, "source.tli = %X, dest_redo.lsn = %X/%X, dest_redo.tli = %X",
+			current.tli, (uint32) (dest_redo.lsn >> 32), (uint32) dest_redo.lsn, dest_redo.tli);
 
 		if (current.tli != 1)
 		{
@@ -285,11 +287,12 @@ catchup_check_tablespaces_existance_in_tbsmapping(PGconn *conn)
 static parray*
 catchup_get_tli_history(ConnectionOptions *conn_opt, TimeLineID tli)
 {
-	PGresult     *res;
-	PGconn	     *conn;
-	char         *history;
-	char          query[128];
-	parray	     *result = NULL;
+	PGresult             *res;
+	PGconn	             *conn;
+	char                 *history;
+	char                  query[128];
+	parray	             *result = NULL;
+	TimeLineHistoryEntry *entry = NULL;
 
 	snprintf(query, sizeof(query), "TIMELINE_HISTORY %u", tli);
 
@@ -335,6 +338,12 @@ catchup_get_tli_history(ConnectionOptions *conn_opt, TimeLineID tli)
 	/* some cleanup */
 	pg_free(history);
 	PQclear(res);
+
+	/* append last timeline entry (as read_timeline_history() do) */
+	entry = pgut_new(TimeLineHistoryEntry);
+	entry->tli = tli;
+	entry->end = InvalidXLogRecPtr;
+	parray_insert(result, 0, entry);
 
 	return result;
 }
