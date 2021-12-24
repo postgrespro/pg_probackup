@@ -921,7 +921,7 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 				char		fullpath[MAXPGPATH];
 
 				join_path_components(fullpath, dest_pgdata, file->rel_path);
-				fio_delete(file->mode, fullpath, FIO_DB_HOST);
+				fio_delete(file->mode, fullpath, FIO_LOCAL_HOST);
 				elog(VERBOSE, "Deleted file \"%s\"", fullpath);
 
 				/* shrink dest pgdata list */
