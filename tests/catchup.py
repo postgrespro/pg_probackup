@@ -292,7 +292,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         src_pg.safe_psql("postgres", "CREATE TABLE ultimate_question AS SELECT 42 AS answer")
         src_query_result = src_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
 
-        # do catchup
+        # do catchup (src_tli = 2, dst_tli = 1)
         self.catchup_node(
             backup_mode = 'DELTA',
             source_pgdata = src_pg.data_dir,
@@ -310,15 +310,25 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         dst_options = {}
         dst_options['port'] = str(dst_pg.port)
         self.set_auto_conf(dst_pg, dst_options)
-        dst_pg.slow_start()
+        self.set_replica(master = src_pg, replica = dst_pg)
+        dst_pg.slow_start(replica = True)
 
         # 2nd check: run verification query
         dst_query_result = dst_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
         self.assertEqual(src_query_result, dst_query_result, 'Different answer from copy')
 
+        dst_pg.stop()
+
+        # do catchup (src_tli = 2, dst_tli = 2)
+        self.catchup_node(
+            backup_mode = 'DELTA',
+            source_pgdata = src_pg.data_dir,
+            destination_node = dst_pg,
+            options = ['-d', 'postgres', '-p', str(src_pg.port), '--stream']
+            )
+
         # Cleanup
         src_pg.stop()
-        dst_pg.stop()
         self.del_test_dir(module_name, self.fname)
 
     def test_tli_ptrack_catchup(self):
@@ -365,7 +375,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         src_pg.safe_psql("postgres", "CREATE TABLE ultimate_question AS SELECT 42 AS answer")
         src_query_result = src_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
 
-        # do catchup
+        # do catchup (src_tli = 2, dst_tli = 1)
         self.catchup_node(
             backup_mode = 'PTRACK',
             source_pgdata = src_pg.data_dir,
@@ -383,15 +393,25 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         dst_options = {}
         dst_options['port'] = str(dst_pg.port)
         self.set_auto_conf(dst_pg, dst_options)
-        dst_pg.slow_start()
+        self.set_replica(master = src_pg, replica = dst_pg)
+        dst_pg.slow_start(replica = True)
 
         # 2nd check: run verification query
         dst_query_result = dst_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
         self.assertEqual(src_query_result, dst_query_result, 'Different answer from copy')
 
+        dst_pg.stop()
+
+        # do catchup (src_tli = 2, dst_tli = 2)
+        self.catchup_node(
+            backup_mode = 'PTRACK',
+            source_pgdata = src_pg.data_dir,
+            destination_node = dst_pg,
+            options = ['-d', 'postgres', '-p', str(src_pg.port), '--stream']
+            )
+
         # Cleanup
         src_pg.stop()
-        dst_pg.stop()
         self.del_test_dir(module_name, self.fname)
 
 #########################################

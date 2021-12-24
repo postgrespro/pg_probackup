@@ -1821,11 +1821,15 @@ satisfy_timeline(const parray *timelines, TimeLineID tli, XLogRecPtr lsn)
 {
 	int			i;
 
+	elog(VERBOSE, "satisfy_timeline() checking: tli = %X, lsn = %X/%X",
+		tli, (uint32) (lsn >> 32), (uint32) lsn);
 	for (i = 0; i < parray_num(timelines); i++)
 	{
 		TimeLineHistoryEntry *timeline;
 
 		timeline = (TimeLineHistoryEntry *) parray_get(timelines, i);
+		elog(VERBOSE, "satisfy_timeline() check %i entry: timeline->tli = %X, timeline->end = %X/%X",
+			i, timeline->tli, (uint32) (timeline->end >> 32), (uint32) timeline->end);
 		if (tli == timeline->tli &&
 			(XLogRecPtrIsInvalid(timeline->end) ||
 			 lsn <= timeline->end))
