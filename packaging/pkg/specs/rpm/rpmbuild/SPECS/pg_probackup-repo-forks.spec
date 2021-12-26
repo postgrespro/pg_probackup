@@ -16,7 +16,7 @@ BuildArch:     noarch
 
 %description
 This package contains yum configuration for @SHORT_CODENAME@, and also the GPG key
-for pg_probackup RPMs for PostgresPro Standart and Enterprise.
+for pg_probackup RPMs for PostgresPro Standard and Enterprise.
 
 %prep
 %setup -q  -c -T

@@ -20,7 +20,7 @@ cd $INPUT_DIR
 
 export DEB_DIR=$OUT_DIR/deb
 export KEYS_DIR=$OUT_DIR/keys
-export CONF=/app/repo/${PBK_PKG_REPO}/conf
+export CONF=/app/repo/reprepro-conf
 mkdir -p "$KEYS_DIR"
 cp -av /app/repo/${PBK_PKG_REPO}/gnupg /root/.gnupg
 
@@ -29,7 +29,7 @@ echo -e 'User-agent: *\nDisallow: /' > $OUT_DIR/robots.txt
 
 mkdir -p $DEB_DIR
 cd $DEB_DIR
-cp -av $CONF ./
+cp -av $CONF ./conf
 
 # make remove-debpkg tool
 echo -n "#!"        > remove-debpkg

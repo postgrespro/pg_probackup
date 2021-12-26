@@ -1,0 +1,5 @@
+%_signature gpg
+%_gpg_path /root/.gnupg
+%_gpg_name PostgreSQL Professional <dba@postgrespro.ru>
+%_gpgbin /usr/bin/gpg
+%_gpg_check_password_cmd /bin/true

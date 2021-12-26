@@ -17,8 +17,14 @@ PG_TOG=$(echo $PG_VERSION | sed 's|\.||g')
 export DEBIAN_FRONTEND=noninteractive
 echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selections
 
-#apt-get -qq --allow-releaseinfo-change update
-apt-get -qq update
+if [ ${DISTRIB} = 'ubuntu' -a ${CODENAME} = 'xenial' ] ; then
+	apt-get -qq update
+elif [ ${DISTRIB} = 'debian' -a ${CODENAME} = 'stretch' ] ; then
+	apt-get -qq update
+else
+	apt-get -qq --allow-releaseinfo-change update
+fi
+
 apt-get -qq install -y wget nginx gnupg lsb-release
 #apt-get -qq install -y libterm-readline-gnu-perl dialog gnupg procps
 

@@ -4,27 +4,27 @@ build/suse_15.1_9.5:
 	touch build/suse_15.1_9.5
 
 build/suse_15.1_9.6:
-	$(call build_suse,suse,15.1,,9.6,9.6.23)
+	$(call build_suse,suse,15.1,,9.6,9.6.24)
 	touch build/suse_15.1_9.6
 
 build/suse_15.1_10:
-	$(call build_suse,suse,15.1,,10,10.18)
+	$(call build_suse,suse,15.1,,10,10.19)
 	touch build/suse_15.1_10
 
 build/suse_15.1_11:
-	$(call build_suse,suse,15.1,,11,11.13)
+	$(call build_suse,suse,15.1,,11,11.14)
 	touch build/suse_15.1_11
 
 build/suse_15.1_12:
-	$(call build_suse,suse,15.1,,12,12.8)
+	$(call build_suse,suse,15.1,,12,12.9)
 	touch build/suse_15.1_12
 
 build/suse_15.1_13:
-	$(call build_suse,suse,15.1,,13,13.4)
+	$(call build_suse,suse,15.1,,13,13.5)
 	touch build/suse_15.1_13
 
 build/suse_15.1_14:
-	$(call build_suse,suse,15.1,,14,14.0)
+	$(call build_suse,suse,15.1,,14,14.1)
 	touch build/suse_15.1_14
 
 # Suse 15.2
@@ -33,25 +33,25 @@ build/suse_15.2_9.5:
 	touch build/suse_15.2_9.5
 
 build/suse_15.2_9.6:
-	$(call build_suse,suse,15.2,,9.6,9.6.23)
+	$(call build_suse,suse,15.2,,9.6,9.6.24)
 	touch build/suse_15.2_9.6
 
 build/suse_15.2_10:
-	$(call build_suse,suse,15.2,,10,10.18)
+	$(call build_suse,suse,15.2,,10,10.19)
 	touch build/suse_15.2_10
 
 build/suse_15.2_11:
-	$(call build_suse,suse,15.2,,11,11.13)
+	$(call build_suse,suse,15.2,,11,11.14)
 	touch build/suse_15.2_11
 
 build/suse_15.2_12:
-	$(call build_suse,suse,15.2,,12,12.8)
+	$(call build_suse,suse,15.2,,12,12.9)
 	touch build/suse_15.2_12
 
 build/suse_15.2_13:
-	$(call build_suse,suse,15.2,,13,13.4)
+	$(call build_suse,suse,15.2,,13,13.5)
 	touch build/suse_15.2_13
 
 build/suse_15.2_14:
-	$(call build_suse,suse,15.2,,14,14.0)
+	$(call build_suse,suse,15.2,,14,14.1)
 	touch build/suse_15.2_14

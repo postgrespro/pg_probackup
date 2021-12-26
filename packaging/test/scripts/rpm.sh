@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Copyright Notice:
-# © (C) Postgres Professional 2015-2016 http://www.postgrespro.ru/
+# © (C) Postgres Professional 2015-2021 http://www.postgrespro.ru/
 # Distributed under Apache License 2.0
 # Распространяется по лицензии Apache 2.0
 
@@ -13,23 +13,19 @@ ulimit -n 1024
 
 PG_TOG=$(echo $PG_VERSION | sed 's|\.||g')
 
-yum update -y
+if [ ${DISTRIB} != 'rhel' -o ${DISTRIB_VERSION} != '7' ]; then
+    # update of rpm package is broken in rhel-7 (26/12/2022)
+    yum update -y
+fi
 # yum upgrade -y || echo 'some packages in docker failed to upgrade'
 # yum install -y sudo
-if [ ${DISTRIB} == 'rhel' ] && [ ${PG_TOG} == '13' ]; then # no packages for PG13 on PGDG
-    exit 0
-fi
 
-#if [ ${DISTRIB} == 'oraclelinux' ] &&  [ ${DISTRIB_VERSION} == '6' ] && [ ${PG_TOG} == '13' ]; then # no packages for PG13 on PGDG
-#    exit 0
-#fi
-
-if [ ${DISTRIB_VERSION} == '6' ]; then
+if [ ${DISTRIB_VERSION} = '6' ]; then
     yum install -y https://nginx.org/packages/rhel/6/x86_64/RPMS/nginx-1.8.1-1.el6.ngx.x86_64.rpm
-elif [ ${DISTRIB} == 'oraclelinux' ] && [ ${DISTRIB_VERSION} == '8' ]; then
-    yum install -y nginx
-elif [ ${DISTRIB_VERSION} == '7' ]; then
+elif [ ${DISTRIB_VERSION} = '7' ]; then
     yum install -y https://nginx.org/packages/rhel/7/x86_64/RPMS/nginx-1.8.1-1.el7.ngx.x86_64.rpm
+elif [ ${DISTRIB_VERSION} = '8' -a \( ${DISTRIB} = 'rhel' -o ${DISTRIB} = 'oraclelinux' \) ]; then
+    yum install -y nginx
 else
     yum install epel-release -y
     yum install -y nginx

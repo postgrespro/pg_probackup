@@ -4,10 +4,10 @@ export PBK_VERSION=2.4.17
 export PBK_HASH=57f871accce2604
 export PBK_RELEASE=1
 export PBK_EDITION=std|ent
-make pkg
+make --keep-going pkg
 ```
 
-To build binaries for PostgresPro Standart or Enterprise, a pgpro.tar.bz2 with latest git tree must be preset in `packaging/pkg/tarballs` directory:
+To build binaries for PostgresPro Standard or Enterprise, a pgpro.tar.bz2 with latest git tree must be preset in `packaging/pkg/tarballs` directory:
 ```
 cd packaging/pkg/tarballs
 git clone pgpro_repo pgpro
@@ -19,3 +19,5 @@ Repo must be build using 1 thread (due to debian bullshit):
 ```
 make repo -j1
 ```
+
+

@@ -1,20 +1,50 @@
 # ALT 9
 build/test_alt_9_9.6:
-	$(call test_alt,alt,9,,9.6,9.6.21)
+	$(call test_alt,alt,9,,9.6,9.6.24)
 	touch build/test_alt_9_9.6
 
 build/test_alt_9_10:
-	$(call test_alt,alt,9,,10,10.17)
+	$(call test_alt,alt,9,,10,10.19)
 	touch build/test_alt_9_10
 
 build/test_alt_9_11:
-	$(call test_alt,alt,9,,11,11.11)
+	$(call test_alt,alt,9,,11,11.14)
 	touch build/test_alt_9_11
 
 build/test_alt_9_12:
-	$(call test_alt,alt,9,,12,12.6)
+	$(call test_alt,alt,9,,12,12.9)
 	touch build/test_alt_9_12
 
 build/test_alt_9_13:
-	$(call test_alt,alt,9,,13,13.2)
+	$(call test_alt,alt,9,,13,13.5)
 	touch build/test_alt_9_13
+
+build/test_alt_9_14:
+	$(call test_alt,alt,9,,14,14.1)
+	touch build/test_alt_9_14
+
+# ALT 8
+build/test_alt_8_9.6:
+	$(call test_alt,alt,8,,9.6,9.6.24)
+	touch build/test_alt_8_9.6
+
+build/test_alt_8_10:
+	$(call test_alt,alt,8,,10,10.19)
+	touch build/test_alt_8_10
+
+build/test_alt_8_11:
+	$(call test_alt,alt,8,,11,11.14)
+	touch build/test_alt_8_11
+
+build/test_alt_8_12:
+	$(call test_alt,alt,8,,12,12.9)
+	touch build/test_alt_8_12
+
+build/test_alt_8_13:
+	$(call test_alt,alt,8,,13,13.5)
+	touch build/test_alt_8_13
+
+build/test_alt_8_14:
+	$(call test_alt,alt,8,,14,14.1)
+	touch build/test_alt_8_14
+

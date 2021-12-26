@@ -20,24 +20,17 @@ export KEYS_DIR=$OUT_DIR/keys
 mkdir -p "$KEYS_DIR"
 rsync /app/repo/$PBK_PKG_REPO/gnupg/key.public $KEYS_DIR/GPG-KEY-PG_PROBACKUP
 chmod 755 $KEYS_DIR
-chmod +x /app/repo/$PBK_PKG_REPO/autosign.sh
 echo -e 'User-agent: *\nDisallow: /' > $OUT_DIR/robots.txt
 
 cd $INPUT_DIR
 
-cp -arv /app/repo/$PBK_PKG_REPO/rpmmacros /root/.rpmmacros
+cp -arv /app/repo/rpm-conf/rpmmacros /root/.rpmmacros
 cp -arv /app/repo/$PBK_PKG_REPO/gnupg /root/.gnupg
 chmod -R 0600 /root/.gnupg
 chown -R root:root /root/.gnupg
 
 for pkg in $(ls ${INPUT_DIR}); do
 	for pkg_full_version in $(ls ${INPUT_DIR}/$pkg); do
-
-		# THere is no std/ent packages for PG 9.5
-		if [[ ${pkg} == 'pg_probackup-std-9.5' ]] || [[ ${pkg} == 'pg_probackup-ent-9.5' ]] ; then
-    		continue;
-		fi
-
 		if [[ ${PBK_EDITION} == '' ]] ; then
 			cp $INPUT_DIR/$pkg/$pkg_full_version/RPMS/noarch/pg_probackup-repo-*.noarch.rpm \
 				$KEYS_DIR/pg_probackup-repo-$DISTRIB.noarch.rpm

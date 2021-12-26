@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Copyright Notice:
-# © (C) Postgres Professional 2015-2016 http://www.postgrespro.ru/
+# © (C) Postgres Professional 2015-2021 http://www.postgrespro.ru/
 # Distributed under Apache License 2.0
 # Распространяется по лицензии Apache 2.0
 
@@ -18,18 +18,16 @@ set -o pipefail
 # fix https://github.com/moby/moby/issues/23137
 ulimit -n 1024
 
-# THere is no std/ent packages for PG 9.5
-if [[ ${PG_VERSION} == '9.5' ]] && [[ ${PBK_EDITION} != '' ]] ; then
-    exit 0
-fi
-
-if [ -f /etc/centos-release ] ; then
+if [ ${DISTRIB} = 'centos' ] ; then
 	sed -i 's|^baseurl=http://|baseurl=https://|g' /etc/yum.repos.d/*.repo
 	yum update -y
 fi
 
 # PACKAGES NEEDED
 yum install -y git wget bzip2 rpm-build
+if [ ${DISTRIB} = 'oraclelinux' -a ${DISTRIB_VERSION} = '8' -a -n ${PBK_EDITION} ] ; then
+	yum install -y bison flex
+fi
 
 mkdir /root/build
 cd /root/build

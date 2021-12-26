@@ -1,5 +1,5 @@
 [pg_probackup-forks]
-name=PG_PROBACKUP @SHORT_CODENAME@ packages for PostgresPro Standart and Enterprise - $basearch
+name=PG_PROBACKUP @SHORT_CODENAME@ packages for PostgresPro Standard and Enterprise - $basearch
 baseurl=https://repo.postgrespro.ru/pg_probackup-forks/rpm/latest/@DISTRIB@-$releasever-$basearch
 enabled=1
 gpgcheck=1

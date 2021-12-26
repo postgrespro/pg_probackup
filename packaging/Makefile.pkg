@@ -1,6 +1,6 @@
 ifeq ($(PBK_EDITION),std)
 	PBK_PKG_REPO = pg_probackup-forks
-	PBK_EDITION_FULL = Standart
+	PBK_EDITION_FULL = Standard
 	PKG_NAME_SUFFIX = std-
 else ifeq ($(PBK_EDITION),ent)
 	PBK_PKG_REPO = pg_probackup-forks
@@ -42,11 +42,8 @@ build/all: build/debian build/ubuntu build/centos build/oraclelinux build/alt bu
 	@echo Packaging is done
 
 ### DEBIAN
-build/debian: build/debian_8 build/debian_9 build/debian_10 build/debian_11
+build/debian: build/debian_9 build/debian_10 build/debian_11
 	@echo Debian: done
-
-build/debian_8: build/debian_8_9.6 build/debian_8_10 build/debian_8_11 build/debian_8_12 build/debian_8_13 build/debian_8_14
-	@echo Debian 8: done
 
 build/debian_9: build/debian_9_9.6 build/debian_9_10 build/debian_9_11 build/debian_9_12 build/debian_9_13 build/debian_9_14
 	@echo Debian 9: done
@@ -58,14 +55,8 @@ build/debian_11: build/debian_11_9.6 build/debian_11_10 build/debian_11_11 build
 	@echo Debian 11: done
 
 ### UBUNTU
-build/ubuntu: build/ubuntu_14.04 build/ubuntu_16.04 build/ubuntu_18.04 build/ubuntu_20.04
+build/ubuntu: build/ubuntu_18.04 build/ubuntu_20.04
 	@echo Ubuntu: done
-
-build/ubuntu_14.04: build/ubuntu_14.04_9.6 build/ubuntu_14.04_10 build/ubuntu_14.04_11 build/ubuntu_14.04_12 build/ubuntu_14.04_13 build/ubuntu_14.04_14
-	@echo Ubuntu 14.04: done
-
-build/ubuntu_16.04: build/ubuntu_16.04_9.6 build/ubuntu_16.04_10 build/ubuntu_16.04_11 build/ubuntu_16.04_12 build/ubuntu_16.04_13 build/ubuntu_16.04_14
-	@echo Ubuntu 16.04: done
 
 build/ubuntu_18.04: build/ubuntu_18.04_9.6 build/ubuntu_18.04_10 build/ubuntu_18.04_11 build/ubuntu_18.04_12 build/ubuntu_18.04_13 build/ubuntu_18.04_14
 	@echo Ubuntu 18.04: done
@@ -95,7 +86,8 @@ build/centos: build/centos_7 build/centos_8 #build/rpm_repo_package_centos
 build/centos_7: build/centos_7_9.6 build/centos_7_10 build/centos_7_11 build/centos_7_12 build/centos_7_13 build/centos_7_14
 	@echo Centos 7: done
 
-build/centos_8: build/centos_8_9.6 build/centos_8_10 build/centos_8_11 build/centos_8_12 build/centos_8_13 build/centos_8_14
+# pgpro-9.6@centos-8 doesn't exist
+build/centos_8: build/centos_8_10 build/centos_8_11 build/centos_8_12 build/centos_8_13 build/centos_8_14 #build/centos_8_9.6
 	@echo Centos 8: done
 
 # Oracle Linux
@@ -108,7 +100,8 @@ build/oraclelinux_6: build/oraclelinux_6_9.6 build/oraclelinux_6_10 build/oracle
 build/oraclelinux_7: build/oraclelinux_7_9.6 build/oraclelinux_7_10 build/oraclelinux_7_11 build/oraclelinux_7_12 build/oraclelinux_7_13 build/oraclelinux_7_14
 	@echo Oraclelinux 7: done
 
-build/oraclelinux_8: build/oraclelinux_8_9.6 build/oraclelinux_8_10 build/oraclelinux_8_11 build/oraclelinux_8_12 build/oraclelinux_8_13 build/oraclelinux_8_14
+# pgpro-9.6@oraclelinux-8 doesn't exist
+build/oraclelinux_8: build/oraclelinux_8_10 build/oraclelinux_8_11 build/oraclelinux_8_12 build/oraclelinux_8_13 build/oraclelinux_8_14 #build/oraclelinux_8_9.6
 	@echo Oraclelinux 8: done
 
 # RHEL
@@ -170,7 +163,8 @@ include packaging/pkg/Makefile.alt
 build/suse: build/suse_15.1 build/suse_15.2
 	@echo Suse: done
 
-build/suse_15.1: build/suse_15.1_9.6 build/suse_15.1_10 build/suse_15.1_11 build/suse_15.1_12 build/suse_15.1_13 build/suse_15.1_14
+# there is no PG-14 in suse-15.1 repositories (test fails)
+build/suse_15.1: build/suse_15.1_9.6 build/suse_15.1_10 build/suse_15.1_11 build/suse_15.1_12 build/suse_15.1_13
 	@echo Rhel 15.1: done
 
 build/suse_15.2: build/suse_15.2_9.6 build/suse_15.2_10 build/suse_15.2_11 build/suse_15.2_12 build/suse_15.2_13 build/suse_15.2_14

@@ -1,14 +1,10 @@
 #### REPO BUILD ####
-repo: check_env repo/debian repo/ubuntu repo/centos repo/oraclelinux repo/alt repo/suse repo_finish #repo/rhel
+repo: check_env repo/debian repo/ubuntu repo/centos repo/oraclelinux repo/rhel repo/alt repo/suse repo_finish
 	@echo Build repo for all platform: done
 
 # Debian
-repo/debian: build/repo_debian_8 build/repo_debian_9 build/repo_debian_10 build/repo_debian_11
+repo/debian: build/repo_debian_9 build/repo_debian_10 build/repo_debian_11
 	@echo Build repo for debian platforms: done
-
-build/repo_debian_8:
-	$(call build_repo_deb,debian,8,jessie)
-	touch build/repo_debian_8
 
 build/repo_debian_9:
 	$(call build_repo_deb,debian,9,stretch)
@@ -23,16 +19,8 @@ build/repo_debian_11:
 	touch build/repo_debian_11
 
 # Ubuntu
-repo/ubuntu: build/repo_ubuntu_14.04 build/repo_ubuntu_16.04 build/repo_ubuntu_18.04 build/repo_ubuntu_20.04
+repo/ubuntu: build/repo_ubuntu_18.04 build/repo_ubuntu_20.04
 	@echo Build repo for ubuntu platforms: done
-
-build/repo_ubuntu_14.04:
-	$(call build_repo_deb,ubuntu,14.04,trusty)
-	touch build/repo_ubuntu_14.04
-
-build/repo_ubuntu_16.04:
-	$(call build_repo_deb,ubuntu,16.04,xenial)
-	touch build/repo_ubuntu_16.04
 
 build/repo_ubuntu_18.04:
 	$(call build_repo_deb,ubuntu,18.04,bionic)

@@ -33,7 +33,7 @@ rsync /app/repo/$PBK_PKG_REPO/gnupg/key.public $KEYS_DIR/GPG-KEY-PG_PROBACKUP
 
 echo -e 'User-agent: *\nDisallow: /' > $OUT_DIR/robots.txt
 
-cp -arv /app/repo/$PBK_PKG_REPO/rpmmacros /root/.rpmmacros
+cp -arv /app/repo/rpm-conf/rpmmacros /root/.rpmmacros
 cp -arv /app/repo/$PBK_PKG_REPO/gnupg /root/.gnupg
 chmod -R 0600 /root/.gnupg
 

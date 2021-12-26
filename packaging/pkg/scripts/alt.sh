@@ -49,11 +49,11 @@ else
 	cd /root/rpmbuild/SOURCES/pgpro
 
 	PGPRO_TOC=$(echo ${PG_FULL_VERSION} | sed 's|\.|_|g')
-    if [[ ${PBK_EDITION} == 'std' ]] ; then
-        git checkout "PGPRO${PGPRO_TOC}_1"
-    else
-        git checkout "PGPROEE${PGPRO_TOC}_1"
-    fi
+	if [[ ${PBK_EDITION} == 'std' ]] ; then
+		git checkout "PGPRO${PGPRO_TOC}_1"
+	else
+		git checkout "PGPROEE${PGPRO_TOC}_1"
+	fi
 	rm -rf .git
 
 	cd /root/rpmbuild/SOURCES/
@@ -86,7 +86,7 @@ else
 	sed -i "s/@PG_FULL_VERSION@/${PG_FULL_VERSION}/" pg_probackup.alt.forks.spec
 
 	if [ ${PG_VERSION} != '9.6' ]; then
-	    sed -i "s|@PREFIX@|/opt/pgpro/${EDITION}-${PG_VERSION}|g" pg_probackup.alt.forks.spec
+		sed -i "s|@PREFIX@|/opt/pgpro/${EDITION}-${PG_VERSION}|g" pg_probackup.alt.forks.spec
 	fi
 fi
 
@@ -106,7 +106,6 @@ fi
 apt-get install -y flex libldap-devel libpam-devel libreadline-devel libssl-devel
 
 if [[ ${PBK_EDITION} == '' ]] ; then
-
 	# build pg_probackup
 	rpmbuild -bs pg_probackup.alt.spec
 	rpmbuild -ba pg_probackup.alt.spec #2>&1 | tee -ai /app/out/build.log

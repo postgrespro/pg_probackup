@@ -13,7 +13,12 @@ ulimit -n 1024
 
 PG_TOG=$(echo $PG_VERSION | sed 's|\.||g')
 
-if [ ${PBK_PBK_EDITION} == 'ent' ]; then
+if [ ${DISTRIB} != 'rhel' -o ${DISTRIB_VERSION} != '7' ]; then
+    # update of rpm package is broken in rhel-7 (26/12/2022)
+    yum update -y
+fi
+
+if [ ${PBK_EDITION} == 'ent' ]; then
     exit 0
 fi
 

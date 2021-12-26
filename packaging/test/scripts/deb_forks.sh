@@ -31,7 +31,11 @@ echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selections
 #printf "deb http://archive.debian.org/debian/ jessie main\ndeb-src http://archive.debian.org/debian/ jessie main\ndeb http://security.debian.org jessie/updates main\ndeb-src http://security.debian.org jessie/updates main" > /etc/apt/sources.list
 #fi
 
-apt-get -qq update
+if [ ${DISTRIB} = 'debian' -a ${CODENAME} = 'stretch' ] ; then
+    apt-get -qq update
+else
+    apt-get -qq --allow-releaseinfo-change update
+fi
 apt-get -qq install -y wget nginx gnupg lsb-release apt-transport-https
 #apt-get -qq install -y libterm-readline-gnu-perl dialog gnupg procps
 
