@@ -227,6 +227,8 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 	uint32		actual_window = 0;
 	uint64		actual_space = 0;
 
+	elog(INFO, "retention_redundancy %d, retention_size %ld",
+		instance_config.retention_redundancy, instance_config.retention_size);
 	/* Calculate n_full_backups, total_backups_size and days_threshold */
 	if (instance_config.retention_redundancy > 0 ||
 			instance_config.retention_size > 0)
@@ -241,8 +243,7 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 					n_full_backups++;
 
 			/* Consider only valid FULL backups for Redundancy */
-			if (((instance_config.retention_redundancy > 0 ) &&
-				backup->backup_mode == BACKUP_MODE_FULL &&
+			if ((backup->backup_mode == BACKUP_MODE_FULL &&
 				(backup->status == BACKUP_STATUS_OK ||
 					backup->status == BACKUP_STATUS_DONE)))
 			{
@@ -255,10 +256,13 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 
 					parray_append(redundancy_full_backup_list, backup);
 				}
+
 			}
 
-			if ((instance_config.retention_size > 0) &&
-				(total_backups_size <= instance_config.retention_size * 1024 * 1024))
+			/* Consider only finished backups for retention_size */
+			if ((backup->status == BACKUP_STATUS_OK || backup->status == BACKUP_STATUS_DONE)
+					&& (instance_config.retention_size > 0) &&
+				(total_backups_size <= instance_config.retention_size * 1024))
 			{
 				if (!size_backup_list)
 					size_backup_list = parray_new();
@@ -336,7 +340,7 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 			(((instance_config.retention_redundancy == 0) || !redundancy_keep) &&
 			((instance_config.retention_size == 0) || !size_keep)))
 		{
-			elog(INFO, "Check if backup %s in needed by retention", base36enc(backup->start_time));
+			elog(LOG, "Check if backup %s in needed by retention", base36enc(backup->start_time));
 			/* This backup is not guarded by retention
 			 *
 			 * Redundancy = 1
@@ -366,7 +370,7 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 			}
 
 			/* Add backup to purge_list */
-			elog(VERBOSE, "Mark backup %s for purge.", base36enc(backup->start_time));
+			elog(INFO, "Mark backup %s for purge.", base36enc(backup->start_time));
 			parray_append(to_purge_list, backup);
 
 			/* Calculate residuary space */
@@ -382,6 +386,7 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 					&& merge_expired)
 			{
 				pgBackup *full_backup = find_parent_full_backup(backup);
+				elog(LOG, "Find parent backup for %s to merge", base36enc(backup->start_time));
 				if (!parray_bsearch(to_purge_list, full_backup, pgBackupCompareIdDesc))
 					parray_append(to_purge_list, full_backup);
 				if (!parray_bsearch(to_keep_list, backup, pgBackupCompareIdDesc))
@@ -444,7 +449,7 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 	 */
 
 	cur_full_backup_num = 1;
-	actual_space = 0;
+	//actual_space = 0;
 	for (i = 0; i < parray_num(backup_list); i++)
 	{
 		char		*action = "Active";
@@ -452,7 +457,7 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 
 		pgBackup	*backup = (pgBackup *) parray_get(backup_list, i);
 
-		actual_space += backup->data_bytes;
+		//actual_space += backup->data_bytes;
 
 		if (parray_bsearch(to_purge_list, backup, pgBackupCompareIdDesc))
 			action = "Expired";
@@ -475,8 +480,8 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 				instance_config.retention_redundancy,
 				actual_window,
 				pinning_window ? pinning_window : instance_config.retention_window,
-				(float)total_backups_size/(1024L * 1024L * 1024L),
-				(float)instance_config.retention_size, // /(1024L * 1024L),
+				(float)total_backups_size/(1024L * 1024L *1024L),
+				(float)instance_config.retention_size /(1024L *1024L),
 				action);
 
 		/* Only valid full backups are count to something */
