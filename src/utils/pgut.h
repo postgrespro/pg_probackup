@@ -70,11 +70,6 @@ extern char *pgut_str_strip_trailing_filename(const char *filepath, const char *
 #define pgut_newarray(type, n)	((type *) pgut_malloc(sizeof(type) * (n)))
 
 /*
- * file operations
- */
-extern FILE *pgut_fopen(const char *path, const char *mode, bool missing_ok);
-
-/*
  * Assert
  */
 #undef Assert

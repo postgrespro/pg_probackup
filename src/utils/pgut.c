@@ -980,7 +980,7 @@ pgut_strndup(const char *str, size_t n)
 /*
  * Allocates new string, that contains part of filepath string minus trailing filename string
  * If trailing filename string not found, returns copy of filepath.
- * Result must be free by caller.
+ * Result must be freed by caller.
  */
 char *
 pgut_str_strip_trailing_filename(const char *filepath, const char *filename)
@@ -991,23 +991,6 @@ pgut_str_strip_trailing_filename(const char *filepath, const char *filename)
 		return pgut_strndup(filepath, fp_len - fn_len);
 	else
 		return pgut_strndup(filepath, fp_len);
-}
-
-FILE *
-pgut_fopen(const char *path, const char *mode, bool missing_ok)
-{
-	FILE *fp;
-
-	if ((fp = fio_open_stream(path, FIO_BACKUP_HOST)) == NULL)
-	{
-		if (missing_ok && errno == ENOENT)
-			return NULL;
-
-		elog(ERROR, "could not open file \"%s\": %s",
-			path, strerror(errno));
-	}
-
-	return fp;
 }
 
 #ifdef WIN32
