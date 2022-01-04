@@ -555,8 +555,14 @@ config_read_opt(const char *path, ConfigOption options[], int elevel,
 	if (!options)
 		return parsed_options;
 
-	if ((fp = pgut_fopen(path, "rt", missing_ok)) == NULL)
-		return parsed_options;
+	if ((fp = fio_open_stream(path, FIO_BACKUP_HOST)) == NULL)
+	{
+			if (missing_ok && errno == ENOENT)
+					return parsed_options;
+
+			elog(ERROR, "could not open file \"%s\": %s",
+							path, strerror(errno));
+	}
 
 	while (fgets(buf, lengthof(buf), fp))
 	{
