@@ -3,7 +3,7 @@
  * restore.c: restore DB cluster and archived WAL.
  *
  * Portions Copyright (c) 2009-2013, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
- * Portions Copyright (c) 2015-2019, Postgres Professional
+ * Portions Copyright (c) 2015-2022, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */
@@ -922,8 +922,10 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 
 				join_path_components(fullpath, pgdata_path, file->rel_path);
 
-				fio_delete(file->mode, fullpath, FIO_DB_HOST);
-				elog(VERBOSE, "Deleted file \"%s\"", fullpath);
+				if (fio_remove(fullpath, false, FIO_DB_HOST) == 0)
+					elog(VERBOSE, "Deleted file \"%s\"", fullpath);
+				else
+					elog(ERROR, "Cannot delete redundant file \"%s\": %s", fullpath, strerror(errno));
 
 				/* shrink pgdata list */
 				pgFileFree(file);

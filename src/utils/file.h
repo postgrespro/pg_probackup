@@ -20,12 +20,11 @@ typedef enum
 	FIO_SYNC,
 	FIO_RENAME,
 	FIO_SYMLINK,
-	FIO_UNLINK,
+	FIO_REMOVE,
 	FIO_MKDIR,
 	FIO_CHMOD,
 	FIO_SEEK,
 	FIO_TRUNCATE,
-	FIO_DELETE,
 	FIO_PREAD,
 	FIO_READ,
 	FIO_LOAD,
@@ -124,7 +123,7 @@ extern pg_crc32 fio_get_crc32(const char *file_path, fio_location location, bool
 
 extern int     fio_rename(char const* old_path, char const* new_path, fio_location location);
 extern int     fio_symlink(char const* target, char const* link_path, bool overwrite, fio_location location);
-extern int     fio_unlink(char const* path, fio_location location);
+extern int     fio_remove(char const* path, bool missing_ok, fio_location location);
 extern int     fio_mkdir(char const* path, int mode, fio_location location);
 extern int     fio_chmod(char const* path, int mode, fio_location location);
 extern int     fio_access(char const* path, int mode, fio_location location);

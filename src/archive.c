@@ -3,7 +3,7 @@
  * archive.c: -  pg_probackup specific archive commands for archive backups.
  *
  *
- * Portions Copyright (c) 2018-2021, Postgres Professional
+ * Portions Copyright (c) 2018-2022, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */
@@ -497,7 +497,8 @@ push_file_internal_uncompressed(const char *wal_file_name, const char *pg_xlog_d
 
 		/* Partial segment is considered stale, so reuse it */
 		elog(LOG, "Reusing stale temp WAL file \"%s\"", to_fullpath_part);
-		fio_unlink(to_fullpath_part, FIO_BACKUP_HOST);
+		if (fio_remove(to_fullpath_part, false, FIO_BACKUP_HOST) != 0)
+			elog(ERROR, "Cannot remove stale temp WAL file \"%s\": %s", to_fullpath_part, strerror(errno));
 
 		out = fio_open(to_fullpath_part, O_RDWR | O_CREAT | O_EXCL | PG_BINARY, FIO_BACKUP_HOST);
 		if (out < 0)
@@ -522,7 +523,8 @@ part_opened:
 			/* cleanup */
 			fclose(in);
 			fio_close(out);
-			fio_unlink(to_fullpath_part, FIO_BACKUP_HOST);
+			if (fio_remove(to_fullpath_part, false, FIO_BACKUP_HOST) != 0)
+				elog(WARNING, "Cannot remove temp WAL file \"%s\": %s", to_fullpath_part, strerror(errno));
 			return 1;
 		}
 		else
@@ -535,7 +537,8 @@ part_opened:
 				/* Overwriting is forbidden,
 				 * so we must unlink partial file and exit with error.
 				 */
-				fio_unlink(to_fullpath_part, FIO_BACKUP_HOST);
+				if (fio_remove(to_fullpath_part, false, FIO_BACKUP_HOST) != 0)
+					elog(WARNING, "Cannot remove temp WAL file \"%s\": %s", to_fullpath_part, strerror(errno));
 				elog(ERROR, "WAL file already exists in archive with "
 						"different checksum: \"%s\"", to_fullpath);
 			}
@@ -552,16 +555,20 @@ part_opened:
 
 		if (ferror(in))
 		{
-			fio_unlink(to_fullpath_part, FIO_BACKUP_HOST);
+			int save_errno = errno;
+			if (fio_remove(to_fullpath_part, false, FIO_BACKUP_HOST) != 0)
+				elog(WARNING, "Cannot remove temp WAL file \"%s\": %s", to_fullpath_part, strerror(errno));
 			elog(ERROR, "Cannot read source file \"%s\": %s",
-						from_fullpath, strerror(errno));
+						from_fullpath, strerror(save_errno));
 		}
 
 		if (read_len > 0 && fio_write_async(out, buf, read_len) != read_len)
 		{
-			fio_unlink(to_fullpath_part, FIO_BACKUP_HOST);
+			int save_errno = errno;
+			if (fio_remove(to_fullpath_part, false, FIO_BACKUP_HOST) != 0)
+				elog(WARNING, "Cannot cleanup temp WAL file \"%s\": %s", to_fullpath_part, strerror(errno));
 			elog(ERROR, "Cannot write to destination temp file \"%s\": %s",
-						to_fullpath_part, strerror(errno));
+						to_fullpath_part, strerror(save_errno));
 		}
 
 		if (feof(in))
@@ -574,7 +581,8 @@ part_opened:
 	/* Writing is asynchronous in case of push in remote mode, so check agent status */
 	if (fio_check_error_fd(out, &errmsg))
 	{
-		fio_unlink(to_fullpath_part, FIO_BACKUP_HOST);
+		if (fio_remove(to_fullpath_part, false, FIO_BACKUP_HOST) != 0)
+			elog(WARNING, "Cannot cleanup temp WAL file \"%s\": %s", to_fullpath_part, strerror(errno));
 		elog(ERROR, "Cannot write to the remote file \"%s\": %s",
 					to_fullpath_part, errmsg);
 	}
@@ -582,9 +590,11 @@ part_opened:
 	/* close temp file */
 	if (fio_close(out) != 0)
 	{
-		fio_unlink(to_fullpath_part, FIO_BACKUP_HOST);
+		int save_errno = errno;
+		if (fio_remove(to_fullpath_part, false, FIO_BACKUP_HOST) != 0)
+			elog(WARNING, "Cannot cleanup temp WAL file \"%s\": %s", to_fullpath_part, strerror(errno));
 		elog(ERROR, "Cannot close temp WAL file \"%s\": %s",
-					to_fullpath_part, strerror(errno));
+					to_fullpath_part, strerror(save_errno));
 	}
 
 	/* sync temp file to disk */
@@ -602,9 +612,11 @@ part_opened:
 	/* Rename temp file to destination file */
 	if (fio_rename(to_fullpath_part, to_fullpath, FIO_BACKUP_HOST) < 0)
 	{
-		fio_unlink(to_fullpath_part, FIO_BACKUP_HOST);
+		int save_errno = errno;
+		if (fio_remove(to_fullpath_part, false, FIO_BACKUP_HOST) != 0)
+			elog(WARNING, "Cannot cleanup temp WAL file \"%s\": %s", to_fullpath_part, strerror(errno));
 		elog(ERROR, "Cannot rename file \"%s\" to \"%s\": %s",
-					to_fullpath_part, to_fullpath, strerror(errno));
+					to_fullpath_part, to_fullpath, strerror(save_errno));
 	}
 
 	pg_free(buf);
@@ -743,7 +755,8 @@ push_file_internal_gz(const char *wal_file_name, const char *pg_xlog_dir,
 
 		/* Partial segment is considered stale, so reuse it */
 		elog(LOG, "Reusing stale temp WAL file \"%s\"", to_fullpath_gz_part);
-		fio_unlink(to_fullpath_gz_part, FIO_BACKUP_HOST);
+		if (fio_remove(to_fullpath_gz_part, false, FIO_BACKUP_HOST) != 0)
+			elog(ERROR, "Cannot remove stale compressed temp WAL file \"%s\": %s", to_fullpath_gz_part, strerror(errno));
 
 		out = fio_gzopen(to_fullpath_gz_part, PG_BINARY_W, compress_level, FIO_BACKUP_HOST);
 		if (out == NULL)
@@ -771,7 +784,8 @@ part_opened:
 			/* cleanup */
 			fclose(in);
 			fio_gzclose(out);
-			fio_unlink(to_fullpath_gz_part, FIO_BACKUP_HOST);
+			if (fio_remove(to_fullpath_gz_part, false, FIO_BACKUP_HOST) != 0)
+				elog(WARNING, "Cannot remove compressed temp WAL file \"%s\": %s", to_fullpath_gz_part, strerror(errno));
 			return 1;
 		}
 		else
@@ -784,7 +798,8 @@ part_opened:
 				/* Overwriting is forbidden,
 				 * so we must unlink partial file and exit with error.
 				 */
-				fio_unlink(to_fullpath_gz_part, FIO_BACKUP_HOST);
+				if (fio_remove(to_fullpath_gz_part, false, FIO_BACKUP_HOST) != 0)
+					elog(WARNING, "Cannot remove compressed temp WAL file \"%s\": %s", to_fullpath_gz_part, strerror(errno));
 				elog(ERROR, "WAL file already exists in archive with "
 						"different checksum: \"%s\"", to_fullpath_gz);
 			}
@@ -801,16 +816,20 @@ part_opened:
 
 		if (ferror(in))
 		{
-			fio_unlink(to_fullpath_gz_part, FIO_BACKUP_HOST);
+			int save_errno = errno;
+			if (fio_remove(to_fullpath_gz_part, false, FIO_BACKUP_HOST) != 0)
+				elog(WARNING, "Cannot remove compressed temp WAL file \"%s\": %s", to_fullpath_gz_part, strerror(errno));
 			elog(ERROR, "Cannot read from source file \"%s\": %s",
-					from_fullpath, strerror(errno));
+					from_fullpath, strerror(save_errno));
 		}
 
 		if (read_len > 0 && fio_gzwrite(out, buf, read_len) != read_len)
 		{
-			fio_unlink(to_fullpath_gz_part, FIO_BACKUP_HOST);
+			int save_errno = errno;
+			if (fio_remove(to_fullpath_gz_part, false, FIO_BACKUP_HOST) != 0)
+				elog(WARNING, "Cannot cleanup compressed temp WAL file \"%s\": %s", to_fullpath_gz_part, strerror(errno));
 			elog(ERROR, "Cannot write to compressed temp WAL file \"%s\": %s",
-					to_fullpath_gz_part, get_gz_error(out, errno));
+					to_fullpath_gz_part, get_gz_error(out, save_errno));
 		}
 
 		if (feof(in))
@@ -823,7 +842,8 @@ part_opened:
 	/* Writing is asynchronous in case of push in remote mode, so check agent status */
 	if (fio_check_error_fd_gz(out, &errmsg))
 	{
-		fio_unlink(to_fullpath_gz_part, FIO_BACKUP_HOST);
+		if (fio_remove(to_fullpath_gz_part, false, FIO_BACKUP_HOST) != 0)
+			elog(WARNING, "Cannot cleanup remote compressed temp WAL file \"%s\": %s", to_fullpath_gz_part, strerror(errno));
 		elog(ERROR, "Cannot write to the remote compressed file \"%s\": %s",
 					to_fullpath_gz_part, errmsg);
 	}
@@ -831,9 +851,11 @@ part_opened:
 	/* close temp file, TODO: make it synchronous */
 	if (fio_gzclose(out) != 0)
 	{
-		fio_unlink(to_fullpath_gz_part, FIO_BACKUP_HOST);
+		int save_errno = errno;
+		if (fio_remove(to_fullpath_gz_part, false, FIO_BACKUP_HOST) != 0)
+			elog(WARNING, "Cannot cleanup compressed temp WAL file \"%s\": %s", to_fullpath_gz_part, strerror(errno));
 		elog(ERROR, "Cannot close compressed temp WAL file \"%s\": %s",
-				to_fullpath_gz_part, strerror(errno));
+				to_fullpath_gz_part, strerror(save_errno));
 	}
 
 	/* sync temp file to disk */
@@ -852,9 +874,11 @@ part_opened:
 	/* Rename temp file to destination file */
 	if (fio_rename(to_fullpath_gz_part, to_fullpath_gz, FIO_BACKUP_HOST) < 0)
 	{
-		fio_unlink(to_fullpath_gz_part, FIO_BACKUP_HOST);
+		int save_errno = errno;
+		if (fio_remove(to_fullpath_gz_part, false, FIO_BACKUP_HOST) != 0)
+			elog(WARNING, "Cannot cleanup compressed temp WAL file \"%s\": %s", to_fullpath_gz_part, strerror(errno));
 		elog(ERROR, "Cannot rename file \"%s\" to \"%s\": %s",
-				to_fullpath_gz_part, to_fullpath_gz, strerror(errno));
+				to_fullpath_gz_part, to_fullpath_gz, strerror(save_errno));
 	}
 
 	pg_free(buf);

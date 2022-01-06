@@ -3,7 +3,7 @@
  * catalog.c: backup catalog operation
  *
  * Portions Copyright (c) 2009-2011, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
- * Portions Copyright (c) 2015-2019, Postgres Professional
+ * Portions Copyright (c) 2015-2022, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */
@@ -451,7 +451,7 @@ grab_lock:
 		 * it.  Need a loop because of possible race condition against other
 		 * would-be creators.
 		 */
-		if (fio_unlink(lock_file, FIO_BACKUP_HOST) < 0)
+		if (fio_remove(lock_file, false, FIO_BACKUP_HOST) < 0)
 		{
 			if (errno == ENOENT)
 				continue; /* race condition, again */
@@ -476,7 +476,8 @@ grab_lock:
 		int save_errno = errno;
 
 		fio_close(fd);
-		fio_unlink(lock_file, FIO_BACKUP_HOST);
+		if (fio_remove(lock_file, false, FIO_BACKUP_HOST) != 0)
+			elog(WARNING, "Cannot remove lock file \"%s\": %s", lock_file, strerror(errno));
 
 		/* In lax mode if we failed to grab lock because of 'out of space error',
 		 * then treat backup as locked.
@@ -494,7 +495,8 @@ grab_lock:
 		int save_errno = errno;
 
 		fio_close(fd);
-		fio_unlink(lock_file, FIO_BACKUP_HOST);
+		if (fio_remove(lock_file, false, FIO_BACKUP_HOST) != 0)
+			elog(WARNING, "Cannot remove lock file \"%s\": %s", lock_file, strerror(errno));
 
 		/* In lax mode if we failed to grab lock because of 'out of space error',
 		 * then treat backup as locked.
@@ -511,9 +513,10 @@ grab_lock:
 	{
 		int save_errno = errno;
 
-		fio_unlink(lock_file, FIO_BACKUP_HOST);
+		if (fio_remove(lock_file, false, FIO_BACKUP_HOST) != 0)
+			elog(WARNING, "Cannot remove lock file \"%s\": %s", lock_file, strerror(errno));
 
-		if (!strict && errno == ENOSPC)
+		if (!strict && save_errno == ENOSPC)
 			return LOCK_FAIL_ENOSPC;
 		else
 			elog(ERROR, "Could not close lock file \"%s\": %s",
@@ -608,8 +611,9 @@ wait_shared_owners(pgBackup *backup)
         return 1;
     }
 
-    /* unlink shared lock file */
-    fio_unlink(lock_file, FIO_BACKUP_HOST);
+    /* remove shared lock file */
+    if (fio_remove(lock_file, true, FIO_BACKUP_HOST) != 0)
+	    elog(ERROR, "Cannot remove shared lock file \"%s\": %s", lock_file, strerror(errno));
     return 0;
 }
 
@@ -727,8 +731,9 @@ release_excl_lock_file(const char *backup_dir)
 
 	/* TODO Sanity check: maybe we should check, that pid in lock file is my_pid */
 
-	/* unlink pid file */
-	fio_unlink(lock_file, FIO_BACKUP_HOST);
+	/* remove pid file */
+	if (fio_remove(lock_file, false, FIO_BACKUP_HOST) != 0)
+		elog(ERROR, "Cannot remove exclusive lock file \"%s\": %s", lock_file, strerror(errno));
 }
 
 void
@@ -792,7 +797,8 @@ release_shared_lock_file(const char *backup_dir)
 	/* if there is no active pid left, then there is nothing to do */
 	if (buffer_len == 0)
 	{
-		fio_unlink(lock_file, FIO_BACKUP_HOST);
+		if (fio_remove(lock_file, false, FIO_BACKUP_HOST) != 0)
+			elog(ERROR, "Cannot remove shared lock file \"%s\": %s", lock_file, strerror(errno));
 		return;
 	}
 
@@ -2462,7 +2468,8 @@ write_backup(pgBackup *backup, bool strict)
 		if (!strict && (save_errno == ENOSPC))
 		{
 			fclose(fp);
-			fio_unlink(path_temp, FIO_BACKUP_HOST);
+			if (fio_remove(path_temp, false, FIO_BACKUP_HOST) != 0)
+				elog(elevel, "Additionally cannot remove file \"%s\": %s", path_temp, strerror(errno));
 			return;
 		}
 	}
