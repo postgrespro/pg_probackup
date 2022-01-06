@@ -2,7 +2,7 @@
  *
  * catchup.c: sync DB cluster
  *
- * Copyright (c) 2021, Postgres Professional
+ * Copyright (c) 2021-2022, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */
@@ -930,8 +930,10 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 				char		fullpath[MAXPGPATH];
 
 				join_path_components(fullpath, dest_pgdata, file->rel_path);
-				fio_delete(file->mode, fullpath, FIO_LOCAL_HOST);
-				elog(VERBOSE, "Deleted file \"%s\"", fullpath);
+				if (fio_remove(fullpath, false, FIO_LOCAL_HOST) == 0)
+					elog(VERBOSE, "Deleted file \"%s\"", fullpath);
+				else
+					elog(ERROR, "Cannot delete redundant file in destination \"%s\": %s", fullpath, strerror(errno));
 
 				/* shrink dest pgdata list */
 				pgFileFree(file);

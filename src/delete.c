@@ -3,7 +3,7 @@
  * delete.c: delete backup files.
  *
  * Portions Copyright (c) 2009-2013, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
- * Portions Copyright (c) 2015-2019, Postgres Professional
+ * Portions Copyright (c) 2015-2022, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */
@@ -782,7 +782,8 @@ delete_backup_files(pgBackup *backup)
 			elog(INFO, "Progress: (%zd/%zd). Delete file \"%s\"",
 				 i + 1, num_files, full_path);
 
-		pgFileDelete(file->mode, full_path);
+		if (fio_remove(full_path, false, FIO_BACKUP_HOST) != 0)
+			elog(ERROR, "Cannot remove file or directory \"%s\": %s", full_path, strerror(errno));
 	}
 
 	parray_walk(files, pgFileFree);
@@ -948,13 +949,11 @@ delete_walfiles_in_tli(InstanceState *instanceState, XLogRecPtr keep_lsn, timeli
 				continue;
 			}
 
-			/* unlink segment */
-			if (fio_unlink(wal_fullpath, FIO_BACKUP_HOST) < 0)
+			/* remove segment, missing file is not considered as error condition */
+			if (fio_remove(wal_fullpath, true, FIO_BACKUP_HOST) < 0)
 			{
-				/* Missing file is not considered as error condition */
-				if (errno != ENOENT)
-					elog(ERROR, "Could not remove file \"%s\": %s",
-							wal_fullpath, strerror(errno));
+				elog(ERROR, "Could not remove file \"%s\": %s",
+						wal_fullpath, strerror(errno));
 			}
 			else
 			{

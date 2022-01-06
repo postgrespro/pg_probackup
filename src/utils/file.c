@@ -176,7 +176,9 @@ fio_safestat(const char *path, struct stat *buf)
 }
 
 #define stat(x, y) fio_safestat(x, y)
+#endif /* WIN32 */
 
+#ifdef WIN32
 /* TODO: use real pread on Linux */
 static ssize_t
 pread(int fd, void* buf, size_t size, off_t off)
@@ -186,15 +188,16 @@ pread(int fd, void* buf, size_t size, off_t off)
 		return -1;
 	return read(fd, buf, size);
 }
+#endif /* WIN32 */
 
+#ifdef WIN32
 static int
 remove_file_or_dir(char const* path)
 {
 	int rc = remove(path);
-#ifdef WIN32
+
 	if (rc < 0 && errno == EACCESS)
 		rc = rmdir(path);
-#endif
 	return rc;
 }
 #else
@@ -1385,28 +1388,65 @@ fio_get_crc32(const char *file_path, fio_location location, bool decompress)
 	}
 }
 
-/* Remove file */
+/*
+ * Remove file or directory
+ * if missing_ok, then ignore ENOENT error
+ */
 int
-fio_unlink(char const* path, fio_location location)
+fio_remove(char const* path, bool missing_ok, fio_location location)
 {
+	int result = 0;
+
 	if (fio_is_remote(location))
 	{
-		fio_header hdr;
-		size_t path_len = strlen(path) + 1;
-		hdr.cop = FIO_UNLINK;
-		hdr.handle = -1;
-		hdr.size = path_len;
+		fio_header hdr = {
+			.cop = FIO_REMOVE,
+			.handle = -1,
+			.size = strlen(path) + 1,
+			.arg = missing_ok ? 1 : 0,
+		};
 
 		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
-		IO_CHECK(fio_write_all(fio_stdout, path, path_len), path_len);
+		IO_CHECK(fio_write_all(fio_stdout, path, hdr.size), hdr.size);
 
-		// TODO: error is swallowed ?
-		return 0;
+		IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
+		Assert(hdr.cop == FIO_REMOVE);
+
+		if (hdr.arg != 0)
+		{
+			errno = hdr.arg;
+			result = -1;
+		}
 	}
 	else
 	{
-		return remove_file_or_dir(path);
+		if (remove_file_or_dir(path) != 0)
+		{
+			if (!missing_ok || errno != ENOENT)
+				result = -1;
+		}
 	}
+	return result;
+}
+
+
+static void
+fio_remove_impl(char const* path, bool missing_ok, int out)
+{
+	fio_header hdr = {
+		.cop = FIO_REMOVE,
+		.handle = -1,
+		.size = 0,
+		.arg = 0,
+	};
+
+	if (remove_file_or_dir(path) != 0)
+	{
+		if (!missing_ok || errno != ENOENT)
+			hdr.arg = errno;
+	}
+
+	IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 }
 
 /* Create directory
@@ -3176,37 +3216,6 @@ fio_check_postmaster_impl(int out, char *buf)
 	IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 }
 
-/*
- * Delete file pointed by the pgFile.
- * If the pgFile points directory, the directory must be empty.
- */
-void
-fio_delete(mode_t mode, const char *fullpath, fio_location location)
-{
-	if (fio_is_remote(location))
-	{
-		fio_header  hdr;
-
-		hdr.cop = FIO_DELETE;
-		hdr.size = strlen(fullpath) + 1;
-		hdr.arg = mode;
-
-		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
-		IO_CHECK(fio_write_all(fio_stdout, fullpath, hdr.size), hdr.size);
-
-	}
-	else
-		pgFileDelete(mode, fullpath);
-}
-
-static void
-fio_delete_impl(mode_t mode, char *buf)
-{
-	char  *fullpath = (char*) buf;
-
-	pgFileDelete(mode, fullpath);
-}
-
 /* Execute commands at remote host */
 void
 fio_communicate(int in, int out)
@@ -3333,8 +3342,8 @@ fio_communicate(int in, int out)
 		  case FIO_SYMLINK: /* Create symbolic link */
 			fio_symlink_impl(out, buf, hdr.arg > 0 ? true : false);
 			break;
-		  case FIO_UNLINK: /* Remove file or directory (TODO: Win32) */
-			SYS_CHECK(remove_file_or_dir(buf));
+		  case FIO_REMOVE: /* Remove file or directory (TODO: Win32) */
+			fio_remove_impl(buf, hdr.arg == 1, out);
 			break;
 		  case FIO_MKDIR:  /* Create directory */
 			hdr.size = 0;
@@ -3395,10 +3404,6 @@ fio_communicate(int in, int out)
 		  case FIO_CHECK_POSTMASTER:
 			/* calculate crc32 for a file */
 			fio_check_postmaster_impl(out, buf);
-			break;
-		  case FIO_DELETE:
-			/* delete file */
-			fio_delete_impl(hdr.arg, buf);
 			break;
 		  case FIO_DISCONNECT:
 			hdr.cop = FIO_DISCONNECTED;
