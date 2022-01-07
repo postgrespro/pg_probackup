@@ -88,7 +88,7 @@ static const unit_conversion time_unit_conversion_table[] =
 };
 
 /* Order is important, keep it in sync with utils/configuration.h:enum ProbackupSubcmd declaration */
-static char const * const subcmd_names[] =
+static const char * const subcmd_names[] =
 {
 	"NO_CMD",
 	"init",
@@ -114,7 +114,7 @@ static char const * const subcmd_names[] =
 };
 
 ProbackupSubcmd
-parse_subcmd(char const * const subcmd_str)
+parse_subcmd(const char * const subcmd_str)
 {
 	struct {
 		ProbackupSubcmd id;
@@ -137,7 +137,7 @@ parse_subcmd(char const * const subcmd_str)
 	return NO_CMD;
 }
 
-char const *
+const char *
 get_subcmd_name(ProbackupSubcmd const subcmd)
 {
 	Assert((int)subcmd < sizeof(subcmd_names) / sizeof(subcmd_names[0]));
