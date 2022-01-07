@@ -818,7 +818,7 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 
 		for (i = 0; i < parray_num(external_dirs); i++)
 			fio_mkdir(FIO_DB_HOST, parray_get(external_dirs, i),
-					  DIR_PERMISSION);
+					  DIR_PERMISSION, false);
 	}
 
 	/*
@@ -844,7 +844,7 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 			join_path_components(dirpath, external_path, file->rel_path);
 
 			elog(VERBOSE, "Create external directory \"%s\"", dirpath);
-			fio_mkdir(FIO_DB_HOST, dirpath, file->mode);
+			fio_mkdir(FIO_DB_HOST, dirpath, file->mode, false);
 		}
 	}
 

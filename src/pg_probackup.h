@@ -1044,7 +1044,6 @@ extern void makeExternalDirPathByNum(char *ret_path, const char *pattern_path,
 									 const int dir_num);
 extern bool backup_contains_external(const char *dir, parray *dirs_list);
 
-extern int dir_create_dir(const char *path, mode_t mode, bool strict);
 extern bool dir_is_empty(const char *path, fio_location location);
 
 extern bool fileExists(const char *path, fio_location location);

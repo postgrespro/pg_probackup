@@ -158,7 +158,7 @@ extern pg_crc32 fio_get_crc32(fio_location location, const char *file_path, bool
 extern int     fio_rename(fio_location location, const char* old_path, const char* new_path);
 extern int     fio_symlink(fio_location location, const char* target, const char* link_path, bool overwrite);
 extern int     fio_remove(fio_location location, const char* path, bool missing_ok);
-extern int     fio_mkdir(fio_location location, const char* path, int mode);
+extern int     fio_mkdir(fio_location location, const char* path, int mode, bool strict);
 extern int     fio_chmod(fio_location location, const char* path, int mode);
 extern int     fio_access(fio_location location, const char* path, int mode);
 extern int     fio_stat(fio_location location, const char* path, struct stat* st, bool follow_symlinks);

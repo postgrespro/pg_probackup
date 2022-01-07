@@ -1224,15 +1224,15 @@ fio_access(fio_location location, const char* path, int mode)
 {
 	if (fio_is_remote(location))
 	{
-		fio_header hdr;
-		size_t path_len = strlen(path) + 1;
-		hdr.cop = FIO_ACCESS;
-		hdr.handle = -1;
-		hdr.size = path_len;
-		hdr.arg = mode;
+		fio_header hdr = {
+			.cop = FIO_ACCESS,
+			.handle = -1,
+			.size = strlen(path) + 1,
+			.arg = mode,
+		};
 
 		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
-		IO_CHECK(fio_write_all(fio_stdout, path, path_len), path_len);
+		IO_CHECK(fio_write_all(fio_stdout, path, hdr.size), hdr.size);
 
 		IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
 		Assert(hdr.cop == FIO_ACCESS);
@@ -1460,7 +1460,6 @@ fio_remove(fio_location location, const char* path, bool missing_ok)
 	return result;
 }
 
-
 static void
 fio_remove_impl(const char* path, bool missing_ok, int out)
 {
@@ -1480,33 +1479,84 @@ fio_remove_impl(const char* path, bool missing_ok, int out)
 	IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 }
 
-/* Create directory
- * TODO: add strict flag
+/*
+ * Create directory, also create parent directories if necessary.
+ * In strict mode treat already existing directory as error.
+ * Return values:
+ *  0 - ok
+ * -1 - error (check errno)
+ */
+static int
+dir_create_dir(const char *dir, mode_t mode, bool strict)
+{
+	char		parent[MAXPGPATH];
+
+	strncpy(parent, dir, MAXPGPATH);
+	get_parent_directory(parent);
+
+	/* Create parent first */
+	if (access(parent, F_OK) == -1)
+		dir_create_dir(parent, mode, false);
+
+	/* Create directory */
+	if (mkdir(dir, mode) == -1)
+	{
+		if (errno == EEXIST && !strict)	/* already exist */
+			return 0;
+		return -1;
+	}
+
+	return 0;
+}
+
+/*
+ * Create directory
  */
 int
-fio_mkdir(fio_location location, const char* path, int mode)
+fio_mkdir(fio_location location, const char* path, int mode, bool strict)
 {
 	if (fio_is_remote(location))
 	{
-		fio_header hdr;
-		size_t path_len = strlen(path) + 1;
-		hdr.cop = FIO_MKDIR;
-		hdr.handle = -1;
-		hdr.size = path_len;
-		hdr.arg = mode;
+		fio_header hdr = {
+			.cop = FIO_MKDIR,
+			.handle = strict ? 1 : 0, /* ugly "hack" to pass more params*/
+			.size = strlen(path) + 1,
+			.arg = mode,
+		};
 
 		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
-		IO_CHECK(fio_write_all(fio_stdout, path, path_len), path_len);
+		IO_CHECK(fio_write_all(fio_stdout, path, hdr.size), hdr.size);
 
 		IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
 		Assert(hdr.cop == FIO_MKDIR);
 
-		return hdr.arg;
+		if (hdr.arg != 0)
+		{
+			errno = hdr.arg;
+			return -1;
+		}
+		return 0;
 	}
 	else
 	{
-		return dir_create_dir(path, mode, false);
+		return dir_create_dir(path, mode, strict);
 	}
+}
+
+static void
+fio_mkdir_impl(const char* path, int mode, bool strict, int out)
+{
+	fio_header hdr = {
+		.cop = FIO_MKDIR,
+		.handle = -1,
+		.size = 0,
+		.arg = 0,
+	};
+
+	if (dir_create_dir(path, mode, strict) != 0)
+		hdr.arg = errno;
+
+	IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 }
 
 /* Change file mode */
@@ -3384,9 +3434,7 @@ fio_communicate(int in, int out)
 			fio_remove_impl(buf, hdr.arg == 1, out);
 			break;
 		  case FIO_MKDIR:  /* Create directory */
-			hdr.size = 0;
-			hdr.arg = dir_create_dir(buf, hdr.arg, false);
-			IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
+			fio_mkdir_impl(buf, hdr.arg, hdr.handle == 1, out);
 			break;
 		  case FIO_CHMOD:  /* Change file mode */
 			SYS_CHECK(chmod(buf, hdr.arg));

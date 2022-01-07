@@ -261,7 +261,7 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 		char stream_xlog_path[MAXPGPATH];
 
 		join_path_components(stream_xlog_path, current.database_dir, PG_XLOG_DIR);
-		fio_mkdir(FIO_BACKUP_HOST, stream_xlog_path, DIR_PERMISSION);
+		fio_mkdir(FIO_BACKUP_HOST, stream_xlog_path, DIR_PERMISSION, false);
 
 		start_WAL_streaming(backup_conn, stream_xlog_path, &instance_config.conn_opt,
 							current.start_lsn, current.tli, true);
@@ -414,7 +414,7 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 				join_path_components(dirpath, current.database_dir, file->rel_path);
 
 			elog(VERBOSE, "Create directory '%s'", dirpath);
-			fio_mkdir(FIO_BACKUP_HOST, dirpath, DIR_PERMISSION);
+			fio_mkdir(FIO_BACKUP_HOST, dirpath, DIR_PERMISSION, false);
 		}
 
 	}
