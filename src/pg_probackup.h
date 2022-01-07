@@ -1236,7 +1236,6 @@ extern PageState *fio_get_checksum_map(const char *fullpath, uint32 checksum_ver
 extern datapagemap_t *fio_get_lsn_map(const char *fullpath, uint32 checksum_version,
 							int n_blocks, XLogRecPtr horizonLsn, BlockNumber segmentno,
 							fio_location location);
-extern pid_t fio_check_postmaster(const char *pgdata, fio_location location);
 
 extern int32 fio_decompress(void* dst, void const* src, size_t size, int compress_alg, char **errormsg);
 

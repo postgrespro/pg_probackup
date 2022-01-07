@@ -3206,20 +3206,24 @@ local_check_postmaster(const char *pgdata)
  * and check that process is running, if process is running, return its pid number.
  */
 pid_t
-fio_check_postmaster(const char *pgdata, fio_location location)
+fio_check_postmaster(fio_location location, const char *pgdata)
 {
 	if (fio_is_remote(location))
 	{
-		fio_header hdr;
-
-		hdr.cop = FIO_CHECK_POSTMASTER;
-		hdr.size = strlen(pgdata) + 1;
+		fio_header hdr = {
+			.cop = FIO_CHECK_POSTMASTER,
+			.handle = -1,
+			.size = strlen(pgdata) + 1,
+			.arg = 0,
+		};
 
 		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
 		IO_CHECK(fio_write_all(fio_stdout, pgdata, hdr.size), hdr.size);
 
 		/* receive result */
 		IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
+		Assert(hdr.cop == FIO_CHECK_POSTMASTER);
+
 		return hdr.arg;
 	}
 	else
@@ -3227,16 +3231,18 @@ fio_check_postmaster(const char *pgdata, fio_location location)
 }
 
 static void
-fio_check_postmaster_impl(int out, char *buf)
+fio_check_postmaster_impl(const char *pgdata, int out)
 {
-	fio_header  hdr;
-	pid_t       postmaster_pid;
-	char       *pgdata = (char*) buf;
+	fio_header hdr = {
+		.cop = FIO_CHECK_POSTMASTER,
+		.handle = -1,
+		.size = 0,
+		.arg = 0,
+	};
 
-	postmaster_pid = local_check_postmaster(pgdata);
+	hdr.arg = local_check_postmaster(pgdata);
 
 	/* send arrays of checksums to main process */
-	hdr.arg = postmaster_pid;
 	IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 }
 
@@ -3427,8 +3433,7 @@ fio_communicate(int in, int out)
 			fio_get_lsn_map_impl(out, buf);
 			break;
 		  case FIO_CHECK_POSTMASTER:
-			/* calculate crc32 for a file */
-			fio_check_postmaster_impl(out, buf);
+			fio_check_postmaster_impl(buf, out);
 			break;
 		  case FIO_DISCONNECT:
 			hdr.cop = FIO_DISCONNECTED;
