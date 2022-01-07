@@ -646,7 +646,7 @@ merge_chain(InstanceState *instanceState,
 			makeExternalDirPathByNum(new_container, full_external_prefix,
 									 file->external_dir_num);
 			join_path_components(dirpath, new_container, file->rel_path);
-			dir_create_dir(dirpath, DIR_PERMISSION, false);
+			fio_mkdir(FIO_BACKUP_HOST, dirpath, DIR_PERMISSION, false);
 		}
 
 		pg_atomic_init_flag(&file->lock);

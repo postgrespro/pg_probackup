@@ -135,36 +135,6 @@ static TablespaceList tablespace_dirs = {NULL, NULL};
 /* Extra directories mapping */
 static TablespaceList external_remap_list = {NULL, NULL};
 
-/*
- * Create directory, also create parent directories if necessary.
- * In strict mode treat already existing directory as error.
- * Return values:
- *  0 - ok
- * -1 - error (check errno)
- */
-int
-dir_create_dir(const char *dir, mode_t mode, bool strict)
-{
-	char		parent[MAXPGPATH];
-
-	strncpy(parent, dir, MAXPGPATH);
-	get_parent_directory(parent);
-
-	/* Create parent first */
-	if (access(parent, F_OK) == -1)
-		dir_create_dir(parent, mode, false);
-
-	/* Create directory */
-	if (mkdir(dir, mode) == -1)
-	{
-		if (errno == EEXIST && !strict)	/* already exist */
-			return 0;
-		return -1;
-	}
-
-	return 0;
-}
-
 pgFile *
 pgFileNew(const char *path, const char *rel_path, bool follow_symlink,
 		  int external_dir_num, fio_location location)
@@ -1106,7 +1076,7 @@ create_data_directories(parray *dest_files, const char *data_dir, const char *ba
 							 linked_path, to_path);
 
 					/* create tablespace directory */
-					fio_mkdir(location, linked_path, pg_tablespace_mode);
+					fio_mkdir(location, linked_path, pg_tablespace_mode, false);
 
 					/* create link to linked_path */
 					if (fio_symlink(location, linked_path, to_path, incremental) < 0)
@@ -1124,7 +1094,7 @@ create_data_directories(parray *dest_files, const char *data_dir, const char *ba
 		join_path_components(to_path, data_dir, dir->rel_path);
 
 		// TODO check exit code
-		fio_mkdir(location, to_path, dir->mode);
+		fio_mkdir(location, to_path, dir->mode, false);
 	}
 
 	if (extract_tablespaces)

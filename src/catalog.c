@@ -1424,7 +1424,6 @@ get_multi_timeline_parent(parray *backup_list, parray *tli_list,
  * It may be ok or maybe not, so it's up to the caller
  * to fix it or let it be.
  */
-
 void
 pgBackupCreateDir(pgBackup *backup, const char *backup_instance_path)
 {
@@ -1467,7 +1466,7 @@ pgBackupCreateDir(pgBackup *backup, const char *backup_instance_path)
 		char	path[MAXPGPATH];
 
 		join_path_components(path, backup->root_dir, parray_get(subdirs, i));
-		fio_mkdir(FIO_BACKUP_HOST, path, DIR_PERMISSION);
+		fio_mkdir(FIO_BACKUP_HOST, path, DIR_PERMISSION, false);
 	}
 
 	free_dir_list(subdirs);
@@ -1490,8 +1489,7 @@ create_backup_dir(pgBackup *backup, const char *backup_instance_path)
 
 		join_path_components(path, backup_instance_path, base36enc(backup_id));
 
-		/* TODO: add wrapper for remote mode */
-		rc = dir_create_dir(path, DIR_PERMISSION, true);
+		rc = fio_mkdir(FIO_BACKUP_HOST, path, DIR_PERMISSION, true);
 
 		if (rc == 0)
 		{

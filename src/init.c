@@ -33,13 +33,13 @@ do_init(CatalogState *catalogState)
 	}
 
 	/* create backup catalog root directory */
-	dir_create_dir(catalogState->catalog_path, DIR_PERMISSION, false);
+	fio_mkdir(FIO_BACKUP_HOST, catalogState->catalog_path, DIR_PERMISSION, false);
 
 	/* create backup catalog data directory */
-	dir_create_dir(catalogState->backup_subdir_path, DIR_PERMISSION, false);
+	fio_mkdir(FIO_BACKUP_HOST, catalogState->backup_subdir_path, DIR_PERMISSION, false);
 
 	/* create backup catalog wal directory */
-	dir_create_dir(catalogState->wal_subdir_path, DIR_PERMISSION, false);
+	fio_mkdir(FIO_BACKUP_HOST, catalogState->wal_subdir_path, DIR_PERMISSION, false);
 
 	elog(INFO, "Backup catalog '%s' successfully inited", catalogState->catalog_path);
 	return 0;
@@ -86,8 +86,8 @@ do_add_instance(InstanceState *instanceState, InstanceConfig *instance)
 				instanceState->instance_name, instanceState->instance_wal_subdir_path);
 
 	/* Create directory for data files of this specific instance */
-	dir_create_dir(instanceState->instance_backup_subdir_path, DIR_PERMISSION, false);
-	dir_create_dir(instanceState->instance_wal_subdir_path, DIR_PERMISSION, false);
+	fio_mkdir(FIO_BACKUP_HOST, instanceState->instance_backup_subdir_path, DIR_PERMISSION, false);
+	fio_mkdir(FIO_BACKUP_HOST, instanceState->instance_wal_subdir_path, DIR_PERMISSION, false);
 
 	/*
 	 * Write initial configuration file.
