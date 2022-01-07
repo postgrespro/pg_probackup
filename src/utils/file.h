@@ -82,7 +82,7 @@ typedef struct
 	unsigned handle : 32;
 	/* size of additional data sent after this header */
 	unsigned size   : 32;
-	/* additional small paramter for requests (varies between operations) or a result code for response */
+	/* additional small parameter for requests (varies between operations) or a result code for response */
 	unsigned arg;
 } fio_header;
 

@@ -667,7 +667,7 @@ grab_shared_lock_file(pgBackup *backup)
 		else if (errno != ESRCH)
 			elog(ERROR, "Failed to send signal 0 to a process %d: %s",
 					encoded_pid, strerror(errno));
-    }
+	}
 
 	if (fp_in)
 	{
