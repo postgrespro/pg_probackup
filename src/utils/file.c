@@ -1256,18 +1256,27 @@ fio_symlink(fio_location location, const char* target, const char* link_path, bo
 {
 	if (fio_is_remote(location))
 	{
-		fio_header hdr;
 		size_t target_len = strlen(target) + 1;
 		size_t link_path_len = strlen(link_path) + 1;
-		hdr.cop = FIO_SYMLINK;
-		hdr.handle = -1;
-		hdr.size = target_len + link_path_len;
-		hdr.arg = overwrite ? 1 : 0;
+		fio_header hdr = {
+			.cop = FIO_SYMLINK,
+			.handle = -1,
+			.size = target_len + link_path_len,
+			.arg = overwrite ? 1 : 0,
+		};
 
 		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
 		IO_CHECK(fio_write_all(fio_stdout, target, target_len), target_len);
 		IO_CHECK(fio_write_all(fio_stdout, link_path, link_path_len), link_path_len);
 
+		IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
+		Assert(hdr.cop == FIO_SYMLINK);
+
+		if (hdr.arg != 0)
+		{
+			errno = hdr.arg;
+			return -1;
+		}
 		return 0;
 	}
 	else
@@ -1280,17 +1289,22 @@ fio_symlink(fio_location location, const char* target, const char* link_path, bo
 }
 
 static void
-fio_symlink_impl(int out, char *buf, bool overwrite)
+fio_symlink_impl(const char* target, const char* link_path, bool overwrite, int out)
 {
-	char *linked_path = buf;
-	char *link_path = buf + strlen(buf) + 1;
+	fio_header hdr = {
+		.cop = FIO_SYMLINK,
+		.handle = -1,
+		.size = 0,
+		.arg = 0,
+	};
 
 	if (overwrite)
 		remove_file_or_dir(link_path);
 
-	if (symlink(linked_path, link_path))
-		elog(ERROR, "Could not create symbolic link \"%s\": %s",
-			link_path, strerror(errno));
+	if (symlink(target, link_path) != 0)
+		hdr.arg = errno;
+
+	IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 }
 
 /* Rename file */
@@ -3428,7 +3442,7 @@ fio_communicate(int in, int out)
 			fio_rename_impl(buf, buf + strlen(buf) + 1, out);
 			break;
 		  case FIO_SYMLINK: /* Create symbolic link */
-			fio_symlink_impl(out, buf, hdr.arg > 0 ? true : false);
+			fio_symlink_impl(buf, buf + strlen(buf) + 1, hdr.arg == 1, out);
 			break;
 		  case FIO_REMOVE: /* Remove file or directory (TODO: Win32) */
 			fio_remove_impl(buf, hdr.arg == 1, out);

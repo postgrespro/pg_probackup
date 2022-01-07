@@ -862,7 +862,7 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 			/* create link to linked_path */
 			if (fio_symlink(FIO_LOCAL_HOST, linked_path, to_path, true) < 0)
 				elog(ERROR, "Could not create symbolic link \"%s\" -> \"%s\": %s",
-					 linked_path, to_path, strerror(errno));
+					 to_path, linked_path, strerror(errno));
 		}
 	}
 
