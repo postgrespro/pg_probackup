@@ -787,8 +787,8 @@ backup_non_data_file(pgFile *file, pgFile *prev_file,
 	/* special treatment for global/pg_control */
 	if (file->external_dir_num == 0 && strcmp(file->rel_path, XLOG_CONTROL_FILE) == 0)
 	{
-		copy_pgcontrol_file(from_fullpath, FIO_DB_HOST,
-							to_fullpath, FIO_BACKUP_HOST, file);
+		copy_pgcontrol_file(FIO_DB_HOST, from_fullpath,
+							FIO_BACKUP_HOST, to_fullpath, file);
 		return;
 	}
 
