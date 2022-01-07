@@ -58,20 +58,6 @@ typedef enum
 	FIO_READLINK
 } fio_operations;
 
-typedef enum
-{
-	FIO_LOCAL_HOST,  /* data is locate at local host */
-	FIO_DB_HOST,     /* data is located at Postgres server host */
-	FIO_BACKUP_HOST, /* data is located at backup host */
-	FIO_REMOTE_HOST  /* date is located at remote host */
-} fio_location;
-
-#define FIO_FDMAX 64
-#define FIO_PIPE_MARKER 0x40000000
-
-#define SYS_CHECK(cmd) do if ((cmd) < 0) { fprintf(stderr, "%s:%d: (%s) %s\n", __FILE__, __LINE__, #cmd, strerror(errno)); exit(EXIT_FAILURE); } while (0)
-#define IO_CHECK(cmd, size) do { int _rc = (cmd); if (_rc != (size)) fio_error(_rc, size, __FILE__, __LINE__); } while (0)
-
 typedef struct
 {
 //	fio_operations cop;
@@ -86,17 +72,50 @@ typedef struct
 	unsigned arg;
 } fio_header;
 
+typedef enum
+{
+	FIO_LOCAL_HOST,  /* data is locate at local host */
+	FIO_DB_HOST,     /* data is located at Postgres server host */
+	FIO_BACKUP_HOST, /* data is located at backup host */
+	FIO_REMOTE_HOST  /* date is located at remote host */
+} fio_location;
+
 extern fio_location MyLocation;
+
+extern void    setMyLocation(ProbackupSubcmd const subcmd);
+/* Check if specified location is local for current node */
+extern bool    fio_is_remote(fio_location location);
+extern bool    fio_is_remote_simple(fio_location location);
+
+extern void    fio_communicate(int in, int out);
+extern void    fio_disconnect(void);
+extern int     fio_get_agent_version(void);
+
+#define FIO_FDMAX 64
+#define FIO_PIPE_MARKER 0x40000000
 
 /* Check if FILE handle is local or remote (created by FIO) */
 #define fio_is_remote_file(file) ((size_t)(file) <= FIO_FDMAX)
 
 extern void    fio_redirect(int in, int out, int err);
-extern void    fio_communicate(int in, int out);
-extern void    fio_disconnect(void);
-
-extern int     fio_get_agent_version(void);
 extern void    fio_error(int rc, int size, const char* file, int line);
+
+#define SYS_CHECK(cmd) do if ((cmd) < 0) { fprintf(stderr, "%s:%d: (%s) %s\n", __FILE__, __LINE__, #cmd, strerror(errno)); exit(EXIT_FAILURE); } while (0)
+#define IO_CHECK(cmd, size) do { int _rc = (cmd); if (_rc != (size)) fio_error(_rc, size, __FILE__, __LINE__); } while (0)
+
+
+/* fd-style functions */
+extern int     fio_open(fio_location location, const char* name, int mode);
+extern ssize_t fio_write(int fd, void const* buf, size_t size);
+extern ssize_t fio_write_async(int fd, void const* buf, size_t size);
+extern int     fio_check_error_fd(int fd, char **errmsg);
+extern int     fio_check_error_fd_gz(gzFile f, char **errmsg);
+extern ssize_t fio_read(int fd, void* buf, size_t size);
+extern int     fio_flush(int fd);
+extern int     fio_seek(int fd, off_t offs);
+extern int     fio_fstat(int fd, struct stat* st);
+extern int     fio_truncate(int fd, off_t size);
+extern int     fio_close(int fd);
 
 /* FILE-style functions */
 extern FILE*   fio_fopen(fio_location location, const char* name, const char* mode);
@@ -116,18 +135,16 @@ extern int     fio_ffstat(FILE* f, struct stat* st);
 extern FILE*   fio_open_stream(fio_location location, const char* name);
 extern int     fio_close_stream(FILE* f);
 
-/* fd-style functions */
-extern int     fio_open(fio_location location, const char* name, int mode);
-extern ssize_t fio_write(int fd, void const* buf, size_t size);
-extern ssize_t fio_write_async(int fd, void const* buf, size_t size);
-extern int     fio_check_error_fd(int fd, char **errmsg);
-extern int     fio_check_error_fd_gz(gzFile f, char **errmsg);
-extern ssize_t fio_read(int fd, void* buf, size_t size);
-extern int     fio_flush(int fd);
-extern int     fio_seek(int fd, off_t offs);
-extern int     fio_fstat(int fd, struct stat* st);
-extern int     fio_truncate(int fd, off_t size);
-extern int     fio_close(int fd);
+/* gzFile-style functions */
+#ifdef HAVE_LIBZ
+extern gzFile  fio_gzopen(fio_location location, const char* path, const char* mode, int level);
+extern int     fio_gzclose(gzFile file);
+extern int     fio_gzread(gzFile f, void *buf, unsigned size);
+extern int     fio_gzwrite(gzFile f, void const* buf, unsigned size);
+extern int     fio_gzeof(gzFile f);
+extern z_off_t fio_gzseek(gzFile f, z_off_t offset, int whence);
+extern const char* fio_gzerror(gzFile file, int *errnum);
+#endif
 
 /* DIR-style functions */
 extern DIR*    fio_opendir(fio_location location, const char* path);
@@ -149,15 +166,14 @@ extern bool    fio_is_same_file(fio_location location, const char* filename1, co
 extern ssize_t fio_readlink(fio_location location, const char *path, char *value, size_t valsiz);
 extern pid_t   fio_check_postmaster(fio_location location, const char *pgdata);
 
-/* gzFile-style functions */
-#ifdef HAVE_LIBZ
-extern gzFile  fio_gzopen(fio_location location, const char* path, const char* mode, int level);
-extern int     fio_gzclose(gzFile file);
-extern int     fio_gzread(gzFile f, void *buf, unsigned size);
-extern int     fio_gzwrite(gzFile f, void const* buf, unsigned size);
-extern int     fio_gzeof(gzFile f);
-extern z_off_t fio_gzseek(gzFile f, z_off_t offset, int whence);
-extern const char* fio_gzerror(gzFile file, int *errnum);
-#endif
+extern void fio_list_dir(parray *files, const char *root, bool exclude, bool follow_symlink,
+						 bool add_root, bool backup_logs, bool skip_hidden, int external_dir_num);
+
+struct PageState; /* defined in pg_probackup.h */
+extern struct PageState *fio_get_checksum_map(fio_location location, const char *fullpath, uint32 checksum_version,
+									   int n_blocks, XLogRecPtr dest_stop_lsn, BlockNumber segmentno);
+struct datapagemap; /* defined in datapagemap.h */
+extern struct datapagemap *fio_get_lsn_map(fio_location location, const char *fullpath, uint32 checksum_version,
+									  int n_blocks, XLogRecPtr horizonLsn, BlockNumber segmentno);
 
 #endif

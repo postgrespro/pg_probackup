@@ -909,7 +909,7 @@ fio_write_async_impl(int fd, void const* buf, size_t size, int out)
 	}
 }
 
-int32
+static int32
 fio_decompress(void* dst, void const* src, size_t size, int compress_alg, char **errormsg)
 {
 	const char *internal_errormsg = NULL;
@@ -3016,8 +3016,8 @@ fio_list_dir(parray *files, const char *root, bool exclude,
 }
 
 PageState *
-fio_get_checksum_map(const char *fullpath, uint32 checksum_version, int n_blocks,
-					 XLogRecPtr dest_stop_lsn, BlockNumber segmentno, fio_location location)
+fio_get_checksum_map(fio_location location, const char *fullpath, uint32 checksum_version,
+					 int n_blocks, XLogRecPtr dest_stop_lsn, BlockNumber segmentno)
 {
 	if (fio_is_remote(location))
 	{
@@ -3059,7 +3059,7 @@ fio_get_checksum_map(const char *fullpath, uint32 checksum_version, int n_blocks
 }
 
 static void
-fio_get_checksum_map_impl(int out, char *buf)
+fio_get_checksum_map_impl(char *buf, int out)
 {
 	fio_header  hdr;
 	PageState  *checksum_map = NULL;
@@ -3079,9 +3079,9 @@ fio_get_checksum_map_impl(int out, char *buf)
 }
 
 datapagemap_t *
-fio_get_lsn_map(const char *fullpath, uint32 checksum_version,
-				int n_blocks, XLogRecPtr shift_lsn, BlockNumber segmentno,
-				fio_location location)
+fio_get_lsn_map(fio_location location, const char *fullpath,
+				uint32 checksum_version, int n_blocks,
+				XLogRecPtr shift_lsn, BlockNumber segmentno)
 {
 	datapagemap_t* lsn_map = NULL;
 
@@ -3127,7 +3127,7 @@ fio_get_lsn_map(const char *fullpath, uint32 checksum_version,
 }
 
 static void
-fio_get_lsn_map_impl(int out, char *buf)
+fio_get_lsn_map_impl(char *buf, int out)
 {
 	fio_header     hdr;
 	datapagemap_t *lsn_map = NULL;
@@ -3425,12 +3425,10 @@ fio_communicate(int in, int out)
 			IO_CHECK(fio_write_all(out, &crc, sizeof(crc)), sizeof(crc));
 			break;
 		  case FIO_GET_CHECKSUM_MAP:
-			/* calculate crc32 for a file */
-			fio_get_checksum_map_impl(out, buf);
+			fio_get_checksum_map_impl(buf, out);
 			break;
 		  case FIO_GET_LSN_MAP:
-			/* calculate crc32 for a file */
-			fio_get_lsn_map_impl(out, buf);
+			fio_get_lsn_map_impl(buf, out);
 			break;
 		  case FIO_CHECK_POSTMASTER:
 			fio_check_postmaster_impl(buf, out);

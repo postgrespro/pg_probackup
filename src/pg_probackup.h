@@ -1209,7 +1209,6 @@ extern int copy_pages(const char *to_fullpath, const char *from_fullpath,
 					  BackupMode backup_mode);
 
 /* FIO */
-extern void setMyLocation(ProbackupSubcmd const subcmd);
 extern int fio_send_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
 	                      XLogRecPtr horizonLsn, int calg, int clevel, uint32 checksum_version,
 	                      bool use_pagemap, BlockNumber *err_blknum, char **errormsg,
@@ -1217,27 +1216,14 @@ extern int fio_send_pages(const char *to_fullpath, const char *from_fullpath, pg
 extern int fio_copy_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
 	                      XLogRecPtr horizonLsn, int calg, int clevel, uint32 checksum_version,
 	                      bool use_pagemap, BlockNumber *err_blknum, char **errormsg);
-/* return codes for fio_send_pages */
 extern int fio_send_file_gz(const char *from_fullpath, const char *to_fullpath, FILE* out, char **errormsg);
 extern int fio_send_file(const char *from_fullpath, const char *to_fullpath, FILE* out,
 														pgFile *file, char **errormsg);
-
-extern void fio_list_dir(parray *files, const char *root, bool exclude, bool follow_symlink,
-						 bool add_root, bool backup_logs, bool skip_hidden, int external_dir_num);
 
 extern bool pgut_rmtree(const char *path, bool rmtopdir, bool strict);
 
 extern void pgut_setenv(const char *key, const char *val);
 extern void pgut_unsetenv(const char *key);
-
-extern PageState *fio_get_checksum_map(const char *fullpath, uint32 checksum_version, int n_blocks,
-									XLogRecPtr dest_stop_lsn, BlockNumber segmentno, fio_location location);
-
-extern datapagemap_t *fio_get_lsn_map(const char *fullpath, uint32 checksum_version,
-							int n_blocks, XLogRecPtr horizonLsn, BlockNumber segmentno,
-							fio_location location);
-
-extern int32 fio_decompress(void* dst, void const* src, size_t size, int compress_alg, char **errormsg);
 
 /* return codes for fio_send_pages() and fio_send_file() */
 #define SEND_OK       (0)
@@ -1248,10 +1234,6 @@ extern int32 fio_decompress(void* dst, void const* src, size_t size, int compres
 #define ZLIB_ERROR   (-5)
 #define REMOTE_ERROR (-6)
 #define PAGE_CORRUPTION (-8)
-
-/* Check if specified location is local for current node */
-extern bool fio_is_remote(fio_location location);
-extern bool fio_is_remote_simple(fio_location location);
 
 extern void get_header_errormsg(Page page, char **errormsg);
 extern void get_checksum_errormsg(Page page, char **errormsg,
