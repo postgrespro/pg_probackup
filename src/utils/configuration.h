@@ -101,8 +101,8 @@ struct ConfigOption
 
 #define OPTION_UNIT					(OPTION_UNIT_MEMORY | OPTION_UNIT_TIME)
 
-extern ProbackupSubcmd parse_subcmd(char const * const subcmd_str);
-extern char const *get_subcmd_name(ProbackupSubcmd const subcmd);
+extern ProbackupSubcmd parse_subcmd(const char * const subcmd_str);
+extern const char *get_subcmd_name(ProbackupSubcmd const subcmd);
 extern int config_get_opt(int argc, char **argv, ConfigOption cmd_options[],
 						  ConfigOption options[]);
 extern int config_read_opt(const char *path, ConfigOption options[], int elevel,

@@ -96,28 +96,28 @@ extern void    fio_communicate(int in, int out);
 extern void    fio_disconnect(void);
 
 extern int     fio_get_agent_version(void);
-extern void    fio_error(int rc, int size, char const* file, int line);
+extern void    fio_error(int rc, int size, const char* file, int line);
 
 /* FILE-style functions */
-extern FILE*   fio_fopen(fio_location location, char const* name, char const* mode);
+extern FILE*   fio_fopen(fio_location location, const char* name, const char* mode);
 extern size_t  fio_fwrite(FILE* f, void const* buf, size_t size);
 extern ssize_t fio_fwrite_async_compressed(FILE* f, void const* buf, size_t size, int compress_alg);
 extern size_t  fio_fwrite_async(FILE* f, void const* buf, size_t size);
 extern int     fio_check_error_file(FILE* f, char **errmsg);
 extern ssize_t fio_fread(FILE* f, void* buf, size_t size);
 extern int     fio_pread(FILE* f, void* buf, off_t offs);
-extern int     fio_fprintf(FILE* f, char const* arg, ...) pg_attribute_printf(2, 3);
+extern int     fio_fprintf(FILE* f, const char* arg, ...) pg_attribute_printf(2, 3);
 extern int     fio_fflush(FILE* f);
 extern int     fio_fseek(FILE* f, off_t offs);
 extern int     fio_ftruncate(FILE* f, off_t size);
 extern int     fio_fclose(FILE* f);
 extern int     fio_ffstat(FILE* f, struct stat* st);
 
-extern FILE*   fio_open_stream(fio_location location, char const* name);
+extern FILE*   fio_open_stream(fio_location location, const char* name);
 extern int     fio_close_stream(FILE* f);
 
 /* fd-style functions */
-extern int     fio_open(fio_location location, char const* name, int mode);
+extern int     fio_open(fio_location location, const char* name, int mode);
 extern ssize_t fio_write(int fd, void const* buf, size_t size);
 extern ssize_t fio_write_async(int fd, void const* buf, size_t size);
 extern int     fio_check_error_fd(int fd, char **errmsg);
@@ -130,27 +130,27 @@ extern int     fio_truncate(int fd, off_t size);
 extern int     fio_close(int fd);
 
 /* DIR-style functions */
-extern DIR*    fio_opendir(fio_location location, char const* path);
+extern DIR*    fio_opendir(fio_location location, const char* path);
 extern struct dirent * fio_readdir(DIR *dirp);
 extern int     fio_closedir(DIR *dirp);
 
 /* pathname-style functions */
-extern int     fio_sync(fio_location location, char const* path);
+extern int     fio_sync(fio_location location, const char* path);
 extern pg_crc32 fio_get_crc32(fio_location location, const char *file_path, bool decompress);
 
-extern int     fio_rename(fio_location location, char const* old_path, char const* new_path);
-extern int     fio_symlink(fio_location location, char const* target, char const* link_path, bool overwrite);
-extern int     fio_remove(fio_location location, char const* path, bool missing_ok);
-extern int     fio_mkdir(fio_location location, char const* path, int mode);
-extern int     fio_chmod(fio_location location, char const* path, int mode);
-extern int     fio_access(fio_location location, char const* path, int mode);
-extern int     fio_stat(fio_location location, char const* path, struct stat* st, bool follow_symlinks);
-extern bool    fio_is_same_file(fio_location location, char const* filename1, char const* filename2, bool follow_symlink);
+extern int     fio_rename(fio_location location, const char* old_path, const char* new_path);
+extern int     fio_symlink(fio_location location, const char* target, const char* link_path, bool overwrite);
+extern int     fio_remove(fio_location location, const char* path, bool missing_ok);
+extern int     fio_mkdir(fio_location location, const char* path, int mode);
+extern int     fio_chmod(fio_location location, const char* path, int mode);
+extern int     fio_access(fio_location location, const char* path, int mode);
+extern int     fio_stat(fio_location location, const char* path, struct stat* st, bool follow_symlinks);
+extern bool    fio_is_same_file(fio_location location, const char* filename1, const char* filename2, bool follow_symlink);
 extern ssize_t fio_readlink(fio_location location, const char *path, char *value, size_t valsiz);
 
 /* gzFile-style functions */
 #ifdef HAVE_LIBZ
-extern gzFile  fio_gzopen(fio_location location, char const* path, char const* mode, int level);
+extern gzFile  fio_gzopen(fio_location location, const char* path, const char* mode, int level);
 extern int     fio_gzclose(gzFile file);
 extern int     fio_gzread(gzFile f, void *buf, unsigned size);
 extern int     fio_gzwrite(gzFile f, void const* buf, unsigned size);

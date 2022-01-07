@@ -112,7 +112,7 @@ fio_redirect(int in, int out, int err)
 }
 
 void
-fio_error(int rc, int size, char const* file, int line)
+fio_error(int rc, int size, const char* file, int line)
 {
 	if (remote_agent)
 	{
@@ -192,7 +192,7 @@ pread(int fd, void* buf, size_t size, off_t off)
 
 #ifdef WIN32
 static int
-remove_file_or_dir(char const* path)
+remove_file_or_dir(const char* path)
 {
 	int rc = remove(path);
 
@@ -287,7 +287,7 @@ fio_get_agent_version(void)
 
 /* Open input stream. Remote file is fetched to the in-memory buffer and then accessed through Linux fmemopen */
 FILE*
-fio_open_stream(fio_location location, char const* path)
+fio_open_stream(fio_location location, const char* path)
 {
 	FILE* f;
 	if (fio_is_remote(location))
@@ -340,7 +340,7 @@ fio_close_stream(FILE* f)
 
 /* Open directory */
 DIR*
-fio_opendir(fio_location location, char const* path)
+fio_opendir(fio_location location, const char* path)
 {
 	DIR* dir;
 	if (fio_is_remote(location))
@@ -432,7 +432,7 @@ fio_closedir(DIR *dir)
 
 /* Open file */
 int
-fio_open(fio_location location, char const* path, int mode)
+fio_open(fio_location location, const char* path, int mode)
 {
 	int fd;
 	if (fio_is_remote(location))
@@ -500,7 +500,7 @@ fio_disconnect(void)
 
 /* Open stdio file */
 FILE*
-fio_fopen(fio_location location, char const* path, char const* mode)
+fio_fopen(fio_location location, const char* path, const char* mode)
 {
 	FILE	   *f = NULL;
 
@@ -546,7 +546,7 @@ fio_fopen(fio_location location, char const* path, char const* mode)
 
 /* Format output to file stream */
 int
-fio_fprintf(FILE* f, char const* format, ...)
+fio_fprintf(FILE* f, const char* format, ...)
 {
 	int rc;
 	va_list args;
@@ -1112,7 +1112,7 @@ fio_read(int fd, void* buf, size_t size)
 
 /* Get information about file */
 int
-fio_stat(fio_location location, char const* path, struct stat* st, bool follow_symlink)
+fio_stat(fio_location location, const char* path, struct stat* st, bool follow_symlink)
 {
 	if (fio_is_remote(location))
 	{
@@ -1149,7 +1149,7 @@ fio_stat(fio_location location, char const* path, struct stat* st, bool follow_s
  * in windows compare only filenames
  */
 bool
-fio_is_same_file(fio_location location, char const* filename1, char const* filename2, bool follow_symlink)
+fio_is_same_file(fio_location location, const char* filename1, const char* filename2, bool follow_symlink)
 {
 #ifndef WIN32
 	struct stat	stat1, stat2;
@@ -1213,7 +1213,7 @@ fio_readlink(fio_location location, const char *path, char *value, size_t valsiz
 
 /* Check presence of the file */
 int
-fio_access(fio_location location, char const* path, int mode)
+fio_access(fio_location location, const char* path, int mode)
 {
 	if (fio_is_remote(location))
 	{
@@ -1245,7 +1245,7 @@ fio_access(fio_location location, char const* path, int mode)
 
 /* Create symbolic link */
 int
-fio_symlink(fio_location location, char const* target, char const* link_path, bool overwrite)
+fio_symlink(fio_location location, const char* target, const char* link_path, bool overwrite)
 {
 	if (fio_is_remote(location))
 	{
@@ -1288,7 +1288,7 @@ fio_symlink_impl(int out, char *buf, bool overwrite)
 
 /* Rename file */
 int
-fio_rename(fio_location location, char const* old_path, char const* new_path)
+fio_rename(fio_location location, const char* old_path, const char* new_path)
 {
 	if (fio_is_remote(location))
 	{
@@ -1315,7 +1315,7 @@ fio_rename(fio_location location, char const* old_path, char const* new_path)
 
 /* Sync file to disk */
 int
-fio_sync(fio_location location, char const* path)
+fio_sync(fio_location location, const char* path)
 {
 	if (fio_is_remote(location))
 	{
@@ -1393,7 +1393,7 @@ fio_get_crc32(fio_location location, const char *file_path, bool decompress)
  * if missing_ok, then ignore ENOENT error
  */
 int
-fio_remove(fio_location location, char const* path, bool missing_ok)
+fio_remove(fio_location location, const char* path, bool missing_ok)
 {
 	int result = 0;
 
@@ -1431,7 +1431,7 @@ fio_remove(fio_location location, char const* path, bool missing_ok)
 
 
 static void
-fio_remove_impl(char const* path, bool missing_ok, int out)
+fio_remove_impl(const char* path, bool missing_ok, int out)
 {
 	fio_header hdr = {
 		.cop = FIO_REMOVE,
@@ -1453,7 +1453,7 @@ fio_remove_impl(char const* path, bool missing_ok, int out)
  * TODO: add strict flag
  */
 int
-fio_mkdir(fio_location location, char const* path, int mode)
+fio_mkdir(fio_location location, const char* path, int mode)
 {
 	if (fio_is_remote(location))
 	{
@@ -1480,7 +1480,7 @@ fio_mkdir(fio_location location, char const* path, int mode)
 
 /* Change file mode */
 int
-fio_chmod(fio_location location, char const* path, int mode)
+fio_chmod(fio_location location, const char* path, int mode)
 {
 	if (fio_is_remote(location))
 	{
@@ -1552,7 +1552,7 @@ fio_check_error_fd_gz(gzFile f, char **errmsg)
 
 /* On error returns NULL and errno should be checked */
 gzFile
-fio_gzopen(fio_location location, char const* path, char const* mode, int level)
+fio_gzopen(fio_location location, const char* path, const char* mode, int level)
 {
 	int rc;
 	if (fio_is_remote(location))
@@ -1819,7 +1819,7 @@ fio_gzseek(gzFile f, z_off_t offset, int whence)
  * Note: it should not be used for large files.
  */
 static void
-fio_load_file(int out, char const* path)
+fio_load_file(int out, const char* path)
 {
 	int fd = open(path, O_RDONLY);
 	fio_header hdr;
@@ -2728,7 +2728,7 @@ fio_send_file(const char *from_fullpath, const char *to_fullpath, FILE* out,
  *
  */
 static void
-fio_send_file_impl(int out, char const* path)
+fio_send_file_impl(int out, const char* path)
 {
 	FILE      *fp;
 	fio_header hdr;
