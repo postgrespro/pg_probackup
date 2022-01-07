@@ -833,7 +833,7 @@ main(int argc, char *argv[])
 		if (wal_file_path == NULL)
 		{
 			/* 1st case */
-			system_id = get_system_identifier(current_dir, FIO_DB_HOST, false);
+			system_id = get_system_identifier(FIO_DB_HOST, current_dir, false);
 			join_path_components(archive_push_xlog_dir, current_dir, XLOGDIR);
 		}
 		else
@@ -852,7 +852,7 @@ main(int argc, char *argv[])
 			if (fio_is_same_file(FIO_DB_HOST, stripped_wal_file_path, archive_push_xlog_dir, true))
 			{
 				/* 2nd case */
-				system_id = get_system_identifier(instance_config.pgdata, FIO_DB_HOST, false);
+				system_id = get_system_identifier(FIO_DB_HOST, instance_config.pgdata, false);
 				/* archive_push_xlog_dir already have right value */
 			}
 			else
@@ -862,7 +862,7 @@ main(int argc, char *argv[])
 				else
 					elog(ERROR, "Value specified to --wal_file_path is too long");
 
-				system_id = get_system_identifier(current_dir, FIO_DB_HOST, true);
+				system_id = get_system_identifier(FIO_DB_HOST, current_dir, true);
 				/* 3rd case if control file present -- i.e. system_id != 0 */
 
 				if (system_id == 0)

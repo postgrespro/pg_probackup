@@ -25,7 +25,7 @@
  *
  */
 char *
-slurpFile(const char *datadir, const char *path, size_t *filesize, bool safe, fio_location location)
+slurpFile(fio_location location, const char *datadir, const char *path, size_t *filesize, bool safe)
 {
 	int		 fd;
 	char	   *buffer;

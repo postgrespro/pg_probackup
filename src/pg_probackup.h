@@ -914,11 +914,11 @@ extern void do_delete_status(InstanceState *instanceState,
 					InstanceConfig *instance_config, const char *status);
 
 /* in fetch.c */
-extern char *slurpFile(const char *datadir,
+extern char *slurpFile(fio_location location,
+					   const char *datadir,
 					   const char *path,
 					   size_t *filesize,
-					   bool safe,
-					   fio_location location);
+					   bool safe);
 extern char *fetchFile(PGconn *conn, const char *filename, size_t *filesize);
 
 /* in help.c */
@@ -1148,19 +1148,19 @@ extern XLogRecPtr get_next_record_lsn(const char *archivedir, XLogSegNo	segno, T
 
 /* in util.c */
 extern TimeLineID get_current_timeline(PGconn *conn);
-extern TimeLineID get_current_timeline_from_control(const char *pgdata_path, fio_location location, bool safe);
+extern TimeLineID get_current_timeline_from_control(fio_location location, const char *pgdata_path, bool safe);
 extern XLogRecPtr get_checkpoint_location(PGconn *conn);
-extern uint64 get_system_identifier(const char *pgdata_path, fio_location location, bool safe);
+extern uint64 get_system_identifier(fio_location location, const char *pgdata_path, bool safe);
 extern uint64 get_remote_system_identifier(PGconn *conn);
 extern uint32 get_data_checksum_version(bool safe);
 extern pg_crc32c get_pgcontrol_checksum(const char *pgdata_path);
-extern DBState get_system_dbstate(const char *pgdata_path, fio_location location);
+extern DBState get_system_dbstate(fio_location location, const char *pgdata_path);
 extern uint32 get_xlog_seg_size(const char *pgdata_path);
-extern void get_redo(const char *pgdata_path, fio_location pgdata_location, RedoParams *redo);
+extern void get_redo(fio_location location, const char *pgdata_path, RedoParams *redo);
 extern void set_min_recovery_point(pgFile *file, const char *backup_path,
 								   XLogRecPtr stop_backup_lsn);
-extern void copy_pgcontrol_file(const char *from_fullpath, fio_location from_location,
-					const char *to_fullpath, fio_location to_location, pgFile *file);
+extern void copy_pgcontrol_file(fio_location from_location, const char *from_fullpath,
+					fio_location to_location, const char *to_fullpath, pgFile *file);
 
 extern void time2iso(char *buf, size_t len, time_t time, bool utc);
 extern const char *status2str(BackupStatus status);

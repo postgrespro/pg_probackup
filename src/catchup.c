@@ -48,7 +48,7 @@ catchup_init_state(PGNodeInfo	*source_node_info, const char *source_pgdata, cons
 
 	/* Get WAL segments size and system ID of source PG instance */
 	instance_config.xlog_seg_size = get_xlog_seg_size(source_pgdata);
-	instance_config.system_identifier = get_system_identifier(source_pgdata, FIO_DB_HOST, false);
+	instance_config.system_identifier = get_system_identifier(FIO_DB_HOST, source_pgdata, false);
 	current.start_time = time(NULL);
 
 	strlcpy(current.program_version, PROGRAM_VERSION, sizeof(current.program_version));
@@ -69,8 +69,9 @@ catchup_init_state(PGNodeInfo	*source_node_info, const char *source_pgdata, cons
 #if PG_VERSION_NUM >= 90600
 	current.tli = get_current_timeline(source_conn);
 #else
+	/* PG-9.5 */
 	instance_config.pgdata = source_pgdata;
-	current.tli = get_current_timeline_from_control(source_pgdata, FIO_DB_HOST, false);
+	current.tli = get_current_timeline_from_control(FIO_DB_HOST, source_pgdata, false);
 #endif
 
 	elog(INFO, "Catchup start, pg_probackup version: %s, "
@@ -163,7 +164,7 @@ catchup_preflight_checks(PGNodeInfo *source_node_info, PGconn *source_conn,
 		uint64	source_conn_id, source_id, dest_id;
 
 		source_conn_id = get_remote_system_identifier(source_conn);
-		source_id = get_system_identifier(source_pgdata, FIO_DB_HOST, false); /* same as instance_config.system_identifier */
+		source_id = get_system_identifier(FIO_DB_HOST, source_pgdata, false); /* same as instance_config.system_identifier */
 
 		if (source_conn_id != source_id)
 			elog(ERROR, "Database identifiers mismatch: we connected to DB id %lu, but in \"%s\" we found id %lu",
@@ -171,7 +172,7 @@ catchup_preflight_checks(PGNodeInfo *source_node_info, PGconn *source_conn,
 
 		if (current.backup_mode != BACKUP_MODE_FULL)
 		{
-			dest_id = get_system_identifier(dest_pgdata, FIO_LOCAL_HOST, false);
+			dest_id = get_system_identifier(FIO_LOCAL_HOST, dest_pgdata, false);
 			if (source_conn_id != dest_id)
 			elog(ERROR, "Database identifiers mismatch: we connected to DB id %lu, but in \"%s\" we found id %lu",
 				source_conn_id, dest_pgdata, dest_id);
@@ -202,7 +203,7 @@ catchup_preflight_checks(PGNodeInfo *source_node_info, PGconn *source_conn,
 		RedoParams	dest_redo = { 0, InvalidXLogRecPtr, 0 };
 
 		/* fill dest_redo.lsn and dest_redo.tli */
-		get_redo(dest_pgdata, FIO_LOCAL_HOST, &dest_redo);
+		get_redo(FIO_LOCAL_HOST, dest_pgdata, &dest_redo);
 		elog(VERBOSE, "source.tli = %X, dest_redo.lsn = %X/%X, dest_redo.tli = %X",
 			current.tli, (uint32) (dest_redo.lsn >> 32), (uint32) dest_redo.lsn, dest_redo.tli);
 
@@ -656,7 +657,7 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 		filter_filelist(dest_filelist, dest_pgdata, exclude_absolute_paths_list, exclude_relative_paths_list, "Destination");
 
 		// fill dest_redo.lsn and dest_redo.tli
-		get_redo(dest_pgdata, FIO_LOCAL_HOST, &dest_redo);
+		get_redo(FIO_LOCAL_HOST, dest_pgdata, &dest_redo);
 		elog(INFO, "syncLSN = %X/%X", (uint32) (dest_redo.lsn >> 32), (uint32) dest_redo.lsn);
 
 		/*
@@ -969,8 +970,8 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 		char	to_fullpath[MAXPGPATH];
 		join_path_components(from_fullpath, source_pgdata, source_pg_control_file->rel_path);
 		join_path_components(to_fullpath, dest_pgdata, source_pg_control_file->rel_path);
-		copy_pgcontrol_file(from_fullpath, FIO_DB_HOST,
-				to_fullpath, FIO_LOCAL_HOST, source_pg_control_file);
+		copy_pgcontrol_file(FIO_DB_HOST, from_fullpath,
+				FIO_LOCAL_HOST, to_fullpath, source_pg_control_file);
 		transfered_datafiles_bytes += source_pg_control_file->size;
 	}
 
