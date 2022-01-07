@@ -173,7 +173,7 @@ pgFileNew(const char *path, const char *rel_path, bool follow_symlink,
 	pgFile		   *file;
 
 	/* stat the file */
-	if (fio_stat(path, &st, follow_symlink, location) < 0)
+	if (fio_stat(location, path, &st, follow_symlink) < 0)
 	{
 		/* file not found is not an error case */
 		if (errno == ENOENT)
@@ -800,7 +800,7 @@ dir_list_file_internal(parray *files, pgFile *parent, const char *parent_dir,
 		elog(ERROR, "\"%s\" is not a directory", parent_dir);
 
 	/* Open directory and list contents */
-	dir = fio_opendir(parent_dir, location);
+	dir = fio_opendir(location, parent_dir);
 	if (dir == NULL)
 	{
 		if (errno == ENOENT)
@@ -1106,10 +1106,10 @@ create_data_directories(parray *dest_files, const char *data_dir, const char *ba
 							 linked_path, to_path);
 
 					/* create tablespace directory */
-					fio_mkdir(linked_path, pg_tablespace_mode, location);
+					fio_mkdir(location, linked_path, pg_tablespace_mode);
 
 					/* create link to linked_path */
-					if (fio_symlink(linked_path, to_path, incremental, location) < 0)
+					if (fio_symlink(location, linked_path, to_path, incremental) < 0)
 						elog(ERROR, "Could not create symbolic link \"%s\": %s",
 							 to_path, strerror(errno));
 
@@ -1124,7 +1124,7 @@ create_data_directories(parray *dest_files, const char *data_dir, const char *ba
 		join_path_components(to_path, data_dir, dir->rel_path);
 
 		// TODO check exit code
-		fio_mkdir(to_path, dir->mode, location);
+		fio_mkdir(location, to_path, dir->mode);
 	}
 
 	if (extract_tablespaces)
@@ -1149,7 +1149,7 @@ read_tablespace_map(parray *links, const char *backup_dir)
 	join_path_components(db_path, backup_dir, DATABASE_DIR);
 	join_path_components(map_path, db_path, PG_TABLESPACE_MAP_FILE);
 
-	fp = fio_open_stream(map_path, FIO_BACKUP_HOST);
+	fp = fio_open_stream(FIO_BACKUP_HOST, map_path);
 	if (fp == NULL)
 		elog(ERROR, "Cannot open tablespace map file \"%s\": %s", map_path, strerror(errno));
 
@@ -1587,7 +1587,7 @@ dir_is_empty(const char *path, fio_location location)
 	DIR		   *dir;
 	struct dirent *dir_ent;
 
-	dir = fio_opendir(path, location);
+	dir = fio_opendir(location, path);
 	if (dir == NULL)
 	{
 		/* Directory in path doesn't exist */
@@ -1624,7 +1624,7 @@ fileExists(const char *path, fio_location location)
 {
 	struct stat buf;
 
-	if (fio_stat(path, &buf, true, location) == -1 && errno == ENOENT)
+	if (fio_stat(location, path, &buf, true) == -1 && errno == ENOENT)
 		return false;
 	else if (!S_ISREG(buf.st_mode))
 		return false;
@@ -1752,7 +1752,7 @@ write_database_map(pgBackup *backup, parray *database_map, parray *backup_files_
 	join_path_components(database_dir, backup->root_dir, DATABASE_DIR);
 	join_path_components(database_map_path, database_dir, DATABASE_MAP);
 
-	fp = fio_fopen(database_map_path, PG_BINARY_W, FIO_BACKUP_HOST);
+	fp = fio_fopen(FIO_BACKUP_HOST, database_map_path, PG_BINARY_W);
 	if (fp == NULL)
 		elog(ERROR, "Cannot open database map \"%s\": %s", database_map_path,
 			 strerror(errno));
@@ -1761,7 +1761,7 @@ write_database_map(pgBackup *backup, parray *database_map, parray *backup_files_
 	if (fio_fflush(fp) || fio_fclose(fp))
 	{
 		int save_errno = errno;
-		if (fio_remove(database_map_path, false, FIO_BACKUP_HOST) != 0)
+		if (fio_remove(FIO_BACKUP_HOST, database_map_path, false) != 0)
 			elog(WARNING, "Cannot cleanup database map \"%s\": %s", database_map_path, strerror(errno));
 		elog(ERROR, "Cannot write database map \"%s\": %s",
 			 database_map_path, strerror(save_errno));
@@ -1792,7 +1792,7 @@ read_database_map(pgBackup *backup)
 	join_path_components(path, backup->root_dir, DATABASE_DIR);
 	join_path_components(database_map_path, path, DATABASE_MAP);
 
-	fp = fio_open_stream(database_map_path, FIO_BACKUP_HOST);
+	fp = fio_open_stream(FIO_BACKUP_HOST, database_map_path);
 	if (fp == NULL)
 	{
 		/* It is NOT ok for database_map to be missing at this point, so
@@ -1858,7 +1858,7 @@ cleanup_tablespace(const char *path)
 
 		join_path_components(fullpath, path, file->rel_path);
 
-		if (fio_remove(fullpath, false, FIO_DB_HOST) == 0)
+		if (fio_remove(FIO_DB_HOST, fullpath, false) == 0)
 			elog(VERBOSE, "Deleted file \"%s\"", fullpath);
 		else
 			elog(ERROR, "Cannot delete file or directory \"%s\": %s", fullpath, strerror(errno));

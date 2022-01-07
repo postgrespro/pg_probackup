@@ -326,7 +326,7 @@ grab_excl_lock_file(const char *root_dir, const char *backup_id, bool strict)
 		 * Think not to make the file protection weaker than 0600.  See
 		 * comments below.
 		 */
-		fd = fio_open(lock_file, O_RDWR | O_CREAT | O_EXCL, FIO_BACKUP_HOST);
+		fd = fio_open(FIO_BACKUP_HOST, lock_file, O_RDWR | O_CREAT | O_EXCL);
 		if (fd >= 0)
 			break;				/* Success; exit the retry loop */
 
@@ -451,7 +451,7 @@ grab_lock:
 		 * it.  Need a loop because of possible race condition against other
 		 * would-be creators.
 		 */
-		if (fio_remove(lock_file, false, FIO_BACKUP_HOST) < 0)
+		if (fio_remove(FIO_BACKUP_HOST, lock_file, false) < 0)
 		{
 			if (errno == ENOENT)
 				continue; /* race condition, again */
@@ -476,7 +476,7 @@ grab_lock:
 		int save_errno = errno;
 
 		fio_close(fd);
-		if (fio_remove(lock_file, false, FIO_BACKUP_HOST) != 0)
+		if (fio_remove(FIO_BACKUP_HOST, lock_file, false) != 0)
 			elog(WARNING, "Cannot remove lock file \"%s\": %s", lock_file, strerror(errno));
 
 		/* In lax mode if we failed to grab lock because of 'out of space error',
@@ -495,7 +495,7 @@ grab_lock:
 		int save_errno = errno;
 
 		fio_close(fd);
-		if (fio_remove(lock_file, false, FIO_BACKUP_HOST) != 0)
+		if (fio_remove(FIO_BACKUP_HOST, lock_file, false) != 0)
 			elog(WARNING, "Cannot remove lock file \"%s\": %s", lock_file, strerror(errno));
 
 		/* In lax mode if we failed to grab lock because of 'out of space error',
@@ -513,7 +513,7 @@ grab_lock:
 	{
 		int save_errno = errno;
 
-		if (fio_remove(lock_file, false, FIO_BACKUP_HOST) != 0)
+		if (fio_remove(FIO_BACKUP_HOST, lock_file, false) != 0)
 			elog(WARNING, "Cannot remove lock file \"%s\": %s", lock_file, strerror(errno));
 
 		if (!strict && save_errno == ENOSPC)
@@ -612,7 +612,7 @@ wait_shared_owners(pgBackup *backup)
     }
 
     /* remove shared lock file */
-    if (fio_remove(lock_file, true, FIO_BACKUP_HOST) != 0)
+    if (fio_remove(FIO_BACKUP_HOST, lock_file, true) != 0)
 	    elog(ERROR, "Cannot remove shared lock file \"%s\": %s", lock_file, strerror(errno));
     return 0;
 }
@@ -732,7 +732,7 @@ release_excl_lock_file(const char *backup_dir)
 	/* TODO Sanity check: maybe we should check, that pid in lock file is my_pid */
 
 	/* remove pid file */
-	if (fio_remove(lock_file, false, FIO_BACKUP_HOST) != 0)
+	if (fio_remove(FIO_BACKUP_HOST, lock_file, false) != 0)
 		elog(ERROR, "Cannot remove exclusive lock file \"%s\": %s", lock_file, strerror(errno));
 }
 
@@ -797,7 +797,7 @@ release_shared_lock_file(const char *backup_dir)
 	/* if there is no active pid left, then there is nothing to do */
 	if (buffer_len == 0)
 	{
-		if (fio_remove(lock_file, false, FIO_BACKUP_HOST) != 0)
+		if (fio_remove(FIO_BACKUP_HOST, lock_file, false) != 0)
 			elog(ERROR, "Cannot remove shared lock file \"%s\": %s", lock_file, strerror(errno));
 		return;
 	}
@@ -852,7 +852,7 @@ IsDir(const char *dirpath, const char *entry, fio_location location)
 
 	join_path_components(path, dirpath, entry);
 
-	return fio_stat(path, &st, false, location) == 0 && S_ISDIR(st.st_mode);
+	return fio_stat(location, path, &st, false) == 0 && S_ISDIR(st.st_mode);
 }
 
 /*
@@ -939,7 +939,7 @@ catalog_get_backup_list(InstanceState *instanceState, time_t requested_backup_id
 	int			i;
 
 	/* open backup instance backups directory */
-	data_dir = fio_opendir(instanceState->instance_backup_subdir_path, FIO_BACKUP_HOST);
+	data_dir = fio_opendir(FIO_BACKUP_HOST, instanceState->instance_backup_subdir_path);
 	if (data_dir == NULL)
 	{
 		elog(WARNING, "cannot open directory \"%s\": %s", instanceState->instance_backup_subdir_path,
@@ -1056,7 +1056,7 @@ get_backup_filelist(pgBackup *backup, bool strict)
 
 	join_path_components(backup_filelist_path, backup->root_dir, DATABASE_FILE_LIST);
 
-	fp = fio_open_stream(backup_filelist_path, FIO_BACKUP_HOST);
+	fp = fio_open_stream(FIO_BACKUP_HOST, backup_filelist_path);
 	if (fp == NULL)
 		elog(ERROR, "cannot open \"%s\": %s", backup_filelist_path, strerror(errno));
 
@@ -1467,7 +1467,7 @@ pgBackupCreateDir(pgBackup *backup, const char *backup_instance_path)
 		char	path[MAXPGPATH];
 
 		join_path_components(path, backup->root_dir, parray_get(subdirs, i));
-		fio_mkdir(path, DIR_PERMISSION, FIO_BACKUP_HOST);
+		fio_mkdir(FIO_BACKUP_HOST, path, DIR_PERMISSION);
 	}
 
 	free_dir_list(subdirs);
@@ -2468,7 +2468,7 @@ write_backup(pgBackup *backup, bool strict)
 		if (!strict && (save_errno == ENOSPC))
 		{
 			fclose(fp);
-			if (fio_remove(path_temp, false, FIO_BACKUP_HOST) != 0)
+			if (fio_remove(FIO_BACKUP_HOST, path_temp, false) != 0)
 				elog(elevel, "Additionally cannot remove file \"%s\": %s", path_temp, strerror(errno));
 			return;
 		}
@@ -2478,7 +2478,7 @@ write_backup(pgBackup *backup, bool strict)
 		elog(ERROR, "Cannot close control file \"%s\": %s",
 			 path_temp, strerror(errno));
 
-	if (fio_sync(path_temp, FIO_BACKUP_HOST) < 0)
+	if (fio_sync(FIO_BACKUP_HOST, path_temp) < 0)
 		elog(ERROR, "Cannot sync control file \"%s\": %s",
 			 path_temp, strerror(errno));
 
@@ -2678,7 +2678,7 @@ readBackupControlFile(const char *path)
 	};
 
 	pgBackupInit(backup);
-	if (fio_access(path, F_OK, FIO_BACKUP_HOST) != 0)
+	if (fio_access(FIO_BACKUP_HOST, path, F_OK) != 0)
 	{
 		elog(WARNING, "Control file \"%s\" doesn't exist", path);
 		pgBackupFree(backup);

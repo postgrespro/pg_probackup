@@ -35,7 +35,7 @@
  * which includes info about pgdata directory and connection.
  *
  * Portions Copyright (c) 2009-2013, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
- * Portions Copyright (c) 2015-2021, Postgres Professional
+ * Portions Copyright (c) 2015-2022, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */
@@ -516,8 +516,8 @@ main(int argc, char *argv[])
 		{
 			struct stat st;
 
-			if (fio_stat(instanceState->instance_backup_subdir_path,
-						 &st, true, FIO_BACKUP_HOST) != 0)
+			if (fio_stat(FIO_BACKUP_HOST, instanceState->instance_backup_subdir_path,
+						 &st, true) != 0)
 			{
 				elog(WARNING, "Failed to access directory \"%s\": %s",
 					instanceState->instance_backup_subdir_path, strerror(errno));
@@ -849,7 +849,7 @@ main(int argc, char *argv[])
 			 */
 			char	*stripped_wal_file_path = pgut_str_strip_trailing_filename(wal_file_path, wal_file_name);
 			join_path_components(archive_push_xlog_dir, instance_config.pgdata, XLOGDIR);
-			if (fio_is_same_file(stripped_wal_file_path, archive_push_xlog_dir, true, FIO_DB_HOST))
+			if (fio_is_same_file(FIO_DB_HOST, stripped_wal_file_path, archive_push_xlog_dir, true))
 			{
 				/* 2nd case */
 				system_id = get_system_identifier(instance_config.pgdata, FIO_DB_HOST, false);

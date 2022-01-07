@@ -782,7 +782,7 @@ delete_backup_files(pgBackup *backup)
 			elog(INFO, "Progress: (%zd/%zd). Delete file \"%s\"",
 				 i + 1, num_files, full_path);
 
-		if (fio_remove(full_path, false, FIO_BACKUP_HOST) != 0)
+		if (fio_remove(FIO_BACKUP_HOST, full_path, false) != 0)
 			elog(ERROR, "Cannot remove file or directory \"%s\": %s", full_path, strerror(errno));
 	}
 
@@ -950,7 +950,7 @@ delete_walfiles_in_tli(InstanceState *instanceState, XLogRecPtr keep_lsn, timeli
 			}
 
 			/* remove segment, missing file is not considered as error condition */
-			if (fio_remove(wal_fullpath, true, FIO_BACKUP_HOST) < 0)
+			if (fio_remove(FIO_BACKUP_HOST, wal_fullpath, true) < 0)
 			{
 				elog(ERROR, "Could not remove file \"%s\": %s",
 						wal_fullpath, strerror(errno));
