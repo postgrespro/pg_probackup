@@ -1292,25 +1292,49 @@ fio_rename(fio_location location, const char* old_path, const char* new_path)
 {
 	if (fio_is_remote(location))
 	{
-		fio_header hdr;
 		size_t old_path_len = strlen(old_path) + 1;
 		size_t new_path_len = strlen(new_path) + 1;
-		hdr.cop = FIO_RENAME;
-		hdr.handle = -1;
-		hdr.size = old_path_len + new_path_len;
+		fio_header hdr = {
+			.cop = FIO_RENAME,
+			.handle = -1,
+			.size = old_path_len + new_path_len,
+			.arg = 0,
+		};
 
 		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
 		IO_CHECK(fio_write_all(fio_stdout, old_path, old_path_len), old_path_len);
 		IO_CHECK(fio_write_all(fio_stdout, new_path, new_path_len), new_path_len);
 
-		//TODO: wait for confirmation.
+		IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
+		Assert(hdr.cop == FIO_RENAME);
 
+		if (hdr.arg != 0)
+		{
+			errno = hdr.arg;
+			return -1;
+		}
 		return 0;
 	}
 	else
 	{
 		return rename(old_path, new_path);
 	}
+}
+
+static void
+fio_rename_impl(char const* old_path, const char* new_path, int out)
+{
+	fio_header hdr = {
+		.cop = FIO_RENAME,
+		.handle = -1,
+		.size = 0,
+		.arg = 0,
+	};
+
+	if (rename(old_path, new_path) != 0)
+		hdr.arg = errno;
+
+	IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 }
 
 /* Sync file to disk */
@@ -3337,7 +3361,8 @@ fio_communicate(int in, int out)
 			IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 			break;
 		  case FIO_RENAME: /* Rename file */
-			SYS_CHECK(rename(buf, buf + strlen(buf) + 1));
+			/* possible buffer overflow */
+			fio_rename_impl(buf, buf + strlen(buf) + 1, out);
 			break;
 		  case FIO_SYMLINK: /* Create symbolic link */
 			fio_symlink_impl(out, buf, hdr.arg > 0 ? true : false);
@@ -3363,7 +3388,7 @@ fio_communicate(int in, int out)
 			fio_list_dir_impl(out, buf);
 			break;
 		  case FIO_SEND_PAGES:
-			// buf contain fio_send_request header and bitmap.
+			/* buf contain fio_send_request header and bitmap. */
 			fio_send_pages_impl(out, buf);
 			break;
 		  case FIO_SEND_FILE:
