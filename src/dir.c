@@ -1602,17 +1602,6 @@ fileExists(const char *path, fio_location location)
 		return true;
 }
 
-size_t
-pgFileSize(const char *path)
-{
-	struct stat buf;
-
-	if (stat(path, &buf) == -1)
-		elog(ERROR, "Cannot stat file \"%s\": %s", path, strerror(errno));
-
-	return buf.st_size;
-}
-
 /*
  * Construct parray containing remapped external directories paths
  * from string like /path1:/path2

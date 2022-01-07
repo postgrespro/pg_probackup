@@ -200,10 +200,14 @@ pgBackupValidate(pgBackup *backup, pgRestoreParams *params)
 		 (parse_program_version(backup->program_version) == 20201)))
 	{
 		char path[MAXPGPATH];
+		struct stat st;
 
 		join_path_components(path, backup->root_dir, DATABASE_FILE_LIST);
 
-		if (pgFileSize(path) >= (BLCKSZ*500))
+		if (fio_stat(FIO_BACKUP_HOST, path, &st, true) < 0)
+			elog(ERROR, "Cannot stat file \"%s\": %s", path, strerror(errno));
+
+		if (st.st_size >= (BLCKSZ*500))
 		{
 			elog(WARNING, "Backup %s is a victim of metadata corruption. "
 							"Additional information can be found here: "
