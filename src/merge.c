@@ -714,7 +714,7 @@ merge_chain(InstanceState *instanceState,
 		cleanup_header_map(&(full_backup->hdr_map));
 
 		/* sync new header map to disk */
-		if (fio_sync(full_backup->hdr_map.path_tmp, FIO_BACKUP_HOST) != 0)
+		if (fio_sync(FIO_BACKUP_HOST, full_backup->hdr_map.path_tmp) != 0)
 			elog(ERROR, "Cannot sync temp header map \"%s\": %s",
 				full_backup->hdr_map.path_tmp, strerror(errno));
 
@@ -809,7 +809,7 @@ merge_chain(InstanceState *instanceState,
 			/* We need full path, file object has relative path */
 			join_path_components(full_file_path, full_database_dir, full_file->rel_path);
 
-			if (fio_remove(full_file_path, false, FIO_BACKUP_HOST) == 0)
+			if (fio_remove(FIO_BACKUP_HOST, full_file_path, false) == 0)
 				elog(VERBOSE, "Deleted \"%s\"", full_file_path);
 			else
 				elog(ERROR, "Cannot delete file or directory \"%s\": %s", full_file_path, strerror(errno));
@@ -1145,7 +1145,7 @@ remove_dir_with_files(const char *path)
 
 		join_path_components(full_path, path, file->rel_path);
 
-		if (fio_remove(full_path, false, FIO_LOCAL_HOST) == 0)
+		if (fio_remove(FIO_LOCAL_HOST, full_path, false) == 0)
 			elog(VERBOSE, "Deleted \"%s\"", full_path);
 		else
 			elog(ERROR, "Cannot delete file or directory \"%s\": %s", full_path, strerror(errno));
@@ -1284,7 +1284,7 @@ merge_data_file(parray *parent_chain, pgBackup *full_backup,
 		return;
 
 	/* sync second temp file to disk */
-	if (!no_sync && fio_sync(to_fullpath_tmp2, FIO_BACKUP_HOST) != 0)
+	if (!no_sync && fio_sync(FIO_BACKUP_HOST, to_fullpath_tmp2) != 0)
 		elog(ERROR, "Cannot sync merge temp file \"%s\": %s",
 			to_fullpath_tmp2, strerror(errno));
 
@@ -1390,7 +1390,7 @@ merge_non_data_file(parray *parent_chain, pgBackup *full_backup,
 						 to_fullpath_tmp, BACKUP_MODE_FULL, 0, false);
 
 	/* sync temp file to disk */
-	if (!no_sync && fio_sync(to_fullpath_tmp, FIO_BACKUP_HOST) != 0)
+	if (!no_sync && fio_sync(FIO_BACKUP_HOST, to_fullpath_tmp) != 0)
 		elog(ERROR, "Cannot sync merge temp file \"%s\": %s",
 			to_fullpath_tmp, strerror(errno));
 

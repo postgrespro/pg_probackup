@@ -287,7 +287,7 @@ fio_get_agent_version(void)
 
 /* Open input stream. Remote file is fetched to the in-memory buffer and then accessed through Linux fmemopen */
 FILE*
-fio_open_stream(char const* path, fio_location location)
+fio_open_stream(fio_location location, char const* path)
 {
 	FILE* f;
 	if (fio_is_remote(location))
@@ -340,7 +340,7 @@ fio_close_stream(FILE* f)
 
 /* Open directory */
 DIR*
-fio_opendir(char const* path, fio_location location)
+fio_opendir(fio_location location, char const* path)
 {
 	DIR* dir;
 	if (fio_is_remote(location))
@@ -432,7 +432,7 @@ fio_closedir(DIR *dir)
 
 /* Open file */
 int
-fio_open(char const* path, int mode, fio_location location)
+fio_open(fio_location location, char const* path, int mode)
 {
 	int fd;
 	if (fio_is_remote(location))
@@ -500,7 +500,7 @@ fio_disconnect(void)
 
 /* Open stdio file */
 FILE*
-fio_fopen(char const* path, char const* mode, fio_location location)
+fio_fopen(fio_location location, char const* path, char const* mode)
 {
 	FILE	   *f = NULL;
 
@@ -531,7 +531,7 @@ fio_fopen(char const* path, char const* mode, fio_location location)
 		} else {
 			Assert(false);
 		}
-		fd = fio_open(path, flags, location);
+		fd = fio_open(location, path, flags);
 		if (fd >= 0)
 			f = (FILE*)(size_t)((fd + 1) & ~FIO_PIPE_MARKER);
 	}
@@ -549,8 +549,8 @@ int
 fio_fprintf(FILE* f, char const* format, ...)
 {
 	int rc;
-    va_list args;
-    va_start (args, format);
+	va_list args;
+	va_start (args, format);
 	if (fio_is_remote_file(f))
 	{
 		char buf[PRINTF_BUF_SIZE];
@@ -567,7 +567,7 @@ fio_fprintf(FILE* f, char const* format, ...)
 	{
 		rc = vfprintf(f, format, args);
 	}
-    va_end (args);
+	va_end (args);
 	return rc;
 }
 
@@ -1112,7 +1112,7 @@ fio_read(int fd, void* buf, size_t size)
 
 /* Get information about file */
 int
-fio_stat(char const* path, struct stat* st, bool follow_symlink, fio_location location)
+fio_stat(fio_location location, char const* path, struct stat* st, bool follow_symlink)
 {
 	if (fio_is_remote(location))
 	{
@@ -1149,15 +1149,15 @@ fio_stat(char const* path, struct stat* st, bool follow_symlink, fio_location lo
  * in windows compare only filenames
  */
 bool
-fio_is_same_file(char const* filename1, char const* filename2, bool follow_symlink, fio_location location)
+fio_is_same_file(fio_location location, char const* filename1, char const* filename2, bool follow_symlink)
 {
 #ifndef WIN32
 	struct stat	stat1, stat2;
 
-	if (fio_stat(filename1, &stat1, follow_symlink, location) < 0)
+	if (fio_stat(location, filename1, &stat1, follow_symlink) < 0)
 		elog(ERROR, "Can't stat file \"%s\": %s", filename1, strerror(errno));
 
-	if (fio_stat(filename2, &stat2, follow_symlink, location) < 0)
+	if (fio_stat(location, filename2, &stat2, follow_symlink) < 0)
 		elog(ERROR, "Can't stat file \"%s\": %s", filename2, strerror(errno));
 
 	return stat1.st_ino == stat2.st_ino && stat1.st_dev == stat2.st_dev;
@@ -1179,7 +1179,7 @@ fio_is_same_file(char const* filename1, char const* filename2, bool follow_symli
  * returned value >= valsiz)
  */
 ssize_t
-fio_readlink(const char *path, char *value, size_t valsiz, fio_location location)
+fio_readlink(fio_location location, const char *path, char *value, size_t valsiz)
 {
 	if (!fio_is_remote(location))
 	{
@@ -1213,7 +1213,7 @@ fio_readlink(const char *path, char *value, size_t valsiz, fio_location location
 
 /* Check presence of the file */
 int
-fio_access(char const* path, int mode, fio_location location)
+fio_access(fio_location location, char const* path, int mode)
 {
 	if (fio_is_remote(location))
 	{
@@ -1245,7 +1245,7 @@ fio_access(char const* path, int mode, fio_location location)
 
 /* Create symbolic link */
 int
-fio_symlink(char const* target, char const* link_path, bool overwrite, fio_location location)
+fio_symlink(fio_location location, char const* target, char const* link_path, bool overwrite)
 {
 	if (fio_is_remote(location))
 	{
@@ -1288,7 +1288,7 @@ fio_symlink_impl(int out, char *buf, bool overwrite)
 
 /* Rename file */
 int
-fio_rename(char const* old_path, char const* new_path, fio_location location)
+fio_rename(fio_location location, char const* old_path, char const* new_path)
 {
 	if (fio_is_remote(location))
 	{
@@ -1315,7 +1315,7 @@ fio_rename(char const* old_path, char const* new_path, fio_location location)
 
 /* Sync file to disk */
 int
-fio_sync(char const* path, fio_location location)
+fio_sync(fio_location location, char const* path)
 {
 	if (fio_is_remote(location))
 	{
@@ -1358,7 +1358,7 @@ fio_sync(char const* path, fio_location location)
 
 /* Get crc32 of file */
 pg_crc32
-fio_get_crc32(const char *file_path, fio_location location, bool decompress)
+fio_get_crc32(fio_location location, const char *file_path, bool decompress)
 {
 	if (fio_is_remote(location))
 	{
@@ -1393,7 +1393,7 @@ fio_get_crc32(const char *file_path, fio_location location, bool decompress)
  * if missing_ok, then ignore ENOENT error
  */
 int
-fio_remove(char const* path, bool missing_ok, fio_location location)
+fio_remove(fio_location location, char const* path, bool missing_ok)
 {
 	int result = 0;
 
@@ -1453,7 +1453,7 @@ fio_remove_impl(char const* path, bool missing_ok, int out)
  * TODO: add strict flag
  */
 int
-fio_mkdir(char const* path, int mode, fio_location location)
+fio_mkdir(fio_location location, char const* path, int mode)
 {
 	if (fio_is_remote(location))
 	{
@@ -1480,7 +1480,7 @@ fio_mkdir(char const* path, int mode, fio_location location)
 
 /* Change file mode */
 int
-fio_chmod(char const* path, int mode, fio_location location)
+fio_chmod(fio_location location, char const* path, int mode)
 {
 	if (fio_is_remote(location))
 	{
@@ -1552,7 +1552,7 @@ fio_check_error_fd_gz(gzFile f, char **errmsg)
 
 /* On error returns NULL and errno should be checked */
 gzFile
-fio_gzopen(char const* path, char const* mode, int level, fio_location location)
+fio_gzopen(fio_location location, char const* path, char const* mode, int level)
 {
 	int rc;
 	if (fio_is_remote(location))
@@ -1574,7 +1574,7 @@ fio_gzopen(char const* path, char const* mode, int level, fio_location location)
 			if (rc == Z_OK)
 			{
 				gz->compress = 1;
-				gz->fd = fio_open(path, O_WRONLY | O_CREAT | O_EXCL | PG_BINARY, location);
+				gz->fd = fio_open(location, path, O_WRONLY | O_CREAT | O_EXCL | PG_BINARY);
 				if (gz->fd < 0)
 				{
 					free(gz);
@@ -1591,7 +1591,7 @@ fio_gzopen(char const* path, char const* mode, int level, fio_location location)
 			if (rc == Z_OK)
 			{
 				gz->compress = 0;
-				gz->fd = fio_open(path, O_RDONLY | PG_BINARY, location);
+				gz->fd = fio_open(location, path, O_RDONLY | PG_BINARY);
 				if (gz->fd < 0)
 				{
 					free(gz);
@@ -2098,12 +2098,12 @@ fio_copy_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
 	if (use_pagemap)
 		IO_CHECK(fio_write_all(fio_stdout, (*file).pagemap.bitmap, (*file).pagemap.bitmapsize), (*file).pagemap.bitmapsize);
 
-	out = fio_fopen(to_fullpath, PG_BINARY_R "+", FIO_BACKUP_HOST);
+	out = fio_fopen(FIO_BACKUP_HOST, to_fullpath, PG_BINARY_R "+");
 	if (out == NULL)
 		elog(ERROR, "Cannot open restore target file \"%s\": %s", to_fullpath, strerror(errno));
 
 	/* update file permission */
-	if (fio_chmod(to_fullpath, file->mode, FIO_BACKUP_HOST) == -1)
+	if (fio_chmod(FIO_BACKUP_HOST, to_fullpath, file->mode) == -1)
 		elog(ERROR, "Cannot change mode of \"%s\": %s", to_fullpath,
 			strerror(errno));
 
@@ -3237,11 +3237,11 @@ fio_communicate(int in, int out)
 	pg_crc32 crc;
 
 #ifdef WIN32
-    SYS_CHECK(setmode(in, _O_BINARY));
-    SYS_CHECK(setmode(out, _O_BINARY));
+	SYS_CHECK(setmode(in, _O_BINARY));
+	SYS_CHECK(setmode(out, _O_BINARY));
 #endif
 
-    /* Main loop until end of processing all master commands */
+	/* Main loop until end of processing all master commands */
 	while ((rc = fio_read_all(in, &hdr, sizeof hdr)) == sizeof(hdr)) {
 		if (hdr.size != 0) {
 			if (hdr.size > buf_size) {

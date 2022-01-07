@@ -2,7 +2,7 @@
  *
  * configure.c: - manage backup catalog.
  *
- * Copyright (c) 2017-2019, Postgres Professional
+ * Copyright (c) 2017-2022, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */
@@ -334,7 +334,7 @@ do_set_config(InstanceState *instanceState, bool missing_ok)
 	if (fclose(fp))
 		elog(ERROR, "Cannot close configuration file: \"%s\"", path_temp);
 
-	if (fio_sync(path_temp, FIO_LOCAL_HOST) != 0)
+	if (fio_sync(FIO_LOCAL_HOST, path_temp) != 0)
 		elog(ERROR, "Failed to sync temp configuration file \"%s\": %s",
 			 path_temp, strerror(errno));
 
@@ -602,7 +602,7 @@ readInstanceConfigFile(InstanceState *instanceState)
 
 	init_config(instance, instanceState->instance_name);
 
-	if (fio_access(instanceState->instance_config_path, F_OK, FIO_BACKUP_HOST) != 0)
+	if (fio_access(FIO_BACKUP_HOST, instanceState->instance_config_path, F_OK) != 0)
 	{
 		elog(WARNING, "Control file \"%s\" doesn't exist", instanceState->instance_config_path);
 		pfree(instance);

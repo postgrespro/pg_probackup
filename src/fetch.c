@@ -3,7 +3,7 @@
  * fetch.c
  *    Functions for fetching files from PostgreSQL data directory
  *
- * Portions Copyright (c) 1996-2018, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
  *
  *-------------------------------------------------------------------------
  */
@@ -35,7 +35,7 @@ slurpFile(const char *datadir, const char *path, size_t *filesize, bool safe, fi
 
 	join_path_components(fullpath, datadir, path);
 
-	if ((fd = fio_open(fullpath, O_RDONLY | PG_BINARY, location)) == -1)
+	if ((fd = fio_open(location, fullpath, O_RDONLY | PG_BINARY)) == -1)
 	{
 		if (safe)
 			return NULL;
@@ -44,7 +44,7 @@ slurpFile(const char *datadir, const char *path, size_t *filesize, bool safe, fi
 					fullpath, strerror(errno));
 	}
 
-	if (fio_stat(fullpath, &statbuf, true, location) < 0)
+	if (fio_stat(location, fullpath, &statbuf, true) < 0)
 	{
 		if (safe)
 			return NULL;

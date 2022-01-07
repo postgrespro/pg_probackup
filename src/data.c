@@ -3,7 +3,7 @@
  * data.c: utils to parse and backup data pages
  *
  * Portions Copyright (c) 2009-2013, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
- * Portions Copyright (c) 2015-2019, Postgres Professional
+ * Portions Copyright (c) 2015-2022, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */
@@ -800,7 +800,7 @@ backup_non_data_file(pgFile *file, pgFile *prev_file,
 		 file->mtime <= parent_backup_time))
 	{
 
-		file->crc = fio_get_crc32(from_fullpath, FIO_DB_HOST, false);
+		file->crc = fio_get_crc32(FIO_DB_HOST, from_fullpath, false);
 
 		/* ...and checksum is the same... */
 		if (EQ_TRADITIONAL_CRC32(file->crc, prev_file->crc))
@@ -1325,7 +1325,7 @@ restore_non_data_file(parray *parent_chain, pgBackup *dest_backup,
 	if (already_exists)
 	{
 		/* compare checksums of already existing file and backup file */
-		pg_crc32 file_crc = fio_get_crc32(to_fullpath, FIO_DB_HOST, false);
+		pg_crc32 file_crc = fio_get_crc32(FIO_DB_HOST, to_fullpath, false);
 
 		if (file_crc == tmp_file->crc)
 		{
@@ -1522,14 +1522,14 @@ create_empty_file(fio_location from_location, const char *to_root,
 
 	/* open file for write  */
 	join_path_components(to_path, to_root, file->rel_path);
-	out = fio_fopen(to_path, PG_BINARY_W, to_location);
+	out = fio_fopen(to_location, to_path, PG_BINARY_W);
 
 	if (out == NULL)
 		elog(ERROR, "Cannot open destination file \"%s\": %s",
 			 to_path, strerror(errno));
 
 	/* update file permission */
-	if (fio_chmod(to_path, file->mode, to_location) == -1)
+	if (fio_chmod(to_location, to_path, file->mode) == -1)
 		elog(ERROR, "Cannot change mode of \"%s\": %s", to_path,
 			 strerror(errno));
 
@@ -2268,7 +2268,7 @@ copy_pages(const char *to_fullpath, const char *from_fullpath,
 		setvbuf(in, in_buf, _IOFBF, STDIO_BUFSIZE);
 	}
 
-	out = fio_fopen(to_fullpath, PG_BINARY_R "+", FIO_BACKUP_HOST);
+	out = fio_fopen(FIO_BACKUP_HOST, to_fullpath, PG_BINARY_R "+");
 	if (out == NULL)
 		elog(ERROR, "Cannot open destination file \"%s\": %s",
 			 to_fullpath, strerror(errno));

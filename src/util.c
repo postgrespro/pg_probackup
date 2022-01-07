@@ -3,7 +3,7 @@
  * util.c: log messages to log file or stderr, and misc code.
  *
  * Portions Copyright (c) 2009-2011, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
- * Portions Copyright (c) 2015-2019, Postgres Professional
+ * Portions Copyright (c) 2015-2022, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */
@@ -138,8 +138,8 @@ writeControlFile(ControlFileData *ControlFile, const char *path, fio_location lo
 	memcpy(buffer, ControlFile, sizeof(ControlFileData));
 
 	/* Write pg_control */
-	fd = fio_open(path,
-				  O_RDWR | O_CREAT | O_TRUNC | PG_BINARY, location);
+	fd = fio_open(location, path,
+				  O_RDWR | O_CREAT | O_TRUNC | PG_BINARY);
 
 	if (fd < 0)
 		elog(ERROR, "Failed to open file: %s", path);

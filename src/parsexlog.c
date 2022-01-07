@@ -5,7 +5,7 @@
  *
  * Portions Copyright (c) 1996-2016, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
- * Portions Copyright (c) 2015-2019, Postgres Professional
+ * Portions Copyright (c) 2015-2022, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */
@@ -1040,8 +1040,8 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 				 reader_data->thread_num, reader_data->xlogpath);
 
 			reader_data->xlogexists = true;
-			reader_data->xlogfile = fio_open(reader_data->xlogpath,
-											 O_RDONLY | PG_BINARY, FIO_LOCAL_HOST);
+			reader_data->xlogfile = fio_open(FIO_LOCAL_HOST, reader_data->xlogpath,
+											 O_RDONLY | PG_BINARY);
 
 			if (reader_data->xlogfile < 0)
 			{
@@ -1059,8 +1059,8 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 				 reader_data->thread_num, reader_data->gz_xlogpath);
 
 			reader_data->xlogexists = true;
-			reader_data->gz_xlogfile = fio_gzopen(reader_data->gz_xlogpath,
-													  "rb", -1, FIO_LOCAL_HOST);
+			reader_data->gz_xlogfile = fio_gzopen(FIO_LOCAL_HOST, reader_data->gz_xlogpath,
+													  "rb", -1);
 			if (reader_data->gz_xlogfile == NULL)
 			{
 				elog(WARNING, "Thread [%d]: Could not open compressed WAL segment \"%s\": %s",

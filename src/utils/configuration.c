@@ -3,7 +3,7 @@
  * configuration.c: - function implementations to work with pg_probackup
  * configurations.
  *
- * Copyright (c) 2017-2019, Postgres Professional
+ * Copyright (c) 2017-2022, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */
@@ -555,7 +555,7 @@ config_read_opt(const char *path, ConfigOption options[], int elevel,
 	if (!options)
 		return parsed_options;
 
-	if ((fp = fio_open_stream(path, FIO_BACKUP_HOST)) == NULL)
+	if ((fp = fio_open_stream(FIO_BACKUP_HOST, path)) == NULL)
 	{
 			if (missing_ok && errno == ENOENT)
 					return parsed_options;

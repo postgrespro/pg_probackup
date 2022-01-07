@@ -154,7 +154,7 @@ catchup_preflight_checks(PGNodeInfo *source_node_info, PGconn *source_conn,
 		char	backup_label_filename[MAXPGPATH];
 
 		join_path_components(backup_label_filename, dest_pgdata, PG_BACKUP_LABEL_FILE);
-		if (fio_access(backup_label_filename, F_OK, FIO_LOCAL_HOST) == 0)
+		if (fio_access(FIO_LOCAL_HOST, backup_label_filename, F_OK) == 0)
 			elog(ERROR, "Destination directory contains \"" PG_BACKUP_LABEL_FILE "\" file");
 	}
 
@@ -555,7 +555,7 @@ catchup_sync_destination_files(const char* pgdata_path, fio_location location, p
 
 		Assert(file->external_dir_num == 0);
 		join_path_components(fullpath, pgdata_path, file->rel_path);
-		if (fio_sync(fullpath, location) != 0)
+		if (fio_sync(location, fullpath) != 0)
 			elog(ERROR, "Cannot sync file \"%s\": %s", fullpath, strerror(errno));
 	}
 
@@ -563,7 +563,7 @@ catchup_sync_destination_files(const char* pgdata_path, fio_location location, p
 	 * sync pg_control file
 	 */
 	join_path_components(fullpath, pgdata_path, pg_control_file->rel_path);
-	if (fio_sync(fullpath, location) != 0)
+	if (fio_sync(location, fullpath) != 0)
 		elog(ERROR, "Cannot sync file \"%s\": %s", fullpath, strerror(errno));
 
 	time(&end_time);
@@ -706,7 +706,7 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 
 	/* Start stream replication */
 	join_path_components(dest_xlog_path, dest_pgdata, PG_XLOG_DIR);
-	fio_mkdir(dest_xlog_path, DIR_PERMISSION, FIO_LOCAL_HOST);
+	fio_mkdir(FIO_LOCAL_HOST, dest_xlog_path, DIR_PERMISSION);
 	start_WAL_streaming(source_conn, dest_xlog_path, &instance_config.conn_opt,
 						current.start_lsn, current.tli, false);
 
@@ -822,7 +822,7 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 			join_path_components(dirpath, dest_pgdata, file->rel_path);
 
 			elog(VERBOSE, "Create directory '%s'", dirpath);
-			fio_mkdir(dirpath, DIR_PERMISSION, FIO_LOCAL_HOST);
+			fio_mkdir(FIO_LOCAL_HOST, dirpath, DIR_PERMISSION);
 		}
 		else
 		{
@@ -835,7 +835,7 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 				char	source_full_path[MAXPGPATH];
 				char	symlink_content[MAXPGPATH];
 				join_path_components(source_full_path, source_pgdata, file->rel_path);
-				fio_readlink(source_full_path, symlink_content, sizeof(symlink_content), FIO_DB_HOST);
+				fio_readlink(FIO_DB_HOST, source_full_path, symlink_content, sizeof(symlink_content));
 				/* we checked that mapping exists in preflight_checks for local catchup */
 				linked_path = get_tablespace_mapping(symlink_content);
 				elog(INFO, "Map tablespace full_path: \"%s\" old_symlink_content: \"%s\" new_symlink_content: \"%s\"\n",
@@ -854,12 +854,12 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 					 linked_path, to_path);
 
 			/* create tablespace directory */
-			if (fio_mkdir(linked_path, file->mode, FIO_LOCAL_HOST) != 0)
+			if (fio_mkdir(FIO_LOCAL_HOST, linked_path, file->mode) != 0)
 				elog(ERROR, "Could not create tablespace directory \"%s\": %s",
 					 linked_path, strerror(errno));
 
 			/* create link to linked_path */
-			if (fio_symlink(linked_path, to_path, true, FIO_LOCAL_HOST) < 0)
+			if (fio_symlink(FIO_LOCAL_HOST, linked_path, to_path, true) < 0)
 				elog(ERROR, "Could not create symbolic link \"%s\" -> \"%s\": %s",
 					 linked_path, to_path, strerror(errno));
 		}
@@ -930,7 +930,7 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 				char		fullpath[MAXPGPATH];
 
 				join_path_components(fullpath, dest_pgdata, file->rel_path);
-				if (fio_remove(fullpath, false, FIO_LOCAL_HOST) == 0)
+				if (fio_remove(FIO_LOCAL_HOST, fullpath, false) == 0)
 					elog(VERBOSE, "Deleted file \"%s\"", fullpath);
 				else
 					elog(ERROR, "Cannot delete redundant file in destination \"%s\": %s", fullpath, strerror(errno));
