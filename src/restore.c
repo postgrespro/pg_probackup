@@ -2160,7 +2160,7 @@ check_incremental_compatibility(const char *pgdata, uint64 system_identifier,
 	char    backup_label[MAXPGPATH];
 
 	/* check postmaster pid */
-	pid = fio_check_postmaster(pgdata, FIO_DB_HOST);
+	pid = fio_check_postmaster(FIO_DB_HOST, pgdata);
 
 	if (pid == 1) /* postmaster.pid is mangled */
 	{

@@ -147,6 +147,7 @@ extern int     fio_access(fio_location location, const char* path, int mode);
 extern int     fio_stat(fio_location location, const char* path, struct stat* st, bool follow_symlinks);
 extern bool    fio_is_same_file(fio_location location, const char* filename1, const char* filename2, bool follow_symlink);
 extern ssize_t fio_readlink(fio_location location, const char *path, char *value, size_t valsiz);
+extern pid_t   fio_check_postmaster(fio_location location, const char *pgdata);
 
 /* gzFile-style functions */
 #ifdef HAVE_LIBZ

@@ -133,7 +133,7 @@ catchup_preflight_checks(PGNodeInfo *source_node_info, PGconn *source_conn,
 	if (current.backup_mode != BACKUP_MODE_FULL)
 	{
 		pid_t   pid;
-		pid = fio_check_postmaster(dest_pgdata, FIO_LOCAL_HOST);
+		pid = fio_check_postmaster(FIO_LOCAL_HOST, dest_pgdata);
 		if (pid == 1) /* postmaster.pid is mangled */
 		{
 			char	pid_filename[MAXPGPATH];
