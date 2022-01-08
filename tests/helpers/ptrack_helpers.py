@@ -1239,7 +1239,8 @@ class ProbackupTest(object):
             options=[], old_binary=False, gdb=False, asynchronous=False):
         cmd_list = [
             'delete',
-            '-B', backup_dir
+            '-B', backup_dir,
+            '-j', '10'
         ]
 
         cmd_list += ['--instance={0}'.format(instance)]
@@ -1253,7 +1254,8 @@ class ProbackupTest(object):
         cmd_list = [
             'delete',
             '-B', backup_dir,
-            '--instance={0}'.format(instance)
+            '--instance={0}'.format(instance),
+            '-j', '10'
         ]
         return self.run_pb(cmd_list + options, old_binary=old_binary)
 
@@ -1308,9 +1310,14 @@ class ProbackupTest(object):
             options['archive_mode'] = 'on'
 
         if custom_archive_command is None:
+            if old_binary:
+                binary_path = self.probackup_old_path
+            else:
+                binary_path = self.probackup_path
+
             if os.name == 'posix':
                 options['archive_command'] = '"{0}" archive-push -B {1} --instance={2} '.format(
-                    self.probackup_path, backup_dir, instance)
+                    binary_path, backup_dir, instance)
 
             elif os.name == 'nt':
                 options['archive_command'] = '"{0}" archive-push -B {1} --instance={2} '.format(

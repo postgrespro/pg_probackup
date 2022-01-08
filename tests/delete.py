@@ -203,9 +203,10 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
         self.set_archiving(backup_dir, 'node', node)
         node.slow_start()
 
-        node.safe_psql(
-            'postgres',
-            'CREATE EXTENSION ptrack')
+        if node.major_version >= 12:
+            node.safe_psql(
+                'postgres',
+                'CREATE EXTENSION ptrack')
 
         # full backup mode
         self.backup_node(backup_dir, 'node', node)
@@ -263,7 +264,7 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
         node.stop()
 
         # Check wals
-        wals_dir = os.path.join(backup_dir, 'wal', 'node')
+        wals_dir = os.path.join(backup_dir, 'wal', 'node', '00000000')
         wals = [f for f in os.listdir(wals_dir) if os.path.isfile(os.path.join(wals_dir, f))]
         original_wal_quantity = len(wals)
 
@@ -299,8 +300,7 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
 
         # Delete last backup
         self.delete_pb(backup_dir, 'node', backup_3_id, options=['--wal'])
-        wals = [f for f in os.listdir(wals_dir) if os.path.isfile(os.path.join(wals_dir, f))]
-        self.assertEqual (0, len(wals), "Number of wals should be equal to 0")
+        self.assertFalse(os.path.exists(wals_dir), "Number of wals should be equal to 0")
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)

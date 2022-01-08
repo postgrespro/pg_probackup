@@ -1545,7 +1545,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         backup_id_2 = self.backup_node(backup_dir, 'node', node)
 
         # Corrupt WAL
-        wals_dir = os.path.join(backup_dir, 'wal', 'node')
+        wals_dir = os.path.join(backup_dir, 'wal', 'node', '00000000')
         wals = [f for f in os.listdir(wals_dir) if os.path.isfile(os.path.join(wals_dir, f)) and not f.endswith('.backup')]
         wals.sort()
         for wal in wals:
@@ -1610,7 +1610,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             target_xid = res[0][0]
 
         # Corrupt WAL
-        wals_dir = os.path.join(backup_dir, 'wal', 'node')
+        wals_dir = os.path.join(backup_dir, 'wal', 'node', '00000000')
         wals = [f for f in os.listdir(wals_dir) if os.path.isfile(os.path.join(wals_dir, f)) and not f.endswith('.backup')]
         wals.sort()
         for wal in wals:
@@ -1673,10 +1673,10 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         backup_id = self.backup_node(backup_dir, 'node', node)
 
         # Delete wal segment
-        wals_dir = os.path.join(backup_dir, 'wal', 'node')
+        wals_dir = os.path.join(backup_dir, 'wal', 'node', '00000000')
         wals = [f for f in os.listdir(wals_dir) if os.path.isfile(os.path.join(wals_dir, f)) and not f.endswith('.backup')]
         wals.sort()
-        file = os.path.join(backup_dir, 'wal', 'node', wals[-1])
+        file = os.path.join(wals_dir, wals[-1])
         os.remove(file)
 
         # cut out '.gz'
@@ -1778,7 +1778,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.backup_node(backup_dir, 'node', node)
 
         # Corrupt WAL
-        wals_dir = os.path.join(backup_dir, 'wal', 'node')
+        wals_dir = os.path.join(backup_dir, 'wal', 'node', '00000000')
         with open(os.path.join(wals_dir, walfile), "rb+", 0) as f:
             f.seek(9000)
             f.write(b"b")

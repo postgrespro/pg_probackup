@@ -647,9 +647,11 @@ typedef struct lsnInterval
 
 typedef enum xlogFileType
 {
+	UNKNOWN,
 	SEGMENT,
-	TEMP_SEGMENT,
+	TEMP_SEGMENT, // '.part' segment created by archive-push
 	PARTIAL_SEGMENT,
+	HISTORY_FILE,
 	BACKUP_HISTORY_FILE
 } xlogFileType;
 
@@ -660,6 +662,8 @@ typedef struct xlogFile
 	xlogFileType type;
 	bool         keep; /* Used to prevent removal of WAL segments
                         * required by ARCHIVE backups. */
+	bool         deleted;
+	volatile     pg_atomic_flag lock;/* lock for synchronization of parallel threads  */
 } xlogFile;
 
 
@@ -814,6 +818,8 @@ typedef struct InstanceState
 	/* $BACKUP_PATH/backups/instance_name */
 	char		instance_wal_subdir_path[MAXPGPATH]; // previously global var arclog_path
 
+	parray     *wal_archive_subdirs;
+
 	/* TODO: Make it more specific */
 	PGconn *conn;
 
@@ -894,6 +900,7 @@ extern void do_archive_push(InstanceState *instanceState, InstanceConfig *instan
 						   bool no_sync, bool no_ready_rename);
 extern void do_archive_get(InstanceState *instanceState, InstanceConfig *instance, const char *prefetch_dir_arg, char *wal_file_path,
 						   char *wal_file_name, int batch_size, bool validate_wal);
+extern void get_archive_subdir(char *archive_subdir, const char * archive_dir, const char *wal_file_name, xlogFileType type);
 
 /* in configure.c */
 extern void do_show_config(void);
@@ -1048,16 +1055,18 @@ extern int dir_create_dir(const char *path, mode_t mode, bool strict);
 extern bool dir_is_empty(const char *path, fio_location location);
 
 extern bool fileExists(const char *path, fio_location location);
+extern bool IsWalFileExists(const char *wal_segment_name, const char *archive_dir, bool in_stream_dir);
 extern size_t pgFileSize(const char *path);
 
 extern pgFile *pgFileNew(const char *path, const char *rel_path,
 						 bool follow_symlink, int external_dir_num,
 						 fio_location location);
 extern pgFile *pgFileInit(const char *rel_path);
-extern void pgFileDelete(mode_t mode, const char *full_path);
+extern void pgFileDelete(mode_t mode, const char *full_path, int elevel);
 extern void fio_pgFileDelete(pgFile *file, const char *full_path);
 
 extern void pgFileFree(void *file);
+extern void pgXlogFileFree(void *xlogfile);
 
 extern pg_crc32 pgFileGetCRC(const char *file_path, bool use_crc32c, bool missing_ok);
 extern pg_crc32 pgFileGetCRCgz(const char *file_path, bool use_crc32c, bool missing_ok);
@@ -1075,6 +1084,7 @@ extern int pgCompareString(const void *str1, const void *str2);
 extern int pgPrefixCompareString(const void *str1, const void *str2);
 extern int pgCompareOid(const void *f1, const void *f2);
 extern void pfilearray_clear_locks(parray *file_list);
+extern void xlogfilearray_clear_locks(parray *xlog_list);
 
 /* in data.c */
 extern bool check_data_file(ConnectionArgs *arguments, pgFile *file,
@@ -1137,9 +1147,9 @@ extern bool validate_wal_segment(TimeLineID tli, XLogSegNo segno,
 extern bool read_recovery_info(const char *archivedir, TimeLineID tli,
 							   uint32 seg_size,
 							   XLogRecPtr start_lsn, XLogRecPtr stop_lsn,
-							   time_t *recovery_time);
+							   time_t *recovery_time, bool honor_subdirs);
 extern bool wal_contains_lsn(const char *archivedir, XLogRecPtr target_lsn,
-							 TimeLineID target_tli, uint32 seg_size);
+							 TimeLineID target_tli, uint32 seg_size, bool honor_subdirs);
 extern XLogRecPtr get_prior_record_lsn(const char *archivedir, XLogRecPtr start_lsn,
 								   XLogRecPtr stop_lsn, TimeLineID tli,
 								   bool seek_prev_segment, uint32 seg_size);

@@ -29,6 +29,23 @@ static bool backup_deleted = false;   /* At least one backup was deleted */
 static bool backup_merged = false;    /* At least one merge was enacted */
 static bool wal_deleted = false;      /* At least one WAL segments was deleted */
 
+typedef struct
+{
+	parray	   *xlog_filelist;
+	int         thread_num;
+	bool        purge_all;
+	XLogSegNo   OldestToKeepSegNo;
+	const char *archive_root_dir;
+
+	/*
+	 * Return value from the thread.
+	 * 0 means there is no error, 1 - there is an error.
+	 */
+	int			ret;
+} delete_files_arg;
+
+static void *delete_walfiles_in_tli_internal(void *arg);
+
 void
 do_delete(InstanceState *instanceState, time_t backup_id)
 {
@@ -782,7 +799,7 @@ delete_backup_files(pgBackup *backup)
 			elog(INFO, "Progress: (%zd/%zd). Delete file \"%s\"",
 				 i + 1, num_files, full_path);
 
-		pgFileDelete(file->mode, full_path);
+		pgFileDelete(file->mode, full_path, ERROR);
 	}
 
 	parray_walk(files, pgFileFree);
@@ -826,6 +843,10 @@ delete_walfiles_in_tli(InstanceState *instanceState, XLogRecPtr keep_lsn, timeli
 	size_t		wal_size_actual = 0;
 	char		wal_pretty_size[20];
 	bool		purge_all = false;
+	// multi-thread stuff
+	pthread_t        *threads;
+	delete_files_arg *threads_args;
+	bool              delete_isok = true;
 
 
 	/* Timeline is completely empty */
@@ -925,21 +946,105 @@ delete_walfiles_in_tli(InstanceState *instanceState, XLogRecPtr keep_lsn, timeli
 	if (dry_run)
 		return;
 
+	/* init thread args with own file lists */
+	threads = (pthread_t *) palloc(sizeof(pthread_t) * num_threads);
+	threads_args = (delete_files_arg *) palloc(sizeof(delete_files_arg)*num_threads);
+
+	for (i = 0; i < num_threads; i++)
+	{
+		delete_files_arg *arg = &(threads_args[i]);
+
+		arg->purge_all = purge_all;
+		arg->OldestToKeepSegNo = OldestToKeepSegNo;
+		arg->archive_root_dir = instanceState->instance_wal_subdir_path;
+		arg->xlog_filelist = tlinfo->xlog_filelist;
+		arg->thread_num = i+1;
+		/* By default there are some error */
+		arg->ret = 1;
+	}
+
+	/* Run threads */
+	thread_interrupted = false;
+	for (i = 0; i < num_threads; i++)
+	{
+		delete_files_arg *arg = &(threads_args[i]);
+
+		elog(VERBOSE, "Start thread num: %i", i);
+		pthread_create(&threads[i], NULL, delete_walfiles_in_tli_internal, arg);
+	}
+
+	/* Wait threads */
+	for (i = 0; i < num_threads; i++)
+	{
+		pthread_join(threads[i], NULL);
+		if (threads_args[i].ret == 1)
+			delete_isok = false;
+	}
+
+	/* TODO: */
+	//if delete_isok
+
+	/* cleanup */
 	for (i = 0; i < parray_num(tlinfo->xlog_filelist); i++)
 	{
 		xlogFile *wal_file = (xlogFile *) parray_get(tlinfo->xlog_filelist, i);
 
-		if (interrupted)
+		if (wal_file->deleted)
+		{
+			pgXlogFileFree(wal_file);
+			parray_remove(tlinfo->xlog_filelist, i);
+			i--;
+		}
+	}
+	pg_free(threads);
+	pg_free(threads_args);
+
+	/* Remove empty subdirectories */
+	if (!instanceState->wal_archive_subdirs)
+		return;
+
+	for (i = 0; i < parray_num(instanceState->wal_archive_subdirs); i++)
+	{
+		char fullpath[MAXPGPATH];
+		pgFile *file = (pgFile *) parray_get(instanceState->wal_archive_subdirs, i);
+
+		join_path_components(fullpath, instanceState->instance_wal_subdir_path, file->name);
+
+		if (dir_is_empty(fullpath, FIO_LOCAL_HOST))
+		{
+			pgFileDelete(file->mode, fullpath, WARNING); /* WARNING (not ERROR) due to possible race condition */
+			pgFileFree(file);
+			parray_remove(instanceState->wal_archive_subdirs, i);
+			i--;
+		}
+	}
+}
+
+void *
+delete_walfiles_in_tli_internal(void *arg)
+{
+	int i;
+	delete_files_arg *args = (delete_files_arg *) arg;
+
+	for (i = 0; i < parray_num(args->xlog_filelist); i++)
+	{
+		xlogFile *wal_file = (xlogFile *) parray_get(args->xlog_filelist, i);
+
+		if (interrupted || thread_interrupted)
 			elog(ERROR, "interrupted during WAL archive purge");
 
-		/* Any segment equal or greater than EndSegNo must be kept
+		if (!pg_atomic_test_set_flag(&wal_file->lock))
+			continue;
+
+		/*
+		 * Any segment equal or greater than EndSegNo must be kept
 		 * unless it`s a 'purge all' scenario.
 		 */
-		if (purge_all || wal_file->segno < OldestToKeepSegNo)
+		if (args->purge_all || wal_file->segno < args->OldestToKeepSegNo)
 		{
 			char wal_fullpath[MAXPGPATH];
 
-			join_path_components(wal_fullpath, instanceState->instance_wal_subdir_path, wal_file->file.name);
+			join_path_components(wal_fullpath, args->archive_root_dir, wal_file->file.rel_path);
 
 			/* save segment from purging */
 			if (instance_config.wal_depth >= 0 && wal_file->keep)
@@ -953,8 +1058,8 @@ delete_walfiles_in_tli(InstanceState *instanceState, XLogRecPtr keep_lsn, timeli
 			{
 				/* Missing file is not considered as error condition */
 				if (errno != ENOENT)
-					elog(ERROR, "Could not remove file \"%s\": %s",
-							wal_fullpath, strerror(errno));
+					elog(ERROR, "[Thread: %d] Could not remove file \"%s\": %s",
+							args->thread_num, wal_fullpath, strerror(errno));
 			}
 			else
 			{
@@ -969,8 +1074,11 @@ delete_walfiles_in_tli(InstanceState *instanceState, XLogRecPtr keep_lsn, timeli
 			}
 
 			wal_deleted = true;
+			wal_file->deleted = true;
 		}
 	}
+
+	return NULL;
 }
 
 

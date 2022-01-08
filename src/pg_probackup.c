@@ -495,6 +495,7 @@ main(int argc, char *argv[])
 							catalogState->wal_subdir_path, instanceState->instance_name);
 		join_path_components(instanceState->instance_config_path,
 							 instanceState->instance_backup_subdir_path, BACKUP_CATALOG_CONF_FILE);
+		instanceState->wal_archive_subdirs = NULL;
 
 	}
 	/* ===== instanceState (END) ======*/

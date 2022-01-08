@@ -369,13 +369,15 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
 
-        wals_dir = os.path.join(backup_dir, 'wal', 'node')
+        wals_dir = os.path.join(backup_dir, 'wal', 'node', '00000000')
         if self.archive_compress:
             filename = '000000010000000000000001.gz'
             file = os.path.join(wals_dir, filename)
         else:
             filename = '000000010000000000000001'
             file = os.path.join(wals_dir, filename)
+
+        os.makedirs(wals_dir)
 
         with open(file, 'a+b') as f:
             f.write(b"blablablaadssaaaaaaaaaaaaaaa")
@@ -461,13 +463,15 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
 
-        wals_dir = os.path.join(backup_dir, 'wal', 'node')
+        wals_dir = os.path.join(backup_dir, 'wal', 'node', '00000000')
         if self.archive_compress:
             filename = '000000010000000000000001.gz'
             file = os.path.join(wals_dir, filename)
         else:
             filename = '000000010000000000000001'
             file = os.path.join(wals_dir, filename)
+
+        os.makedirs(wals_dir)
 
         with open(file, 'a+b') as f:
             f.write(b"blablablaadssaaaaaaaaaaaaaaa")
@@ -565,13 +569,15 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         filename_orig = filename_orig.decode('utf-8')
 
         # form up path to next .part WAL segment
-        wals_dir = os.path.join(backup_dir, 'wal', 'node')
+        wals_dir = os.path.join(backup_dir, 'wal', 'node', '00000000')
         if self.archive_compress:
             filename = filename_orig + '.gz' + '.part'
             file = os.path.join(wals_dir, filename)
         else:
             filename = filename_orig + '.part'
             file = os.path.join(wals_dir, filename)
+
+#        os.makedirs(wals_dir)
 
         # emulate stale .part file
         with open(file, 'a+b') as f:
@@ -1111,6 +1117,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
+
         if self.get_version(node) < 100000:
             pg_receivexlog_path = self.get_bin_path('pg_receivexlog')
         else:
@@ -1462,7 +1469,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             self.assertTrue(timeline['status'], 'OK')
 
         # create holes in t3
-        wals_dir = os.path.join(backup_dir, 'wal', 'replica')
+        wals_dir = os.path.join(backup_dir, 'wal', 'replica', '00000000')
         wals = [
                 f for f in os.listdir(wals_dir) if os.path.isfile(os.path.join(wals_dir, f))
                 and not f.endswith('.backup') and not f.endswith('.history') and f.startswith('00000003')
@@ -1472,17 +1479,17 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         # check that t3 is ok
         self.show_archive(backup_dir)
 
-        file = os.path.join(backup_dir, 'wal', 'replica', '000000030000000000000017')
+        file = os.path.join(wals_dir, '000000030000000000000017')
         if self.archive_compress:
             file = file + '.gz'
         os.remove(file)
 
-        file = os.path.join(backup_dir, 'wal', 'replica', '000000030000000000000012')
+        file = os.path.join(wals_dir, '000000030000000000000012')
         if self.archive_compress:
             file = file + '.gz'
         os.remove(file)
 
-        file = os.path.join(backup_dir, 'wal', 'replica', '000000030000000000000013')
+        file = os.path.join(wals_dir, '000000030000000000000013')
         if self.archive_compress:
             file = file + '.gz'
         os.remove(file)
@@ -1597,7 +1604,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         self.backup_node(backup_dir, 'node', node)
         node.pgbench_init(scale=2)
 
-        wals_dir = os.path.join(backup_dir, 'wal', 'node')
+        wals_dir = os.path.join(backup_dir, 'wal', 'node', '00000000')
         original_file = os.path.join(wals_dir, '000000010000000000000001.gz')
         tmp_file = os.path.join(wals_dir, '000000010000000000000001')
 
@@ -1652,7 +1659,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         self.backup_node(backup_dir, 'node', node)
         node.pgbench_init(scale=2)
 
-        wals_dir = os.path.join(backup_dir, 'wal', 'node')
+        wals_dir = os.path.join(backup_dir, 'wal', 'node', '00000000')
         original_file = os.path.join(wals_dir, '000000010000000000000001.gz')
         tmp_file = os.path.join(wals_dir, '000000010000000000000001')
 
@@ -2503,7 +2510,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         sleep(20)
 
         # now copy WAL files into prefetch directory and corrupt some of them
-        archive_dir = os.path.join(backup_dir, 'wal', 'node')
+        archive_dir = os.path.join(backup_dir, 'wal', 'node', '00000000')
         files = os.listdir(archive_dir)
         files.sort()
 
@@ -2589,7 +2596,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
         self.backup_node(backup_dir, 'node', node)
 
-        wals_dir = os.path.join(backup_dir, 'wal', 'node')
+        wals_dir = os.path.join(backup_dir, 'wal', 'node', '00000000')
 
         # .part file
         node.safe_psql(

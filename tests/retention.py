@@ -59,7 +59,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         min_wal = output_after['min-segno']
         max_wal = output_after['max-segno']
 
-        for wal_name in os.listdir(os.path.join(backup_dir, 'wal', 'node')):
+        for wal_name in os.listdir(os.path.join(backup_dir, 'wal', 'node', '00000000')):
             if not wal_name.endswith(".backup"):
 
                 if self.archive_compress:

@@ -615,6 +615,11 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         merge them with new binary.
         old binary version =< 2.2.7
         """
+        if self.version_to_num(self.old_probackup_version) > self.version_to_num('2.2.7'):
+            self.assertTrue(
+                False,
+                'You need pg_probackup old_binary =< 2.2.7 for this test')
+
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
@@ -1475,10 +1480,78 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
 
         if self.paranoia:
             pgdata = self.pgdata_content(node.data_dir)
-
-        if self.paranoia:
             pgdata_restored = self.pgdata_content(node_restored.data_dir)
             self.compare_pgdata(pgdata, pgdata_restored)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.expectedFailure
+    # @unittest.skip("skip")
+    def test_archive_subdir(self):
+        """
+        https://github.com/postgrespro/pg_probackup/issues/449
+
+        Make sure that our WAL reader can fallback from subdir to archive dir
+        old binary version =< 2.5.2
+        """
+        if self.version_to_num(self.old_probackup_version) > self.version_to_num('2.5.2'):
+            self.assertTrue(
+                False, 'OLD pg_probackup binary must be =< 2.5.2 for this test')
+
+        self.assertNotEqual(
+            self.version_to_num(self.old_probackup_version),
+            self.version_to_num(self.probackup_version))
+
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node, old_binary=True)
+        node.slow_start()
+
+        # generate data using old binary
+        node.pgbench_init(scale=10)
+
+        # TAKE FULL ARCHIVE BACKUP
+        self.backup_node(backup_dir, 'node', node, old_binary=True)
+
+        # generate some more WAL using old binary
+        node.pgbench_init(scale=10)
+
+        # generate some WAL using new binary
+        self.set_archiving(backup_dir, 'node', node)
+        node.reload()
+
+        # generate some WAL using old binary
+        pgbench = node.pgbench(
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            options=["-j", "4", "-T", "50"])
+        pgbench.wait()
+        pgbench.stdout.close()
+
+        # TAKE PAGE ARCHIVE BACKUP
+        self.backup_node(backup_dir, 'node', node, backup_type='page', options=['--archive-timeout=10s'])
+
+        if self.paranoia:
+            pgdata = self.pgdata_content(node.data_dir)
+
+        node.cleanup()
+
+        self.restore_node(backup_dir, 'node', node, options=["-j", "4"])
+
+        if self.paranoia:
+            pgdata_restored = self.pgdata_content(node.data_dir)
+            self.compare_pgdata(pgdata, pgdata_restored)
+
+        node.slow_start()
+        node.stop()
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)

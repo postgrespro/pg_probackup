@@ -115,6 +115,7 @@ typedef struct XLogReaderData
 	gzFile		 gz_xlogfile;
 	char		 gz_xlogpath[MAXPGPATH];
 #endif
+	bool         honor_subdirs;
 } XLogReaderData;
 
 /* Function to process a WAL record */
@@ -172,7 +173,8 @@ static bool RunXLogThreads(const char *archivedir,
 						   bool consistent_read,
 						   xlog_record_function process_record,
 						   XLogRecTarget *last_rec,
-						   bool inclusive_endpoint);
+						   bool inclusive_endpoint,
+						   bool honor_subdirs);
 //static XLogReaderState *InitXLogThreadRead(xlog_thread_arg *arg);
 static bool SwitchThreadToNextWal(XLogReaderState *xlogreader,
 								  xlog_thread_arg *arg);
@@ -254,7 +256,7 @@ extractPageMap(const char *archivedir, uint32 wal_seg_size,
 		extract_isok = RunXLogThreads(archivedir, 0, InvalidTransactionId,
 									  InvalidXLogRecPtr, end_tli, wal_seg_size,
 									  startpoint, endpoint, false, extractPageInfo,
-									  NULL, true);
+									  NULL, true, true);
 	else
 	{
 		/* We have to process WAL located on several different xlog intervals,
@@ -348,7 +350,7 @@ extractPageMap(const char *archivedir, uint32 wal_seg_size,
 			extract_isok = RunXLogThreads(archivedir, 0, InvalidTransactionId,
 									  InvalidXLogRecPtr, tmp_interval->tli, wal_seg_size,
 									  tmp_interval->begin_lsn, tmp_interval->end_lsn,
-									  false, extractPageInfo, NULL, inclusive_endpoint);
+									  false, extractPageInfo, NULL, inclusive_endpoint, true);
 			if (!extract_isok)
 				break;
 
@@ -377,7 +379,7 @@ validate_backup_wal_from_start_to_stop(pgBackup *backup,
 	got_endpoint = RunXLogThreads(archivedir, 0, InvalidTransactionId,
 								  InvalidXLogRecPtr, tli, xlog_seg_size,
 								  backup->start_lsn, backup->stop_lsn,
-								  false, NULL, NULL, true);
+								  false, NULL, NULL, true, !backup->stream);
 
 	if (!got_endpoint)
 	{
@@ -450,6 +452,7 @@ validate_wal(pgBackup *backup, const char *archivedir,
 		elog(WARNING, "Backup %s WAL segments are corrupted", backup_id);
 		return;
 	}
+
 	/*
 	 * If recovery target is provided check that we can restore backup to a
 	 * recovery target time or xid.
@@ -490,7 +493,8 @@ validate_wal(pgBackup *backup, const char *archivedir,
 	all_wal = all_wal ||
 		RunXLogThreads(archivedir, target_time, target_xid, target_lsn,
 					   tli, wal_seg_size, backup->stop_lsn,
-					   InvalidXLogRecPtr, true, validateXLogRecord, &last_rec, true);
+					   InvalidXLogRecPtr, true, validateXLogRecord, &last_rec, true,
+					   true);
 	if (last_rec.rec_time > 0)
 		time2iso(last_timestamp, lengthof(last_timestamp),
 				 timestamptz_to_time_t(last_rec.rec_time), false);
@@ -532,7 +536,7 @@ validate_wal(pgBackup *backup, const char *archivedir,
 bool
 read_recovery_info(const char *archivedir, TimeLineID tli, uint32 wal_seg_size,
 				   XLogRecPtr start_lsn, XLogRecPtr stop_lsn,
-				   time_t *recovery_time)
+				   time_t *recovery_time, bool honor_subdirs)
 {
 	XLogRecPtr	startpoint = stop_lsn;
 	XLogReaderState *xlogreader;
@@ -549,6 +553,7 @@ read_recovery_info(const char *archivedir, TimeLineID tli, uint32 wal_seg_size,
 
 	xlogreader = InitXLogPageRead(&reader_data, archivedir, tli, wal_seg_size,
 								  false, true, true);
+	reader_data.honor_subdirs = honor_subdirs;
 
 	/* Read records from stop_lsn down to start_lsn */
 	do
@@ -608,7 +613,7 @@ cleanup:
  */
 bool
 wal_contains_lsn(const char *archivedir, XLogRecPtr target_lsn,
-				 TimeLineID target_tli, uint32 wal_seg_size)
+				 TimeLineID target_tli, uint32 wal_seg_size, bool honor_subdirs)
 {
 	XLogReaderState *xlogreader;
 	XLogReaderData reader_data;
@@ -626,6 +631,7 @@ wal_contains_lsn(const char *archivedir, XLogRecPtr target_lsn,
 			elog(ERROR, "Out of memory");
 
 	xlogreader->system_identifier = instance_config.system_identifier;
+	reader_data.honor_subdirs = honor_subdirs;
 
 #if PG_VERSION_NUM >= 130000
 	if (XLogRecPtrIsInvalid(target_lsn))
@@ -1012,34 +1018,124 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 	/* Try to switch to the next WAL segment */
 	if (!reader_data->xlogexists)
 	{
-		char		xlogfname[MAXFNAMELEN];
-		char		partial_file[MAXPGPATH];
+		bool	compressed = false;
+		char	xlogfname[MAXFNAMELEN];
+//		char	partial_file[MAXPGPATH];
+		char    fullpath[MAXPGPATH];
+		char    fullpath_gz[MAXPGPATH];
+		char    fullpath_partial_gz[MAXPGPATH];
 
 		GetXLogFileName(xlogfname, reader_data->tli, reader_data->xlogsegno, wal_seg_size);
 
-		join_path_components(reader_data->xlogpath, wal_archivedir, xlogfname);
-		snprintf(reader_data->gz_xlogpath, MAXPGPATH, "%s.gz", reader_data->xlogpath);
+		/* obtain WAL archive subdir for ARCHIVE backup */
+		// TODO: move to separate function and rewrite it 
+		if (reader_data->honor_subdirs)
+		{
+			char	archive_subdir[MAXPGPATH];
+			get_archive_subdir(archive_subdir, wal_archivedir, xlogfname, SEGMENT);
+
+			/* default value for xlogpath for error message */
+			snprintf(reader_data->xlogpath, MAXPGPATH, "%s/%s", archive_subdir, xlogfname);
+
+			/* check existence of wal_dir/xlogid/segment.gz file ... */
+			snprintf(fullpath_gz, MAXPGPATH, "%s/%s.gz", archive_subdir, xlogfname);
+
+			//TODO: rewrite it to something less ugly
+#ifdef HAVE_LIBZ
+			if (fileExists(fullpath_gz, FIO_LOCAL_HOST))
+			{
+				snprintf(reader_data->xlogpath, MAXPGPATH, "%s/%s", archive_subdir, xlogfname);
+				snprintf(reader_data->gz_xlogpath, MAXPGPATH, "%s", fullpath_gz);
+				compressed = true;
+				goto file_found;
+			}
+
+			/* ... failing that check existence of wal_dir/xlogid/segment.partial.gz ... */
+			snprintf(fullpath_partial_gz, MAXPGPATH, "%s/%s.partial.gz", archive_subdir, xlogfname);
+			if (fileExists(fullpath_partial_gz, FIO_LOCAL_HOST))
+			{
+				snprintf(reader_data->xlogpath, MAXPGPATH, "%s/%s.partial", archive_subdir, xlogfname);
+				snprintf(reader_data->gz_xlogpath, MAXPGPATH, "%s", fullpath_partial_gz);
+				compressed = true;
+				goto file_found;
+			}
+#endif
+			/* ... failing that check existence of wal_dir/xlogid/segment ... */
+			snprintf(fullpath, MAXPGPATH, "%s/%s", archive_subdir, xlogfname);
+			if (fileExists(fullpath, FIO_LOCAL_HOST))
+			{
+				snprintf(reader_data->xlogpath, MAXPGPATH, "%s", fullpath);
+				goto file_found;
+			}
+
+			goto archive_dir;
+		}
+		/* use directory as-is */
+		else
+		{
+			/* default value for xlogpath for error message */
+			snprintf(reader_data->xlogpath, MAXPGPATH, "%s/%s", wal_archivedir, xlogfname);
+archive_dir:
+#ifdef HAVE_LIBZ
+			/* ... failing that check existence of wal_dir/segment.gz ... */
+			snprintf(fullpath_gz, MAXPGPATH, "%s/%s.gz", wal_archivedir, xlogfname);
+			if (fileExists(fullpath_gz, FIO_LOCAL_HOST))
+			{
+				snprintf(reader_data->gz_xlogpath, MAXPGPATH, "%s", fullpath_gz);
+				snprintf(reader_data->xlogpath, MAXPGPATH, "%s/%s", wal_archivedir, xlogfname);
+				compressed = true;
+
+				goto file_found;
+			}
+
+			/* ... failing that check existence of wal_dir/segment.partial.gz ... */
+			snprintf(fullpath_partial_gz, MAXPGPATH, "%s/%s.partial.gz", wal_archivedir, xlogfname);
+			if (fileExists(wal_archivedir, FIO_LOCAL_HOST))
+			{
+				snprintf(reader_data->xlogpath, MAXPGPATH, "%s/%s.partial", wal_archivedir, xlogfname);
+				snprintf(reader_data->gz_xlogpath, MAXPGPATH, "%s", fullpath_partial_gz);
+				compressed = true;
+				goto file_found;
+			}
+#endif
+			/* ... failing that check existence of wal_dir/segment ... */
+			snprintf(fullpath, MAXPGPATH, "%s/%s", wal_archivedir, xlogfname);
+			if (fileExists(fullpath, FIO_LOCAL_HOST))
+			{
+				snprintf(reader_data->xlogpath, MAXPGPATH, "%s", fullpath);
+				goto file_found;
+			}
+		}
+
+file_found:
+		canonicalize_path(reader_data->xlogpath);
+
+#ifdef HAVE_LIBZ
+		if (compressed)
+			canonicalize_path(reader_data->gz_xlogpath);
+#endif
+
+//		snprintf(reader_data->gz_xlogpath, MAXPGPATH, "%s.gz", reader_data->xlogpath);
 
 		/* We fall back to using .partial segment in case if we are running
 		 * multi-timeline incremental backup right after standby promotion.
 		 * TODO: it should be explicitly enabled.
 		 */
-		snprintf(partial_file, MAXPGPATH, "%s.partial", reader_data->xlogpath);
+//		snprintf(partial_file, MAXPGPATH, "%s.partial", reader_data->xlogpath);
 
 		/* If segment do not exists, but the same
 		 * segment with '.partial' suffix does, use it instead */
-		if (!fileExists(reader_data->xlogpath, FIO_LOCAL_HOST) &&
-			fileExists(partial_file, FIO_LOCAL_HOST))
-		{
-			snprintf(reader_data->xlogpath, MAXPGPATH, "%s", partial_file);
-		}
+//		if (!fileExists(reader_data->xlogpath, FIO_LOCAL_HOST) &&
+//			fileExists(partial_file, FIO_LOCAL_HOST))
+//		{
+//			snprintf(reader_data->xlogpath, MAXPGPATH, "%s", partial_file);
+//		}
 
-		if (fileExists(reader_data->xlogpath, FIO_LOCAL_HOST))
+		if (!compressed)
 		{
 			elog(LOG, "Thread [%d]: Opening WAL segment \"%s\"",
 				 reader_data->thread_num, reader_data->xlogpath);
 
-			reader_data->xlogexists = true;
 			reader_data->xlogfile = fio_open(reader_data->xlogpath,
 											 O_RDONLY | PG_BINARY, FIO_LOCAL_HOST);
 
@@ -1050,15 +1146,16 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 					 strerror(errno));
 				return -1;
 			}
+			else
+				reader_data->xlogexists = true;
 		}
 #ifdef HAVE_LIBZ
 		/* Try to open compressed WAL segment */
-		else if (fileExists(reader_data->gz_xlogpath, FIO_LOCAL_HOST))
+		else
 		{
 			elog(LOG, "Thread [%d]: Opening compressed WAL segment \"%s\"",
 				 reader_data->thread_num, reader_data->gz_xlogpath);
 
-			reader_data->xlogexists = true;
 			reader_data->gz_xlogfile = fio_gzopen(reader_data->gz_xlogpath,
 													  "rb", -1, FIO_LOCAL_HOST);
 			if (reader_data->gz_xlogfile == NULL)
@@ -1068,6 +1165,8 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 					 strerror(errno));
 				return -1;
 			}
+			else
+				reader_data->xlogexists = true;
 		}
 #endif
 		/* Exit without error if WAL segment doesn't exist */
@@ -1191,7 +1290,7 @@ RunXLogThreads(const char *archivedir, time_t target_time,
 			   TransactionId target_xid, XLogRecPtr target_lsn, TimeLineID tli,
 			   uint32 segment_size, XLogRecPtr startpoint, XLogRecPtr endpoint,
 			   bool consistent_read, xlog_record_function process_record,
-			   XLogRecTarget *last_rec, bool inclusive_endpoint)
+			   XLogRecTarget *last_rec, bool inclusive_endpoint, bool honor_subdirs)
 {
 	pthread_t  *threads;
 	xlog_thread_arg *thread_args;
@@ -1255,6 +1354,7 @@ RunXLogThreads(const char *archivedir, time_t target_time,
 						 consistent_read, false);
 		arg->reader_data.xlogsegno = segno_next;
 		arg->reader_data.thread_num = i + 1;
+		arg->reader_data.honor_subdirs = honor_subdirs;
 		arg->process_record = process_record;
 		arg->startpoint = startpoint;
 		arg->endpoint = endpoint;
@@ -1482,7 +1582,7 @@ XLogThreadWorker(void *arg)
 					 reader_data->thread_num,
 					 (uint32) (errptr >> 32), (uint32) (errptr));
 
-			/* In we failed to read record located at endpoint position,
+			/* If we failed to read record located at endpoint position,
 			 * and endpoint is not inclusive, do not consider this as an error.
 			 */
 			if (!thread_arg->inclusive_endpoint &&
@@ -1509,6 +1609,7 @@ XLogThreadWorker(void *arg)
 
 		if (thread_arg->process_record)
 			thread_arg->process_record(xlogreader, reader_data, &stop_reading);
+
 		if (stop_reading)
 		{
 			thread_arg->got_target = true;
@@ -1915,7 +2016,7 @@ bool validate_wal_segment(TimeLineID tli, XLogSegNo segno, const char *prefetch_
 
 	rc = RunXLogThreads(prefetch_dir, 0, InvalidTransactionId,
 						InvalidXLogRecPtr, tli, wal_seg_size,
-						startpoint, endpoint, false, NULL, NULL, true);
+						startpoint, endpoint, false, NULL, NULL, true, false);
 
 	num_threads = tmp_num_threads;
 
@@ -1946,4 +2047,65 @@ static XLogReaderState* WalReaderAllocate(uint32 wal_seg_size, XLogReaderData *r
 #else
 	return XLogReaderAllocate(&SimpleXLogPageRead, reader_data);
 #endif
+}
+
+/*
+ * Is WAL file exists in archive directory
+ * for stream backup check uncompressed segment in wal_root_dir
+ * for archive backup first check subdirectory, then fallback to archive directory
+ */
+bool IsWalFileExists(const char *wal_segment_name, const char *wal_root_dir, bool in_stream_dir)
+{
+	char wal_file_fullpath[MAXPGPATH];
+	char wal_file_fullpath_gz[MAXPGPATH];
+	char wal_segment_subdir[MAXPGPATH];
+
+	if (in_stream_dir)
+	{
+		join_path_components(wal_file_fullpath, wal_root_dir, wal_segment_name);
+		if (fileExists(wal_file_fullpath, FIO_BACKUP_HOST))
+			goto found_uncompressed_file;
+
+		goto not_found;
+	}
+
+	/* obtain subdir in WAL archive */
+	get_archive_subdir(wal_segment_subdir, wal_root_dir, wal_segment_name, SEGMENT);
+
+	/* first try uncompressed segment in WAL archive subdir ... */
+	join_path_components(wal_file_fullpath, wal_segment_subdir, wal_segment_name);
+	if (fileExists(wal_file_fullpath, FIO_BACKUP_HOST))
+		goto found_uncompressed_file;
+
+#ifdef HAVE_LIBZ
+	/* ... fallback to compressed segment in WAL archive subdir ... */
+	snprintf(wal_file_fullpath_gz, MAXPGPATH, "%s.gz", wal_file_fullpath);
+	if (fileExists(wal_file_fullpath_gz, FIO_BACKUP_HOST))
+		goto found_compressed_file;
+#endif
+
+	/* ... fallback to uncompressed segment in archive dir ... */
+	join_path_components(wal_file_fullpath, wal_root_dir, wal_segment_name);
+	if (fileExists(wal_file_fullpath, FIO_BACKUP_HOST))
+		goto found_uncompressed_file;
+
+	/* ... fallback to compressed segment in archive dir */
+#ifdef HAVE_LIBZ
+	snprintf(wal_file_fullpath_gz, MAXPGPATH, "%s.gz", wal_file_fullpath);
+	if (fileExists(wal_file_fullpath_gz, FIO_BACKUP_HOST))
+		goto found_compressed_file;
+#endif
+
+	goto not_found;
+
+found_compressed_file:
+	elog(LOG, "Found compressed WAL segment: %s", wal_file_fullpath);
+	return true;
+
+found_uncompressed_file:
+	elog(LOG, "Found WAL segment: %s", wal_file_fullpath_gz);
+	return true;
+
+not_found:
+	return false;
 }

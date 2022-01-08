@@ -1628,6 +1628,9 @@ catalog_get_timelines(InstanceState *instanceState, InstanceConfig *instance)
 				else if (strcmp(suffix, "gz") != 0)
 				{
 					elog(WARNING, "unexpected WAL file name \"%s\"", file->name);
+					pgFileFree(file);
+					parray_remove(xlog_files_list, i);
+					i--;
 					continue;
 				}
 			}
@@ -1724,8 +1727,23 @@ catalog_get_timelines(InstanceState *instanceState, InstanceConfig *instance)
 			parray_walk(timelines, pfree);
 			parray_free(timelines);
 		}
+		/*
+		 * Add WAL archive subdirectories to filelist (used only in delete)
+		 * TODO: currently only directory with 8-character name is treated as WAL subdir, is it ok?
+		 */
+		else if (S_ISDIR(file->mode) && strspn(file->rel_path, "0123456789ABCDEF") == 8)
+		{
+			if (instanceState->wal_archive_subdirs == NULL)
+				instanceState->wal_archive_subdirs = parray_new();
+			parray_append(instanceState->wal_archive_subdirs, file);
+		}
 		else
+		{
 			elog(WARNING, "unexpected WAL file name \"%s\"", file->name);
+			pgFileFree(file);
+			parray_remove(xlog_files_list, i);
+			i--;
+		}
 	}
 
 	/* save information about backups belonging to each timeline */
@@ -1745,6 +1763,9 @@ catalog_get_timelines(InstanceState *instanceState, InstanceConfig *instance)
 				parray_append(tlinfo->backups, backup);
 			}
 		}
+
+		/* setup locks */
+		xlogfilearray_clear_locks(tlinfo->xlog_filelist);
 	}
 
 	/* determine oldest backup and closest backup for every timeline */
