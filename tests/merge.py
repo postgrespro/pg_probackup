@@ -1829,6 +1829,8 @@ class MergeTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node', page_2, gdb=True,
             options=['--log-level-console=VERBOSE'])
 
+        gdb.set_breakpoint('delete_backup_files')
+        gdb.run_until_break()
         gdb.set_breakpoint('fio_remove')
         gdb.run_until_break()
         gdb.continue_execution_until_break(2)
