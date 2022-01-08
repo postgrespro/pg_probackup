@@ -732,7 +732,8 @@ release_excl_lock_file(const char *backup_dir)
 	/* TODO Sanity check: maybe we should check, that pid in lock file is my_pid */
 
 	/* remove pid file */
-	if (fio_remove(FIO_BACKUP_HOST, lock_file, false) != 0)
+	/* exclusive locks releasing multiple times -> missing_ok = true */
+	if (fio_remove(FIO_BACKUP_HOST, lock_file, true) != 0)
 		elog(ERROR, "Cannot remove exclusive lock file \"%s\": %s", lock_file, strerror(errno));
 }
 
