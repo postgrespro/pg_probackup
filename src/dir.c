@@ -1817,7 +1817,7 @@ cleanup_tablespace(const char *path)
 
 		join_path_components(fullpath, path, file->rel_path);
 
-		if (fio_remove(FIO_DB_HOST, fullpath, false) == 0)
+		if (fio_remove(FIO_DB_HOST, fullpath, true) == 0)
 			elog(VERBOSE, "Deleted file \"%s\"", fullpath);
 		else
 			elog(ERROR, "Cannot delete file or directory \"%s\": %s", fullpath, strerror(errno));

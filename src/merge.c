@@ -809,7 +809,7 @@ merge_chain(InstanceState *instanceState,
 			/* We need full path, file object has relative path */
 			join_path_components(full_file_path, full_database_dir, full_file->rel_path);
 
-			if (fio_remove(FIO_BACKUP_HOST, full_file_path, false) == 0)
+			if (fio_remove(FIO_BACKUP_HOST, full_file_path, true) == 0)
 				elog(VERBOSE, "Deleted \"%s\"", full_file_path);
 			else
 				elog(ERROR, "Cannot delete file or directory \"%s\": %s", full_file_path, strerror(errno));
@@ -1145,7 +1145,7 @@ remove_dir_with_files(const char *path)
 
 		join_path_components(full_path, path, file->rel_path);
 
-		if (fio_remove(FIO_LOCAL_HOST, full_path, false) == 0)
+		if (fio_remove(FIO_LOCAL_HOST, full_path, true) == 0)
 			elog(VERBOSE, "Deleted \"%s\"", full_path);
 		else
 			elog(ERROR, "Cannot delete file or directory \"%s\": %s", full_path, strerror(errno));
