@@ -39,7 +39,7 @@ define test_deb
 	docker rm -f $1_$2_probackup_$(PKG_NAME_SUFFIX)$(PBK_VERSION) >> /dev/null 2>&1 ; \
 	docker run \
 		-v $(WORKDIR)/packaging/test:/app/in \
-		-v $(BUILDDIR)/data/www:/app/www \
+		-v $(PBK_PKG_BUILDDIR)/data/www:/app/www \
 		-e "DISTRIB=$1" -e "DISTRIB_VERSION=$2" -e "CODENAME=$3" -e "PG_VERSION=$4" -e "PG_FULL_VERSION=$5" \
 		-e "PKG_HASH=$(PBK_HASH)" -e "PKG_URL=$(PBK_GIT_REPO)" -e "PKG_RELEASE=$(PBK_RELEASE)" -e "PKG_NAME=pg-probackup-$(PKG_NAME_SUFFIX)$4" \
 		-e "PKG_VERSION=$(PBK_VERSION)" -e "PBK_EDITION=$(PBK_EDITION)" -e "PBK_EDITION_FULL=$(PBK_EDITION_FULL)" \
@@ -47,8 +47,8 @@ define test_deb
 		--rm pgpro/$1:$2 /app/in/scripts/deb$(SCRIPT_SUFFIX).sh
 endef
 
-include packaging/test/Makefile.debian
-include packaging/test/Makefile.ubuntu
+include $(top_pbk_srcdir)/packaging/test/Makefile.debian
+include $(top_pbk_srcdir)/packaging/test/Makefile.ubuntu
 
 # CENTOS
 build/test_centos: build/test_centos_7 build/test_centos_8
@@ -86,7 +86,7 @@ define test_rpm
 	docker rm -f $1_$2_probackup_$(PKG_NAME_SUFFIX)$(PBK_VERSION) >> /dev/null 2>&1 ; \
 	docker run \
 		-v $(WORKDIR)/packaging/test:/app/in \
-		-v $(BUILDDIR)/data/www:/app/www \
+		-v $(PBK_PKG_BUILDDIR)/data/www:/app/www \
 		-e "DISTRIB=$1" -e "DISTRIB_VERSION=$2" -e "CODENAME=$3" -e "PG_VERSION=$4" -e "PG_FULL_VERSION=$5" \
 		-e "PKG_HASH=$(PBK_HASH)" -e "PKG_URL=$(PBK_GIT_REPO)" -e "PKG_RELEASE=$(PBK_RELEASE)" -e "PKG_NAME=pg_probackup-$(PKG_NAME_SUFFIX)$4" \
 		-e "PKG_VERSION=$(PBK_VERSION)" -e "PBK_EDITION=$(PBK_EDITION)" -e "PBK_EDITION_FULL=$(PBK_EDITION_FULL)" \
@@ -94,9 +94,9 @@ define test_rpm
 		--rm pgpro/$1:$2 /app/in/scripts/rpm$(SCRIPT_SUFFIX).sh
 endef
 
-include packaging/test/Makefile.centos
-include packaging/test/Makefile.rhel
-include packaging/test/Makefile.oraclelinux
+include $(top_pbk_srcdir)/packaging/test/Makefile.centos
+include $(top_pbk_srcdir)/packaging/test/Makefile.rhel
+include $(top_pbk_srcdir)/packaging/test/Makefile.oraclelinux
 
 # Alt Linux
 build/test_alt: build/test_alt_8 build/test_alt_9
@@ -115,7 +115,7 @@ define test_alt
 	docker rm -f $1_$2_probackup_$(PKG_NAME_SUFFIX)$(PBK_VERSION) >> /dev/null 2>&1 ; \
 	docker run \
 		-v $(WORKDIR)/packaging/test:/app/in \
-		-v $(BUILDDIR)/data/www:/app/www \
+		-v $(PBK_PKG_BUILDDIR)/data/www:/app/www \
 		-e "DISTRIB=$1" -e "DISTRIB_VERSION=$2" -e "CODENAME=$3" -e "PG_VERSION=$4" -e "PG_FULL_VERSION=$5" \
 		-e "PKG_HASH=$(PBK_HASH)" -e "PKG_URL=$(PBK_GIT_REPO)" -e "PKG_RELEASE=$(PBK_RELEASE)" -e "PKG_NAME=pg_probackup-$(PKG_NAME_SUFFIX)$4" \
 		-e "PKG_VERSION=$(PBK_VERSION)" -e "PBK_EDITION=$(PBK_EDITION)" -e "PBK_EDITION_FULL=$(PBK_EDITION_FULL)" \
@@ -123,7 +123,7 @@ define test_alt
 		--rm pgpro/$1:$2 /app/in/scripts/alt$(SCRIPT_SUFFIX).sh
 endef
 
-include packaging/test/Makefile.alt
+include $(top_pbk_srcdir)/packaging/test/Makefile.alt
 
 # SUSE Linux
 build/test_suse: build/test_suse_15.1 build/test_suse_15.2
@@ -139,7 +139,7 @@ define test_suse
 	docker rm -f $1_$2_probackup_$(PKG_NAME_SUFFIX)$(PBK_VERSION) >> /dev/null 2>&1 ; \
 	docker run \
 		-v $(WORKDIR)/packaging/test:/app/in \
-		-v $(BUILDDIR)/data/www:/app/www \
+		-v $(PBK_PKG_BUILDDIR)/data/www:/app/www \
 		-e "DISTRIB=$1" -e "DISTRIB_VERSION=$2" -e "CODENAME=$3" -e "PG_VERSION=$4" -e "PG_FULL_VERSION=$5" \
 		-e "PKG_HASH=$(PBK_HASH)" -e "PKG_URL=$(PBK_GIT_REPO)" -e "PKG_RELEASE=$(PBK_RELEASE)" -e "PKG_NAME=pg_probackup-$(PKG_NAME_SUFFIX)$4" \
 		-e "PKG_VERSION=$(PBK_VERSION)" -e "PBK_EDITION=$(PBK_EDITION)" -e "PBK_EDITION_FULL=$(PBK_EDITION_FULL)" \
@@ -147,4 +147,4 @@ define test_suse
 		--rm pgpro/$1:$2 /app/in/scripts/suse$(SCRIPT_SUFFIX).sh
 endef
 
-include packaging/test/Makefile.suse
+include $(top_pbk_srcdir)/packaging/test/Makefile.suse

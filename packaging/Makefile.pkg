@@ -36,7 +36,7 @@ build/prepare:
 	mkdir -p build
 
 build/clean: build/prepare
-	find $(BUILDDIR) -maxdepth 1 -type f -exec rm -f {} \;
+	find $(PBK_PKG_BUILDDIR) -maxdepth 1 -type f -exec rm -f {} \;
 
 build/all: build/debian build/ubuntu build/centos build/oraclelinux build/alt build/suse build/rhel
 	@echo Packaging is done
@@ -76,8 +76,8 @@ define build_deb
 		--rm pgpro/$1:$2 /app/in/scripts/deb.sh
 endef
 
-include packaging/pkg/Makefile.debian
-include packaging/pkg/Makefile.ubuntu
+include $(top_pbk_srcdir)/packaging/pkg/Makefile.debian
+include $(top_pbk_srcdir)/packaging/pkg/Makefile.ubuntu
 
 # CENTOS
 build/centos: build/centos_7 build/centos_8 #build/rpm_repo_package_centos
@@ -127,9 +127,9 @@ define build_rpm
 		--rm pgpro/$1:$2 /app/in/scripts/rpm.sh
 endef
 
-include packaging/pkg/Makefile.centos
-include packaging/pkg/Makefile.rhel
-include packaging/pkg/Makefile.oraclelinux
+include $(top_pbk_srcdir)/packaging/pkg/Makefile.centos
+include $(top_pbk_srcdir)/packaging/pkg/Makefile.rhel
+include $(top_pbk_srcdir)/packaging/pkg/Makefile.oraclelinux
 
 
 # Alt Linux
@@ -157,7 +157,7 @@ define build_alt
 		--rm pgpro/$1:$2 /app/in/scripts/alt.sh
 endef
 
-include packaging/pkg/Makefile.alt
+include $(top_pbk_srcdir)/packaging/pkg/Makefile.alt
 
 # SUSE Linux
 build/suse: build/suse_15.1 build/suse_15.2
@@ -182,4 +182,4 @@ define build_suse
 		--rm pgpro/$1:$2 /app/in/scripts/suse.sh
 endef
 
-include packaging/pkg/Makefile.suse
+include $(top_pbk_srcdir)/packaging/pkg/Makefile.suse
