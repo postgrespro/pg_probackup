@@ -155,6 +155,7 @@ sub build_pgprobackup
 		'archive.c',
 		'backup.c',
 		'catalog.c',
+		'catchup.c',
 		'configure.c',
 		'data.c',
 		'delete.c',
