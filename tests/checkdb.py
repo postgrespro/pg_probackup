@@ -211,6 +211,7 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         gdb.kill()
+        node.stop()
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
@@ -349,6 +350,7 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
                 log_file_content)
 
         # Clean after yourself
+        node.stop()
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
@@ -445,6 +447,98 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
                 e.message)
 
         # Clean after yourself
+        node.stop()
+        self.del_test_dir(module_name, fname)
+
+    def test_checkdb_checkunique(self):
+        """Test checkunique parameter of amcheck.bt_index_check function"""
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'])
+        node.slow_start()
+
+        try:
+            node.safe_psql(
+               "postgres",
+               "create extension amcheck")
+        except QueryException as e:
+            node.safe_psql(
+                "postgres",
+                "create extension amcheck_next")
+
+        # Part of https://commitfest.postgresql.org/32/2976/ patch test
+        node.safe_psql(
+                "postgres",
+                "CREATE TABLE bttest_unique(a varchar(50), b varchar(1500), c bytea, d varchar(50)); "
+                "ALTER TABLE bttest_unique SET (autovacuum_enabled = false); "
+                "CREATE UNIQUE INDEX bttest_unique_idx ON bttest_unique(a,b); "
+                "UPDATE pg_catalog.pg_index SET indisunique = false "
+                "WHERE indrelid = (SELECT oid FROM pg_catalog.pg_class WHERE relname = 'bttest_unique'); "
+                "INSERT INTO bttest_unique "
+                "        SELECT  i::text::varchar, "
+                "                        array_to_string(array( "
+                "                                SELECT substr('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', ((random()*(36-1)+1)::integer), 1) "
+                "                        FROM generate_series(1,1300)),'')::varchar, "
+                "        i::text::bytea, i::text::varchar "
+                "        FROM generate_series(0,1) AS i, generate_series(0,30) AS x; "
+                "UPDATE pg_catalog.pg_index SET indisunique = true "
+                "WHERE indrelid = (SELECT oid FROM pg_catalog.pg_class WHERE relname = 'bttest_unique'); "
+                "DELETE FROM bttest_unique WHERE ctid::text='(0,2)'; "
+                "DELETE FROM bttest_unique WHERE ctid::text='(4,2)'; "
+                "DELETE FROM bttest_unique WHERE ctid::text='(4,3)'; "
+                "DELETE FROM bttest_unique WHERE ctid::text='(9,3)';")
+
+        # run without checkunique option (error will not detected)
+        output = self.checkdb_node(
+            options=[
+                '--amcheck',
+                '--skip-block-validation',
+                '-d', 'postgres', '-p', str(node.port)])
+
+        self.assertIn(
+            'INFO: checkdb --amcheck finished successfully',
+            output)
+        self.assertIn(
+            'All checked indexes are valid',
+            output)
+
+        # run with checkunique option
+        try:
+            self.checkdb_node(
+                options=[
+                    '--amcheck',
+                    '--skip-block-validation',
+                    '--checkunique',
+                    '-d', 'postgres', '-p', str(node.port)])
+            if (ProbackupTest.enterprise and
+                    (self.get_version(node) >= 111300 and self.get_version(node) < 120000
+                    or self.get_version(node) >= 120800 and self.get_version(node) < 130000
+                    or self.get_version(node) >= 130400)):
+                # we should die here because exception is what we expect to happen
+                self.assertEqual(
+                    1, 0,
+                    "Expecting Error because of index corruption\n"
+                    " Output: {0} \n CMD: {1}".format(
+                        repr(self.output), self.cmd))
+            else:
+                self.assertRegex(
+                    self.output,
+                    r"WARNING: Extension 'amcheck(|_next)' version [\d.]* in schema 'public' do not support 'checkunique' parameter")
+        except ProbackupException as e:
+            self.assertIn(
+                "ERROR: checkdb --amcheck finished with failure. Not all checked indexes are valid. All databases were amchecked.",
+                e.message,
+                "\n Unexpected Error Message: {0}\n CMD: {1}".format(
+                    repr(e.message), self.cmd))
+
+            self.assertIn(
+                "Amcheck failed in database 'postgres' for index: 'public.bttest_unique_idx': ERROR:  index \"bttest_unique_idx\" is corrupted. There are tuples violating UNIQUE constraint",
+                e.message)
+
+        # Clean after yourself
+        node.stop()
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
@@ -502,6 +596,7 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         gdb.kill()
+        node.stop()
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
@@ -563,12 +658,15 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
                 'GRANT SELECT ON TABLE pg_catalog.pg_namespace TO backup; '
                 'GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup; '
                 'GRANT EXECUTE ON FUNCTION pg_catalog.set_config(text, text, boolean) TO backup; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.texteq(text, text) TO backup; '
                 'GRANT EXECUTE ON FUNCTION pg_catalog.nameeq(name, name) TO backup; '
                 'GRANT EXECUTE ON FUNCTION pg_catalog.namene(name, name) TO backup; '
                 'GRANT EXECUTE ON FUNCTION pg_catalog.int8(integer) TO backup; '
                 'GRANT EXECUTE ON FUNCTION pg_catalog.oideq(oid, oid) TO backup; '
                 'GRANT EXECUTE ON FUNCTION pg_catalog.charne("char", "char") TO backup; '
                 'GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.string_to_array(text, text) TO backup; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.array_position(anyarray, anyelement) TO backup; '
                 'GRANT EXECUTE ON FUNCTION bt_index_check(regclass, bool) TO backup;' # amcheck-next function
             )
         # PG 9.6
@@ -588,6 +686,7 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
                 'GRANT SELECT ON TABLE pg_catalog.pg_namespace TO backup; '
                 'GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup; '
                 'GRANT EXECUTE ON FUNCTION pg_catalog.set_config(text, text, boolean) TO backup; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.texteq(text, text) TO backup; '
                 'GRANT EXECUTE ON FUNCTION pg_catalog.nameeq(name, name) TO backup; '
                 'GRANT EXECUTE ON FUNCTION pg_catalog.namene(name, name) TO backup; '
                 'GRANT EXECUTE ON FUNCTION pg_catalog.int8(integer) TO backup; '
@@ -595,6 +694,8 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
                 'GRANT EXECUTE ON FUNCTION pg_catalog.charne("char", "char") TO backup; '
                 'GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup; '
                 'GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_system() TO backup; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.string_to_array(text, text) TO backup; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.array_position(anyarray, anyelement) TO backup; '
 #                'GRANT EXECUTE ON FUNCTION bt_index_check(regclass) TO backup; '
                 'GRANT EXECUTE ON FUNCTION bt_index_check(regclass, bool) TO backup;'
             )
@@ -615,13 +716,16 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
                 'GRANT SELECT ON TABLE pg_catalog.pg_namespace TO backup; '
                 'GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup; '
                 'GRANT EXECUTE ON FUNCTION pg_catalog.set_config(text, text, boolean) TO backup; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.texteq(text, text) TO backup; '
                 'GRANT EXECUTE ON FUNCTION pg_catalog.nameeq(name, name) TO backup; '
                 'GRANT EXECUTE ON FUNCTION pg_catalog.namene(name, name) TO backup; '
                 'GRANT EXECUTE ON FUNCTION pg_catalog.int8(integer) TO backup; '
                 'GRANT EXECUTE ON FUNCTION pg_catalog.oideq(oid, oid) TO backup; '
                 'GRANT EXECUTE ON FUNCTION pg_catalog.charne("char", "char") TO backup; '
                 'GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_system() TO backup;'
+                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_system() TO backup; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.string_to_array(text, text) TO backup; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.array_position(anyarray, anyelement) TO backup;'
             )
             if ProbackupTest.enterprise:
                 # amcheck-1.1
@@ -633,7 +737,45 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
                 node.safe_psql(
                     'backupdb',
                     'GRANT EXECUTE ON FUNCTION bt_index_check(regclass) TO backup')
-        # >= 11
+        # >= 11 < 14
+        elif self.get_version(node) > 110000 and self.get_version(node) < 140000:
+            node.safe_psql(
+                'backupdb',
+                'CREATE ROLE backup WITH LOGIN; '
+                'GRANT CONNECT ON DATABASE backupdb to backup; '
+                'GRANT USAGE ON SCHEMA pg_catalog TO backup; '
+                'GRANT USAGE ON SCHEMA public TO backup; '
+                'GRANT SELECT ON TABLE pg_catalog.pg_proc TO backup; '
+                'GRANT SELECT ON TABLE pg_catalog.pg_extension TO backup; '
+                'GRANT SELECT ON TABLE pg_catalog.pg_database TO backup; '
+                'GRANT SELECT ON TABLE pg_catalog.pg_am TO backup; '
+                'GRANT SELECT ON TABLE pg_catalog.pg_class TO backup; '
+                'GRANT SELECT ON TABLE pg_catalog.pg_index TO backup; '
+                'GRANT SELECT ON TABLE pg_catalog.pg_namespace TO backup; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.set_config(text, text, boolean) TO backup; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.texteq(text, text) TO backup; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.nameeq(name, name) TO backup; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.namene(name, name) TO backup; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.int8(integer) TO backup; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.oideq(oid, oid) TO backup; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.charne("char", "char") TO backup; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_system() TO backup; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.string_to_array(text, text) TO backup; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.array_position(anyarray, anyelement) TO backup; '
+                'GRANT EXECUTE ON FUNCTION bt_index_check(regclass) TO backup; '
+                'GRANT EXECUTE ON FUNCTION bt_index_check(regclass, bool) TO backup;'
+            )
+            # checkunique parameter
+            if ProbackupTest.enterprise:
+                if (self.get_version(node) >= 111300 and self.get_version(node) < 120000
+                        or self.get_version(node) >= 120800 and self.get_version(node) < 130000
+                        or self.get_version(node) >= 130400):
+                    node.safe_psql(
+                        "backupdb",
+                        "GRANT EXECUTE ON FUNCTION bt_index_check(regclass, bool, bool) TO backup")
+        # >= 14
         else:
             node.safe_psql(
                 'backupdb',
@@ -650,6 +792,7 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
                 'GRANT SELECT ON TABLE pg_catalog.pg_namespace TO backup; '
                 'GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup; '
                 'GRANT EXECUTE ON FUNCTION pg_catalog.set_config(text, text, boolean) TO backup; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.texteq(text, text) TO backup; '
                 'GRANT EXECUTE ON FUNCTION pg_catalog.nameeq(name, name) TO backup; '
                 'GRANT EXECUTE ON FUNCTION pg_catalog.namene(name, name) TO backup; '
                 'GRANT EXECUTE ON FUNCTION pg_catalog.int8(integer) TO backup; '
@@ -657,9 +800,16 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
                 'GRANT EXECUTE ON FUNCTION pg_catalog.charne("char", "char") TO backup; '
                 'GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup; '
                 'GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_system() TO backup; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.string_to_array(text, text) TO backup; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.array_position(anycompatiblearray, anycompatible) TO backup; '
                 'GRANT EXECUTE ON FUNCTION bt_index_check(regclass) TO backup; '
                 'GRANT EXECUTE ON FUNCTION bt_index_check(regclass, bool) TO backup;'
             )
+            # checkunique parameter
+            if ProbackupTest.enterprise:
+                node.safe_psql(
+                    "backupdb",
+                    "GRANT EXECUTE ON FUNCTION bt_index_check(regclass, bool, bool) TO backup")
 
         if ProbackupTest.enterprise:
             node.safe_psql(
@@ -700,4 +850,5 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
                     repr(e.message), self.cmd))
 
         # Clean after yourself
+        node.stop()
         self.del_test_dir(module_name, fname)
