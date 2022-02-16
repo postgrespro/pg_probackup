@@ -4176,7 +4176,7 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
 pg_probackup checkdb
 [-B <replaceable>backup_dir</replaceable>] [--instance <replaceable>instance_name</replaceable>] [-D <replaceable>data_dir</replaceable>]
 [--help] [-j <replaceable>num_threads</replaceable>] [--progress]
-[--skip-block-validation] [--amcheck] [--heapallindexed]
+[--skip-block-validation] [--amcheck [--checkunique] [--heapallindexed]]
 [<replaceable>connection_options</replaceable>] [<replaceable>logging_options</replaceable>]
 </programlisting>
       <para>
@@ -4195,17 +4195,24 @@ pg_probackup checkdb
         extension or the <application>amcheck_next</application> extension
         installed in the database to check its indexes. For databases
         without <application>amcheck</application>, index verification will be skipped.
+        Additional options <option>--checkunique</option> and <option>--heapallindexed</option>
+        are effective depending on the version of <application>amcheck</application> installed.
       </para>
       </listitem>
       </varlistentry>
 
       <varlistentry>
-<term><option>--skip-block-validation</option></term>
+<term><option>--checkunique</option></term>
       <listitem>
       <para>
-        Skip validation of data files. You can use this flag only
-        together with the <option>--amcheck</option> flag, so that only logical
-        verification of indexes is performed.
+        Verifies unique constraints during logical verification of indexes.
+        You can use this flag only together with the <option>--amcheck</option> flag when
+        the <application>amcheck</application> extension is
+        installed in the database.
+      </para>
+      <para>
+        This verification is only possible if it is supported by the version of the
+        <application>amcheck</application> extension you are using.
       </para>
       </listitem>
       </varlistentry>
@@ -4219,12 +4226,24 @@ pg_probackup checkdb
         <option>--amcheck</option> flag.
       </para>
       <para>
-        This check is only possible if you are using the
-        <application>amcheck</application> extension of version 2.0 or higher, or
-        the <application>amcheck_next</application> extension of any version.
+        This check is only possible if it is supported by the version of the
+        <application>amcheck</application> extension you are using or
+        if the <application>amcheck_next</application> extension is used instead.
       </para>
       </listitem>
       </varlistentry>
+      <varlistentry>
+
+<term><option>--skip-block-validation</option></term>
+      <listitem>
+      <para>
+        Skip validation of data files. You can use this flag only
+        together with the <option>--amcheck</option> flag, so that only logical
+        verification of indexes is performed.
+      </para>
+      </listitem>
+      </varlistentry>
+
     </variablelist>
     </para>
       <para>

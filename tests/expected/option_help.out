@@ -107,7 +107,7 @@ pg_probackup - utility to manage backup/recovery of PostgreSQL database.
   pg_probackup checkdb [-B backup-path] [--instance=instance_name]
                  [-D pgdata-path] [--progress] [-j num-threads]
                  [--amcheck] [--skip-block-validation]
-                 [--heapallindexed]
+                 [--heapallindexed] [--checkunique]
                  [--help]
 
   pg_probackup show -B backup-path

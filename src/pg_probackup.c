@@ -126,6 +126,7 @@ static parray *exclude_relative_paths_list = NULL;
 /* checkdb options */
 bool need_amcheck = false;
 bool heapallindexed = false;
+bool checkunique = false;
 bool amcheck_parent = false;
 
 /* delete options */
@@ -240,6 +241,7 @@ static ConfigOption cmd_options[] =
 	/* checkdb options */
 	{ 'b', 195, "amcheck",			&need_amcheck,		SOURCE_CMD_STRICT },
 	{ 'b', 196, "heapallindexed",	&heapallindexed,	SOURCE_CMD_STRICT },
+	{ 'b', 198, "checkunique",		&checkunique,		SOURCE_CMD_STRICT },
 	{ 'b', 197, "parent",			&amcheck_parent,	SOURCE_CMD_STRICT },
 	/* delete options */
 	{ 'b', 145, "wal",				&delete_wal,		SOURCE_CMD_STRICT },
@@ -595,6 +597,16 @@ main(int argc, char *argv[])
 		instance_name == NULL &&
 		instance_config.pgdata == NULL)
 			elog(ERROR, "required parameter not specified: --instance");
+
+	/* Check checkdb command options consistency */
+	if (backup_subcmd == CHECKDB_CMD &&
+		!need_amcheck)
+	{
+		if (heapallindexed)
+			elog(ERROR, "--heapallindexed can only be used with --amcheck option");
+		if (checkunique)
+			elog(ERROR, "--checkunique can only be used with --amcheck option");
+	}
 
 	/* Usually checkdb for file logging requires log_directory
 	 * to be specified explicitly, but if backup_dir and instance name are provided,
