@@ -3,7 +3,7 @@
  * pg_probackup.h: Backup/Recovery manager for PostgreSQL.
  *
  * Portions Copyright (c) 2009-2013, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
- * Portions Copyright (c) 2015-2021, Postgres Professional
+ * Portions Copyright (c) 2015-2022, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */
@@ -338,7 +338,7 @@ typedef enum ShowFormat
 #define BYTES_INVALID		(-1) /* file didn`t changed since previous backup, DELTA backup do not rely on it */
 #define FILE_NOT_FOUND		(-2) /* file disappeared during backup */
 #define BLOCKNUM_INVALID	(-1)
-#define PROGRAM_VERSION	"2.5.4"
+#define PROGRAM_VERSION	"2.5.5"
 
 /* update when remote agent API or behaviour changes */
 #define AGENT_PROTOCOL_VERSION 20501
