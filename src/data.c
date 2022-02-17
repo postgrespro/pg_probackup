@@ -3,7 +3,7 @@
  * data.c: utils to parse and backup data pages
  *
  * Portions Copyright (c) 2009-2013, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
- * Portions Copyright (c) 2015-2019, Postgres Professional
+ * Portions Copyright (c) 2015-2022, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */
@@ -694,7 +694,7 @@ catchup_data_file(pgFile *file, const char *from_fullpath, const char *to_fullpa
 		use_pagemap = true;
 
 	if (use_pagemap)
-		elog(VERBOSE, "Using pagemap for file \"%s\"", file->rel_path);
+		elog(LOG, "Using pagemap for file \"%s\"", file->rel_path);
 
 	/* Remote mode */
 	if (fio_is_remote(FIO_DB_HOST))
