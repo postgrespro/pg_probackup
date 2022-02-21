@@ -19,6 +19,7 @@ before_install:
         export PATH=/C/tools/msys64/mingw64/bin:$PATH
         export MAKE=mingw32-make  # so that Autotools can find it
     - git clone -b REL_14_STABLE --single-branch --depth 1 https://github.com/postgres/postgres.git
+    - sed 's/\t/ /g' -i postgres/src/backend/storage/lmgr/lwlocknames.txt
     - cd postgres/src/tools/msvc
     - cp config_default.pl config.pl
     - ./build.bat
