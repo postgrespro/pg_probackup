@@ -4,8 +4,10 @@ os:
 language: c
 
 before_install:
-    - systeminfo
-    - dir "C:\Program Files (x86)\Microsoft Visual Studio\2017"
+    - git clone -b REL_14_STABLE --single-branch --depth 1 https://github.com/postgres/postgres.git
+    - cd postgres\src\tools\msvc
+    - cp config_default.pl) config.pl
+    - .\build.bat
 
 before_cache:
     - |-
