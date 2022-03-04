@@ -30,6 +30,21 @@ typedef struct
 	int         path_len;
 } fio_send_request;
 
+//typedef struct
+//{
+//	int         calg;
+//	int         clevel;
+//	int         path_len;
+//	int         read_len;
+//	pg_crc      uncompressed_crc;
+//} fio_send_file_request;
+//
+//typedef struct
+//{
+//	int         read_len;
+//	pg_crc      uncompressed_crc;
+//} fio_send_file_response;
+
 
 typedef struct
 {
@@ -1044,86 +1059,6 @@ int fio_stat(char const* path, struct stat* st, bool follow_symlink, fio_locatio
 	}
 }
 
-/*
- * Calculate size of the file without trailing spaces in the end.
- * Save result in statbuf->st_size.
- *
- * It is used to avoid sending trailing zeros in CFS map files.
- */
-static int getFileNonZeroSize(const char *path, struct stat *statbuf)
-{
-	char buf[BLCKSZ];
-	uint64* word = (uint64*)buf;
-	pgoff_t size;
-	int i;
-	FILE *fp;
-
-	stat(path, statbuf);
-	size = statbuf->st_size;
-
-	fp = fopen(path, PG_BINARY_R);
-
-	while (size > BLCKSZ && fseek(fp, size-BLCKSZ, SEEK_SET) == 0)
-	{
-		int rc = fread(buf, 1, BLCKSZ, fp);
-
-		if (rc != BLCKSZ)
-			break;
-
-		for (i = 0; i < BLCKSZ/8; i++)
-		{
-			if (word[i] != 0)
-				goto stop;
-		}
-		size -= BLCKSZ;
-	}
- stop:
-
-	statbuf->st_size = size;
-	fclose(fp);
-
-	//TODO handle possible errors
-	return 0;
-}
-
-/*
- * This function is wrapper for both local and remote calls.
- *
- * Calculate size of the file without trailing spaces in the end.
- * Return result via statbuf->st_size.
- */
-int fio_find_non_zero_size(char const* path, struct stat* st, bool remote)
-{
-	if (remote)
-	{
-		fio_header hdr;
-		size_t path_len = strlen(path) + 1;
-
-		hdr.cop = FIO_NON_ZERO_SIZE;
-		hdr.arg = 0;
-		hdr.handle = -1;
-		hdr.size = path_len;
-
-		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
-		IO_CHECK(fio_write_all(fio_stdout, path, path_len), path_len);
-
-		IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
-		Assert(hdr.cop == FIO_NON_ZERO_SIZE);
-		IO_CHECK(fio_read_all(fio_stdin, st, sizeof(*st)), sizeof(*st));
-
-		if (hdr.arg != 0)
-		{
-			errno = hdr.arg;
-			return -1;
-		}
-		return 0;
-	}
-	else
-	{
-		return getFileNonZeroSize(path, st);
-	}
-}
-
 /* Check presence of the file */
 int fio_access(char const* path, int mode, fio_location location)
 {
@@ -1265,7 +1200,7 @@ int fio_sync(char const* path, fio_location location)
 }
 
 /* Get crc32 of file */
-pg_crc32 fio_get_crc32(const char *file_path, fio_location location, bool decompress)
+pg_crc32 fio_get_crc32(const char *file_path, fio_location location, bool decompress, bool missing_ok)
 {
 	if (fio_is_remote(location))
 	{
@@ -1280,6 +1215,8 @@ pg_crc32 fio_get_crc32(const char *file_path, fio_location location, bool decomp
 		if (decompress)
 			hdr.arg = 1;
 
+		/* TODO: send missing_ok flag */
+
 		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
 		IO_CHECK(fio_write_all(fio_stdout, file_path, path_len), path_len);
 		IO_CHECK(fio_read_all(fio_stdin, &crc, sizeof(crc)), sizeof(crc));
@@ -1289,9 +1226,9 @@ pg_crc32 fio_get_crc32(const char *file_path, fio_location location, bool decomp
 	else
 	{
 		if (decompress)
-			return pgFileGetCRCgz(file_path, true, true);
+			return pgFileGetCRCgz(file_path, true, missing_ok);
 		else
-			return pgFileGetCRC(file_path, true, true);
+			return pgFileGetCRC(file_path, true, NONE_COMPRESS, false, missing_ok);
 	}
 }
 
@@ -2165,7 +2102,6 @@ int fio_send_file_gz(const char *from_fullpath, const char *to_fullpath, FILE* o
 	z_stream *strm = NULL;
 
 	hdr.cop = FIO_SEND_FILE;
-	hdr.arg = 0; //read till EOF
 	hdr.size = path_len;
 
 //	elog(VERBOSE, "Thread [%d]: Attempting to open remote compressed WAL file '%s'",
@@ -2304,7 +2240,6 @@ cleanup:
 	return exit_code;
 }
 
-
 /* Receive chunks of data and write them to destination file.
  * Return codes:
  *   SEND_OK       (0)
@@ -2324,19 +2259,7 @@ int fio_send_file(const char *from_fullpath, const char *to_fullpath, FILE* out,
 	size_t path_len = strlen(from_fullpath) + 1;
 	char *buf = pgut_malloc(CHUNK_SIZE);    /* buffer */
 
-	struct stat statbuf;
-	ssize_t	cfm_non_zero_size = 0;
-
-
-	if (file && file->forkName == cfm)
-	{
-		if (fio_find_non_zero_size(from_fullpath, &statbuf, true) != 0)
-			elog(ERROR, "fio_find_non_zero_size failed");
-		cfm_non_zero_size = statbuf.st_size;
-	}
-
 	hdr.cop = FIO_SEND_FILE;
-	hdr.arg = cfm_non_zero_size; //read till this length
 	hdr.size = path_len;
 
 //	elog(VERBOSE, "Thread [%d]: Attempting to open remote WAL file '%s'",
@@ -2398,6 +2321,120 @@ int fio_send_file(const char *from_fullpath, const char *to_fullpath, FILE* out,
 	return exit_code;
 }
 
+/* Receive chunks of data and write them to destination file.
+ * Return codes:
+ *   SEND_OK         (0)
+ *   FILE_MISSING    (-1)
+ *   OPEN_FAILED_DST (-3)
+ *   READ_FAILED     (-4)
+ *   WRITE_FAILED    (-5)
+ *   CLOSE_FAILED    (-6)
+ *
+ * OPEN_FAILED and READ_FAIL should also set errormsg.
+ * If pgFile is not NULL then we must calculate crc and read_size for it.
+ *
+ * TODO: data compression and calculation of uncompressed crc must be done on the agent.
+ * At this point for the purpose of backward compatibility we cannot compress data on the
+ * agent to avoid changing agent API and forcing user to update.
+ */
+int fio_send_file_new(const char *from_fullpath, const char *to_fullpath,
+					  pgFile *file, CompressAlg calg, int clevel, char **errormsg)
+{
+	fio_header hdr;
+	int exit_code = SEND_OK;
+	size_t   path_len = strlen(from_fullpath) + 1;
+	char    *buf = pgut_malloc(CHUNK_SIZE);    /* buffer */
+	PbkFile *out = NULL;
+
+	hdr.cop = FIO_SEND_FILE;
+	hdr.size = path_len;
+
+	if (file)
+		INIT_FILE_CRC32(true, file->crc);
+
+	IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
+	IO_CHECK(fio_write_all(fio_stdout, from_fullpath, path_len), path_len);
+
+	for (;;)
+	{
+		/* receive data */
+		IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
+
+		if (hdr.cop == FIO_SEND_FILE_EOF)
+		{
+			break;
+		}
+		else if (hdr.cop == FIO_ERROR)
+		{
+			/* handle error, reported by the agent */
+			if (hdr.size > 0)
+			{
+				IO_CHECK(fio_read_all(fio_stdin, buf, hdr.size), hdr.size);
+				*errormsg = pgut_malloc(hdr.size);
+				snprintf(*errormsg, hdr.size, "%s", buf);
+			}
+			/* possible values are FILE_MISSING, OPEN_FAILED, READ_FAILED */
+			exit_code = hdr.arg;
+			break;
+		}
+		else if (hdr.cop == FIO_PAGE)
+		{
+			Assert(hdr.size <= CHUNK_SIZE);
+			IO_CHECK(fio_read_all(fio_stdin, buf, hdr.size), hdr.size);
+
+			if (!out)
+			{
+				/* open backup file for write  */
+				out = open_for_write(to_fullpath, calg, clevel, (file) ? file->mode : FILE_PERMISSIONS, CRC32C);
+				if (out->fd <= 0)
+				{
+					exit_code = OPEN_FAILED_DST;
+					*errormsg = out->errmsg;
+					break;
+				}
+			}
+
+			/* calculate uncompressed crc  */
+			if (file)
+				COMP_FILE_CRC32(true, file->crc, buf, hdr.size);
+
+			/* We have received a chunk of data data, lets write it out */
+			if (write_file(out, buf, hdr.size) < 0)
+			{
+				exit_code = WRITE_FAILED;
+				*errormsg = out->errmsg;
+			    break;
+			}
+		}
+		else
+		{
+			/* TODO: fio_disconnect may get assert fail when running after this */
+			elog(ERROR, "Remote agent returned message of unexpected type: %i", hdr.cop);
+		}
+	}
+
+	if (out)
+	{
+		if (close_file(out) < 0 && exit_code == SEND_OK)
+			exit_code = CLOSE_FAILED;
+
+		if (file)
+		{
+			file->z_crc = out->crc;
+			file->write_size = out->currpos;
+			/* finish uncompressed CRC calculation */
+			FIN_FILE_CRC32(true, file->crc);
+		}
+		free_file(out);
+	}
+
+	if (exit_code < FILE_MISSING)
+		fio_disconnect(); /* discard possible pending data in pipe */
+
+	pg_free(buf);
+	return exit_code;
+}
+
 /* Send file content
  * On error we return FIO_ERROR message with following codes
  *  FIO_ERROR:
@@ -2408,19 +2445,13 @@ int fio_send_file(const char *from_fullpath, const char *to_fullpath, FILE* out,
  *  FIO_PAGE
  *  FIO_SEND_FILE_EOF
  *
- * If we only want to read a part of the file, pass len_wanted argument.
- * Currently we do not differentiate exit codes and return with FIO_SEND_FILE_EOF
- * when expected amount of bytes was send.
- *
- * len_wanted == 0 means read till the end of file.
  */
-static void fio_send_file_impl(int out, char const* path, size_t len_wanted)
+static void fio_send_file_impl(int out, char const* path)
 {
 	FILE      *fp;
 	fio_header hdr;
 	char      *buf = pgut_malloc(CHUNK_SIZE);
 	size_t	   read_len = 0;
-	size_t	   real_send_len = 0;
 	char      *errormsg = NULL;
 
 	/* open source file for read */
@@ -2488,10 +2519,6 @@ static void fio_send_file_impl(int out, char const* path, size_t len_wanted)
 			IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 			IO_CHECK(fio_write_all(out, buf, read_len), read_len);
 		}
-
-		real_send_len += read_len;
-		if (len_wanted && real_send_len >= len_wanted)
-			break; //TODO pass real_send_len somewhere
 
 		if (feof(fp))
 			break;
@@ -2647,7 +2674,6 @@ static void fio_list_dir_impl(int out, char* buf)
 			fio_file.linked_len = 0;
 
 		hdr.cop = FIO_SEND_FILE;
-		hdr.arg = 0; //read till EOF
 		hdr.size = strlen(file->rel_path) + 1;
 
 		/* send rel_path first */
@@ -3036,7 +3062,7 @@ void fio_communicate(int in, int out)
 			fio_send_pages_impl(out, buf);
 			break;
 		  case FIO_SEND_FILE:
-			fio_send_file_impl(out, buf, hdr.arg);
+			fio_send_file_impl(out, buf);
 			break;
 		  case FIO_SYNC:
 			/* open file and fsync it */
@@ -3059,7 +3085,7 @@ void fio_communicate(int in, int out)
 			if (hdr.arg == 1)
 				crc = pgFileGetCRCgz(buf, true, true);
 			else
-				crc = pgFileGetCRC(buf, true, true);
+				crc = pgFileGetCRC(buf, true, NONE_COMPRESS, false, true);
 			IO_CHECK(fio_write_all(out, &crc, sizeof(crc)), sizeof(crc));
 			break;
 		  case FIO_GET_CHECKSUM_MAP:
@@ -3084,14 +3110,6 @@ void fio_communicate(int in, int out)
 			break;
 		  case FIO_GET_ASYNC_ERROR:
 			fio_get_async_error_impl(out);
-			break;
-		 case FIO_NON_ZERO_SIZE: /* Get non-zero length of the file in specified path.
-		 						  * Currently used for cfm optimization */
-			hdr.size = sizeof(st);
-			rc = getFileNonZeroSize(buf, &st);
-			hdr.arg = rc < 0 ? errno : 0;
-			IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
-			IO_CHECK(fio_write_all(out, &st, sizeof(st)), sizeof(st));
 			break;
 		  default:
 			Assert(false);

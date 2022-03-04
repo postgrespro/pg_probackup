@@ -55,9 +55,7 @@ typedef enum
 	FIO_LIST_DIR,
 	FIO_CHECK_POSTMASTER,
 	FIO_GET_ASYNC_ERROR,
-	FIO_WRITE_ASYNC,
-	/* used for cfm optimization */
-	FIO_NON_ZERO_SIZE
+	FIO_WRITE_ASYNC
 } fio_operations;
 
 typedef enum
@@ -121,7 +119,7 @@ extern int     fio_truncate(int fd, off_t size);
 extern int     fio_close(int fd);
 extern void    fio_disconnect(void);
 extern int     fio_sync(char const* path, fio_location location);
-extern pg_crc32 fio_get_crc32(const char *file_path, fio_location location, bool decompress);
+extern pg_crc32 fio_get_crc32(const char *file_path, fio_location location, bool decompress, bool missing_ok);
 
 extern int     fio_rename(char const* old_path, char const* new_path, fio_location location);
 extern int     fio_symlink(char const* target, char const* link_path, bool overwrite, fio_location location);
@@ -135,9 +133,6 @@ extern struct dirent * fio_readdir(DIR *dirp);
 extern int     fio_closedir(DIR *dirp);
 extern FILE*   fio_open_stream(char const* name, fio_location location);
 extern int     fio_close_stream(FILE* f);
-
-extern int fio_find_non_zero_size(char const* path, struct stat* st, bool remote);
-
 
 #ifdef HAVE_LIBZ
 extern gzFile  fio_gzopen(char const* path, char const* mode, int level, fio_location location);

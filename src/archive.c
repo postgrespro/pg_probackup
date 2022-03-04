@@ -537,8 +537,8 @@ part_opened:
 		pg_crc32 crc32_src;
 		pg_crc32 crc32_dst;
 
-		crc32_src = fio_get_crc32(from_fullpath, FIO_DB_HOST, false);
-		crc32_dst = fio_get_crc32(to_fullpath, FIO_BACKUP_HOST, false);
+		crc32_src = fio_get_crc32(from_fullpath, FIO_DB_HOST, false, false);
+		crc32_dst = fio_get_crc32(to_fullpath, FIO_BACKUP_HOST, false, false);
 
 		if (crc32_src == crc32_dst)
 		{
@@ -785,8 +785,8 @@ part_opened:
 		pg_crc32 crc32_dst;
 
 		/* TODO: what if one of them goes missing? */
-		crc32_src = fio_get_crc32(from_fullpath, FIO_DB_HOST, false);
-		crc32_dst = fio_get_crc32(to_fullpath_gz, FIO_BACKUP_HOST, true);
+		crc32_src = fio_get_crc32(from_fullpath, FIO_DB_HOST, false, false);
+		crc32_dst = fio_get_crc32(to_fullpath_gz, FIO_BACKUP_HOST, true, false);
 
 		if (crc32_src == crc32_dst)
 		{

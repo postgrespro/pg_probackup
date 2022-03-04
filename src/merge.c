@@ -1386,7 +1386,9 @@ merge_non_data_file(parray *parent_chain, pgBackup *full_backup,
 
 	/* Copy file to FULL backup directory into temp file */
 	backup_non_data_file(tmp_file, NULL, from_fullpath,
-						 to_fullpath_tmp, BACKUP_MODE_FULL, 0, false);
+						 to_fullpath_tmp, BACKUP_MODE_FULL, 0,
+						 NONE_COMPRESS,
+						 dest_backup->compress_level, false);
 
 	/* sync temp file to disk */
 	if (!no_sync && fio_sync(to_fullpath_tmp, FIO_BACKUP_HOST) != 0)

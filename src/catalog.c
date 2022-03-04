@@ -2444,6 +2444,12 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 					file->external_dir_num,
 					file->dbOid);
 
+		if (!file->is_datafile && file->compress_alg == ZLIB_COMPRESS)
+			len += sprintf(line+len, ",\"z_crc\":\"%u\"", file->z_crc);
+
+		if (file->is_datafile)
+			len += sprintf(line+len, ",\"segno\":\"%d\"", file->segno);
+
 		if (file->is_datafile)
 			len += sprintf(line+len, ",\"segno\":\"%d\"", file->segno);
 

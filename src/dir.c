@@ -262,59 +262,48 @@ delete_file:
  * We cannot make decision about file decompression because
  * user may ask to backup already compressed files and we should be
  * obvious about it.
+ *
+ * TODO: do not issue elog here
  */
 pg_crc32
-pgFileGetCRC(const char *file_path, bool use_crc32c, bool missing_ok)
+pgFileGetCRC(const char *file_path, bool use_crc32c, CompressAlg calg, bool decompress, bool missing_ok)
 {
-	FILE	   *fp;
+	PbkFile    *f = NULL;
 	pg_crc32	crc = 0;
-	char	   *buf;
-	size_t		len = 0;
-
-	INIT_FILE_CRC32(use_crc32c, crc);
+	char	   *buf = NULL;
+	ssize_t		len = 0;
 
 	/* open file in binary read mode */
-	fp = fopen(file_path, PG_BINARY_R);
-	if (fp == NULL)
+	f = open_for_read(file_path, calg, (use_crc32c) ? CRC32C : CRC32, decompress);
+	if (f->fd < 0)
 	{
-		if (errno == ENOENT)
-		{
-			if (missing_ok)
-			{
-				FIN_FILE_CRC32(use_crc32c, crc);
-				return crc;
-			}
-		}
+		if (errno == ENOENT && missing_ok)
+			goto done;
 
 		elog(ERROR, "Cannot open file \"%s\": %s",
 			file_path, strerror(errno));
 	}
 
-	/* disable stdio buffering */
-	setvbuf(fp, NULL, _IONBF, BUFSIZ);
-	buf = pgut_malloc(STDIO_BUFSIZE);
+	/* allocate buffer */
+	buf = pgut_malloc(CHUNK_SIZE);
 
 	/* calc CRC of file */
 	for (;;)
 	{
-		if (interrupted)
-			elog(ERROR, "interrupted during CRC calculation");
+		len = read_file(f, buf, CHUNK_SIZE);
 
-		len = fread(buf, 1, STDIO_BUFSIZE, fp);
-
-		if (ferror(fp))
-			elog(ERROR, "Cannot read \"%s\": %s", file_path, strerror(errno));
-
-		/* update CRC */
-		COMP_FILE_CRC32(use_crc32c, crc, buf, len);
-
-		if (feof(fp))
+		if (len < 0)
+			elog(ERROR, "Cannot read from file \"%s\": %s",
+					file_path, strerror(errno));
+		else if (len == 0) /* EOF */
 			break;
 	}
 
-	FIN_FILE_CRC32(use_crc32c, crc);
-	fclose(fp);
+done:
 	pg_free(buf);
+	close_file(f);
+	crc = f->crc;
+	free_file(f);
 
 	return crc;
 }
@@ -1614,6 +1603,7 @@ dir_read_file_list(const char *root, const char *external_prefix,
 					is_cfs,
 					external_dir_num,
 					crc,
+					z_crc,
 					segno,
 					n_blocks,
 					n_headers,
@@ -1631,6 +1621,7 @@ dir_read_file_list(const char *root, const char *external_prefix,
 		get_control_value(buf, "is_datafile", NULL, &is_datafile, true);
 		get_control_value(buf, "is_cfs", NULL, &is_cfs, false);
 		get_control_value(buf, "crc", NULL, &crc, true);
+		get_control_value(buf, "z_crc", NULL, &z_crc, false);
 		get_control_value(buf, "compress_alg", compress_alg_string, NULL, false);
 		get_control_value(buf, "external_dir_num", NULL, &external_dir_num, false);
 		get_control_value(buf, "dbOid", NULL, &dbOid, false);
@@ -1641,6 +1632,7 @@ dir_read_file_list(const char *root, const char *external_prefix,
 		file->is_datafile = is_datafile ? true : false;
 		file->is_cfs = is_cfs ? true : false;
 		file->crc = (pg_crc32) crc;
+		file->z_crc = is_datafile ? 0 : (pg_crc32) z_crc;
 		file->compress_alg = parse_compress_alg(compress_alg_string);
 		file->external_dir_num = external_dir_num;
 		file->dbOid = dbOid ? dbOid : 0;
@@ -1884,7 +1876,7 @@ write_database_map(pgBackup *backup, parray *database_map, parray *backup_files_
 	/* Add metadata to backup_content.control */
 	file = pgFileNew(database_map_path, DATABASE_MAP, true, 0,
 								 FIO_BACKUP_HOST);
-	file->crc = pgFileGetCRC(database_map_path, true, false);
+	file->crc = pgFileGetCRC(database_map_path, true, NONE_COMPRESS, false, false);
 	file->write_size = file->size;
 	file->uncompressed_size = file->read_size;
 

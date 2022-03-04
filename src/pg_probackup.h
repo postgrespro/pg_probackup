@@ -105,6 +105,7 @@ extern const char  *PROGRAM_EMAIL;
 #define CHUNK_SIZE (128 * 1024)
 #define LARGE_CHUNK_SIZE (4 * 1024 * 1024)
 #define OUT_BUF_SIZE (512 * 1024)
+#define PBK_BUF_SIZE (1024 * 1024)
 
 /* retry attempts */
 #define PAGE_READ_ATTEMPTS 300
@@ -229,6 +230,7 @@ typedef struct pgFile
 								 */
 							/* we need int64 here to store '-1' value */
 	pg_crc32 crc;			/* CRC value of the file, regular file only */
+	pg_crc32 z_crc;			/* CRC value of the compressed file, nonedata file only */
 	char   *rel_path;		/* relative path of the file */
 	char   *linked;			/* path of the linked file */
 	bool	is_datafile;	/* true if the file is PostgreSQL data file */
@@ -1022,7 +1024,7 @@ extern void fio_pgFileDelete(pgFile *file, const char *full_path);
 
 extern void pgFileFree(void *file);
 
-extern pg_crc32 pgFileGetCRC(const char *file_path, bool use_crc32c, bool missing_ok);
+extern pg_crc32 pgFileGetCRC(const char *file_path, bool use_crc32c, CompressAlg calg, bool decompress, bool missing_ok);
 extern pg_crc32 pgFileGetCRCgz(const char *file_path, bool use_crc32c, bool missing_ok);
 
 extern int pgFileMapComparePath(const void *f1, const void *f2);
@@ -1046,11 +1048,70 @@ extern void backup_data_file(ConnectionArgs* conn_arg, pgFile *file,
 extern void backup_non_data_file(pgFile *file, pgFile *prev_file,
 								 const char *from_fullpath, const char *to_fullpath,
 								 BackupMode backup_mode, time_t parent_backup_time,
+								 CompressAlg calg, int clevel,
 								 bool missing_ok);
 extern void backup_non_data_file_internal(const char *from_fullpath,
 										  fio_location from_location,
 										  const char *to_fullpath, pgFile *file,
 										  bool missing_ok);
+extern void receive_non_data_file(const char *from_fullpath,
+								  fio_location from_location,
+								  const char *to_fullpath, pgFile *file,
+								  CompressAlg calg, int clevel,
+								  bool missing_ok);
+
+typedef enum CrcMethod
+{
+	NONE_CRC,
+	CRC32,
+	CRC32C
+} CrcMethod;
+
+//typedef struct pbkGZFile
+//{
+//	z_stream strm;
+//	int      fd;
+//	int      errnum;
+//	bool     compress;
+//	bool     eof;
+//} fioGZFile;
+
+typedef struct PbkFile
+{
+	int         fd;
+	off_t       currpos;
+	char        pathname[MAXPGPATH];
+	char        fullpath[MAXPGPATH];
+	char       *suffix;
+	CompressAlg calg;
+	int         clevel;
+	int         buf_pos;
+	unsigned char *buffer;
+	bool        read;
+	bool        is_remote;
+	bool        compression;
+
+	bool        do_crc;
+	bool        use_crc32c;
+	pg_crc32    crc;
+	char       *errmsg;
+
+#ifdef HAVE_LIBZ
+	gzFile		gzfp;
+	z_stream    strm;
+	bool        eof;
+#endif
+} PbkFile;
+
+extern PbkFile* InitPbkFile(bool enable_buffering, CrcMethod crc_method, CompressAlg calg, int clevel);
+extern PbkFile* open_for_read(const char *pathname, CompressAlg calg, CrcMethod crc_method, bool decompress);
+extern PbkFile* open_for_write(const char *pathname, CompressAlg calg, int clevel, mode_t mode, CrcMethod crc_method);
+extern ssize_t read_file(PbkFile *f, void *buf, size_t len);
+extern ssize_t write_file(PbkFile *f, const void *buf, size_t count);
+extern ssize_t get_offset(PbkFile *f);
+extern ssize_t flush_file(PbkFile *f);
+extern int close_file(PbkFile *f);
+extern void free_file(PbkFile *f);
 
 extern size_t restore_data_file(parray *parent_chain, pgFile *dest_file, FILE *out,
 								const char *to_fullpath, bool use_bitmap, PageState *checksum_map,
@@ -1062,7 +1123,7 @@ extern size_t restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint
 extern size_t restore_non_data_file(parray *parent_chain, pgBackup *dest_backup,
 									pgFile *dest_file, FILE *out, const char *to_fullpath,
 									bool already_exists);
-extern void restore_non_data_file_internal(FILE *in, FILE *out, pgFile *file,
+extern void restore_non_data_file_internal(FILE *out, pgFile *file,
 										   const char *from_fullpath, const char *to_fullpath);
 extern bool create_empty_file(fio_location from_location, const char *to_root,
 							  fio_location to_location, pgFile *file);
@@ -1105,6 +1166,8 @@ extern XLogRecPtr get_first_record_lsn(const char *archivedir, XLogRecPtr start_
 									   TimeLineID tli, uint32 wal_seg_size, int timeout);
 extern XLogRecPtr get_next_record_lsn(const char *archivedir, XLogSegNo	segno, TimeLineID tli,
 									  uint32 wal_seg_size, int timeout, XLogRecPtr target);
+//extern const char *get_gz_error(gzFile gzf);
+//extern const char *get_gz_error(gzFile gzf, int errnum);
 
 /* in util.c */
 extern TimeLineID get_current_timeline(PGconn *conn);
@@ -1179,6 +1242,8 @@ extern int fio_send_pages(const char *to_fullpath, const char *from_fullpath, pg
 extern int fio_send_file_gz(const char *from_fullpath, const char *to_fullpath, FILE* out, char **errormsg);
 extern int fio_send_file(const char *from_fullpath, const char *to_fullpath, FILE* out,
 														pgFile *file, char **errormsg);
+extern int fio_send_file_new(const char *from_fullpath, const char *to_fullpath,
+							 pgFile *file, CompressAlg calg, int clevel, char **errormsg);
 
 extern void fio_list_dir(parray *files, const char *root, bool exclude, bool follow_symlink,
 						 bool add_root, bool backup_logs, bool skip_hidden, int external_dir_num);
@@ -1199,14 +1264,17 @@ extern pid_t fio_check_postmaster(const char *pgdata, fio_location location);
 extern int32 fio_decompress(void* dst, void const* src, size_t size, int compress_alg, char **errormsg);
 
 /* return codes for fio_send_pages() and fio_send_file() */
-#define SEND_OK       (0)
-#define FILE_MISSING (-1)
-#define OPEN_FAILED  (-2)
-#define READ_FAILED  (-3)
-#define WRITE_FAILED (-4)
-#define ZLIB_ERROR   (-5)
-#define REMOTE_ERROR (-6)
-#define PAGE_CORRUPTION (-8)
+#define SEND_OK          (0)
+#define FILE_MISSING    (-1)
+#define OPEN_FAILED     (-2)
+#define OPEN_FAILED_SRC (-3)
+#define OPEN_FAILED_DST (-4)
+#define READ_FAILED     (-5)
+#define WRITE_FAILED    (-6)
+#define ZLIB_ERROR      (-7)
+#define REMOTE_ERROR    (-8)
+#define PAGE_CORRUPTION (-9)
+#define CLOSE_FAILED    (-10)
 
 /* Check if specified location is local for current node */
 extern bool fio_is_remote(fio_location location);

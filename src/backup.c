@@ -461,7 +461,7 @@ do_backup_instance(PGconn *backup_conn, PGNodeInfo *nodeInfo, bool no_sync, bool
 	}
 
 	/* Sort by size for load balancing */
-	parray_qsort(backup_files_list, pgFileCompareSize);
+	parray_qsort(backup_files_list, pgFileCompareRelPathWithExternal);
 	/* Sort the array for binary search */
 	if (prev_backup_filelist)
 		parray_qsort(prev_backup_filelist, pgFileCompareRelPathWithExternal);
@@ -1816,7 +1816,7 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn,
 				file = pgFileNew(backup_label, PG_BACKUP_LABEL_FILE, true, 0,
 								 FIO_BACKUP_HOST);
 
-				file->crc = pgFileGetCRC(backup_label, true, false);
+				file->crc = pgFileGetCRC(backup_label, true, NONE_COMPRESS, false, false);
 
 				file->write_size = file->size;
 				file->uncompressed_size = file->size;
@@ -1863,7 +1863,7 @@ pg_stop_backup(pgBackup *backup, PGconn *pg_startbackup_conn,
 								 FIO_BACKUP_HOST);
 				if (S_ISREG(file->mode))
 				{
-					file->crc = pgFileGetCRC(tablespace_map, true, false);
+					file->crc = pgFileGetCRC(tablespace_map, true, NONE_COMPRESS, false, false);
 					file->write_size = file->size;
 				}
 
@@ -2063,7 +2063,11 @@ backup_files(void *arg)
 		else
 		{
 			backup_non_data_file(file, prev_file, from_fullpath, to_fullpath,
-								 current.backup_mode, current.parent_backup, true);
+								 current.backup_mode, current.parent_backup,
+//								 instance_config.compress_alg,
+								 file->is_cfs ? NONE_COMPRESS : instance_config.compress_alg,
+								 instance_config.compress_level,
+								 true);
 		}
 
 		if (file->write_size == FILE_NOT_FOUND)

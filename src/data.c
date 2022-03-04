@@ -58,6 +58,64 @@ zlib_decompress(void *dst, size_t dst_size, void const *src, size_t src_size)
 }
 #endif
 
+/* output buffer must be bigger than input */
+static int
+my_compress(PbkFile *f, void const* buf, unsigned size)
+{
+	int rc;
+
+	f->strm.next_in = (Bytef *) buf;
+	f->strm.avail_in = size;
+	f->strm.next_out = f->buffer + f->buf_pos;
+
+//	elog(INFO, "buffer position 1: %i", f->buf_pos);
+
+	f->strm.avail_out = PBK_BUF_SIZE - f->buf_pos;
+
+	rc = deflate(&f->strm, Z_NO_FLUSH);
+	Assert(rc == Z_OK);     // TODO: error check
+
+	f->buf_pos = PBK_BUF_SIZE - f->strm.avail_out;
+
+//	elog(INFO, "Buf pos: %i", f->buf_pos);
+
+	return size;
+}
+
+/* output buffer must be bigger than input */
+static void
+end_compress(PbkFile *f)
+{
+	int rc;
+
+	/* we rely here on the fact that in output buffer is always enough space */
+	rc = deflate(&f->strm, Z_FINISH);
+	Assert(rc == Z_STREAM_END);
+
+	f->buf_pos += f->strm.avail_out;
+
+	rc = deflateEnd(&f->strm);
+	Assert(rc == Z_OK);
+}
+
+#ifdef HAVE_LIBZ
+/*
+ * Show error during work with compressed file
+ */
+static const char *
+get_gz_error(gzFile gzf)
+{
+	int			errnum;
+	const char *errmsg;
+
+	errmsg = fio_gzerror(gzf, &errnum);
+	if (errnum == Z_ERRNO)
+		return strerror(errno);
+	else
+		return errmsg;
+}
+#endif
+
 /*
  * Compresses source into dest using algorithm. Returns the number of bytes
  * written in the destination buffer, or -1 if compression fails.
@@ -698,7 +756,7 @@ void
 backup_non_data_file(pgFile *file, pgFile *prev_file,
 				 const char *from_fullpath, const char *to_fullpath,
 				 BackupMode backup_mode, time_t parent_backup_time,
-				 bool missing_ok)
+				 CompressAlg calg, int clevel, bool missing_ok)
 {
 	/* special treatment for global/pg_control */
 	if (file->external_dir_num == 0 && strcmp(file->rel_path, XLOG_CONTROL_FILE) == 0)
@@ -715,19 +773,27 @@ backup_non_data_file(pgFile *file, pgFile *prev_file,
 		(prev_file && file->exists_in_prev &&
 		 file->mtime <= parent_backup_time))
 	{
+		pg_crc32 crc;
 
-		file->crc = fio_get_crc32(from_fullpath, FIO_DB_HOST, false);
+		file->crc = fio_get_crc32(from_fullpath, FIO_DB_HOST, false, true);
 
 		/* ...and checksum is the same... */
-		if (EQ_TRADITIONAL_CRC32(file->crc, prev_file->crc))
+//		crc = (prev_file->compress_alg == ZLIB_COMPRESS) ? prev_file->z_crc : prev_file->crc; /* TODO: somethin wrong here */
+		crc = prev_file->crc;
+		if (EQ_TRADITIONAL_CRC32(file->crc, crc))
 		{
 			file->write_size = BYTES_INVALID;
 			return; /* ...skip copying file. */
 		}
 	}
 
-	backup_non_data_file_internal(from_fullpath, FIO_DB_HOST,
-								  to_fullpath, file, missing_ok);
+	/* Non-data files will be compressed only if compression is enabled and algorithm is set to ZLIB */
+	if (calg != ZLIB_COMPRESS)
+		calg = NONE_COMPRESS;
+
+	receive_non_data_file(from_fullpath, FIO_DB_HOST,
+						  to_fullpath, file, calg,
+						  clevel, missing_ok);
 }
 
 /*
@@ -1123,41 +1189,44 @@ restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_vers
  * it is either small control file or already compressed cfs file.
  */
 void
-restore_non_data_file_internal(FILE *in, FILE *out, pgFile *file,
+restore_non_data_file_internal(FILE *out, pgFile *file,
 					  const char *from_fullpath, const char *to_fullpath)
 {
-	size_t     read_len = 0;
-	char      *buf = pgut_malloc(STDIO_BUFSIZE); /* 64kB buffer */
+	PbkFile *in = NULL;
+	char    *buf = pgut_malloc(CHUNK_SIZE); /* 128kB buffer */
+
+	/* open source file for read */
+	in = open_for_read(from_fullpath, file->compress_alg, NONE_CRC, true);
+	if (in->fd <= 0)
+		elog(ERROR, "%s", in->errmsg);
 
 	/* copy content */
 	for (;;)
 	{
-		read_len = 0;
+		ssize_t read_len = read_file(in, buf, CHUNK_SIZE);
+
+		if (read_len < 0)
+			elog(ERROR, "%s", in->errmsg);
+
+		else if (read_len == 0) /* EOF */
+			break;
+
+		if (fio_fwrite_async(out, buf, read_len) != read_len)
+			elog(ERROR, "Cannot write to \"%s\": %s", to_fullpath,
+				 strerror(errno));
 
 		/* check for interrupt */
 		if (interrupted || thread_interrupted)
 			elog(ERROR, "Interrupted during nonedata file restore");
-
-		read_len = fread(buf, 1, STDIO_BUFSIZE, in);
-
-		if (ferror(in))
-			elog(ERROR, "Cannot read backup file \"%s\": %s",
-				from_fullpath, strerror(errno));
-
-		if (read_len > 0)
-		{
-			if (fio_fwrite_async(out, buf, read_len) != read_len)
-				elog(ERROR, "Cannot write to \"%s\": %s", to_fullpath,
-					 strerror(errno));
-		}
-
-		if (feof(in))
-			break;
 	}
 
+	if (close_file(in) < 0)
+		elog(ERROR, "%s", in->errmsg);
+
+	free_file(in);
 	pg_free(buf);
 
-	elog(VERBOSE, "Copied file \"%s\": %lu bytes", from_fullpath, file->write_size);
+	elog(VERBOSE, "Copied file \"%s\": %lu bytes", to_fullpath, file->write_size);
 }
 
 size_t
@@ -1167,7 +1236,7 @@ restore_non_data_file(parray *parent_chain, pgBackup *dest_backup,
 {
 	char		from_root[MAXPGPATH];
 	char		from_fullpath[MAXPGPATH];
-	FILE		*in = NULL;
+//	FILE		*in = NULL;
 
 	pgFile		*tmp_file = NULL;
 	pgBackup	*tmp_backup = NULL;
@@ -1242,8 +1311,12 @@ restore_non_data_file(parray *parent_chain, pgBackup *dest_backup,
 	/* incremental restore */
 	if (already_exists)
 	{
+//		pg_crc32 crc;
 		/* compare checksums of already existing file and backup file */
-		pg_crc32 file_crc = fio_get_crc32(to_fullpath, FIO_DB_HOST, false);
+		pg_crc32 file_crc = fio_get_crc32(to_fullpath, FIO_DB_HOST, false, false);
+
+//		crc = (tmp_file->compress_alg == ZLIB_COMPRESS) ? tmp_file->z_crc : tmp_file->crc; /* TODO: look wrong */
+//		crc = tmp_file->crc;
 
 		if (file_crc == tmp_file->crc)
 		{
@@ -1270,20 +1343,20 @@ restore_non_data_file(parray *parent_chain, pgBackup *dest_backup,
 
 	join_path_components(from_fullpath, from_root, dest_file->rel_path);
 
-	in = fopen(from_fullpath, PG_BINARY_R);
-	if (in == NULL)
-		elog(ERROR, "Cannot open backup file \"%s\": %s", from_fullpath,
-			 strerror(errno));
+//	in = fopen(from_fullpath, PG_BINARY_R);
+//	if (in == NULL)
+//		elog(ERROR, "Cannot open backup file \"%s\": %s", from_fullpath,
+//			 strerror(errno));
 
 	/* disable stdio buffering for nonedata files */
-	setvbuf(in, NULL, _IONBF, BUFSIZ);
+//	setvbuf(in, NULL, _IONBF, BUFSIZ);
 
 	/* do actual work */
-	restore_non_data_file_internal(in, out, tmp_file, from_fullpath, to_fullpath);
+	restore_non_data_file_internal(out, tmp_file, from_fullpath, to_fullpath);
 
-	if (fclose(in) != 0)
-		elog(ERROR, "Cannot close file \"%s\": %s", from_fullpath,
-			strerror(errno));
+//	if (fclose(in) != 0)
+//		elog(ERROR, "Cannot close file \"%s\": %s", from_fullpath,
+//			strerror(errno));
 
 	return tmp_file->write_size;
 }
@@ -1357,9 +1430,6 @@ backup_non_data_file_internal(const char *from_fullpath,
 	/* backup local file */
 	else
 	{
-		struct stat statbuf;
-		ssize_t 	cfm_non_zero_size = 0;
-
 		/* open source file for read */
 		in = fopen(from_fullpath, PG_BINARY_R);
 		if (in == NULL)
@@ -1388,12 +1458,6 @@ backup_non_data_file_internal(const char *from_fullpath,
 		/* allocate 64kB buffer */
 		buf = pgut_malloc(CHUNK_SIZE);
 
-		if (file->forkName == cfm)
-		{
-			fio_find_non_zero_size(from_fullpath, &statbuf, false);
-			cfm_non_zero_size = statbuf.st_size;
-		}
-
 		/* copy content and calc CRC */
 		for (;;)
 		{
@@ -1413,10 +1477,6 @@ backup_non_data_file_internal(const char *from_fullpath,
 				COMP_FILE_CRC32(true, file->crc, buf, read_len);
 				file->read_size += read_len;
 			}
-
-			if (file->forkName == cfm &&
-				file->read_size >= cfm_non_zero_size)
-				break;
 
 			if (feof(in))
 				break;
@@ -1439,6 +1499,438 @@ cleanup:
 		elog(ERROR, "Cannot close the file \"%s\": %s", to_fullpath, strerror(errno));
 
 	pg_free(buf);
+}
+
+PbkFile*
+InitPbkFile(bool enable_buffering, CrcMethod crc_method, CompressAlg calg, int clevel)
+{
+	PbkFile  *f = pgut_malloc(sizeof(PbkFile));
+	memset(f, 0, sizeof(PbkFile));
+
+	f->read = false;
+	f->currpos = 0;
+	f->fd = 0;
+	f->calg = calg;
+	f->clevel = clevel;
+	f->is_remote = false;
+	f->compression = false;
+	f->buf_pos = 0;
+	f->buffer = enable_buffering ? pgut_malloc(PBK_BUF_SIZE) : NULL;
+
+	f->do_crc = (crc_method == NONE_CRC) ? false : true;
+	f->use_crc32c = (crc_method == CRC32C) ? true : false;
+
+	if (f->do_crc)
+		INIT_FILE_CRC32(f->use_crc32c, f->crc);
+
+	f->errmsg = NULL;
+
+	return f;
+}
+
+PbkFile*
+open_for_write(const char *pathname, CompressAlg calg, int clevel, mode_t mode, CrcMethod crc_method)
+{
+	/* for compressed files buffering is disabled (for now), because we use gzwrite */
+	PbkFile    *f = InitPbkFile(true, crc_method, calg, clevel);
+
+	snprintf(f->fullpath, sizeof(f->fullpath), "%s%s", pathname, (calg == ZLIB_COMPRESS && clevel > 0) ? ".gz" : "");
+	snprintf(f->pathname, sizeof(f->pathname), "%s", pathname);
+
+	f->fd = open(f->fullpath, O_WRONLY | O_CREAT | O_APPEND | PG_BINARY, mode);
+	if (f->fd < 0)
+	{
+		f->errmsg = pgut_malloc(ERRMSG_MAX_LEN);
+		snprintf(f->errmsg, ERRMSG_MAX_LEN, "Cannot open file for writing \"%s\": %s", f->fullpath, strerror(errno));
+	}
+
+	// TODO: reuse fio_gzopen
+#ifdef HAVE_LIBZ
+	if (calg == ZLIB_COMPRESS)
+	{
+		int rc;
+
+		f->compression = true;
+//		f->gzfp = gzdopen(f->fd, PG_BINARY_W);
+//		f->gzfp = fio_gzopen(to_fullpath_gz_part, PG_BINARY_W, compress_level, FIO_BACKUP_HOST);
+
+//		if (f->gzfp == Z_NULL)
+//			elog(ERROR, "Cannot open file \"%s\": %s", f->fullpath, strerror(errno));
+
+		f->strm.next_out = f->buffer;
+		f->strm.avail_out = PBK_BUF_SIZE;
+		rc = deflateInit2(&f->strm,
+						  clevel,
+						  Z_DEFLATED,
+						  15 + 16, 9,
+						  Z_DEFAULT_STRATEGY);
+		if (rc != Z_OK)
+			elog(ERROR, "Failed to run deflateInit2");
+	}
+#endif
+
+	return f;
+}
+
+PbkFile*
+open_for_read(const char *pathname, CompressAlg calg, CrcMethod crc_method, bool decompress)
+{
+	PbkFile *f = InitPbkFile(false, crc_method, calg, 1);
+
+	f->compression = decompress;
+	f->read = true;
+
+	snprintf(f->fullpath, sizeof(f->fullpath), "%s%s", pathname, (calg == ZLIB_COMPRESS) ? ".gz" : "");
+	snprintf(f->pathname, sizeof(f->pathname), "%s", pathname);
+
+	/*
+	 * Open a file for non-compressed as well as compressed files. Tracking
+	 * the file descriptor is important for dir_sync() method as gzflush()
+	 * does not do any system calls to fsync() to make changes permanent on
+	 * disk.
+	 */
+	f->fd = open(f->fullpath, O_RDONLY);
+	if (f->fd < 0)
+	{
+		f->errmsg = pgut_malloc(ERRMSG_MAX_LEN);
+		snprintf(f->errmsg, ERRMSG_MAX_LEN, "Cannot open file for reading \"%s\": %s", f->fullpath, strerror(errno));
+		return f;
+	}
+
+#ifdef HAVE_LIBZ
+	if (f->compression && calg == ZLIB_COMPRESS)
+	{
+		f->gzfp = gzdopen(f->fd, "r");
+		if (f->gzfp == Z_NULL)
+		{
+			f->errmsg = pgut_malloc(ERRMSG_MAX_LEN);
+			snprintf(f->errmsg, ERRMSG_MAX_LEN, "Cannot open file for reading \"%s\": %s", f->fullpath, strerror(errno));
+			close(f->fd); /* don`t care about possible errors here */
+			errno = 0;
+			f->fd = -1;
+		}
+	}
+#endif
+	return f;
+}
+
+
+/*
+ * -1 for error
+ * If opened for writing - flush leftovers in the buffer
+ * TODO: decompose into close_file_write() and close_file_read()
+ */
+int
+close_file(PbkFile *f)
+{
+	int		 r;
+	ssize_t	 flush_r = 0;
+
+	if (!f)
+		return 0;
+
+	if (!f->read)
+	{
+		if (f->compression)
+			end_compress(f);
+
+		/* flush any leftovers */
+		if (f->buf_pos > 0)
+		{
+//			elog(INFO, "flush leftovers");
+			flush_r = flush_file(f);
+		}
+	}
+
+#ifdef HAVE_LIBZ
+	if (f->read && f->compression && f->calg == ZLIB_COMPRESS)
+		r = gzclose(f->gzfp);
+	else
+#endif
+		r = close(f->fd);
+
+	/* error message already in place */
+	if (flush_r < 0)
+		return flush_r;
+
+	if (r != 0)
+	{
+		f->errmsg = pgut_malloc(ERRMSG_MAX_LEN);
+		snprintf(f->errmsg, ERRMSG_MAX_LEN, "Cannot close file \"%s\": %s", f->fullpath, strerror(errno));
+		return -1;
+	}
+
+	if (f->do_crc)
+		FIN_FILE_CRC32(f->use_crc32c, f->crc);
+
+	return 0;
+}
+
+void
+free_file(PbkFile *f)
+{
+	if (!f)
+		return;
+
+	pg_free(f->buffer);
+//	pg_free(f->errmsg); /* it is up to the caller to free error message */
+	pg_free(f);
+}
+
+ssize_t
+write_file(PbkFile *f, const void *buf, size_t count)
+{
+	ssize_t	r = 0;
+	off_t   write_barrier = (f->calg == ZLIB_COMPRESS) ? count*2 : count;
+
+	/* flush buffer if free space is running out */
+	if (write_barrier > (PBK_BUF_SIZE - f->buf_pos))
+		r = flush_file(f);
+
+	/* compress data if requested */
+	if (f->compression)
+		my_compress(f, buf, count);
+	else
+	{
+		/* Do not compress page */
+		memcpy(f->buffer + f->buf_pos, buf, count);
+		f->buf_pos += count;
+	}
+
+	return r;
+}
+
+ssize_t
+read_file(PbkFile *f, void *buf, size_t len)
+{
+	ssize_t		r;
+	bool decompress = (f->compression && f->calg == ZLIB_COMPRESS);
+
+#ifdef HAVE_LIBZ
+	if (decompress)
+	{
+		r = gzread(f->gzfp, buf, len);
+
+		/* eof is not reached  */
+		if (r <= 0 && gzeof(f->gzfp) == 0)
+			r = -1;
+//		if (r <= 0 && !gzeof(f->gzfp))
+//		{
+//			const char *err_str = NULL;
+//
+//            err_str = gzerror(f->gzfp, &err);
+//            elog(ERROR, "Cannot read from compressed file %s", err_str);
+//		}
+	}
+	else
+#endif
+		r = read(f->fd, buf, len);
+
+	if (r > 0)
+	{
+		f->currpos += r;
+
+		if (f->do_crc)
+			COMP_FILE_CRC32(f->use_crc32c, f->crc, buf, r);
+	}
+	else if (r < 0)
+	{
+		f->errmsg = pgut_malloc(ERRMSG_MAX_LEN);
+
+		/* set error message */
+		if (f->compression && f->calg == ZLIB_COMPRESS)
+			snprintf(f->errmsg, ERRMSG_MAX_LEN, "Cannot read from compressed file \"%s\": %s",
+												f->fullpath, get_gz_error(f->gzfp));
+		else
+			snprintf(f->errmsg, ERRMSG_MAX_LEN, "Cannot read from file \"%s\": %s", f->fullpath, strerror(errno));
+	}
+	return r;
+}
+
+ssize_t
+flush_file(PbkFile *f)
+{
+
+	ssize_t r = write(f->fd, f->buffer, f->buf_pos);
+
+//	elog(INFO, "POS: %i", f->buf_pos);
+
+	if (r > 0)
+	{
+		/* Update CRC */
+		if (f->do_crc)
+			COMP_FILE_CRC32(f->use_crc32c, f->crc, f->buffer, f->buf_pos);
+
+		f->buf_pos = 0;
+		f->currpos += r;
+	}
+	else
+	{
+		f->errmsg = pgut_malloc(ERRMSG_MAX_LEN);
+		snprintf(f->errmsg, ERRMSG_MAX_LEN, "Cannot write to file \"%s\": %s", f->fullpath, strerror(errno));
+	}
+
+	return r;
+}
+
+//ssize_t
+//get_offset(PbkFile *f)
+//{
+//#ifdef HAVE_LIBZ
+//	if (f->calg == ZLIB_COMPRESS)
+//	{
+//		gzflush(f->gzfp, Z_FINISH); /* TODO: check error */
+//		return gzoffset(f->gzfp);
+//	}
+//	else
+//#endif
+//
+//	return f->currpos;
+//}
+
+/* Receive chunks of data and write them to destination file.
+ * Return codes:
+ *   SEND_OK         (0)
+ *   FILE_MISSING    (-1)
+ *   OPEN_FAILED_SRC (-2)
+ *   OPEN_FAILED_DST (-3)
+ *   READ_FAILED     (-4)
+ *   WRITE_FAILED    (-5)
+ *   CLOSE_FAILED    (-7)
+ *
+ * TODO: OPEN_FAILED and READ_FAIL should also set errormsg.
+ *
+ * If pgFile is not NULL then we must calculate crc and read_size for it.
+ * All primitive functions should not issue elog messages.
+ *
+ * This function must handle local backup and restore.
+ */
+static int
+send_file(const char *from_fullpath, const char *to_fullpath,
+		  pgFile *file, CompressAlg calg, int clevel, char **errormsg)
+{
+	int      rc = SEND_OK;
+	char    *buf = NULL;
+	PbkFile *in = NULL;
+	PbkFile *out = NULL;
+
+	/* open source file for read */
+	in = open_for_read(from_fullpath, NONE_COMPRESS, CRC32C, false);
+	if (in->fd <= 0)
+	{
+		rc = (errno == ENOENT) ? FILE_MISSING : OPEN_FAILED_SRC;
+		*errormsg = in->errmsg;
+		goto cleanup;
+	}
+
+	/* allocate 128kB buffer */
+	buf = pgut_malloc(CHUNK_SIZE);
+
+	/* copy content and calc CRC */
+	for (;;)
+	{
+		ssize_t read_len = read_file(in, buf, CHUNK_SIZE);
+
+		if (read_len < 0)
+		{
+			rc = READ_FAILED;
+			*errormsg = in->errmsg;
+			goto cleanup;
+		}
+
+		else if (read_len == 0) /* EOF, nothing to write */
+			break;
+
+		else if (!out)
+		{
+			/* open backup file for write  */
+			out = open_for_write(to_fullpath, calg, clevel, file->mode, CRC32C);
+			if (out->fd <= 0)
+			{
+				rc = OPEN_FAILED_DST;
+				*errormsg = out->errmsg;
+				goto cleanup;
+			}
+		}
+
+		// how to differentiate between write error and compression error ?
+		if (write_file(out, buf, read_len) < 0)
+		{
+			rc = WRITE_FAILED;
+			*errormsg = out->errmsg;
+			goto cleanup;
+		}
+		file->read_size += read_len;
+	}
+
+cleanup:
+	if (close_file(in) < 0 && rc == SEND_OK)
+		rc = CLOSE_FAILED;
+	if (close_file(out) < 0 && rc == SEND_OK)
+		rc = CLOSE_FAILED;
+
+	/* finish CRC calculation and store into pgFile */
+	file->crc = in ? in->crc : 0;
+	file->z_crc = out ? out->crc: 0;
+	file->write_size = out ? out->currpos: 0;
+
+	free_file(in);
+	free_file(out);
+	pg_free(buf);
+
+	return rc;
+}
+
+/*
+ * Copy file to backup.
+ * Apply compression if requested, unless it is cfs file
+ * TODO: optimize remote copying
+ */
+void
+receive_non_data_file(const char *from_fullpath,
+					  fio_location from_location,
+					  const char *to_fullpath, pgFile *file,
+					  CompressAlg calg, int clevel, bool missing_ok)
+{
+	int   rc = 0;
+	char *errmsg = NULL;
+
+	/* reset size summary */
+	file->read_size = 0;
+	file->write_size = 0;
+	file->uncompressed_size = 0;
+
+	/* backup remote file  */
+	if (fio_is_remote(FIO_DB_HOST))
+		rc = fio_send_file_new(from_fullpath, to_fullpath, file, calg, clevel, &errmsg);
+	/* backup local file */
+	else
+		rc = send_file(from_fullpath, to_fullpath, file, calg, clevel, &errmsg);
+
+	/* handle errors */
+	if (rc == FILE_MISSING)
+	{
+		/* maybe deleted, it's not error in case of backup */
+		if (missing_ok)
+		{
+			elog(LOG, "File \"%s\" is not found", from_fullpath);
+			file->write_size = FILE_NOT_FOUND;
+		}
+		else
+			elog(ERROR, "File \"%s\" is not found", from_fullpath);
+	}
+	else if (rc != SEND_OK)
+		elog(ERROR, "%s", errmsg);
+
+	pg_free(errmsg);
+
+	/* set compress_alg only if some data is written */
+	if (file->write_size > 0)
+	{
+		file->uncompressed_size = file->read_size;
+		if (calg == ZLIB_COMPRESS)
+			file->compress_alg = calg;
+	}
 }
 
 /*

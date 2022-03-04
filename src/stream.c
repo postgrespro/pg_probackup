@@ -645,7 +645,7 @@ add_walsegment_to_filelist(parray *filelist, uint32 timeline, XLogRecPtr xlogpos
 
     if (existing_file)
     {
-        (*existing_file)->crc = pgFileGetCRC(wal_segment_fullpath, true, false);
+        (*existing_file)->crc = pgFileGetCRC(wal_segment_fullpath, true, NONE_COMPRESS, false, false);
         (*existing_file)->write_size = xlog_seg_size;
         (*existing_file)->uncompressed_size = xlog_seg_size;
 
@@ -653,7 +653,7 @@ add_walsegment_to_filelist(parray *filelist, uint32 timeline, XLogRecPtr xlogpos
     }
 
     /* calculate crc */
-    file->crc = pgFileGetCRC(wal_segment_fullpath, true, false);
+    file->crc = pgFileGetCRC(wal_segment_fullpath, true, NONE_COMPRESS, false, false);
 
     /* Should we recheck it using stat? */
     file->write_size = xlog_seg_size;
@@ -683,7 +683,7 @@ add_history_file_to_filelist(parray *filelist, uint32 timeline, char *basedir)
     file = pgFileNew(fullpath, relpath, false, 0, FIO_BACKUP_HOST);
 
     /* calculate crc */
-    file->crc = pgFileGetCRC(fullpath, true, false);
+    file->crc = pgFileGetCRC(fullpath, true, NONE_COMPRESS, false, false);
     file->write_size = file->size;
     file->uncompressed_size = file->size;
 
