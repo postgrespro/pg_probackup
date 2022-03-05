@@ -25,7 +25,8 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
             pg_options={
                 'cfs_encryption': 'off',
                 'max_wal_senders': '2',
-                'shared_buffers': '200MB'
+                'shared_buffers': '200MB',
+                'ptrack.map_size': '1'
             }
         )
 
@@ -193,21 +194,18 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
             "CREATE TABLE {0} TABLESPACE {1} "
             "AS SELECT i AS id, MD5(i::text) AS text, "
             "MD5(repeat(i::text,10))::tsvector AS tsvector "
-            "FROM generate_series(0,256) i".format('t1', tblspace_name)
-        )
+            "FROM generate_series(0,256) i".format('t1', tblspace_name))
 
-        backup_id = None
-        try:
-            backup_id = self.backup_node(
-                self.backup_dir, 'node', self.node,
-                backup_type='full', options=['--stream'])
-        except ProbackupException as e:
-            self.fail(
-                "ERROR: Full backup failed.\n {0} \n {1}".format(
-                    repr(self.cmd),
-                    repr(e.message)
-                )
-            )
+        for i in range(0,100):
+            self.node.safe_psql(
+                "postgres",
+                "CREATE TABLE t_{0}() TABLESPACE {1} ".format(i, tblspace_name))
+
+        backup_id = self.backup_node(
+            self.backup_dir, 'node', self.node,
+            backup_type='full', options=['--stream'])
+
+        exit(1)
         show_backup = self.show_pb(self.backup_dir, 'node', backup_id)
         self.assertEqual(
             "OK",

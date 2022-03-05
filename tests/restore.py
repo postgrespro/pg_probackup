@@ -2424,6 +2424,8 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         gdb.remove_all_breakpoints()
         gdb.continue_execution_until_exit()
 
+        self.assertEqual(self.show_pb(backup_dir, 'node')[1]['status'], "DONE")
+
         pgdata = self.pgdata_content(node.data_dir)
         node.cleanup()
 
