@@ -139,6 +139,10 @@ def slow_start(self, replica=False):
         except testgres.QueryException as e:
             if 'database system is starting up' in e.message:
                 pass
+            elif 'FATAL:  the database system is not accepting connections' in e.message:
+                pass
+            elif replica and 'Hot standby mode is disabled' in e.message:
+                raise e
             else:
                 raise e
 
@@ -180,15 +184,15 @@ class ProbackupTest(object):
         self.test_env['LC_MESSAGES'] = 'C'
         self.test_env['LC_TIME'] = 'C'
 
-        self.paranoia = False
-        if 'PG_PROBACKUP_PARANOIA' in self.test_env:
-            if self.test_env['PG_PROBACKUP_PARANOIA'] == 'ON':
-                self.paranoia = True
+        self.gdb = 'PGPROBACKUP_GDB' in os.environ and \
+              os.environ['PGPROBACKUP_GDB'] == 'ON'
 
-        self.archive_compress = False
-        if 'ARCHIVE_COMPRESSION' in self.test_env:
-            if self.test_env['ARCHIVE_COMPRESSION'] == 'ON':
-                self.archive_compress = True
+        self.paranoia = 'PG_PROBACKUP_PARANOIA' in self.test_env and \
+            self.test_env['PG_PROBACKUP_PARANOIA'] == 'ON'
+
+        self.archive_compress = 'ARCHIVE_COMPRESSION' in self.test_env and \
+            self.test_env['ARCHIVE_COMPRESSION'] == 'ON'
+
         try:
             testgres.configure_testgres(
                 cache_initdb=False,
@@ -308,7 +312,8 @@ class ProbackupTest(object):
         self.ptrack = False
         if 'PG_PROBACKUP_PTRACK' in self.test_env:
             if self.test_env['PG_PROBACKUP_PTRACK'] == 'ON':
-                self.ptrack = True
+                if self.pg_config_version >= self.version_to_num('11.0'):
+                    self.ptrack = True
 
         os.environ["PGAPPNAME"] = "pg_probackup"
 
@@ -335,14 +340,9 @@ class ProbackupTest(object):
 #                print('PGPROBACKUP_SSH_USER is not set')
 #                exit(1)
 
-    def make_simple_node(
+    def make_empty_node(
             self,
-            base_dir=None,
-            set_replication=False,
-            ptrack_enable=False,
-            initdb_params=[],
-            pg_options={}):
-
+            base_dir=None):
         real_base_dir = os.path.join(self.tmp_path, base_dir)
         shutil.rmtree(real_base_dir, ignore_errors=True)
         os.makedirs(real_base_dir)
@@ -351,6 +351,17 @@ class ProbackupTest(object):
         # bound method slow_start() to 'node' class instance
         node.slow_start = slow_start.__get__(node)
         node.should_rm_dirs = True
+        return node
+
+    def make_simple_node(
+            self,
+            base_dir=None,
+            set_replication=False,
+            ptrack_enable=False,
+            initdb_params=[],
+            pg_options={}):
+
+        node = self.make_empty_node(base_dir)
         node.init(
            initdb_params=initdb_params, allow_streaming=set_replication)
 
@@ -375,17 +386,15 @@ class ProbackupTest(object):
         options['log_connections'] = 'on'
         options['log_disconnections'] = 'on'
         options['restart_after_crash'] = 'off'
+        options['autovacuum'] = 'off'
 
         # Allow replication in pg_hba.conf
         if set_replication:
             options['max_wal_senders'] = 10
 
         if ptrack_enable:
-            if node.major_version >= 11:
-                options['ptrack.map_size'] = '128'
-                options['shared_preload_libraries'] = 'ptrack'
-            else:
-                options['ptrack_enable'] = 'on'
+            options['ptrack.map_size'] = '128'
+            options['shared_preload_libraries'] = 'ptrack'
 
         if node.major_version >= 13:
             options['wal_keep_size'] = '200MB'
@@ -405,6 +414,59 @@ class ProbackupTest(object):
             self.set_auto_conf(
                 node, {}, 'postgresql.conf', ['wal_keep_segments'])
         return node
+    
+    def simple_bootstrap(self, node, role) -> None:
+
+        node.safe_psql(
+            'postgres',
+            'CREATE ROLE {0} WITH LOGIN REPLICATION'.format(role))
+
+        # PG 9.5
+        if self.get_version(node) < 90600:
+            node.safe_psql(
+                'postgres',
+                'GRANT USAGE ON SCHEMA pg_catalog TO {0}; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO {0}; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO {0}; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean) TO {0}; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup() TO {0}; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_create_restore_point(text) TO {0}; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_switch_xlog() TO {0}; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.txid_current() TO {0}; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO {0}; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO {0};'.format(role))
+        # PG 9.6
+        elif self.get_version(node) > 90600 and self.get_version(node) < 100000:
+            node.safe_psql(
+                'postgres',
+                'GRANT USAGE ON SCHEMA pg_catalog TO {0}; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO {0}; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO {0}; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean, boolean) TO {0}; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup(boolean) TO {0}; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_create_restore_point(text) TO {0}; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_switch_xlog() TO {0}; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_last_xlog_replay_location() TO {0}; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.txid_current() TO {0}; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO {0}; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO {0}; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_checkpoint() TO {0};'.format(role))
+        # >= 10
+        else:
+            node.safe_psql(
+                'postgres',
+                'GRANT USAGE ON SCHEMA pg_catalog TO {0}; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO {0}; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO {0}; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean, boolean) TO {0}; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup(boolean, boolean) TO {0}; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_create_restore_point(text) TO {0}; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_switch_wal() TO {0}; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_last_wal_replay_lsn() TO {0}; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.txid_current() TO {0}; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO {0}; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO {0}; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_checkpoint() TO {0};'.format(role))
 
     def create_tblspace_in_node(self, node, tblspc_name, tblspc_path=None, cfs=False):
         res = node.execute(
@@ -562,9 +624,6 @@ class ProbackupTest(object):
         return ptrack_bits_for_fork
 
     def check_ptrack_map_sanity(self, node, idx_ptrack):
-        if node.major_version >= 12:
-            return
-
         success = True
         for i in idx_ptrack:
             # get new size of heap and indexes. size calculated in pages
@@ -978,6 +1037,28 @@ class ProbackupTest(object):
 
         return self.run_pb(cmd_list + options, gdb=gdb, old_binary=old_binary)
 
+    def catchup_node(
+            self,
+            backup_mode, source_pgdata, destination_node,
+            options = []
+            ):
+
+        cmd_list = [
+            'catchup',
+            '--backup-mode={0}'.format(backup_mode),
+            '--source-pgdata={0}'.format(source_pgdata),
+            '--destination-pgdata={0}'.format(destination_node.data_dir)
+        ]
+        if self.remote:
+            cmd_list += ['--remote-proto=ssh', '--remote-host=localhost']
+        if self.verbose:
+            cmd_list += [
+                '--log-level-file=VERBOSE',
+                '--log-directory={0}'.format(destination_node.logs_dir)
+            ]
+
+        return self.run_pb(cmd_list + options)
+
     def show_pb(
             self, backup_dir, instance=None, backup_id=None,
             options=[], as_text=False, as_json=True, old_binary=False,
@@ -1215,7 +1296,8 @@ class ProbackupTest(object):
     def set_archiving(
             self, backup_dir, instance, node, replica=False,
             overwrite=False, compress=True, old_binary=False,
-            log_level=False, archive_timeout=False):
+            log_level=False, archive_timeout=False,
+            custom_archive_command=None):
 
         # parse postgresql.auto.conf
         options = {}
@@ -1225,45 +1307,47 @@ class ProbackupTest(object):
         else:
             options['archive_mode'] = 'on'
 
-        if os.name == 'posix':
-            options['archive_command'] = '"{0}" archive-push -B {1} --instance={2} '.format(
-                self.probackup_path, backup_dir, instance)
+        if custom_archive_command is None:
+            if os.name == 'posix':
+                options['archive_command'] = '"{0}" archive-push -B {1} --instance={2} '.format(
+                    self.probackup_path, backup_dir, instance)
 
-        elif os.name == 'nt':
-            options['archive_command'] = '"{0}" archive-push -B {1} --instance={2} '.format(
-                self.probackup_path.replace("\\","\\\\"),
-                backup_dir.replace("\\","\\\\"), instance)
+            elif os.name == 'nt':
+                options['archive_command'] = '"{0}" archive-push -B {1} --instance={2} '.format(
+                    self.probackup_path.replace("\\","\\\\"),
+                    backup_dir.replace("\\","\\\\"), instance)
 
-        # don`t forget to kill old_binary after remote ssh release
-        if self.remote and not old_binary:
-            options['archive_command'] += '--remote-proto=ssh '
-            options['archive_command'] += '--remote-host=localhost '
+            # don`t forget to kill old_binary after remote ssh release
+            if self.remote and not old_binary:
+                options['archive_command'] += '--remote-proto=ssh '
+                options['archive_command'] += '--remote-host=localhost '
 
-        if self.archive_compress and compress:
-            options['archive_command'] += '--compress '
+            if self.archive_compress and compress:
+                options['archive_command'] += '--compress '
 
-        if overwrite:
-            options['archive_command'] += '--overwrite '
+            if overwrite:
+                options['archive_command'] += '--overwrite '
 
-        options['archive_command'] += '--log-level-console=VERBOSE '
-        options['archive_command'] += '-j 5 '
-        options['archive_command'] += '--batch-size 10 '
-        options['archive_command'] += '--no-sync '
+            options['archive_command'] += '--log-level-console=VERBOSE '
+            options['archive_command'] += '-j 5 '
+            options['archive_command'] += '--batch-size 10 '
+            options['archive_command'] += '--no-sync '
 
-        if archive_timeout:
-            options['archive_command'] += '--archive-timeout={0} '.format(
-                archive_timeout)
+            if archive_timeout:
+                options['archive_command'] += '--archive-timeout={0} '.format(
+                    archive_timeout)
 
-        if os.name == 'posix':
-            options['archive_command'] += '--wal-file-path=%p --wal-file-name=%f'
+            if os.name == 'posix':
+                options['archive_command'] += '--wal-file-path=%p --wal-file-name=%f'
 
-        elif os.name == 'nt':
-            options['archive_command'] += '--wal-file-path="%p" --wal-file-name="%f"'
+            elif os.name == 'nt':
+                options['archive_command'] += '--wal-file-path="%p" --wal-file-name="%f"'
 
-        if log_level:
-            options['archive_command'] += ' --log-level-console={0}'.format(log_level)
-            options['archive_command'] += ' --log-level-file={0} '.format(log_level)
-
+            if log_level:
+                options['archive_command'] += ' --log-level-console={0}'.format(log_level)
+                options['archive_command'] += ' --log-level-file={0} '.format(log_level)
+        else: # custom_archive_command is not None
+            options['archive_command'] = custom_archive_command
 
         self.set_auto_conf(node, options)
 
@@ -1516,6 +1600,13 @@ class ProbackupTest(object):
         return self.version_to_num(
             testgres.get_pg_config()['VERSION'].split(" ")[1])
 
+    def get_ptrack_version(self, node):
+        version = node.safe_psql(
+            "postgres",
+            "SELECT extversion "
+                        "FROM pg_catalog.pg_extension WHERE extname = 'ptrack'").decode('utf-8').rstrip()
+        return self.version_to_num(version)
+
     def get_bin_path(self, binary):
         return testgres.get_bin_path(binary)
 
@@ -1626,8 +1717,30 @@ class ProbackupTest(object):
 
         return directory_dict
 
-    def compare_pgdata(self, original_pgdata, restored_pgdata):
-        """ return dict with directory content. DO IT BEFORE RECOVERY"""
+    def get_known_bugs_comparision_exclusion_dict(self, node):
+        """ get dict of known datafiles difference, that can be used in compare_pgdata() """
+        comparision_exclusion_dict = dict()
+
+        # bug in spgist metapage update (PGPRO-5707)
+        spgist_filelist = node.safe_psql(
+            "postgres",
+            "SELECT pg_catalog.pg_relation_filepath(pg_class.oid) "
+            "FROM pg_am, pg_class "
+            "WHERE pg_am.amname = 'spgist' "
+            "AND pg_class.relam = pg_am.oid"
+            ).decode('utf-8').rstrip().splitlines()
+        for filename in spgist_filelist:
+            comparision_exclusion_dict[filename] = set([0])
+
+        return comparision_exclusion_dict
+
+
+    def compare_pgdata(self, original_pgdata, restored_pgdata, exclusion_dict = dict()):
+        """
+        return dict with directory content. DO IT BEFORE RECOVERY
+        exclusion_dict is used for exclude files (and it block_no) from comparision
+        it is a dict with relative filenames as keys and set of block numbers as values
+        """
         fail = False
         error_message = 'Restored PGDATA is not equal to original!\n'
 
@@ -1678,10 +1791,10 @@ class ProbackupTest(object):
                 ):
                     fail = True
                     error_message += '\nFile permissions mismatch:\n'
-                    error_message += ' File_old: {0} Permissions: {1}\n'.format(
+                    error_message += ' File_old: {0} Permissions: {1:o}\n'.format(
                         os.path.join(original_pgdata['pgdata'], file),
                         original_pgdata['files'][file]['mode'])
-                    error_message += ' File_new: {0} Permissions: {1}\n'.format(
+                    error_message += ' File_new: {0} Permissions: {1:o}\n'.format(
                         os.path.join(restored_pgdata['pgdata'], file),
                         restored_pgdata['files'][file]['mode'])
 
@@ -1689,16 +1802,17 @@ class ProbackupTest(object):
                     original_pgdata['files'][file]['md5'] !=
                     restored_pgdata['files'][file]['md5']
                 ):
-                    fail = True
-                    error_message += (
-                        '\nFile Checksumm mismatch.\n'
-                        'File_old: {0}\nChecksumm_old: {1}\n'
-                        'File_new: {2}\nChecksumm_new: {3}\n').format(
-                        os.path.join(original_pgdata['pgdata'], file),
-                        original_pgdata['files'][file]['md5'],
-                        os.path.join(restored_pgdata['pgdata'], file),
-                        restored_pgdata['files'][file]['md5']
-                    )
+                    if file not in exclusion_dict:
+                        fail = True
+                        error_message += (
+                            '\nFile Checksum mismatch.\n'
+                            'File_old: {0}\nChecksum_old: {1}\n'
+                            'File_new: {2}\nChecksum_new: {3}\n').format(
+                            os.path.join(original_pgdata['pgdata'], file),
+                            original_pgdata['files'][file]['md5'],
+                            os.path.join(restored_pgdata['pgdata'], file),
+                            restored_pgdata['files'][file]['md5']
+                        )
 
                     if original_pgdata['files'][file]['is_datafile']:
                         for page in original_pgdata['files'][file]['md5_per_page']:
@@ -1714,13 +1828,16 @@ class ProbackupTest(object):
                                     )
                                 continue
 
-                            if original_pgdata['files'][file][
-                                'md5_per_page'][page] != restored_pgdata[
-                                    'files'][file]['md5_per_page'][page]:
+                            if not (file in exclusion_dict and page in exclusion_dict[file]):
+                                if (
+                                    original_pgdata['files'][file]['md5_per_page'][page] !=
+                                    restored_pgdata['files'][file]['md5_per_page'][page]
+                                ):
+                                    fail = True
                                     error_message += (
-                                        '\n Page checksumm mismatch: {0}\n '
-                                        ' PAGE Checksumm_old: {1}\n '
-                                        ' PAGE Checksumm_new: {2}\n '
+                                        '\n Page checksum mismatch: {0}\n '
+                                        ' PAGE Checksum_old: {1}\n '
+                                        ' PAGE Checksum_new: {2}\n '
                                         ' File: {3}\n'
                                     ).format(
                                         page,
@@ -1948,6 +2065,9 @@ class GDBobj(ProbackupTest):
             if line.startswith('*stopped,reason="breakpoint-hit"'):
                 return True
         return False
+
+    def quit(self):
+        self.proc.terminate()
 
     # use for breakpoint, run, continue
     def _execute(self, cmd, running=True):

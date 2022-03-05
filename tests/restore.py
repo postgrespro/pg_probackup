@@ -4,12 +4,13 @@ from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 import subprocess
 import sys
 from time import sleep
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import hashlib
 import shutil
 import json
 from shutil import copyfile
-from testgres import QueryException
+from testgres import QueryException, StartNodeException
+from stat import S_ISDIR
 
 
 module_name = 'restore'
@@ -188,7 +189,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'],
-            pg_options={'TimeZone': 'Europe/Moscow'})
+            pg_options={'TimeZone': 'GMT'})
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
@@ -201,7 +202,9 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         backup_id = self.backup_node(backup_dir, 'node', node)
 
-        target_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        target_time = node.execute(
+            "postgres", "SELECT to_char(now(), 'YYYY-MM-DD HH24:MI:SS+00')"
+        )[0][0]
         pgbench = node.pgbench(
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         pgbench.wait()
@@ -511,10 +514,9 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.set_archiving(backup_dir, 'node', node)
         node.slow_start()
 
-        if node.major_version >= 12:
-            node.safe_psql(
-                "postgres",
-                "CREATE EXTENSION ptrack")
+        node.safe_psql(
+            "postgres",
+            "CREATE EXTENSION ptrack")
 
         node.pgbench_init(scale=2)
 
@@ -566,10 +568,9 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.set_archiving(backup_dir, 'node', node)
         node.slow_start()
 
-        if node.major_version >= 12:
-            node.safe_psql(
-                "postgres",
-                "CREATE EXTENSION ptrack")
+        node.safe_psql(
+            "postgres",
+            "CREATE EXTENSION ptrack")
 
         node.pgbench_init(scale=2)
 
@@ -629,10 +630,9 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.set_archiving(backup_dir, 'node', node)
         node.slow_start()
 
-        if node.major_version >= 12:
-            node.safe_psql(
-                "postgres",
-                "CREATE EXTENSION ptrack")
+        node.safe_psql(
+            "postgres",
+            "CREATE EXTENSION ptrack")
 
         node.pgbench_init(scale=2)
 
@@ -688,10 +688,9 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.set_archiving(backup_dir, 'node', node)
         node.slow_start()
 
-        if node.major_version >= 12:
-            node.safe_psql(
-                "postgres",
-                "CREATE EXTENSION ptrack")
+        node.safe_psql(
+            "postgres",
+            "CREATE EXTENSION ptrack")
 
         node.pgbench_init(scale=2)
 
@@ -758,10 +757,9 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.set_archiving(backup_dir, 'node', node)
         node.slow_start()
 
-        if node.major_version >= 12:
-            node.safe_psql(
-                "postgres",
-                "CREATE EXTENSION ptrack")
+        node.safe_psql(
+            "postgres",
+            "CREATE EXTENSION ptrack")
 
         # wal_segment_size = self.guc_wal_segment_size(node)
         node.pgbench_init(scale=2)
@@ -1028,8 +1026,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
-            initdb_params=['--data-checksums'],
-            pg_options={'autovacuum': 'off'})
+            initdb_params=['--data-checksums'])
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
@@ -1488,7 +1485,6 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'],
             pg_options={
-                'autovacuum': 'off',
                 'full_page_writes': 'on'}
             )
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
@@ -1864,9 +1860,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
-            initdb_params=['--data-checksums'],
-            pg_options={
-                'autovacuum': 'off'})
+            initdb_params=['--data-checksums'])
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
@@ -2141,7 +2135,8 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         target_name = 'savepoint'
 
-        target_time = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S %z")
+        # in python-3.6+ it can be ...now()..astimezone()...
+        target_time = datetime.utcnow().replace(tzinfo=timezone.utc).astimezone().strftime("%Y-%m-%d %H:%M:%S %z")
         with node.connect("postgres") as con:
             res = con.execute(
                 "INSERT INTO tbl0005 VALUES ('inserted') RETURNING (xmin)")
@@ -2506,7 +2501,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         db_list_raw = node.safe_psql(
             'postgres',
             'SELECT to_json(a) '
-            'FROM (SELECT oid, datname FROM pg_database) a').rstrip()
+            'FROM (SELECT oid, datname FROM pg_database) a').decode('utf-8').rstrip()
 
         db_list_splitted = db_list_raw.splitlines()
 
@@ -2745,7 +2740,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         db_list_raw = node.safe_psql(
             'postgres',
             'SELECT to_json(a) '
-            'FROM (SELECT oid, datname FROM pg_database) a').rstrip()
+            'FROM (SELECT oid, datname FROM pg_database) a').decode('utf-8').rstrip()
 
         db_list_splitted = db_list_raw.splitlines()
 
@@ -2853,6 +2848,9 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         """
         old binary should be of version < 2.2.0
         """
+        if not self.probackup_old_path:
+            self.skipTest("You must specify PGPROBACKUPBIN_OLD"
+                          " for run this test")
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
@@ -2956,6 +2954,9 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         """
         old binary should be of version < 2.2.0
         """
+        if not self.probackup_old_path:
+            self.skipTest("You must specify PGPROBACKUPBIN_OLD"
+                          " for run this test")
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
@@ -3179,8 +3180,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             ptrack_enable=self.ptrack,
-            initdb_params=['--data-checksums'],
-            pg_options={'autovacuum': 'off'})
+            initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -3220,10 +3220,12 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
                 "GRANT SELECT ON TABLE pg_catalog.pg_proc TO backup; "
                 "GRANT SELECT ON TABLE pg_catalog.pg_extension TO backup; "
                 "GRANT SELECT ON TABLE pg_catalog.pg_database TO backup; " # for partial restore, checkdb and ptrack
+                "GRANT EXECUTE ON FUNCTION pg_catalog.oideq(oid, oid) TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.nameeq(name, name) TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.textout(text) TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.timestamptz(timestamp with time zone, integer) TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.set_config(text, text, boolean) TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean) TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup() TO backup; "
@@ -3253,10 +3255,12 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
                 "GRANT SELECT ON TABLE pg_catalog.pg_proc TO backup; "
                 "GRANT SELECT ON TABLE pg_catalog.pg_extension TO backup; "
                 "GRANT SELECT ON TABLE pg_catalog.pg_database TO backup; " # for partial restore, checkdb and ptrack
+                "GRANT EXECUTE ON FUNCTION pg_catalog.oideq(oid, oid) TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.nameeq(name, name) TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.textout(text) TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.timestamptz(timestamp with time zone, integer) TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.set_config(text, text, boolean) TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_system() TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean, boolean) TO backup; "
@@ -3290,8 +3294,10 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
                 "GRANT SELECT ON TABLE pg_catalog.pg_proc TO backup; "
                 "GRANT SELECT ON TABLE pg_catalog.pg_extension TO backup; "
                 "GRANT SELECT ON TABLE pg_catalog.pg_database TO backup; " # for partial restore, checkdb and ptrack
+                "GRANT EXECUTE ON FUNCTION pg_catalog.oideq(oid, oid) TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.nameeq(name, name) TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.set_config(text, text, boolean) TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_system() TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean, boolean) TO backup; "
@@ -3304,32 +3310,15 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             )
 
         if self.ptrack:
-            fnames = []
-            if node.major_version < 12:
-                fnames += [
-                    'pg_catalog.oideq(oid, oid)',
-                    'pg_catalog.ptrack_version()',
-                    'pg_catalog.pg_ptrack_clear()',
-                    'pg_catalog.pg_ptrack_control_lsn()',
-                    'pg_catalog.pg_ptrack_get_and_clear_db(oid, oid)',
-                    'pg_catalog.pg_ptrack_get_and_clear(oid, oid)',
-                    'pg_catalog.pg_ptrack_get_block_2(oid, oid, oid, bigint)'
-                    ]
-            else:
-                # TODO why backup works without these grants ?
-#                fnames += [
-#                    'pg_ptrack_get_pagemapset(pg_lsn)',
-#                    'pg_ptrack_control_lsn()',
-#                    'pg_ptrack_get_block(oid, oid, oid, bigint)'
-#                    ]
-                node.safe_psql(
-                    "backupdb",
-                    "CREATE EXTENSION ptrack WITH SCHEMA pg_catalog")
-
-            for fname in fnames:
-                node.safe_psql(
-                    "backupdb",
-                    "GRANT EXECUTE ON FUNCTION {0} TO backup".format(fname))
+            # TODO why backup works without these grants ?
+            #    'pg_ptrack_get_pagemapset(pg_lsn)',
+            #    'pg_ptrack_control_lsn()',
+            # because PUBLIC
+            node.safe_psql(
+                "backupdb",
+                "CREATE SCHEMA ptrack; "
+                "GRANT USAGE ON SCHEMA ptrack TO backup; "
+                "CREATE EXTENSION ptrack WITH SCHEMA ptrack")
 
         if ProbackupTest.enterprise:
             node.safe_psql(
@@ -3582,8 +3571,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
-            initdb_params=['--data-checksums'],
-            pg_options={'autovacuum': 'off'})
+            initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -3650,7 +3638,9 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         pg_probackup version must be 12 or greater
         """
-
+        if not self.probackup_old_path:
+            self.skipTest("You must specify PGPROBACKUPBIN_OLD"
+                          " for run this test")
         if self.pg_config_version < self.version_to_num('12.0'):
            return unittest.skip('You need PostgreSQL >= 12 for this test')
 
@@ -3661,8 +3651,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
-            initdb_params=['--data-checksums'],
-            pg_options={'autovacuum': 'off'})
+            initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -3731,8 +3720,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
-            initdb_params=['--data-checksums'],
-            pg_options={'autovacuum': 'off'})
+            initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -3777,8 +3765,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
-            initdb_params=['--data-checksums'],
-            pg_options={'autovacuum': 'off'})
+            initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -3864,6 +3851,70 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         self.compare_pgdata(pgdata1, pgdata2)
         self.compare_pgdata(pgdata2, pgdata3)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # skip this test until https://github.com/postgrespro/pg_probackup/pull/399
+    @unittest.skip("skip")
+    def test_restore_issue_313(self):
+        """
+        Check that partially restored PostgreSQL instance cannot be started
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # FULL backup
+        backup_id = self.backup_node(backup_dir, 'node', node)
+        node.cleanup()
+
+        count = 0
+        filelist =  self.get_backup_filelist(backup_dir, 'node', backup_id)
+        for file in filelist:
+            # count only nondata files
+            if int(filelist[file]['is_datafile']) == 0 and int(filelist[file]['size']) > 0:
+                count += 1
+
+        node_restored = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node_restored'))
+        node_restored.cleanup()
+        self.restore_node(backup_dir, 'node', node_restored)
+
+        gdb = self.restore_node(backup_dir, 'node', node, gdb=True, options=['--progress'])
+        gdb.verbose = False
+        gdb.set_breakpoint('restore_non_data_file')
+        gdb.run_until_break()
+        gdb.continue_execution_until_break(count - 2)
+        gdb.quit()
+
+        # emulate the user or HA taking care of PG configuration
+        for fname in os.listdir(node_restored.data_dir):
+            if fname.endswith('.conf'):
+                os.rename(
+                    os.path.join(node_restored.data_dir, fname),
+                    os.path.join(node.data_dir, fname))
+
+        try:
+            node.slow_start()
+            # we should die here because exception is what we expect to happen
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because backup is not fully restored")
+        except StartNodeException as e:
+            self.assertIn(
+                'Cannot start node',
+                e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)

@@ -1,0 +1,179 @@
+Origin: repo.postgrespro.ru
+Label: PostgreSQL backup utility pg_probackup
+Codename: squeeze
+Architectures: amd64 i386 source
+Components: main-squeeze
+Description: PostgresPro pg_probackup repo
+SignWith: yes
+Log:
+ --type=dsc changelog.script
+
+Origin: repo.postgrespro.ru
+Label: PostgreSQL backup utility pg_probackup
+Codename: wheezy
+Architectures: amd64 i386 source
+Components: main-wheezy
+Description: PostgresPro pg_probackup repo
+SignWith: yes
+Log:
+ --type=dsc changelog.script
+
+Origin: repo.postgrespro.ru
+Label: PostgreSQL backup utility pg_probackup
+Codename: jessie
+Architectures: amd64 i386 source
+Components: main-jessie
+Description: PostgresPro pg_probackup repo
+SignWith: yes
+Log:
+ --type=dsc changelog.script
+
+Origin: repo.postgrespro.ru
+Label: PostgreSQL backup utility pg_probackup
+Codename: bullseye
+Architectures: amd64 i386 source
+Components: main-bullseye
+Description: PostgresPro pg_probackup repo
+SignWith: yes
+Log:
+ --type=dsc changelog.script
+
+Origin: repo.postgrespro.ru
+Label: PostgreSQL backup utility pg_probackup
+Codename: wily
+Architectures: amd64 i386 source
+Components: main-wily
+Description: PostgresPro pg_probackup repo
+SignWith: yes
+Log:
+ --type=dsc changelog.script
+
+Origin: repo.postgrespro.ru
+Label: PostgreSQL backup utility pg_probackup
+Codename: precise
+Architectures: amd64 i386 source
+Components: main-precise
+Description: PostgresPro pg_probackup repo
+SignWith: yes
+Log:
+ --type=dsc changelog.script
+
+Origin: repo.postgrespro.ru
+Label: PostgreSQL backup utility pg_probackup
+Codename: vivid
+Architectures: amd64 i386 source
+Components: main-vivid
+Description: PostgresPro pg_probackup repo
+SignWith: yes
+Log:
+ --type=dsc changelog.script
+
+Origin: repo.postgrespro.ru
+Label: PostgreSQL backup utility pg_probackup
+Codename: trusty
+Architectures: amd64 i386 source
+Components: main-trusty
+Description: PostgresPro pg_probackup repo
+SignWith: yes
+Log:
+ --type=dsc changelog.script
+
+Origin: repo.postgrespro.ru
+Label: PostgreSQL backup utility pg_probackup
+Codename: lucid
+Architectures: amd64 i386 source
+Components: main-lucid
+Description: PostgresPro pg_probackup repo
+SignWith: yes
+Log:
+ --type=dsc changelog.script
+
+Origin: repo.postgrespro.ru
+Label: PostgreSQL backup utility pg_probackup
+Codename: cosmic
+Architectures: amd64 i386 source
+Components: main-cosmic
+Description: PostgresPro pg_probackup repo
+SignWith: yes
+Log:
+ --type=dsc changelog.script
+
+Origin: repo.postgrespro.ru
+Label: PostgreSQL backup utility pg_probackup
+Codename: xenial
+Architectures: amd64 i386 source
+Components: main-xenial
+Description: PostgresPro pg_probackup repo
+SignWith: yes
+Log:
+ --type=dsc changelog.script
+
+Origin: repo.postgrespro.ru
+Label: PostgreSQL backup utility pg_probackup
+Codename: yakkety
+Architectures: amd64 i386 source
+Components: main-yakkety
+Description: PostgresPro pg_probackup repo
+SignWith: yes
+Log:
+ --type=dsc changelog.script
+
+Origin: repo.postgrespro.ru
+Label: PostgreSQL backup utility pg_probackup
+Codename: zesty
+Architectures: amd64 i386 source
+Components: main-zesty
+Description: PostgresPro pg_probackup repo
+SignWith: yes
+Log:
+ --type=dsc changelog.script
+
+Origin: repo.postgrespro.ru
+Label: PostgreSQL backup utility pg_probackup
+Codename: stretch
+Architectures: amd64 i386 source
+Components: main-stretch
+Description: PostgresPro pg_probackup repo
+SignWith: yes
+Log:
+ --type=dsc changelog.script
+
+Origin: repo.postgrespro.ru
+Label: PostgreSQL backup utility pg_probackup
+Codename: buster
+Architectures: amd64 i386 source
+Components: main-buster
+Description: PostgresPro pg_probackup repo
+SignWith: yes
+Log:
+ --type=dsc changelog.script
+
+Origin: repo.postgrespro.ru
+Label: PostgreSQL backup utility pg_probackup
+Codename: artful
+Architectures: amd64 i386 source
+Components: main-artful
+Description: PostgresPro pg_probackup repo
+SignWith: yes
+Log:
+ --type=dsc changelog.script
+
+Origin: repo.postgrespro.ru
+Label: PostgreSQL backup utility pg_probackup
+Codename: bionic
+Architectures: amd64 i386 source
+Components: main-bionic
+Description: PostgresPro pg_probackup repo
+SignWith: yes
+Log:
+ --type=dsc changelog.script
+
+Origin: repo.postgrespro.ru
+Label: PostgreSQL backup utility pg_probackup
+Codename: focal
+Architectures: amd64 i386 source
+Components: main-focal
+Description: PostgresPro pg_probackup repo
+SignWith: yes
+Log:
+ --type=dsc changelog.script

@@ -83,6 +83,12 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             pg_options={
                 'checkpoint_timeout': '30s'}
             )
+
+        if self.get_version(node) < self.version_to_num('9.6.0'):
+            self.del_test_dir(module_name, fname)
+            return unittest.skip(
+                'Skipped because pg_control_checkpoint() is not supported in PG 9.5')
+
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -432,6 +438,11 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             'pg_probackup archive-push completed successfully',
             log_content)
 
+        # btw check that console coloring codes are not slipped into log file
+        self.assertNotIn('[0m', log_content)
+
+        print(log_content)
+
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
@@ -693,6 +704,11 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
                 'checkpoint_timeout': '30s',
                 'max_wal_size': '32MB'})
 
+        if self.get_version(master) < self.version_to_num('9.6.0'):
+            self.del_test_dir(module_name, fname)
+            return unittest.skip(
+                'Skipped because backup from replica is not supported in PG 9.5')
+
         self.init_pb(backup_dir)
         # ADD INSTANCE 'MASTER'
         self.add_instance(backup_dir, 'master', master)
@@ -728,7 +744,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         # to original data
         master.psql(
             "postgres",
-            "insert into t_heap as select i as id, md5(i::text) as text, "
+            "insert into t_heap select i as id, md5(i::text) as text, "
             "md5(repeat(i::text,10))::tsvector as tsvector "
             "from generate_series(256,512) i")
         before = master.safe_psql("postgres", "SELECT * FROM t_heap")
@@ -763,7 +779,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         # to original data
         master.psql(
             "postgres",
-            "insert into t_heap as select i as id, md5(i::text) as text, "
+            "insert into t_heap select i as id, md5(i::text) as text, "
             "md5(repeat(i::text,10))::tsvector as tsvector "
             "from generate_series(512,80680) i")
 
@@ -818,6 +834,12 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             pg_options={
                 'archive_timeout': '10s'}
             )
+
+        if self.get_version(master) < self.version_to_num('9.6.0'):
+            self.del_test_dir(module_name, fname)
+            return unittest.skip(
+                'Skipped because backup from replica is not supported in PG 9.5')
+
         replica = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'replica'))
         replica.cleanup()
@@ -895,6 +917,9 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             set replica with archiving,
             make sure that archiving on both node is working.
         """
+        if self.pg_config_version < self.version_to_num('9.6.0'):
+            return unittest.skip('You need PostgreSQL >= 9.6 for this test')
+
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         master = self.make_simple_node(
@@ -903,8 +928,12 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             initdb_params=['--data-checksums'],
             pg_options={
                 'checkpoint_timeout': '30s',
-                'autovacuum': 'off',
                 'archive_timeout': '10s'})
+
+        if self.get_version(master) < self.version_to_num('9.6.0'):
+            self.del_test_dir(module_name, fname)
+            return unittest.skip(
+                'Skipped because backup from replica is not supported in PG 9.5')
 
         replica = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'replica'))
@@ -951,7 +980,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
         master.psql(
             "postgres",
-            "insert into t_heap as select i as id, md5(i::text) as text, "
+            "insert into t_heap select i as id, md5(i::text) as text, "
             "md5(repeat(i::text,10))::tsvector as tsvector "
             "from generate_series(0,10000) i")
 
@@ -1002,8 +1031,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         master = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'master'),
             set_replication=True,
-            initdb_params=['--data-checksums'],
-            pg_options={'autovacuum': 'off'})
+            initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', master)
@@ -1235,8 +1263,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             initdb_params=['--data-checksums'],
             pg_options={
                 'archive_timeout': '30s',
-                'checkpoint_timeout': '30s',
-                'autovacuum': 'off'})
+                'checkpoint_timeout': '30s'})
 
         if self.get_version(master) < self.version_to_num('9.6.0'):
             self.del_test_dir(module_name, fname)
@@ -1547,8 +1574,8 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         double segment - compressed and not
         """
         if not self.archive_compress:
-            return self.fail(
-                'You need to enable ARCHIVE_COMPRESSION for this test to run')
+            self.skipTest('You need to enable ARCHIVE_COMPRESSION '
+                          'for this test to run')
 
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
@@ -1558,8 +1585,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             initdb_params=['--data-checksums'],
             pg_options={
                 'archive_timeout': '30s',
-                'checkpoint_timeout': '30s',
-                'autovacuum': 'off'})
+                'checkpoint_timeout': '30s'})
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -1603,8 +1629,8 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         double segment - compressed and not
         """
         if not self.archive_compress:
-            return self.fail(
-                'You need to enable ARCHIVE_COMPRESSION for this test to run')
+            self.skipTest('You need to enable ARCHIVE_COMPRESSION '
+                          'for this test to run')
 
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
@@ -1614,8 +1640,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             initdb_params=['--data-checksums'],
             pg_options={
                 'archive_timeout': '30s',
-                'checkpoint_timeout': '30s',
-                'autovacuum': 'off'})
+                'checkpoint_timeout': '30s'})
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -1661,6 +1686,9 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         check that '--archive-host', '--archive-user', '--archiver-port'
         and '--restore-command' are working as expected.
         """
+        if not self.remote:
+            self.skipTest("You must enable PGPROBACKUP_SSH_REMOTE"
+                          " for run this test")
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
@@ -1802,6 +1830,133 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure
+    def test_undefined_wal_file_path(self):
+        """
+        check that archive-push works correct with undefined
+        --wal-file-path
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        if os.name == 'posix':
+            archive_command = '\"{0}\" archive-push -B \"{1}\" --instance \"{2}\" --wal-file-name=%f'.format(
+                self.probackup_path, backup_dir, 'node')
+        elif os.name == 'nt':
+            archive_command = '\"{0}\" archive-push -B \"{1}\" --instance \"{2}\" --wal-file-name=%f'.format(
+                self.probackup_path, backup_dir, 'node').replace("\\","\\\\")
+        else:
+            self.assertTrue(False, 'Unexpected os family')
+
+        self.set_auto_conf(
+                node,
+                {'archive_command': archive_command})
+
+        node.slow_start()
+        node.safe_psql(
+            "postgres",
+            "create table t_heap as select i"
+            " as id from generate_series(0, 10) i")
+        self.switch_wal_segment(node)
+
+        # check
+        self.assertEqual(self.show_archive(backup_dir, instance='node', tli=1)['min-segno'], '000000010000000000000001')
+
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    # @unittest.expectedFailure
+    def test_intermediate_archiving(self):
+        """
+        check that archive-push works correct with --wal-file-path setting by user
+        """
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'])
+
+        node_pg_options = {}
+        if node.major_version >= 13:
+            node_pg_options['wal_keep_size'] = '0MB'
+        else:
+            node_pg_options['wal_keep_segments'] = '0'
+        self.set_auto_conf(node, node_pg_options)
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+
+        wal_dir = os.path.join(self.tmp_path, module_name, fname, 'intermediate_dir')
+        shutil.rmtree(wal_dir, ignore_errors=True)
+        os.makedirs(wal_dir)
+        if os.name == 'posix':
+            self.set_archiving(backup_dir, 'node', node, custom_archive_command='cp -v %p {0}/%f'.format(wal_dir))
+        elif os.name == 'nt':
+            self.set_archiving(backup_dir, 'node', node, custom_archive_command='copy /Y "%p" "{0}\\\\%f"'.format(wal_dir.replace("\\","\\\\")))
+        else:
+            self.assertTrue(False, 'Unexpected os family')
+
+        node.slow_start()
+        node.safe_psql(
+            "postgres",
+            "create table t_heap as select i"
+            " as id from generate_series(0, 10) i")
+        self.switch_wal_segment(node)
+
+        wal_segment = '000000010000000000000001'
+
+        self.run_pb(["archive-push", "-B", backup_dir,
+            "--instance=node", "-D", node.data_dir,
+            "--wal-file-path", "{0}/{1}".format(wal_dir, wal_segment), "--wal-file-name", wal_segment])
+
+        self.assertEqual(self.show_archive(backup_dir, instance='node', tli=1)['min-segno'], wal_segment)
+
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    # @unittest.expectedFailure
+    def test_waldir_outside_pgdata_archiving(self):
+        """
+        check that archive-push works correct with symlinked waldir
+        """
+        if self.pg_config_version < self.version_to_num('10.0'):
+            return unittest.skip(
+                'Skipped because waldir outside pgdata is supported since PG 10')
+
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        external_wal_dir = os.path.join(self.tmp_path, module_name, fname, 'ext_wal_dir')
+        shutil.rmtree(external_wal_dir, ignore_errors=True)
+
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums', '--waldir={0}'.format(external_wal_dir)])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+
+        node.slow_start()
+        node.safe_psql(
+            "postgres",
+            "create table t_heap as select i"
+            " as id from generate_series(0, 10) i")
+        self.switch_wal_segment(node)
+
+        # check
+        self.assertEqual(self.show_archive(backup_dir, instance='node', tli=1)['min-segno'], '000000010000000000000001')
+
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    # @unittest.expectedFailure
     def test_hexadecimal_timeline(self):
         """
         Check that timelines are correct.
@@ -1811,8 +1966,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
-            initdb_params=['--data-checksums'],
-            pg_options={'autovacuum': 'off'})
+            initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -1875,7 +2029,6 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'autovacuum': 'off',
                 'checkpoint_timeout': '30s',
                 'max_wal_size': '64MB'})
 
@@ -2008,8 +2161,12 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
-            initdb_params=['--data-checksums'],
-            pg_options={'autovacuum': 'off'})
+            initdb_params=['--data-checksums'])
+
+        if self.get_version(node) < self.version_to_num('9.6.0'):
+            self.del_test_dir(module_name, fname)
+            return unittest.skip(
+                'Skipped because backup from replica is not supported in PG 9.5')
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -2098,8 +2255,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
-            initdb_params=['--data-checksums'],
-            pg_options={'autovacuum': 'off'})
+            initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -2214,8 +2370,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
-            initdb_params=['--data-checksums'],
-            pg_options={'autovacuum': 'off'})
+            initdb_params=['--data-checksums'])
 
         if self.get_version(node) < self.version_to_num('9.6.0'):
             self.del_test_dir(module_name, fname)
@@ -2287,8 +2442,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
-            initdb_params=['--data-checksums'],
-            pg_options={'autovacuum': 'off'})
+            initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)

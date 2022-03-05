@@ -1,0 +1,5 @@
+FROM alt:p9
+RUN ulimit -n 1024 && apt-get update -y && apt-get install -y tar wget rpm-build
+RUN ulimit -n 1024 && apt-get install -y make perl libicu-devel glibc-devel bison flex
+RUN ulimit -n 1024 && apt-get install -y git perl-devel readline-devel libxml2-devel libxslt-devel python-devel zlib-devel openssl-devel libkrb5 libkrb5-devel
+RUN ulimit -n 1024 && apt-get dist-upgrade -y

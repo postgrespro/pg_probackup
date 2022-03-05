@@ -1,0 +1,29 @@
+Source: @PKG_NAME@
+Section: database
+Priority: optional
+Maintainer: PostgresPro DBA <dba@postgrespro.ru>
+Uploaders: Grigory Smolkin <g.smolkin@postgrespro.ru>
+Build-Depends:
+ debhelper (>= 9),
+ bison,
+ dpkg-dev,
+ flex,
+ gettext,
+ zlib1g-dev | libz-dev,
+ libpq5
+Standards-Version: 3.9.6
+Homepage: https://github.com/postgrespro/pg_probackup
+
+Package: @PKG_NAME@
+Architecture: any
+Depends: ${misc:Depends}, ${shlibs:Depends}
+Description: Backup tool for PostgreSQL.
+ .
+ This package provides pg_probackup binary for PostgreSQL @PG_VERSION@.
+
+Package: @PKG_NAME@-dbg
+Depends: @PKG_NAME@
+Architecture: any
+Description: Backup tool for PostgreSQL.
+ .
+ This package provides detached debugging symbols for pg_probackup

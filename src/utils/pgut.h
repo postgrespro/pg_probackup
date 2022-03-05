@@ -3,7 +3,7 @@
  * pgut.h
  *
  * Portions Copyright (c) 2009-2013, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
- * Portions Copyright (c) 2017-2019, Postgres Professional
+ * Portions Copyright (c) 2017-2021, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */
@@ -59,16 +59,15 @@ extern int pgut_wait(int num, PGconn *connections[], struct timeval *timeout);
  * memory allocators
  */
 extern void *pgut_malloc(size_t size);
+extern void *pgut_malloc0(size_t size);
 extern void *pgut_realloc(void *p, size_t size);
 extern char *pgut_strdup(const char *str);
+extern char *pgut_strndup(const char *str, size_t n);
+extern char *pgut_str_strip_trailing_filename(const char *filepath, const char *filename);
 
 #define pgut_new(type)			((type *) pgut_malloc(sizeof(type)))
+#define pgut_new0(type)			((type *) pgut_malloc0(sizeof(type)))
 #define pgut_newarray(type, n)	((type *) pgut_malloc(sizeof(type) * (n)))
-
-/*
- * file operations
- */
-extern FILE *pgut_fopen(const char *path, const char *mode, bool missing_ok);
 
 /*
  * Assert

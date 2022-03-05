@@ -3,14 +3,12 @@
  * util.c: log messages to log file or stderr, and misc code.
  *
  * Portions Copyright (c) 2009-2011, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
- * Portions Copyright (c) 2015-2019, Postgres Professional
+ * Portions Copyright (c) 2015-2022, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */
 
 #include "pg_probackup.h"
-
-#include "catalog/pg_control.h"
 
 #include <time.h>
 
@@ -124,7 +122,7 @@ digestControlFile(ControlFileData *ControlFile, char *src, size_t size)
  * Write ControlFile to pg_control
  */
 static void
-writeControlFile(ControlFileData *ControlFile, const char *path, fio_location location)
+writeControlFile(fio_location location, const char *path, ControlFileData *ControlFile)
 {
 	int			fd;
 	char       *buffer = NULL;
@@ -136,12 +134,12 @@ writeControlFile(ControlFileData *ControlFile, const char *path, fio_location lo
 #endif
 
 	/* copy controlFileSize */
-	buffer = pg_malloc(ControlFileSize);
+	buffer = pg_malloc0(ControlFileSize);
 	memcpy(buffer, ControlFile, sizeof(ControlFileData));
 
 	/* Write pg_control */
-	fd = fio_open(path,
-				  O_RDWR | O_CREAT | O_TRUNC | PG_BINARY, location);
+	fd = fio_open(location, path,
+				  O_RDWR | O_CREAT | O_TRUNC | PG_BINARY);
 
 	if (fd < 0)
 		elog(ERROR, "Failed to open file: %s", path);
@@ -169,12 +167,12 @@ get_current_timeline(PGconn *conn)
 	char	   *val;
 
 	res = pgut_execute_extended(conn,
-				   "SELECT timeline_id FROM pg_control_checkpoint()", 0, NULL, true, true);
+				   "SELECT timeline_id FROM pg_catalog.pg_control_checkpoint()", 0, NULL, true, true);
 
 	if (PQresultStatus(res) == PGRES_TUPLES_OK)
 		val = PQgetvalue(res, 0, 0);
 	else
-		return get_current_timeline_from_control(false);
+		return get_current_timeline_from_control(FIO_DB_HOST, instance_config.pgdata, false);
 
 	if (!parse_uint32(val, &tli, 0))
 	{
@@ -182,7 +180,7 @@ get_current_timeline(PGconn *conn)
 		elog(WARNING, "Invalid value of timeline_id %s", val);
 
 		/* TODO 3.0 remove it and just error out */
-		return get_current_timeline_from_control(false);
+		return get_current_timeline_from_control(FIO_DB_HOST, instance_config.pgdata, false);
 	}
 
 	return tli;
@@ -190,15 +188,15 @@ get_current_timeline(PGconn *conn)
 
 /* Get timeline from pg_control file */
 TimeLineID
-get_current_timeline_from_control(bool safe)
+get_current_timeline_from_control(fio_location location, const char *pgdata_path, bool safe)
 {
 	ControlFileData ControlFile;
 	char       *buffer;
 	size_t      size;
 
 	/* First fetch file... */
-	buffer = slurpFile(instance_config.pgdata, XLOG_CONTROL_FILE, &size,
-					   safe, FIO_DB_HOST);
+	buffer = slurpFile(location, pgdata_path, XLOG_CONTROL_FILE,
+					   &size, safe);
 	if (safe && buffer == NULL)
 		return 0;
 
@@ -236,11 +234,12 @@ get_checkpoint_location(PGconn *conn)
 
 	return lsn;
 #else
+	/* PG-9.5 */
 	char	   *buffer;
 	size_t		size;
 	ControlFileData ControlFile;
 
-	buffer = slurpFile(instance_config.pgdata, XLOG_CONTROL_FILE, &size, false, FIO_DB_HOST);
+	buffer = slurpFile(FIO_DB_HOST, instance_config.pgdata, XLOG_CONTROL_FILE, &size, false);
 	digestControlFile(&ControlFile, buffer, size);
 	pg_free(buffer);
 
@@ -249,15 +248,15 @@ get_checkpoint_location(PGconn *conn)
 }
 
 uint64
-get_system_identifier(const char *pgdata_path)
+get_system_identifier(fio_location location, const char *pgdata_path, bool safe)
 {
 	ControlFileData ControlFile;
 	char	   *buffer;
 	size_t		size;
 
 	/* First fetch file... */
-	buffer = slurpFile(pgdata_path, XLOG_CONTROL_FILE, &size, false, FIO_DB_HOST);
-	if (buffer == NULL)
+	buffer = slurpFile(location, pgdata_path, XLOG_CONTROL_FILE, &size, safe);
+	if (safe && buffer == NULL)
 		return 0;
 	digestControlFile(&ControlFile, buffer, size);
 	pg_free(buffer);
@@ -286,11 +285,12 @@ get_remote_system_identifier(PGconn *conn)
 
 	return system_id_conn;
 #else
+	/* PG-9.5 */
 	char	   *buffer;
 	size_t		size;
 	ControlFileData ControlFile;
 
-	buffer = slurpFile(instance_config.pgdata, XLOG_CONTROL_FILE, &size, false, FIO_DB_HOST);
+	buffer = slurpFile(FIO_DB_HOST, instance_config.pgdata, XLOG_CONTROL_FILE, &size, false);
 	digestControlFile(&ControlFile, buffer, size);
 	pg_free(buffer);
 
@@ -299,7 +299,7 @@ get_remote_system_identifier(PGconn *conn)
 }
 
 uint32
-get_xlog_seg_size(char *pgdata_path)
+get_xlog_seg_size(const char *pgdata_path)
 {
 #if PG_VERSION_NUM >= 110000
 	ControlFileData ControlFile;
@@ -307,7 +307,7 @@ get_xlog_seg_size(char *pgdata_path)
 	size_t		size;
 
 	/* First fetch file... */
-	buffer = slurpFile(pgdata_path, XLOG_CONTROL_FILE, &size, false, FIO_DB_HOST);
+	buffer = slurpFile(FIO_DB_HOST, pgdata_path, XLOG_CONTROL_FILE, &size, false);
 	digestControlFile(&ControlFile, buffer, size);
 	pg_free(buffer);
 
@@ -325,8 +325,8 @@ get_data_checksum_version(bool safe)
 	size_t		size;
 
 	/* First fetch file... */
-	buffer = slurpFile(instance_config.pgdata, XLOG_CONTROL_FILE, &size,
-					   safe, FIO_DB_HOST);
+	buffer = slurpFile(FIO_DB_HOST, instance_config.pgdata, XLOG_CONTROL_FILE,
+					   &size, safe);
 	if (buffer == NULL)
 		return 0;
 	digestControlFile(&ControlFile, buffer, size);
@@ -343,7 +343,7 @@ get_pgcontrol_checksum(const char *pgdata_path)
 	size_t		size;
 
 	/* First fetch file... */
-	buffer = slurpFile(pgdata_path, XLOG_CONTROL_FILE, &size, false, FIO_BACKUP_HOST);
+	buffer = slurpFile(FIO_BACKUP_HOST, pgdata_path, XLOG_CONTROL_FILE, &size, false);
 
 	digestControlFile(&ControlFile, buffer, size);
 	pg_free(buffer);
@@ -351,15 +351,32 @@ get_pgcontrol_checksum(const char *pgdata_path)
 	return ControlFile.crc;
 }
 
+/* unused function */
+DBState
+get_system_dbstate(fio_location location, const char *pgdata_path)
+{
+	ControlFileData ControlFile;
+	char	   *buffer;
+	size_t		size;
+
+	buffer = slurpFile(location, pgdata_path, XLOG_CONTROL_FILE, &size, false);
+	if (buffer == NULL)
+		return 0;
+	digestControlFile(&ControlFile, buffer, size);
+	pg_free(buffer);
+
+	return ControlFile.state;
+}
+
 void
-get_redo(const char *pgdata_path, RedoParams *redo)
+get_redo(fio_location location, const char *pgdata_path, RedoParams *redo)
 {
 	ControlFileData ControlFile;
 	char	   *buffer;
 	size_t		size;
 
 	/* First fetch file... */
-	buffer = slurpFile(pgdata_path, XLOG_CONTROL_FILE, &size, false, FIO_DB_HOST);
+	buffer = slurpFile(location, pgdata_path, XLOG_CONTROL_FILE, &size, false);
 
 	digestControlFile(&ControlFile, buffer, size);
 	pg_free(buffer);
@@ -398,7 +415,7 @@ set_min_recovery_point(pgFile *file, const char *backup_path,
 	char		fullpath[MAXPGPATH];
 
 	/* First fetch file content */
-	buffer = slurpFile(instance_config.pgdata, XLOG_CONTROL_FILE, &size, false, FIO_DB_HOST);
+	buffer = slurpFile(FIO_DB_HOST, instance_config.pgdata, XLOG_CONTROL_FILE, &size, false);
 	digestControlFile(&ControlFile, buffer, size);
 
 	elog(LOG, "Current minRecPoint %X/%X",
@@ -418,8 +435,8 @@ set_min_recovery_point(pgFile *file, const char *backup_path,
 	FIN_CRC32C(ControlFile.crc);
 
 	/* overwrite pg_control */
-	snprintf(fullpath, sizeof(fullpath), "%s/%s", backup_path, XLOG_CONTROL_FILE);
-	writeControlFile(&ControlFile, fullpath, FIO_LOCAL_HOST);
+	join_path_components(fullpath, backup_path, XLOG_CONTROL_FILE);
+	writeControlFile(FIO_LOCAL_HOST, fullpath, &ControlFile);
 
 	/* Update pg_control checksum in backup_list */
 	file->crc = ControlFile.crc;
@@ -431,14 +448,14 @@ set_min_recovery_point(pgFile *file, const char *backup_path,
  * Copy pg_control file to backup. We do not apply compression to this file.
  */
 void
-copy_pgcontrol_file(const char *from_fullpath, fio_location from_location,
-					const char *to_fullpath, fio_location to_location, pgFile *file)
+copy_pgcontrol_file(fio_location from_location, const char *from_fullpath,
+					fio_location to_location, const char *to_fullpath, pgFile *file)
 {
 	ControlFileData ControlFile;
 	char	   *buffer;
 	size_t		size;
 
-	buffer = slurpFile(from_fullpath, "", &size, false, from_location);
+	buffer = slurpFile(from_location, from_fullpath, "", &size, false);
 
 	digestControlFile(&ControlFile, buffer, size);
 
@@ -447,7 +464,7 @@ copy_pgcontrol_file(const char *from_fullpath, fio_location from_location,
 	file->write_size = size;
 	file->uncompressed_size = size;
 
-	writeControlFile(&ControlFile, to_fullpath, to_location);
+	writeControlFile(to_location, to_fullpath, &ControlFile);
 
 	pg_free(buffer);
 }
@@ -516,6 +533,29 @@ status2str(BackupStatus status)
 	return statusName[status];
 }
 
+const char *
+status2str_color(BackupStatus status)
+{
+	char *status_str = pgut_malloc(20);
+
+	/* UNKNOWN */
+	if (status == BACKUP_STATUS_INVALID)
+		snprintf(status_str, 20, "%s%s%s", TC_YELLOW_BOLD, "UNKNOWN", TC_RESET);
+	/* CORRUPT, ERROR and ORPHAN */
+	else if (status == BACKUP_STATUS_CORRUPT || status == BACKUP_STATUS_ERROR ||
+			 status == BACKUP_STATUS_ORPHAN)
+		snprintf(status_str, 20, "%s%s%s", TC_RED_BOLD, statusName[status], TC_RESET);
+	/* MERGING, MERGED, DELETING and DELETED */
+	else if (status == BACKUP_STATUS_MERGING || status == BACKUP_STATUS_MERGED ||
+			 status == BACKUP_STATUS_DELETING || status == BACKUP_STATUS_DELETED)
+		snprintf(status_str, 20, "%s%s%s", TC_YELLOW_BOLD, statusName[status], TC_RESET);
+	/* OK and DONE */
+	else
+		snprintf(status_str, 20, "%s%s%s", TC_GREEN_BOLD, statusName[status], TC_RESET);
+
+	return status_str;
+}
+
 BackupStatus
 str2status(const char *status)
 {
@@ -555,52 +595,4 @@ datapagemap_print_debug(datapagemap_t *map)
 		elog(INFO, "  block %u", blocknum);
 
 	pg_free(iter);
-}
-
-/*
- * Return pid of postmaster process running in given pgdata.
- * Return 0 if there is none.
- * Return 1 if postmaster.pid is mangled.
- */
-pid_t
-check_postmaster(const char *pgdata)
-{
-	FILE  *fp;
-	pid_t  pid;
-	char   pid_file[MAXPGPATH];
-
-	snprintf(pid_file, MAXPGPATH, "%s/postmaster.pid", pgdata);
-
-	fp = fopen(pid_file, "r");
-	if (fp == NULL)
-	{
-		/* No pid file, acceptable*/
-		if (errno == ENOENT)
-			return 0;
-		else
-			elog(ERROR, "Cannot open file \"%s\": %s",
-				pid_file, strerror(errno));
-	}
-
-	if (fscanf(fp, "%i", &pid) != 1)
-	{
-		/* something is wrong with the file content */
-		pid = 1;
-	}
-
-	if (pid > 1)
-	{
-		if (kill(pid, 0) != 0)
-		{
-			/* process no longer exists */
-			if (errno == ESRCH)
-				pid = 0;
-			else
-				elog(ERROR, "Failed to send signal 0 to a process %d: %s",
-						pid, strerror(errno));
-		}
-	}
-
-	fclose(fp);
-	return pid;
 }

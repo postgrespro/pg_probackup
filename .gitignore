@@ -1,5 +1,6 @@
 # Object files
 *.o
+*.bc
 
 # Libraries
 *.lib
@@ -33,15 +34,8 @@
 /tests/helpers/*pyc
 
 # Extra files
-/src/pg_crc.c
-/src/receivelog.c
-/src/receivelog.h
-/src/streamutil.c
-/src/streamutil.h
-/src/xlogreader.c
-/src/walmethods.c
-/src/walmethods.h
-/src/instr_time.h
+/src/borrowed/
+/borrowed.mk
 
 # Doc files
 /doc/*html
@@ -53,6 +47,12 @@
 /run_tests.sh
 /make_dockerfile.sh
 /backup_restore.sh
+
+# Packaging
+/pkg-build
+/packaging/pkg/tarballs/pgpro.tar.bz2
+/packaging/repo/pg_probackup
+/packaging/repo/pg_probackup-forks
 
 # Misc
 .python-version

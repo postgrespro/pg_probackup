@@ -3,7 +3,7 @@
  * pgut.c
  *
  * Portions Copyright (c) 2009-2013, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
- * Portions Copyright (c) 2017-2019, Postgres Professional
+ * Portions Copyright (c) 2017-2021, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */
@@ -15,6 +15,16 @@
 #include "libpq-fe.h"
 #include "libpq/pqsignal.h"
 #include "pqexpbuffer.h"
+
+#if PG_VERSION_NUM >= 140000
+#include "common/string.h"
+#endif
+
+#if PG_VERSION_NUM >= 100000
+#include "common/connect.h"
+#else
+#include "fe_utils/connect.h"
+#endif
 
 #include <time.h>
 
@@ -75,7 +85,16 @@ prompt_for_password(const char *username)
 		password = NULL;
 	}
 
-#if PG_VERSION_NUM >= 100000
+#if PG_VERSION_NUM >= 140000
+	if (username == NULL)
+		password = simple_prompt("Password: ", false);
+	else
+	{
+		char	message[256];
+		snprintf(message, lengthof(message), "Password for user %s: ", username);
+		password = simple_prompt(message , false);
+	}
+#elif PG_VERSION_NUM >= 100000
 	password = (char *) pgut_malloc(sizeof(char) * 100 + 1);
 	if (username == NULL)
 		simple_prompt("Password: ", password, 100, false);
@@ -244,7 +263,7 @@ pgut_connect(const char *host, const char *port,
 			pthread_lock(&atexit_callback_disconnect_mutex);
 			pgut_atexit_push(pgut_disconnect_callback, conn);
 			pthread_mutex_unlock(&atexit_callback_disconnect_mutex);
-			return conn;
+			break;
 		}
 
 		if (conn && PQconnectionNeedsPassword(conn) && prompt_password)
@@ -266,6 +285,28 @@ pgut_connect(const char *host, const char *port,
 		PQfinish(conn);
 		return NULL;
 	}
+
+	/*
+	 * Fix for CVE-2018-1058. This code was taken with small modification from
+	 * src/bin/pg_basebackup/streamutil.c:GetConnection()
+	 */
+	if (dbname != NULL)
+	{
+		PGresult   *res;
+
+		res = PQexec(conn, ALWAYS_SECURE_SEARCH_PATH_SQL);
+		if (PQresultStatus(res) != PGRES_TUPLES_OK)
+		{
+			elog(ERROR, "could not clear search_path: %s",
+						 PQerrorMessage(conn));
+			PQclear(res);
+			PQfinish(conn);
+			return NULL;
+		}
+		PQclear(res);
+	}
+
+	return conn;
 }
 
 PGconn *
@@ -878,6 +919,17 @@ pgut_malloc(size_t size)
 }
 
 void *
+pgut_malloc0(size_t size)
+{
+	char *ret;
+
+	ret = pgut_malloc(size);
+	memset(ret, 0, size);
+
+	return ret;
+}
+
+void *
 pgut_realloc(void *p, size_t size)
 {
 	char *ret;
@@ -902,21 +954,43 @@ pgut_strdup(const char *str)
 	return ret;
 }
 
-FILE *
-pgut_fopen(const char *path, const char *mode, bool missing_ok)
+char *
+pgut_strndup(const char *str, size_t n)
 {
-	FILE *fp;
+	char *ret;
 
-	if ((fp = fio_open_stream(path, FIO_BACKUP_HOST)) == NULL)
-	{
-		if (missing_ok && errno == ENOENT)
-			return NULL;
+	if (str == NULL)
+		return NULL;
 
-		elog(ERROR, "could not open file \"%s\": %s",
-			path, strerror(errno));
-	}
+#if _POSIX_C_SOURCE >= 200809L
+	if ((ret = strndup(str, n)) == NULL)
+		elog(ERROR, "could not duplicate string \"%s\": %s",
+			str, strerror(errno));
+#else /* WINDOWS doesn't have strndup() */
+        if ((ret = malloc(n + 1)) == NULL)
+		elog(ERROR, "could not duplicate string \"%s\": %s",
+			str, strerror(errno));
 
-	return fp;
+        memcpy(ret, str, n);
+        ret[n] = '\0';
+#endif
+	return ret;
+}
+
+/*
+ * Allocates new string, that contains part of filepath string minus trailing filename string
+ * If trailing filename string not found, returns copy of filepath.
+ * Result must be freed by caller.
+ */
+char *
+pgut_str_strip_trailing_filename(const char *filepath, const char *filename)
+{
+	size_t	fp_len = strlen(filepath);
+	size_t	fn_len = strlen(filename);
+	if (strncmp(filepath + fp_len - fn_len, filename, fn_len) == 0)
+		return pgut_strndup(filepath, fp_len - fn_len);
+	else
+		return pgut_strndup(filepath, fp_len);
 }
 
 #ifdef WIN32
@@ -1173,7 +1247,7 @@ pgut_rmtree(const char *path, bool rmtopdir, bool strict)
 	/* now we have the names we can start removing things */
 	for (filename = filenames; *filename; filename++)
 	{
-		snprintf(pathbuf, MAXPGPATH, "%s/%s", path, *filename);
+		join_path_components(pathbuf, path, *filename);
 
 		if (lstat(pathbuf, &statbuf) != 0)
 		{

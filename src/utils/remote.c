@@ -103,7 +103,7 @@ void launch_ssh(char* argv[])
 }
 #endif
 
-static bool needs_quotes(char const* path)
+static bool needs_quotes(const char* path)
 {
 	return strchr(path, ' ') != NULL;
 }
@@ -156,7 +156,7 @@ bool launch_agent(void)
 
 	if (instance_config.remote.path)
 	{
-		char const* probackup = PROGRAM_NAME_FULL;
+		const char* probackup = PROGRAM_NAME_FULL;
 		char* sep = strrchr(probackup, '/');
 		if (sep != NULL) {
 			probackup = sep + 1;

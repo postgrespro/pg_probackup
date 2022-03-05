@@ -27,8 +27,7 @@ class PageTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'checkpoint_timeout': '300s',
-                'autovacuum': 'off'})
+                'checkpoint_timeout': '300s'})
 
         node_restored = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node_restored'))
@@ -115,8 +114,7 @@ class PageTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
-            initdb_params=['--data-checksums'],
-            pg_options={'autovacuum': 'off'})
+            initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -373,7 +371,6 @@ class PageTest(ProbackupTest, unittest.TestCase):
                 'fsync': 'off',
                 'shared_buffers': '1GB',
                 'maintenance_work_mem': '1GB',
-                'autovacuum': 'off',
                 'full_page_writes': 'off'})
 
         self.init_pb(backup_dir)
@@ -447,7 +444,6 @@ class PageTest(ProbackupTest, unittest.TestCase):
             set_replication=True, initdb_params=['--data-checksums'],
             pg_options={
                 'checkpoint_timeout': '30s',
-                'autovacuum': 'off'
             }
         )
 
@@ -521,7 +517,6 @@ class PageTest(ProbackupTest, unittest.TestCase):
             initdb_params=['--data-checksums'],
             pg_options={
                 'checkpoint_timeout': '30s',
-                'autovacuum': 'off'
             }
         )
 
@@ -1074,7 +1069,6 @@ class PageTest(ProbackupTest, unittest.TestCase):
             pg_options={
                 'max_wal_size': '10GB',
                 'checkpoint_timeout': '5min',
-                'autovacuum': 'off'
             }
         )
 
@@ -1190,8 +1184,7 @@ class PageTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
-            initdb_params=['--data-checksums'],
-            pg_options={'autovacuum': 'off'})
+            initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -1330,7 +1323,7 @@ class PageTest(ProbackupTest, unittest.TestCase):
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
-            pg_options={'autovacuum': 'off', 'wal_log_hints': 'on'})
+            pg_options={'wal_log_hints': 'on'})
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -1403,7 +1396,6 @@ class PageTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
-                'autovacuum': 'off',
                 'shared_buffers': '512MB',
                 'max_wal_size': '3GB'})
 

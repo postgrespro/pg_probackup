@@ -5,8 +5,9 @@ from . import init, merge, option, show, compatibility, \
     backup, delete, delta, restore, validate, \
     retention, pgpro560, pgpro589, pgpro2068, false_positive, replica, \
     compression, page, ptrack, archive, exclude, cfs_backup, cfs_restore, \
-    cfs_validate_backup, auth_test, time_stamp, snapfs, logging, \
-    locking, remote, external, config, checkdb, set_backup, incr_restore
+    cfs_validate_backup, auth_test, time_stamp, logging, \
+    locking, remote, external, config, checkdb, set_backup, incr_restore, \
+    catchup, CVE_2018_1058
 
 
 def load_tests(loader, tests, pattern):
@@ -23,7 +24,9 @@ def load_tests(loader, tests, pattern):
 #    suite.addTests(loader.loadTestsFromModule(auth_test))
     suite.addTests(loader.loadTestsFromModule(archive))
     suite.addTests(loader.loadTestsFromModule(backup))
-    suite.addTests(loader.loadTestsFromModule(compatibility))
+    suite.addTests(loader.loadTestsFromModule(catchup))
+    if 'PGPROBACKUPBIN_OLD' in os.environ and os.environ['PGPROBACKUPBIN_OLD']:
+        suite.addTests(loader.loadTestsFromModule(compatibility))
     suite.addTests(loader.loadTestsFromModule(checkdb))
     suite.addTests(loader.loadTestsFromModule(config))
 #    suite.addTests(loader.loadTestsFromModule(cfs_backup))
@@ -51,9 +54,9 @@ def load_tests(loader, tests, pattern):
     suite.addTests(loader.loadTestsFromModule(retention))
     suite.addTests(loader.loadTestsFromModule(set_backup))
     suite.addTests(loader.loadTestsFromModule(show))
-    suite.addTests(loader.loadTestsFromModule(snapfs))
     suite.addTests(loader.loadTestsFromModule(time_stamp))
     suite.addTests(loader.loadTestsFromModule(validate))
+    suite.addTests(loader.loadTestsFromModule(CVE_2018_1058))
 
     return suite
 

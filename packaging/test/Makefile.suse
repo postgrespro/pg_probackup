@@ -1,0 +1,49 @@
+# Suse 15.1
+build/test_suse_15.1_9.6:
+	$(call test_suse,suse,15.1,,9.6,9.6.24)
+	touch build/test_suse_15.1_9.6
+
+build/test_suse_15.1_10:
+	$(call test_suse,suse,15.1,,10,10.19)
+	touch build/test_suse_15.1_10
+
+build/test_suse_15.1_11:
+	$(call test_suse,suse,15.1,,11,11.14)
+	touch build/test_suse_15.1_11
+
+build/test_suse_15.1_12:
+	$(call test_suse,suse,15.1,,12,12.9)
+	touch build/test_suse_15.1_12
+
+build/test_suse_15.1_13:
+	$(call test_suse,suse,15.1,,13,13.5)
+	touch build/test_suse_15.1_13
+
+build/test_suse_15.1_14:
+	$(call test_suse,suse,15.1,,14,14.1)
+	touch build/test_suse_15.1_14
+
+# Suse 15.2
+build/test_suse_15.2_9.6:
+	$(call test_suse,suse,15.2,,9.6,9.6.24)
+	touch build/test_suse_15.2_9.6
+
+build/test_suse_15.2_10:
+	$(call test_suse,suse,15.2,,10,10.19)
+	touch build/test_suse_15.2_10
+
+build/test_suse_15.2_11:
+	$(call test_suse,suse,15.2,,11,11.14)
+	touch build/test_suse_15.2_11
+
+build/test_suse_15.2_12:
+	$(call test_suse,suse,15.2,,12,12.9)
+	touch build/test_suse_15.2_12
+
+build/test_suse_15.2_13:
+	$(call test_suse,suse,15.2,,13,13.5)
+	touch build/test_suse_15.2_13
+
+build/test_suse_15.2_14:
+	$(call test_suse,suse,15.2,,14,14.1)
+	touch build/test_suse_15.2_14

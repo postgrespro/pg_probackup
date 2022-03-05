@@ -1,0 +1,7 @@
+FROM registry.access.redhat.com/ubi8
+RUN yum install -y tar wget rpm-build yum-utils
+RUN yum install -y gcc make perl libicu-devel glibc-devel
+RUN yum install -y git
+RUN yum upgrade -y
+RUN yum install -y http://mirror.centos.org/centos/8/AppStream/x86_64/os/Packages/bison-3.0.4-10.el8.x86_64.rpm
+RUN yum install -y http://mirror.centos.org/centos/8/AppStream/x86_64/os/Packages/flex-2.6.1-9.el8.x86_64.rpm

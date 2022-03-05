@@ -2,14 +2,16 @@ FROM ololobus/postgres-dev:stretch
 
 USER root
 RUN apt-get update
-RUN apt-get -yq install python python-pip
+RUN apt-get -yq install python3 python3-pip
 
 # RUN curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py
 # RUN python2 get-pip.py
-RUN python2 -m pip install virtualenv
+RUN python3 -m pip install virtualenv
 
 # Environment
 ENV PG_MAJOR=${PG_VERSION} PG_BRANCH=${PG_BRANCH}
+ENV PTRACK_PATCH_PG_BRANCH=${PTRACK_PATCH_PG_BRANCH}
+ENV PGPROBACKUP_GDB=${PGPROBACKUP_GDB}
 ENV LANG=C.UTF-8 PGHOME=/pg/testdir/pgbin
 
 # Make directories

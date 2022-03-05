@@ -2,7 +2,7 @@
  *
  * configure.c: - manage backup catalog.
  *
- * Copyright (c) 2017-2019, Postgres Professional
+ * Copyright (c) 2017-2022, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */
@@ -277,18 +277,16 @@ do_show_config(void)
  * values into the file.
  */
 void
-do_set_config(bool missing_ok)
+do_set_config(InstanceState *instanceState, bool missing_ok)
 {
-	char		path[MAXPGPATH];
 	char		path_temp[MAXPGPATH];
 	FILE	   *fp;
 	int			i;
 
-	join_path_components(path, backup_instance_path, BACKUP_CATALOG_CONF_FILE);
-	snprintf(path_temp, sizeof(path_temp), "%s.tmp", path);
+	snprintf(path_temp, sizeof(path_temp), "%s.tmp", instanceState->instance_config_path);
 
-	if (!missing_ok && !fileExists(path, FIO_LOCAL_HOST))
-		elog(ERROR, "Configuration file \"%s\" doesn't exist", path);
+	if (!missing_ok && !fileExists(instanceState->instance_config_path, FIO_LOCAL_HOST))
+		elog(ERROR, "Configuration file \"%s\" doesn't exist", instanceState->instance_config_path);
 
 	fp = fopen(path_temp, "wt");
 	if (fp == NULL)
@@ -336,16 +334,16 @@ do_set_config(bool missing_ok)
 	if (fclose(fp))
 		elog(ERROR, "Cannot close configuration file: \"%s\"", path_temp);
 
-	if (fio_sync(path_temp, FIO_LOCAL_HOST) != 0)
+	if (fio_sync(FIO_LOCAL_HOST, path_temp) != 0)
 		elog(ERROR, "Failed to sync temp configuration file \"%s\": %s",
 			 path_temp, strerror(errno));
 
-	if (rename(path_temp, path) < 0)
+	if (rename(path_temp, instanceState->instance_config_path) < 0)
 	{
 		int			errno_temp = errno;
 		unlink(path_temp);
 		elog(ERROR, "Cannot rename configuration file \"%s\" to \"%s\": %s",
-			 path_temp, path, strerror(errno_temp));
+			 path_temp, instanceState->instance_config_path, strerror(errno_temp));
 	}
 }
 
@@ -353,8 +351,6 @@ void
 init_config(InstanceConfig *config, const char *instance_name)
 {
 	MemSet(config, 0, sizeof(InstanceConfig));
-
-	config->name = pgut_strdup(instance_name);
 
 	/*
 	 * Starting from PostgreSQL 11 WAL segment size may vary. Prior to
@@ -387,9 +383,8 @@ init_config(InstanceConfig *config, const char *instance_name)
  * read instance config from file
  */
 InstanceConfig *
-readInstanceConfigFile(const char *instance_name)
+readInstanceConfigFile(InstanceState *instanceState)
 {
-	char	path[MAXPGPATH];
 	InstanceConfig   *instance = pgut_new(InstanceConfig);
 	char	   *log_level_console = NULL;
 	char	   *log_level_file = NULL;
@@ -605,31 +600,21 @@ readInstanceConfigFile(const char *instance_name)
 	};
 
 
-	init_config(instance, instance_name);
+	init_config(instance, instanceState->instance_name);
 
-	sprintf(instance->backup_instance_path, "%s/%s/%s",
-			backup_path, BACKUPS_DIR, instance_name);
-	canonicalize_path(instance->backup_instance_path);
-
-	sprintf(instance->arclog_path, "%s/%s/%s",
-			backup_path, "wal", instance_name);
-	canonicalize_path(instance->arclog_path);
-
-	join_path_components(path, instance->backup_instance_path,
-						 BACKUP_CATALOG_CONF_FILE);
-
-	if (fio_access(path, F_OK, FIO_BACKUP_HOST) != 0)
+	if (fio_access(FIO_BACKUP_HOST, instanceState->instance_config_path, F_OK) != 0)
 	{
-		elog(WARNING, "Control file \"%s\" doesn't exist", path);
+		elog(WARNING, "Control file \"%s\" doesn't exist", instanceState->instance_config_path);
 		pfree(instance);
 		return NULL;
 	}
 
-	parsed_options = config_read_opt(path, instance_options, WARNING, true, true);
+	parsed_options = config_read_opt(instanceState->instance_config_path,
+									 instance_options, WARNING, true, true);
 
 	if (parsed_options == 0)
 	{
-		elog(WARNING, "Control file \"%s\" is empty", path);
+		elog(WARNING, "Control file \"%s\" is empty", instanceState->instance_config_path);
 		pfree(instance);
 		return NULL;
 	}
@@ -650,7 +635,6 @@ readInstanceConfigFile(const char *instance_name)
 #endif
 
 	return instance;
-
 }
 
 static void

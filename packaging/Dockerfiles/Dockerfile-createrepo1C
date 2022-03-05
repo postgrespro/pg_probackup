@@ -1,0 +1,4 @@
+FROM ubuntu:17.10
+RUN apt-get -qq update -y
+RUN apt-get -qq install -y reprepro rpm createrepo gnupg rsync perl less wget expect rsync dpkg-dev
+RUN apt-get upgrade -y

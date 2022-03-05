@@ -3,7 +3,7 @@
  * restore.c: restore DB cluster and archived WAL.
  *
  * Portions Copyright (c) 2009-2013, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
- * Portions Copyright (c) 2015-2019, Postgres Professional
+ * Portions Copyright (c) 2015-2022, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */
@@ -41,22 +41,22 @@ typedef struct
 
 
 static void
-print_recovery_settings(FILE *fp, pgBackup *backup,
+print_recovery_settings(InstanceState *instanceState, FILE *fp, pgBackup *backup,
 							   pgRestoreParams *params, pgRecoveryTarget *rt);
 static void
 print_standby_settings_common(FILE *fp, pgBackup *backup, pgRestoreParams *params);
 
 #if PG_VERSION_NUM >= 120000
 static void
-update_recovery_options(pgBackup *backup,
+update_recovery_options(InstanceState *instanceState, pgBackup *backup,
 						pgRestoreParams *params, pgRecoveryTarget *rt);
 #else
 static void
-update_recovery_options_before_v12(pgBackup *backup,
+update_recovery_options_before_v12(InstanceState *instanceState, pgBackup *backup,
 								   pgRestoreParams *params, pgRecoveryTarget *rt);
 #endif
 
-static void create_recovery_conf(time_t backup_id,
+static void create_recovery_conf(InstanceState *instanceState, time_t backup_id,
 								 pgRecoveryTarget *rt,
 								 pgBackup *backup,
 								 pgRestoreParams *params);
@@ -67,8 +67,6 @@ static void restore_chain(pgBackup *dest_backup, parray *parent_chain,
 						  parray *dbOid_exclude_list, pgRestoreParams *params,
 						  const char *pgdata_path, bool no_sync, bool cleanup_pgdata,
 						  bool backup_has_tblspc);
-static DestDirIncrCompatibility check_incremental_compatibility(const char *pgdata, uint64 system_identifier,
-																IncrRestoreMode incremental_mode);
 
 /*
  * Iterate over backup list to find all ancestors of the broken parent_backup
@@ -94,7 +92,7 @@ set_orphan_status(parray *backups, pgBackup *parent_backup)
 			if (backup->status == BACKUP_STATUS_OK ||
 				backup->status == BACKUP_STATUS_DONE)
 			{
-				write_backup_status(backup, BACKUP_STATUS_ORPHAN, instance_name, true);
+				write_backup_status(backup, BACKUP_STATUS_ORPHAN, true);
 
 				elog(WARNING,
 					"Backup %s is orphaned because his parent %s has status: %s",
@@ -117,7 +115,7 @@ set_orphan_status(parray *backups, pgBackup *parent_backup)
  * Entry point of pg_probackup RESTORE and VALIDATE subcommands.
  */
 int
-do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
+do_restore_or_validate(InstanceState *instanceState, time_t target_backup_id, pgRecoveryTarget *rt,
 					   pgRestoreParams *params, bool no_sync)
 {
 	int			i = 0;
@@ -136,7 +134,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 	bool        backup_has_tblspc = true; /* backup contain tablespace */
 	XLogRecPtr  shift_lsn = InvalidXLogRecPtr;
 
-	if (instance_name == NULL)
+	if (instanceState == NULL)
 		elog(ERROR, "required parameter not specified: --instance");
 
 	if (params->is_restore)
@@ -216,7 +214,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 	elog(LOG, "%s begin.", action);
 
 	/* Get list of all backups sorted in order of descending start time */
-	backups = catalog_get_backup_list(instance_name, INVALID_BACKUP_ID);
+	backups = catalog_get_backup_list(instanceState, INVALID_BACKUP_ID);
 
 	/* Find backup range we should restore or validate. */
 	while ((i < parray_num(backups)) && !dest_backup)
@@ -287,12 +285,13 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 
 			//	elog(LOG, "target timeline ID = %u", rt->target_tli);
 				/* Read timeline history files from archives */
-				timelines = read_timeline_history(arclog_path, rt->target_tli, true);
+				timelines = read_timeline_history(instanceState->instance_wal_subdir_path,
+												  rt->target_tli, true);
 
 				if (!timelines)
 					elog(ERROR, "Failed to get history file for target timeline %i", rt->target_tli);
 
-				if (!satisfy_timeline(timelines, current_backup))
+				if (!satisfy_timeline(timelines, current_backup->tli, current_backup->stop_lsn))
 				{
 					if (target_backup_id != INVALID_BACKUP_ID)
 						elog(ERROR, "target backup %s does not satisfy target timeline",
@@ -367,7 +366,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 					if (backup->status == BACKUP_STATUS_OK ||
 						backup->status == BACKUP_STATUS_DONE)
 					{
-						write_backup_status(backup, BACKUP_STATUS_ORPHAN, instance_name, true);
+						write_backup_status(backup, BACKUP_STATUS_ORPHAN, true);
 
 						elog(WARNING, "Backup %s is orphaned because his parent %s is missing",
 								base36enc(backup->start_time), missing_backup_id);
@@ -486,13 +485,14 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 	{
 		RedoParams redo;
 		parray	  *timelines = NULL;
-		get_redo(instance_config.pgdata, &redo);
+		get_redo(FIO_DB_HOST, instance_config.pgdata, &redo);
 
 		if (redo.checksum_version == 0)
 			elog(ERROR, "Incremental restore in 'lsn' mode require "
 				"data_checksums to be enabled in destination data directory");
 
-		timelines = read_timeline_history(arclog_path, redo.tli, false);
+		timelines = read_timeline_history(instanceState->instance_wal_subdir_path,
+										  redo.tli, false);
 
 		if (!timelines)
 			elog(WARNING, "Failed to get history for redo timeline %i, "
@@ -557,8 +557,8 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 		elog(INFO, "shift LSN: %X/%X",
 			(uint32) (shift_lsn >> 32), (uint32) shift_lsn);
 
-		params->shift_lsn = shift_lsn;
 	}
+	params->shift_lsn = shift_lsn;
 
 	/* for validation or restore with enabled validation */
 	if (!params->is_restore || !params->no_validate)
@@ -607,7 +607,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 			 * We pass base_full_backup timeline as last argument to this function,
 			 * because it's needed to form the name of xlog file.
 			 */
-			validate_wal(dest_backup, arclog_path, rt->target_time,
+			validate_wal(dest_backup, instanceState->instance_wal_subdir_path, rt->target_time,
 						 rt->target_xid, rt->target_lsn,
 						 dest_backup->tli, instance_config.xlog_seg_size);
 		}
@@ -676,7 +676,7 @@ do_restore_or_validate(time_t target_backup_id, pgRecoveryTarget *rt,
 
 		//TODO rename and update comment
 		/* Create recovery.conf with given recovery target parameters */
-		create_recovery_conf(target_backup_id, rt, dest_backup, params);
+		create_recovery_conf(instanceState, target_backup_id, rt, dest_backup, params);
 	}
 
 	/* ssh connection to longer needed */
@@ -817,12 +817,12 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 			elog(LOG, "Restore external directories");
 
 		for (i = 0; i < parray_num(external_dirs); i++)
-			fio_mkdir(parray_get(external_dirs, i),
-					  DIR_PERMISSION, FIO_DB_HOST);
+			fio_mkdir(FIO_DB_HOST, parray_get(external_dirs, i),
+					  DIR_PERMISSION, false);
 	}
 
 	/*
-	 * Setup directory structure for external directories and file locks
+	 * Setup directory structure for external directories
 	 */
 	for (i = 0; i < parray_num(dest_files); i++)
 	{
@@ -844,12 +844,12 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 			join_path_components(dirpath, external_path, file->rel_path);
 
 			elog(VERBOSE, "Create external directory \"%s\"", dirpath);
-			fio_mkdir(dirpath, file->mode, FIO_DB_HOST);
+			fio_mkdir(FIO_DB_HOST, dirpath, file->mode, false);
 		}
-
-		/* setup threads */
-		pg_atomic_clear_flag(&file->lock);
 	}
+
+	/* setup threads */
+	pfilearray_clear_locks(dest_files);
 
 	/* Get list of files in destination directory and remove redundant files */
 	if (params->incremental_mode != INCR_NONE || cleanup_pgdata)
@@ -922,8 +922,10 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 
 				join_path_components(fullpath, pgdata_path, file->rel_path);
 
-				fio_delete(file->mode, fullpath, FIO_DB_HOST);
-				elog(VERBOSE, "Deleted file \"%s\"", fullpath);
+				if (fio_remove(FIO_DB_HOST, fullpath, false) == 0)
+					elog(VERBOSE, "Deleted file \"%s\"", fullpath);
+				else
+					elog(ERROR, "Cannot delete redundant file \"%s\": %s", fullpath, strerror(errno));
 
 				/* shrink pgdata list */
 				pgFileFree(file);
@@ -1064,7 +1066,7 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 			}
 
 			/* TODO: write test for case: file to be synced is missing */
-			if (fio_sync(to_fullpath, FIO_DB_HOST) != 0)
+			if (fio_sync(FIO_DB_HOST, to_fullpath) != 0)
 				elog(ERROR, "Failed to sync file \"%s\": %s", to_fullpath, strerror(errno));
 		}
 
@@ -1203,15 +1205,17 @@ restore_files(void *arg)
 		{
 			if (arguments->incremental_mode == INCR_LSN)
 			{
-				lsn_map = fio_get_lsn_map(to_fullpath, arguments->dest_backup->checksum_version,
+				lsn_map = fio_get_lsn_map(FIO_DB_HOST, to_fullpath,
+								arguments->dest_backup->checksum_version,
 								dest_file->n_blocks, arguments->shift_lsn,
-								dest_file->segno * RELSEG_SIZE, FIO_DB_HOST);
+								dest_file->segno * RELSEG_SIZE);
 			}
 			else if (arguments->incremental_mode == INCR_CHECKSUM)
 			{
-				checksum_map = fio_get_checksum_map(to_fullpath, arguments->dest_backup->checksum_version,
+				checksum_map = fio_get_checksum_map(FIO_DB_HOST, to_fullpath,
+													arguments->dest_backup->checksum_version,
 													dest_file->n_blocks, arguments->dest_backup->stop_lsn,
-													dest_file->segno * RELSEG_SIZE, FIO_DB_HOST);
+													dest_file->segno * RELSEG_SIZE);
 			}
 		}
 
@@ -1221,20 +1225,20 @@ restore_files(void *arg)
 		 * if file do not exist
 		 */
 		if ((already_exists && dest_file->write_size == 0) || !already_exists)
-			out = fio_fopen(to_fullpath, PG_BINARY_W, FIO_DB_HOST);
+			out = fio_fopen(FIO_DB_HOST, to_fullpath, PG_BINARY_W);
 		/*
 		 * If file already exists and dest size is not zero,
 		 * then open it for reading and writing.
 		 */
 		else
-			out = fio_fopen(to_fullpath, PG_BINARY_R "+", FIO_DB_HOST);
+			out = fio_fopen(FIO_DB_HOST, to_fullpath, PG_BINARY_R "+");
 
 		if (out == NULL)
 			elog(ERROR, "Cannot open restore target file \"%s\": %s",
 				 to_fullpath, strerror(errno));
 
 		/* update file permission */
-		if (fio_chmod(to_fullpath, dest_file->mode, FIO_DB_HOST) == -1)
+		if (fio_chmod(FIO_DB_HOST, to_fullpath, dest_file->mode) == -1)
 			elog(ERROR, "Cannot change mode of \"%s\": %s", to_fullpath,
 				 strerror(errno));
 
@@ -1306,7 +1310,7 @@ done:
  * with given recovery target parameters
  */
 static void
-create_recovery_conf(time_t backup_id,
+create_recovery_conf(InstanceState *instanceState, time_t backup_id,
 					 pgRecoveryTarget *rt,
 					 pgBackup *backup,
 					 pgRestoreParams *params)
@@ -1353,16 +1357,16 @@ create_recovery_conf(time_t backup_id,
 	elog(LOG, "----------------------------------------");
 
 #if PG_VERSION_NUM >= 120000
-	update_recovery_options(backup, params, rt);
+	update_recovery_options(instanceState, backup, params, rt);
 #else
-	update_recovery_options_before_v12(backup, params, rt);
+	update_recovery_options_before_v12(instanceState, backup, params, rt);
 #endif
 }
 
 
-/* TODO get rid of using global variables: instance_config, backup_path, instance_name */
+/* TODO get rid of using global variables: instance_config */
 static void
-print_recovery_settings(FILE *fp, pgBackup *backup,
+print_recovery_settings(InstanceState *instanceState, FILE *fp, pgBackup *backup,
 							   pgRestoreParams *params, pgRecoveryTarget *rt)
 {
 	char restore_command_guc[16384];
@@ -1378,7 +1382,8 @@ print_recovery_settings(FILE *fp, pgBackup *backup,
 		sprintf(restore_command_guc, "\"%s\" archive-get -B \"%s\" --instance \"%s\" "
 				"--wal-file-path=%%p --wal-file-name=%%f",
 				PROGRAM_FULL_PATH ? PROGRAM_FULL_PATH : PROGRAM_NAME,
-				backup_path, instance_name);
+				/* TODO What is going on here? Why do we use catalog path as wal-file-path? */
+				instanceState->catalog_state->catalog_path, instanceState->instance_name);
 
 		/* append --remote-* parameters provided via --archive-* settings */
 		if (instance_config.archive.host)
@@ -1463,7 +1468,7 @@ print_standby_settings_common(FILE *fp, pgBackup *backup, pgRestoreParams *param
 
 #if PG_VERSION_NUM < 120000
 static void
-update_recovery_options_before_v12(pgBackup *backup,
+update_recovery_options_before_v12(InstanceState *instanceState, pgBackup *backup,
 								   pgRestoreParams *params, pgRecoveryTarget *rt)
 {
 	FILE	   *fp;
@@ -1480,21 +1485,21 @@ update_recovery_options_before_v12(pgBackup *backup,
 	}
 
 	elog(LOG, "update recovery settings in recovery.conf");
-	snprintf(path, lengthof(path), "%s/recovery.conf", instance_config.pgdata);
+	join_path_components(path, instance_config.pgdata, "recovery.conf");
 
-	fp = fio_fopen(path, "w", FIO_DB_HOST);
+	fp = fio_fopen(FIO_DB_HOST, path, "w");
 	if (fp == NULL)
 		elog(ERROR, "cannot open file \"%s\": %s", path,
 			strerror(errno));
 
-	if (fio_chmod(path, FILE_PERMISSION, FIO_DB_HOST) == -1)
+	if (fio_chmod(FIO_DB_HOST, path, FILE_PERMISSION) == -1)
 		elog(ERROR, "Cannot change mode of \"%s\": %s", path, strerror(errno));
 
 	fio_fprintf(fp, "# recovery.conf generated by pg_probackup %s\n",
 				PROGRAM_VERSION);
 
 	if (params->recovery_settings_mode == PITR_REQUESTED)
-		print_recovery_settings(fp, backup, params, rt);
+		print_recovery_settings(instanceState, fp, backup, params, rt);
 
 	if (params->restore_as_replica)
 	{
@@ -1516,7 +1521,7 @@ update_recovery_options_before_v12(pgBackup *backup,
  */
 #if PG_VERSION_NUM >= 120000
 static void
-update_recovery_options(pgBackup *backup,
+update_recovery_options(InstanceState *instanceState, pgBackup *backup,
 						pgRestoreParams *params, pgRecoveryTarget *rt)
 
 {
@@ -1537,10 +1542,9 @@ update_recovery_options(pgBackup *backup,
 
 	time2iso(current_time_str, lengthof(current_time_str), current_time, false);
 
-	snprintf(postgres_auto_path, lengthof(postgres_auto_path),
-				"%s/postgresql.auto.conf", instance_config.pgdata);
+	join_path_components(postgres_auto_path, instance_config.pgdata, "postgresql.auto.conf");
 
-	if (fio_stat(postgres_auto_path, &st, false, FIO_DB_HOST) < 0)
+	if (fio_stat(FIO_DB_HOST, postgres_auto_path, &st, false) < 0)
 	{
 		/* file not found is not an error case */
 		if (errno != ENOENT)
@@ -1552,13 +1556,13 @@ update_recovery_options(pgBackup *backup,
 	/* Kludge for 0-sized postgresql.auto.conf file. TODO: make something more intelligent */
 	if (st.st_size > 0)
 	{
-		fp = fio_open_stream(postgres_auto_path, FIO_DB_HOST);
+		fp = fio_open_stream(FIO_DB_HOST, postgres_auto_path);
 		if (fp == NULL)
 			elog(ERROR, "cannot open \"%s\": %s", postgres_auto_path, strerror(errno));
 	}
 
 	sprintf(postgres_auto_path_tmp, "%s.tmp", postgres_auto_path);
-	fp_tmp = fio_fopen(postgres_auto_path_tmp, "w", FIO_DB_HOST);
+	fp_tmp = fio_fopen(FIO_DB_HOST, postgres_auto_path_tmp, "w");
 	if (fp_tmp == NULL)
 		elog(ERROR, "cannot open \"%s\": %s", postgres_auto_path_tmp, strerror(errno));
 
@@ -1607,16 +1611,16 @@ update_recovery_options(pgBackup *backup,
 				strerror(errno));
 	pg_free(buf);
 
-	if (fio_rename(postgres_auto_path_tmp, postgres_auto_path, FIO_DB_HOST) < 0)
+	if (fio_rename(FIO_DB_HOST, postgres_auto_path_tmp, postgres_auto_path) < 0)
 		elog(ERROR, "Cannot rename file \"%s\" to \"%s\": %s",
 					postgres_auto_path_tmp, postgres_auto_path, strerror(errno));
 
-	if (fio_chmod(postgres_auto_path, FILE_PERMISSION, FIO_DB_HOST) == -1)
+	if (fio_chmod(FIO_DB_HOST, postgres_auto_path, FILE_PERMISSION) == -1)
 		elog(ERROR, "Cannot change mode of \"%s\": %s", postgres_auto_path, strerror(errno));
 
 	if (params)
 	{
-		fp = fio_fopen(postgres_auto_path, "a", FIO_DB_HOST);
+		fp = fio_fopen(FIO_DB_HOST, postgres_auto_path, "a");
 		if (fp == NULL)
 			elog(ERROR, "cannot open file \"%s\": %s", postgres_auto_path,
 				strerror(errno));
@@ -1625,7 +1629,7 @@ update_recovery_options(pgBackup *backup,
 				base36enc(backup->start_time), current_time_str);
 
 		if (params->recovery_settings_mode == PITR_REQUESTED)
-			print_recovery_settings(fp, backup, params, rt);
+			print_recovery_settings(instanceState, fp, backup, params, rt);
 
 		if (params->restore_as_replica)
 			print_standby_settings_common(fp, backup, params);
@@ -1648,9 +1652,9 @@ update_recovery_options(pgBackup *backup,
 		if (params->recovery_settings_mode == PITR_REQUESTED)
 		{
 			elog(LOG, "creating recovery.signal file");
-			snprintf(path, lengthof(path), "%s/recovery.signal", instance_config.pgdata);
+			join_path_components(path, instance_config.pgdata, "recovery.signal");
 
-			fp = fio_fopen(path, PG_BINARY_W, FIO_DB_HOST);
+			fp = fio_fopen(FIO_DB_HOST, path, PG_BINARY_W);
 			if (fp == NULL)
 				elog(ERROR, "cannot open file \"%s\": %s", path,
 					strerror(errno));
@@ -1664,9 +1668,9 @@ update_recovery_options(pgBackup *backup,
 		if (params->restore_as_replica)
 		{
 			elog(LOG, "creating standby.signal file");
-			snprintf(path, lengthof(path), "%s/standby.signal", instance_config.pgdata);
+			join_path_components(path, instance_config.pgdata, "standby.signal");
 
-			fp = fio_fopen(path, PG_BINARY_W, FIO_DB_HOST);
+			fp = fio_fopen(FIO_DB_HOST, path, PG_BINARY_W);
 			if (fp == NULL)
 				elog(ERROR, "cannot open file \"%s\": %s", path,
 					strerror(errno));
@@ -1817,18 +1821,22 @@ satisfy_recovery_target(const pgBackup *backup, const pgRecoveryTarget *rt)
 
 /* TODO description */
 bool
-satisfy_timeline(const parray *timelines, const pgBackup *backup)
+satisfy_timeline(const parray *timelines, TimeLineID tli, XLogRecPtr lsn)
 {
 	int			i;
 
+	elog(VERBOSE, "satisfy_timeline() checking: tli = %X, lsn = %X/%X",
+		tli, (uint32) (lsn >> 32), (uint32) lsn);
 	for (i = 0; i < parray_num(timelines); i++)
 	{
 		TimeLineHistoryEntry *timeline;
 
 		timeline = (TimeLineHistoryEntry *) parray_get(timelines, i);
-		if (backup->tli == timeline->tli &&
+		elog(VERBOSE, "satisfy_timeline() check %i entry: timeline->tli = %X, timeline->end = %X/%X",
+			i, timeline->tli, (uint32) (timeline->end >> 32), (uint32) timeline->end);
+		if (tli == timeline->tli &&
 			(XLogRecPtrIsInvalid(timeline->end) ||
-			 backup->stop_lsn <= timeline->end))
+			 lsn <= timeline->end))
 			return true;
 	}
 	return false;
@@ -2154,13 +2162,13 @@ check_incremental_compatibility(const char *pgdata, uint64 system_identifier,
 	char    backup_label[MAXPGPATH];
 
 	/* check postmaster pid */
-	pid = fio_check_postmaster(pgdata, FIO_DB_HOST);
+	pid = fio_check_postmaster(FIO_DB_HOST, pgdata);
 
 	if (pid == 1) /* postmaster.pid is mangled */
 	{
 		char pid_file[MAXPGPATH];
 
-		snprintf(pid_file, MAXPGPATH, "%s/postmaster.pid", pgdata);
+		join_path_components(pid_file, pgdata, "postmaster.pid");
 		elog(WARNING, "Pid file \"%s\" is mangled, cannot determine whether postmaster is running or not",
 			pid_file);
 		success = false;
@@ -2184,9 +2192,9 @@ check_incremental_compatibility(const char *pgdata, uint64 system_identifier,
 	 * data files content, because based on pg_control information we will
 	 * choose a backup suitable for lsn based incremental restore.
 	 */
-	elog(INFO, "Trying to read pg_control file in destination direstory");
+	elog(INFO, "Trying to read pg_control file in destination directory");
 
-	system_id_pgdata = get_system_identifier(pgdata);
+	system_id_pgdata = get_system_identifier(FIO_DB_HOST, pgdata, false);
 
 	if (system_id_pgdata == instance_config.system_identifier)
 		system_id_match = true;
@@ -2201,8 +2209,8 @@ check_incremental_compatibility(const char *pgdata, uint64 system_identifier,
 	 */
 	if (incremental_mode == INCR_LSN)
 	{
-		snprintf(backup_label, MAXPGPATH, "%s/backup_label", pgdata);
-		if (fio_access(backup_label, F_OK, FIO_DB_HOST) == 0)
+		join_path_components(backup_label, pgdata, "backup_label");
+		if (fio_access(FIO_DB_HOST, backup_label, F_OK) == 0)
 		{
 			elog(WARNING, "Destination directory contains \"backup_control\" file. "
 				"This does NOT mean that you should delete this file and retry, only that "

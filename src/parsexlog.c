@@ -5,7 +5,7 @@
  *
  * Portions Copyright (c) 1996-2016, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
- * Portions Copyright (c) 2015-2019, Postgres Professional
+ * Portions Copyright (c) 2015-2022, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */
@@ -385,7 +385,7 @@ validate_backup_wal_from_start_to_stop(pgBackup *backup,
 		 * If we don't have WAL between start_lsn and stop_lsn,
 		 * the backup is definitely corrupted. Update its status.
 		 */
-		write_backup_status(backup, BACKUP_STATUS_CORRUPT, instance_name, true);
+		write_backup_status(backup, BACKUP_STATUS_CORRUPT, true);
 
 		elog(WARNING, "There are not enough WAL records to consistenly restore "
 			"backup %s from START LSN: %X/%X to STOP LSN: %X/%X",
@@ -1017,7 +1017,7 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 
 		GetXLogFileName(xlogfname, reader_data->tli, reader_data->xlogsegno, wal_seg_size);
 
-		snprintf(reader_data->xlogpath, MAXPGPATH, "%s/%s", wal_archivedir, xlogfname);
+		join_path_components(reader_data->xlogpath, wal_archivedir, xlogfname);
 		snprintf(reader_data->gz_xlogpath, MAXPGPATH, "%s.gz", reader_data->xlogpath);
 
 		/* We fall back to using .partial segment in case if we are running
@@ -1040,8 +1040,8 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 				 reader_data->thread_num, reader_data->xlogpath);
 
 			reader_data->xlogexists = true;
-			reader_data->xlogfile = fio_open(reader_data->xlogpath,
-											 O_RDONLY | PG_BINARY, FIO_LOCAL_HOST);
+			reader_data->xlogfile = fio_open(FIO_LOCAL_HOST, reader_data->xlogpath,
+											 O_RDONLY | PG_BINARY);
 
 			if (reader_data->xlogfile < 0)
 			{
@@ -1059,8 +1059,8 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 				 reader_data->thread_num, reader_data->gz_xlogpath);
 
 			reader_data->xlogexists = true;
-			reader_data->gz_xlogfile = fio_gzopen(reader_data->gz_xlogpath,
-													  "rb", -1, FIO_LOCAL_HOST);
+			reader_data->gz_xlogfile = fio_gzopen(FIO_LOCAL_HOST, reader_data->gz_xlogpath,
+													  "rb", -1);
 			if (reader_data->gz_xlogfile == NULL)
 			{
 				elog(WARNING, "Thread [%d]: Could not open compressed WAL segment \"%s\": %s",
@@ -1796,6 +1796,18 @@ extractPageInfo(XLogReaderState *record, XLogReaderData *reader_data,
 		 * We can safely ignore these. When we compare the sizes later on,
 		 * we'll notice that they differ, and copy the missing tail from
 		 * source system.
+		 */
+	}
+	else if (rmid == RM_XACT_ID &&
+			 ((rminfo & XLOG_XACT_OPMASK) == XLOG_XACT_COMMIT ||
+			  (rminfo & XLOG_XACT_OPMASK) == XLOG_XACT_COMMIT_PREPARED ||
+			  (rminfo & XLOG_XACT_OPMASK) == XLOG_XACT_ABORT ||
+			  (rminfo & XLOG_XACT_OPMASK) == XLOG_XACT_ABORT_PREPARED))
+	{
+		/*
+		 * These records can include "dropped rels". We can safely ignore
+		 * them, we will see that they are missing and copy them from the
+		 * source.
 		 */
 	}
 	else if (info & XLR_SPECIAL_REL_UPDATE)

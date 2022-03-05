@@ -1,0 +1,49 @@
+# UBUNTU 18.04
+build/test_ubuntu_18.04_9.6:
+	$(call test_deb,ubuntu,18.04,bionic,9.6,9.6.24)
+	touch build/test_ubuntu_18.04_9.6
+
+build/test_ubuntu_18.04_10:
+	$(call test_deb,ubuntu,18.04,bionic,10,10.19)
+	touch build/test_ubuntu_18.04_10
+
+build/test_ubuntu_18.04_11:
+	$(call test_deb,ubuntu,18.04,bionic,11,11.14)
+	touch build/test_ubuntu_18.04_11
+
+build/test_ubuntu_18.04_12:
+	$(call test_deb,ubuntu,18.04,bionic,12,12.9)
+	touch build/test_ubuntu_18.04_12
+
+build/test_ubuntu_18.04_13:
+	$(call test_deb,ubuntu,18.04,bionic,13,13.5)
+	touch build/test_ubuntu_18.04_13
+
+build/test_ubuntu_18.04_14:
+	$(call test_deb,ubuntu,18.04,bionic,14,14.1)
+	touch build/test_ubuntu_18.04_14
+
+# UBUNTU 20.04
+build/test_ubuntu_20.04_9.6:
+	$(call test_deb,ubuntu,20.04,focal,9.6,9.6.24)
+	touch build/test_ubuntu_20.04_9.6
+
+build/test_ubuntu_20.04_10:
+	$(call test_deb,ubuntu,20.04,focal,10,10.19)
+	touch build/test_ubuntu_20.04_10
+
+build/test_ubuntu_20.04_11:
+	$(call test_deb,ubuntu,20.04,focal,11,11.14)
+	touch build/test_ubuntu_20.04_11
+
+build/test_ubuntu_20.04_12:
+	$(call test_deb,ubuntu,20.04,focal,12,12.9)
+	touch build/test_ubuntu_20.04_12
+
+build/test_ubuntu_20.04_13:
+	$(call test_deb,ubuntu,20.04,focal,13,13.5)
+	touch build/test_ubuntu_20.04_13
+
+build/test_ubuntu_20.04_14:
+	$(call test_deb,ubuntu,20.04,focal,14,14.1)
+	touch build/test_ubuntu_20.04_14

@@ -3,7 +3,16 @@
 #
 # Copyright (c) 2019-2020, Postgres Professional
 #
+set -xe
 
+sudo su -c 'mkdir /run/sshd'
+sudo su -c 'apt-get update -y'
+sudo su -c 'apt-get install openssh-client openssh-server -y'
+sudo su -c '/etc/init.d/ssh start'
+
+ssh-keygen -t rsa -f ~/.ssh/id_rsa -q -N ""
+cat ~/.ssh/id_rsa.pub > ~/.ssh/authorized_keys
+ssh-keyscan -H localhost >> ~/.ssh/known_hosts
 
 PG_SRC=$PWD/postgres
 
@@ -23,17 +32,37 @@ PG_SRC=$PWD/postgres
 echo "############### Getting Postgres sources:"
 git clone https://github.com/postgres/postgres.git -b $PG_BRANCH --depth=1
 
+# Clone ptrack
+if [ "$PTRACK_PATCH_PG_BRANCH" != "off" ]; then
+    git clone https://github.com/postgrespro/ptrack.git -b master --depth=1
+    export PG_PROBACKUP_PTRACK=on
+else
+    export PG_PROBACKUP_PTRACK=off
+fi
+
+
 # Compile and install Postgres
 echo "############### Compiling Postgres:"
 cd postgres # Go to postgres dir
-./configure --prefix=$PGHOME --enable-debug --enable-cassert --enable-depend --enable-tap-tests
+if [ "$PG_PROBACKUP_PTRACK" = "on" ]; then
+    git apply -3 ../ptrack/patches/${PTRACK_PATCH_PG_BRANCH}-ptrack-core.diff
+fi
+CFLAGS="-O0" ./configure --prefix=$PGHOME --enable-debug --enable-cassert --enable-depend --enable-tap-tests
 make -s -j$(nproc) install
+#make -s -j$(nproc) -C 'src/common' install
+#make -s -j$(nproc) -C 'src/port' install
+#make -s -j$(nproc) -C 'src/interfaces' install
 make -s -j$(nproc) -C contrib/ install
 
 # Override default Postgres instance
 export PATH=$PGHOME/bin:$PATH
 export LD_LIBRARY_PATH=$PGHOME/lib
 export PG_CONFIG=$(which pg_config)
+
+if [ "$PG_PROBACKUP_PTRACK" = "on" ]; then
+    echo "############### Compiling Ptrack:"
+    make USE_PGXS=1 -C ../ptrack install
+fi
 
 # Get amcheck if missing
 if [ ! -d "contrib/amcheck" ]; then
@@ -53,6 +82,12 @@ which pg_config
 echo "############### pg_config:"
 pg_config
 
+# Show kernel parameters
+echo "############### kernel params:"
+cat /proc/sys/kernel/yama/ptrace_scope
+sudo sysctl kernel.yama.ptrace_scope=0
+cat /proc/sys/kernel/yama/ptrace_scope
+
 # Build and install pg_probackup (using PG_CPPFLAGS and SHLIB_LINK for gcov)
 echo "############### Compiling and installing pg_probackup:"
 # make USE_PGXS=1 PG_CPPFLAGS="-coverage" SHLIB_LINK="-coverage" top_srcdir=$CUSTOM_PG_SRC install
@@ -60,17 +95,17 @@ make USE_PGXS=1 top_srcdir=$PG_SRC install
 
 # Setup python environment
 echo "############### Setting up python env:"
-python2 -m virtualenv pyenv
+python3 -m virtualenv pyenv
 source pyenv/bin/activate
-pip install testgres==1.8.2
+pip3 install testgres
 
 echo "############### Testing:"
 if [ "$MODE" = "basic" ]; then
     export PG_PROBACKUP_TEST_BASIC=ON
-    python -m unittest -v tests
-    python -m unittest -v tests.init
+    python3 -m unittest -v tests
+    python3 -m unittest -v tests.init
 else
-    python -m unittest -v tests.$MODE
+    python3 -m unittest -v tests.$MODE
 fi
 
 # Generate *.gcov files
