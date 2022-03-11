@@ -85,5 +85,5 @@ jobs:
           $Env:PG_PROBACKUP_PTRACK = "ON"
           $Env:PG_PROBACKUP_TEST_BASIC = "ON"
           $Env:LC_MESSAGES = "English"
-          python -m unittest -v tests.incr_restore.IncrRestoreTest.test_basic_incr_restore
+          python -m unittest -v tests.merge.MergeTest.test_basic_merge_full_page
 
