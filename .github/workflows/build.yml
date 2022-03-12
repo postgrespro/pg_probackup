@@ -85,5 +85,5 @@ jobs:
           $Env:PG_PROBACKUP_PTRACK = "ON"
           $Env:PG_PROBACKUP_TEST_BASIC = "ON"
           $Env:LC_MESSAGES = "English"
-          python -m unittest -v tests
+          python -m unittest -v tests.validate.ValidateTest.test_basic_validate_nullified_heap_page_backup
 
