@@ -1455,3 +1455,101 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         dst_pg.stop()
         #self.assertEqual(1, 0, 'Stop test')
         self.del_test_dir(module_name, self.fname)
+
+    def test_dry_run_catchup_full(self):
+        """
+        Test dry-run option for full catchup
+        """
+        # preparation 1: source
+        src_pg = self.make_simple_node(
+            base_dir = os.path.join(module_name, self.fname, 'src'),
+            set_replication = True,
+            pg_options = { 'wal_log_hints': 'on' }
+            )
+        src_pg.slow_start()
+        src_pg.safe_psql(
+            "postgres",
+            "CREATE TABLE ultimate_question(answer int)")
+
+        # preparation 2: make clean shutdowned lagging behind replica
+        dst_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'dst'))
+
+        # save the condition before dry-run
+        dst_before = dst_pg.data_dir
+
+        # do full catchup
+        self.catchup_node(
+            backup_mode = 'FULL',
+            source_pgdata = src_pg.data_dir,
+            destination_node = dst_pg,
+            options = ['-d', 'postgres', '-p', str(src_pg.port), '--stream', '--dry-run']
+            )
+
+        # compare data dirs before and after cathup
+        self.compare_pgdata(
+            self.pgdata_content(dst_before),
+            self.pgdata_content(dst_pg.data_dir)
+            )
+
+        # compare data dirs before and after cathup
+#        self.compare_pgdata(
+#            self.pgdata_content(dst_before),
+#            self.pgdata_content(dst_pg.data_dir)
+#            )
+
+        # Cleanup
+        src_pg.stop()
+
+    def test_dry_run_catchup_ptrack(self):
+        """
+        Test dry-run option for catchup in incremental mode
+        """
+        if not self.ptrack:
+            return unittest.skip('Skipped because ptrack support is disabled')
+
+        # preparation 1: source
+        src_pg = self.make_simple_node(
+            base_dir = os.path.join(module_name, self.fname, 'src'),
+            set_replication = True,
+            pg_options = { 'wal_log_hints': 'on' }
+            )
+        src_pg.slow_start()
+        src_pg.safe_psql(
+            "postgres",
+            "CREATE TABLE ultimate_question(answer int)")
+
+        # preparation 2: make clean shutdowned lagging behind replica
+        dst_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'dst'))
+        self.catchup_node(
+            backup_mode = 'FULL',
+            source_pgdata = src_pg.data_dir,
+            destination_node = dst_pg,
+            options = ['-d', 'postgres', '-p', str(src_pg.port), '--stream']
+            )
+        self.set_replica(src_pg, dst_pg)
+        dst_options = {}
+        dst_options['port'] = str(dst_pg.port)
+        self.set_auto_conf(dst_pg, dst_options)
+        dst_pg.slow_start(replica = True)
+        dst_pg.stop()
+
+        # save the condition before dry-run
+        dst_before = dst_pg.data_dir
+
+        # do incremental catchup
+        self.catchup_node(
+            backup_mode = 'PTRACK',
+            source_pgdata = src_pg.data_dir,
+            destination_node = dst_pg,
+            options = ['-d', 'postgres', '-p', str(src_pg.port), '--stream', '--dry-run']
+            )
+
+        # compare data dirs before and after cathup
+        self.compare_pgdata(
+            self.pgdata_content(dst_before),
+            self.pgdata_content(dst_pg.data_dir)
+            )
+
+        # Cleanup
+        src_pg.stop()
+
