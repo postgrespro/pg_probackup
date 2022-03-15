@@ -166,14 +166,16 @@ catchup_preflight_checks(PGNodeInfo *source_node_info, PGconn *source_conn,
 		source_id = get_system_identifier(source_pgdata, FIO_DB_HOST, false); /* same as instance_config.system_identifier */
 
 		if (source_conn_id != source_id)
-			elog(ERROR, "Database identifiers mismatch: we connected to DB id %lu, but in \"%s\" we found id %lu",
+			elog(ERROR, "Database identifiers mismatch: we %s connected to DB id %lu, but in \"%s\" we found id %lu",
+				dry_run? "can":"will",
 				source_conn_id, source_pgdata, source_id);
 
 		if (current.backup_mode != BACKUP_MODE_FULL)
 		{
 			dest_id = get_system_identifier(dest_pgdata, FIO_LOCAL_HOST, false);
 			if (source_conn_id != dest_id)
-			elog(ERROR, "Database identifiers mismatch: we connected to DB id %lu, but in \"%s\" we found id %lu",
+			elog(ERROR, "Database identifiers mismatch: we %s connected to DB id %lu, but in \"%s\" we found id %lu",
+				dry_run? "can":"will",
 				source_conn_id, dest_pgdata, dest_id);
 		}
 	}
@@ -706,9 +708,12 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 
 	/* Start stream replication */
 	join_path_components(dest_xlog_path, dest_pgdata, PG_XLOG_DIR);
-	fio_mkdir(dest_xlog_path, DIR_PERMISSION, FIO_LOCAL_HOST);
-	start_WAL_streaming(source_conn, dest_xlog_path, &instance_config.conn_opt,
-						current.start_lsn, current.tli, false);
+	if (!dry_run)
+	{
+		fio_mkdir(dest_xlog_path, DIR_PERMISSION, FIO_LOCAL_HOST);
+		start_WAL_streaming(source_conn, dest_xlog_path, &instance_config.conn_opt,
+										current.start_lsn, current.tli, false);
+	}
 
 	source_filelist = parray_new();
 
@@ -820,9 +825,9 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 			char		dirpath[MAXPGPATH];
 
 			join_path_components(dirpath, dest_pgdata, file->rel_path);
-
-			elog(VERBOSE, "Create directory '%s'", dirpath);
-			fio_mkdir(dirpath, DIR_PERMISSION, FIO_LOCAL_HOST);
+			elog(VERBOSE, "Directory '%s' %s be created", dirpath, dry_run? "can":"will");
+			if (!dry_run)
+				fio_mkdir(dirpath, DIR_PERMISSION, FIO_LOCAL_HOST);
 		}
 		else
 		{
@@ -850,18 +855,21 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 
 			join_path_components(to_path, dest_pgdata, file->rel_path);
 
-			elog(VERBOSE, "Create directory \"%s\" and symbolic link \"%s\"",
-					 linked_path, to_path);
+			elog(VERBOSE, "Directory \"%s\" and symbolic link \"%s\" %s be created",
+					 linked_path, to_path, dry_run? "can":"will");
 
-			/* create tablespace directory */
-			if (fio_mkdir(linked_path, file->mode, FIO_LOCAL_HOST) != 0)
-				elog(ERROR, "Could not create tablespace directory \"%s\": %s",
-					 linked_path, strerror(errno));
+			if (!dry_run)
+			{
+				/* create tablespace directory */
+				if (fio_mkdir(linked_path, file->mode, FIO_LOCAL_HOST) != 0)
+					elog(ERROR, "Could not create tablespace directory \"%s\": %s",
+						 linked_path, strerror(errno));
 
-			/* create link to linked_path */
-			if (fio_symlink(linked_path, to_path, true, FIO_LOCAL_HOST) < 0)
-				elog(ERROR, "Could not create symbolic link \"%s\" -> \"%s\": %s",
-					 linked_path, to_path, strerror(errno));
+				/* create link to linked_path */
+				if (fio_symlink(linked_path, to_path, true, FIO_LOCAL_HOST) < 0)
+					elog(ERROR, "Could not create symbolic link \"%s\" -> \"%s\": %s",
+						 linked_path, to_path, strerror(errno));
+			}
 		}
 	}
 
@@ -901,7 +909,7 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 	 */
 	if (current.backup_mode != BACKUP_MODE_FULL)
 	{
-		elog(INFO, "Removing redundant files in destination directory");
+		elog(INFO, "Redundant files %s in destination directory", dry_run ? "can" : "will");
 		parray_qsort(dest_filelist, pgFileCompareRelPathWithExternalDesc);
 		for (i = 0; i < parray_num(dest_filelist); i++)
 		{
@@ -930,11 +938,15 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 				char		fullpath[MAXPGPATH];
 
 				join_path_components(fullpath, dest_pgdata, file->rel_path);
-				fio_delete(file->mode, fullpath, FIO_LOCAL_HOST);
-				elog(VERBOSE, "Deleted file \"%s\"", fullpath);
+				if (!dry_run)
+				{
+					fio_delete(file->mode, fullpath, FIO_LOCAL_HOST);
+						elog(VERBOSE, "File \"%s\" %s deleted", fullpath, dry_run ? "can" : "will");
+				}
 
 				/* shrink dest pgdata list */
-				pgFileFree(file);
+				if (!dry_run)
+					pgFileFree(file);
 				parray_remove(dest_filelist, i);
 				i--;
 			}
@@ -951,17 +963,20 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 	if (dest_filelist)
 		parray_qsort(dest_filelist, pgFileCompareRelPathWithExternal);
 
-	/* run copy threads */
-	elog(INFO, "Start transferring data files");
-	time(&start_time);
-	transfered_datafiles_bytes = catchup_multithreaded_copy(num_threads, &source_node_info,
-		source_pgdata, dest_pgdata,
-		source_filelist, dest_filelist,
-		dest_redo.lsn, current.backup_mode);
-	catchup_isok = transfered_datafiles_bytes != -1;
+	if (!dry_run)
+	{
+		/* run copy threads */
+		elog(INFO, "Start transferring data files");
+		time(&start_time);
+		transfered_datafiles_bytes = catchup_multithreaded_copy(num_threads, &source_node_info,
+			source_pgdata, dest_pgdata,
+			source_filelist, dest_filelist,
+			dest_redo.lsn, current.backup_mode);
+		catchup_isok = transfered_datafiles_bytes != -1;
+	}
 
 	/* at last copy control file */
-	if (catchup_isok)
+	if (catchup_isok && !dry_run)
 	{
 		char	from_fullpath[MAXPGPATH];
 		char	to_fullpath[MAXPGPATH];
@@ -972,7 +987,7 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 		transfered_datafiles_bytes += source_pg_control_file->size;
 	}
 
-	if (!catchup_isok)
+	if (!catchup_isok && !dry_run)
 	{
 		char	pretty_time[20];
 		char	pretty_transfered_data_bytes[20];
@@ -1010,15 +1025,19 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 		pg_free(stop_backup_query_text);
 	}
 
-	wait_wal_and_calculate_stop_lsn(dest_xlog_path, stop_backup_result.lsn, &current);
+	if (!dry_run)
+		wait_wal_and_calculate_stop_lsn(dest_xlog_path, stop_backup_result.lsn, &current);
 
 #if PG_VERSION_NUM >= 90600
 	/* Write backup_label */
 	Assert(stop_backup_result.backup_label_content != NULL);
-	pg_stop_backup_write_file_helper(dest_pgdata, PG_BACKUP_LABEL_FILE, "backup label",
-		stop_backup_result.backup_label_content, stop_backup_result.backup_label_content_len,
-		NULL);
-	free(stop_backup_result.backup_label_content);
+	if (!dry_run)
+	{
+		pg_stop_backup_write_file_helper(dest_pgdata, PG_BACKUP_LABEL_FILE, "backup label",
+			stop_backup_result.backup_label_content, stop_backup_result.backup_label_content_len,
+			NULL);
+		free(stop_backup_result.backup_label_content);
+	}
 	stop_backup_result.backup_label_content = NULL;
 	stop_backup_result.backup_label_content_len = 0;
 
@@ -1040,6 +1059,7 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 #endif
 
 	/* wait for end of wal streaming and calculate wal size transfered */
+	if (!dry_run)
 	{
 		parray *wal_files_list = NULL;
 		wal_files_list = parray_new();
@@ -1081,7 +1101,8 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 		pretty_size(transfered_datafiles_bytes, pretty_transfered_data_bytes, lengthof(pretty_transfered_data_bytes));
 		pretty_size(transfered_walfiles_bytes, pretty_transfered_wal_bytes, lengthof(pretty_transfered_wal_bytes));
 
-		elog(INFO, "Databases synchronized. Transfered datafiles size: %s, transfered wal size: %s, time elapsed: %s",
+		elog(INFO, "Databases %s synchronized. Transfered datafiles size: %s, transfered wal size: %s, time elapsed: %s",
+			dry_run ? "can be" : "was",
 			pretty_transfered_data_bytes, pretty_transfered_wal_bytes, pretty_time);
 
 		if (current.backup_mode != BACKUP_MODE_FULL)
@@ -1091,13 +1112,17 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 	}
 
 	/* Sync all copied files unless '--no-sync' flag is used */
-	if (sync_dest_files)
-		catchup_sync_destination_files(dest_pgdata, FIO_LOCAL_HOST, source_filelist, source_pg_control_file);
-	else
-		elog(WARNING, "Files are not synced to disk");
+	if (!dry_run)
+	{
+		/* Sync all copied files unless '--no-sync' flag is used */
+		if (sync_dest_files)
+			catchup_sync_destination_files(dest_pgdata, FIO_LOCAL_HOST, source_filelist, source_pg_control_file);
+		else
+			elog(WARNING, "Files are not synced to disk");
+	}
 
 	/* Cleanup */
-	if (dest_filelist)
+	if (dest_filelist && !dry_run)
 	{
 		parray_walk(dest_filelist, pgFileFree);
 		parray_free(dest_filelist);
