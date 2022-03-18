@@ -178,6 +178,7 @@ pg_probackup - utility to manage backup/recovery of PostgreSQL database.
                  [--remote-proto] [--remote-host]
                  [--remote-port] [--remote-path] [--remote-user]
                  [--ssh-options]
+                 [--dry-run]
                  [--help]
 
 Read the website for details. <https://github.com/postgrespro/pg_probackup>
