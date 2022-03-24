@@ -164,7 +164,7 @@ doc/src/sgml/pgprobackup.sgml
    recovery of <productname>PostgreSQL</productname> database clusters.
    It is designed to perform periodic backups of the <productname>PostgreSQL</productname> 
    instance that enable you to restore the server in case of a failure.
-   <application>pg_probackup</application> supports PostgreSQL 9.5 or higher.
+   <application>pg_probackup</application> supports PostgreSQL 9.6 or higher.
   </para>
 
 <itemizedlist spacing="compact">
@@ -403,11 +403,6 @@ doc/src/sgml/pgprobackup.sgml
     <itemizedlist spacing="compact">
       <listitem>
         <para>
-          <application>pg_probackup</application> only supports PostgreSQL 9.5 and higher.
-        </para>
-      </listitem>
-      <listitem>
-        <para>
           The remote mode is not supported on Windows systems.
         </para>
       </listitem>
@@ -420,17 +415,6 @@ doc/src/sgml/pgprobackup.sgml
           by user <literal>postgres</literal>. To satisfy this requirement when taking backups in the
           <link linkend="pbk-remote-backup">remote mode</link> using SSH, you must set
           <option>--remote-user</option> option to <literal>postgres</literal>.
-        </para>
-      </listitem>
-      <listitem>
-        <para>
-          For <productname>PostgreSQL</productname> 9.5, functions
-          <function>pg_create_restore_point(text)</function> and
-          <function>pg_switch_xlog()</function> can be executed only if
-          the backup role is a superuser, so backup of a
-          cluster with low amount of WAL traffic by a non-superuser
-          role can take longer than the backup of the same cluster by
-          a superuser role.
         </para>
       </listitem>
       <listitem>
@@ -612,25 +596,6 @@ pg_probackup add-instance -B <replaceable>backup_dir</replaceable> -D <replaceab
       only in the database <emphasis role="strong">used for
       connection</emphasis> to the <productname>PostgreSQL</productname> server:
     </para>
-    <para>
-      For <productname>PostgreSQL</productname> 9.5:
-    </para>
-    <programlisting>
-BEGIN;
-CREATE ROLE backup WITH LOGIN;
-GRANT USAGE ON SCHEMA pg_catalog TO backup;
-GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup;
-GRANT EXECUTE ON FUNCTION pg_catalog.set_config(text, text, boolean) TO backup;
-GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup;
-GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean) TO backup;
-GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup() TO backup;
-GRANT EXECUTE ON FUNCTION pg_catalog.pg_create_restore_point(text) TO backup;
-GRANT EXECUTE ON FUNCTION pg_catalog.pg_switch_xlog() TO backup;
-GRANT EXECUTE ON FUNCTION pg_catalog.txid_current() TO backup;
-GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup;
-GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;
-COMMIT;
-</programlisting>
     <para>
       For <productname>PostgreSQL</productname> 9.6:
     </para>
