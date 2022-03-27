@@ -260,9 +260,8 @@ make_pagemap_from_ptrack_2(parray *files,
 	page_map_entry *dummy_map = NULL;
 
 	/* Receive all available ptrack bitmaps at once */
-	if (!dry_run)
-		filemaps = pg_ptrack_get_pagemapset(backup_conn, ptrack_schema,
-											ptrack_version_num, lsn);
+	filemaps = pg_ptrack_get_pagemapset(backup_conn, ptrack_schema,
+										ptrack_version_num, lsn);
 
 	if (filemaps != NULL)
 		parray_qsort(filemaps, pgFileMapComparePath);

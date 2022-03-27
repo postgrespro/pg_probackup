@@ -1475,7 +1475,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         dst_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'dst'))
 
         # save the condition before dry-run
-        dst_before = dst_pg.data_dir
+        content_before = self.pgdata_content(dst_pg.data_dir)
 
         # do full catchup
         self.catchup_node(
@@ -1487,15 +1487,9 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
 
         # compare data dirs before and after cathup
         self.compare_pgdata(
-            self.pgdata_content(dst_before),
+            content_before,
             self.pgdata_content(dst_pg.data_dir)
             )
-
-        # compare data dirs before and after cathup
-#        self.compare_pgdata(
-#            self.pgdata_content(dst_before),
-#            self.pgdata_content(dst_pg.data_dir)
-#            )
 
         # Cleanup
         src_pg.stop()
@@ -1534,7 +1528,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         dst_pg.stop()
 
         # save the condition before dry-run
-        dst_before = dst_pg.data_dir
+        content_before = self.pgdata_content(dst_pg.data_dir)
 
         # do incremental catchup
         self.catchup_node(
@@ -1546,7 +1540,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
 
         # compare data dirs before and after cathup
         self.compare_pgdata(
-            self.pgdata_content(dst_before),
+            content_before,
             self.pgdata_content(dst_pg.data_dir)
             )
 

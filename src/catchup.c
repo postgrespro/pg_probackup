@@ -511,14 +511,18 @@ catchup_multithreaded_copy(int num_threads,
 	threads = (pthread_t *) palloc(sizeof(pthread_t) * num_threads);
 	for (i = 0; i < num_threads; i++)
 	{
-		elog(VERBOSE, "Start thread num: %i", i);
-		pthread_create(&threads[i], NULL, &catchup_thread_runner, &(threads_args[i]));
+		if (!dry_run)
+		{
+			elog(VERBOSE, "Start thread num: %i", i);
+			pthread_create(&threads[i], NULL, &catchup_thread_runner, &(threads_args[i]));
+		}
 	}
 
 	/* Wait threads */
 	for (i = 0; i < num_threads; i++)
 	{
-		pthread_join(threads[i], NULL);
+		if (!dry_run)
+			pthread_join(threads[i], NULL);
 		all_threads_successful &= threads_args[i].completed;
 		transfered_bytes_result += threads_args[i].transfered_bytes;
 	}
@@ -714,6 +718,8 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 		start_WAL_streaming(source_conn, dest_xlog_path, &instance_config.conn_opt,
 										current.start_lsn, current.tli, false);
 	}
+	else
+		elog(INFO, "WAL streaming cannot be started with --dry-run option");
 
 	source_filelist = parray_new();
 
@@ -784,9 +790,9 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 
 		/* Build the page map from ptrack information */
 		make_pagemap_from_ptrack_2(source_filelist, source_conn,
-								   source_node_info.ptrack_schema,
-								   source_node_info.ptrack_version_num,
-								   dest_redo.lsn);
+									   source_node_info.ptrack_schema,
+									   source_node_info.ptrack_version_num,
+									   dest_redo.lsn);
 		time(&end_time);
 		elog(INFO, "Pagemap successfully extracted, time elapsed: %.0f sec",
 			 difftime(end_time, start_time));
@@ -909,7 +915,7 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 	 */
 	if (current.backup_mode != BACKUP_MODE_FULL)
 	{
-		elog(INFO, "Redundant files %s in destination directory", dry_run ? "can" : "will");
+		elog(INFO, "Redundant files in destination directory %s be removed", dry_run ? "can" : "will");
 		parray_qsort(dest_filelist, pgFileCompareRelPathWithExternalDesc);
 		for (i = 0; i < parray_num(dest_filelist); i++)
 		{
@@ -945,8 +951,7 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 				}
 
 				/* shrink dest pgdata list */
-				if (!dry_run)
-					pgFileFree(file);
+				pgFileFree(file);
 				parray_remove(dest_filelist, i);
 				i--;
 			}
@@ -963,17 +968,14 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 	if (dest_filelist)
 		parray_qsort(dest_filelist, pgFileCompareRelPathWithExternal);
 
-	if (!dry_run)
-	{
-		/* run copy threads */
-		elog(INFO, "Start transferring data files");
-		time(&start_time);
-		transfered_datafiles_bytes = catchup_multithreaded_copy(num_threads, &source_node_info,
-			source_pgdata, dest_pgdata,
-			source_filelist, dest_filelist,
-			dest_redo.lsn, current.backup_mode);
-		catchup_isok = transfered_datafiles_bytes != -1;
-	}
+	/* run copy threads */
+	elog(INFO, "Transferring data files %s started", dry_run ? "can be" : "");
+	time(&start_time);
+	transfered_datafiles_bytes = catchup_multithreaded_copy(num_threads, &source_node_info,
+		source_pgdata, dest_pgdata,
+		source_filelist, dest_filelist,
+		dest_redo.lsn, current.backup_mode);
+	catchup_isok = transfered_datafiles_bytes != -1;
 
 	/* at last copy control file */
 	if (catchup_isok && !dry_run)
@@ -1101,7 +1103,7 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 		pretty_size(transfered_datafiles_bytes, pretty_transfered_data_bytes, lengthof(pretty_transfered_data_bytes));
 		pretty_size(transfered_walfiles_bytes, pretty_transfered_wal_bytes, lengthof(pretty_transfered_wal_bytes));
 
-		elog(INFO, "Databases %s synchronized. Transfered datafiles size: %s, transfered wal size: %s, time elapsed: %s",
+		elog(INFO, "Databases %s synchronized. Transfered datafiles sizes: %s, transfered wal size: %s, time elapsed: %s",
 			dry_run ? "can be" : "was",
 			pretty_transfered_data_bytes, pretty_transfered_wal_bytes, pretty_time);
 
@@ -1112,14 +1114,10 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 	}
 
 	/* Sync all copied files unless '--no-sync' flag is used */
-	if (!dry_run)
-	{
-		/* Sync all copied files unless '--no-sync' flag is used */
-		if (sync_dest_files)
-			catchup_sync_destination_files(dest_pgdata, FIO_LOCAL_HOST, source_filelist, source_pg_control_file);
-		else
-			elog(WARNING, "Files are not synced to disk");
-	}
+	if (sync_dest_files && !dry_run)
+		catchup_sync_destination_files(dest_pgdata, FIO_LOCAL_HOST, source_filelist, source_pg_control_file);
+	else
+		elog(WARNING, "Files are not synced to disk");
 
 	/* Cleanup */
 	if (dest_filelist && !dry_run)
