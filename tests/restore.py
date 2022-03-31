@@ -17,6 +17,104 @@ module_name = 'restore'
 
 
 class RestoreTest(ProbackupTest, unittest.TestCase):
+    def test_two_backup_labels(self):
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'])
+
+        # initialize a node and a backup dir
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        print(1)
+        # populate it with some data
+        node.pgbench_init(scale=250)
+        pgbench = node.pgbench(
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        pgbench.wait()
+        pgbench.stdout.close()
+
+        # back it up (creating backup_label)
+        backup_id = self.backup_node(backup_dir, 'node', node, options=["--stream"])
+        print("backup_id: " + str(backup_id))
+        print("node first:", node.execute("postgres", "SELECT count(*) FROM pgbench_branches"))
+
+        print(2)
+        # perform the first restore
+        node.stop()
+        node.cleanup()
+        restore_res = self.restore_node(backup_dir, 'node', node, options=["-j", "4", "--stream"])
+        print(restore_res)
+        node.slow_start()
+
+        print(3)
+        # create replica
+        replica = self.make_simple_node(
+                    base_dir=os.path.join(module_name, fname, 'replica'))
+        replica.cleanup()
+
+        print(4)
+		# populate replica with the master backup data
+        self.restore_node(backup_dir, 'node', replica, options=["-j", "4", "--stream"])
+        # add some more data to master so it will be streamed to replica once they're bond
+        pgbench = node.pgbench(
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        pgbench.wait()
+        pgbench.stdout.close()
+        print("node second:", node.execute("postgres", "SELECT count(*) FROM pgbench_branches"))
+
+		# binding replica to master, awaiting the stream
+        self.add_instance(backup_dir, 'replica', replica)
+        self.set_replica(node, replica)
+        replica.slow_start(replica=True)
+        print("replica first:", replica.execute("postgres", "SELECT count(*) FROM pgbench_branches"))
+
+        print(5)
+        # create second backup on replica(backup_label => backup_label.old + new backup_label)
+        backup_id2 = self.backup_node(backup_dir, 'replica', replica, options=["--stream"])
+        print("backup_id2: " + str(backup_id2))
+
+		# stop replica immediately
+        replica.stop(["-m", "immediate", "-D", replica.data_dir])
+        replica.cleanup()
+
+        print(6)
+        # perform second restore
+        restore_res = self.restore_node(backup_dir, 'replica', replica, options=["-j", "4", "--stream", "-i", backup_id2])
+        print(restore_res)
+        replica.slow_start(replica=True)
+        print("replica second:", node.execute("postgres", "SELECT count(*) FROM pgbench_branches"))
+
+#        # 1 - Test recovery from latest
+#        self.assertIn(
+#            "INFO: Restore of backup {0} completed.".format(backup_id),
+#            self.restore_node(
+#                backup_dir, 'node', node, options=["-j", "4", "--stream"]),
+#            '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+#                repr(self.output), self.cmd))
+#
+#        # 2 - Test that recovery.conf was created
+#        # TODO update test
+#        if self.get_version(node) >= self.version_to_num('12.0'):
+#            recovery_conf = os.path.join(node.data_dir, 'postgresql.auto.conf')
+#            with open(recovery_conf, 'r') as f:
+#                print(f.read())
+#        else:
+#            recovery_conf = os.path.join(node.data_dir, 'recovery.conf')
+#        self.assertEqual(os.path.isfile(recovery_conf), True)
+#
+#        node.slow_start()
+#
+#        after = node.execute("postgres", "SELECT * FROM pgbench_branches")
+#        self.assertEqual(before, after)
+#
+#        # Clean after yourself
+#        self.del_test_dir(module_name, fname)
+
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure
