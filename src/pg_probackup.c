@@ -308,6 +308,7 @@ main(int argc, char *argv[])
 	init_config(&instance_config, instance_name);
 
 	PROGRAM_NAME = get_progname(argv[0]);
+	set_pglocale_pgservice(argv[0], PG_TEXTDOMAIN("pg_probackup"));
 	PROGRAM_FULL_PATH = palloc0(MAXPGPATH);
 
 	/* Get current time */

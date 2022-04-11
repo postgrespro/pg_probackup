@@ -267,9 +267,9 @@ help_pg_probackup(void)
 	{
 		printf("\n");
 		if (PROGRAM_URL)
-			printf("Read the website for details. <%s>\n", PROGRAM_URL);
+			printf(_("Read the website for details <%s>.\n"), PROGRAM_URL);
 		if (PROGRAM_EMAIL)
-			printf("Report bugs to <%s>.\n", PROGRAM_EMAIL);
+			printf(_("Report bugs to <%s>.\n"), PROGRAM_EMAIL);
 	}
 }
 
