@@ -2,7 +2,7 @@
  *
  * catchup.c: sync DB cluster
  *
- * Copyright (c) 2021, Postgres Professional
+ * Copyright (c) 2022, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */

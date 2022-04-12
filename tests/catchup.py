@@ -1456,6 +1456,9 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         #self.assertEqual(1, 0, 'Stop test')
         self.del_test_dir(module_name, self.fname)
 
+#########################################
+# --dry-run
+#########################################
     def test_dry_run_catchup_full(self):
         """
         Test dry-run option for full catchup
@@ -1485,7 +1488,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             options = ['-d', 'postgres', '-p', str(src_pg.port), '--stream', '--dry-run']
             )
 
-        # compare data dirs before and after cathup
+        # compare data dirs before and after catchup
         self.compare_pgdata(
             content_before,
             self.pgdata_content(dst_pg.data_dir)
