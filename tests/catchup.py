@@ -1466,21 +1466,16 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         # preparation 1: source
         src_pg = self.make_simple_node(
             base_dir = os.path.join(module_name, self.fname, 'src'),
-            set_replication = True,
-            pg_options = { 'wal_log_hints': 'on' }
+            set_replication = True
             )
         src_pg.slow_start()
 
         # preparation 2: make clean shutdowned lagging behind replica
         dst_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'dst'))
 
-        src_pg.safe_psql(
-            "postgres",
-            "CREATE TABLE ultimate_question(answer int)")
         src_pg.pgbench_init(scale = 10)
         pgbench = src_pg.pgbench(options=['-T', '10', '--no-vacuum'])
         pgbench.wait()
-        src_pg.safe_psql("postgres", "INSERT INTO ultimate_question VALUES(42)")
 
         # save the condition before dry-run
         content_before = self.pgdata_content(dst_pg.data_dir)
@@ -1501,30 +1496,25 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
 
         # Cleanup
         src_pg.stop()
-        dst_pg.stop()
         self.del_test_dir(module_name, self.fname)
 
     def test_dry_run_catchup_ptrack(self):
         """
         Test dry-run option for catchup in incremental ptrack mode
         """
-        if not self.ptrack:
-            return unittest.skip('Skipped because ptrack support is disabled')
-
-        # preparation 1: source
+         # preparation 1: source
         src_pg = self.make_simple_node(
             base_dir = os.path.join(module_name, self.fname, 'src'),
             set_replication = True,
-            pg_options = { 'wal_log_hints': 'on' }
+            ptrack_enable = True,
+            initdb_params = ['--data-checksums']
             )
         src_pg.slow_start()
-        src_pg.safe_psql(
-            "postgres",
-            "CREATE TABLE ultimate_question(answer int)")
+        src_pg.safe_psql("postgres", "CREATE EXTENSION ptrack")
+
         src_pg.pgbench_init(scale = 10)
         pgbench = src_pg.pgbench(options=['-T', '10', '--no-vacuum'])
         pgbench.wait()
-        src_pg.safe_psql("postgres", "INSERT INTO ultimate_question VALUES(42)")
 
         # preparation 2: make clean shutdowned lagging behind replica
         dst_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'dst'))
@@ -1560,7 +1550,6 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
 
         # Cleanup
         src_pg.stop()
-        dst_pg.stop()
         self.del_test_dir(module_name, self.fname)
 
     def test_dry_run_catchup_delta(self):
@@ -1572,18 +1561,16 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         src_pg = self.make_simple_node(
             base_dir = os.path.join(module_name, self.fname, 'src'),
             set_replication = True,
+            initdb_params = ['--data-checksums'],
             pg_options = { 'wal_log_hints': 'on' }
             )
         src_pg.slow_start()
-        src_pg.safe_psql(
-            "postgres",
-            "CREATE TABLE ultimate_question(answer int)")
+
         src_pg.pgbench_init(scale = 10)
         pgbench = src_pg.pgbench(options=['-T', '10', '--no-vacuum'])
         pgbench.wait()
-        src_pg.safe_psql("postgres", "INSERT INTO ultimate_question VALUES(42)")
 
-        # preparation 2: make clean shutdowned lagging behind replica
+         # preparation 2: make clean shutdowned lagging behind replica
         dst_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'dst'))
         self.catchup_node(
             backup_mode = 'FULL',
@@ -1601,12 +1588,12 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         # save the condition before dry-run
         content_before = self.pgdata_content(dst_pg.data_dir)
 
-        # do incremental catchup
+        # do delta catchup
         self.catchup_node(
             backup_mode = 'DELTA',
             source_pgdata = src_pg.data_dir,
             destination_node = dst_pg,
-            options = ['-d', 'postgres', '-p', str(src_pg.port), '--stream', '--dry-run']
+            options = ['-d', 'postgres', '-p', str(src_pg.port), '--stream', "--dry-run"]
             )
 
         # compare data dirs before and after cathup
@@ -1617,6 +1604,5 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
 
         # Cleanup
         src_pg.stop()
-        dst_pg.stop()
         self.del_test_dir(module_name, self.fname)
 
