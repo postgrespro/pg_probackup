@@ -1502,6 +1502,9 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         """
         Test dry-run option for catchup in incremental ptrack mode
         """
+        if not self.ptrack:
+            return unittest.skip('Skipped because ptrack support is disabled')
+
          # preparation 1: source
         src_pg = self.make_simple_node(
             base_dir = os.path.join(module_name, self.fname, 'src'),
