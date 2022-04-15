@@ -166,16 +166,14 @@ catchup_preflight_checks(PGNodeInfo *source_node_info, PGconn *source_conn,
 		source_id = get_system_identifier(source_pgdata, FIO_DB_HOST, false); /* same as instance_config.system_identifier */
 
 		if (source_conn_id != source_id)
-			elog(ERROR, "Database identifiers mismatch: we %s connected to DB id %lu, but in \"%s\" we found id %lu",
-				dry_run? "can":"will",
+			elog(ERROR, "Database identifiers mismatch: we connected to DB id %lu, but in \"%s\" we found id %lu",
 				source_conn_id, source_pgdata, source_id);
 
 		if (current.backup_mode != BACKUP_MODE_FULL)
 		{
 			dest_id = get_system_identifier(dest_pgdata, FIO_LOCAL_HOST, false);
 			if (source_conn_id != dest_id)
-			elog(ERROR, "Database identifiers mismatch: we %s connected to DB id %lu, but in \"%s\" we found id %lu",
-				dry_run? "can":"will",
+			elog(ERROR, "Database identifiers mismatch: we connected to DB id %lu, but in \"%s\" we found id %lu",
 				source_conn_id, dest_pgdata, dest_id);
 		}
 	}
@@ -831,7 +829,7 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 			char		dirpath[MAXPGPATH];
 
 			join_path_components(dirpath, dest_pgdata, file->rel_path);
-			elog(VERBOSE, "Directory '%s' %s be created", dirpath, dry_run? "can":"will");
+			elog(VERBOSE, "Create directory '%s'", dirpath);
 			if (!dry_run)
 				fio_mkdir(dirpath, DIR_PERMISSION, FIO_LOCAL_HOST);
 		}
@@ -861,8 +859,8 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 
 			join_path_components(to_path, dest_pgdata, file->rel_path);
 
-			elog(VERBOSE, "Directory \"%s\" and symbolic link \"%s\" %s be created",
-					 linked_path, to_path, dry_run? "can":"will");
+			elog(VERBOSE, "Create directory \"%s\" and symbolic link \"%s\"",
+					 linked_path, to_path);
 
 			if (!dry_run)
 			{
@@ -915,7 +913,7 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 	 */
 	if (current.backup_mode != BACKUP_MODE_FULL)
 	{
-		elog(INFO, "Redundant files in destination directory %s be removed", dry_run ? "can" : "will");
+		elog(INFO, "Removing redundant files in destination directory");
 		parray_qsort(dest_filelist, pgFileCompareRelPathWithExternalDesc);
 		for (i = 0; i < parray_num(dest_filelist); i++)
 		{
@@ -947,7 +945,7 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 				if (!dry_run)
 				{
 					fio_delete(file->mode, fullpath, FIO_LOCAL_HOST);
-						elog(VERBOSE, "File \"%s\" %s deleted", fullpath, dry_run ? "can" : "will");
+						elog(VERBOSE, "Deleted file \"%s\"", fullpath);
 				}
 
 				/* shrink dest pgdata list */
@@ -969,7 +967,7 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 		parray_qsort(dest_filelist, pgFileCompareRelPathWithExternal);
 
 	/* run copy threads */
-	elog(INFO, "Transferring data files %s started", dry_run ? "can be" : "");
+	elog(INFO, "Start transferring data files");
 	time(&start_time);
 	transfered_datafiles_bytes = catchup_multithreaded_copy(num_threads, &source_node_info,
 		source_pgdata, dest_pgdata,
@@ -1103,8 +1101,7 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 		pretty_size(transfered_datafiles_bytes, pretty_transfered_data_bytes, lengthof(pretty_transfered_data_bytes));
 		pretty_size(transfered_walfiles_bytes, pretty_transfered_wal_bytes, lengthof(pretty_transfered_wal_bytes));
 
-		elog(INFO, "Databases %s synchronized. Transfered datafiles sizes: %s, transfered wal size: %s, time elapsed: %s",
-			dry_run ? "can be" : "was",
+		elog(INFO, "Databases synchronized. Transfered datafiles size: %s, transfered wal size: %s, time elapsed: %s",
 			pretty_transfered_data_bytes, pretty_transfered_wal_bytes, pretty_time);
 
 		if (current.backup_mode != BACKUP_MODE_FULL)
