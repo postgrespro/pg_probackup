@@ -4314,6 +4314,8 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             "postgres",
             "CREATE EXTENSION ptrack")
 
+        ptrack_version = self.get_ptrack_version(node)
+
         # Create table
         node.safe_psql(
             "postgres",
@@ -4338,16 +4340,9 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         node.stop(['-m', 'immediate', '-D', node.data_dir])
 
         ptrack_map = os.path.join(node.data_dir, 'global', 'ptrack.map')
-        ptrack_map_mmap = os.path.join(node.data_dir, 'global', 'ptrack.map.mmap')
 
-        # Let`s do index corruption. ptrack.map, ptrack.map.mmap
+        # Let`s do index corruption. ptrack.map
         with open(ptrack_map, "rb+", 0) as f:
-            f.seek(42)
-            f.write(b"blablahblahs")
-            f.flush()
-            f.close
-
-        with open(ptrack_map_mmap, "rb+", 0) as f:
             f.seek(42)
             f.write(b"blablahblahs")
             f.flush()
@@ -4355,31 +4350,45 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
 #        os.remove(os.path.join(node.logs_dir, node.pg_log_name))
 
-        try:
+        if self.verbose:
+            print('Ptrack version:', ptrack_version)
+        if ptrack_version >= self.version_to_num("2.3"):
             node.slow_start()
-            # we should die here because exception is what we expect to happen
-            self.assertEqual(
-                1, 0,
-                "Expecting Error because ptrack.map is corrupted"
-                "\n Output: {0} \n CMD: {1}".format(
-                    repr(self.output), self.cmd))
-        except StartNodeException as e:
+
+            log_file = os.path.join(node.logs_dir, 'postgresql.log')
+            with open(log_file, 'r') as f:
+                log_content = f.read()
+
             self.assertIn(
-                'Cannot start node',
-                e.message,
-                '\n Unexpected Error Message: {0}\n'
-                ' CMD: {1}'.format(repr(e.message), self.cmd))
+                'WARNING:  ptrack read map: incorrect checksum of file "{0}"'.format(ptrack_map),
+                log_content)
 
-        log_file = os.path.join(node.logs_dir, 'postgresql.log')
-        with open(log_file, 'r') as f:
-            log_content = f.read()
+            node.stop(['-D', node.data_dir])
+        else:
+            try:
+                node.slow_start()
+                # we should die here because exception is what we expect to happen
+                self.assertEqual(
+                    1, 0,
+                    "Expecting Error because ptrack.map is corrupted"
+                    "\n Output: {0} \n CMD: {1}".format(
+                        repr(self.output), self.cmd))
+            except StartNodeException as e:
+                self.assertIn(
+                    'Cannot start node',
+                    e.message,
+                    '\n Unexpected Error Message: {0}\n'
+                    ' CMD: {1}'.format(repr(e.message), self.cmd))
 
-        self.assertIn(
-            'FATAL:  ptrack init: incorrect checksum of file "{0}"'.format(ptrack_map),
-            log_content)
+            log_file = os.path.join(node.logs_dir, 'postgresql.log')
+            with open(log_file, 'r') as f:
+                log_content = f.read()
+
+            self.assertIn(
+               'FATAL:  ptrack init: incorrect checksum of file "{0}"'.format(ptrack_map),
+                log_content)
 
         self.set_auto_conf(node, {'ptrack.map_size': '0'})
-
         node.slow_start()
 
         try:

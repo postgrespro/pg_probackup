@@ -340,7 +340,7 @@ typedef enum ShowFormat
 #define BYTES_INVALID		(-1) /* file didn`t changed since previous backup, DELTA backup do not rely on it */
 #define FILE_NOT_FOUND		(-2) /* file disappeared during backup */
 #define BLOCKNUM_INVALID	(-1)
-#define PROGRAM_VERSION	"2.5.4"
+#define PROGRAM_VERSION	"2.5.5"
 
 /* update when remote agent API or behaviour changes */
 #define AGENT_PROTOCOL_VERSION 20600
@@ -831,6 +831,7 @@ extern ShowFormat show_format;
 
 /* checkdb options */
 extern bool heapallindexed;
+extern bool checkunique;
 extern bool skip_block_validation;
 
 /* current settings */
