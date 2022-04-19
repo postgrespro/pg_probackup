@@ -2321,7 +2321,7 @@ copy_pages(const char *to_fullpath, const char *from_fullpath,
 		elog(ERROR, "Cannot seek to end of file position in destination file \"%s\": %s",
 			 to_fullpath, strerror(errno));
 	{
-		size_t pos = ftell(out);
+		long pos = ftell(out);
 
 		if (pos < 0)
 			elog(ERROR, "Cannot get position in destination file \"%s\": %s",
