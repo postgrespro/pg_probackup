@@ -80,10 +80,15 @@ jobs:
         run: |
           icacls.exe "${{ github.workspace }}" /grant "${env:USERNAME}:(OI)(CI)F"
           $env:PATH += ";${{ github.workspace }}\postgres\postgres_install\lib;${{ env.zlib_dir }}\lib"
+          $Env:LC_MESSAGES = "English"
           $Env:PG_CONFIG = "${{ github.workspace }}\postgres\postgres_install\bin\pg_config.exe"
           $Env:PGPROBACKUPBIN = "${{ github.workspace }}\postgres\Release\pg_probackup\pg_probackup.exe"
           $Env:PG_PROBACKUP_PTRACK = "ON"
-          $Env:PG_PROBACKUP_TEST_BASIC = "ON"
-          $Env:LC_MESSAGES = "English"
-          python -m unittest -v tests
+          If (!$Env:MODE -Or $Env:MODE -Eq "basic") {
+            $Env:PG_PROBACKUP_TEST_BASIC = "ON"
+            python -m unittest -v tests
+            python -m unittest -v tests.init
+          } else {
+            python -m unittest -v tests.$Env:MODE
+          }
 
