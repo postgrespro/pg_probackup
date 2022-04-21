@@ -2030,10 +2030,10 @@ get_page_header(FILE *in, const char *fullpath, BackupPageHeader* bph,
 			return false;		/* EOF found */
 		else if (read_len != 0 && feof(in))
 			elog(ERROR,
-				 "Odd size page found at offset %lu of \"%s\"",
+				 "Odd size page found at offset %ld of \"%s\"",
 				 ftello(in), fullpath);
 		else
-			elog(ERROR, "Cannot read header at offset %lu of \"%s\": %s",
+			elog(ERROR, "Cannot read header at offset %ld of \"%s\": %s",
 				 ftello(in), fullpath, strerror(errno));
 	}
 
