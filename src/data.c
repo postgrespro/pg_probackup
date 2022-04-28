@@ -301,6 +301,8 @@ prepare_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 	{
 		/* read the block */
 		int read_len = fio_pread(in, page, blknum * BLCKSZ);
+		/* avoid re-reading once buffered data, see PBCKP-150 */
+		fflush(in);
 
 		/* The block could have been truncated. It is fine. */
 		if (read_len == 0)
