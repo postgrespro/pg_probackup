@@ -507,9 +507,9 @@ catchup_multithreaded_copy(int num_threads,
 	/* Run threads */
 	thread_interrupted = false;
 	threads = (pthread_t *) palloc(sizeof(pthread_t) * num_threads);
-	for (i = 0; i < num_threads; i++)
+	if (!dry_run)
 	{
-		if (!dry_run)
+		for (i = 0; i < num_threads; i++)
 		{
 			elog(VERBOSE, "Start thread num: %i", i);
 			pthread_create(&threads[i], NULL, &catchup_thread_runner, &(threads_args[i]));
@@ -788,9 +788,9 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 
 		/* Build the page map from ptrack information */
 		make_pagemap_from_ptrack_2(source_filelist, source_conn,
-									   source_node_info.ptrack_schema,
-									   source_node_info.ptrack_version_num,
-									   dest_redo.lsn);
+									source_node_info.ptrack_schema,
+									source_node_info.ptrack_version_num,
+									dest_redo.lsn);
 		time(&end_time);
 		elog(INFO, "Pagemap successfully extracted, time elapsed: %.0f sec",
 			 difftime(end_time, start_time));
@@ -945,8 +945,8 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 				if (!dry_run)
 				{
 					fio_delete(file->mode, fullpath, FIO_LOCAL_HOST);
-						elog(VERBOSE, "Deleted file \"%s\"", fullpath);
 				}
+				elog(VERBOSE, "Deleted file \"%s\"", fullpath);
 
 				/* shrink dest pgdata list */
 				pgFileFree(file);
@@ -1036,8 +1036,8 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 		pg_stop_backup_write_file_helper(dest_pgdata, PG_BACKUP_LABEL_FILE, "backup label",
 			stop_backup_result.backup_label_content, stop_backup_result.backup_label_content_len,
 			NULL);
-		free(stop_backup_result.backup_label_content);
 	}
+	free(stop_backup_result.backup_label_content);
 	stop_backup_result.backup_label_content = NULL;
 	stop_backup_result.backup_label_content_len = 0;
 
@@ -1120,8 +1120,8 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 	if (dest_filelist && !dry_run)
 	{
 		parray_walk(dest_filelist, pgFileFree);
-		parray_free(dest_filelist);
 	}
+	parray_free(dest_filelist);
 	parray_walk(source_filelist, pgFileFree);
 	parray_free(source_filelist);
 	pgFileFree(source_pg_control_file);
