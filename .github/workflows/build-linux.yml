@@ -1,0 +1,42 @@
+name: Linux
+on:
+  push:
+    branches:
+      - "**"
+  pull_request:
+    branches:
+      - main
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+    inputs:
+      build_versions:
+        description: Build versions
+        default: 11, 12, 13, 14, 15
+      test_mode:
+        description: Test mode
+        default: basic
+jobs:
+  build:
+    name: ${{ format('pg_probackup ({0}, v{1})', 'ubuntu-22.04', matrix.pg_version) }}
+    strategy:
+      matrix:
+        pg_version: ${{ fromJSON(github.event.inputs.build_versions && format('[{0}]', github.event.inputs.build_versions) || '[11, 12, 13, 14, 15]') }}
+      fail-fast: false
+    runs-on:
+      - ubuntu-22.04
+    env:
+      PG_VERSION: ${{ matrix.pg_version }}
+      PG_BRANCH: ${{ matrix.pg_version == 16 && 'master' || format('REL_{0}_STABLE', matrix.pg_version) }}
+      PTRACK_PATCH_PG_BRANCH: ${{ matrix.pg_version == 16 && 'master' || format('REL_{0}_STABLE', matrix.pg_version) }}
+      PG_BASE: ${{ github.workspace }}/pgsql
+      PG_CONFIG: ${{ github.workspace }}/pgsql/bin/pg_config
+    steps:
+      - uses: actions/checkout@v2
+      - name: Install dependencies
+        run: sudo ci/install-deps.sh
+      - name: Build and install
+        run: ci/build-install.sh
+      - name: Test
+        run: ci/test.sh
+    continue-on-error: ${{ matrix.pg_version == 16 }}
+

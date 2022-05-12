@@ -1,5 +1,6 @@
+[![Linux](https://github.com/postgrespro/pg_probackup/actions/workflows/build-linux.yml/badge.svg)](https://github.com/postgrespro/pg_probackup/actions/workflows/build-linux.yml)
+[![Windows](https://github.com/postgrespro/pg_probackup/actions/workflows/build-windows.yml/badge.svg)](https://github.com/postgrespro/pg_probackup/actions/workflows/build-windows.yml)
 [![GitHub release](https://img.shields.io/github/v/release/postgrespro/pg_probackup?include_prereleases)](https://github.com/postgrespro/pg_probackup/releases/latest)
-[![Build Status](https://travis-ci.com/postgrespro/pg_probackup.svg?branch=master)](https://travis-ci.com/postgrespro/pg_probackup)
 
 # pg_probackup
 
