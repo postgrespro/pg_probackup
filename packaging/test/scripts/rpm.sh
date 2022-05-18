@@ -15,7 +15,16 @@ PG_TOG=$(echo $PG_VERSION | sed 's|\.||g')
 
 if [ ${DISTRIB} != 'rhel' -o ${DISTRIB_VERSION} != '7' ]; then
     # update of rpm package is broken in rhel-7 (26/12/2022)
-    yum update -y
+    #yum update -y
+    if [ ${DISTRIB} = 'centos' -a ${DISTRIB_VERSION} = '8' ]; then
+       sed -i 's|mirrorlist|#mirrorlist|g' /etc/yum.repos.d/CentOS-*.repo
+        sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/CentOS-*.repo
+    fi
+        yum update -y
+    if [ ${DISTRIB} = 'centos' -a ${DISTRIB_VERSION} = '8' ]; then
+        sed -i 's|mirrorlist|#mirrorlist|g' /etc/yum.repos.d/CentOS-*.repo
+        sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/CentOS-*.repo
+    fi
 fi
 # yum upgrade -y || echo 'some packages in docker failed to upgrade'
 # yum install -y sudo
