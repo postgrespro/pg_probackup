@@ -343,7 +343,6 @@ class ExcludeTest(ProbackupTest, unittest.TestCase):
 
         show_pb_page = self.show_pb(
             backup_dir, 'node', backup_id=backup_id_page)
-        show_archive = self.show_archive(backup_dir, 'node')
         self.assertTrue(show_pb_page["data-bytes"] < 1024*1024)
 
         # Clean after yourself
