@@ -717,7 +717,7 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 										current.start_lsn, current.tli, false);
 	}
 	else
-		elog(INFO, "WAL streaming cannot be started with --dry-run option");
+		elog(INFO, "WAL streaming skipping with --dry-run option");
 
 	source_filelist = parray_new();
 
