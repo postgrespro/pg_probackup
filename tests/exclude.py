@@ -262,6 +262,94 @@ class ExcludeTest(ProbackupTest, unittest.TestCase):
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
+    #TODO REVIEW time consuming test, but not more than 25 secs and 850M disk space :(
+    def test_exclude_unlogged_table_and_check_backup_size_unchanged(self):
+        """
+        - make backup on empty db, capture full backup stats
+        - fill unlogged table by 160M, capture "full" backup, check its size is almost the same as for empty one
+        - increase unlogged table by 160M again, check "delta" backup size increment is less than 1M
+        - increase unlogged table by 160M again, check "page" backup size increment is less than 1M
+        """
+
+        fname = self.id().split('.')[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                "shared_buffers": "10MB"})
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # init full backup and stats on empty db
+        backup_id_empty = self.backup_node(
+            backup_dir, 'node', node, backup_type="full",
+            return_id=True,
+            options=["-j", "4", "--stream"]
+        )
+
+        show_pb_empty = self.show_pb(
+            backup_dir, 'node', backup_id=backup_id_empty)  # ['recovery-time']
+
+        # fill unlogged table by 400M, ensure second "full" backup is almost the same size
+        node.safe_psql(
+            "postgres",
+            "create unlogged table t_logged as select i"
+            " as id from generate_series(0,4005000) i")
+
+        backup_id_full = self.backup_node(
+            backup_dir, 'node', node, backup_type="full",
+            return_id=True,
+            options=["-j", "4", "--stream"]
+        )
+
+        show_pb_full = self.show_pb(
+            backup_dir, 'node', backup_id=backup_id_full)
+
+        self.assertTrue(show_pb_full["data-bytes"] - show_pb_empty["data-bytes"] < 1024*1024)
+
+        # ensure "delta" backup skips 400M increment to unlogged table
+        node.safe_psql(
+            "postgres",
+            "insert into t_logged "
+            " select from generate_series(0,4005000)")
+
+        backup_id_delta = self.backup_node(
+            backup_dir, 'node', node, backup_type="delta",
+            return_id=True,
+            options=["-j", "4", "--stream"]
+        )
+
+        show_pb_delta = self.show_pb(
+            backup_dir, 'node', backup_id=backup_id_delta)
+
+        self.assertTrue(show_pb_delta["data-bytes"] < 1024*1024)
+
+        # ensure "page" backup skips 400M increment to unlogged table
+        node.safe_psql(
+            "postgres",
+            "insert into t_logged "
+            " select from generate_series(0,4005000)")
+
+        backup_id_page = self.backup_node(
+            backup_dir, 'node', node, backup_type="page",
+            return_id=True,
+            options=["-j", "4", "--stream"]
+        )
+
+        show_pb_page = self.show_pb(
+            backup_dir, 'node', backup_id=backup_id_page)
+        show_archive = self.show_archive(backup_dir, 'node')
+        self.assertTrue(show_pb_page["data-bytes"] < 1024*1024)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
     def test_exclude_log_dir(self):
         """
         check that by default 'log' and 'pg_log' directories are not backed up
