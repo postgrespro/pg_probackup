@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 #
-# Copyright (c) 2019-2020, Postgres Professional
+# Copyright (c) 2019-2022, Postgres Professional
 #
 set -xe
 
@@ -33,18 +33,18 @@ echo "############### Getting Postgres sources:"
 git clone https://github.com/postgres/postgres.git -b $PG_BRANCH --depth=1
 
 # Clone ptrack
-if [ "$PTRACK_PATCH_PG_BRANCH" != "off" ]; then
+if [ "$PTRACK_PATCH_PG_BRANCH" != "OFF" ]; then
     git clone https://github.com/postgrespro/ptrack.git -b master --depth=1
-    export PG_PROBACKUP_PTRACK=on
+    export PG_PROBACKUP_PTRACK=ON
 else
-    export PG_PROBACKUP_PTRACK=off
+    export PG_PROBACKUP_PTRACK=OFF
 fi
 
 
 # Compile and install Postgres
 echo "############### Compiling Postgres:"
 cd postgres # Go to postgres dir
-if [ "$PG_PROBACKUP_PTRACK" = "on" ]; then
+if [ "$PG_PROBACKUP_PTRACK" = "ON" ]; then
     git apply -3 ../ptrack/patches/${PTRACK_PATCH_PG_BRANCH}-ptrack-core.diff
 fi
 CFLAGS="-O0" ./configure --prefix=$PGHOME --enable-debug --enable-cassert --enable-depend --enable-tap-tests --enable-nls
@@ -59,7 +59,7 @@ export PATH=$PGHOME/bin:$PATH
 export LD_LIBRARY_PATH=$PGHOME/lib
 export PG_CONFIG=$(which pg_config)
 
-if [ "$PG_PROBACKUP_PTRACK" = "on" ]; then
+if [ "$PG_PROBACKUP_PTRACK" = "ON" ]; then
     echo "############### Compiling Ptrack:"
     make USE_PGXS=1 -C ../ptrack install
 fi

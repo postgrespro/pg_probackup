@@ -20,7 +20,15 @@ ulimit -n 1024
 
 if [ ${DISTRIB} = 'centos' ] ; then
 	sed -i 's|^baseurl=http://|baseurl=https://|g' /etc/yum.repos.d/*.repo
+	if [ ${DISTRIB_VERSION} = '8' ]; then
+		sed -i 's|mirrorlist|#mirrorlist|g' /etc/yum.repos.d/CentOS-*.repo
+		sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/CentOS-*.repo
+	fi
 	yum update -y
+	if [ ${DISTRIB_VERSION} = '8' ]; then
+		sed -i 's|mirrorlist|#mirrorlist|g' /etc/yum.repos.d/CentOS-*.repo
+		sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/CentOS-*.repo
+	fi
 fi
 
 # PACKAGES NEEDED
