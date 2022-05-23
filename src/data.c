@@ -2030,10 +2030,10 @@ get_page_header(FILE *in, const char *fullpath, BackupPageHeader* bph,
 			return false;		/* EOF found */
 		else if (read_len != 0 && feof(in))
 			elog(ERROR,
-				 "Odd size page found at offset %lu of \"%s\"",
+				 "Odd size page found at offset %ld of \"%s\"",
 				 ftello(in), fullpath);
 		else
-			elog(ERROR, "Cannot read header at offset %lu of \"%s\": %s",
+			elog(ERROR, "Cannot read header at offset %ld of \"%s\": %s",
 				 ftello(in), fullpath, strerror(errno));
 	}
 
@@ -2321,7 +2321,7 @@ copy_pages(const char *to_fullpath, const char *from_fullpath,
 		elog(ERROR, "Cannot seek to end of file position in destination file \"%s\": %s",
 			 to_fullpath, strerror(errno));
 	{
-		size_t pos = ftell(out);
+		long pos = ftell(out);
 
 		if (pos < 0)
 			elog(ERROR, "Cannot get position in destination file \"%s\": %s",
