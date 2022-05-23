@@ -1,5 +1,5 @@
 
-pg_probackup - utility to manage backup/recovery of PostgreSQL database.
+pg_probackup - утилита для управления резервным копированием/восстановлением базы данных PostgreSQL.
 
   pg_probackup help [COMMAND]
 
@@ -180,5 +180,5 @@ pg_probackup - utility to manage backup/recovery of PostgreSQL database.
                  [--ssh-options]
                  [--help]
 
-Read the website for details <https://github.com/postgrespro/pg_probackup>.
-Report bugs to <https://github.com/postgrespro/pg_probackup/issues>.
+Подробнее читайте на сайте <https://github.com/postgrespro/pg_probackup>.
+Сообщайте об ошибках в <https://github.com/postgrespro/pg_probackup/issues>.

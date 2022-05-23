@@ -31,7 +31,7 @@ Remote backup depends on key authentication to local machine via ssh as current 
  export PGPROBACKUP_SSH_REMOTE=ON
 
 Run tests that are relied on advanced debugging features. For this mode, pg_probackup should be compiled without optimizations. For example:
-CFLAGS="-O0" ./configure --prefix=/path/to/prefix --enable-debug --enable-cassert --enable-depend --enable-tap-tests
+CFLAGS="-O0" ./configure --prefix=/path/to/prefix --enable-debug --enable-cassert --enable-depend --enable-tap-tests --enable-nls
 
  export PGPROBACKUP_GDB=ON
 
