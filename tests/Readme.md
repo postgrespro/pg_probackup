@@ -41,6 +41,8 @@ Run suit of basic simple tests:
 Run ptrack tests:
  export PG_PROBACKUP_PTRACK=ON
 
+Run long (time consuming) tests:
+ export PG_PROBACKUP_LONG=ON
 
 Usage:
  sudo echo 0 > /proc/sys/kernel/yama/ptrace_scope

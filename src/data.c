@@ -349,6 +349,8 @@ prepare_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 					Assert(false);
 			}
 		}
+		/* avoid re-reading once buffered data, flushing on further attempts, see PBCKP-150 */
+		fflush(in);
 	}
 
 	/*
