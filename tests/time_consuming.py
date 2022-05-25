@@ -4,9 +4,9 @@ from .helpers.ptrack_helpers import ProbackupTest
 import subprocess
 from time import sleep
 
-module_name = 'pbckp150'
+module_name = 'time_consuming'
 
-class TestPageCorruptionDueToRace(ProbackupTest, unittest.TestCase):
+class TimeConsumingTests(ProbackupTest, unittest.TestCase):
     def test_pbckp150(self):
         """
         https://jira.postgrespro.ru/browse/PBCKP-150
