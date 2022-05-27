@@ -235,9 +235,9 @@ class ExcludeTest(ProbackupTest, unittest.TestCase):
                     'postgres',
                     'insert into test select generate_series(0,20050000)::text')
 
-            rel_path = node.safe_psql(
+            rel_path = node.execute(
                 'postgres',
-                "select pg_relation_filepath('test')").decode('utf-8').rstrip()
+                "select pg_relation_filepath('test')")[0][0]
 
             backup_id = self.backup_node(
                 backup_dir, 'node', node,
@@ -274,10 +274,11 @@ class ExcludeTest(ProbackupTest, unittest.TestCase):
             node.slow_start()
 
             self.assertEqual(
-                node.safe_psql(
+                node.execute(
                     'postgres',
-                    'select count(*) from test').decode('utf-8').rstrip(),
-                '0')
+                    # TODO REVIEW unfortunately this make auto conversion from string to int, it's weird for me
+                    'select count(*) from test')[0][0],
+                0)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
