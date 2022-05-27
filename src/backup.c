@@ -695,7 +695,7 @@ pgdata_basic_setup(ConnectionOptions conn_opt, PGNodeInfo *nodeInfo)
  */
 int
 do_backup(InstanceState *instanceState, pgSetBackupParams *set_backup_params,
-		  bool no_validate, bool no_sync, bool backup_logs)
+		  bool no_validate, bool no_sync, bool backup_logs, time_t start_time)
 {
 	PGconn		*backup_conn = NULL;
 	PGNodeInfo	nodeInfo;
@@ -710,7 +710,7 @@ do_backup(InstanceState *instanceState, pgSetBackupParams *set_backup_params,
 		current.external_dir_str = instance_config.external_dir_str;
 
 	/* Create backup directory and BACKUP_CONTROL_FILE */
-	pgBackupCreateDir(&current, instanceState->instance_backup_subdir_path);
+	pgBackupCreateDir(&current, instanceState, start_time);
 
 	if (!instance_config.pgdata)
 		elog(ERROR, "required parameter not specified: PGDATA "
