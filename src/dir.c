@@ -3,7 +3,7 @@
  * dir.c: directory operation utility.
  *
  * Portions Copyright (c) 2009-2013, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
- * Portions Copyright (c) 2015-2019, Postgres Professional
+ * Portions Copyright (c) 2015-2022, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */
@@ -1134,7 +1134,7 @@ create_data_directories(parray *dest_files, const char *data_dir, const char *ba
 
 					join_path_components(to_path, data_dir, dir->rel_path);
 
-					elog(VERBOSE, "Create directory \"%s\" and symbolic link \"%s\"",
+					elog(LOG, "Create directory \"%s\" and symbolic link \"%s\"",
 							 linked_path, to_path);
 
 					/* create tablespace directory */
@@ -1151,7 +1151,7 @@ create_data_directories(parray *dest_files, const char *data_dir, const char *ba
 		}
 
 		/* This is not symlink, create directory */
-		elog(VERBOSE, "Create directory \"%s\"", dir->rel_path);
+		elog(LOG, "Create directory \"%s\"", dir->rel_path);
 
 		join_path_components(to_path, data_dir, dir->rel_path);
 
@@ -1889,7 +1889,7 @@ cleanup_tablespace(const char *path)
 		join_path_components(fullpath, path, file->rel_path);
 
 		fio_delete(file->mode, fullpath, FIO_DB_HOST);
-		elog(VERBOSE, "Deleted file \"%s\"", fullpath);
+		elog(LOG, "Deleted file \"%s\"", fullpath);
 	}
 
 	parray_walk(files, pgFileFree);

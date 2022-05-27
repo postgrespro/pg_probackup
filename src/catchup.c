@@ -398,9 +398,8 @@ catchup_thread_runner(void *arg)
 		if (interrupted || thread_interrupted)
 			elog(ERROR, "Interrupted during catchup");
 
-		if (progress)
-			elog(INFO, "Progress: (%d/%d). Process file \"%s\"",
-				 i + 1, n_files, file->rel_path);
+		elog(progress ? INFO : LOG, "Progress: (%d/%d). Process file \"%s\"",
+			 i + 1, n_files, file->rel_path);
 
 		/* construct destination filepath */
 		Assert(file->external_dir_num == 0);

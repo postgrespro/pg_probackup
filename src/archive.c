@@ -3,7 +3,7 @@
  * archive.c: -  pg_probackup specific archive commands for archive backups.
  *
  *
- * Portions Copyright (c) 2018-2021, Postgres Professional
+ * Portions Copyright (c) 2018-2022, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */
@@ -361,7 +361,7 @@ push_file(WALSegno *xlogfile, const char *archive_status_dir,
 		canonicalize_path(wal_file_ready);
 		canonicalize_path(wal_file_done);
 		/* It is ok to rename status file in archive_status directory */
-		elog(VERBOSE, "Rename \"%s\" to \"%s\"", wal_file_ready, wal_file_done);
+		elog(LOG, "Rename \"%s\" to \"%s\"", wal_file_ready, wal_file_done);
 
 		/* do not error out, if rename failed */
 		if (fio_rename(wal_file_ready, wal_file_done, FIO_DB_HOST) < 0)
@@ -505,7 +505,7 @@ push_file_internal_uncompressed(const char *wal_file_name, const char *pg_xlog_d
 	}
 
 part_opened:
-	elog(VERBOSE, "Temp WAL file successfully created: \"%s\"", to_fullpath_part);
+	elog(LOG, "Temp WAL file successfully created: \"%s\"", to_fullpath_part);
 	/* Check if possible to skip copying */
 	if (fileExists(to_fullpath, FIO_BACKUP_HOST))
 	{
@@ -595,7 +595,7 @@ part_opened:
 						to_fullpath_part, strerror(errno));
 	}
 
-	elog(VERBOSE, "Rename \"%s\" to \"%s\"", to_fullpath_part, to_fullpath);
+	elog(LOG, "Rename \"%s\" to \"%s\"", to_fullpath_part, to_fullpath);
 
 	//copy_file_attributes(from_path, FIO_DB_HOST, to_path_temp, FIO_BACKUP_HOST, true);
 
@@ -752,7 +752,7 @@ push_file_internal_gz(const char *wal_file_name, const char *pg_xlog_dir,
 	}
 
 part_opened:
-	elog(VERBOSE, "Temp WAL file successfully created: \"%s\"", to_fullpath_gz_part);
+	elog(LOG, "Temp WAL file successfully created: \"%s\"", to_fullpath_gz_part);
 	/* Check if possible to skip copying,
 	 */
 	if (fileExists(to_fullpath_gz, FIO_BACKUP_HOST))
@@ -844,7 +844,7 @@ part_opened:
 					to_fullpath_gz_part, strerror(errno));
 	}
 
-	elog(VERBOSE, "Rename \"%s\" to \"%s\"",
+	elog(LOG, "Rename \"%s\" to \"%s\"",
 			to_fullpath_gz_part, to_fullpath_gz);
 
 	//copy_file_attributes(from_path, FIO_DB_HOST, to_path_temp, FIO_BACKUP_HOST, true);
@@ -1155,7 +1155,7 @@ do_archive_get(InstanceState *instanceState, InstanceConfig *instance, const cha
 		if (get_wal_file(wal_file_name, backup_wal_file_path, absolute_wal_file_path, false))
 		{
 			fail_count = 0;
-			elog(INFO, "pg_probackup archive-get copied WAL file %s", wal_file_name);
+			elog(LOG, "pg_probackup archive-get copied WAL file %s", wal_file_name);
 			n_fetched++;
 			break;
 		}
@@ -1511,7 +1511,7 @@ get_wal_file_internal(const char *from_path, const char *to_path, FILE *out,
 	char    *buf = pgut_malloc(OUT_BUF_SIZE); /* 1MB buffer */
 	int      exit_code = 0;
 
-	elog(VERBOSE, "Attempting to %s WAL file '%s'",
+	elog(LOG, "Attempting to %s WAL file '%s'",
 			is_decompress ? "open compressed" : "open", from_path);
 
 	/* open source file for read */

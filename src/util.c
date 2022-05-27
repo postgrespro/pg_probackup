@@ -3,7 +3,7 @@
  * util.c: log messages to log file or stderr, and misc code.
  *
  * Portions Copyright (c) 2009-2011, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
- * Portions Copyright (c) 2015-2019, Postgres Professional
+ * Portions Copyright (c) 2015-2021, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */
@@ -589,7 +589,7 @@ datapagemap_print_debug(datapagemap_t *map)
 
 	iter = datapagemap_iterate(map);
 	while (datapagemap_next(iter, &blocknum))
-		elog(INFO, "  block %u", blocknum);
+		elog(VERBOSE, "  block %u", blocknum);
 
 	pg_free(iter);
 }
