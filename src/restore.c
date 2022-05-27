@@ -1562,6 +1562,7 @@ update_recovery_options(InstanceState *instanceState, pgBackup *backup,
 	if (fp_tmp == NULL)
 		elog(ERROR, "cannot open \"%s\": %s", postgres_auto_path_tmp, strerror(errno));
 
+	// GREPME_PBCKP-180_CONFIG
 	while (fp && fgets(line, lengthof(line), fp))
 	{
 		/* ignore "include 'probackup_recovery.conf'" directive */
@@ -1706,6 +1707,7 @@ read_timeline_history(const char *arclog_path, TimeLineID targetTLI, bool strict
 	/* Timeline 1 does not have a history file */
 	if (targetTLI != 1)
 	{
+		// GREPME_PBCKP-180_WAL
 		fd = fopen(path, "rt");
 		if (fd == NULL)
 		{
@@ -1727,6 +1729,7 @@ read_timeline_history(const char *arclog_path, TimeLineID targetTLI, bool strict
 	/*
 	 * Parse the file...
 	 */
+	// GREPME_PBCKP-180_WAL
 	while (fd && fgets(fline, sizeof(fline), fd) != NULL)
 	{
 		char	   *ptr;
@@ -1775,6 +1778,7 @@ read_timeline_history(const char *arclog_path, TimeLineID targetTLI, bool strict
 	if (fd && (ferror(fd)))
 			elog(ERROR, "Failed to read from file: \"%s\"", path);
 
+	// GREPME_PBCKP-180_WAL
 	if (fd)
 		fclose(fd);
 

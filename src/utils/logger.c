@@ -308,10 +308,12 @@ elog_internal(int elevel, bool file_only, const char *message)
 		if (log_file == NULL)
 			open_logfile(&log_file, logger_config.log_filename ? logger_config.log_filename : LOG_FILENAME_DEFAULT);
 
+		// GREPME_PBCKP-180_LOG
 		fprintf(log_file, "%s ", strfbuf);
 		fprintf(log_file, "%s ", str_pid);
 		write_elevel(log_file, elevel);
 
+		// GREPME_PBCKP-180_LOG
 		fprintf(log_file, "%s\n", message);
 		fflush(log_file);
 	}
@@ -326,10 +328,12 @@ elog_internal(int elevel, bool file_only, const char *message)
 		if (error_log_file == NULL)
 			open_logfile(&error_log_file, logger_config.error_log_filename);
 
+		// GREPME_PBCKP-180_LOG
 		fprintf(error_log_file, "%s ", strfbuf);
 		fprintf(error_log_file, "%s ", str_pid);
 		write_elevel(error_log_file, elevel);
 
+		// GREPME_PBCKP-180_LOG
 		fprintf(error_log_file, "%s\n", message);
 		fflush(error_log_file);
 	}
@@ -643,8 +647,10 @@ logfile_open(const char *filename, const char *mode)
 	/*
 	 * Create log directory if not present; ignore errors
 	 */
+	// GREPME_PBCKP-180_LOG
 	mkdir(logger_config.log_directory, S_IRWXU);
 
+	// GREPME_PBCKP-180_LOG
 	fh = fopen(filename, mode);
 
 	if (fh)
@@ -681,6 +687,7 @@ open_logfile(FILE **file, const char *filename_format)
 	/* "log_directory" was checked in logfile_getname() */
 	snprintf(control, MAXPGPATH, "%s.rotation", filename);
 
+	// GREPME_PBCKP-180_LOG
 	if (stat(filename, &st) == -1)
 	{
 		if (errno == ENOENT)
@@ -704,6 +711,7 @@ open_logfile(FILE **file, const char *filename_format)
 		{
 			struct stat	control_st;
 
+			// GREPME_PBCKP-180_LOG
 			if (stat(control, &control_st) < 0)
 			{
 				if (errno == ENOENT)
@@ -719,6 +727,7 @@ open_logfile(FILE **file, const char *filename_format)
 				/* rotation file exists */
 				char		buf[1024];
 
+				// GREPME_PBCKP-180_LOG
 				control_file = fopen(control, "r");
 				if (control_file == NULL)
 					elog_stderr(ERROR, "cannot open rotation file \"%s\": %s",
@@ -726,6 +735,7 @@ open_logfile(FILE **file, const char *filename_format)
 
 				rotation_file_exists = true;
 
+				// GREPME_PBCKP-180_LOG
 				if (fgets(buf, lengthof(buf), control_file))
 				{
 					time_t		creation_time;
@@ -754,6 +764,7 @@ open_logfile(FILE **file, const char *filename_format)
 					rotation_file_exists = false;
 				}
 
+				// GREPME_PBCKP-180_LOG
 				fclose(control_file);
 			}
 		}
@@ -777,13 +788,16 @@ logfile_open:
 	{
 		time_t		timestamp = time(NULL);
 
+		// GREPME_PBCKP-180_LOG
 		control_file = fopen(control, "w");
 		if (control_file == NULL)
 			elog_stderr(ERROR, "cannot open rotation file \"%s\": %s",
 						control, strerror(errno));
 
+		// GREPME_PBCKP-180_LOG
 		fprintf(control_file, "%ld", timestamp);
 
+		// GREPME_PBCKP-180_LOG
 		fclose(control_file);
 	}
 

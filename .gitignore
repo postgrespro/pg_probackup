@@ -63,3 +63,5 @@
 # Misc
 .python-version
 .vscode
+src/tags
+tags

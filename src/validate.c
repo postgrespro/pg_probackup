@@ -296,6 +296,7 @@ pgBackupValidateFiles(void *arg)
 			join_path_components(file_fullpath, arguments->base_path, file->rel_path);
 
 		/* TODO: it is redundant to check file existence using stat */
+		// GREPME_PBCKP-180_LOCAL_DATA
 		if (stat(file_fullpath, &st) == -1)
 		{
 			if (errno == ENOENT)
@@ -392,11 +393,13 @@ do_validate_all(CatalogState *catalogState, InstanceState *instanceState)
 		struct dirent *dent;
 
 		/* open directory and list contents */
+		// GREPME_PBCKP-180_LOCAL_DATA
 		dir = opendir(catalogState->backup_subdir_path);
 		if (dir == NULL)
 			elog(ERROR, "cannot open directory \"%s\": %s", catalogState->backup_subdir_path, strerror(errno));
 
 		errno = 0;
+		// GREPME_PBCKP-180_LOCAL_DATA
 		while ((dent = readdir(dir)))
 		{
 			char		child[MAXPGPATH];
@@ -411,6 +414,7 @@ do_validate_all(CatalogState *catalogState, InstanceState *instanceState)
 
 			join_path_components(child, catalogState->backup_subdir_path, dent->d_name);
 
+			// GREPME_PBCKP-180_LOCAL_DATA
 			if (lstat(child, &st) == -1)
 				elog(ERROR, "cannot stat file \"%s\": %s", child, strerror(errno));
 

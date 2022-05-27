@@ -353,6 +353,7 @@ grab_excl_lock_file(const char *root_dir, const char *backup_id, bool strict)
 		 * here: file might have been deleted since we tried to create it.
 		 */
 
+		// GREPME_PBCKP-180_LOCK
 		fp_out = fopen(lock_file, "r");
 		if (fp_out == NULL)
 		{
@@ -361,6 +362,7 @@ grab_excl_lock_file(const char *root_dir, const char *backup_id, bool strict)
 			elog(ERROR, "Cannot open lock file \"%s\": %s", lock_file, strerror(errno));
 		}
 
+		// GREPME_PBCKP-180_LOCK
 		len = fread(buffer, 1, sizeof(buffer) - 1, fp_out);
 		if (ferror(fp_out))
 			elog(ERROR, "Cannot read from lock file: \"%s\"", lock_file);
@@ -542,11 +544,13 @@ wait_shared_owners(pgBackup *backup)
 
     join_path_components(lock_file, backup->root_dir, BACKUP_RO_LOCK_FILE);
 
+	// GREPME_PBCKP-180_LOCK
     fp = fopen(lock_file, "r");
     if (fp == NULL && errno != ENOENT)
         elog(ERROR, "Cannot open lock file \"%s\": %s", lock_file, strerror(errno));
 
     /* iterate over pids in lock file */
+	// GREPME_PBCKP-180_LOCK
     while (fp && fgets(buffer, sizeof(buffer), fp))
     {
         encoded_pid = atoi(buffer);
@@ -597,6 +601,7 @@ wait_shared_owners(pgBackup *backup)
     if (fp && ferror(fp))
         elog(ERROR, "Cannot read from lock file: \"%s\"", lock_file);
 
+	// GREPME_PBCKP-180_LOCK
     if (fp)
         fclose(fp);
 
@@ -635,11 +640,13 @@ grab_shared_lock_file(pgBackup *backup)
 	snprintf(lock_file_tmp, MAXPGPATH, "%s%s", lock_file, "tmp");
 
 	/* open already existing lock files */
+	// GREPME_PBCKP-180_LOCK
 	fp_in = fopen(lock_file, "r");
 	if (fp_in == NULL && errno != ENOENT)
 		elog(ERROR, "Cannot open lock file \"%s\": %s", lock_file, strerror(errno));
 
 	/* read PIDs of owners */
+	// GREPME_PBCKP-180_LOCK
 	while (fp_in && fgets(buf_in, sizeof(buf_in), fp_in))
 	{
 		encoded_pid = atoi(buf_in);
@@ -669,9 +676,11 @@ grab_shared_lock_file(pgBackup *backup)
 	{
 		if (ferror(fp_in))
 			elog(ERROR, "Cannot read from lock file: \"%s\"", lock_file);
+		// GREPME_PBCKP-180_LOCK
 		fclose(fp_in);
 	}
 
+	// GREPME_PBCKP-180_LOCK
 	fp_out = fopen(lock_file_tmp, "w");
 	if (fp_out == NULL)
 	{
@@ -685,14 +694,17 @@ grab_shared_lock_file(pgBackup *backup)
 	buffer_len += snprintf(buffer+buffer_len, sizeof(buffer), "%u\n", my_pid);
 
 	/* write out the collected PIDs to temp lock file */
+	// GREPME_PBCKP-180_LOCK
 	fwrite(buffer, 1, buffer_len, fp_out);
 
 	if (ferror(fp_out))
 		elog(ERROR, "Cannot write to lock file: \"%s\"", lock_file_tmp);
 
+	// GREPME_PBCKP-180_LOCK
 	if (fclose(fp_out) != 0)
 		elog(ERROR, "Cannot close temp lock file \"%s\": %s", lock_file_tmp, strerror(errno));
 
+	// GREPME_PBCKP-180_LOCK
 	if (rename(lock_file_tmp, lock_file) < 0)
 		elog(ERROR, "Cannot rename file \"%s\" to \"%s\": %s",
 			lock_file_tmp, lock_file, strerror(errno));
@@ -748,6 +760,7 @@ release_shared_lock_file(const char *backup_dir)
 	snprintf(lock_file_tmp, MAXPGPATH, "%s%s", lock_file, "tmp");
 
 	/* open lock file */
+	// GREPME_PBCKP-180_LOCK
 	fp_in = fopen(lock_file, "r");
 	if (fp_in == NULL)
 	{
@@ -758,6 +771,7 @@ release_shared_lock_file(const char *backup_dir)
 	}
 
 	/* read PIDs of owners */
+	// GREPME_PBCKP-180_LOCK
 	while (fgets(buf_in, sizeof(buf_in), fp_in))
 	{
 		encoded_pid = atoi(buf_in);
@@ -787,6 +801,7 @@ release_shared_lock_file(const char *backup_dir)
 
 	if (ferror(fp_in))
 		elog(ERROR, "Cannot read from lock file: \"%s\"", lock_file);
+	// GREPME_PBCKP-180_LOCK
 	fclose(fp_in);
 
 	/* if there is no active pid left, then there is nothing to do */
@@ -796,19 +811,23 @@ release_shared_lock_file(const char *backup_dir)
 		return;
 	}
 
+	// GREPME_PBCKP-180_LOCK
 	fp_out = fopen(lock_file_tmp, "w");
 	if (fp_out == NULL)
 		elog(ERROR, "Cannot open temp lock file \"%s\": %s", lock_file_tmp, strerror(errno));
 
 	/* write out the collected PIDs to temp lock file */
+	// GREPME_PBCKP-180_LOCK
 	fwrite(buffer, 1, buffer_len, fp_out);
 
 	if (ferror(fp_out))
 		elog(ERROR, "Cannot write to lock file: \"%s\"", lock_file_tmp);
 
+	// GREPME_PBCKP-180_LOCK
 	if (fclose(fp_out) != 0)
 		elog(ERROR, "Cannot close temp lock file \"%s\": %s", lock_file_tmp, strerror(errno));
 
+	// GREPME_PBCKP-180_LOCK
 	if (rename(lock_file_tmp, lock_file) < 0)
 		elog(ERROR, "Cannot rename file \"%s\" to \"%s\": %s",
 			lock_file_tmp, lock_file, strerror(errno));
@@ -864,6 +883,7 @@ catalog_get_instance_list(CatalogState *catalogState)
 	instances = parray_new();
 
 	/* open directory and list contents */
+	// GREPME_PBCKP-180_LOCAL_DATA
 	dir = opendir(catalogState->backup_subdir_path);
 	if (dir == NULL)
 		elog(ERROR, "Cannot open directory \"%s\": %s",
@@ -882,6 +902,7 @@ catalog_get_instance_list(CatalogState *catalogState)
 
 		join_path_components(child, catalogState->backup_subdir_path, dent->d_name);
 
+		// GREPME_PBCKP-180_LOCAL_DATA
 		if (lstat(child, &st) == -1)
 			elog(ERROR, "Cannot stat file \"%s\": %s",
 					child, strerror(errno));
@@ -911,6 +932,7 @@ catalog_get_instance_list(CatalogState *catalogState)
 		elog(ERROR, "Cannot read directory \"%s\": %s",
 				catalogState->backup_subdir_path, strerror(errno));
 
+	// GREPME_PBCKP-180_LOCAL_DATA
 	if (closedir(dir))
 		elog(ERROR, "Cannot close directory \"%s\": %s",
 				catalogState->backup_subdir_path, strerror(errno));
@@ -1062,6 +1084,7 @@ get_backup_filelist(pgBackup *backup, bool strict)
 
 	INIT_FILE_CRC32(true, content_crc);
 
+	// GREPME_PBCKP-180_LOCAL_DATA
 	while (fgets(buf, lengthof(buf), fp))
 	{
 		char		path[MAXPGPATH];
@@ -1520,6 +1543,7 @@ catalog_get_timelines(InstanceState *instanceState, InstanceConfig *instance)
 	char end_segno_str[MAXFNAMELEN];
 
 	/* read all xlog files that belong to this archive */
+	// TODO: should we read xlog files by means of fio or io syscalls?
 	dir_list_file(xlog_files_list, instanceState->instance_wal_subdir_path,
 				  false, true, false, false, true, 0, FIO_BACKUP_HOST);
 	parray_qsort(xlog_files_list, pgFileCompareName);
@@ -2434,20 +2458,24 @@ write_backup(pgBackup *backup, bool strict)
 	join_path_components(path, backup->root_dir, BACKUP_CONTROL_FILE);
 	snprintf(path_temp, sizeof(path_temp), "%s.tmp", path);
 
+	// GREPME_PBCKP-180_METADATA
 	fp = fopen(path_temp, PG_BINARY_W);
 	if (fp == NULL)
 		elog(ERROR, "Cannot open control file \"%s\": %s",
 			 path_temp, strerror(errno));
 
+	// GREPME_PBCKP-180_METADATA
 	if (chmod(path_temp, FILE_PERMISSION) == -1)
 		elog(ERROR, "Cannot change mode of \"%s\": %s", path_temp,
 			 strerror(errno));
 
 	setvbuf(fp, buf, _IOFBF, sizeof(buf));
 
+	// GREPME_PBCKP-180 this function uses fio whereas above code is written with stdio
 	pgBackupWriteControl(fp, backup, true);
 
 	/* Ignore 'out of space' error in lax mode */
+	// GREPME_PBCKP-180_METADATA
 	if (fflush(fp) != 0)
 	{
 		int elevel = ERROR;
@@ -2461,12 +2489,14 @@ write_backup(pgBackup *backup, bool strict)
 
 		if (!strict && (save_errno == ENOSPC))
 		{
+			// GREPME_PBCKP-180_METADATA
 			fclose(fp);
 			fio_unlink(path_temp, FIO_BACKUP_HOST);
 			return;
 		}
 	}
 
+	// GREPME_PBCKP-180_METADATA
 	if (fclose(fp) != 0)
 		elog(ERROR, "Cannot close control file \"%s\": %s",
 			 path_temp, strerror(errno));
@@ -2475,6 +2505,7 @@ write_backup(pgBackup *backup, bool strict)
 		elog(ERROR, "Cannot sync control file \"%s\": %s",
 			 path_temp, strerror(errno));
 
+	// GREPME_PBCKP-180_METADATA
 	if (rename(path_temp, path) < 0)
 		elog(ERROR, "Cannot rename file \"%s\" to \"%s\": %s",
 			 path_temp, path, strerror(errno));
@@ -2500,11 +2531,13 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 	join_path_components(control_path, backup->root_dir, DATABASE_FILE_LIST);
 	snprintf(control_path_temp, sizeof(control_path_temp), "%s.tmp", control_path);
 
+	// GREPME_PBCKP-180_METADATA
 	out = fopen(control_path_temp, PG_BINARY_W);
 	if (out == NULL)
 		elog(ERROR, "Cannot open file list \"%s\": %s", control_path_temp,
 			 strerror(errno));
 
+	// GREPME_PBCKP-180_METADATA
 	if (chmod(control_path_temp, FILE_PERMISSION) == -1)
 		elog(ERROR, "Cannot change mode of \"%s\": %s", control_path_temp,
 			 strerror(errno));
@@ -2583,24 +2616,29 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 		if (sync)
 			COMP_FILE_CRC32(true, backup->content_crc, line, strlen(line));
 
+		// GREPME_PBCKP-180_METADATA
 		fprintf(out, "%s", line);
 	}
 
 	if (sync)
 		FIN_FILE_CRC32(true, backup->content_crc);
 
+	// GREPME_PBCKP-180_METADATA
 	if (fflush(out) != 0)
 		elog(ERROR, "Cannot flush file list \"%s\": %s",
 			 control_path_temp, strerror(errno));
 
+	// GREPME_PBCKP-180_METADATA
 	if (sync && fsync(fileno(out)) < 0)
 		elog(ERROR, "Cannot sync file list \"%s\": %s",
 			 control_path_temp, strerror(errno));
 
+	// GREPME_PBCKP-180_METADATA
 	if (fclose(out) != 0)
 		elog(ERROR, "Cannot close file list \"%s\": %s",
 			 control_path_temp, strerror(errno));
 
+	// GREPME_PBCKP-180_METADATA
 	if (rename(control_path_temp, control_path) < 0)
 		elog(ERROR, "Cannot rename file \"%s\" to \"%s\": %s",
 			 control_path_temp, control_path, strerror(errno));

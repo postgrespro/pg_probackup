@@ -350,6 +350,7 @@ prepare_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 			}
 		}
 		/* avoid re-reading once buffered data, flushing on further attempts, see PBCKP-150 */
+		// GREPME_PBCKP-180_LOCAL_DATA
 		fflush(in);
 	}
 
@@ -893,6 +894,7 @@ restore_data_file(parray *parent_chain, pgFile *dest_file, FILE *out,
 		join_path_components(from_root, backup->root_dir, DATABASE_DIR);
 		join_path_components(from_fullpath, from_root, tmp_file->rel_path);
 
+		// GREPME_PBCKP-180_LOCAL_DATA
 		in = fopen(from_fullpath, PG_BINARY_R);
 		if (in == NULL)
 			elog(ERROR, "Cannot open backup file \"%s\": %s", from_fullpath,
@@ -925,6 +927,7 @@ restore_data_file(parray *parent_chain, pgFile *dest_file, FILE *out,
 													  backup->stop_lsn <= shift_lsn ? lsn_map : NULL,
 													  headers);
 
+		// GREPME_PBCKP-180_LOCAL_DATA
 		if (fclose(in) != 0)
 			elog(ERROR, "Cannot close file \"%s\": %s", from_fullpath,
 				strerror(errno));
@@ -1113,6 +1116,7 @@ restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_vers
 			/* Backward compatibility kludge TODO: remove in 3.0
 			 * go to the next page.
 			 */
+			// GREPME_PBCKP-180_LOCAL_DATA
 			if (!headers && fseek(in, read_len, SEEK_CUR) != 0)
 				elog(ERROR, "Cannot seek block %u of \"%s\": %s",
 					blknum, from_fullpath, strerror(errno));
@@ -1122,6 +1126,7 @@ restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_vers
 		if (headers &&
 			cur_pos_in != headers[n_hdr].pos)
 		{
+			// GREPME_PBCKP-180_LOCAL_DATA
 			if (fseek(in, headers[n_hdr].pos, SEEK_SET) != 0)
 				elog(ERROR, "Cannot seek to offset %u of \"%s\": %s",
 					headers[n_hdr].pos, from_fullpath, strerror(errno));
@@ -1130,6 +1135,7 @@ restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_vers
 		}
 
 		/* read a page from file */
+		// GREPME_PBCKP-180_LOCAL_DATA
 		if (headers)
 			len = fread(&page, 1, read_len, in);
 		else
@@ -1222,6 +1228,7 @@ restore_non_data_file_internal(FILE *in, FILE *out, pgFile *file,
 		if (interrupted || thread_interrupted)
 			elog(ERROR, "Interrupted during nonedata file restore");
 
+		// GREPME_PBCKP-180_LOCAL_DATA
 		read_len = fread(buf, 1, STDIO_BUFSIZE, in);
 
 		if (ferror(in))
@@ -1235,6 +1242,7 @@ restore_non_data_file_internal(FILE *in, FILE *out, pgFile *file,
 					 strerror(errno));
 		}
 
+		// GREPME_PBCKP-180_LOCAL_DATA
 		if (feof(in))
 			break;
 	}
@@ -1354,6 +1362,7 @@ restore_non_data_file(parray *parent_chain, pgBackup *dest_backup,
 
 	join_path_components(from_fullpath, from_root, dest_file->rel_path);
 
+	// GREPME_PBCKP-180_LOCAL_DATA
 	in = fopen(from_fullpath, PG_BINARY_R);
 	if (in == NULL)
 		elog(ERROR, "Cannot open backup file \"%s\": %s", from_fullpath,
@@ -1365,6 +1374,7 @@ restore_non_data_file(parray *parent_chain, pgBackup *dest_backup,
 	/* do actual work */
 	restore_non_data_file_internal(in, out, tmp_file, from_fullpath, to_fullpath);
 
+	// GREPME_PBCKP-180_LOCAL_DATA
 	if (fclose(in) != 0)
 		elog(ERROR, "Cannot close file \"%s\": %s", from_fullpath,
 			strerror(errno));
@@ -1397,12 +1407,14 @@ backup_non_data_file_internal(const char *from_fullpath,
 	file->uncompressed_size = 0;
 
 	/* open backup file for write  */
+	// GREPME_PBCKP-180_LOCAL_DATA
 	out = fopen(to_fullpath, PG_BINARY_W);
 	if (out == NULL)
 		elog(ERROR, "Cannot open destination file \"%s\": %s",
 			 to_fullpath, strerror(errno));
 
 	/* update file permission */
+	// GREPME_PBCKP-180_LOCAL_DATA
 	if (chmod(to_fullpath, file->mode) == -1)
 		elog(ERROR, "Cannot change mode of \"%s\": %s", to_fullpath,
 			 strerror(errno));
@@ -1503,9 +1515,11 @@ cleanup:
 	/* finish CRC calculation and store into pgFile */
 	FIN_FILE_CRC32(true, file->crc);
 
+	// GREPME_PBCKP-180_LOCAL_DATA
 	if (in && fclose(in))
 		elog(ERROR, "Cannot close the file \"%s\": %s", from_fullpath, strerror(errno));
 
+	// GREPME_PBCKP-180_LOCAL_DATA
 	if (out && fclose(out))
 		elog(ERROR, "Cannot close the file \"%s\": %s", to_fullpath, strerror(errno));
 
@@ -1616,6 +1630,7 @@ check_data_file(ConnectionArgs *arguments, pgFile *file,
 	char		curr_page[BLCKSZ];
 	bool		is_valid = true;
 
+	// GREPME_PBCKP-180_LOCAL_DATA
 	in = fopen(from_fullpath, PG_BINARY_R);
 	if (in == NULL)
 	{
@@ -1665,6 +1680,7 @@ check_data_file(ConnectionArgs *arguments, pgFile *file,
 		}
 	}
 
+	// GREPME_PBCKP-180_LOCAL_DATA
 	fclose(in);
 	return is_valid;
 }
@@ -1688,6 +1704,7 @@ validate_file_pages(pgFile *file, const char *fullpath, XLogRecPtr stop_lsn,
 	/* should not be possible */
 	Assert(!(backup_version >= 20400 && file->n_headers <= 0));
 
+	// GREPME_PBCKP-180_LOCAL_DATA
 	in = fopen(fullpath, PG_BINARY_R);
 	if (in == NULL)
 		elog(ERROR, "Cannot open file \"%s\": %s",
@@ -1774,6 +1791,7 @@ validate_file_pages(pgFile *file, const char *fullpath, XLogRecPtr stop_lsn,
 		Assert(compressed_size <= BLCKSZ);
 		Assert(compressed_size > 0);
 
+		// GREPME_PBCKP-180_LOCAL_DATA
 		if (headers)
 			len = fread(&compressed_page, 1, read_len, in);
 		else
@@ -1862,6 +1880,7 @@ validate_file_pages(pgFile *file, const char *fullpath, XLogRecPtr stop_lsn,
 	}
 
 	FIN_FILE_CRC32(use_crc32c, crc);
+	// GREPME_PBCKP-180_LOCAL_DATA
 	fclose(in);
 
 	if (crc != file->crc)
@@ -1888,11 +1907,13 @@ get_checksum_map(const char *fullpath, uint32 checksum_version,
 	char        in_buf[STDIO_BUFSIZE];
 
 	/* open file */
+	// GREPME_PBCKP-180_LOCAL_DATA
 	in = fopen(fullpath, "r+b");
 	if (!in)
 		elog(ERROR, "Cannot open source file \"%s\": %s", fullpath, strerror(errno));
 
 	/* truncate up to blocks */
+	// GREPME_PBCKP-180_LOCAL_DATA
 	if (ftruncate(fileno(in), n_blocks * BLCKSZ) != 0)
 		elog(ERROR, "Cannot truncate file to blknum %u \"%s\": %s",
 				n_blocks, fullpath, strerror(errno));
@@ -1905,6 +1926,7 @@ get_checksum_map(const char *fullpath, uint32 checksum_version,
 
 	for (blknum = 0; blknum < n_blocks;  blknum++)
 	{
+		// GREPME_PBCKP-180_LOCAL_DATA
 		size_t read_len = fread(read_buffer, 1, BLCKSZ, in);
 		PageState page_st;
 
@@ -1932,6 +1954,7 @@ get_checksum_map(const char *fullpath, uint32 checksum_version,
 		else
 			elog(ERROR, "Failed to read blknum %u from file \"%s\"", blknum, fullpath);
 
+		// GREPME_PBCKP-180_LOCAL_DATA
 		if (feof(in))
 			break;
 
@@ -1939,6 +1962,7 @@ get_checksum_map(const char *fullpath, uint32 checksum_version,
 			elog(ERROR, "Interrupted during page reading");
 	}
 
+	// GREPME_PBCKP-180_LOCAL_DATA
 	if (in)
 		fclose(in);
 
@@ -1959,11 +1983,13 @@ get_lsn_map(const char *fullpath, uint32 checksum_version,
 	Assert(shift_lsn > 0);
 
 	/* open file */
+	// GREPME_PBCKP-180_LOCAL_DATA
 	in = fopen(fullpath, "r+b");
 	if (!in)
 		elog(ERROR, "Cannot open source file \"%s\": %s", fullpath, strerror(errno));
 
 	/* truncate up to blocks */
+	// GREPME_PBCKP-180_LOCAL_DATA
 	if (ftruncate(fileno(in), n_blocks * BLCKSZ) != 0)
 		elog(ERROR, "Cannot truncate file to blknum %u \"%s\": %s",
 				n_blocks, fullpath, strerror(errno));
@@ -1975,6 +2001,7 @@ get_lsn_map(const char *fullpath, uint32 checksum_version,
 
 	for (blknum = 0; blknum < n_blocks;  blknum++)
 	{
+		// GREPME_PBCKP-180_LOCAL_DATA
 		size_t read_len = fread(read_buffer, 1, BLCKSZ, in);
 		PageState page_st;
 
@@ -1995,6 +2022,7 @@ get_lsn_map(const char *fullpath, uint32 checksum_version,
 			elog(ERROR, "Cannot read block %u from file \"%s\": %s",
 					blknum, fullpath, strerror(errno));
 
+		// GREPME_PBCKP-180_LOCAL_DATA
 		if (feof(in))
 			break;
 
@@ -2002,6 +2030,7 @@ get_lsn_map(const char *fullpath, uint32 checksum_version,
 			elog(ERROR, "Interrupted during page reading");
 	}
 
+	// GREPME_PBCKP-180_LOCAL_DATA
 	if (in)
 		fclose(in);
 
@@ -2020,6 +2049,7 @@ get_page_header(FILE *in, const char *fullpath, BackupPageHeader* bph,
 				pg_crc32 *crc, bool use_crc32c)
 {
 	/* read BackupPageHeader */
+	// GREPME_PBCKP-180_LOCAL_DATA
 	size_t read_len = fread(bph, 1, sizeof(BackupPageHeader), in);
 
 	if (ferror(in))
@@ -2033,9 +2063,11 @@ get_page_header(FILE *in, const char *fullpath, BackupPageHeader* bph,
 		else if (read_len != 0 && feof(in))
 			elog(ERROR,
 				 "Odd size page found at offset %ld of \"%s\"",
+				// GREPME_PBCKP-180_LOCAL_DATA
 				 ftello(in), fullpath);
 		else
 			elog(ERROR, "Cannot read header at offset %ld of \"%s\": %s",
+				// GREPME_PBCKP-180_LOCAL_DATA
 				 ftello(in), fullpath, strerror(errno));
 	}
 
@@ -2059,12 +2091,14 @@ open_local_file_rw(const char *to_fullpath, char **out_buf, uint32 buf_size)
 {
 	FILE *out = NULL;
 	/* open backup file for write  */
+	// GREPME_PBCKP-180_LOCAL_DATA
 	out = fopen(to_fullpath, PG_BINARY_W);
 	if (out == NULL)
 		elog(ERROR, "Cannot open backup file \"%s\": %s",
 			 to_fullpath, strerror(errno));
 
 	/* update file permission */
+	// GREPME_PBCKP-180_LOCAL_DATA
 	if (chmod(to_fullpath, FILE_PERMISSION) == -1)
 		elog(ERROR, "Cannot change mode of \"%s\": %s", to_fullpath,
 			 strerror(errno));
@@ -2384,6 +2418,7 @@ get_data_file_headers(HeaderMap *hdr_map, pgFile *file, uint32 backup_version, b
 		return NULL;
 
 	/* TODO: consider to make this descriptor thread-specific */
+	// GREPME_PBCKP-180_LOCAL_DATA
 	in = fopen(hdr_map->path, PG_BINARY_R);
 
 	if (!in)
@@ -2394,6 +2429,7 @@ get_data_file_headers(HeaderMap *hdr_map, pgFile *file, uint32 backup_version, b
 	/* disable buffering for header file */
 	setvbuf(in, NULL, _IONBF, 0);
 
+	// GREPME_PBCKP-180_LOCAL_DATA
 	if (fseeko(in, file->hdr_off, SEEK_SET))
 	{
 		elog(strict ? ERROR : WARNING, "Cannot seek to position %llu in page header map \"%s\": %s",
@@ -2411,6 +2447,7 @@ get_data_file_headers(HeaderMap *hdr_map, pgFile *file, uint32 backup_version, b
 	zheaders = pgut_malloc(file->hdr_size);
 	memset(zheaders, 0, file->hdr_size);
 
+	// GREPME_PBCKP-180_LOCAL_DATA
 	if (fread(zheaders, 1, file->hdr_size, in) != file->hdr_size)
 	{
 		elog(strict ? ERROR : WARNING, "Cannot read header file at offset: %llu len: %i \"%s\": %s",
@@ -2504,6 +2541,7 @@ write_page_headers(BackupPageHeader2 *headers, pgFile *file, HeaderMap *hdr_map,
 	{
 		elog(LOG, "Creating page header map \"%s\"", map_path);
 
+		// GREPME_PBCKP-180_LOCAL_REMOTE_DATA
 		hdr_map->fp = fopen(map_path, PG_BINARY_A);
 		if (hdr_map->fp == NULL)
 			elog(ERROR, "Cannot open header file \"%s\": %s",
@@ -2514,6 +2552,7 @@ write_page_headers(BackupPageHeader2 *headers, pgFile *file, HeaderMap *hdr_map,
 		setvbuf(hdr_map->fp, hdr_map->buf, _IOFBF, LARGE_CHUNK_SIZE);
 
 		/* update file permission */
+		// GREPME_PBCKP-180_LOCAL_REMOTE_DATA
 		if (chmod(map_path, FILE_PERMISSION) == -1)
 			elog(ERROR, "Cannot change mode of \"%s\": %s", map_path,
 				 strerror(errno));
@@ -2536,6 +2575,7 @@ write_page_headers(BackupPageHeader2 *headers, pgFile *file, HeaderMap *hdr_map,
 	elog(VERBOSE, "Writing headers for file \"%s\" offset: %llu, len: %i, crc: %u",
 			file->rel_path, file->hdr_off, z_len, file->hdr_crc);
 
+	// GREPME_PBCKP-180_LOCAL_REMOTE_DATA
 	if (fwrite(zheaders, 1, z_len, hdr_map->fp) != z_len)
 		elog(ERROR, "Cannot write to file \"%s\": %s", map_path, strerror(errno));
 

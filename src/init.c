@@ -63,15 +63,19 @@ do_add_instance(InstanceState *instanceState, InstanceConfig *instance)
 
 	/* Ensure that all root directories already exist */
 	/* TODO maybe call do_init() here instead of error?*/
+	// GREPME_PBCKP-180_LOCAL_DATA
 	if (access(catalogState->catalog_path, F_OK) != 0)
 		elog(ERROR, "Directory does not exist: '%s'", catalogState->catalog_path);
 
+	// GREPME_PBCKP-180_LOCAL_DATA
 	if (access(catalogState->backup_subdir_path, F_OK) != 0)
 		elog(ERROR, "Directory does not exist: '%s'", catalogState->backup_subdir_path);
 
+	// GREPME_PBCKP-180_LOCAL_DATA
 	if (access(catalogState->wal_subdir_path, F_OK) != 0)
 		elog(ERROR, "Directory does not exist: '%s'", catalogState->wal_subdir_path);
 
+	// GREPME_PBCKP-180_LOCAL_DATA
 	if (stat(instanceState->instance_backup_subdir_path, &st) == 0 && S_ISDIR(st.st_mode))
 		elog(ERROR, "Instance '%s' backup directory already exists: '%s'",
 			instanceState->instance_name, instanceState->instance_backup_subdir_path);
@@ -81,6 +85,7 @@ do_add_instance(InstanceState *instanceState, InstanceConfig *instance)
 	 * Existence check is extra paranoid because if we don't have such a
 	 * directory in data dir, we shouldn't have it in wal as well.
 	 */
+	// GREPME_PBCKP-180_LOCAL_DATA
 	if (stat(instanceState->instance_wal_subdir_path, &st) == 0 && S_ISDIR(st.st_mode))
 		elog(ERROR, "Instance '%s' WAL archive directory already exists: '%s'",
 				instanceState->instance_name, instanceState->instance_wal_subdir_path);

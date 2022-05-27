@@ -840,6 +840,7 @@ main(int argc, char *argv[])
 		if (instance_config.compress_alg == PGLZ_COMPRESS)
                         elog(ERROR, "Cannot use pglz for WAL compression");
 
+		// GREPME_PBCKP-180_REMOTE_DATA
 		if (!getcwd(current_dir, sizeof(current_dir)))
 			elog(ERROR, "getcwd() error");
 

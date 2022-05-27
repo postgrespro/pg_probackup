@@ -251,6 +251,7 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 		 * Because WAL streaming will start after pg_start_backup() in stream
 		 * mode.
 		 */
+		// GREPME_PBCKP-180 reading wal using fio
 		wait_wal_lsn(instanceState->instance_wal_subdir_path, current.start_lsn, true, current.tli, false, true, ERROR, false);
 	}
 
@@ -300,6 +301,7 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 				fio_list_dir(backup_files_list, parray_get(external_dirs, i),
 							 false, true, false, false, true, i+1);
 			else
+				// GREPME_PBCKP-180 based on fio anyway; wtf
 				dir_list_file(backup_files_list, parray_get(external_dirs, i),
 							  false, true, false, false, true, i+1, FIO_LOCAL_HOST);
 		}

@@ -407,6 +407,7 @@ push_file_internal_uncompressed(const char *wal_file_name, const char *pg_xlog_d
 	canonicalize_path(to_fullpath);
 
 	/* Open source file for read */
+	// GREPME_PBCKP-180_WAL
 	in = fopen(from_fullpath, PG_BINARY_R);
 	if (in == NULL)
 		elog(ERROR, "Cannot open source file \"%s\": %s", from_fullpath, strerror(errno));
@@ -520,6 +521,7 @@ part_opened:
 			elog(LOG, "WAL file already exists in archive with the same "
 					"checksum, skip pushing: \"%s\"", from_fullpath);
 			/* cleanup */
+			// GREPME_PBCKP-180_WAL
 			fclose(in);
 			fio_close(out);
 			fio_unlink(to_fullpath_part, FIO_BACKUP_HOST);
@@ -548,6 +550,7 @@ part_opened:
 	{
 		size_t  read_len = 0;
 
+		// GREPME_PBCKP-180_WAL
 		read_len = fread(buf, 1, OUT_BUF_SIZE, in);
 
 		if (ferror(in))
@@ -564,11 +567,13 @@ part_opened:
 						to_fullpath_part, strerror(errno));
 		}
 
+		// GREPME_PBCKP-180_WAL
 		if (feof(in))
 			break;
 	}
 
 	/* close source file */
+	// GREPME_PBCKP-180_WAL
 	fclose(in);
 
 	/* Writing is asynchronous in case of push in remote mode, so check agent status */
@@ -654,6 +659,7 @@ push_file_internal_gz(const char *wal_file_name, const char *pg_xlog_dir,
 	snprintf(to_fullpath_gz_part, sizeof(to_fullpath_gz_part), "%s.part", to_fullpath_gz);
 
 	/* Open source file for read */
+	// GREPME_PBCKP-180_WAL
 	in = fopen(from_fullpath, PG_BINARY_R);
 	if (in == NULL)
 		elog(ERROR, "Cannot open source WAL file \"%s\": %s",
@@ -769,6 +775,7 @@ part_opened:
 			elog(LOG, "WAL file already exists in archive with the same "
 					"checksum, skip pushing: \"%s\"", from_fullpath);
 			/* cleanup */
+			// GREPME_PBCKP-180_WAL
 			fclose(in);
 			fio_gzclose(out);
 			fio_unlink(to_fullpath_gz_part, FIO_BACKUP_HOST);
@@ -797,6 +804,7 @@ part_opened:
 	{
 		size_t  read_len = 0;
 
+		// GREPME_PBCKP-180_WAL
 		read_len = fread(buf, 1, OUT_BUF_SIZE, in);
 
 		if (ferror(in))
@@ -813,11 +821,13 @@ part_opened:
 					to_fullpath_gz_part, get_gz_error(out, errno));
 		}
 
+		// GREPME_PBCKP-180_WAL
 		if (feof(in))
 			break;
 	}
 
 	/* close source file */
+	// GREPME_PBCKP-180_WAL
 	fclose(in);
 
 	/* Writing is asynchronous in case of push in remote mode, so check agent status */
@@ -1063,6 +1073,7 @@ do_archive_get(InstanceState *instanceState, InstanceConfig *instance, const cha
 		join_path_components(prefetched_file, prefetch_dir, wal_file_name);
 
 		/* check if file is available in prefetch directory */
+		// GREPME_PBCKP-180_WAL
 		if (access(prefetched_file, F_OK) == 0)
 		{
 			/* Prefetched WAL segment is available, before using it, we must validate it.
@@ -1100,6 +1111,7 @@ do_archive_get(InstanceState *instanceState, InstanceConfig *instance, const cha
 		{
 			/* Do prefetch maintenance here */
 
+			// GREPME_PBCKP-180_WAL
 			mkdir(prefetch_dir, DIR_PERMISSION); /* In case prefetch directory do not exists yet */
 
 			/* We`ve failed to satisfy current request from prefetch directory,
@@ -1344,6 +1356,7 @@ get_wal_file(const char *filename, const char *from_fullpath,
 	snprintf(from_fullpath_gz, sizeof(from_fullpath_gz), "%s.gz", from_fullpath);
 
 	/* open destination file */
+	// GREPME_PBCKP-180_WAL
 	out = fopen(to_fullpath, PG_BINARY_W);
 	if (!out)
 	{
@@ -1352,11 +1365,14 @@ get_wal_file(const char *filename, const char *from_fullpath,
 		return false;
 	}
 
+	// GREPME_PBCKP-180_WAL
 	if (chmod(to_fullpath, FILE_PERMISSION) == -1)
 	{
 		elog(WARNING, "Cannot change mode of file '%s': %s",
 				to_fullpath, strerror(errno));
+		// GREPME_PBCKP-180_WAL
 		fclose(out);
+		// GREPME_PBCKP-180_WAL
 		unlink(to_fullpath);
 		return false;
 	}
@@ -1450,7 +1466,9 @@ get_wal_file(const char *filename, const char *from_fullpath,
 
 	if (rc < 0)
 	{
+		// GREPME_PBCKP-180_WAL
 		fclose(out);
+		// GREPME_PBCKP-180_WAL
 		unlink(to_fullpath);
 		return false;
 	}
@@ -1462,26 +1480,34 @@ get_wal_file(const char *filename, const char *from_fullpath,
 	if (src_partial)
 	{
 
+		// GREPME_PBCKP-180_WAL
 		if (fflush(out) != 0)
 		{
 			elog(WARNING, "Cannot flush file \"%s\": %s", to_fullpath, strerror(errno));
+			// GREPME_PBCKP-180_WAL
 			fclose(out);
+			// GREPME_PBCKP-180_WAL
 			unlink(to_fullpath);
 			return false;
 		}
 
+		// GREPME_PBCKP-180_WAL
 		if (ftruncate(fileno(out), xlog_seg_size) != 0)
 		{
 			elog(WARNING, "Cannot extend file \"%s\": %s", to_fullpath, strerror(errno));
+			// GREPME_PBCKP-180_WAL
 			fclose(out);
+			// GREPME_PBCKP-180_WAL
 			unlink(to_fullpath);
 			return false;
 		}
 	}
 
+	// GREPME_PBCKP-180_WAL
 	if (fclose(out) != 0)
 	{
 		elog(WARNING, "Cannot close file '%s': %s", to_fullpath, strerror(errno));
+		// GREPME_PBCKP-180_WAL
 		unlink(to_fullpath);
 		return false;
 	}
@@ -1627,6 +1653,7 @@ bool next_wal_segment_exists(TimeLineID tli, XLogSegNo segno, const char *prefet
 
 	join_path_components(next_wal_fullpath, prefetch_dir, next_wal_filename);
 
+	// GREPME_PBCKP-180_WAL
 	if (access(next_wal_fullpath, F_OK) == 0)
 		return true;
 
@@ -1647,6 +1674,7 @@ bool wal_satisfy_from_prefetch(TimeLineID tli, XLogSegNo segno, const char *wal_
 	join_path_components(prefetched_file, prefetch_dir, wal_file_name);
 
 	/* If prefetched file do not exists, then nothing can be done */
+	// GREPME_PBCKP-180_WAL
 	if (access(prefetched_file, F_OK) != 0)
 		return false;
 
@@ -1661,17 +1689,20 @@ bool wal_satisfy_from_prefetch(TimeLineID tli, XLogSegNo segno, const char *wal_
 	{
 		/* prefetched WAL segment is not looking good */
 		elog(LOG, "Prefetched WAL segment %s is invalid, cannot use it", wal_file_name);
+		// GREPME_PBCKP-180_WAL
 		unlink(prefetched_file);
 		return false;
 	}
 
 	/* file is available in prefetch directory */
+	// GREPME_PBCKP-180_WAL
 	if (rename(prefetched_file, absolute_wal_file_path) == 0)
 		return true;
 	else
 	{
 		elog(WARNING, "Cannot rename file '%s' to '%s': %s",
 				prefetched_file, absolute_wal_file_path, strerror(errno));
+		// GREPME_PBCKP-180_WAL
 		unlink(prefetched_file);
 	}
 
@@ -1693,6 +1724,7 @@ uint32 maintain_prefetch(const char *prefetch_dir, XLogSegNo first_segno, uint32
 
 	char fullpath[MAXPGPATH];
 
+	// GREPME_PBCKP-180_WAL
 	dir = opendir(prefetch_dir);
 	if (dir == NULL)
 	{
@@ -1702,6 +1734,7 @@ uint32 maintain_prefetch(const char *prefetch_dir, XLogSegNo first_segno, uint32
 		return n_files;
 	}
 
+	// GREPME_PBCKP-180_WAL
 	while ((dir_ent = readdir(dir)))
 	{
 		/* Skip entries point current dir or parent dir */
@@ -1723,9 +1756,11 @@ uint32 maintain_prefetch(const char *prefetch_dir, XLogSegNo first_segno, uint32
 		}
 
 		join_path_components(fullpath, prefetch_dir, dir_ent->d_name);
+		// GREPME_PBCKP-180_WAL
 		unlink(fullpath);
 	}
 
+	// GREPME_PBCKP-180_WAL
 	closedir(dir);
 
 	return n_files;

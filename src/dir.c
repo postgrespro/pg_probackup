@@ -151,10 +151,12 @@ dir_create_dir(const char *dir, mode_t mode, bool strict)
 	get_parent_directory(parent);
 
 	/* Create parent first */
+	// GREPME_PBCKP-180_LOCAL_DATA
 	if (access(parent, F_OK) == -1)
 		dir_create_dir(parent, mode, false);
 
 	/* Create directory */
+	// GREPME_PBCKP-180_LOCAL_DATA
 	if (mkdir(dir, mode) == -1)
 	{
 		if (errno == EEXIST && !strict)	/* already exist */
@@ -235,6 +237,7 @@ pgFileDelete(mode_t mode, const char *full_path)
 {
 	if (S_ISDIR(mode))
 	{
+		// GREPME_PBCKP-180_LOCAL_DATA
 		if (rmdir(full_path) == -1)
 		{
 			if (errno == ENOENT)
@@ -249,6 +252,7 @@ pgFileDelete(mode_t mode, const char *full_path)
 	}
 
 delete_file:
+	// GREPME_PBCKP-180_LOCAL_DATA
 	if (remove(full_path) == -1)
 	{
 		if (errno == ENOENT)
@@ -275,6 +279,7 @@ pgFileGetCRC(const char *file_path, bool use_crc32c, bool missing_ok)
 	INIT_FILE_CRC32(use_crc32c, crc);
 
 	/* open file in binary read mode */
+	// GREPME_PBCKP-180_LOCAL_DATA
 	fp = fopen(file_path, PG_BINARY_R);
 	if (fp == NULL)
 	{
@@ -301,6 +306,7 @@ pgFileGetCRC(const char *file_path, bool use_crc32c, bool missing_ok)
 		if (interrupted)
 			elog(ERROR, "interrupted during CRC calculation");
 
+		// GREPME_PBCKP-180_LOCAL_DATA
 		len = fread(buf, 1, STDIO_BUFSIZE, fp);
 
 		if (ferror(fp))
@@ -309,11 +315,13 @@ pgFileGetCRC(const char *file_path, bool use_crc32c, bool missing_ok)
 		/* update CRC */
 		COMP_FILE_CRC32(use_crc32c, crc, buf, len);
 
+		// GREPME_PBCKP-180_LOCAL_DATA
 		if (feof(fp))
 			break;
 	}
 
 	FIN_FILE_CRC32(use_crc32c, crc);
+	// GREPME_PBCKP-180_LOCAL_DATA
 	fclose(fp);
 	pg_free(buf);
 
@@ -338,6 +346,7 @@ pgFileGetCRCgz(const char *file_path, bool use_crc32c, bool missing_ok)
 	INIT_FILE_CRC32(use_crc32c, crc);
 
 	/* open file in binary read mode */
+	// GREPME_PBCKP-180_LOCAL_DATA
 	fp = gzopen(file_path, PG_BINARY_R);
 	if (fp == NULL)
 	{
@@ -362,11 +371,13 @@ pgFileGetCRCgz(const char *file_path, bool use_crc32c, bool missing_ok)
 		if (interrupted)
 			elog(ERROR, "interrupted during CRC calculation");
 
+		// GREPME_PBCKP-180_LOCAL_DATA
 		len = gzread(fp, buf, STDIO_BUFSIZE);
 
 		if (len <= 0)
 		{
 			/* we either run into eof or error */
+			// GREPME_PBCKP-180_LOCAL_DATA
 			if (gzeof(fp))
 				break;
 			else
@@ -383,6 +394,7 @@ pgFileGetCRCgz(const char *file_path, bool use_crc32c, bool missing_ok)
 	}
 
 	FIN_FILE_CRC32(use_crc32c, crc);
+	// GREPME_PBCKP-180_LOCAL_DATA
 	gzclose(fp);
 	pg_free(buf);
 
@@ -1185,6 +1197,7 @@ read_tablespace_map(parray *links, const char *backup_dir)
 	if (fp == NULL)
 		elog(ERROR, "Cannot open tablespace map file \"%s\": %s", map_path, strerror(errno));
 
+	// GREPME_PBCKP-180_LOCAL_DATA
 	while (fgets(buf, lengthof(buf), fp))
 	{
 		char        link_name[MAXPGPATH];
@@ -1669,6 +1682,7 @@ pgFileSize(const char *path)
 {
 	struct stat buf;
 
+	// GREPME_PBCKP-180_LOCAL_DATA
 	if (stat(path, &buf) == -1)
 		elog(ERROR, "Cannot stat file \"%s\": %s", path, strerror(errno));
 
@@ -1834,6 +1848,7 @@ read_database_map(pgBackup *backup)
 
 	database_map = parray_new();
 
+	// GREPME_PBCKP-180_LOCAL_DATA
 	while (fgets(buf, lengthof(buf), fp))
 	{
 		char datname[MAXPGPATH];

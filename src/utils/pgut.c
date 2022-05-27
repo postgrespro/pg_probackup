@@ -1186,6 +1186,7 @@ pgut_pgfnames(const char *path, bool strict)
 	int			numnames = 0;
 	int			fnsize = 200;	/* enough for many small dbs */
 
+	// GREPME_PBCKP-180_LOCAL_DATA
 	dir = opendir(path);
 	if (dir == NULL)
 	{
@@ -1195,6 +1196,7 @@ pgut_pgfnames(const char *path, bool strict)
 
 	filenames = (char **) palloc(fnsize * sizeof(char *));
 
+	// GREPME_PBCKP-180_LOCAL_DATA
 	while (errno = 0, (file = readdir(dir)) != NULL)
 	{
 		if (strcmp(file->d_name, ".") != 0 && strcmp(file->d_name, "..") != 0)
@@ -1217,6 +1219,7 @@ pgut_pgfnames(const char *path, bool strict)
 
 	filenames[numnames] = NULL;
 
+	// GREPME_PBCKP-180_LOCAL_DATA
 	if (closedir(dir))
 	{
 		elog(strict ? ERROR : WARNING, "could not close directory \"%s\": %m", path);
@@ -1266,6 +1269,7 @@ pgut_rmtree(const char *path, bool rmtopdir, bool strict)
 	{
 		join_path_components(pathbuf, path, *filename);
 
+		// GREPME_PBCKP-180_LOCAL_DATA
 		if (lstat(pathbuf, &statbuf) != 0)
 		{
 			elog(strict ? ERROR : WARNING, "could not stat file or directory \"%s\": %m", pathbuf);
@@ -1284,6 +1288,7 @@ pgut_rmtree(const char *path, bool rmtopdir, bool strict)
 		}
 		else
 		{
+			// GREPME_PBCKP-180_LOCAL_DATA
 			if (unlink(pathbuf) != 0)
 			{
 				elog(strict ? ERROR : WARNING, "could not remove file or directory \"%s\": %m", pathbuf);
@@ -1295,6 +1300,7 @@ pgut_rmtree(const char *path, bool rmtopdir, bool strict)
 
 	if (rmtopdir)
 	{
+		// GREPME_PBCKP-180_LOCAL_DATA
 		if (rmdir(path) != 0)
 		{
 			elog(strict ? ERROR : WARNING, "could not remove file or directory \"%s\": %m", path);

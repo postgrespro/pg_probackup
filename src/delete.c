@@ -999,6 +999,7 @@ do_delete_instance(InstanceState *instanceState)
 	pgut_rmtree(instanceState->instance_wal_subdir_path, false, true);
 
 	/* Delete backup instance config file */
+	// GREPME_PBCKP-180_LOCAL_DATA
 	if (remove(instanceState->instance_config_path))
 	{
 		elog(ERROR, "Can't remove \"%s\": %s", instanceState->instance_config_path,
@@ -1006,10 +1007,12 @@ do_delete_instance(InstanceState *instanceState)
 	}
 
 	/* Delete instance root directories */
+	// GREPME_PBCKP-180_LOCAL_DATA
 	if (rmdir(instanceState->instance_backup_subdir_path) != 0)
 		elog(ERROR, "Can't remove \"%s\": %s", instanceState->instance_backup_subdir_path,
 			strerror(errno));
 
+	// GREPME_PBCKP-180_LOCAL_DATA
 	if (rmdir(instanceState->instance_wal_subdir_path) != 0)
 		elog(ERROR, "Can't remove \"%s\": %s", instanceState->instance_wal_subdir_path,
 			strerror(errno));

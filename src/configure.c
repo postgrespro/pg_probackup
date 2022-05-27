@@ -288,6 +288,7 @@ do_set_config(InstanceState *instanceState, bool missing_ok)
 	if (!missing_ok && !fileExists(instanceState->instance_config_path, FIO_LOCAL_HOST))
 		elog(ERROR, "Configuration file \"%s\" doesn't exist", instanceState->instance_config_path);
 
+	// GREPME_PBCKP-180_CONFIG
 	fp = fopen(path_temp, "wt");
 	if (fp == NULL)
 		elog(ERROR, "Cannot create configuration file \"%s\": %s",
@@ -314,9 +315,11 @@ do_set_config(InstanceState *instanceState, bool missing_ok)
 		if (current_group == NULL || strcmp(opt->group, current_group) != 0)
 		{
 			current_group = opt->group;
+			// GREPME_PBCKP-180_CONFIG
 			fprintf(fp, "# %s\n", current_group);
 		}
 
+		// GREPME_PBCKP-180_CONFIG
 		if (strchr(value, ' '))
 			rc = fprintf(fp, "%s = '%s'\n", opt->lname, value);
 		else
@@ -328,9 +331,11 @@ do_set_config(InstanceState *instanceState, bool missing_ok)
 		pfree(value);
 	}
 
+	// GREPME_PBCKP-180_CONFIG
 	if (ferror(fp) || fflush(fp))
 		elog(ERROR, "Cannot write to configuration file: \"%s\"", path_temp);
 
+	// GREPME_PBCKP-180_CONFIG
 	if (fclose(fp))
 		elog(ERROR, "Cannot close configuration file: \"%s\"", path_temp);
 
@@ -338,6 +343,7 @@ do_set_config(InstanceState *instanceState, bool missing_ok)
 		elog(ERROR, "Failed to sync temp configuration file \"%s\": %s",
 			 path_temp, strerror(errno));
 
+	// GREPME_PBCKP-180_CONFIG
 	if (rename(path_temp, instanceState->instance_config_path) < 0)
 	{
 		int			errno_temp = errno;
@@ -704,6 +710,7 @@ show_configure_end(void)
 		appendPQExpBufferChar(&show_buf, '\n');
 	}
 
+	// GREPME_PBCKP-180_CONFIG
 	fputs(show_buf.data, stdout);
 	termPQExpBuffer(&show_buf);
 }

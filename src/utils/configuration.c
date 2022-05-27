@@ -558,6 +558,7 @@ config_read_opt(const char *path, ConfigOption options[], int elevel,
 	if ((fp = pgut_fopen(path, "rt", missing_ok)) == NULL)
 		return parsed_options;
 
+	// GREPME_PBCKP-180_CONFIG
 	while (fgets(buf, lengthof(buf), fp))
 	{
 		size_t		i;
@@ -590,6 +591,7 @@ config_read_opt(const char *path, ConfigOption options[], int elevel,
 		}
 	}
 
+	// GREPME_PBCKP-180_CONFIG
 	if (ferror(fp))
 		elog(ERROR, "Failed to read from file: \"%s\"", path);
 

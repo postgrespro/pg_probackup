@@ -719,6 +719,7 @@ merge_chain(InstanceState *instanceState,
 				full_backup->hdr_map.path_tmp, strerror(errno));
 
 		/* Replace old header map with new one */
+		// GREPME_PBCKP-180_LOCAL_DATA
 		if (rename(full_backup->hdr_map.path_tmp, full_backup->hdr_map.path))
 			elog(ERROR, "Could not rename file \"%s\" to \"%s\": %s",
 				 full_backup->hdr_map.path_tmp, full_backup->hdr_map.path, strerror(errno));
@@ -843,6 +844,7 @@ merge_rename:
 	if (dest_backup)
 	{
 		elog(LOG, "Rename %s to %s", full_backup->root_dir, dest_backup->root_dir);
+		// GREPME_PBCKP-180_LOCAL_DATA
 		if (rename(full_backup->root_dir, dest_backup->root_dir) == -1)
 			elog(ERROR, "Could not rename directory \"%s\" to \"%s\": %s",
 				 full_backup->root_dir, dest_backup->root_dir, strerror(errno));
@@ -860,6 +862,7 @@ merge_rename:
 							base36enc(full_backup->merge_dest_backup));
 
 		elog(LOG, "Rename %s to %s", full_backup->root_dir, destination_path);
+		// GREPME_PBCKP-180_LOCAL_DATA
 		if (rename(full_backup->root_dir, destination_path) == -1)
 			elog(ERROR, "Could not rename directory \"%s\" to \"%s\": %s",
 				 full_backup->root_dir, destination_path, strerror(errno));
@@ -1194,6 +1197,7 @@ reorder_external_dirs(pgBackup *to_backup, parray *to_external,
 			makeExternalDirPathByNum(old_path, externaldir_template, i + 1);
 			makeExternalDirPathByNum(new_path, externaldir_template, from_num);
 			elog(VERBOSE, "Rename %s to %s", old_path, new_path);
+			// GREPME_PBCKP-180_LOCAL_DATA
 			if (rename (old_path, new_path) == -1)
 				elog(ERROR, "Could not rename directory \"%s\" to \"%s\": %s",
 					 old_path, new_path, strerror(errno));
@@ -1228,6 +1232,7 @@ merge_data_file(parray *parent_chain, pgBackup *full_backup,
 	snprintf(to_fullpath_tmp2, MAXPGPATH, "%s_tmp2", to_fullpath);
 
 	/* open temp file */
+	// GREPME_PBCKP-180_LOCAL_DATA
 	out = fopen(to_fullpath_tmp1, PG_BINARY_W);
 	if (out == NULL)
 		elog(ERROR, "Cannot open merge target file \"%s\": %s",
@@ -1239,6 +1244,7 @@ merge_data_file(parray *parent_chain, pgBackup *full_backup,
 									   use_bitmap, NULL, InvalidXLogRecPtr, NULL,
 									   /* when retrying merge header map cannot be trusted */
 									   is_retry ? false : true);
+	// GREPME_PBCKP-180_LOCAL_DATA
 	if (fclose(out) != 0)
 		elog(ERROR, "Cannot close file \"%s\": %s",
 			 to_fullpath_tmp1, strerror(errno));
@@ -1260,6 +1266,7 @@ merge_data_file(parray *parent_chain, pgBackup *full_backup,
 				 &(full_backup->hdr_map), true);
 
 	/* drop restored temp file */
+	// GREPME_PBCKP-180_LOCAL_DATA
 	if (unlink(to_fullpath_tmp1) == -1)
 		elog(ERROR, "Cannot remove file \"%s\": %s", to_fullpath_tmp1,
 			 strerror(errno));
@@ -1284,12 +1291,14 @@ merge_data_file(parray *parent_chain, pgBackup *full_backup,
 		elog(ERROR, "Cannot sync merge temp file \"%s\": %s",
 			to_fullpath_tmp2, strerror(errno));
 
+	// GREPME_PBCKP-180_LOCAL_DATA
 	/* Do atomic rename from second temp file to destination file */
 	if (rename(to_fullpath_tmp2, to_fullpath) == -1)
 			elog(ERROR, "Could not rename file \"%s\" to \"%s\": %s",
 				 to_fullpath_tmp2, to_fullpath, strerror(errno));
 
 	/* drop temp file */
+	// GREPME_PBCKP-180_LOCAL_DATA
 	unlink(to_fullpath_tmp1);
 }
 
@@ -1391,6 +1400,7 @@ merge_non_data_file(parray *parent_chain, pgBackup *full_backup,
 			to_fullpath_tmp, strerror(errno));
 
 	/* Do atomic rename from second temp file to destination file */
+	// GREPME_PBCKP-180_LOCAL_DATA
 	if (rename(to_fullpath_tmp, to_fullpath) == -1)
 			elog(ERROR, "Could not rename file \"%s\" to \"%s\": %s",
 				to_fullpath_tmp, to_fullpath, strerror(errno));
