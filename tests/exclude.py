@@ -276,7 +276,6 @@ class ExcludeTest(ProbackupTest, unittest.TestCase):
             self.assertEqual(
                 node.execute(
                     'postgres',
-                    # TODO REVIEW unfortunately this make auto conversion from string to int, it's weird for me
                     'select count(*) from test')[0][0],
                 0)
 
