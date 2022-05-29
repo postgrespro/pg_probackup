@@ -1811,7 +1811,7 @@ pg_stop_backup_write_file_helper(const char *path, const char *filename, const c
 
 		if (S_ISREG(file->mode))
 		{
-			file->crc = pgFileGetCRC(full_filename, true, NONE_COMPRESS, false, false);
+			file->crc = pgFileGetCRC(full_filename, true, NONE_COMPRESS, false);
 
 			file->write_size = file->size;
 			file->uncompressed_size = file->size;
@@ -2059,9 +2059,10 @@ backup_files(void *arg)
 			backup_non_data_file(file, prev_file, from_fullpath, to_fullpath,
 								 current.backup_mode, current.parent_backup,
 //								 instance_config.compress_alg,
-								 file->is_cfs ? NONE_COMPRESS : instance_config.compress_alg,
+								 instance_config.compress_alg,
 								 instance_config.compress_level,
-								 true);
+								 true,
+								 NONE_COMPRESS);
 		}
 
 		if (file->write_size == FILE_NOT_FOUND)

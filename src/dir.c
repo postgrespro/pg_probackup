@@ -193,6 +193,7 @@ pgFileInit(const char *rel_path)
 	// May be add?
 	// pg_atomic_clear_flag(file->lock);
 	file->excluded = false;
+	file->forkName = none;
 	return file;
 }
 
@@ -205,7 +206,7 @@ pgFileInit(const char *rel_path)
  * TODO: do not issue elog here
  */
 pg_crc32
-pgFileGetCRC(const char *file_path, bool use_crc32c, CompressAlg calg, bool decompress, bool missing_ok)
+pgFileGetCRC(const char *file_path, bool use_crc32c, CompressAlg calg, bool missing_ok)
 {
 	PbkFile    *f = NULL;
 	pg_crc32	crc = 0;
@@ -213,7 +214,7 @@ pgFileGetCRC(const char *file_path, bool use_crc32c, CompressAlg calg, bool deco
 	ssize_t		len = 0;
 
 	/* open file in binary read mode */
-	f = open_for_read(file_path, calg, (use_crc32c) ? CRC32C : CRC32, decompress);
+	f = open_for_read(file_path, calg, (use_crc32c) ? CRC32C : CRC32);
 	if (f->fd < 0)
 	{
 		if (errno == ENOENT && missing_ok)
@@ -681,47 +682,18 @@ dir_check_file(pgFile *file, bool backup_logs)
 			return CHECK_FALSE;
 		else if (isdigit(file->name[0]))
 		{
-			char	   *fork_name;
-			int			len;
-			char		suffix[MAXPGPATH];
+			set_forkname(file);
 
-			fork_name = strstr(file->name, "_");
-			if (fork_name)
+			if (file->forkName == ptrack) /* Compatibility with left-overs from ptrack1 */
+				return CHECK_FALSE;
+			else if (file->forkName != none)
+				return CHECK_TRUE;
+
+			/* Check if file is CFM fork and also set is_datafile flag */
 			{
-				/* Auxiliary fork of the relfile */
-				if (strcmp(fork_name, "_vm") == 0)
-					file->forkName = vm;
-
-				else if (strcmp(fork_name, "_fsm") == 0)
-					file->forkName = fsm;
-
-				else if (strcmp(fork_name, "_cfm") == 0)
-					file->forkName = cfm;
-
-				else if (strcmp(fork_name, "_ptrack") == 0)
-					file->forkName = ptrack;
-
-				else if (strcmp(fork_name, "_init") == 0)
-					file->forkName = init;
-
-				// extract relOid for certain forks
-				if (file->forkName == vm ||
-					file->forkName == fsm ||
-					file->forkName == init ||
-					file->forkName == cfm)
-				{
-					// sanity
-					if (sscanf(file->name, "%u_*", &(file->relOid)) != 1)
-						file->relOid = 0;
-				}
-
-				/* Do not backup ptrack files */
-				if (file->forkName == ptrack)
-					return CHECK_FALSE;
-			}
-			else
-			{
-
+				int  len;
+				char suffix[MAXFNAMELEN];
+				/* check if file is CFM */
 				len = strlen(file->name);
 				/* reloid.cfm */
 				if (len > 3 && strcmp(file->name + len - 3, "cfm") == 0)
@@ -730,10 +702,11 @@ dir_check_file(pgFile *file, bool backup_logs)
 					return CHECK_TRUE;
 				}
 
+				/* check if file is datafile */
 				sscanf_res = sscanf(file->name, "%u.%d.%s", &(file->relOid),
 									&(file->segno), suffix);
 				if (sscanf_res == 0)
-					elog(ERROR, "Cannot parse file name \"%s\"", file->name);
+					elog(ERROR, "Cannot parse file name \"%s\"", file->name); /* TODO: do we really need that ? */
 				else if (sscanf_res == 1 || sscanf_res == 2)
 					file->is_datafile = true;
 			}
@@ -1721,7 +1694,7 @@ write_database_map(pgBackup *backup, parray *database_map, parray *backup_files_
 	/* Add metadata to backup_content.control */
 	file = pgFileNew(database_map_path, DATABASE_MAP, true, 0,
 								 FIO_BACKUP_HOST);
-	file->crc = pgFileGetCRC(database_map_path, true, NONE_COMPRESS, false, false);
+	file->crc = pgFileGetCRC(database_map_path, true, NONE_COMPRESS, false);
 	file->write_size = file->size;
 	file->uncompressed_size = file->read_size;
 
@@ -1830,5 +1803,40 @@ pfilearray_clear_locks(parray *file_list)
 	{
 		pgFile *file = (pgFile *) parray_get(file_list, i);
 		pg_atomic_clear_flag(&file->lock);
+	}
+}
+
+/* Set forkName if possible */
+void
+set_forkname(pgFile *file)
+{
+	char *fork_name;
+
+	fork_name = strstr(file->name, "_");
+	if (fork_name)
+	{
+		/* Auxiliary fork of the relfile */
+		if (strcmp(fork_name, "_vm") == 0)
+			file->forkName = vm;
+
+		else if (strcmp(fork_name, "_fsm") == 0)
+			file->forkName = fsm;
+
+		else if (strcmp(fork_name, "_cfm") == 0)
+			file->forkName = cfm;
+
+		else if (strcmp(fork_name, "_ptrack") == 0)
+			file->forkName = ptrack;
+
+		else if (strcmp(fork_name, "_init") == 0)
+			file->forkName = init;
+
+		// extract relOid for certain forks
+		if ((file->forkName == vm ||
+			 file->forkName == fsm ||
+			 file->forkName == init ||
+			 file->forkName == cfm) &&
+			(sscanf(file->name, "%u_*", &(file->relOid)) != 1))
+				file->relOid = 0;
 	}
 }

@@ -808,7 +808,7 @@ fio_fwrite(FILE* f, void const* buf, size_t size)
  * with filesystem, since writing less than buffer size
  * is not considered an error.
  */
-static ssize_t
+ssize_t
 durable_write(int fd, const char* buf, size_t size)
 {
 	off_t current_pos = 0;
@@ -1446,7 +1446,7 @@ fio_get_crc32(fio_location location, const char *file_path, bool decompress, boo
 		if (decompress)
 			return pgFileGetCRCgz(file_path, true, missing_ok);
 		else
-			return pgFileGetCRC(file_path, true, NONE_COMPRESS, false, missing_ok);
+			return pgFileGetCRC(file_path, true, NONE_COMPRESS, missing_ok);
 	}
 }
 
@@ -2952,6 +2952,7 @@ int fio_send_file_new(const char *from_fullpath, const char *to_fullpath,
  *  FIO_PAGE
  *  FIO_SEND_FILE_EOF
  *
+ * TODO: add optional compression
  */
 static void
 fio_send_file_impl(int out, const char* path)
@@ -3621,7 +3622,7 @@ fio_communicate(int in, int out)
 			if (hdr.arg == 1)
 				crc = pgFileGetCRCgz(buf, true, true);
 			else
-				crc = pgFileGetCRC(buf, true, NONE_COMPRESS, false, true);
+				crc = pgFileGetCRC(buf, true, NONE_COMPRESS, true);
 			IO_CHECK(fio_write_all(out, &crc, sizeof(crc)), sizeof(crc));
 			break;
 		  case FIO_GET_CHECKSUM_MAP:

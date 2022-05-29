@@ -116,6 +116,7 @@ extern int     fio_seek(int fd, off_t offs);
 extern int     fio_fstat(int fd, struct stat* st);
 extern int     fio_truncate(int fd, off_t size);
 extern int     fio_close(int fd);
+extern ssize_t durable_write(int fd, const char* buf, size_t size);
 
 /* FILE-style functions */
 extern FILE*   fio_fopen(fio_location location, const char* name, const char* mode);

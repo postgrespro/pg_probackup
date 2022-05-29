@@ -1109,7 +1109,8 @@ get_backup_filelist(pgBackup *backup, bool strict)
 		file->is_datafile = is_datafile ? true : false;
 		file->is_cfs = is_cfs ? true : false;
 		file->crc = (pg_crc32) crc;
-		file->z_crc = is_datafile ? 0 : (pg_crc32) z_crc;
+//		file->z_crc = is_datafile ? 0 : (pg_crc32) z_crc;
+		file->z_crc = (pg_crc32) z_crc;
 		file->compress_alg = parse_compress_alg(compress_alg_string);
 		file->external_dir_num = external_dir_num;
 		file->dbOid = dbOid ? dbOid : 0;
@@ -1140,6 +1141,9 @@ get_backup_filelist(pgBackup *backup, bool strict)
 
 		if (get_control_value(buf, "hdr_size", NULL, &hdr_size, false))
 			file->hdr_size = (int) hdr_size;
+
+		if (file->external_dir_num == 0)
+			set_forkname(file);
 
 		parray_append(files, file);
 	}

@@ -14,6 +14,9 @@
 
 #include "utils/thread.h"
 
+/* We need critical section to append mergeed files into filelist */
+static pthread_mutex_t mergelist_append_mutex = PTHREAD_MUTEX_INITIALIZER;
+
 typedef struct
 {
 	parray		*merge_filelist;
@@ -60,6 +63,7 @@ merge_non_data_file(parray *parent_chain, pgBackup *full_backup,
 				const char *full_external_prefix, bool no_sync);
 
 static bool is_forward_compatible(parray *parent_chain);
+static void guess_uncompressed_size(pgFile *file);
 
 /*
  * Implementation of MERGE command.
@@ -953,6 +957,7 @@ merge_files(void *arg)
 		tmp_file->is_cfs = dest_file->is_cfs;
 		tmp_file->external_dir_num = dest_file->external_dir_num;
 		tmp_file->dbOid = dest_file->dbOid;
+		tmp_file->forkName = dest_file->forkName;
 
 		/* Directories were created before */
 		if (S_ISDIR(dest_file->mode))
@@ -1015,10 +1020,9 @@ merge_files(void *arg)
 
 			for (i = parray_num(arguments->parent_chain) - 1; i >= 0; i--)
 			{
-				pgFile	   **res_file = NULL;
-				pgFile	   *file = NULL;
-
-				pgBackup   *backup = (pgBackup *) parray_get(arguments->parent_chain, i);
+				pgFile  **res_file = NULL;
+				pgFile   *file = NULL;
+				pgBackup *backup = (pgBackup *) parray_get(arguments->parent_chain, i);
 
 				/* lookup file in intermediate backup */
 				res_file =  parray_bsearch(backup->files, dest_file, pgFileCompareRelPathWithExternal);
@@ -1053,35 +1057,28 @@ merge_files(void *arg)
 		 */
 		if (in_place)
 		{
-			pgFile	   **res_file = NULL;
+			bool        skip_merge = false;
+			pgFile	  **res_file = NULL;
 			pgFile	   *file = NULL;
 			res_file = parray_bsearch(arguments->full_backup->files, dest_file,
 										pgFileCompareRelPathWithExternal);
 			file = (res_file) ? *res_file : NULL;
 
 			/* If file didn`t changed in any way, then in-place merge is possible */
-			if (file &&
+			if (file && dest_file->is_datafile && !dest_file->is_cfs &&
 				file->n_blocks == dest_file->n_blocks)
 			{
 				BackupPageHeader2 *headers = NULL;
 
-				elog(VERBOSE, "The file didn`t changed since FULL backup, skip merge: \"%s\"",
-								file->rel_path);
-
 				tmp_file->crc = file->crc;
 				tmp_file->write_size = file->write_size;
 
-				if (dest_file->is_datafile && !dest_file->is_cfs)
-				{
-					tmp_file->n_blocks = file->n_blocks;
-					tmp_file->compress_alg = file->compress_alg;
-					tmp_file->uncompressed_size = file->n_blocks * BLCKSZ;
+				tmp_file->n_blocks = file->n_blocks;
+				tmp_file->compress_alg = file->compress_alg;
+				tmp_file->uncompressed_size = file->n_blocks * BLCKSZ;
 
-					tmp_file->n_headers = file->n_headers;
-					tmp_file->hdr_crc = file->hdr_crc;
-				}
-				else
-					tmp_file->uncompressed_size = tmp_file->write_size;
+				tmp_file->n_headers = file->n_headers;
+				tmp_file->hdr_crc = file->hdr_crc;
 
 				/* Copy header metadata from old map into a new one */
 				tmp_file->n_headers = file->n_headers;
@@ -1095,7 +1092,34 @@ merge_files(void *arg)
 
 				write_page_headers(headers, tmp_file, &(arguments->full_backup->hdr_map), true);
 				pg_free(headers);
+				skip_merge = true;
+			}
+			else if ((!dest_file->is_datafile || dest_file->is_cfs) &&
+					 file->compress_alg == arguments->dest_backup->compress_alg)
+			{
+				/* inherit properties from source file */
+				tmp_file->crc = file->crc;
+				tmp_file->write_size = file->write_size;
+				tmp_file->compress_alg = file->compress_alg;
+				tmp_file->write_size = file->write_size;
+				tmp_file->uncompressed_size = file->write_size; /* untrue for compressed */
 
+				if (file->compress_alg != NONE_COMPRESS)
+				{
+					tmp_file->z_crc = file->z_crc;
+					/* We have no idea about actual uncompressed size of compressed non-data file,
+					 * because we do not store it in metadata.
+					 * Probably we can obtain that from gz_header via inflateGetHeader
+					 * Pure speculations follows
+					 */
+					guess_uncompressed_size(tmp_file);
+				}
+				skip_merge = true;
+			}
+
+			if (skip_merge)
+			{
+				elog(VERBOSE, "The file didn`t changed since FULL backup, skip merge: \"%s\"", file->rel_path);
 				//TODO: report in_place merge bytes.
 				goto done;
 			}
@@ -1120,7 +1144,12 @@ merge_files(void *arg)
 								arguments->no_sync);
 
 done:
+		// append file into result merge_list
+		if (num_threads > 1)
+			pthread_lock(&mergelist_append_mutex);
 		parray_append(arguments->merge_filelist, tmp_file);
+		if (num_threads > 1)
+			pthread_mutex_unlock(&mergelist_append_mutex);
 	}
 
 	/* Data files merging is successful */
@@ -1312,8 +1341,10 @@ merge_non_data_file(parray *parent_chain, pgBackup *full_backup,
 	char	to_fullpath[MAXPGPATH];
 	char	to_fullpath_tmp[MAXPGPATH]; /* used for backup */
 	char	from_fullpath[MAXPGPATH];
+	bool      do_decompress_source = false;
+	bool      do_compress_dest = false;
 	pgBackup *from_backup = NULL;
-	pgFile *from_file = NULL;
+	pgFile   *from_file = NULL;
 
 	/* We need to make full path to destination file */
 	if (dest_file->external_dir_num)
@@ -1350,7 +1381,7 @@ merge_non_data_file(parray *parent_chain, pgBackup *full_backup,
 		 */
 		if (!from_file)
 		{
-			elog(ERROR, "Failed to locate nonedata file \"%s\" in backup %s",
+			elog(ERROR, "Failed to locate non-data file \"%s\" in backup %s",
 				dest_file->rel_path, base36enc(from_backup->start_time));
 			continue;
 		}
@@ -1380,16 +1411,49 @@ merge_non_data_file(parray *parent_chain, pgBackup *full_backup,
 	}
 	else
 	{
-		char backup_database_dir[MAXPGPATH];
-		join_path_components(backup_database_dir, from_backup->root_dir, DATABASE_DIR);
-		join_path_components(from_fullpath, backup_database_dir, from_file->rel_path);
+		char temp[MAXPGPATH];
+		join_path_components(temp, from_backup->root_dir, DATABASE_DIR);
+		join_path_components(from_fullpath, temp, from_file->rel_path);
 	}
 
 	/* Copy file to FULL backup directory into temp file */
+
+	/* possible variants:
+	 * 1. source uncompressed, dest compressed, do_decompress == false
+	 * 2. source compressed, dest uncompressed, do_compress = true
+	 * 3. source compressed, dest compressed, do_compress = false
+	 * 4. source uncompressed, dest uncompressed, do_compress = false
+	 */
+	if (from_file->compress_alg != NONE_COMPRESS && dest_backup->compress_alg == NONE_COMPRESS)
+		do_decompress_source = true;
+
+	/* possible variants:
+	 * 1. source uncompressed, dest compressed, do_compress_dest == true // cannot copy as-is
+	 * 2. source compressed, dest uncompressed, do_compress_dest = false
+	 * 3. source compressed, dest compressed, do_compress_dest = false
+	 * 4. source uncompressed, dest uncompressed, do_compress = false
+	 */
+	if (from_file->compress_alg == NONE_COMPRESS && dest_backup->compress_alg != NONE_COMPRESS)
+		do_compress_dest = true;
+
+	/* TODO: make crc calculation optional */
 	backup_non_data_file(tmp_file, NULL, from_fullpath,
 						 to_fullpath_tmp, BACKUP_MODE_FULL, 0,
-						 NONE_COMPRESS,
-						 dest_backup->compress_level, false);
+						 /* do not compress already compressed file */
+						 do_compress_dest ? dest_backup->compress_alg : NONE_COMPRESS,
+						 dest_backup->compress_level,
+						 false,
+						/* do not decompress uncompressed files and copied as-is compressed */
+						 do_decompress_source ? from_file->compress_alg : NONE_COMPRESS);
+
+	/* Compression in source and dest are matching, file was copied as-is, inherit its meta */
+	if (from_file->compress_alg == dest_backup->compress_alg && dest_backup->compress_alg != NONE_COMPRESS)
+	{
+		tmp_file->compress_alg = from_file->compress_alg;
+		tmp_file->z_crc = from_file->z_crc;
+		guess_uncompressed_size(tmp_file);
+	}
+	tmp_file->crc = from_file->crc;
 
 	/* sync temp file to disk */
 	if (!no_sync && fio_sync(FIO_BACKUP_HOST, to_fullpath_tmp) != 0)
@@ -1400,7 +1464,6 @@ merge_non_data_file(parray *parent_chain, pgBackup *full_backup,
 	if (rename(to_fullpath_tmp, to_fullpath) == -1)
 			elog(ERROR, "Could not rename file \"%s\" to \"%s\": %s",
 				to_fullpath_tmp, to_fullpath, strerror(errno));
-
 }
 
 /*
@@ -1456,4 +1519,18 @@ is_forward_compatible(parray *parent_chain)
 	}
 
 	return true;
+}
+
+/* try to guess uncompressed size of non-data file, forkName and write_size must be actual */
+void
+guess_uncompressed_size(pgFile *file)
+{
+	if (file->forkName == vm)
+		file->uncompressed_size = BLCKSZ;
+	else if (file->forkName == fsm)
+		file->uncompressed_size = BLCKSZ * 3;
+	else if (file->forkName == cfm)
+		file->uncompressed_size = 1024 * 1024;
+	else
+		file->uncompressed_size = file->write_size;
 }

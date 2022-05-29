@@ -1269,9 +1269,9 @@ restore_files(void *arg)
 			if (!fio_is_remote_file(out))
 				setvbuf(out, NULL, _IONBF, BUFSIZ);
 			/* Destination file is nonedata file */
-			arguments->restored_bytes += restore_non_data_file(arguments->parent_chain,
-										arguments->dest_backup, dest_file, out, to_fullpath,
-										already_exists);
+			arguments->restored_bytes += restore_non_data_file(arguments->dest_backup,
+															   dest_file, out, to_fullpath,
+															   already_exists);
 		}
 
 done:

@@ -210,6 +210,7 @@ typedef enum CompressAlg
 
 typedef enum ForkName
 {
+	none,
 	vm,
 	fsm,
 	cfm,
@@ -1058,7 +1059,7 @@ extern pgFile *pgFileNew(const char *path, const char *rel_path,
 extern pgFile *pgFileInit(const char *rel_path);
 extern void pgFileFree(void *file);
 
-extern pg_crc32 pgFileGetCRC(const char *file_path, bool use_crc32c, CompressAlg calg, bool decompress, bool missing_ok);
+extern pg_crc32 pgFileGetCRC(const char *file_path, bool use_crc32c, CompressAlg calg, bool missing_ok);
 extern pg_crc32 pgFileGetCRCgz(const char *file_path, bool use_crc32c, bool missing_ok);
 
 extern int pgFileMapComparePath(const void *f1, const void *f2);
@@ -1074,6 +1075,7 @@ extern int pgCompareString(const void *str1, const void *str2);
 extern int pgPrefixCompareString(const void *str1, const void *str2);
 extern int pgCompareOid(const void *f1, const void *f2);
 extern void pfilearray_clear_locks(parray *file_list);
+extern void set_forkname(pgFile *file);
 
 /* in data.c */
 extern bool check_data_file(ConnectionArgs *arguments, pgFile *file,
@@ -1091,16 +1093,16 @@ extern void backup_non_data_file(pgFile *file, pgFile *prev_file,
 								 const char *from_fullpath, const char *to_fullpath,
 								 BackupMode backup_mode, time_t parent_backup_time,
 								 CompressAlg calg, int clevel,
-								 bool missing_ok);
-extern void backup_non_data_file_internal(const char *from_fullpath,
+								 bool missing_ok, CompressAlg src_calg);
+extern void backup_non_data_file_internal_old(const char *from_fullpath,
 										  fio_location from_location,
 										  const char *to_fullpath, pgFile *file,
 										  bool missing_ok);
-extern void receive_non_data_file(const char *from_fullpath,
+extern void backup_non_data_file_internal(const char *from_fullpath,
 								  fio_location from_location,
 								  const char *to_fullpath, pgFile *file,
-								  CompressAlg calg, int clevel,
-								  bool missing_ok);
+								  int clevel, bool missing_ok,
+								  CompressAlg src_calg);
 
 typedef enum CrcMethod
 {
@@ -1122,7 +1124,6 @@ typedef struct PbkFile
 {
 	int         fd;
 	off_t       currpos;
-	char        pathname[MAXPGPATH];
 	char        fullpath[MAXPGPATH];
 	char       *suffix;
 	CompressAlg calg;
@@ -1131,7 +1132,6 @@ typedef struct PbkFile
 	unsigned char *buffer;
 	bool        read;
 	bool        is_remote;
-	bool        compression;
 
 	bool        do_crc;
 	bool        use_crc32c;
@@ -1146,7 +1146,7 @@ typedef struct PbkFile
 } PbkFile;
 
 extern PbkFile* InitPbkFile(bool enable_buffering, CrcMethod crc_method, CompressAlg calg, int clevel);
-extern PbkFile* open_for_read(const char *pathname, CompressAlg calg, CrcMethod crc_method, bool decompress);
+extern PbkFile* open_for_read(const char *pathname, CompressAlg calg, CrcMethod crc_method);
 extern PbkFile* open_for_write(const char *pathname, CompressAlg calg, int clevel, mode_t mode, CrcMethod crc_method);
 extern ssize_t read_file(PbkFile *f, void *buf, size_t len);
 extern ssize_t write_file(PbkFile *f, const void *buf, size_t count);
@@ -1162,7 +1162,7 @@ extern size_t restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint
 										 const char *from_fullpath, const char *to_fullpath, int nblocks,
 										 datapagemap_t *map, PageState *checksum_map, int checksum_version,
 										 datapagemap_t *lsn_map, BackupPageHeader2 *headers);
-extern size_t restore_non_data_file(parray *parent_chain, pgBackup *dest_backup,
+extern size_t restore_non_data_file(pgBackup *dest_backup,
 									pgFile *dest_file, FILE *out, const char *to_fullpath,
 									bool already_exists);
 extern void restore_non_data_file_internal(FILE *out, pgFile *file,

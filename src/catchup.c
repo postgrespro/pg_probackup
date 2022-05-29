@@ -440,7 +440,7 @@ catchup_thread_runner(void *arg)
 		{
 			backup_non_data_file(file, dest_file, from_fullpath, to_fullpath,
 								 arguments->backup_mode, current.parent_backup,
-								 NONE_COMPRESS, 0, true);
+								 NONE_COMPRESS, 0, true, NONE_COMPRESS);
 		}
 
 		/* file went missing during catchup */

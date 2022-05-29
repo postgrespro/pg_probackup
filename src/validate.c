@@ -238,7 +238,6 @@ pgBackupValidateFiles(void *arg)
 		struct stat st;
 		pgFile  *file = (pgFile *) parray_get(arguments->files, i);
 		char     file_fullpath[MAXPGPATH];
-		char     *file_fullpath_gz = NULL;
 
 		if (interrupted || thread_interrupted)
 			elog(ERROR, "Interrupted during validate");
@@ -300,25 +299,16 @@ pgBackupValidateFiles(void *arg)
 		else
 			join_path_components(file_fullpath, arguments->base_path, file->rel_path);
 
-		// TODO: check backup version, in old version cfs files where not compressed
-		if (!file->is_datafile && !file->is_cfs && file->compress_alg == ZLIB_COMPRESS)
-		{
-//			char     temp[MAXPGPATH];
-//			snprintf(temp, MAXPGPATH, "%s", file_fullpath);
-			file_fullpath_gz = pgut_malloc(MAXPGPATH);
-			snprintf(file_fullpath_gz, MAXPGPATH, "%s.%s", file_fullpath, "gz");
-		}
-
-		/* TODO: it is redundant to check file existence using stat */
-		if (stat(file_fullpath_gz ? file_fullpath_gz : file_fullpath, &st) == -1)
+		/* TODO: it is redundant to check file existence using stat ?
+		 * Objection: currently we fail earlier and it is good
+		 */
+		if (stat(file_fullpath, &st) == -1)
 		{
 			if (errno == ENOENT)
-				elog(WARNING, "Backup file \"%s\" is not found", file_fullpath_gz ? file_fullpath_gz : file_fullpath);
+				elog(WARNING, "Backup file \"%s\" is not found", file_fullpath);
 			else
-				elog(WARNING, "Cannot stat backup file \"%s\": %s",
-					file_fullpath_gz ? file_fullpath_gz : file_fullpath, strerror(errno));
+				elog(WARNING, "Cannot stat backup file \"%s\": %s", file_fullpath, strerror(errno));
 			arguments->corrupted = true;
-			pg_free(file_fullpath_gz);
 			break;
 		}
 
@@ -326,9 +316,8 @@ pgBackupValidateFiles(void *arg)
 		if (file->write_size != st.st_size)
 		{
 			elog(WARNING, "Invalid size of backup file \"%s\" : " INT64_FORMAT ". Expected %lu",
-				 file_fullpath_gz ? file_fullpath_gz : file_fullpath, (unsigned long) st.st_size, file->write_size);
+				 file_fullpath, (unsigned long) st.st_size, file->write_size);
 			arguments->corrupted = true;
-			pg_free(file_fullpath_gz);
 			break;
 		}
 
@@ -361,18 +350,23 @@ pgBackupValidateFiles(void *arg)
 				!file->external_dir_num)
 				crc = get_pgcontrol_checksum(arguments->base_path);
 			else
+			{
 				crc = pgFileGetCRC(file_fullpath,
 								   arguments->backup_version <= 20021 ||
 								   arguments->backup_version >= 20025,
-								   file->compress_alg, false,
+								   NONE_COMPRESS, /* it is cheaper to not decompress */
 								   false);
+			}
 
-			expected_crc = (file->compress_alg == ZLIB_COMPRESS) ? file->z_crc : file->crc;
+			/* for compressed data-file in skip-block-validation mode use file->crc,
+			 * for compressed non-datafile use file->z_crc */
+//			expected_crc = (file->compress_alg == ZLIB_COMPRESS && !file->is_datafile) ? file->z_crc : file->crc;
+			expected_crc = (file->z_crc != 0) ? file->z_crc : file->crc;
 
 			if (crc != expected_crc)
 			{
-				elog(ERROR, "Invalid CRC of backup file \"%s\" : %X. Expected %X",
-						file_fullpath, crc, file->crc);
+				elog(WARNING, "Invalid CRC of backup file \"%s\" : %X. Expected %X",
+						file_fullpath, crc, expected_crc);
 				arguments->corrupted = true;
 			}
 		}
@@ -389,8 +383,6 @@ pgBackupValidateFiles(void *arg)
 								  arguments->hdr_map))
 				arguments->corrupted = true;
 		}
-
-		pg_free(file_fullpath_gz);
 	}
 
 	/* Data files validation is successful */
@@ -768,7 +760,7 @@ validate_tablespace_map(pgBackup *backup, bool no_validate)
 	/* check tablespace map checksumms */
 	if (!no_validate)
 	{
-		crc = pgFileGetCRC(map_path, use_crc32c, NONE_COMPRESS, false, false);
+		crc = pgFileGetCRC(map_path, use_crc32c, NONE_COMPRESS, false);
 
 		if ((*tablespace_map)->crc != crc)
 			elog(ERROR, "Invalid CRC of tablespace map file \"%s\" : %X. Expected %X, "
