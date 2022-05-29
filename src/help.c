@@ -261,6 +261,7 @@ help_pg_probackup(void)
 	printf(_("                 [--remote-proto] [--remote-host]\n"));
 	printf(_("                 [--remote-port] [--remote-path] [--remote-user]\n"));
 	printf(_("                 [--ssh-options]\n"));
+	printf(_("                 [--dry-run]\n"));
 	printf(_("                 [--help]\n"));
 
 	if ((PROGRAM_URL || PROGRAM_EMAIL))
