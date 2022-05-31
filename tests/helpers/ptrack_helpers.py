@@ -90,17 +90,17 @@ def dir_files(base_dir):
 def is_enterprise():
     # pg_config --help
     if os.name == 'posix':
-        cmd = [os.environ['PG_CONFIG'], '--help']
+        cmd = [os.environ['PG_CONFIG'], '--pgpro-edition']
 
     elif os.name == 'nt':
-        cmd = [[os.environ['PG_CONFIG']], ['--help']]
+        cmd = [[os.environ['PG_CONFIG']], ['--pgpro-edition']]
 
     p = subprocess.Popen(
         cmd,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE
     )
-    if b'postgrespro.ru' in p.communicate()[0]:
+    if b'enterprise' in p.communicate()[0]:
         return True
     else:
         return False
