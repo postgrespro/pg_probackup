@@ -190,7 +190,7 @@ help_pg_probackup(void)
 	printf(_("\n  %s checkdb [-B backup-path] [--instance=instance_name]\n"), PROGRAM_NAME);
 	printf(_("                 [-D pgdata-path] [--progress] [-j num-threads]\n"));
 	printf(_("                 [--amcheck] [--skip-block-validation]\n"));
-	printf(_("                 [--heapallindexed]\n"));
+	printf(_("                 [--heapallindexed] [--checkunique]\n"));
 	printf(_("                 [--help]\n"));
 
 	printf(_("\n  %s show -B backup-path\n"), PROGRAM_NAME);
@@ -261,15 +261,16 @@ help_pg_probackup(void)
 	printf(_("                 [--remote-proto] [--remote-host]\n"));
 	printf(_("                 [--remote-port] [--remote-path] [--remote-user]\n"));
 	printf(_("                 [--ssh-options]\n"));
+	printf(_("                 [--dry-run]\n"));
 	printf(_("                 [--help]\n"));
 
 	if ((PROGRAM_URL || PROGRAM_EMAIL))
 	{
 		printf("\n");
 		if (PROGRAM_URL)
-			printf("Read the website for details. <%s>\n", PROGRAM_URL);
+			printf(_("Read the website for details <%s>.\n"), PROGRAM_URL);
 		if (PROGRAM_EMAIL)
-			printf("Report bugs to <%s>.\n", PROGRAM_EMAIL);
+			printf(_("Report bugs to <%s>.\n"), PROGRAM_EMAIL);
 	}
 }
 
@@ -601,7 +602,7 @@ help_checkdb(void)
 	printf(_("\n%s checkdb [-B backup-path] [--instance=instance_name]\n"), PROGRAM_NAME);
 	printf(_("                 [-D pgdata-path] [-j num-threads] [--progress]\n"));
 	printf(_("                 [--amcheck] [--skip-block-validation]\n"));
-	printf(_("                 [--heapallindexed]\n\n"));
+	printf(_("                 [--heapallindexed] [--checkunique]\n\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
 	printf(_("      --instance=instance_name     name of the instance\n"));
@@ -615,6 +616,8 @@ help_checkdb(void)
 	printf(_("                                   check btree indexes via function 'bt_index_check()'\n"));
 	printf(_("                                   using 'amcheck' or 'amcheck_next' extensions\n"));
 	printf(_("      --heapallindexed             also check that heap is indexed\n"));
+	printf(_("                                   can be used only with '--amcheck' option\n"));
+	printf(_("      --checkunique                also check unique constraints\n"));
 	printf(_("                                   can be used only with '--amcheck' option\n"));
 
 	printf(_("\n  Logging options:\n"));
@@ -1045,6 +1048,7 @@ help_catchup(void)
 	printf(_("                 [--remote-proto] [--remote-host]\n"));
 	printf(_("                 [--remote-port] [--remote-path] [--remote-user]\n"));
 	printf(_("                 [--ssh-options]\n"));
+	printf(_("                 [--dry-run]\n"));
 	printf(_("                 [--help]\n\n"));
 
 	printf(_("  -b, --backup-mode=catchup-mode   catchup mode=FULL|DELTA|PTRACK\n"));
@@ -1079,4 +1083,6 @@ help_catchup(void)
 	printf(_("      --remote-user=username       user name for ssh connection (default: current user)\n"));
 	printf(_("      --ssh-options=ssh_options    additional ssh options (default: none)\n"));
 	printf(_("                                   (example: --ssh-options='-c cipher_spec -F configfile')\n\n"));
+
+	printf(_("      --dry-run                    perform a trial run without any changes\n\n"));
 }

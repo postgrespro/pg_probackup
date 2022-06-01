@@ -15,7 +15,7 @@ if [ -z ${MODE+x} ]; then
 fi
 
 if [ -z ${PTRACK_PATCH_PG_BRANCH+x} ]; then
-	PTRACK_PATCH_PG_BRANCH=off
+	PTRACK_PATCH_PG_BRANCH=OFF
 fi
 
 if [ -z ${PGPROBACKUP_GDB+x} ]; then

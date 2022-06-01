@@ -1,0 +1,1880 @@
+# Russian message translation file for pg_probackup
+# Copyright (C) 2022 PostgreSQL Global Development Group
+# This file is distributed under the same license as the pg_probackup (PostgreSQL) package.
+# Vyacheslav Makarov <v.makarov@postgrespro.ru>, 2022.
+msgid ""
+msgstr ""
+"Project-Id-Version: pg_probackup (PostgreSQL)\n"
+"Report-Msgid-Bugs-To: bugs@postgrespro.ru\n"
+"POT-Creation-Date: 2022-04-08 11:33+0300\n"
+"PO-Revision-Date: 2022-MO-DA HO:MI+ZONE\n"
+"Last-Translator: Vyacheslav Makarov <v.makarov@postgrespro.ru>\n"
+"Language-Team: Russian <pgsql-ru-general@postgresql.org>\n"
+"Language: ru\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n"
+"%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
+
+#: src/help.c:84
+#, c-format
+msgid ""
+"\n"
+"%s - utility to manage backup/recovery of PostgreSQL database.\n"
+msgstr  ""
+"\n"
+"%s - утилита для управления резервным копированием/восстановлением базы данных PostgreSQL.\n"
+
+#: src/help.c:86
+#, c-format
+msgid ""
+"\n"
+"  %s help [COMMAND]\n"
+msgstr ""
+
+#: src/help.c:88
+#, c-format
+msgid ""
+"\n"
+"  %s version\n"
+msgstr ""
+
+#: src/help.c:90
+#, c-format
+msgid ""
+"\n"
+"  %s init -B backup-path\n"
+msgstr ""
+
+#: src/help.c:92
+#, c-format
+msgid ""
+"\n"
+"  %s set-config -B backup-path --instance=instance_name\n"
+msgstr ""
+
+#: src/help.c:93 src/help.c:791
+#, c-format
+msgid "                 [-D pgdata-path]\n"
+msgstr ""
+
+#: src/help.c:94 src/help.c:130 src/help.c:218
+#, c-format
+msgid "                 [--external-dirs=external-directories-paths]\n"
+msgstr ""
+
+#: src/help.c:95 src/help.c:132 src/help.c:305 src/help.c:731 src/help.c:794
+#, c-format
+msgid "                 [--log-level-console=log-level-console]\n"
+msgstr ""
+
+#: src/help.c:96 src/help.c:133 src/help.c:306 src/help.c:732 src/help.c:795
+#, c-format
+msgid "                 [--log-level-file=log-level-file]\n"
+msgstr ""
+
+#: src/help.c:97 src/help.c:134 src/help.c:307 src/help.c:733 src/help.c:796
+#, c-format
+msgid "                 [--log-filename=log-filename]\n"
+msgstr ""
+
+#: src/help.c:98 src/help.c:135 src/help.c:308 src/help.c:734 src/help.c:797
+#, c-format
+msgid "                 [--error-log-filename=error-log-filename]\n"
+msgstr ""
+
+#: src/help.c:99 src/help.c:136 src/help.c:309 src/help.c:735 src/help.c:798
+#, c-format
+msgid "                 [--log-directory=log-directory]\n"
+msgstr ""
+
+#: src/help.c:100 src/help.c:137 src/help.c:310 src/help.c:736 src/help.c:799
+#, c-format
+msgid "                 [--log-rotation-size=log-rotation-size]\n"
+msgstr ""
+
+#: src/help.c:101 src/help.c:800
+#, c-format
+msgid "                 [--log-rotation-age=log-rotation-age]\n"
+msgstr ""
+
+#: src/help.c:102 src/help.c:140 src/help.c:203 src/help.c:313 src/help.c:674
+#: src/help.c:801
+#, c-format
+msgid "                 [--retention-redundancy=retention-redundancy]\n"
+msgstr ""
+
+#: src/help.c:103 src/help.c:141 src/help.c:204 src/help.c:314 src/help.c:675
+#: src/help.c:802
+#, c-format
+msgid "                 [--retention-window=retention-window]\n"
+msgstr ""
+
+#: src/help.c:104 src/help.c:142 src/help.c:205 src/help.c:315 src/help.c:676
+#: src/help.c:803
+#, c-format
+msgid "                 [--wal-depth=wal-depth]\n"
+msgstr ""
+
+#: src/help.c:105 src/help.c:144 src/help.c:235 src/help.c:317 src/help.c:804
+#: src/help.c:948
+#, c-format
+msgid "                 [--compress-algorithm=compress-algorithm]\n"
+msgstr ""
+
+#: src/help.c:106 src/help.c:145 src/help.c:236 src/help.c:318 src/help.c:805
+#: src/help.c:949
+#, c-format
+msgid "                 [--compress-level=compress-level]\n"
+msgstr ""
+
+#: src/help.c:107 src/help.c:232 src/help.c:806 src/help.c:945
+#, c-format
+msgid "                 [--archive-timeout=timeout]\n"
+msgstr ""
+
+#: src/help.c:108 src/help.c:147 src/help.c:259 src/help.c:320 src/help.c:807
+#: src/help.c:1045
+#, c-format
+msgid "                 [-d dbname] [-h host] [-p port] [-U username]\n"
+msgstr ""
+
+#: src/help.c:109 src/help.c:149 src/help.c:174 src/help.c:219 src/help.c:237
+#: src/help.c:247 src/help.c:261 src/help.c:322 src/help.c:449 src/help.c:808
+#: src/help.c:906 src/help.c:950 src/help.c:994 src/help.c:1047
+#, c-format
+msgid "                 [--remote-proto] [--remote-host]\n"
+msgstr ""
+
+#: src/help.c:110 src/help.c:150 src/help.c:175 src/help.c:220 src/help.c:238
+#: src/help.c:248 src/help.c:262 src/help.c:323 src/help.c:450 src/help.c:809
+#: src/help.c:907 src/help.c:951 src/help.c:995 src/help.c:1048
+#, c-format
+msgid "                 [--remote-port] [--remote-path] [--remote-user]\n"
+msgstr ""
+
+#: src/help.c:111 src/help.c:151 src/help.c:176 src/help.c:221 src/help.c:239
+#: src/help.c:249 src/help.c:263 src/help.c:324 src/help.c:451 src/help.c:1049
+#, c-format
+msgid "                 [--ssh-options]\n"
+msgstr ""
+
+#: src/help.c:112
+#, c-format
+msgid "                 [--restore-command=cmdline] [--archive-host=destination]\n"
+msgstr ""
+
+#: src/help.c:113 src/help.c:178
+#, c-format
+msgid "                 [--archive-port=port] [--archive-user=username]\n"
+msgstr ""
+
+#: src/help.c:114 src/help.c:119 src/help.c:123 src/help.c:153 src/help.c:179
+#: src/help.c:188 src/help.c:194 src/help.c:209 src/help.c:214 src/help.c:222
+#: src/help.c:226 src/help.c:240 src/help.c:250 src/help.c:264
+#, c-format
+msgid "                 [--help]\n"
+msgstr ""
+
+#: src/help.c:116
+#, c-format
+msgid ""
+"\n"
+"  %s set-backup -B backup-path --instance=instance_name\n"
+msgstr ""
+
+#: src/help.c:117
+#, c-format
+msgid "                 -i backup-id [--ttl=interval] [--expire-time=timestamp]\n"
+msgstr ""
+
+#: src/help.c:118
+#, c-format
+msgid "                 [--note=text]\n"
+msgstr ""
+
+#: src/help.c:121
+#, c-format
+msgid ""
+"\n"
+"  %s show-config -B backup-path --instance=instance_name\n"
+msgstr ""
+
+#: src/help.c:122
+#, c-format
+msgid "                 [--format=format]\n"
+msgstr ""
+
+#: src/help.c:125
+#, c-format
+msgid ""
+"\n"
+"  %s backup -B backup-path -b backup-mode --instance=instance_name\n"
+msgstr ""
+
+#: src/help.c:126 src/help.c:299
+#, c-format
+msgid "                 [-D pgdata-path] [-C]\n"
+msgstr ""
+
+#: src/help.c:127 src/help.c:300
+#, c-format
+msgid "                 [--stream [-S slot-name] [--temp-slot]]\n"
+msgstr ""
+
+#: src/help.c:128 src/help.c:301
+#, c-format
+msgid "                 [--backup-pg-log] [-j num-threads] [--progress]\n"
+msgstr ""
+
+#: src/help.c:129 src/help.c:168 src/help.c:302 src/help.c:433
+#, c-format
+msgid "                 [--no-validate] [--skip-block-validation]\n"
+msgstr ""
+
+#: src/help.c:131 src/help.c:304
+#, c-format
+msgid "                 [--no-sync]\n"
+msgstr ""
+
+#: src/help.c:138 src/help.c:311
+#, c-format
+msgid "                 [--log-rotation-age=log-rotation-age] [--no-color]\n"
+msgstr ""
+
+#: src/help.c:139 src/help.c:312
+#, c-format
+msgid "                 [--delete-expired] [--delete-wal] [--merge-expired]\n"
+msgstr ""
+
+#: src/help.c:143 src/help.c:316
+#, c-format
+msgid "                 [--compress]\n"
+msgstr ""
+
+#: src/help.c:146 src/help.c:319
+#, c-format
+msgid "                 [--archive-timeout=archive-timeout]\n"
+msgstr ""
+
+#: src/help.c:148 src/help.c:260 src/help.c:321 src/help.c:1046
+#, c-format
+msgid "                 [-w --no-password] [-W --password]\n"
+msgstr ""
+
+#: src/help.c:152
+#, c-format
+msgid "                 [--ttl=interval] [--expire-time=timestamp] [--note=text]\n"
+msgstr ""
+
+#: src/help.c:156
+#, c-format
+msgid ""
+"\n"
+"  %s restore -B backup-path --instance=instance_name\n"
+msgstr ""
+
+#: src/help.c:157 src/help.c:431
+#, c-format
+msgid "                 [-D pgdata-path] [-i backup-id] [-j num-threads]\n"
+msgstr ""
+
+#: src/help.c:158 src/help.c:183 src/help.c:439 src/help.c:552
+#, c-format
+msgid "                 [--recovery-target-time=time|--recovery-target-xid=xid\n"
+msgstr ""
+
+#: src/help.c:159 src/help.c:184 src/help.c:440 src/help.c:553
+#, c-format
+msgid "                  |--recovery-target-lsn=lsn [--recovery-target-inclusive=boolean]]\n"
+msgstr ""
+
+#: src/help.c:160 src/help.c:185 src/help.c:441 src/help.c:554
+#, c-format
+msgid "                 [--recovery-target-timeline=timeline]\n"
+msgstr ""
+
+#: src/help.c:161 src/help.c:442
+#, c-format
+msgid "                 [--recovery-target=immediate|latest]\n"
+msgstr ""
+
+#: src/help.c:162 src/help.c:186 src/help.c:443 src/help.c:555
+#, c-format
+msgid "                 [--recovery-target-name=target-name]\n"
+msgstr ""
+
+#: src/help.c:163 src/help.c:444
+#, c-format
+msgid "                 [--recovery-target-action=pause|promote|shutdown]\n"
+msgstr ""
+
+#: src/help.c:164 src/help.c:445 src/help.c:793
+#, c-format
+msgid "                 [--restore-command=cmdline]\n"
+msgstr ""
+
+#: src/help.c:165
+#, c-format
+msgid "                 [-R | --restore-as-replica] [--force]\n"
+msgstr ""
+
+#: src/help.c:166 src/help.c:447
+#, c-format
+msgid "                 [--primary-conninfo=primary_conninfo]\n"
+msgstr ""
+
+#: src/help.c:167 src/help.c:448
+#, c-format
+msgid "                 [-S | --primary-slot-name=slotname]\n"
+msgstr ""
+
+#: src/help.c:169
+#, c-format
+msgid "                 [-T OLDDIR=NEWDIR] [--progress]\n"
+msgstr ""
+
+#: src/help.c:170 src/help.c:435
+#, c-format
+msgid "                 [--external-mapping=OLDDIR=NEWDIR]\n"
+msgstr ""
+
+#: src/help.c:171
+#, c-format
+msgid "                 [--skip-external-dirs] [--no-sync]\n"
+msgstr ""
+
+#: src/help.c:172 src/help.c:437
+#, c-format
+msgid "                 [-I | --incremental-mode=none|checksum|lsn]\n"
+msgstr ""
+
+#: src/help.c:173
+#, c-format
+msgid "                 [--db-include | --db-exclude]\n"
+msgstr ""
+
+#: src/help.c:177
+#, c-format
+msgid "                 [--archive-host=hostname]\n"
+msgstr ""
+
+#: src/help.c:181
+#, c-format
+msgid ""
+"\n"
+"  %s validate -B backup-path [--instance=instance_name]\n"
+msgstr ""
+
+#: src/help.c:182 src/help.c:551
+#, c-format
+msgid "                 [-i backup-id] [--progress] [-j num-threads]\n"
+msgstr ""
+
+#: src/help.c:187
+#, c-format
+msgid "                 [--skip-block-validation]\n"
+msgstr ""
+
+#: src/help.c:190
+#, c-format
+msgid ""
+"\n"
+"  %s checkdb [-B backup-path] [--instance=instance_name]\n"
+msgstr ""
+
+#: src/help.c:191
+#, c-format
+msgid "                 [-D pgdata-path] [--progress] [-j num-threads]\n"
+msgstr ""
+
+#: src/help.c:192 src/help.c:603
+#, c-format
+msgid "                 [--amcheck] [--skip-block-validation]\n"
+msgstr ""
+
+#: src/help.c:193
+#, c-format
+msgid "                 [--heapallindexed] [--checkunique]\n"
+msgstr ""
+
+#: src/help.c:196
+#, c-format
+msgid ""
+"\n"
+"  %s show -B backup-path\n"
+msgstr ""
+
+#: src/help.c:197 src/help.c:657
+#, c-format
+msgid "                 [--instance=instance_name [-i backup-id]]\n"
+msgstr ""
+
+#: src/help.c:198
+#, c-format
+msgid "                 [--format=format] [--archive]\n"
+msgstr ""
+
+#: src/help.c:199
+#, c-format
+msgid "                 [--no-color] [--help]\n"
+msgstr ""
+
+#: src/help.c:201
+#, c-format
+msgid ""
+"\n"
+"  %s delete -B backup-path --instance=instance_name\n"
+msgstr ""
+
+#: src/help.c:202 src/help.c:673
+#, c-format
+msgid "                 [-j num-threads] [--progress]\n"
+msgstr ""
+
+#: src/help.c:206
+#, c-format
+msgid "                 [-i backup-id | --delete-expired | --merge-expired | --status=backup_status]\n"
+msgstr ""
+
+#: src/help.c:207
+#, c-format
+msgid "                 [--delete-wal]\n"
+msgstr ""
+
+#: src/help.c:208
+#, c-format
+msgid "                 [--dry-run] [--no-validate] [--no-sync]\n"
+msgstr ""
+
+#: src/help.c:211
+#, c-format
+msgid ""
+"\n"
+"  %s merge -B backup-path --instance=instance_name\n"
+msgstr ""
+
+#: src/help.c:212
+#, c-format
+msgid "                 -i backup-id [--progress] [-j num-threads]\n"
+msgstr ""
+
+#: src/help.c:213 src/help.c:730
+#, c-format
+msgid "                 [--no-validate] [--no-sync]\n"
+msgstr ""
+
+#: src/help.c:216
+#, c-format
+msgid ""
+"\n"
+"  %s add-instance -B backup-path -D pgdata-path\n"
+msgstr ""
+
+#: src/help.c:217 src/help.c:225 src/help.c:904
+#, c-format
+msgid "                 --instance=instance_name\n"
+msgstr ""
+
+#: src/help.c:224
+#, c-format
+msgid ""
+"\n"
+"  %s del-instance -B backup-path\n"
+msgstr ""
+
+#: src/help.c:228
+#, c-format
+msgid ""
+"\n"
+"  %s archive-push -B backup-path --instance=instance_name\n"
+msgstr ""
+
+#: src/help.c:229 src/help.c:244 src/help.c:942 src/help.c:990
+#, c-format
+msgid "                 --wal-file-name=wal-file-name\n"
+msgstr ""
+
+#: src/help.c:230 src/help.c:943 src/help.c:991
+#, c-format
+msgid "                 [--wal-file-path=wal-file-path]\n"
+msgstr ""
+
+#: src/help.c:231 src/help.c:245 src/help.c:944 src/help.c:992
+#, c-format
+msgid "                 [-j num-threads] [--batch-size=batch_size]\n"
+msgstr ""
+
+#: src/help.c:233 src/help.c:946
+#, c-format
+msgid "                 [--no-ready-rename] [--no-sync]\n"
+msgstr ""
+
+#: src/help.c:234 src/help.c:947
+#, c-format
+msgid "                 [--overwrite] [--compress]\n"
+msgstr ""
+
+#: src/help.c:242
+#, c-format
+msgid ""
+"\n"
+"  %s archive-get -B backup-path --instance=instance_name\n"
+msgstr ""
+
+#: src/help.c:243
+#, c-format
+msgid "                 --wal-file-path=wal-file-path\n"
+msgstr ""
+
+#: src/help.c:246 src/help.c:993
+#, c-format
+msgid "                 [--no-validate-wal]\n"
+msgstr ""
+
+#: src/help.c:252
+#, c-format
+msgid ""
+"\n"
+"  %s catchup  -b catchup-mode\n"
+msgstr ""
+
+#: src/help.c:253 src/help.c:1039
+#, c-format
+msgid "                 --source-pgdata=path_to_pgdata_on_remote_server\n"
+msgstr ""
+
+#: src/help.c:254 src/help.c:1040
+#, c-format
+msgid "                 --destination-pgdata=path_to_local_dir\n"
+msgstr ""
+
+#: src/help.c:255
+#, c-format
+msgid "                 [--stream [-S slot-name] [--temp-slot | --perm-slot]]\n"
+msgstr ""
+
+#: src/help.c:256 src/help.c:1042
+#, c-format
+msgid "                 [-j num-threads]\n"
+msgstr ""
+
+#: src/help.c:257 src/help.c:434 src/help.c:1043
+#, c-format
+msgid "                 [-T OLDDIR=NEWDIR]\n"
+msgstr ""
+
+#: src/help.c:258 src/help.c:1044
+#, c-format
+msgid "                 [--exclude-path=path_prefix]\n"
+msgstr ""
+
+#: src/help.c:270
+#, c-format
+msgid "Read the website for details <%s>.\n"
+msgstr "Подробнее читайте на сайте <%s>.\n"
+
+#: src/help.c:272
+#, c-format
+msgid "Report bugs to <%s>.\n"
+msgstr "Сообщайте об ошибках в <%s>.\n"
+
+#: src/help.c:279
+#, c-format
+msgid ""
+"\n"
+"Unknown command. Try pg_probackup help\n"
+"\n"
+msgstr ""
+"\n"
+"Неизвестная команда. Попробуйте pg_probackup help\n"
+"\n"
+
+#: src/help.c:285
+#, c-format
+msgid ""
+"\n"
+"This command is intended for internal use\n"
+"\n"
+msgstr ""
+
+#: src/help.c:291
+#, c-format
+msgid ""
+"\n"
+"%s init -B backup-path\n"
+"\n"
+msgstr ""
+
+#: src/help.c:292
+#, c-format
+msgid ""
+"  -B, --backup-path=backup-path    location of the backup storage area\n"
+"\n"
+msgstr ""
+
+#: src/help.c:298
+#, c-format
+msgid ""
+"\n"
+"%s backup -B backup-path -b backup-mode --instance=instance_name\n"
+msgstr ""
+
+#: src/help.c:303 src/help.c:792
+#, c-format
+msgid "                 [-E external-directories-paths]\n"
+msgstr ""
+
+#: src/help.c:325
+#, c-format
+msgid ""
+"                 [--ttl=interval] [--expire-time=timestamp] [--note=text]\n"
+"\n"
+msgstr ""
+
+#: src/help.c:327 src/help.c:455 src/help.c:558 src/help.c:606 src/help.c:660
+#: src/help.c:679 src/help.c:739 src/help.c:812 src/help.c:895 src/help.c:910
+#: src/help.c:934 src/help.c:954 src/help.c:998
+#, c-format
+msgid "  -B, --backup-path=backup-path    location of the backup storage area\n"
+msgstr ""
+
+#: src/help.c:328
+#, c-format
+msgid "  -b, --backup-mode=backup-mode    backup mode=FULL|PAGE|DELTA|PTRACK\n"
+msgstr ""
+
+#: src/help.c:329 src/help.c:456 src/help.c:559 src/help.c:607 src/help.c:680
+#: src/help.c:740 src/help.c:813 src/help.c:896
+#, c-format
+msgid "      --instance=instance_name     name of the instance\n"
+msgstr ""
+
+#: src/help.c:330 src/help.c:458 src/help.c:608 src/help.c:814 src/help.c:911
+#, c-format
+msgid "  -D, --pgdata=pgdata-path         location of the database storage area\n"
+msgstr ""
+
+#: src/help.c:331
+#, c-format
+msgid "  -C, --smooth-checkpoint          do smooth checkpoint before backup\n"
+msgstr ""
+
+#: src/help.c:332
+#, c-format
+msgid "      --stream                     stream the transaction log and include it in the backup\n"
+msgstr ""
+
+#: src/help.c:333 src/help.c:1054
+#, c-format
+msgid "  -S, --slot=SLOTNAME              replication slot to use\n"
+msgstr ""
+
+#: src/help.c:334 src/help.c:1055
+#, c-format
+msgid "      --temp-slot                  use temporary replication slot\n"
+msgstr ""
+
+#: src/help.c:335
+#, c-format
+msgid "      --backup-pg-log              backup of '%s' directory\n"
+msgstr ""
+
+#: src/help.c:336 src/help.c:460 src/help.c:563 src/help.c:611 src/help.c:682
+#: src/help.c:743 src/help.c:960 src/help.c:1004 src/help.c:1058
+#, c-format
+msgid "  -j, --threads=NUM                number of parallel threads\n"
+msgstr ""
+
+#: src/help.c:337 src/help.c:462 src/help.c:562 src/help.c:610 src/help.c:683
+#: src/help.c:744
+#, c-format
+msgid "      --progress                   show progress\n"
+msgstr ""
+
+#: src/help.c:338
+#, c-format
+msgid "      --no-validate                disable validation after backup\n"
+msgstr ""
+
+#: src/help.c:339 src/help.c:466 src/help.c:573
+#, c-format
+msgid "      --skip-block-validation      set to validate only file-level checksum\n"
+msgstr ""
+
+#: src/help.c:340 src/help.c:815 src/help.c:914
+#, c-format
+msgid "  -E  --external-dirs=external-directories-paths\n"
+msgstr ""
+
+#: src/help.c:341 src/help.c:816 src/help.c:915
+#, c-format
+msgid "                                   backup some directories not from pgdata \n"
+msgstr ""
+
+#: src/help.c:342 src/help.c:817 src/help.c:916
+#, c-format
+msgid "                                   (example: --external-dirs=/tmp/dir1:/tmp/dir2)\n"
+msgstr ""
+
+#: src/help.c:343
+#, c-format
+msgid "      --no-sync                    do not sync backed up files to disk\n"
+msgstr ""
+
+#: src/help.c:344
+#, c-format
+msgid "      --note=text                  add note to backup\n"
+msgstr ""
+
+#: src/help.c:345 src/help.c:784
+#, c-format
+msgid "                                   (example: --note='backup before app update to v13.1')\n"
+msgstr ""
+
+#: src/help.c:347 src/help.c:508 src/help.c:575 src/help.c:622 src/help.c:702
+#: src/help.c:748 src/help.c:820
+#, c-format
+msgid ""
+"\n"
+"  Logging options:\n"
+msgstr ""
+
+#: src/help.c:348 src/help.c:509 src/help.c:576 src/help.c:623 src/help.c:703
+#: src/help.c:749 src/help.c:821
+#, c-format
+msgid "      --log-level-console=log-level-console\n"
+msgstr ""
+
+#: src/help.c:349 src/help.c:510 src/help.c:577 src/help.c:624 src/help.c:704
+#: src/help.c:750 src/help.c:822
+#, c-format
+msgid "                                   level for console logging (default: info)\n"
+msgstr ""
+
+#: src/help.c:350 src/help.c:353 src/help.c:511 src/help.c:514 src/help.c:578
+#: src/help.c:581 src/help.c:625 src/help.c:628 src/help.c:705 src/help.c:708
+#: src/help.c:751 src/help.c:754 src/help.c:823 src/help.c:826
+#, c-format
+msgid "                                   available options: 'off', 'error', 'warning', 'info', 'log', 'verbose'\n"
+msgstr ""
+
+#: src/help.c:351 src/help.c:512 src/help.c:579 src/help.c:626 src/help.c:706
+#: src/help.c:752 src/help.c:824
+#, c-format
+msgid "      --log-level-file=log-level-file\n"
+msgstr ""
+
+#: src/help.c:352 src/help.c:513 src/help.c:580 src/help.c:627 src/help.c:707
+#: src/help.c:753 src/help.c:825
+#, c-format
+msgid "                                   level for file logging (default: off)\n"
+msgstr ""
+
+#: src/help.c:354 src/help.c:515 src/help.c:582 src/help.c:629 src/help.c:709
+#: src/help.c:755 src/help.c:827
+#, c-format
+msgid "      --log-filename=log-filename\n"
+msgstr ""
+
+#: src/help.c:355 src/help.c:516 src/help.c:583 src/help.c:630 src/help.c:710
+#: src/help.c:756 src/help.c:828
+#, c-format
+msgid "                                   filename for file logging (default: 'pg_probackup.log')\n"
+msgstr ""
+
+#: src/help.c:356 src/help.c:517 src/help.c:584 src/help.c:711 src/help.c:757
+#: src/help.c:829
+#, c-format
+msgid "                                   support strftime format (example: pg_probackup-%%Y-%%m-%%d_%%H%%M%%S.log)\n"
+msgstr ""
+
+#: src/help.c:357 src/help.c:518 src/help.c:585 src/help.c:632 src/help.c:712
+#: src/help.c:758 src/help.c:830
+#, c-format
+msgid "      --error-log-filename=error-log-filename\n"
+msgstr ""
+
+#: src/help.c:358 src/help.c:519 src/help.c:586 src/help.c:633 src/help.c:713
+#: src/help.c:759 src/help.c:831
+#, c-format
+msgid "                                   filename for error logging (default: none)\n"
+msgstr ""
+
+#: src/help.c:359 src/help.c:520 src/help.c:587 src/help.c:634 src/help.c:714
+#: src/help.c:760 src/help.c:832
+#, c-format
+msgid "      --log-directory=log-directory\n"
+msgstr ""
+
+#: src/help.c:360 src/help.c:521 src/help.c:588 src/help.c:635 src/help.c:715
+#: src/help.c:761 src/help.c:833
+#, c-format
+msgid "                                   directory for file logging (default: BACKUP_PATH/log)\n"
+msgstr ""
+
+#: src/help.c:361 src/help.c:522 src/help.c:589 src/help.c:636 src/help.c:716
+#: src/help.c:762 src/help.c:834
+#, c-format
+msgid "      --log-rotation-size=log-rotation-size\n"
+msgstr ""
+
+#: src/help.c:362 src/help.c:523 src/help.c:590 src/help.c:637 src/help.c:717
+#: src/help.c:763 src/help.c:835
+#, c-format
+msgid "                                   rotate logfile if its size exceeds this value; 0 disables; (default: 0)\n"
+msgstr ""
+
+#: src/help.c:363 src/help.c:524 src/help.c:591 src/help.c:638 src/help.c:718
+#: src/help.c:764 src/help.c:836
+#, c-format
+msgid "                                   available units: 'kB', 'MB', 'GB', 'TB' (default: kB)\n"
+msgstr ""
+
+#: src/help.c:364 src/help.c:525 src/help.c:592 src/help.c:639 src/help.c:719
+#: src/help.c:765 src/help.c:837
+#, c-format
+msgid "      --log-rotation-age=log-rotation-age\n"
+msgstr ""
+
+#: src/help.c:365 src/help.c:526 src/help.c:593 src/help.c:640 src/help.c:720
+#: src/help.c:766 src/help.c:838
+#, c-format
+msgid "                                   rotate logfile if its age exceeds this value; 0 disables; (default: 0)\n"
+msgstr ""
+
+#: src/help.c:366 src/help.c:527 src/help.c:594 src/help.c:641 src/help.c:721
+#: src/help.c:767 src/help.c:839
+#, c-format
+msgid "                                   available units: 'ms', 's', 'min', 'h', 'd' (default: min)\n"
+msgstr ""
+
+#: src/help.c:367 src/help.c:528 src/help.c:642
+#, c-format
+msgid "      --no-color                   disable the coloring of error and warning console messages\n"
+msgstr ""
+
+#: src/help.c:369 src/help.c:687 src/help.c:841
+#, c-format
+msgid ""
+"\n"
+"  Retention options:\n"
+msgstr ""
+
+#: src/help.c:370 src/help.c:688
+#, c-format
+msgid "      --delete-expired             delete backups expired according to current\n"
+msgstr ""
+
+#: src/help.c:371 src/help.c:373
+#, c-format
+msgid "                                   retention policy after successful backup completion\n"
+msgstr ""
+
+#: src/help.c:372 src/help.c:690
+#, c-format
+msgid "      --merge-expired              merge backups expired according to current\n"
+msgstr ""
+
+#: src/help.c:374 src/help.c:692
+#, c-format
+msgid "      --delete-wal                 remove redundant files in WAL archive\n"
+msgstr ""
+
+#: src/help.c:375 src/help.c:693 src/help.c:842
+#, c-format
+msgid "      --retention-redundancy=retention-redundancy\n"
+msgstr ""
+
+#: src/help.c:376 src/help.c:694 src/help.c:843
+#, c-format
+msgid "                                   number of full backups to keep; 0 disables; (default: 0)\n"
+msgstr ""
+
+#: src/help.c:377 src/help.c:695 src/help.c:844
+#, c-format
+msgid "      --retention-window=retention-window\n"
+msgstr ""
+
+#: src/help.c:378 src/help.c:696 src/help.c:845
+#, c-format
+msgid "                                   number of days of recoverability; 0 disables; (default: 0)\n"
+msgstr ""
+
+#: src/help.c:379 src/help.c:697
+#, c-format
+msgid "      --wal-depth=wal-depth        number of latest valid backups per timeline that must\n"
+msgstr ""
+
+#: src/help.c:380 src/help.c:698
+#, c-format
+msgid "                                   retain the ability to perform PITR; 0 disables; (default: 0)\n"
+msgstr ""
+
+#: src/help.c:381 src/help.c:699
+#, c-format
+msgid "      --dry-run                    perform a trial run without any changes\n"
+msgstr ""
+
+#: src/help.c:383
+#, c-format
+msgid ""
+"\n"
+"  Pinning options:\n"
+msgstr ""
+
+#: src/help.c:384 src/help.c:778
+#, c-format
+msgid "      --ttl=interval               pin backup for specified amount of time; 0 unpin\n"
+msgstr ""
+
+#: src/help.c:385 src/help.c:779
+#, c-format
+msgid "                                   available units: 'ms', 's', 'min', 'h', 'd' (default: s)\n"
+msgstr ""
+
+#: src/help.c:386 src/help.c:780
+#, c-format
+msgid "                                   (example: --ttl=20d)\n"
+msgstr ""
+
+#: src/help.c:387 src/help.c:781
+#, c-format
+msgid "      --expire-time=time           pin backup until specified time stamp\n"
+msgstr ""
+
+#: src/help.c:388 src/help.c:782
+#, c-format
+msgid "                                   (example: --expire-time='2024-01-01 00:00:00+03')\n"
+msgstr ""
+
+#: src/help.c:390 src/help.c:849 src/help.c:967
+#, c-format
+msgid ""
+"\n"
+"  Compression options:\n"
+msgstr ""
+
+#: src/help.c:391 src/help.c:850 src/help.c:968
+#, c-format
+msgid "      --compress                   alias for --compress-algorithm='zlib' and --compress-level=1\n"
+msgstr ""
+
+#: src/help.c:392 src/help.c:851 src/help.c:969
+#, c-format
+msgid "      --compress-algorithm=compress-algorithm\n"
+msgstr ""
+
+#: src/help.c:393
+#, c-format
+msgid "                                   available options: 'zlib', 'pglz', 'none' (default: none)\n"
+msgstr ""
+
+#: src/help.c:394 src/help.c:853 src/help.c:971
+#, c-format
+msgid "      --compress-level=compress-level\n"
+msgstr ""
+
+#: src/help.c:395 src/help.c:854 src/help.c:972
+#, c-format
+msgid "                                   level of compression [0-9] (default: 1)\n"
+msgstr ""
+
+#: src/help.c:397 src/help.c:856
+#, c-format
+msgid ""
+"\n"
+"  Archive options:\n"
+msgstr ""
+
+#: src/help.c:398 src/help.c:857
+#, c-format
+msgid "      --archive-timeout=timeout    wait timeout for WAL segment archiving (default: 5min)\n"
+msgstr ""
+
+#: src/help.c:400 src/help.c:644 src/help.c:859 src/help.c:1066
+#, c-format
+msgid ""
+"\n"
+"  Connection options:\n"
+msgstr ""
+
+#: src/help.c:401 src/help.c:645 src/help.c:860 src/help.c:1067
+#, c-format
+msgid "  -U, --pguser=USERNAME            user name to connect as (default: current local user)\n"
+msgstr ""
+
+#: src/help.c:402 src/help.c:646 src/help.c:861 src/help.c:1068
+#, c-format
+msgid "  -d, --pgdatabase=DBNAME          database to connect (default: username)\n"
+msgstr ""
+
+#: src/help.c:403 src/help.c:647 src/help.c:862 src/help.c:1069
+#, c-format
+msgid "  -h, --pghost=HOSTNAME            database server host or socket directory(default: 'local socket')\n"
+msgstr ""
+
+#: src/help.c:404 src/help.c:648 src/help.c:863 src/help.c:1070
+#, c-format
+msgid "  -p, --pgport=PORT                database server port (default: 5432)\n"
+msgstr ""
+
+#: src/help.c:405 src/help.c:649 src/help.c:1071
+#, c-format
+msgid "  -w, --no-password                never prompt for password\n"
+msgstr ""
+
+#: src/help.c:406
+#, c-format
+msgid "  -W, --password                   force password prompt\n"
+msgstr ""
+
+#: src/help.c:408 src/help.c:530 src/help.c:865 src/help.c:917 src/help.c:974
+#: src/help.c:1009 src/help.c:1074
+#, c-format
+msgid ""
+"\n"
+"  Remote options:\n"
+msgstr ""
+
+#: src/help.c:409 src/help.c:531 src/help.c:866 src/help.c:918 src/help.c:975
+#: src/help.c:1010 src/help.c:1075
+#, c-format
+msgid "      --remote-proto=protocol      remote protocol to use\n"
+msgstr ""
+
+#: src/help.c:410 src/help.c:532 src/help.c:867 src/help.c:919 src/help.c:976
+#: src/help.c:1011 src/help.c:1076
+#, c-format
+msgid "                                   available options: 'ssh', 'none' (default: ssh)\n"
+msgstr ""
+
+#: src/help.c:411 src/help.c:533 src/help.c:868 src/help.c:920
+#, c-format
+msgid "      --remote-host=destination    remote host address or hostname\n"
+msgstr ""
+
+#: src/help.c:412 src/help.c:534 src/help.c:869 src/help.c:921 src/help.c:978
+#: src/help.c:1013 src/help.c:1078
+#, c-format
+msgid "      --remote-port=port           remote host port (default: 22)\n"
+msgstr ""
+
+#: src/help.c:413 src/help.c:535 src/help.c:870 src/help.c:922 src/help.c:979
+#: src/help.c:1014 src/help.c:1079
+#, c-format
+msgid "      --remote-path=path           path to directory with pg_probackup binary on remote host\n"
+msgstr ""
+
+#: src/help.c:414 src/help.c:536 src/help.c:871 src/help.c:923 src/help.c:980
+#: src/help.c:1015 src/help.c:1080
+#, c-format
+msgid "                                   (default: current binary path)\n"
+msgstr ""
+
+#: src/help.c:415 src/help.c:537 src/help.c:872 src/help.c:924 src/help.c:981
+#: src/help.c:1016 src/help.c:1081
+#, c-format
+msgid "      --remote-user=username       user name for ssh connection (default: current user)\n"
+msgstr ""
+
+#: src/help.c:416 src/help.c:538 src/help.c:873 src/help.c:925 src/help.c:982
+#: src/help.c:1017 src/help.c:1082
+#, c-format
+msgid "      --ssh-options=ssh_options    additional ssh options (default: none)\n"
+msgstr ""
+
+#: src/help.c:417 src/help.c:539 src/help.c:874
+#, c-format
+msgid "                                   (example: --ssh-options='-c cipher_spec -F configfile')\n"
+msgstr ""
+
+#: src/help.c:419 src/help.c:881
+#, c-format
+msgid ""
+"\n"
+"  Replica options:\n"
+msgstr ""
+
+#: src/help.c:420 src/help.c:882
+#, c-format
+msgid "      --master-user=user_name      user name to connect to master (deprecated)\n"
+msgstr ""
+
+#: src/help.c:421 src/help.c:883
+#, c-format
+msgid "      --master-db=db_name          database to connect to master (deprecated)\n"
+msgstr ""
+
+#: src/help.c:422 src/help.c:884
+#, c-format
+msgid "      --master-host=host_name      database server host of master (deprecated)\n"
+msgstr ""
+
+#: src/help.c:423 src/help.c:885
+#, c-format
+msgid "      --master-port=port           database server port of master (deprecated)\n"
+msgstr ""
+
+#: src/help.c:424 src/help.c:886
+#, c-format
+msgid ""
+"      --replica-timeout=timeout    wait timeout for WAL segment streaming through replication (deprecated)\n"
+"\n"
+msgstr ""
+
+#: src/help.c:430
+#, c-format
+msgid ""
+"\n"
+"%s restore -B backup-path --instance=instance_name\n"
+msgstr ""
+
+#: src/help.c:432
+#, c-format
+msgid "                 [--progress] [--force] [--no-sync]\n"
+msgstr ""
+
+#: src/help.c:436
+#, c-format
+msgid "                 [--skip-external-dirs]\n"
+msgstr ""
+
+#: src/help.c:438
+#, c-format
+msgid "                 [--db-include dbname | --db-exclude dbname]\n"
+msgstr ""
+
+#: src/help.c:446
+#, c-format
+msgid "                 [-R | --restore-as-replica]\n"
+msgstr ""
+
+#: src/help.c:452
+#, c-format
+msgid "                 [--archive-host=hostname] [--archive-port=port]\n"
+msgstr ""
+
+#: src/help.c:453
+#, c-format
+msgid ""
+"                 [--archive-user=username]\n"
+"\n"
+msgstr ""
+
+#: src/help.c:459
+#, c-format
+msgid "  -i, --backup-id=backup-id        backup to restore\n"
+msgstr ""
+
+#: src/help.c:463
+#, c-format
+msgid "      --force                      ignore invalid status of the restored backup\n"
+msgstr ""
+
+#: src/help.c:464
+#, c-format
+msgid "      --no-sync                    do not sync restored files to disk\n"
+msgstr ""
+
+#: src/help.c:465
+#, c-format
+msgid "      --no-validate                disable backup validation during restore\n"
+msgstr ""
+
+#: src/help.c:468 src/help.c:1060
+#, c-format
+msgid "  -T, --tablespace-mapping=OLDDIR=NEWDIR\n"
+msgstr ""
+
+#: src/help.c:469 src/help.c:1061
+#, c-format
+msgid "                                   relocate the tablespace from directory OLDDIR to NEWDIR\n"
+msgstr ""
+
+#: src/help.c:470
+#, c-format
+msgid "      --external-mapping=OLDDIR=NEWDIR\n"
+msgstr ""
+
+#: src/help.c:471
+#, c-format
+msgid "                                   relocate the external directory from OLDDIR to NEWDIR\n"
+msgstr ""
+
+#: src/help.c:472
+#, c-format
+msgid "      --skip-external-dirs         do not restore all external directories\n"
+msgstr ""
+
+#: src/help.c:474
+#, c-format
+msgid ""
+"\n"
+"  Incremental restore options:\n"
+msgstr ""
+
+#: src/help.c:475
+#, c-format
+msgid "  -I, --incremental-mode=none|checksum|lsn\n"
+msgstr ""
+
+#: src/help.c:476
+#, c-format
+msgid "                                   reuse valid pages available in PGDATA if they have not changed\n"
+msgstr ""
+
+#: src/help.c:477
+#, c-format
+msgid "                                   (default: none)\n"
+msgstr ""
+
+#: src/help.c:479
+#, c-format
+msgid ""
+"\n"
+"  Partial restore options:\n"
+msgstr ""
+
+#: src/help.c:480
+#, c-format
+msgid "      --db-include dbname          restore only specified databases\n"
+msgstr ""
+
+#: src/help.c:481
+#, c-format
+msgid "      --db-exclude dbname          do not restore specified databases\n"
+msgstr ""
+
+#: src/help.c:483
+#, c-format
+msgid ""
+"\n"
+"  Recovery options:\n"
+msgstr ""
+
+#: src/help.c:484 src/help.c:564
+#, c-format
+msgid "      --recovery-target-time=time  time stamp up to which recovery will proceed\n"
+msgstr ""
+
+#: src/help.c:485 src/help.c:565
+#, c-format
+msgid "      --recovery-target-xid=xid    transaction ID up to which recovery will proceed\n"
+msgstr ""
+
+#: src/help.c:486 src/help.c:566
+#, c-format
+msgid "      --recovery-target-lsn=lsn    LSN of the write-ahead log location up to which recovery will proceed\n"
+msgstr ""
+
+#: src/help.c:487 src/help.c:567
+#, c-format
+msgid "      --recovery-target-inclusive=boolean\n"
+msgstr ""
+
+#: src/help.c:488 src/help.c:568
+#, c-format
+msgid "                                   whether we stop just after the recovery target\n"
+msgstr ""
+
+#: src/help.c:489 src/help.c:569
+#, c-format
+msgid "      --recovery-target-timeline=timeline\n"
+msgstr ""
+
+#: src/help.c:490 src/help.c:570
+#, c-format
+msgid "                                   recovering into a particular timeline\n"
+msgstr ""
+
+#: src/help.c:491
+#, c-format
+msgid "      --recovery-target=immediate|latest\n"
+msgstr ""
+
+#: src/help.c:492
+#, c-format
+msgid "                                   end recovery as soon as a consistent state is reached or as late as possible\n"
+msgstr ""
+
+#: src/help.c:493 src/help.c:571
+#, c-format
+msgid "      --recovery-target-name=target-name\n"
+msgstr ""
+
+#: src/help.c:494 src/help.c:572
+#, c-format
+msgid "                                   the named restore point to which recovery will proceed\n"
+msgstr ""
+
+#: src/help.c:495
+#, c-format
+msgid "      --recovery-target-action=pause|promote|shutdown\n"
+msgstr ""
+
+#: src/help.c:496
+#, c-format
+msgid "                                   action the server should take once the recovery target is reached\n"
+msgstr ""
+
+#: src/help.c:497
+#, c-format
+msgid "                                   (default: pause)\n"
+msgstr ""
+
+#: src/help.c:498 src/help.c:818
+#, c-format
+msgid "      --restore-command=cmdline    command to use as 'restore_command' in recovery.conf; 'none' disables\n"
+msgstr ""
+
+#: src/help.c:500
+#, c-format
+msgid ""
+"\n"
+"  Standby options:\n"
+msgstr ""
+
+#: src/help.c:501
+#, c-format
+msgid "  -R, --restore-as-replica         write a minimal recovery.conf in the output directory\n"
+msgstr ""
+
+#: src/help.c:502
+#, c-format
+msgid "                                   to ease setting up a standby server\n"
+msgstr ""
+
+#: src/help.c:503
+#, c-format
+msgid "      --primary-conninfo=primary_conninfo\n"
+msgstr ""
+
+#: src/help.c:504
+#, c-format
+msgid "                                   connection string to be used for establishing connection\n"
+msgstr ""
+
+#: src/help.c:505
+#, c-format
+msgid "                                   with the primary server\n"
+msgstr ""
+
+#: src/help.c:506
+#, c-format
+msgid "  -S, --primary-slot-name=slotname replication slot to be used for WAL streaming from the primary server\n"
+msgstr ""
+
+#: src/help.c:541 src/help.c:876
+#, c-format
+msgid ""
+"\n"
+"  Remote WAL archive options:\n"
+msgstr ""
+
+#: src/help.c:542 src/help.c:877
+#, c-format
+msgid "      --archive-host=destination   address or hostname for ssh connection to archive host\n"
+msgstr ""
+
+#: src/help.c:543 src/help.c:878
+#, c-format
+msgid "      --archive-port=port          port for ssh connection to archive host (default: 22)\n"
+msgstr ""
+
+#: src/help.c:544
+#, c-format
+msgid ""
+"      --archive-user=username      user name for ssh connection to archive host (default: PostgreSQL user)\n"
+"\n"
+msgstr ""
+
+#: src/help.c:550
+#, c-format
+msgid ""
+"\n"
+"%s validate -B backup-path [--instance=instance_name]\n"
+msgstr ""
+
+#: src/help.c:556
+#, c-format
+msgid ""
+"                 [--skip-block-validation]\n"
+"\n"
+msgstr ""
+
+#: src/help.c:560
+#, c-format
+msgid "  -i, --backup-id=backup-id        backup to validate\n"
+msgstr ""
+
+#: src/help.c:595 src/help.c:722 src/help.c:768
+#, c-format
+msgid ""
+"      --no-color                   disable the coloring of error and warning console messages\n"
+"\n"
+msgstr ""
+
+#: src/help.c:601
+#, c-format
+msgid ""
+"\n"
+"%s checkdb [-B backup-path] [--instance=instance_name]\n"
+msgstr ""
+
+#: src/help.c:602
+#, c-format
+msgid "                 [-D pgdata-path] [-j num-threads] [--progress]\n"
+msgstr ""
+
+#: src/help.c:604
+#, c-format
+msgid ""
+"                 [--heapallindexed] [--checkunique]\n"
+"\n"
+msgstr ""
+
+#: src/help.c:612
+#, c-format
+msgid "      --skip-block-validation      skip file-level checking\n"
+msgstr ""
+
+#: src/help.c:613 src/help.c:618 src/help.c:620
+#, c-format
+msgid "                                   can be used only with '--amcheck' option\n"
+msgstr ""
+
+#: src/help.c:614
+#, c-format
+msgid "      --amcheck                    in addition to file-level block checking\n"
+msgstr ""
+
+#: src/help.c:615
+#, c-format
+msgid "                                   check btree indexes via function 'bt_index_check()'\n"
+msgstr ""
+
+#: src/help.c:616
+#, c-format
+msgid "                                   using 'amcheck' or 'amcheck_next' extensions\n"
+msgstr ""
+
+#: src/help.c:617
+#, c-format
+msgid "      --heapallindexed             also check that heap is indexed\n"
+msgstr ""
+
+#: src/help.c:619
+#, c-format
+msgid "      --checkunique                also check unique constraints\n"
+msgstr ""
+
+#: src/help.c:631
+#, c-format
+msgid "                                   support strftime format (example: pg_probackup-%%Y-%%m-%%d_%%H%%M%%S.log\n"
+msgstr ""
+
+#: src/help.c:650 src/help.c:1072
+#, c-format
+msgid ""
+"  -W, --password                   force password prompt\n"
+"\n"
+msgstr ""
+
+#: src/help.c:656
+#, c-format
+msgid ""
+"\n"
+"%s show -B backup-path\n"
+msgstr ""
+
+#: src/help.c:658
+#, c-format
+msgid ""
+"                 [--format=format] [--archive]\n"
+"\n"
+msgstr ""
+
+#: src/help.c:661
+#, c-format
+msgid "      --instance=instance_name     show info about specific instance\n"
+msgstr ""
+
+#: src/help.c:662
+#, c-format
+msgid "  -i, --backup-id=backup-id        show info about specific backups\n"
+msgstr ""
+
+#: src/help.c:663
+#, c-format
+msgid "      --archive                    show WAL archive information\n"
+msgstr ""
+
+#: src/help.c:664
+#, c-format
+msgid "      --format=format              show format=PLAIN|JSON\n"
+msgstr ""
+
+#: src/help.c:665
+#, c-format
+msgid ""
+"      --no-color                   disable the coloring for plain format\n"
+"\n"
+msgstr ""
+
+#: src/help.c:671
+#, c-format
+msgid ""
+"\n"
+"%s delete -B backup-path --instance=instance_name\n"
+msgstr ""
+
+#: src/help.c:672
+#, c-format
+msgid "                 [-i backup-id | --delete-expired | --merge-expired] [--delete-wal]\n"
+msgstr ""
+
+#: src/help.c:677
+#, c-format
+msgid ""
+"                 [--no-validate] [--no-sync]\n"
+"\n"
+msgstr ""
+
+#: src/help.c:681
+#, c-format
+msgid "  -i, --backup-id=backup-id        backup to delete\n"
+msgstr ""
+
+#: src/help.c:684 src/help.c:745
+#, c-format
+msgid "      --no-validate                disable validation during retention merge\n"
+msgstr ""
+
+#: src/help.c:685 src/help.c:746
+#, c-format
+msgid "      --no-sync                    do not sync merged files to disk\n"
+msgstr ""
+
+#: src/help.c:689 src/help.c:691
+#, c-format
+msgid "                                   retention policy\n"
+msgstr ""
+
+#: src/help.c:700
+#, c-format
+msgid "      --status=backup_status       delete all backups with specified status\n"
+msgstr ""
+
+#: src/help.c:728
+#, c-format
+msgid ""
+"\n"
+"%s merge -B backup-path --instance=instance_name\n"
+msgstr ""
+
+#: src/help.c:729
+#, c-format
+msgid "                 -i backup-id [-j num-threads] [--progress]\n"
+msgstr ""
+
+#: src/help.c:737
+#, c-format
+msgid ""
+"                 [--log-rotation-age=log-rotation-age]\n"
+"\n"
+msgstr ""
+
+#: src/help.c:741
+#, c-format
+msgid "  -i, --backup-id=backup-id        backup to merge\n"
+msgstr ""
+
+#: src/help.c:774
+#, c-format
+msgid ""
+"\n"
+"%s set-backup -B backup-path --instance=instance_name\n"
+msgstr ""
+
+#: src/help.c:775
+#, c-format
+msgid "                 -i backup-id\n"
+msgstr ""
+
+#: src/help.c:776
+#, c-format
+msgid ""
+"                 [--ttl=interval] [--expire-time=time] [--note=text]\n"
+"\n"
+msgstr ""
+
+#: src/help.c:783
+#, c-format
+msgid "      --note=text                  add note to backup; 'none' to remove note\n"
+msgstr ""
+
+#: src/help.c:790
+#, c-format
+msgid ""
+"\n"
+"%s set-config -B backup-path --instance=instance_name\n"
+msgstr ""
+
+#: src/help.c:810 src/help.c:908 src/help.c:952 src/help.c:996
+#, c-format
+msgid ""
+"                 [--ssh-options]\n"
+"\n"
+msgstr ""
+
+#: src/help.c:846
+#, c-format
+msgid "      --wal-depth=wal-depth        number of latest valid backups with ability to perform\n"
+msgstr ""
+
+#: src/help.c:847
+#, c-format
+msgid "                                   the point in time recovery;  disables; (default: 0)\n"
+msgstr ""
+
+#: src/help.c:852 src/help.c:970
+#, c-format
+msgid "                                   available options: 'zlib','pglz','none' (default: 'none')\n"
+msgstr ""
+
+#: src/help.c:879
+#, c-format
+msgid "      --archive-user=username      user name for ssh connection to archive host (default: PostgreSQL user)\n"
+msgstr ""
+
+#: src/help.c:892
+#, c-format
+msgid ""
+"\n"
+"%s show-config -B backup-path --instance=instance_name\n"
+msgstr ""
+
+#: src/help.c:893
+#, c-format
+msgid ""
+"                 [--format=format]\n"
+"\n"
+msgstr ""
+
+#: src/help.c:897
+#, c-format
+msgid ""
+"      --format=format              show format=PLAIN|JSON\n"
+"\n"
+msgstr ""
+
+#: src/help.c:903
+#, c-format
+msgid ""
+"\n"
+"%s add-instance -B backup-path -D pgdata-path\n"
+msgstr ""
+
+#: src/help.c:905
+#, c-format
+msgid "                 [-E external-directory-path]\n"
+msgstr ""
+
+#: src/help.c:912
+#, c-format
+msgid "      --instance=instance_name     name of the new instance\n"
+msgstr ""
+
+#: src/help.c:926 src/help.c:983 src/help.c:1018 src/help.c:1083
+#, c-format
+msgid ""
+"                                   (example: --ssh-options='-c cipher_spec -F configfile')\n"
+"\n"
+msgstr ""
+
+#: src/help.c:932
+#, c-format
+msgid ""
+"\n"
+"%s del-instance -B backup-path --instance=instance_name\n"
+msgstr ""
+
+#: src/help.c:935
+#, c-format
+msgid ""
+"      --instance=instance_name     name of the instance to delete\n"
+"\n"
+msgstr ""
+
+#: src/help.c:941
+#, c-format
+msgid ""
+"\n"
+"%s archive-push -B backup-path --instance=instance_name\n"
+msgstr ""
+
+#: src/help.c:955 src/help.c:999
+#, c-format
+msgid "      --instance=instance_name     name of the instance to delete\n"
+msgstr ""
+
+#: src/help.c:956 src/help.c:1002
+#, c-format
+msgid "      --wal-file-name=wal-file-name\n"
+msgstr ""
+
+#: src/help.c:957
+#, c-format
+msgid "                                   name of the file to copy into WAL archive\n"
+msgstr ""
+
+#: src/help.c:958 src/help.c:1000
+#, c-format
+msgid "      --wal-file-path=wal-file-path\n"
+msgstr ""
+
+#: src/help.c:959
+#, c-format
+msgid "                                   relative destination path of the WAL archive\n"
+msgstr ""
+
+#: src/help.c:961
+#, c-format
+msgid "      --batch-size=NUM             number of files to be copied\n"
+msgstr ""
+
+#: src/help.c:962
+#, c-format
+msgid "      --archive-timeout=timeout    wait timeout before discarding stale temp file(default: 5min)\n"
+msgstr ""
+
+#: src/help.c:963
+#, c-format
+msgid "      --no-ready-rename            do not rename '.ready' files in 'archive_status' directory\n"
+msgstr ""
+
+#: src/help.c:964
+#, c-format
+msgid "      --no-sync                    do not sync WAL file to disk\n"
+msgstr ""
+
+#: src/help.c:965
+#, c-format
+msgid "      --overwrite                  overwrite archived WAL file\n"
+msgstr ""
+
+#: src/help.c:977 src/help.c:1012 src/help.c:1077
+#, c-format
+msgid "      --remote-host=hostname       remote host address or hostname\n"
+msgstr ""
+
+#: src/help.c:989
+#, c-format
+msgid ""
+"\n"
+"%s archive-get -B backup-path --instance=instance_name\n"
+msgstr ""
+
+#: src/help.c:1001
+#, c-format
+msgid "                                   relative destination path name of the WAL file on the server\n"
+msgstr ""
+
+#: src/help.c:1003
+#, c-format
+msgid "                                   name of the WAL file to retrieve from the archive\n"
+msgstr ""
+
+#: src/help.c:1005
+#, c-format
+msgid "      --batch-size=NUM             number of files to be prefetched\n"
+msgstr ""
+
+#: src/help.c:1006
+#, c-format
+msgid "      --prefetch-dir=path          location of the store area for prefetched WAL files\n"
+msgstr ""
+
+#: src/help.c:1007
+#, c-format
+msgid "      --no-validate-wal            skip validation of prefetched WAL file before using it\n"
+msgstr ""
+
+#: src/help.c:1024
+#, c-format
+msgid ""
+"\n"
+"%s help [command]\n"
+msgstr ""
+
+#: src/help.c:1025
+#, c-format
+msgid ""
+"%s command --help\n"
+"\n"
+msgstr ""
+
+#: src/help.c:1031
+#, c-format
+msgid ""
+"\n"
+"%s version\n"
+msgstr ""
+
+#: src/help.c:1032
+#, c-format
+msgid ""
+"%s --version\n"
+"\n"
+msgstr ""
+
+#: src/help.c:1038
+#, c-format
+msgid ""
+"\n"
+"%s catchup  -b catchup-mode\n"
+msgstr ""
+
+#: src/help.c:1041
+#, c-format
+msgid "                 [--stream [-S slot-name]] [--temp-slot | --perm-slot]\n"
+msgstr ""
+
+#: src/help.c:1050
+#, c-format
+msgid ""
+"                 [--help]\n"
+"\n"
+msgstr ""
+
+#: src/help.c:1052
+#, c-format
+msgid "  -b, --backup-mode=catchup-mode   catchup mode=FULL|DELTA|PTRACK\n"
+msgstr ""
+
+#: src/help.c:1053
+#, c-format
+msgid "      --stream                     stream the transaction log (only supported mode)\n"
+msgstr ""
+
+#: src/help.c:1056
+#, c-format
+msgid "  -P  --perm-slot                  create permanent replication slot\n"
+msgstr ""
+
+#: src/help.c:1062
+#, c-format
+msgid "  -x, --exclude-path=path_prefix   files with path_prefix (relative to pgdata) will be\n"
+msgstr ""
+
+#: src/help.c:1063
+#, c-format
+msgid "                                   excluded from catchup (can be used multiple times)\n"
+msgstr ""
+
+#: src/help.c:1064
+#, c-format
+msgid "                                   Dangerous option! Use at your own risk!\n"
+msgstr ""

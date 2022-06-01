@@ -89,11 +89,7 @@ def dir_files(base_dir):
 
 def is_enterprise():
     # pg_config --help
-    if os.name == 'posix':
-        cmd = [os.environ['PG_CONFIG'], '--help']
-
-    elif os.name == 'nt':
-        cmd = [[os.environ['PG_CONFIG']], ['--help']]
+    cmd = [os.environ['PG_CONFIG'], '--help']
 
     p = subprocess.Popen(
         cmd,

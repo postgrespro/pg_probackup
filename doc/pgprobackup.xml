@@ -942,6 +942,7 @@ GRANT SELECT ON TABLE pg_catalog.pg_namespace TO backup;
 GRANT SELECT ON TABLE pg_catalog.pg_extension TO backup;
 GRANT EXECUTE ON FUNCTION bt_index_check(regclass) TO backup;
 GRANT EXECUTE ON FUNCTION bt_index_check(regclass, bool) TO backup;
+GRANT EXECUTE ON FUNCTION bt_index_check(regclass, bool, bool) TO backup;
 </programlisting>
   </refsect2>
   <refsect2 id="pbk-setting-up-partial-restore">
@@ -3530,6 +3531,14 @@ pg_probackup catchup -b <replaceable>catchup_mode</replaceable> --source-pgdata=
 </programlisting>
     </para>
     <para>
+      Before cloning/synchronising a <productname>PostgreSQL</productname> instance, you can run the
+      <command>catchup</command> command with the <option>--dry-run</option> flag
+      to estimate the size of data files to be transferred, but make no changes on disk:
+      <programlisting>
+pg_probackup catchup -b <replaceable>catchup_mode</replaceable> --source-pgdata=<replaceable>path_to_pgdata_on_remote_server</replaceable> --destination-pgdata=<replaceable>path_to_local_dir</replaceable> --stream --dry-run
+</programlisting>
+    </para>
+    <para>
       For example, assume that a remote standby server with the <productname>PostgreSQL</productname> instance having <filename>/replica-pgdata</filename> data directory has fallen behind. To sync this instance with the one in <filename>/master-pgdata</filename> data directory, you can run
       the <command>catchup</command> command in the <literal>PTRACK</literal> mode on four parallel threads as follows:
       <programlisting>
@@ -3540,7 +3549,7 @@ pg_probackup catchup --source-pgdata=/master-pgdata --destination-pgdata=/replic
     <para>
       Another example shows how you can add a new remote standby server with the <productname>PostgreSQL</productname> data directory <filename>/replica-pgdata</filename> by running the <command>catchup</command> command in the <literal>FULL</literal> mode
       on four parallel threads:
-<programlisting>
+      <programlisting>
 pg_probackup catchup --source-pgdata=/master-pgdata --destination-pgdata=/replica-pgdata -p 5432 -d postgres -U remote-postgres-user --stream --backup-mode=FULL --remote-host=remote-hostname --remote-user=remote-unix-username -j 4
 </programlisting>
     </para>
@@ -4141,7 +4150,7 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
 pg_probackup checkdb
 [-B <replaceable>backup_dir</replaceable>] [--instance <replaceable>instance_name</replaceable>] [-D <replaceable>data_dir</replaceable>]
 [--help] [-j <replaceable>num_threads</replaceable>] [--progress]
-[--skip-block-validation] [--amcheck] [--heapallindexed]
+[--amcheck [--skip-block-validation] [--checkunique] [--heapallindexed]]
 [<replaceable>connection_options</replaceable>] [<replaceable>logging_options</replaceable>]
 </programlisting>
       <para>
@@ -4156,21 +4165,30 @@ pg_probackup checkdb
       <para>
         Performs logical verification of indexes for the specified
         <productname>PostgreSQL</productname> instance if no corruption was found while checking
-        data files. You must have the <application>amcheck</application>
+        data files. You must have the <ulink url="https://postgrespro.com/docs/enterprise/current/amcheck.html"><application>amcheck</application></ulink>
         extension or the <application>amcheck_next</application> extension
         installed in the database to check its indexes. For databases
         without <application>amcheck</application>, index verification will be skipped.
+        Additional options <option>--checkunique</option> and <option>--heapallindexed</option>
+        are effective depending on the version of <application>amcheck</application> installed.
       </para>
       </listitem>
       </varlistentry>
 
       <varlistentry>
-<term><option>--skip-block-validation</option></term>
+<term><option>--checkunique</option></term>
       <listitem>
       <para>
-        Skip validation of data files. You can use this flag only
-        together with the <option>--amcheck</option> flag, so that only logical
-        verification of indexes is performed.
+        Verifies unique constraints during logical verification of indexes.
+        You can use this flag only together with the <option>--amcheck</option> flag when
+        the <application>amcheck</application> extension is
+        installed in the database.
+      </para>
+      <para>
+        The verification of unique constraints is only possible if in the version of the
+        <application>amcheck</application> extension you are using, the
+        <function>bt_index_check</function> function takes the
+        <parameter>checkunique</parameter> parameter.
       </para>
       </listitem>
       </varlistentry>
@@ -4184,12 +4202,25 @@ pg_probackup checkdb
         <option>--amcheck</option> flag.
       </para>
       <para>
-        This check is only possible if you are using the
-        <application>amcheck</application> extension of version 2.0 or higher, or
-        the <application>amcheck_next</application> extension of any version.
+        This check is only possible if in the version of the
+        <application>amcheck</application>/<application>amcheck_next</application> extension
+        you are using, the <function>bt_index_check</function>
+        function takes the <parameter>heapallindexed</parameter> parameter.
       </para>
       </listitem>
       </varlistentry>
+      <varlistentry>
+
+<term><option>--skip-block-validation</option></term>
+      <listitem>
+      <para>
+        Skip validation of data files. You can use this flag only
+        together with the <option>--amcheck</option> flag, so that only logical
+        verification of indexes is performed.
+      </para>
+      </listitem>
+      </varlistentry>
+
     </variablelist>
     </para>
       <para>
@@ -4424,7 +4455,7 @@ pg_probackup archive-get -B <replaceable>backup_dir</replaceable> --instance <re
 pg_probackup catchup -b <replaceable>catchup_mode</replaceable>
 --source-pgdata=<replaceable>path_to_pgdata_on_remote_server</replaceable>
 --destination-pgdata=<replaceable>path_to_local_dir</replaceable>
-[--help] [-j | --threads=<replaceable>num_threads</replaceable>] [--stream]
+[--help] [-j | --threads=<replaceable>num_threads</replaceable>] [--stream] [--dry-run]
 [--temp-slot] [-P | --perm-slot] [-S | --slot=<replaceable>slot_name</replaceable>]
 [--exclude-path=<replaceable>PATHNAME</replaceable>]
 [-T <replaceable>OLDDIR</replaceable>=<replaceable>NEWDIR</replaceable>]
@@ -4514,6 +4545,19 @@ pg_probackup catchup -b <replaceable>catchup_mode</replaceable>
       </varlistentry>
 
       <varlistentry>
+<term><option>--dry-run</option></term>
+      <listitem>
+      <para>
+        Displays the total size of the files to be transferred by <command>catchup</command>.
+        This flag initiates a trial run of <command>catchup</command>, which does
+        not actually create, delete or move files on disk. WAL streaming is skipped with <option>--dry-run</option>.
+        This flag also allows you to check that
+        all the options are correct and cloning/synchronising is ready to run.
+      </para>
+      </listitem>
+      </varlistentry>
+
+      <varlistentry>
 <term><option>-x</option>=<replaceable>path_prefix</replaceable></term>
 <term><option>--exclude-path</option>=<replaceable>path_prefix</replaceable></term>
       <listitem>
@@ -4529,17 +4573,6 @@ pg_probackup catchup -b <replaceable>catchup_mode</replaceable>
           incomplete synchronization; use with care.
         </para>
         </warning>
-      </para>
-      </listitem>
-      </varlistentry>
-
-      <varlistentry>
-<term><option>--stream</option></term>
-      <listitem>
-      <para>
-        Copies the instance in <link linkend="pbk-stream-mode">STREAM</link> WAL delivery mode,
-        including all the necessary WAL files by streaming them from
-        the instance server via replication protocol.
       </para>
       </listitem>
       </varlistentry>
