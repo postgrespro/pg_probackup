@@ -341,7 +341,7 @@ typedef enum ShowFormat
 #define BYTES_INVALID		(-1) /* file didn`t changed since previous backup, DELTA backup do not rely on it */
 #define FILE_NOT_FOUND		(-2) /* file disappeared during backup */
 #define BLOCKNUM_INVALID	(-1)
-#define PROGRAM_VERSION	"2.5.5"
+#define PROGRAM_VERSION	"2.6.1"
 
 /* update when remote agent API or behaviour changes */
 #define AGENT_PROTOCOL_VERSION 20600
@@ -1078,6 +1078,7 @@ extern void pfilearray_clear_locks(parray *file_list);
 extern void set_forkname(pgFile *file);
 
 /* in data.c */
+extern bool IsForkCompressable(ForkName forkName);
 extern bool check_data_file(ConnectionArgs *arguments, pgFile *file,
 							const char *from_fullpath, uint32 checksum_version);
 

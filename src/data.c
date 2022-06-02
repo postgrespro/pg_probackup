@@ -826,7 +826,7 @@ cleanup:
 	pg_free(file->pagemap.bitmap);
 }
 
-static bool
+bool
 IsForkCompressable(ForkName forkName)
 {
 	return forkName == vm || forkName == fsm || forkName == cfm;

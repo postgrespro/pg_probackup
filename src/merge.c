@@ -14,9 +14,6 @@
 
 #include "utils/thread.h"
 
-/* We need critical section to append mergeed files into filelist */
-static pthread_mutex_t mergelist_append_mutex = PTHREAD_MUTEX_INITIALIZER;
-
 typedef struct
 {
 	parray		*merge_filelist;
@@ -29,7 +26,6 @@ typedef struct
 	const char	*full_external_prefix;
 
 //	size_t		in_place_merge_bytes;
-	bool		compression_match;
 	bool		program_version_match;
 	bool        use_bitmap;
 	bool        is_retry;
@@ -464,7 +460,6 @@ merge_chain(InstanceState *instanceState,
 	time_t		end_time;
 	char		pretty_time[20];
 	/* in-place merge flags */
-	bool		compression_match = false;
 	bool		program_version_match = false;
 	/* It's redundant to check block checksumms during merge */
 	skip_block_validation = true;
@@ -532,11 +527,16 @@ merge_chain(InstanceState *instanceState,
 	 * full backup compression algorithm, then in-place merge is
 	 * not possible.
 	 */
-	if (full_backup->compress_alg == dest_backup->compress_alg)
-		compression_match = true;
-	else
-		elog(WARNING, "In-place merge is disabled because of compression "
-					"algorithms mismatch");
+	if (full_backup->compress_alg != dest_backup->compress_alg)
+	{
+		char *dest_backup_id = base36enc_dup(dest_backup->start_time);
+
+		elog(ERROR, "Cannot run merge because of compression algorithm mismatch "
+					"beetwen full backup %s and target incremental backup %s",
+					base36enc(full_backup->start_time),
+					dest_backup_id);
+		pg_free(dest_backup_id);
+	}
 
 	/*
 	 * If current program version differs from destination backup version,
@@ -672,7 +672,6 @@ merge_chain(InstanceState *instanceState,
 		arg->full_database_dir = full_database_dir;
 		arg->full_external_prefix = full_external_prefix;
 
-		arg->compression_match = compression_match;
 		arg->program_version_match = program_version_match;
 		arg->use_bitmap = use_bitmap;
 		arg->is_retry = is_retry;
@@ -987,8 +986,7 @@ merge_files(void *arg)
 		 * In-place merge is also impossible, if program version of destination
 		 * backup differs from PROGRAM_VERSION
 		 */
-		if (arguments->program_version_match && arguments->compression_match &&
-			!arguments->is_retry)
+		if (arguments->program_version_match && !arguments->is_retry)
 		{
 			/*
 			 * Case 1:
@@ -1144,12 +1142,7 @@ merge_files(void *arg)
 								arguments->no_sync);
 
 done:
-		// append file into result merge_list
-		if (num_threads > 1)
-			pthread_lock(&mergelist_append_mutex);
 		parray_append(arguments->merge_filelist, tmp_file);
-		if (num_threads > 1)
-			pthread_mutex_unlock(&mergelist_append_mutex);
 	}
 
 	/* Data files merging is successful */
@@ -1341,8 +1334,8 @@ merge_non_data_file(parray *parent_chain, pgBackup *full_backup,
 	char	to_fullpath[MAXPGPATH];
 	char	to_fullpath_tmp[MAXPGPATH]; /* used for backup */
 	char	from_fullpath[MAXPGPATH];
-	bool      do_decompress_source = false;
-	bool      do_compress_dest = false;
+	bool    do_decompress_source = false;
+	bool    do_compress_dest = false;
 	pgBackup *from_backup = NULL;
 	pgFile   *from_file = NULL;
 
@@ -1398,6 +1391,23 @@ merge_non_data_file(parray *parent_chain, pgBackup *full_backup,
 	if (!from_file)
 		elog(ERROR, "Failed to locate a full copy of nonedata file \"%s\"", dest_file->rel_path);
 
+	/*
+	 * If from_file located in FULL backup, then do in-place merge,
+	 * even if there is mismatch of compression algorithm between from_file and dest_backup
+	 * Reason for this is to keep from_file from overwriting, so retry of failed merge can be idempotent
+	 */
+	if (from_file->external_dir_num == 0 && from_backup->backup_mode == BACKUP_MODE_FULL)
+	{
+		tmp_file->crc = from_file->crc;
+		tmp_file->compress_alg = from_file->compress_alg;
+		tmp_file->z_crc = from_file->z_crc;
+		tmp_file->write_size = from_file->write_size;
+
+		if (from_file->compress_alg != NONE_COMPRESS)
+			guess_uncompressed_size(tmp_file);
+		return;
+	}
+
 	/* set path to source file */
 	if (from_file->external_dir_num)
 	{
@@ -1433,7 +1443,8 @@ merge_non_data_file(parray *parent_chain, pgBackup *full_backup,
 	 * 3. source compressed, dest compressed, do_compress_dest = false
 	 * 4. source uncompressed, dest uncompressed, do_compress = false
 	 */
-	if (from_file->compress_alg == NONE_COMPRESS && dest_backup->compress_alg != NONE_COMPRESS)
+	if (from_file->compress_alg == NONE_COMPRESS &&
+		IsForkCompressable(from_file->forkName) && dest_backup->compress_alg != NONE_COMPRESS)
 		do_compress_dest = true;
 
 	/* TODO: make crc calculation optional */
@@ -1447,12 +1458,13 @@ merge_non_data_file(parray *parent_chain, pgBackup *full_backup,
 						 do_decompress_source ? from_file->compress_alg : NONE_COMPRESS);
 
 	/* Compression in source and dest are matching, file was copied as-is, inherit its meta */
-	if (from_file->compress_alg == dest_backup->compress_alg && dest_backup->compress_alg != NONE_COMPRESS)
+	if (!do_compress_dest && from_file->compress_alg == dest_backup->compress_alg && dest_backup->compress_alg != NONE_COMPRESS)
 	{
 		tmp_file->compress_alg = from_file->compress_alg;
 		tmp_file->z_crc = from_file->z_crc;
 		guess_uncompressed_size(tmp_file);
 	}
+
 	tmp_file->crc = from_file->crc;
 
 	/* sync temp file to disk */
