@@ -676,6 +676,48 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
     # @unittest.expectedFailure
     # @unittest.skip("skip")
     @unittest.skipUnless(ProbackupTest.enterprise, 'skip')
+    def test_multiple_small_files(self):
+        """
+        Case:   Create 100 small tables, make full backup
+                Check: .cfm files are compressed
+        """
+
+        for i in range(0, 100):
+            self.node.safe_psql(
+                "postgres",
+                "CREATE TABLE t{0} TABLESPACE {1} "
+                "AS SELECT i AS id, MD5(i::text) AS text, "
+                "MD5(repeat(i::text,10))::tsvector AS tsvector "
+                "FROM generate_series(0,1000) i".format(i, tblspace_name)
+            )
+
+        backup_id_full = self.backup_node(
+            self.backup_dir, 'node', self.node, backup_type='full', options=['--compress'])
+
+        self.node.safe_psql(
+                "postgres",
+                "VACUUM")
+
+        backup_id_page = self.backup_node(self.backup_dir, 'node', self.node, backup_type='page')
+
+#        show_backup_full = self.show_pb(
+#            self.backup_dir, 'node', backup_id_full)
+#        show_backup_page = self.show_pb(
+#            self.backup_dir, 'node', backup_id_page)
+#        self.assertGreater(
+#            show_backup_full["data-bytes"],
+#            show_backup_page["data-bytes"],
+#            "ERROR: Size of incremental backup greater than full. \n "
+#            "INFO: {0} >{1}".format(
+#                show_backup_page["data-bytes"],
+#                show_backup_full["data-bytes"]
+#            )
+#        )
+        exit(1)
+
+    # @unittest.expectedFailure
+    # @unittest.skip("skip")
+    @unittest.skipUnless(ProbackupTest.enterprise, 'skip')
     def test_multiple_segments(self):
         """
         Case:   Make full backup before created table in the tablespace.
