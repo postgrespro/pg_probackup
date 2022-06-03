@@ -837,6 +837,7 @@ IsForkCompressable(ForkName forkName)
  * We do not apply compression to this file.
  * If file exists in previous backup, then compare checksums
  * and make a decision about copying or skiping the file.
+ * Catchup always copies file, no crc comparison in happening (because we dont know crc)
  */
 void
 backup_non_data_file(pgFile *file, pgFile *prev_file,
@@ -1614,13 +1615,14 @@ InitPbkFile(bool enable_buffering, CrcMethod crc_method, CompressAlg calg, int c
 	return f;
 }
 
+/* Open destination file for writing and truncate it */
 PbkFile*
 open_for_write(const char *fullpath, CompressAlg calg, int clevel, mode_t mode, CrcMethod crc_method)
 {
 	PbkFile    *f = InitPbkFile(true, crc_method, calg, clevel);
 	snprintf(f->fullpath, sizeof(f->fullpath), "%s", fullpath);
 
-	f->fd = open(f->fullpath, O_WRONLY | O_CREAT | O_APPEND | PG_BINARY, mode);
+	f->fd = open(f->fullpath, O_WRONLY | O_CREAT | O_APPEND | O_TRUNC | PG_BINARY, mode);
 	if (f->fd < 0)
 	{
 		f->errmsg = pgut_malloc(ERRMSG_MAX_LEN);
@@ -1940,7 +1942,7 @@ cleanup:
 }
 
 /*
- * Copy file to backup.
+ * Copy file to backup or, in case of catchup, into destination PGDATA.
  * Apply compression only to compressable forks
  */
 void

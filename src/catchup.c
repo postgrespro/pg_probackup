@@ -438,8 +438,9 @@ catchup_thread_runner(void *arg)
 		}
 		else
 		{
-			backup_non_data_file(file, dest_file, from_fullpath, to_fullpath,
-								 arguments->backup_mode, current.parent_backup,
+			/* overwrite original non-data file */
+			backup_non_data_file(file, NULL, from_fullpath, to_fullpath,
+								 arguments->backup_mode, 0,
 								 NONE_COMPRESS, 0, true, NONE_COMPRESS);
 		}
 
