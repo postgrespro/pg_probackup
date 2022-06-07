@@ -122,6 +122,7 @@ static parray *datname_include_list = NULL;
 /* arrays for --exclude-path's */
 static parray *exclude_absolute_paths_list = NULL;
 static parray *exclude_relative_paths_list = NULL;
+static char* waldir_path = NULL;
 
 /* checkdb options */
 bool need_amcheck = false;
@@ -238,6 +239,7 @@ static ConfigOption cmd_options[] =
 	{ 's', 160, "primary-conninfo",	&primary_conninfo,	SOURCE_CMD_STRICT },
 	{ 's', 'S', "primary-slot-name",&replication_slot,	SOURCE_CMD_STRICT },
 	{ 'f', 'I', "incremental-mode", opt_incr_restore_mode,	SOURCE_CMD_STRICT },
+	{ 's', 'X', "waldir",		&waldir_path,	SOURCE_CMD_STRICT },
 	/* checkdb options */
 	{ 'b', 195, "amcheck",			&need_amcheck,		SOURCE_CMD_STRICT },
 	{ 'b', 196, "heapallindexed",	&heapallindexed,	SOURCE_CMD_STRICT },
@@ -754,6 +756,21 @@ main(int argc, char *argv[])
 			restore_params->partial_restore_type = INCLUDE;
 			restore_params->partial_db_list = datname_include_list;
 		}
+
+		if (waldir_path)
+		{
+			/* clean up xlog directory name, check it's absolute */
+			canonicalize_path(waldir_path);
+			if (!is_absolute_path(waldir_path))
+			{
+				elog(ERROR, "WAL directory location must be an absolute path");
+			}
+			if (strlen(waldir_path) > MAXPGPATH)
+				elog(ERROR, "Value specified to --waldir is too long");
+
+		}
+		restore_params->waldir = waldir_path;
+
 	}
 
 	/*
