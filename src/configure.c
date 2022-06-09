@@ -17,10 +17,12 @@
 
 static void assign_log_level_console(ConfigOption *opt, const char *arg);
 static void assign_log_level_file(ConfigOption *opt, const char *arg);
+static void assign_log_format_json(ConfigOption *opt, const char *arg);
 static void assign_compress_alg(ConfigOption *opt, const char *arg);
 
 static char *get_log_level_console(ConfigOption *opt);
 static char *get_log_level_file(ConfigOption *opt);
+static char *get_log_format_json(ConfigOption *opt);
 static char *get_compress_alg(ConfigOption *opt);
 
 static void show_configure_start(void);
@@ -241,6 +243,11 @@ ConfigOption instance_options[] =
 		&instance_config.remote.ssh_config, SOURCE_CMD, 0,
 		OPTION_REMOTE_GROUP, 0, option_get_value
 	},
+	{
+		'f', 231, "log-format-json",
+		assign_log_format_json, SOURCE_CMD, 0,
+		OPTION_LOG_GROUP, 0, get_log_format_json
+	},
 	{ 0 }
 };
 
@@ -388,6 +395,7 @@ readInstanceConfigFile(InstanceState *instanceState)
 	InstanceConfig   *instance = pgut_new(InstanceConfig);
 	char	   *log_level_console = NULL;
 	char	   *log_level_file = NULL;
+	char	   *log_format_json = NULL;
 	char	   *compress_alg = NULL;
 	int			parsed_options;
 
@@ -596,6 +604,11 @@ readInstanceConfigFile(InstanceState *instanceState)
 			&instance->remote.ssh_config, SOURCE_CMD, 0,
 			OPTION_REMOTE_GROUP, 0, option_get_value
 		},
+		{
+			's', 231, "log-format-json",
+			&log_format_json, SOURCE_CMD, 0,
+			OPTION_LOG_GROUP, 0, option_get_value
+		},
 		{ 0 }
 	};
 
@@ -625,6 +638,9 @@ readInstanceConfigFile(InstanceState *instanceState)
 	if (log_level_file)
 		instance->logger.log_level_file = parse_log_level(log_level_file);
 
+	if (log_format_json)
+		instance->logger.log_format_json = parse_log_format_json(log_format_json);
+
 	if (compress_alg)
 		instance->compress_alg = parse_compress_alg(compress_alg);
 
@@ -650,6 +666,12 @@ assign_log_level_file(ConfigOption *opt, const char *arg)
 }
 
 static void
+assign_log_format_json(ConfigOption *opt, const char *arg)
+{
+	instance_config.logger.log_format_json = parse_log_format_json(arg);
+}
+
+static void
 assign_compress_alg(ConfigOption *opt, const char *arg)
 {
 	instance_config.compress_alg = parse_compress_alg(arg);
@@ -665,6 +687,12 @@ static char *
 get_log_level_file(ConfigOption *opt)
 {
 	return pstrdup(deparse_log_level(instance_config.logger.log_level_file));
+}
+
+static char *
+get_log_format_json(ConfigOption *opt)
+{
+	return pstrdup(deparse_log_format_json(instance_config.logger.log_format_json));
 }
 
 static char *

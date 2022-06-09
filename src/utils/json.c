@@ -144,3 +144,21 @@ json_add_escaped(PQExpBuffer buf, const char *str)
 	}
 	appendPQExpBufferChar(buf, '"');
 }
+
+void
+json_add_min(PQExpBuffer buf, JsonToken type)
+{
+	switch (type)
+	{
+		case JT_BEGIN_OBJECT:
+			appendPQExpBufferChar(buf, '{');
+			add_comma = false;
+			break;
+		case JT_END_OBJECT:
+			appendPQExpBufferStr(buf, "}\n");
+			add_comma = true;
+			break;
+		default:
+			break;
+	}
+}
