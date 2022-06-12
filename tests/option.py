@@ -24,7 +24,7 @@ class OptionTest(ProbackupTest, unittest.TestCase):
         """help options"""
         with open(os.path.join(self.dir_path, "expected/option_version.out"), "rb") as version_out:
             self.assertIn(
-                version_out.read().decode("utf-8"),
+                version_out.read().decode("utf-8").strip(),
                 self.run_pb(["--version"])
             )
 
