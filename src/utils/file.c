@@ -3169,6 +3169,7 @@ fio_check_postmaster_impl(int out, char *buf)
 	pid_t       postmaster_pid;
 	char       *pgdata = (char*) buf;
 
+	// GREPME_PBCKP-180_REMOTE_DATA
 	postmaster_pid = local_check_postmaster(pgdata);
 
 	/* send arrays of checksums to main process */
