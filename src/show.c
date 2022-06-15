@@ -3,7 +3,7 @@
  * show.c: show backup information.
  *
  * Portions Copyright (c) 2009-2011, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
- * Portions Copyright (c) 2015-2019, Postgres Professional
+ * Portions Copyright (c) 2015-2022, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */
@@ -12,6 +12,7 @@
 
 #include <time.h>
 #include <dirent.h>
+#include <locale.h>
 #include <sys/stat.h>
 
 #include "utils/json.h"
@@ -70,6 +71,43 @@ static void show_archive_json(const char *instance_name, uint32 xlog_seg_size,
 static PQExpBufferData show_buf;
 static bool first_instance = true;
 static int32 json_level = 0;
+
+static const char* lc_env_locale;
+typedef enum {
+	LOCALE_C,	// Used for formatting output to unify the dot-based floating point representation
+	LOCALE_ENV	// Default environment locale
+} output_numeric_locale;
+
+#ifdef HAVE_USELOCALE
+static locale_t env_locale, c_locale;
+#endif
+void memorize_environment_locale() {
+	lc_env_locale = (const char *)getenv("LC_NUMERIC");
+	lc_env_locale = lc_env_locale != NULL ? lc_env_locale : "C";
+#ifdef HAVE_USELOCALE
+	env_locale = newlocale(LC_NUMERIC_MASK, lc_env_locale, (locale_t)0);
+	c_locale = newlocale(LC_NUMERIC_MASK, "C", (locale_t)0);
+#else
+#ifdef HAVE__CONFIGTHREADLOCALE
+	_configthreadlocale(_ENABLE_PER_THREAD_LOCALE);
+#endif
+#endif
+}
+
+void free_environment_locale() {
+#ifdef HAVE_USELOCALE
+	freelocale(env_locale);
+	freelocale(c_locale);
+#endif
+}
+
+static void set_output_numeric_locale(output_numeric_locale loc) {
+#ifdef HAVE_USELOCALE
+	uselocale(loc == LOCALE_C ? c_locale : env_locale);
+#else
+	setlocale(LC_NUMERIC, loc == LOCALE_C ? "C" : lc_env_locale);
+#endif
+}
 
 /*
  * Entry point of pg_probackup SHOW subcommand.
@@ -513,6 +551,9 @@ show_instance_plain(const char *instance_name, parray *backup_list, bool show_na
 	ShowBackendRow *rows;
 	TimeLineID parent_tli = 0;
 
+	// Since we've been printing a table, set LC_NUMERIC to its default environment value
+	set_output_numeric_locale(LOCALE_ENV);
+
 	for (i = 0; i < SHOW_FIELDS_COUNT; i++)
 		widths[i] = strlen(names[i]);
 
@@ -726,6 +767,8 @@ show_instance_plain(const char *instance_name, parray *backup_list, bool show_na
 	}
 
 	pfree(rows);
+	// Restore the C locale
+	set_output_numeric_locale(LOCALE_C);
 }
 
 /*
@@ -805,6 +848,9 @@ show_archive_plain(const char *instance_name, uint32 xlog_seg_size,
 	uint32		widths[SHOW_ARCHIVE_FIELDS_COUNT];
 	uint32		widths_sum = 0;
 	ShowArchiveRow *rows;
+
+	// Since we've been printing a table, set LC_NUMERIC to its default environment value
+	set_output_numeric_locale(LOCALE_ENV);
 
 	for (i = 0; i < SHOW_ARCHIVE_FIELDS_COUNT; i++)
 		widths[i] = strlen(names[i]);
@@ -973,6 +1019,8 @@ show_archive_plain(const char *instance_name, uint32 xlog_seg_size,
 	}
 
 	pfree(rows);
+	// Restore the C locale
+	set_output_numeric_locale(LOCALE_C);
 	//TODO: free timelines
 }
 
@@ -1045,8 +1093,9 @@ show_archive_json(const char *instance_name, uint32 xlog_seg_size,
 		appendPQExpBuffer(buf, "%lu", tlinfo->size);
 
 		json_add_key(buf, "zratio", json_level);
+
 		if (tlinfo->size != 0)
-			zratio = ((float)xlog_seg_size*tlinfo->n_xlog_files) / tlinfo->size;
+			zratio = ((float) xlog_seg_size * tlinfo->n_xlog_files) / tlinfo->size;
 		appendPQExpBuffer(buf, "%.2f", zratio);
 
 		if (tlinfo->closest_backup != NULL)

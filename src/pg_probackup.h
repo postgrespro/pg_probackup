@@ -905,6 +905,8 @@ extern InstanceConfig *readInstanceConfigFile(InstanceState *instanceState);
 /* in show.c */
 extern int do_show(CatalogState *catalogState, InstanceState *instanceState,
 				   time_t requested_backup_id, bool show_archive);
+extern void memorize_environment_locale(void);
+extern void free_environment_locale(void);
 
 /* in delete.c */
 extern void do_delete(InstanceState *instanceState, time_t backup_id);
