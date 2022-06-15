@@ -1550,11 +1550,6 @@ get_control_value(const char *str, const char *name,
 					}
 					else if (value_int64)
 					{
-						/* Length of buf_uint64 should not be greater than 31 */
-						if (buf_int64_ptr - buf_int64 >= 32)
-							elog(ERROR, "field \"%s\" is out of range in the line %s of the file %s",
-								 name, str, DATABASE_FILE_LIST);
-
 						*buf_int64_ptr = '\0';
 						if (!parse_int64(buf_int64, value_int64, 0))
 						{
@@ -1577,8 +1572,16 @@ get_control_value(const char *str, const char *name,
 					}
 					else
 					{
-						*buf_int64_ptr = *buf;
-						buf_int64_ptr++;
+                        /* verify if buf_int64 not exceeds size limits */
+                        if (buf_int64_ptr - buf_int64 < sizeof buf_int64) {
+                            *buf_int64_ptr = *buf;
+                            buf_int64_ptr++;
+                        }
+                        else
+                        {
+                            elog(ERROR, "field \"%s\" is out of range in the line %s of the file %s",
+                                 name, str, DATABASE_FILE_LIST);
+                        }
 					}
 				}
 				break;
