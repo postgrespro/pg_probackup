@@ -148,6 +148,9 @@ bool launch_agent(void)
 	ssh_argv[ssh_argc++] = "Compression=no";
 
 	ssh_argv[ssh_argc++] = "-o";
+	ssh_argv[ssh_argc++] = "ControlMaster=no";
+
+	ssh_argv[ssh_argc++] = "-o";
 	ssh_argv[ssh_argc++] = "LogLevel=error";
 
 	ssh_argv[ssh_argc++] = instance_config.remote.host;
