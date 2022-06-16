@@ -178,6 +178,7 @@ pg_probackup - утилита для управления резервным к�
                  [--remote-proto] [--remote-host]
                  [--remote-port] [--remote-path] [--remote-user]
                  [--ssh-options]
+                 [--dry-run]
                  [--help]
 
 Подробнее читайте на сайте <https://github.com/postgrespro/pg_probackup>.
