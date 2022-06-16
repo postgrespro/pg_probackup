@@ -86,6 +86,7 @@ pg_probackup - утилита для управления резервным к�
                  [-T OLDDIR=NEWDIR] [--progress]
                  [--external-mapping=OLDDIR=NEWDIR]
                  [--skip-external-dirs] [--no-sync]
+                 [-X WALDIR | --waldir=WALDIR]
                  [-I | --incremental-mode=none|checksum|lsn]
                  [--db-include | --db-exclude]
                  [--remote-proto] [--remote-host]
@@ -178,6 +179,7 @@ pg_probackup - утилита для управления резервным к�
                  [--remote-proto] [--remote-host]
                  [--remote-port] [--remote-path] [--remote-user]
                  [--ssh-options]
+                 [--dry-run]
                  [--help]
 
 Подробнее читайте на сайте <https://github.com/postgrespro/pg_probackup>.
