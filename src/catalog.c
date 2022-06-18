@@ -1084,15 +1084,15 @@ get_backup_filelist(pgBackup *backup, bool strict)
 
 		COMP_FILE_CRC32(true, content_crc, buf, strlen(buf));
 
-		get_control_value(buf, "path", path, NULL, true);
-		get_control_value(buf, "size", NULL, &write_size, true);
-		get_control_value(buf, "mode", NULL, &mode, true);
-		get_control_value(buf, "is_datafile", NULL, &is_datafile, true);
-		get_control_value(buf, "is_cfs", NULL, &is_cfs, false);
-		get_control_value(buf, "crc", NULL, &crc, true);
-		get_control_value(buf, "compress_alg", compress_alg_string, NULL, false);
-		get_control_value(buf, "external_dir_num", NULL, &external_dir_num, false);
-		get_control_value(buf, "dbOid", NULL, &dbOid, false);
+		get_control_value(buf, "path", path, sizeof(path), NULL, true);
+		get_control_value(buf, "size", NULL, 0, &write_size, true);
+		get_control_value(buf, "mode", NULL, 0, &mode, true);
+		get_control_value(buf, "is_datafile", NULL, 0, &is_datafile, true);
+		get_control_value(buf, "is_cfs", NULL, 0, &is_cfs, false);
+		get_control_value(buf, "crc", NULL, 0, &crc, true);
+		get_control_value(buf, "compress_alg", compress_alg_string, sizeof(compress_alg_string), NULL, false);
+		get_control_value(buf, "external_dir_num", NULL, 0, &external_dir_num, false);
+		get_control_value(buf, "dbOid", NULL, 0, &dbOid, false);
 
 		file = pgFileInit(path);
 		file->write_size = (int64) write_size;
@@ -1107,28 +1107,28 @@ get_backup_filelist(pgBackup *backup, bool strict)
 		/*
 		 * Optional fields
 		 */
-		if (get_control_value(buf, "linked", linked, NULL, false) && linked[0])
+		if (get_control_value(buf, "linked", linked, sizeof(linked), NULL, false) && linked[0])
 		{
 			file->linked = pgut_strdup(linked);
 			canonicalize_path(file->linked);
 		}
 
-		if (get_control_value(buf, "segno", NULL, &segno, false))
+		if (get_control_value(buf, "segno", NULL, 0, &segno, false))
 			file->segno = (int) segno;
 
-		if (get_control_value(buf, "n_blocks", NULL, &n_blocks, false))
+		if (get_control_value(buf, "n_blocks", NULL, 0, &n_blocks, false))
 			file->n_blocks = (int) n_blocks;
 
-		if (get_control_value(buf, "n_headers", NULL, &n_headers, false))
+		if (get_control_value(buf, "n_headers", NULL, 0, &n_headers, false))
 			file->n_headers = (int) n_headers;
 
-		if (get_control_value(buf, "hdr_crc", NULL, &hdr_crc, false))
+		if (get_control_value(buf, "hdr_crc", NULL, 0, &hdr_crc, false))
 			file->hdr_crc = (pg_crc32) hdr_crc;
 
-		if (get_control_value(buf, "hdr_off", NULL, &hdr_off, false))
+		if (get_control_value(buf, "hdr_off", NULL, 0, &hdr_off, false))
 			file->hdr_off = hdr_off;
 
-		if (get_control_value(buf, "hdr_size", NULL, &hdr_size, false))
+		if (get_control_value(buf, "hdr_size", NULL, 0, &hdr_size, false))
 			file->hdr_size = (int) hdr_size;
 
 		parray_append(files, file);

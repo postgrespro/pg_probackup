@@ -1011,7 +1011,7 @@ extern const char* deparse_compress_alg(int alg);
 
 /* in dir.c */
 extern bool get_control_value(const char *str, const char *name,
-				  char *value_str, int64 *value_int64, bool is_mandatory);
+							  char *value_str, size_t value_str_size, int64 *value_int64, bool is_mandatory);
 extern void dir_list_file(parray *files, const char *root, bool exclude,
 						  bool follow_symlink, bool add_root, bool backup_logs,
 						  bool skip_hidden, int external_dir_num, fio_location location);
