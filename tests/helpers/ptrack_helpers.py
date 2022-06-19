@@ -1863,6 +1863,9 @@ class ProbackupTest(object):
     def gdb_attach(self, pid):
         return GDBobj([str(pid)], self.verbose, attach=True)
 
+    # def gdb_test_function(self, ):
+    #     return GDBobj(None, self.verbose, test_function=True)
+    #
 
 class GdbException(Exception):
     def __init__(self, message=False):
@@ -1873,7 +1876,10 @@ class GdbException(Exception):
 
 
 class GDBobj(ProbackupTest):
+# class GDBobj:
     def __init__(self, cmd, verbose, attach=False):
+    # def __isettinit__(self, cmd, verbose, attach=False, test_function=False):
+
         self.verbose = verbose
         self.output = ''
 
@@ -1894,6 +1900,8 @@ class GDBobj(ProbackupTest):
 
         if attach:
             self.cmd = self.base_cmd + ['--pid'] + cmd
+        # elif test_function:
+        #     self.cmd = self.base_cmd + ["--args"] + cmd
         else:
             self.cmd = self.base_cmd + ['--args'] + cmd
 
