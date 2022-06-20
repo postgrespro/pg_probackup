@@ -38,6 +38,15 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
         node.safe_psql(
             "postgres",
             "create index on t_heap(id)")
+            
+        node.safe_psql(
+            "postgres",
+            "create table idxpart (a int) "
+            "partition by range (a)")
+
+        node.safe_psql(
+            "postgres",
+            "create index on idxpart(a)")
 
         try:
             node.safe_psql(
