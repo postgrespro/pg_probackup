@@ -461,7 +461,9 @@ get_index_list(const char *dbname, bool first_db_with_amcheck,
 									"LEFT JOIN pg_catalog.pg_class cls ON idx.indexrelid=cls.oid "
 									"LEFT JOIN pg_catalog.pg_namespace nmspc ON cls.relnamespace=nmspc.oid "
 									"LEFT JOIN pg_catalog.pg_am am ON cls.relam=am.oid "
-									"WHERE am.amname='btree' AND cls.relpersistence != 't' "
+									"WHERE am.amname='btree' "
+									"AND cls.relpersistence != 't' "
+									"AND cls.relkind != 'I' "
 									"ORDER BY nmspc.nspname DESC",
 									0, NULL);
 	}
@@ -473,8 +475,10 @@ get_index_list(const char *dbname, bool first_db_with_amcheck,
 									"LEFT JOIN pg_catalog.pg_class cls ON idx.indexrelid=cls.oid "
 									"LEFT JOIN pg_catalog.pg_namespace nmspc ON cls.relnamespace=nmspc.oid "
 									"LEFT JOIN pg_catalog.pg_am am ON cls.relam=am.oid "
-									"WHERE am.amname='btree' AND cls.relpersistence != 't' AND "
-									"(cls.reltablespace IN "
+									"WHERE am.amname='btree' "
+									"AND cls.relpersistence != 't' "
+									"AND cls.relkind != 'I' "
+									"AND (cls.reltablespace IN "
 									"(SELECT oid from pg_catalog.pg_tablespace where spcname <> 'pg_global') "
 									"OR cls.reltablespace = 0) "
 									"ORDER BY nmspc.nspname DESC",
