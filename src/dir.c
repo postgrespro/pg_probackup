@@ -8,6 +8,7 @@
  *-------------------------------------------------------------------------
  */
 
+#include <assert.h>
 #include "pg_probackup.h"
 #include "utils/file.h"
 
