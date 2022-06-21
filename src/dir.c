@@ -132,10 +132,6 @@ static void cleanup_tablespace(const char *path);
 
 static void control_string_bad_format(const char* str);
 
-static bool get_control_string_value(const char *str, const char *name,
-									 char *value_str, size_t value_str_size, bool is_mandatory);
-
-
 
 /* Tablespace mapping */
 static TablespaceList tablespace_dirs = {NULL, NULL};
@@ -1474,7 +1470,7 @@ get_external_remap(char *current_dir)
 	return current_dir;
 }
 
-/* Parsing states for get_control_value() */
+/* Parsing states for get_control_value_str() */
 #define CONTROL_WAIT_NAME			1
 #define CONTROL_INNAME				2
 #define CONTROL_WAIT_COLON			3
@@ -1488,37 +1484,23 @@ get_external_remap(char *current_dir)
  * The line has the following format:
  *   {"name1":"value1", "name2":"value2"}
  *
- * The value will be returned to "value_str" as string if it is not NULL. If it
- * is NULL the value will be returned to "value_int64" as int64.
+ * The value will be returned in "value_int64" as int64.
  *
- * Returns true if the value was found in the line.
+ * Returns true if the value was found in the line and parsed.
  */
 bool
-get_control_value(const char *str, const char *name,
-				  char *value_str, size_t value_str_size, int64 *value_int64, bool is_mandatory)
+get_control_value_int64(const char *str, const char *name, int64 *value_int64, bool is_mandatory)
 {
 
 	char buf_int64[32];
-	bool result;
 
-	//TODO REVUEW XXX use asserts?
-	assert((value_str && value_str_size >0) || value_int64);
+	assert(value_int64);
 
-	if (!value_str)
-	{
-		value_str = buf_int64;
-		value_str_size = sizeof(buf_int64);
-	}
+    /* Set default value */
+    *value_int64 = 0;
 
-	*value_str = '\0';
-
-	result = get_control_string_value(str, name, value_str, value_str_size, is_mandatory);
-
-	if (!result)
+	if (!get_control_value_str(str, name, buf_int64, sizeof(buf_int64), is_mandatory))
 		return false;
-
-	if (value_str != buf_int64)
-		return true;
 
 	if (!parse_int64(buf_int64, value_int64, 0))
 	{
@@ -1527,17 +1509,10 @@ get_control_value(const char *str, const char *name,
 			*value_int64 = BYTES_INVALID;
 		else
 			control_string_bad_format(str);
+        return false;
 	}
 
 	return true;
-}
-
-//TODO REVIEW XXX if it's needed and to be static, otherwise go back to goto bad_format: and custom message for parse_int64
-static void
-control_string_bad_format(const char* str)
-{
-	elog(ERROR, "%s file has invalid format in line %s",
-		 DATABASE_FILE_LIST, str);
 }
 
 /*
@@ -1551,16 +1526,15 @@ control_string_bad_format(const char* str)
  * Returns true if the value was found in the line.
  */
 
-static bool get_control_string_value(const char *str, const char *name,
-						 char *value_str, size_t value_str_size, bool is_mandatory)
+bool
+get_control_value_str(const char *str, const char *name,
+                      char *value_str, size_t value_str_size, bool is_mandatory)
 {
 	int			state = CONTROL_WAIT_NAME;
 	char	   *name_ptr = (char *) name;
 	char	   *buf = (char *) str;
-	//TODO REVIEW XXX *const can contradict postgres coding rules
 	char 	   *const value_str_start = value_str;
 
-	//TODO REVIEW XXX asserts in production code? are there any other ways to validate inputs
 	assert(value_str);
 	assert(value_str_size > 0);
 
@@ -1643,6 +1617,13 @@ static bool get_control_string_value(const char *str, const char *name,
 		elog(ERROR, "field \"%s\" is not found in the line %s of the file %s",
 			 name, str, DATABASE_FILE_LIST);
 	return false;
+}
+
+static void
+control_string_bad_format(const char* str)
+{
+    elog(ERROR, "%s file has invalid format in line %s",
+         DATABASE_FILE_LIST, str);
 }
 
 /*
@@ -1876,8 +1857,8 @@ read_database_map(pgBackup *backup)
 
 		db_map_entry *db_entry = (db_map_entry *) pgut_malloc(sizeof(db_map_entry));
 
-		get_control_value(buf, "dbOid", NULL, 0, &dbOid, true);
-		get_control_value(buf, "datname", datname, sizeof(datname), NULL, true);
+        get_control_value_int64(buf, "dbOid", &dbOid, true);
+        get_control_value_str(buf, "datname", datname, sizeof(datname), true);
 
 		db_entry->dbOid = dbOid;
 		db_entry->datname = pgut_strdup(datname);
