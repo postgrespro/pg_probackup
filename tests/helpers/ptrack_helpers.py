@@ -101,6 +101,19 @@ def is_enterprise():
     else:
         return False
 
+def enable_nls():
+    cmd = [os.environ['PG_CONFIG'], '--configure']
+
+    p = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE
+    )
+    if b'enable-nls' in p.communicate()[0]:
+        return True
+    else:
+        return False
+
 
 class ProbackupException(Exception):
     def __init__(self, message, cmd):
@@ -147,6 +160,7 @@ def slow_start(self, replica=False):
 class ProbackupTest(object):
     # Class attributes
     enterprise = is_enterprise()
+    enable_nls = enable_nls()
 
     def __init__(self, *args, **kwargs):
         super(ProbackupTest, self).__init__(*args, **kwargs)

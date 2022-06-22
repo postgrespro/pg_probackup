@@ -231,9 +231,13 @@ class OptionTest(ProbackupTest, unittest.TestCase):
     # @unittest.skip("skip")
     def test_help_6(self):
         """help options"""
-        self.test_env['LC_ALL'] = 'ru_RU.utf-8'
-        with open(os.path.join(self.dir_path, "expected/option_help_ru.out"), "rb") as help_out:
-            self.assertEqual(
-                self.run_pb(["--help"]),
-                help_out.read().decode("utf-8")
-            )
+        if ProbackupTest.enable_nls:
+            self.test_env['LC_ALL'] = 'ru_RU.utf-8'
+            with open(os.path.join(self.dir_path, "expected/option_help_ru.out"), "rb") as help_out:
+                self.assertEqual(
+                    self.run_pb(["--help"]),
+                    help_out.read().decode("utf-8")
+                )
+        else:
+            return unittest.skip(
+                'You need configure PostgreSQL with --enabled-nls option for this test')
