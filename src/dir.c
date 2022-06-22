@@ -8,6 +8,7 @@
  *-------------------------------------------------------------------------
  */
 
+#include <assert.h>
 #include "pg_probackup.h"
 #include "utils/file.h"
 
@@ -129,6 +130,9 @@ static void dir_list_file_internal(parray *files, pgFile *parent, const char *pa
 static void opt_path_map(ConfigOption *opt, const char *arg,
 						 TablespaceList *list, const char *type);
 static void cleanup_tablespace(const char *path);
+
+static void control_string_bad_format(const char* str);
+
 
 /* Tablespace mapping */
 static TablespaceList tablespace_dirs = {NULL, NULL};
@@ -1467,7 +1471,7 @@ get_external_remap(char *current_dir)
 	return current_dir;
 }
 
-/* Parsing states for get_control_value() */
+/* Parsing states for get_control_value_str() */
 #define CONTROL_WAIT_NAME			1
 #define CONTROL_INNAME				2
 #define CONTROL_WAIT_COLON			3
@@ -1481,26 +1485,62 @@ get_external_remap(char *current_dir)
  * The line has the following format:
  *   {"name1":"value1", "name2":"value2"}
  *
- * The value will be returned to "value_str" as string if it is not NULL. If it
- * is NULL the value will be returned to "value_int64" as int64.
+ * The value will be returned in "value_int64" as int64.
+ *
+ * Returns true if the value was found in the line and parsed.
+ */
+bool
+get_control_value_int64(const char *str, const char *name, int64 *value_int64, bool is_mandatory)
+{
+
+	char buf_int64[32];
+
+	assert(value_int64);
+
+    /* Set default value */
+    *value_int64 = 0;
+
+	if (!get_control_value_str(str, name, buf_int64, sizeof(buf_int64), is_mandatory))
+		return false;
+
+	if (!parse_int64(buf_int64, value_int64, 0))
+	{
+		/* We assume that too big value is -1 */
+		if (errno == ERANGE)
+			*value_int64 = BYTES_INVALID;
+		else
+			control_string_bad_format(str);
+        return false;
+	}
+
+	return true;
+}
+
+/*
+ * Get value from json-like line "str" of backup_content.control file.
+ *
+ * The line has the following format:
+ *   {"name1":"value1", "name2":"value2"}
+ *
+ * The value will be returned to "value_str" as string.
  *
  * Returns true if the value was found in the line.
  */
+
 bool
-get_control_value(const char *str, const char *name,
-				  char *value_str, int64 *value_int64, bool is_mandatory)
+get_control_value_str(const char *str, const char *name,
+                      char *value_str, size_t value_str_size, bool is_mandatory)
 {
 	int			state = CONTROL_WAIT_NAME;
 	char	   *name_ptr = (char *) name;
 	char	   *buf = (char *) str;
-	char		buf_int64[32],	/* Buffer for "value_int64" */
-			   *buf_int64_ptr = buf_int64;
+	char 	   *const value_str_start = value_str;
 
-	/* Set default values */
-	if (value_str)
-		*value_str = '\0';
-	else if (value_int64)
-		*value_int64 = 0;
+	assert(value_str);
+	assert(value_str_size > 0);
+
+	/* Set default value */
+	*value_str = '\0';
 
 	while (*buf)
 	{
@@ -1510,7 +1550,7 @@ get_control_value(const char *str, const char *name,
 				if (*buf == '"')
 					state = CONTROL_INNAME;
 				else if (IsAlpha(*buf))
-					goto bad_format;
+					control_string_bad_format(str);
 				break;
 			case CONTROL_INNAME:
 				/* Found target field. Parse value. */
@@ -1529,57 +1569,32 @@ get_control_value(const char *str, const char *name,
 				if (*buf == ':')
 					state = CONTROL_WAIT_VALUE;
 				else if (!IsSpace(*buf))
-					goto bad_format;
+					control_string_bad_format(str);
 				break;
 			case CONTROL_WAIT_VALUE:
 				if (*buf == '"')
 				{
 					state = CONTROL_INVALUE;
-					buf_int64_ptr = buf_int64;
 				}
 				else if (IsAlpha(*buf))
-					goto bad_format;
+					control_string_bad_format(str);
 				break;
 			case CONTROL_INVALUE:
 				/* Value was parsed, exit */
 				if (*buf == '"')
 				{
-					if (value_str)
-					{
-						*value_str = '\0';
-					}
-					else if (value_int64)
-					{
-						/* Length of buf_uint64 should not be greater than 31 */
-						if (buf_int64_ptr - buf_int64 >= 32)
-							elog(ERROR, "field \"%s\" is out of range in the line %s of the file %s",
-								 name, str, DATABASE_FILE_LIST);
-
-						*buf_int64_ptr = '\0';
-						if (!parse_int64(buf_int64, value_int64, 0))
-						{
-							/* We assume that too big value is -1 */
-							if (errno == ERANGE)
-								*value_int64 = BYTES_INVALID;
-							else
-								goto bad_format;
-						}
-					}
-
+					*value_str = '\0';
 					return true;
 				}
 				else
 				{
-					if (value_str)
-					{
-						*value_str = *buf;
-						value_str++;
+					/* verify if value_str not exceeds value_str_size limits */
+					if (value_str - value_str_start >= value_str_size - 1) {
+						elog(ERROR, "field \"%s\" is out of range in the line %s of the file %s",
+							 name, str, DATABASE_FILE_LIST);
 					}
-					else
-					{
-						*buf_int64_ptr = *buf;
-						buf_int64_ptr++;
-					}
+					*value_str = *buf;
+					value_str++;
 				}
 				break;
 			case CONTROL_WAIT_NEXT_NAME:
@@ -1596,18 +1611,20 @@ get_control_value(const char *str, const char *name,
 
 	/* There is no close quotes */
 	if (state == CONTROL_INNAME || state == CONTROL_INVALUE)
-		goto bad_format;
+		control_string_bad_format(str);
 
 	/* Did not find target field */
 	if (is_mandatory)
 		elog(ERROR, "field \"%s\" is not found in the line %s of the file %s",
 			 name, str, DATABASE_FILE_LIST);
 	return false;
+}
 
-bad_format:
-	elog(ERROR, "%s file has invalid format in line %s",
-		 DATABASE_FILE_LIST, str);
-	return false;	/* Make compiler happy */
+static void
+control_string_bad_format(const char* str)
+{
+    elog(ERROR, "%s file has invalid format in line %s",
+         DATABASE_FILE_LIST, str);
 }
 
 /*
@@ -1841,8 +1858,8 @@ read_database_map(pgBackup *backup)
 
 		db_map_entry *db_entry = (db_map_entry *) pgut_malloc(sizeof(db_map_entry));
 
-		get_control_value(buf, "dbOid", NULL, &dbOid, true);
-		get_control_value(buf, "datname", datname, NULL, true);
+        get_control_value_int64(buf, "dbOid", &dbOid, true);
+        get_control_value_str(buf, "datname", datname, sizeof(datname), true);
 
 		db_entry->dbOid = dbOid;
 		db_entry->datname = pgut_strdup(datname);
