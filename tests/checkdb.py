@@ -698,6 +698,7 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
                 'GRANT EXECUTE ON FUNCTION pg_catalog.array_position(anyarray, anyelement) TO backup; '
 #                'GRANT EXECUTE ON FUNCTION bt_index_check(regclass) TO backup; '
                 'GRANT EXECUTE ON FUNCTION bt_index_check(regclass, bool) TO backup;'
+                'GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_edition() TO backup; '
             )
         # PG 10
         elif self.get_version(node) > 100000 and self.get_version(node) < 110000:

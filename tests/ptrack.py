@@ -582,6 +582,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
                 "GRANT EXECUTE ON FUNCTION pg_catalog.pg_last_xlog_replay_location() TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;"
+                'GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_edition() TO backup; '
             )
         # >= 10
         else:
@@ -618,6 +619,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
                 "GRANT EXECUTE ON FUNCTION pg_catalog.pg_last_wal_replay_lsn() TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;"
+                'GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_edition() TO backup; '
             )
 
         node.safe_psql(
@@ -635,10 +637,6 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             "GRANT SELECT ON TABLE pg_catalog.pg_extension TO backup")
 
         if ProbackupTest.enterprise:
-            node.safe_psql(
-                "backupdb",
-                "GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_edition() TO backup")
-
             node.safe_psql(
                 "backupdb",
                 "GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_version() TO backup")
