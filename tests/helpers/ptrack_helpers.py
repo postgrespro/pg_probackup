@@ -109,10 +109,7 @@ def is_nls_enabled():
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE
     )
-    if b'enable-nls' in p.communicate()[0]:
-        return True
-    else:
-        return False
+    return b'enable-nls' in p.communicate()[0]
 
 
 class ProbackupException(Exception):
