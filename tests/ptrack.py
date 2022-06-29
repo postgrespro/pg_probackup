@@ -824,6 +824,8 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
     def test_ptrack_vacuum_full(self):
         """make node, make full and ptrack stream backups,
           restore them and check data correctness"""
+        self._check_gdb_flag_or_skip_test()
+
         backup_dir = os.path.join(self.tmp_path, module_name, self.fname, 'backup')
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, self.fname, 'node'),

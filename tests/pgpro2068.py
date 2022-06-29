@@ -18,6 +18,8 @@ class BugTest(ProbackupTest, unittest.TestCase):
         """
         https://jira.postgrespro.ru/browse/PGPRO-2068
         """
+        self._check_gdb_flag_or_skip_test()
+
         if not self.gdb:
             self.skipTest(
                 "Specify PGPROBACKUP_GDB and build without "
