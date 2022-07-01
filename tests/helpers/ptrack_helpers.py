@@ -810,8 +810,7 @@ class ProbackupTest(object):
             if self.verbose:
                 print(self.cmd)
             if gdb:
-                #TODO REVIEW XXX no self parameter
-                return GDBobj([binary_path] + command, self.verbose)
+                return GDBobj([binary_path] + command, self)
             if asynchronous:
                 return subprocess.Popen(
                     [binary_path] + command,
@@ -1862,8 +1861,7 @@ class ProbackupTest(object):
         self.assertFalse(fail, error_message)
 
     def gdb_attach(self, pid):
-        #TODO REVIEW XXX no self parameter
-        return GDBobj([str(pid)], self.verbose, attach=True)
+        return GDBobj([str(pid)], self, attach=True)
 
     def _check_gdb_flag_or_skip_test(self):
         if not self.gdb:
@@ -1872,24 +1870,28 @@ class ProbackupTest(object):
                 "optimizations for run this test"
             )
 
+
 class GdbException(Exception):
-    def __init__(self, message=False):
+    def __init__(self, message="False"):
         self.message = message
 
     def __str__(self):
         return '\n ERROR: {0}\n'.format(repr(self.message))
 
 
-class GDBobj(ProbackupTest):
-    def __init__(self, cmd, verbose, attach=False):
-        self.verbose = verbose
+#TODO REVIEW XXX no inheritance needed
+# class GDBobj(ProbackupTest):
+class GDBobj:
+    # TODO REVIEW XXX Type specification env:ProbackupTest is only for python3, is it ok?
+    def __init__(self, cmd, env: ProbackupTest, attach=False):
+        self.verbose = env.verbose
         self.output = ''
 
         # Check gdb flag is set up
-        # if not self.gdb:
-        #     raise GdbException("No `PGPROBACKUP_GDB=on` is set, "
-        #                        "test should call ProbackupTest::check_gdb_flag_or_skip_test() on its start "
-        #                        "and be skipped")
+        if not env.gdb:
+            raise GdbException("No `PGPROBACKUP_GDB=on` is set, "
+                               "test should call ProbackupTest::check_gdb_flag_or_skip_test() on its start "
+                               "and be skipped")
         # Check gdb presense
         try:
             gdb_version, _ = subprocess.Popen(

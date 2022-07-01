@@ -719,7 +719,6 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
     def test_replica_stop_lsn_null_offset_next_record(self):
         """
         """
-        self._check_gdb_flag_or_skip_test()
 
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
@@ -743,7 +742,6 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
         # freeze bgwriter to get rid of RUNNING XACTS records
         bgwriter_pid = master.auxiliary_pids[ProcessType.BackgroundWriter][0]
-        gdb_checkpointer = self.gdb_attach(bgwriter_pid)
 
         self.backup_node(backup_dir, 'master', master)
 
@@ -1097,7 +1095,6 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
     def test_start_stop_lsn_in_the_same_segno(self):
         """
         """
-        self._check_gdb_flag_or_skip_test()
 
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
@@ -1121,7 +1118,6 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
         # freeze bgwriter to get rid of RUNNING XACTS records
         bgwriter_pid = master.auxiliary_pids[ProcessType.BackgroundWriter][0]
-        gdb_checkpointer = self.gdb_attach(bgwriter_pid)
 
         self.backup_node(backup_dir, 'master', master, options=['--stream'])
 
