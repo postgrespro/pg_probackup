@@ -277,7 +277,7 @@ StreamLog(void *arg)
 #if PG_VERSION_NUM >= 150000
 		ctl.walmethod = CreateWalDirectoryMethod(
 			stream_arg->basedir,
-			COMPRESSION_NONE,
+			PG_COMPRESSION_NONE,
 			0,
 			false);
 #elif PG_VERSION_NUM >= 100000

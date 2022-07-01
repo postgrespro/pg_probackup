@@ -29,7 +29,10 @@
  * RmgrNames is an array of resource manager names, to make error messages
  * a bit nicer.
  */
-#if PG_VERSION_NUM >= 100000
+#if PG_VERSION_NUM >= 150000
+#define PG_RMGR(symname,name,redo,desc,identify,startup,cleanup,mask,decode) \
+  name,
+#elif PG_VERSION_NUM >= 100000
 #define PG_RMGR(symname,name,redo,desc,identify,startup,cleanup,mask) \
   name,
 #else
@@ -1769,7 +1772,8 @@ extractPageInfo(XLogReaderState *record, XLogReaderData *reader_data,
 
 	/* Is this a special record type that I recognize? */
 
-	if (rmid == RM_DBASE_ID && rminfo == XLOG_DBASE_CREATE)
+	if (rmid == RM_DBASE_ID
+		&& (rminfo == XLOG_DBASE_CREATE_WAL_LOG || rminfo == XLOG_DBASE_CREATE_FILE_COPY))
 	{
 		/*
 		 * New databases can be safely ignored. They would be completely
@@ -1823,13 +1827,13 @@ extractPageInfo(XLogReaderState *record, XLogReaderData *reader_data,
 				 RmgrNames[rmid], info);
 	}
 
-	for (block_id = 0; block_id <= record->max_block_id; block_id++)
+	for (block_id = 0; block_id <= record->record->max_block_id; block_id++)
 	{
 		RelFileNode rnode;
 		ForkNumber	forknum;
 		BlockNumber blkno;
 
-		if (!XLogRecGetBlockTag(record, block_id, &rnode, &forknum, &blkno))
+		if (!XLogRecGetBlockTagExtended(record, block_id, &rnode, &forknum, &blkno, NULL))
 			continue;
 
 		/* We only care about the main fork; others are copied as is */
