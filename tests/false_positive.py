@@ -198,6 +198,7 @@ class FalsePositive(ProbackupTest, unittest.TestCase):
 
         gdb = self.backup_node(backup_dir, 'node', node, gdb=True)
 
+        # Attention! This breakpoint is set to a probackup internal fuction, not a postgres core one
         gdb.set_breakpoint('pg_stop_backup')
         gdb.run_until_break()
         gdb.remove_all_breakpoints()
@@ -257,6 +258,7 @@ class FalsePositive(ProbackupTest, unittest.TestCase):
             backup_dir, 'node', node,
             options=['--log-level-console=LOG'], gdb=True)
 
+        # Attention! This breakpoint is set to a probackup internal fuction, not a postgres core one
         gdb.set_breakpoint('pg_stop_backup')
         gdb.run_until_break()
         gdb.remove_all_breakpoints()
@@ -308,6 +310,7 @@ class FalsePositive(ProbackupTest, unittest.TestCase):
             backup_dir, 'node', node, gdb=True,
             options=['--stream', '--log-level-file=LOG'])
 
+        # Attention! This breakpoint is set to a probackup internal fuction, not a postgres core one
         gdb.set_breakpoint('pg_stop_backup')
         gdb.run_until_break()
 

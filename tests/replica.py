@@ -785,6 +785,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
                 '--stream'],
             gdb=True)
 
+        # Attention! this breakpoint is set to a probackup internal function, not a postgres core one
         gdb.set_breakpoint('pg_stop_backup')
         gdb.run_until_break()
         gdb.remove_all_breakpoints()
