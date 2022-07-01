@@ -12,6 +12,10 @@ class LogTest(ProbackupTest, unittest.TestCase):
     # @unittest.expectedFailure
     # PGPRO-2154
     def test_log_rotation(self):
+        """
+        """
+        self._check_gdb_flag_or_skip_test()
+
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),

@@ -1879,10 +1879,7 @@ class GdbException(Exception):
         return '\n ERROR: {0}\n'.format(repr(self.message))
 
 
-#TODO REVIEW XXX no inheritance needed
-# class GDBobj(ProbackupTest):
 class GDBobj:
-    # TODO REVIEW XXX Type specification env:ProbackupTest is only for python3, is it ok?
     def __init__(self, cmd, env: ProbackupTest, attach=False):
         self.verbose = env.verbose
         self.output = ''

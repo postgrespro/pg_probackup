@@ -1499,6 +1499,8 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         FULL
         -------window
         """
+        self._check_gdb_flag_or_skip_test()
+
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
@@ -1546,6 +1548,8 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         FULL
         -------window
         """
+        self._check_gdb_flag_or_skip_test()
+
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
@@ -1588,6 +1592,8 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
     def test_retention_redundancy_overlapping_chains(self):
         """"""
+        self._check_gdb_flag_or_skip_test()
+
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
@@ -1636,6 +1642,8 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
     def test_retention_redundancy_overlapping_chains_1(self):
         """"""
+        self._check_gdb_flag_or_skip_test()
+
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
@@ -1744,6 +1752,8 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         """
         Check that retention purge works correctly with MERGING backups
         """
+        self._check_gdb_flag_or_skip_test()
+
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
@@ -2536,6 +2546,8 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         """
         https://github.com/postgrespro/pg_probackup/issues/328
         """
+        self._check_gdb_flag_or_skip_test()
+
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
