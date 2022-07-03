@@ -112,6 +112,9 @@ if [ "$MODE" = "basic" ]; then
     echo PG_PROBACKUP_TEST_BASIC=${PG_PROBACKUP_TEST_BASIC}
     python3 -m unittest -v tests
     python3 -m unittest -v tests.init
+elif [ "$MODE" = "TMP" ]; then
+    echo MODE=TMP
+    PGPROBACKUP_GDB=ON python3 -m unittest -v tests
 else
     echo PG_PROBACKUP_TEST_BASIC=${PG_PROBACKUP_TEST_BASIC}
     python3 -m unittest -v tests.$MODE
