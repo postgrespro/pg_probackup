@@ -1010,8 +1010,9 @@ extern CompressAlg parse_compress_alg(const char *arg);
 extern const char* deparse_compress_alg(int alg);
 
 /* in dir.c */
-extern bool get_control_value(const char *str, const char *name,
-				  char *value_str, int64 *value_int64, bool is_mandatory);
+extern bool get_control_value_int64(const char *str, const char *name, int64 *value_int64, bool is_mandatory);
+extern bool get_control_value_str(const char *str, const char *name,
+                                  char *value_str, size_t value_str_size, bool is_mandatory);
 extern void dir_list_file(parray *files, const char *root, bool exclude,
 						  bool follow_symlink, bool add_root, bool backup_logs,
 						  bool skip_hidden, int external_dir_num, fio_location location);

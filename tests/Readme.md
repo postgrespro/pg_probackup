@@ -1,4 +1,4 @@
-[see wiki](https://confluence.postgrespro.ru/display/DEV/pg_probackup)
+****[see wiki](https://confluence.postgrespro.ru/display/DEV/pg_probackup)
 
 ```
 Note: For now these tests work on Linux and "kinda" work on Windows
@@ -49,4 +49,33 @@ Usage:
  pip install testgres
  export PG_CONFIG=/path/to/pg_config
  python -m unittest [-v] tests[.specific_module][.class.test]
+```
+
+### Troubleshooting FAQ
+
+#### python test failures
+1. Test failure reason like 
+```
+testgres.exceptions.QueryException ERROR:  could not open extension control file "/home/avaness/postgres/postgres.build/share/extension/amcheck.control": No such file or directory
+```
+
+*Solution*: you have no `<postgres_src_root>/contrib/` extensions installed
+
+```commandline
+cd <postgres_src_root>
+make world install
+```
+
+2. Test failure
+
+```
+FAIL: test_help_6 (tests.option.OptionTest)
+```
+
+*Solution*: you didn't configure postgres build with `--enable-nls` 
+
+```commandline
+cd <postgres_src_root>
+make distclean
+<your-./configure-cmdline> --enable-nls
 ```
