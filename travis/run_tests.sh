@@ -107,17 +107,18 @@ echo PGPROBACKUPBIN=${PGPROBACKUPBIN}
 echo PGPROBACKUP_SSH_REMOTE=${PGPROBACKUP_SSH_REMOTE}
 echo PGPROBACKUP_GDB=${PGPROBACKUP_GDB}
 echo PG_PROBACKUP_PTRACK=${PG_PROBACKUP_PTRACK}
+echo ADDITIONAL_ENV_FLAGS=${ENV_FLAGS}
 if [ "$MODE" = "basic" ]; then
     export PG_PROBACKUP_TEST_BASIC=ON
     echo PG_PROBACKUP_TEST_BASIC=${PG_PROBACKUP_TEST_BASIC}
-    python3 -m unittest -v tests
-    python3 -m unittest -v tests.init
-elif [ "$MODE" = "TMP" ]; then
-    echo MODE=TMP
-    PGPROBACKUP_GDB=ON python3 -m unittest -v tests
+    ${ADDITIONAL_ENV_FLAGS} python3 -m unittest -v tests
+    ${ADDITIONAL_ENV_FLAGS} python3 -m unittest -v tests.init
+#elif [ "$MODE" = "FULL" ]; then
+#    echo MODE=FULL
+#    ${ADDITIONAL_ENV_FLAGS} python3 -m unittest -v tests
 else
     echo PG_PROBACKUP_TEST_BASIC=${PG_PROBACKUP_TEST_BASIC}
-    python3 -m unittest -v tests.$MODE
+    ${ADDITIONAL_ENV_FLAGS} python3 -m unittest -v tests.$MODE
 fi
 
 # Generate *.gcov files

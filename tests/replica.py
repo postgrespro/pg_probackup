@@ -539,11 +539,8 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         start backup from replica, during backup promote replica
         check that backup is failed
         """
-        if not self.gdb:
-            self.skipTest(
-                "Specify PGPROBACKUP_GDB and build without "
-                "optimizations for run this test"
-            )
+        self._check_gdb_flag_or_skip_test()
+
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         master = self.make_simple_node(
