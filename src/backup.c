@@ -423,7 +423,7 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 	pfilearray_clear_locks(backup_files_list);
 
 	/* Sort by size for load balancing */
-	parray_qsort(backup_files_list, pgFileCompareRelPathWithExternal);
+	parray_qsort(backup_files_list, pgFileCompareSize);
 	/* Sort the array for binary search */
 	if (prev_backup_filelist)
 		parray_qsort(prev_backup_filelist, pgFileCompareRelPathWithExternal);
