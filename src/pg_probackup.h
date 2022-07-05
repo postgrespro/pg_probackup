@@ -1122,6 +1122,8 @@ typedef enum CrcMethod
 //	bool     eof;
 //} fioGZFile;
 
+#define CFM_MAX_SIZE 1048608 /* TODO: must be imported from EE source */
+
 typedef struct PbkFile
 {
 	int         fd;

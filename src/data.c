@@ -1291,6 +1291,7 @@ restore_non_data_file_internal(FILE *out, pgFile *file,
 	/* copy content */
 	for (;;)
 	{
+		/* currently decompression happens here, not great */
 		ssize_t read_len = read_file(in, buf, CHUNK_SIZE);
 
 		if (read_len < 0)
@@ -1310,6 +1311,9 @@ restore_non_data_file_internal(FILE *out, pgFile *file,
 
 	if (close_file(in) < 0)
 		elog(ERROR, "%s", in->errmsg);
+
+	if (file->forkName == cfm)
+		fio_ftruncate(out, CFM_MAX_SIZE);
 
 	elog(VERBOSE, "Copied file \"%s\": %lu bytes", to_fullpath, in->currpos);
 

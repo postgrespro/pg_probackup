@@ -1803,7 +1803,7 @@ set_forkname(pgFile *file)
 {
 	int name_len = strlen(file->name);
 
-		/* Auxiliary fork of the relfile */
+	/* Auxiliary fork of the relfile */
 	if (name_len > 3 && strcmp(file->name + name_len - 3, "_vm") == 0)
 		file->forkName = vm;
 
