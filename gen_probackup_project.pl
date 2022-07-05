@@ -214,6 +214,7 @@ sub build_pgprobackup
         $probackup->AddIncludeDir("$currpath");
         $probackup->AddIncludeDir("$currpath/src");
         $probackup->AddIncludeDir("$currpath/src/utils");
+        $probackup->AddIncludeDir("$currpath/src/fu_util");
 
     if ($libpgfeutils)
     {

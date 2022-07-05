@@ -49,6 +49,9 @@ extern LoggerConfig logger_config;
 #undef elog
 extern void elog(int elevel, const char *fmt, ...) pg_attribute_printf(2, 3);
 extern void elog_file(int elevel, const char *fmt, ...) pg_attribute_printf(2, 3);
+extern void elog_ft_log(enum FT_LOG_LEVEL, ft_source_position_t srcpos,
+		const char* error, const char *fmt, va_list args)
+		pg_attribute_printf(4, 0);
 
 extern void init_logger(const char *root_path, LoggerConfig *config);
 extern void init_console(void);

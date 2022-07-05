@@ -295,6 +295,8 @@ main(int argc, char *argv[])
 	char	   *command = NULL;
 	ProbackupSubcmd backup_subcmd = NO_CMD;
 
+	ft_init_log(elog_ft_log);
+	fobj_init();
 	PROGRAM_NAME_FULL = argv[0];
 
 	/* Check terminal presense and initialize ANSI escape codes for Windows */

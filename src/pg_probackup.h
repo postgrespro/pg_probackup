@@ -10,6 +10,7 @@
 #ifndef PG_PROBACKUP_H
 #define PG_PROBACKUP_H
 
+#include <fo_obj.h>
 
 #include "postgres_fe.h"
 #include "libpq-fe.h"

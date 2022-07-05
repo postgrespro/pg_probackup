@@ -1,0 +1,9 @@
+#ifndef FU_UTILS_FU_UTILS_H_IN
+#define FU_UTILS_FU_UTILS_H_IN
+
+#define FU_UTILS_VERSION_MAJOR @fu_utils_VERSION_MAJOR@
+#define FU_UTILS_VERSION_MINOR @fu_utils_VERSION_MINOR@
+
+//#cmakedefine HAVE_LIBBACKTRACE
+
+#endif
