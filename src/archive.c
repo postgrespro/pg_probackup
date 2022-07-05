@@ -13,23 +13,16 @@
 #include "utils/thread.h"
 #include "instr_time.h"
 
-static int push_file_internal_uncompressed(const char *wal_file_name, const char *pg_xlog_dir,
-								  const char *archive_dir, bool overwrite, bool no_sync,
-								  uint32 archive_timeout);
-#ifdef HAVE_LIBZ
-static int push_file_internal_gz(const char *wal_file_name, const char *pg_xlog_dir,
-									 const char *archive_dir, bool overwrite, bool no_sync,
-									 int compress_level, uint32 archive_timeout);
-#endif
+static int push_file_internal(const char *wal_file_name,
+                              const char *pg_xlog_dir,
+                              const char *archive_dir,
+                              bool overwrite, bool no_sync,
+                              bool is_compress, int compress_level,
+                              uint32 archive_timeout);
 static void *push_files(void *arg);
 static void *get_files(void *arg);
 static bool get_wal_file(const char *filename, const char *from_path, const char *to_path,
 													bool prefetch_mode);
-static int get_wal_file_internal(const char *from_path, const char *to_path, FILE *out,
-								 bool is_decompress);
-#ifdef HAVE_LIBZ
-static const char *get_gz_error(gzFile gzf, int errnum);
-#endif
 //static void copy_file_attributes(const char *from_path,
 //								 fio_location from_location,
 //								 const char *to_path, fio_location to_location,
@@ -335,17 +328,10 @@ push_file(WALSegno *xlogfile, const char *archive_status_dir,
 
 	elog(LOG, "pushing file \"%s\"", xlogfile->name);
 
-	/* If compression is not required, then just copy it as is */
-	if (!is_compress)
-		rc = push_file_internal_uncompressed(xlogfile->name, pg_xlog_dir,
-											 archive_dir, overwrite, no_sync,
-											 archive_timeout);
-#ifdef HAVE_LIBZ
-	else
-		rc = push_file_internal_gz(xlogfile->name, pg_xlog_dir, archive_dir,
-								   overwrite, no_sync, compress_level,
-								   archive_timeout);
-#endif
+	rc = push_file_internal(xlogfile->name, pg_xlog_dir,
+							archive_dir, overwrite, no_sync,
+							is_compress, compress_level,
+							archive_timeout);
 
 	/* take '--no-ready-rename' flag into account */
 	if (!no_ready_rename && archive_status_dir != NULL)
@@ -372,538 +358,245 @@ push_file(WALSegno *xlogfile, const char *archive_status_dir,
 	return rc;
 }
 
+static void
+remove_temp_wal_file(pioDrive_i *backup_drive, char *partpath)
+{
+	err_i   remerr = $i(pioRemove, *backup_drive, partpath, false);
+	if ($haserr(remerr))
+		elog(WARNING, "Temp WAL: %s", $errmsg(remerr));
+}
+
 /*
  * Copy non WAL file, such as .backup or .history file, into WAL archive.
- * Such files are not compressed.
+ * Optionally apply streaming compression to it.
  * Returns:
  *  0 - file was successfully pushed
  *  1 - push was skipped because file already exists in the archive and
  *      has the same checksum
  */
 int
-push_file_internal_uncompressed(const char *wal_file_name, const char *pg_xlog_dir,
-								const char *archive_dir, bool overwrite, bool no_sync,
-								uint32 archive_timeout)
+push_file_internal(const char *wal_file_name, const char *pg_xlog_dir,
+                   const char *archive_dir, bool overwrite, bool no_sync,
+                   bool is_compress, int compress_level,
+                   uint32 archive_timeout)
 {
-	FILE	   *in = NULL;
-	int			out = -1;
-	char       *buf = pgut_malloc(OUT_BUF_SIZE); /* 1MB buffer */
-	char		from_fullpath[MAXPGPATH];
-	char		to_fullpath[MAXPGPATH];
-	/* partial handling */
-	struct stat		st;
-	char		to_fullpath_part[MAXPGPATH];
-	int			partial_try_count = 0;
-	int			partial_file_size = 0;
-	bool		partial_is_stale = true;
-	/* remote agent error message */
-	char       *errmsg = NULL;
+    FOBJ_FUNC_ARP();
+    pioFile_i in;
+    pioFile_i out;
+    char *buf = pgut_malloc(OUT_BUF_SIZE); /* 1MB buffer */
+    char from_fullpath[MAXPGPATH];
+    char to_fullpath[MAXPGPATH];
+    char to_fullpath_part[MAXPGPATH];
+/* partial handling */
+    struct stat st;
+    int partial_try_count = 0;
+    ssize_t partial_file_size = 0;
+    bool partial_is_stale = true;
+    size_t len;
+    err_i err = $noerr();
 
-	/* from path */
-	join_path_components(from_fullpath, pg_xlog_dir, wal_file_name);
-	canonicalize_path(from_fullpath);
-	/* to path */
-	join_path_components(to_fullpath, archive_dir, wal_file_name);
-	canonicalize_path(to_fullpath);
+    pioDrive_i db_drive = pioDriveForLocation(FIO_DB_HOST);
+    pioDrive_i backup_drive = pioDriveForLocation(FIO_BACKUP_HOST);
 
-	/* Open source file for read */
-	in = fopen(from_fullpath, PG_BINARY_R);
-	if (in == NULL)
-		elog(ERROR, "Cannot open source file \"%s\": %s", from_fullpath, strerror(errno));
+    /* from path */
+    join_path_components(from_fullpath, pg_xlog_dir, wal_file_name);
+    canonicalize_path(from_fullpath);
+    /* to path */
+    join_path_components(to_fullpath, archive_dir, wal_file_name);
+    canonicalize_path(to_fullpath);
+    if (is_compress)
+    {
+        /* destination file with .gz suffix */
+        len = ft_strlcat(to_fullpath, ".gz", sizeof(to_fullpath));
+        if (len >= sizeof(to_fullpath))
+            elog(ERROR, "File path too long: \"%s\"", to_fullpath);
+    }
+    /* open destination partial file for write */
+    len = snprintf(to_fullpath_part, sizeof(to_fullpath_part), "%s.part",
+                   to_fullpath);
+    if (len >= sizeof(to_fullpath))
+        elog(ERROR, "File path too long: \"%s\"", to_fullpath);
 
-	/* disable stdio buffering for input file */
-	setvbuf(in, NULL, _IONBF, BUFSIZ);
+    /* Open source file for read */
+    in = $i(pioOpen, db_drive, from_fullpath, O_RDONLY | PG_BINARY, .err = &err);
+    if ($haserr(err))
+        elog(ERROR, "Source file: %s", $errmsg(err));
 
-	/* open destination partial file for write */
-	snprintf(to_fullpath_part, sizeof(to_fullpath_part), "%s.part", to_fullpath);
+    retry_open:
+    out = $i(pioOpen, backup_drive, to_fullpath_part,
+             .flags = O_WRONLY | O_CREAT | O_EXCL | PG_BINARY,
+             .err = &err);
+    if ($noerr(err))
+        goto part_opened;
 
-	/* Grab lock by creating temp file in exclusive mode */
-	out = fio_open(FIO_BACKUP_HOST, to_fullpath_part, O_RDWR | O_CREAT | O_EXCL | PG_BINARY);
-	if (out < 0)
-	{
-		if (errno != EEXIST)
-			elog(ERROR, "Failed to open temp WAL file \"%s\": %s",
-					to_fullpath_part, strerror(errno));
-		/* Already existing destination temp file is not an error condition */
-	}
-	else
-		goto part_opened;
+    if (getErrno(err) != EEXIST)
+        /* Already existing destination temp file is not an error condition */
+        elog(ERROR, "Temp WAL file: %s", $errmsg(err));
 
-	/*
-	 * Partial file already exists, it could have happened due to:
-	 * 1. failed archive-push
-	 * 2. concurrent archiving
-	 *
-	 * For ARCHIVE_TIMEOUT period we will try to create partial file
-	 * and look for the size of already existing partial file, to
-	 * determine if it is changing or not.
-	 * If after ARCHIVE_TIMEOUT we still failed to create partial
-	 * file, we will make a decision about discarding
-	 * already existing partial file.
-	 */
+    /*
+     * Partial file already exists, it could have happened due to:
+     * 1. failed archive-push
+     * 2. concurrent archiving
+     *
+     * For ARCHIVE_TIMEOUT period we will try to create partial file
+     * and look for the size of already existing partial file, to
+     * determine if it is changing or not.
+     * If after ARCHIVE_TIMEOUT we still failed to create partial
+     * file, we will make a decision about discarding
+     * already existing partial file.
+     */
 
-	while (partial_try_count < archive_timeout)
-	{
-		if (fio_stat(FIO_BACKUP_HOST, to_fullpath_part, &st, false) < 0)
-		{
-			if (errno == ENOENT)
-			{
-				//part file is gone, lets try to grab it
-				out = fio_open(FIO_BACKUP_HOST, to_fullpath_part, O_RDWR | O_CREAT | O_EXCL | PG_BINARY);
-				if (out < 0)
-				{
-					if (errno != EEXIST)
-						elog(ERROR, "Failed to open temp WAL file \"%s\": %s",
-										to_fullpath_part, strerror(errno));
-				}
-				else
-					/* Successfully created partial file */
-					break;
-			}
-			else
-				elog(ERROR, "Cannot stat temp WAL file \"%s\": %s", to_fullpath_part, strerror(errno));
-		}
+    while (partial_try_count < archive_timeout)
+    {
+        FOBJ_LOOP_ARP();
+        st = $i(pioStat, backup_drive, .path = to_fullpath_part,
+                .follow_symlink = false, .err = &err);
+        if ($haserr(err))
+        {
+            if (getErrno(err) == ENOENT)
+                //part file is gone, lets try to grab it
+                goto retry_open;
+            else
+                elog(ERROR, "Temp WAL: %s", $errmsg(err));
+        }
 
-		/* first round */
-		if (!partial_try_count)
-		{
-			elog(LOG, "Temp WAL file already exists, waiting on it %u seconds: \"%s\"",
-					archive_timeout, to_fullpath_part);
-			partial_file_size = st.st_size;
-		}
+        /* first round */
+        if (!partial_try_count)
+        {
+            elog(LOG,
+                 "Temp WAL file already exists, waiting on it %u seconds: \"%s\"",
+                 archive_timeout, to_fullpath_part);
+            partial_file_size = st.st_size;
+        }
 
-		/* file size is changing */
-		if (st.st_size > partial_file_size)
-			partial_is_stale = false;
+        /* file size is changing */
+        if (st.st_size != partial_file_size)
+            partial_is_stale = false;
 
-		sleep(1);
-		partial_try_count++;
-	}
-	/* The possible exit conditions:
-	 * 1. File is grabbed
-	 * 2. File is not grabbed, and it is not stale
-	 * 2. File is not grabbed, and it is stale.
-	 */
+        sleep(1);
+        partial_try_count++;
+    }
+    /* The possible exit conditions:
+     * 1. File is not grabbed, and it is not stale
+     * 2. File is not grabbed, and it is stale.
+     */
 
-	/*
-	 * If temp file was not grabbed for ARCHIVE_TIMEOUT and temp file is not stale,
-	 * then exit with error.
-	 */
-	if (out < 0)
-	{
-		if (!partial_is_stale)
-			elog(ERROR, "Failed to open temp WAL file \"%s\" in %i seconds",
-					to_fullpath_part, archive_timeout);
+    /*
+     * If temp file was not grabbed for ARCHIVE_TIMEOUT and temp file is not stale,
+     * then exit with error.
+     */
+    if (!partial_is_stale)
+        elog(ERROR, "Failed to open temp WAL file \"%s\" in %i seconds",
+             to_fullpath_part, archive_timeout);
 
-		/* Partial segment is considered stale, so reuse it */
-		elog(LOG, "Reusing stale temp WAL file \"%s\"", to_fullpath_part);
-		if (fio_remove(FIO_BACKUP_HOST, to_fullpath_part, false) != 0)
-			elog(ERROR, "Cannot remove stale temp WAL file \"%s\": %s", to_fullpath_part, strerror(errno));
+    /* Partial segment is considered stale, so reuse it */
+    elog(LOG, "Reusing stale temp WAL file \"%s\"", to_fullpath_part);
+    err = $i(pioRemove, backup_drive, .path = to_fullpath_part, .missing_ok = false);
+    if ($haserr(err))
+        elog(ERROR, "Temp WAL: %s", $errmsg(err));
 
-		out = fio_open(FIO_BACKUP_HOST, to_fullpath_part, O_RDWR | O_CREAT | O_EXCL | PG_BINARY);
-		if (out < 0)
-			elog(ERROR, "Cannot open temp WAL file \"%s\": %s", to_fullpath_part, strerror(errno));
-	}
+    out = $i(pioOpen, backup_drive, .path = to_fullpath_part,
+             .flags = O_WRONLY | O_CREAT | O_EXCL | PG_BINARY,
+             .err = &err);
+    if ($haserr(err))
+        elog(ERROR, "Temp WAL: %s", $errmsg(err));
 
-part_opened:
-	elog(VERBOSE, "Temp WAL file successfully created: \"%s\"", to_fullpath_part);
-	/* Check if possible to skip copying */
-	if (fileExists(to_fullpath, FIO_BACKUP_HOST))
-	{
-		pg_crc32 crc32_src;
-		pg_crc32 crc32_dst;
+    part_opened:
+    elog(VERBOSE, "Temp WAL file successfully created: \"%s\"", to_fullpath_part);
 
-		crc32_src = fio_get_crc32(FIO_DB_HOST,     from_fullpath, false);
-		crc32_dst = fio_get_crc32(FIO_BACKUP_HOST, to_fullpath,   false);
+    if ($i(pioExists, backup_drive, to_fullpath, &err))
+    {
+        pg_crc32 crc32_src;
+        pg_crc32 crc32_dst;
 
-		if (crc32_src == crc32_dst)
-		{
-			elog(LOG, "WAL file already exists in archive with the same "
-					"checksum, skip pushing: \"%s\"", from_fullpath);
-			/* cleanup */
-			fclose(in);
-			fio_close(out);
-			if (fio_remove(FIO_BACKUP_HOST, to_fullpath_part, false) != 0)
-				elog(WARNING, "Cannot remove temp WAL file \"%s\": %s", to_fullpath_part, strerror(errno));
-			return 1;
-		}
-		else
-		{
-			if (overwrite)
-				elog(LOG, "WAL file already exists in archive with "
-						"different checksum, overwriting: \"%s\"", to_fullpath);
-			else
-			{
-				/* Overwriting is forbidden,
-				 * so we must unlink partial file and exit with error.
-				 */
-				if (fio_remove(FIO_BACKUP_HOST, to_fullpath_part, false) != 0)
-					elog(WARNING, "Cannot remove temp WAL file \"%s\": %s", to_fullpath_part, strerror(errno));
-				elog(ERROR, "WAL file already exists in archive with "
-						"different checksum: \"%s\"", to_fullpath);
-			}
-		}
-	}
+        crc32_src = $i(pioGetCRC32, db_drive, from_fullpath,
+                       .compressed = false, .err = &err);
+        if ($haserr(err))
+            elog(ERROR, "Cannot count crc32 for source file \"%s\": %s",
+                 from_fullpath, $errmsg(err));
 
-	/* copy content */
-	errno = 0;
-	for (;;)
-	{
-		size_t  read_len = 0;
+        crc32_dst = $i(pioGetCRC32, backup_drive, to_fullpath,
+                       .compressed = is_compress, .err = &err);
+        if ($haserr(err))
+            elog(ERROR, "Cannot count crc32 for destination file \"%s\": %s",
+                 to_fullpath, $errmsg(err));
 
-		read_len = fread(buf, 1, OUT_BUF_SIZE, in);
+        if (crc32_src == crc32_dst)
+        {
+            elog(LOG, "WAL file already exists in archive with the same "
+                      "checksum, skip pushing: \"%s\"", from_fullpath);
+            $i(pioClose, in);
+            $i(pioClose, out);
+            remove_temp_wal_file(&backup_drive, to_fullpath_part);
+            return 1;
+        }
+        else if (overwrite)
+        {
+            elog(LOG, "WAL file already exists in archive with "
+                      "different checksum, overwriting: \"%s\"",
+                 to_fullpath);
+        }
+        else
+        {
+            $i(pioClose, in);
+            $i(pioClose, out);
+            remove_temp_wal_file(&backup_drive, to_fullpath_part);
 
-		if (ferror(in))
-		{
-			int save_errno = errno;
-			if (fio_remove(FIO_BACKUP_HOST, to_fullpath_part, false) != 0)
-				elog(WARNING, "Cannot remove temp WAL file \"%s\": %s", to_fullpath_part, strerror(errno));
-			elog(ERROR, "Cannot read source file \"%s\": %s",
-						from_fullpath, strerror(save_errno));
-		}
+            elog(ERROR, "WAL file already exists in archive with "
+                        "different checksum: \"%s\"", to_fullpath);
+        }
+    }
+    else if ($haserr(err))
+    {
+        elog(ERROR, "%s", $errmsg(err));
+    }
 
-		if (read_len > 0 && fio_write_async(out, buf, read_len) != read_len)
-		{
-			int save_errno = errno;
-			if (fio_remove(FIO_BACKUP_HOST, to_fullpath_part, false) != 0)
-				elog(WARNING, "Cannot cleanup temp WAL file \"%s\": %s", to_fullpath_part, strerror(errno));
-			elog(ERROR, "Cannot write to destination temp file \"%s\": %s",
-						to_fullpath_part, strerror(save_errno));
-		}
-
-		if (feof(in))
-			break;
-	}
-
-	/* close source file */
-	fclose(in);
-
-	/* Writing is asynchronous in case of push in remote mode, so check agent status */
-	if (fio_check_error_fd(out, &errmsg))
-	{
-		if (fio_remove(FIO_BACKUP_HOST, to_fullpath_part, false) != 0)
-			elog(WARNING, "Cannot cleanup temp WAL file \"%s\": %s", to_fullpath_part, strerror(errno));
-		elog(ERROR, "Cannot write to the remote file \"%s\": %s",
-					to_fullpath_part, errmsg);
-	}
-
-	/* close temp file */
-	if (fio_close(out) != 0)
-	{
-		int save_errno = errno;
-		if (fio_remove(FIO_BACKUP_HOST, to_fullpath_part, false) != 0)
-			elog(WARNING, "Cannot cleanup temp WAL file \"%s\": %s", to_fullpath_part, strerror(errno));
-		elog(ERROR, "Cannot close temp WAL file \"%s\": %s",
-					to_fullpath_part, strerror(save_errno));
-	}
-
-	/* sync temp file to disk */
-	if (!no_sync)
-	{
-		if (fio_sync(FIO_BACKUP_HOST, to_fullpath_part) != 0)
-			elog(ERROR, "Failed to sync file \"%s\": %s",
-						to_fullpath_part, strerror(errno));
-	}
-
-	elog(VERBOSE, "Rename \"%s\" to \"%s\"", to_fullpath_part, to_fullpath);
-
-	//copy_file_attributes(from_path, FIO_DB_HOST, to_path_temp, FIO_BACKUP_HOST, true);
-
-	/* Rename temp file to destination file */
-	if (fio_rename(FIO_BACKUP_HOST, to_fullpath_part, to_fullpath) < 0)
-	{
-		int save_errno = errno;
-		if (fio_remove(FIO_BACKUP_HOST, to_fullpath_part, false) != 0)
-			elog(WARNING, "Cannot cleanup temp WAL file \"%s\": %s", to_fullpath_part, strerror(errno));
-		elog(ERROR, "Cannot rename file \"%s\" to \"%s\": %s",
-					to_fullpath_part, to_fullpath, strerror(save_errno));
-	}
-
-	pg_free(buf);
-	return 0;
-}
-
+    /* enable streaming compression */
+    if (is_compress)
 #ifdef HAVE_LIBZ
-/*
- * Push WAL segment into archive and apply streaming compression to it.
- * Returns:
- *  0 - file was successfully pushed
- *  1 - push was skipped because file already exists in the archive and
- *      has the same checksum
- */
-int
-push_file_internal_gz(const char *wal_file_name, const char *pg_xlog_dir,
-					  const char *archive_dir, bool overwrite, bool no_sync,
-					  int compress_level, uint32 archive_timeout)
-{
-	FILE	   *in = NULL;
-	gzFile		out = NULL;
-	char       *buf = pgut_malloc(OUT_BUF_SIZE);
-	char		from_fullpath[MAXPGPATH];
-	char		to_fullpath[MAXPGPATH];
-	char		to_fullpath_gz[MAXPGPATH];
-
-	/* partial handling */
-	struct stat		st;
-
-	char		to_fullpath_gz_part[MAXPGPATH];
-	int			partial_try_count = 0;
-	int			partial_file_size = 0;
-	bool		partial_is_stale = true;
-	/* remote agent errormsg */
-	char       *errmsg = NULL;
-
-	/* from path */
-	join_path_components(from_fullpath, pg_xlog_dir, wal_file_name);
-	canonicalize_path(from_fullpath);
-	/* to path */
-	join_path_components(to_fullpath, archive_dir, wal_file_name);
-	canonicalize_path(to_fullpath);
-
-	/* destination file with .gz suffix */
-	snprintf(to_fullpath_gz, sizeof(to_fullpath_gz), "%s.gz", to_fullpath);
-	/* destination temp file */
-	snprintf(to_fullpath_gz_part, sizeof(to_fullpath_gz_part), "%s.part", to_fullpath_gz);
-
-	/* Open source file for read */
-	in = fopen(from_fullpath, PG_BINARY_R);
-	if (in == NULL)
-		elog(ERROR, "Cannot open source WAL file \"%s\": %s",
-				from_fullpath, strerror(errno));
-
-	/* disable stdio buffering for input file */
-	setvbuf(in, NULL, _IONBF, BUFSIZ);
-
-	/* Grab lock by creating temp file in exclusive mode */
-	out = fio_gzopen(FIO_BACKUP_HOST, to_fullpath_gz_part, PG_BINARY_W, compress_level);
-	if (out == NULL)
-	{
-		if (errno != EEXIST)
-			elog(ERROR, "Cannot open temp WAL file \"%s\": %s",
-					to_fullpath_gz_part, strerror(errno));
-		/* Already existing destination temp file is not an error condition */
-	}
-	else
-		goto part_opened;
-
-	/*
-	 * Partial file already exists, it could have happened due to:
-	 * 1. failed archive-push
-	 * 2. concurrent archiving
-	 *
-	 * For ARCHIVE_TIMEOUT period we will try to create partial file
-	 * and look for the size of already existing partial file, to
-	 * determine if it is changing or not.
-	 * If after ARCHIVE_TIMEOUT we still failed to create partial
-	 * file, we will make a decision about discarding
-	 * already existing partial file.
-	 */
-
-	while (partial_try_count < archive_timeout)
-	{
-		if (fio_stat(FIO_BACKUP_HOST, to_fullpath_gz_part, &st, false) < 0)
-		{
-			if (errno == ENOENT)
-			{
-				//part file is gone, lets try to grab it
-				out = fio_gzopen(FIO_BACKUP_HOST, to_fullpath_gz_part, PG_BINARY_W, compress_level);
-				if (out == NULL)
-				{
-					if (errno != EEXIST)
-						elog(ERROR, "Failed to open temp WAL file \"%s\": %s",
-									to_fullpath_gz_part, strerror(errno));
-				}
-				else
-					/* Successfully created partial file */
-					break;
-			}
-			else
-				elog(ERROR, "Cannot stat temp WAL file \"%s\": %s",
-							to_fullpath_gz_part, strerror(errno));
-		}
-
-		/* first round */
-		if (!partial_try_count)
-		{
-			elog(LOG, "Temp WAL file already exists, waiting on it %u seconds: \"%s\"",
-					archive_timeout, to_fullpath_gz_part);
-			partial_file_size = st.st_size;
-		}
-
-		/* file size is changing */
-		if (st.st_size > partial_file_size)
-			partial_is_stale = false;
-
-		sleep(1);
-		partial_try_count++;
-	}
-	/* The possible exit conditions:
-	 * 1. File is grabbed
-	 * 2. File is not grabbed, and it is not stale
-	 * 2. File is not grabbed, and it is stale.
-	 */
-
-	/*
-	 * If temp file was not grabbed for ARCHIVE_TIMEOUT and temp file is not stale,
-	 * then exit with error.
-	 */
-	if (out == NULL)
-	{
-		if (!partial_is_stale)
-			elog(ERROR, "Failed to open temp WAL file \"%s\" in %i seconds",
-					to_fullpath_gz_part, archive_timeout);
-
-		/* Partial segment is considered stale, so reuse it */
-		elog(LOG, "Reusing stale temp WAL file \"%s\"", to_fullpath_gz_part);
-		if (fio_remove(FIO_BACKUP_HOST, to_fullpath_gz_part, false) != 0)
-			elog(ERROR, "Cannot remove stale compressed temp WAL file \"%s\": %s", to_fullpath_gz_part, strerror(errno));
-
-		out = fio_gzopen(FIO_BACKUP_HOST, to_fullpath_gz_part, PG_BINARY_W, compress_level);
-		if (out == NULL)
-			elog(ERROR, "Cannot open temp WAL file \"%s\": %s",
-					to_fullpath_gz_part, strerror(errno));
-	}
-
-part_opened:
-	elog(VERBOSE, "Temp WAL file successfully created: \"%s\"", to_fullpath_gz_part);
-	/* Check if possible to skip copying,
-	 */
-	if (fileExists(to_fullpath_gz, FIO_BACKUP_HOST))
-	{
-		pg_crc32 crc32_src;
-		pg_crc32 crc32_dst;
-
-		/* TODO: what if one of them goes missing? */
-		crc32_src = fio_get_crc32(FIO_DB_HOST,     from_fullpath,  false);
-		crc32_dst = fio_get_crc32(FIO_BACKUP_HOST, to_fullpath_gz, true);
-
-		if (crc32_src == crc32_dst)
-		{
-			elog(LOG, "WAL file already exists in archive with the same "
-					"checksum, skip pushing: \"%s\"", from_fullpath);
-			/* cleanup */
-			fclose(in);
-			fio_gzclose(out);
-			if (fio_remove(FIO_BACKUP_HOST, to_fullpath_gz_part, false) != 0)
-				elog(WARNING, "Cannot remove compressed temp WAL file \"%s\": %s", to_fullpath_gz_part, strerror(errno));
-			return 1;
-		}
-		else
-		{
-			if (overwrite)
-				elog(LOG, "WAL file already exists in archive with "
-						"different checksum, overwriting: \"%s\"", to_fullpath_gz);
-			else
-			{
-				/* Overwriting is forbidden,
-				 * so we must unlink partial file and exit with error.
-				 */
-				if (fio_remove(FIO_BACKUP_HOST, to_fullpath_gz_part, false) != 0)
-					elog(WARNING, "Cannot remove compressed temp WAL file \"%s\": %s", to_fullpath_gz_part, strerror(errno));
-				elog(ERROR, "WAL file already exists in archive with "
-						"different checksum: \"%s\"", to_fullpath_gz);
-			}
-		}
-	}
-
-	/* copy content */
-	/* TODO: move to separate function */
-	for (;;)
-	{
-		size_t  read_len = 0;
-
-		read_len = fread(buf, 1, OUT_BUF_SIZE, in);
-
-		if (ferror(in))
-		{
-			int save_errno = errno;
-			if (fio_remove(FIO_BACKUP_HOST, to_fullpath_gz_part, false) != 0)
-				elog(WARNING, "Cannot remove compressed temp WAL file \"%s\": %s", to_fullpath_gz_part, strerror(errno));
-			elog(ERROR, "Cannot read from source file \"%s\": %s",
-					from_fullpath, strerror(save_errno));
-		}
-
-		if (read_len > 0 && fio_gzwrite(out, buf, read_len) != read_len)
-		{
-			int save_errno = errno;
-			if (fio_remove(FIO_BACKUP_HOST, to_fullpath_gz_part, false) != 0)
-				elog(WARNING, "Cannot cleanup compressed temp WAL file \"%s\": %s", to_fullpath_gz_part, strerror(errno));
-			elog(ERROR, "Cannot write to compressed temp WAL file \"%s\": %s",
-					to_fullpath_gz_part, get_gz_error(out, save_errno));
-		}
-
-		if (feof(in))
-			break;
-	}
-
-	/* close source file */
-	fclose(in);
-
-	/* Writing is asynchronous in case of push in remote mode, so check agent status */
-	if (fio_check_error_fd_gz(out, &errmsg))
-	{
-		if (fio_remove(FIO_BACKUP_HOST, to_fullpath_gz_part, false) != 0)
-			elog(WARNING, "Cannot cleanup remote compressed temp WAL file \"%s\": %s", to_fullpath_gz_part, strerror(errno));
-		elog(ERROR, "Cannot write to the remote compressed file \"%s\": %s",
-					to_fullpath_gz_part, errmsg);
-	}
-
-	/* close temp file, TODO: make it synchronous */
-	if (fio_gzclose(out) != 0)
-	{
-		int save_errno = errno;
-		if (fio_remove(FIO_BACKUP_HOST, to_fullpath_gz_part, false) != 0)
-			elog(WARNING, "Cannot cleanup compressed temp WAL file \"%s\": %s", to_fullpath_gz_part, strerror(errno));
-		elog(ERROR, "Cannot close compressed temp WAL file \"%s\": %s",
-				to_fullpath_gz_part, strerror(save_errno));
-	}
-
-	/* sync temp file to disk */
-	if (!no_sync)
-	{
-		if (fio_sync(FIO_BACKUP_HOST, to_fullpath_gz_part) != 0)
-			elog(ERROR, "Failed to sync file \"%s\": %s",
-					to_fullpath_gz_part, strerror(errno));
-	}
-
-	elog(VERBOSE, "Rename \"%s\" to \"%s\"",
-			to_fullpath_gz_part, to_fullpath_gz);
-
-	//copy_file_attributes(from_path, FIO_DB_HOST, to_path_temp, FIO_BACKUP_HOST, true);
-
-	/* Rename temp file to destination file */
-	if (fio_rename(FIO_BACKUP_HOST, to_fullpath_gz_part, to_fullpath_gz) < 0)
-	{
-		int save_errno = errno;
-		if (fio_remove(FIO_BACKUP_HOST, to_fullpath_gz_part, false) != 0)
-			elog(WARNING, "Cannot cleanup compressed temp WAL file \"%s\": %s", to_fullpath_gz_part, strerror(errno));
-		elog(ERROR, "Cannot rename file \"%s\" to \"%s\": %s",
-				to_fullpath_gz_part, to_fullpath_gz, strerror(save_errno));
-	}
-
-	pg_free(buf);
-
-	return 0;
-}
+    {
+        pioFilter_i flt = pioGZCompressFilter(compress_level);
+        err = pioCopy($reduce(pioWriteFlush, out),
+                      $reduce(pioRead, in),
+                      flt);
+    }
+    else
+#else
+    elog(ERROR, "Compression is requested, but not compiled it");
 #endif
+    {
+        err = pioCopy($reduce(pioWriteFlush, out),
+                      $reduce(pioRead, in));
+    }
 
-#ifdef HAVE_LIBZ
-/*
- * Show error during work with compressed file
- */
-static const char *
-get_gz_error(gzFile gzf, int errnum)
-{
-	int			gz_errnum;
-	const char *errmsg;
+    /* close source file */
+    $i(pioClose, in); /* ignore error */
 
-	errmsg = fio_gzerror(gzf, &gz_errnum);
-	if (gz_errnum == Z_ERRNO)
-		return strerror(errnum);
-	else
-		return errmsg;
+    if ($haserr(err))
+    {
+        $i(pioClose, out);
+        remove_temp_wal_file(&backup_drive, to_fullpath_part);
+        elog(ERROR, "Copy WAL: %s", $errmsg(err));
+    }
+
+    err = $i(pioClose, out, .sync = !no_sync);
+    if ($haserr(err))
+    {
+        remove_temp_wal_file(&backup_drive, to_fullpath_part);
+        elog(ERROR, "Temp WAL: %s", $errmsg(err));
+    }
+
+    /* Rename temp file to destination file */
+    err = $i(pioRename, backup_drive, to_fullpath_part, to_fullpath);
+    if ($haserr(err))
+    {
+        remove_temp_wal_file(&backup_drive, to_fullpath_part);
+        elog(ERROR, "%s", $errmsg(err));
+    }
+
+    free(buf);
+    return 0;
 }
-#endif
 
 /* Copy file attributes */
 //static void
@@ -1360,286 +1053,144 @@ bool
 get_wal_file(const char *filename, const char *from_fullpath,
 			 const char *to_fullpath, bool prefetch_mode)
 {
-	int     rc = FILE_MISSING;
-	FILE   *out;
-	char    from_fullpath_gz[MAXPGPATH];
-	bool    src_partial = false;
+    FOBJ_FUNC_ARP();
+    pioFile_i out = {NULL};
+    pioFile_i in = {NULL};
+    char *buf = pgut_malloc(OUT_BUF_SIZE); /* 1MB buffer */
+    err_i err = $noerr();
+    char from_fullpath_gz[MAXPGPATH];
+    bool compressed = false;
+    bool src_partial = false;
 
-	snprintf(from_fullpath_gz, sizeof(from_fullpath_gz), "%s.gz", from_fullpath);
+    pioDrive_i db_drive = pioDriveForLocation(FIO_DB_HOST);
+    pioDrive_i backup_drive = pioDriveForLocation(FIO_BACKUP_HOST);
 
-	/* open destination file */
-	out = fopen(to_fullpath, PG_BINARY_W);
-	if (!out)
-	{
-		elog(WARNING, "Failed to open file '%s': %s",
-				to_fullpath, strerror(errno));
-		return false;
-	}
+    snprintf(from_fullpath_gz, sizeof(from_fullpath_gz), "%s.gz",
+             from_fullpath);
 
-	if (chmod(to_fullpath, FILE_PERMISSION) == -1)
-	{
-		elog(WARNING, "Cannot change mode of file '%s': %s",
-				to_fullpath, strerror(errno));
-		fclose(out);
-		unlink(to_fullpath);
-		return false;
-	}
+    /* open destination file */
+    out = $i(pioOpen, db_drive, .path = to_fullpath, .err = &err,
+               .flags = O_WRONLY | O_CREAT | O_EXCL | O_TRUNC | PG_BINARY);
+    if ($haserr(err))
+    {
+        elog(WARNING, "%s", $errmsg(err));
+        return false;
+    }
 
-	/* disable buffering for output file */
-	setvbuf(out, NULL, _IONBF, BUFSIZ);
-
-	/* In prefetch mode, we do look only for full WAL segments
-	 * In non-prefetch mode, do look up '.partial' and '.gz.partial'
-	 * segments.
-	 */
-	if (fio_is_remote(FIO_BACKUP_HOST))
-	{
-		char *errmsg = NULL;
-		/* get file via ssh */
-#ifdef HAVE_LIBZ
-		/* If requested file is regular WAL segment, then try to open it with '.gz' suffix... */
-		if (IsXLogFileName(filename))
-			rc = fio_send_file_gz(from_fullpath_gz, to_fullpath, out, &errmsg);
-		if (rc == FILE_MISSING)
-#endif
-			/* ... failing that, use uncompressed */
-			rc = fio_send_file(from_fullpath, to_fullpath, out, NULL, &errmsg);
-
-		/* When not in prefetch mode, try to use partial file */
-		if (rc == FILE_MISSING && !prefetch_mode && IsXLogFileName(filename))
-		{
-			char    from_partial[MAXPGPATH];
 
 #ifdef HAVE_LIBZ
-			/* '.gz.partial' goes first ... */
-			snprintf(from_partial, sizeof(from_partial), "%s.gz.partial", from_fullpath);
-			rc = fio_send_file_gz(from_partial, to_fullpath, out, &errmsg);
-			if (rc == FILE_MISSING)
+    /* If requested file is regular WAL segment, then try to open it with '.gz' suffix... */
+    if (IsXLogFileName(filename))
+    {
+        in = $i(pioOpen, backup_drive, from_fullpath_gz, O_RDONLY | PG_BINARY,
+                  .err = &err);
+        compressed = in.self != NULL;
+        if ($haserr(err) && getErrno(err) != ENOENT)
+            elog(ERROR, "Source file: %s", $errmsg(err));
+    }
 #endif
-			{
-				/* ... failing that, use '.partial' */
-				snprintf(from_partial, sizeof(from_partial), "%s.partial", from_fullpath);
-				rc = fio_send_file(from_partial, to_fullpath, out, NULL, &errmsg);
-			}
-
-			if (rc == SEND_OK)
-				src_partial = true;
-		}
-
-		if (rc == WRITE_FAILED)
-			elog(WARNING, "Cannot write to file '%s': %s",
-					to_fullpath, strerror(errno));
-
-		if (errmsg)
-			elog(WARNING, "%s", errmsg);
-
-		pg_free(errmsg);
-	}
-	else
-	{
-		/* get file locally */
+    if (in.self == NULL)
+    {
+        in = $i(pioOpen, backup_drive, from_fullpath, O_RDONLY | PG_BINARY,
+                  .err = &err);
+        if ($haserr(err) && getErrno(err) != ENOENT)
+            elog(ERROR, "Source file: %s", $errmsg(err));
+    }
+    /* try partial file */
+    if (in.self == NULL && !prefetch_mode && IsXLogFileName(filename))
+    {
+        char from_partial[MAXPGPATH];
 #ifdef HAVE_LIBZ
-		/* If requested file is regular WAL segment, then try to open it with '.gz' suffix... */
-		if (IsXLogFileName(filename))
-			rc = get_wal_file_internal(from_fullpath_gz, to_fullpath, out, true);
-		if (rc == FILE_MISSING)
-#endif
-			/* ... failing that, use uncompressed */
-			rc = get_wal_file_internal(from_fullpath, to_fullpath, out, false);
+        snprintf(from_partial, sizeof(from_partial), "%s.gz.partial",
+                 from_fullpath);
 
-		/* When not in prefetch mode, try to use partial file */
-		if (rc == FILE_MISSING && !prefetch_mode && IsXLogFileName(filename))
-		{
-			char    from_partial[MAXPGPATH];
-
-#ifdef HAVE_LIBZ
-			/* '.gz.partial' goes first ... */
-			snprintf(from_partial, sizeof(from_partial), "%s.gz.partial", from_fullpath);
-			rc = get_wal_file_internal(from_partial, to_fullpath, out, true);
-			if (rc == FILE_MISSING)
-#endif
-			{
-				/* ... failing that, use '.partial' */
-				snprintf(from_partial, sizeof(from_partial), "%s.partial", from_fullpath);
-				rc = get_wal_file_internal(from_partial, to_fullpath, out, false);
-			}
-
-			if (rc == SEND_OK)
-				src_partial = true;
-		}
-	}
-
-	if (!prefetch_mode && (rc == FILE_MISSING))
-		elog(LOG, "Target WAL file is missing: %s", filename);
-
-	if (rc < 0)
-	{
-		fclose(out);
-		unlink(to_fullpath);
-		return false;
-	}
-
-	/* If partial file was used as source, then it is very likely that destination
-	 * file is not equal to XLOG_SEG_SIZE - that is the way pg_receivexlog works.
-	 * We must manually extent it up to XLOG_SEG_SIZE.
-	 */
-	if (src_partial)
-	{
-
-		if (fflush(out) != 0)
-		{
-			elog(WARNING, "Cannot flush file \"%s\": %s", to_fullpath, strerror(errno));
-			fclose(out);
-			unlink(to_fullpath);
-			return false;
-		}
-
-		if (ftruncate(fileno(out), xlog_seg_size) != 0)
-		{
-			elog(WARNING, "Cannot extend file \"%s\": %s", to_fullpath, strerror(errno));
-			fclose(out);
-			unlink(to_fullpath);
-			return false;
-		}
-	}
-
-	if (fclose(out) != 0)
-	{
-		elog(WARNING, "Cannot close file '%s': %s", to_fullpath, strerror(errno));
-		unlink(to_fullpath);
-		return false;
-	}
-
-	elog(LOG, "WAL file successfully %s: %s",
-			prefetch_mode ? "prefetched" : "copied", filename);
-	return true;
-}
-
-/*
- * Copy WAL segment with possible decompression from local archive.
- * Return codes:
- *   FILE_MISSING (-1)
- *   OPEN_FAILED  (-2)
- *   READ_FAILED  (-3)
- *   WRITE_FAILED (-4)
- *   ZLIB_ERROR   (-5)
- */
-int
-get_wal_file_internal(const char *from_path, const char *to_path, FILE *out,
-					  bool is_decompress)
-{
-#ifdef HAVE_LIBZ
-	gzFile   gz_in = NULL;
-#endif
-	FILE    *in = NULL;
-	char    *buf = pgut_malloc(OUT_BUF_SIZE); /* 1MB buffer */
-	int      exit_code = 0;
-
-	elog(VERBOSE, "Attempting to %s WAL file '%s'",
-			is_decompress ? "open compressed" : "open", from_path);
-
-	/* open source file for read */
-	if (!is_decompress)
-	{
-		in = fopen(from_path, PG_BINARY_R);
-		if (in == NULL)
-		{
-			if (errno == ENOENT)
-				exit_code = FILE_MISSING;
-			else
-			{
-				elog(WARNING, "Cannot open source WAL file \"%s\": %s",
-						from_path, strerror(errno));
-				exit_code = OPEN_FAILED;
-			}
-			goto cleanup;
-		}
-
-		/* disable stdio buffering */
-		setvbuf(out, NULL, _IONBF, BUFSIZ);
-	}
-#ifdef HAVE_LIBZ
-	else
-	{
-		gz_in = gzopen(from_path, PG_BINARY_R);
-		if (gz_in == NULL)
-		{
-			if (errno == ENOENT)
-				exit_code = FILE_MISSING;
-			else
-			{
-				elog(WARNING, "Cannot open compressed WAL file \"%s\": %s",
-						from_path, strerror(errno));
-				exit_code = OPEN_FAILED;
-			}
-
-			goto cleanup;
-		}
-	}
+        in = $i(pioOpen, backup_drive, from_partial, O_RDONLY | PG_BINARY,
+                  .err = &err);
+        compressed = in.self != NULL;
+        if ($haserr(err) && getErrno(err) != ENOENT)
+            elog(ERROR, "Source partial file: %s", $errmsg(err));
 #endif
 
-	/* copy content */
-	for (;;)
-	{
-		int read_len = 0;
+        if (in.self == NULL)
+        {
+            snprintf(from_partial, sizeof(from_partial), "%s.partial",
+                     from_fullpath);
+            in = $i(pioOpen, backup_drive,
+                      .path = from_partial,
+                      .flags = O_RDONLY | PG_BINARY,
+                      .err = &err);
+            if ($haserr(err) && getErrno(err) != ENOENT)
+                elog(ERROR, "Source partial file: %s", $errmsg(err));
+        }
+
+        src_partial = true;
+    }
+
+    if (in.self == NULL)
+    {
+        $i(pioClose, out);
+        $i(pioRemove, db_drive, to_fullpath, true);
+        free(buf);
+        if (!prefetch_mode)
+            elog(LOG, "Target WAL file is missing: %s", filename);
+        return false;
+    }
 
 #ifdef HAVE_LIBZ
-		if (is_decompress)
-		{
-			read_len = gzread(gz_in, buf, OUT_BUF_SIZE);
-
-			if (read_len <= 0)
-			{
-				if (gzeof(gz_in))
-					break;
-				else
-				{
-					elog(WARNING, "Cannot read compressed WAL file \"%s\": %s",
-							from_path, get_gz_error(gz_in, errno));
-					exit_code = READ_FAILED;
-					break;
-				}
-			}
-		}
-		else
+    if (compressed)
+    {
+        pioFilter_i flt = pioGZDecompressFilter(src_partial);
+        err = pioCopy($reduce(pioWriteFlush, out),
+                      $reduce(pioRead, in),
+                      flt);
+    }
+    else
 #endif
-		{
-			read_len = fread(buf, 1, OUT_BUF_SIZE, in);
+    {
+        err = pioCopy($reduce(pioWriteFlush, out),
+                      $reduce(pioRead, in));
+    }
 
-			if (ferror(in))
-			{
-				elog(WARNING, "Cannot read source WAL file \"%s\": %s",
-					from_path, strerror(errno));
-				exit_code = READ_FAILED;
-				break;
-			}
+    /* close source file */
+    $i(pioClose, in); /* ignore error */
 
-			if (read_len == 0 && feof(in))
-				break;
-		}
+    if ($haserr(err))
+    {
+        $i(pioClose, out);
+        $i(pioRemove, db_drive, to_fullpath, true);
+        elog(ERROR, "%s", $errmsg(err));
+    }
 
-		if (read_len > 0)
-		{
-			if (fwrite(buf, 1, read_len, out) != read_len)
-			{
-				elog(WARNING, "Cannot write to WAL file '%s': %s",
-					to_path, strerror(errno));
-				exit_code = WRITE_FAILED;
-				break;
-			}
-		}
-	}
+    /* If partial file was used as source, then it is very likely that destination
+     * file is not equal to XLOG_SEG_SIZE - that is the way pg_receivexlog works.
+     * We must manually extent it up to XLOG_SEG_SIZE.
+     */
+    if (src_partial)
+    {
+        err = $i(pioTruncate, out, xlog_seg_size);
+        if ($haserr(err))
+        {
+            elog(WARNING, "Extend file: %s", $errmsg(err));
+            $i(pioClose, out);
+            $i(pioRemove, db_drive, to_fullpath, true);
+            free(buf);
+            return false;
+        }
+    }
 
-cleanup:
-#ifdef HAVE_LIBZ
-	if (gz_in)
-		gzclose(gz_in);
-#endif
-	if (in)
-		fclose(in);
+    err = $i(pioClose, out);
+    if ($haserr(err))
+    {
+        elog(WARNING, "%s", $errmsg(err));
+        $i(pioRemove, db_drive, to_fullpath, true);
+        free(buf);
+        return false;
+    }
 
-	pg_free(buf);
-	return exit_code;
+    elog(LOG, "WAL file successfully %s: %s",
+         prefetch_mode ? "prefetched" : "copied", filename);
+    free(buf);
+    return true;
 }
 
 bool next_wal_segment_exists(TimeLineID tli, XLogSegNo segno, const char *prefetch_dir, uint32 wal_seg_size)

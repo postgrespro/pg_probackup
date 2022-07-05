@@ -1218,7 +1218,6 @@ extern int fio_send_pages(const char *to_fullpath, const char *from_fullpath, pg
 extern int fio_copy_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
 	                      XLogRecPtr horizonLsn, int calg, int clevel, uint32 checksum_version,
 	                      bool use_pagemap, BlockNumber *err_blknum, char **errormsg);
-extern int fio_send_file_gz(const char *from_fullpath, const char *to_fullpath, FILE* out, char **errormsg);
 extern int fio_send_file(const char *from_fullpath, const char *to_fullpath, FILE* out,
 														pgFile *file, char **errormsg);
 
