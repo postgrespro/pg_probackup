@@ -214,27 +214,25 @@ pgFileGetCRC(const char *file_path, bool use_crc32c, CompressAlg calg, bool miss
 	ssize_t		len = 0;
 
 	/* open file in binary read mode */
-	f = open_for_read(file_path, calg, (use_crc32c) ? CRC32C : CRC32);
+	f = InitPbkFile(file_path, (use_crc32c) ? CRC32C : CRC32, calg, 1, true);
+	open_for_read(f);
 	if (f->fd < 0)
 	{
 		if (errno == ENOENT && missing_ok)
 			goto done;
-
-		elog(ERROR, "Cannot open file \"%s\": %s",
-			file_path, strerror(errno));
+		elog(ERROR, "%s", f->errmsg);
 	}
 
 	/* allocate buffer */
 	buf = pgut_malloc(CHUNK_SIZE);
 
-	/* calc CRC of file */
+	/* Calc CRC of file */
 	for (;;)
 	{
 		len = read_file(f, buf, CHUNK_SIZE);
 
 		if (len < 0)
-			elog(ERROR, "Cannot read from file \"%s\": %s",
-					file_path, strerror(errno));
+			elog(ERROR, "%s", f->errmsg);
 		else if (len == 0) /* EOF */
 			break;
 	}
@@ -242,7 +240,9 @@ pgFileGetCRC(const char *file_path, bool use_crc32c, CompressAlg calg, bool miss
 done:
 	pg_free(buf);
 	close_file(f);
+
 	crc = f->crc;
+	pg_free(f->errmsg);
 	free_file(f);
 
 	return crc;
@@ -689,18 +689,9 @@ dir_check_file(pgFile *file, bool backup_logs)
 			else if (file->forkName != none)
 				return CHECK_TRUE;
 
-			/* Check if file is CFM fork and also set is_datafile flag */
+			/* Set is_datafile flag */
 			{
-				int  len;
 				char suffix[MAXFNAMELEN];
-				/* check if file is CFM */
-				len = strlen(file->name);
-				/* reloid.cfm */
-				if (len > 3 && strcmp(file->name + len - 3, "cfm") == 0)
-				{
-					file->forkName = cfm;
-					return CHECK_TRUE;
-				}
 
 				/* check if file is datafile */
 				sscanf_res = sscanf(file->name, "%u.%d.%s", &(file->relOid),
@@ -1810,33 +1801,29 @@ pfilearray_clear_locks(parray *file_list)
 void
 set_forkname(pgFile *file)
 {
-	char *fork_name;
+	int name_len = strlen(file->name);
 
-	fork_name = strstr(file->name, "_");
-	if (fork_name)
-	{
 		/* Auxiliary fork of the relfile */
-		if (strcmp(fork_name, "_vm") == 0)
-			file->forkName = vm;
+	if (name_len > 3 && strcmp(file->name + name_len - 3, "_vm") == 0)
+		file->forkName = vm;
 
-		else if (strcmp(fork_name, "_fsm") == 0)
-			file->forkName = fsm;
+	else if (name_len > 4 && strcmp(file->name + name_len - 4, "_fsm") == 0)
+		file->forkName = fsm;
 
-		else if (strcmp(fork_name, "_cfm") == 0)
-			file->forkName = cfm;
+	else if (name_len > 4 && strcmp(file->name + name_len - 4, ".cfm") == 0)
+		file->forkName = cfm;
 
-		else if (strcmp(fork_name, "_ptrack") == 0)
-			file->forkName = ptrack;
+	else if (name_len > 5 && strcmp(file->name + name_len - 5, "_init") == 0)
+		file->forkName = init;
 
-		else if (strcmp(fork_name, "_init") == 0)
-			file->forkName = init;
+	else if (name_len > 7 && strcmp(file->name + name_len - 7, "_ptrack") == 0)
+		file->forkName = ptrack;
 
-		// extract relOid for certain forks
-		if ((file->forkName == vm ||
-			 file->forkName == fsm ||
-			 file->forkName == init ||
-			 file->forkName == cfm) &&
-			(sscanf(file->name, "%u_*", &(file->relOid)) != 1))
-				file->relOid = 0;
-	}
+	// extract relOid for certain forks
+	if ((file->forkName == vm ||
+		 file->forkName == fsm ||
+		 file->forkName == init ||
+		 file->forkName == cfm) &&
+		(sscanf(file->name, "%u*", &(file->relOid)) != 1))
+			file->relOid = 0;
 }

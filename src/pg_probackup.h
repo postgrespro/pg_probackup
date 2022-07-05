@@ -215,7 +215,8 @@ typedef enum ForkName
 	fsm,
 	cfm,
 	init,
-	ptrack
+	ptrack,
+	clog
 } ForkName;
 
 #define INIT_FILE_CRC32(use_crc32c, crc) \
@@ -790,7 +791,7 @@ extern bool perm_slot;
 extern bool		smooth_checkpoint;
 
 /* remote probackup options */
-extern char* remote_agent;
+extern bool remote_agent;
 
 extern bool exclusive_backup;
 
@@ -1126,18 +1127,19 @@ typedef struct PbkFile
 	int         fd;
 	off_t       currpos;
 	char        fullpath[MAXPGPATH];
-	char       *suffix;
+	char          *errmsg;
+	unsigned char *buffer;
 	CompressAlg calg;
 	int         clevel;
 	int         buf_pos;
-	unsigned char *buffer;
 	bool        read;
-	bool        is_remote;
-
-	bool        do_crc;
-	bool        use_crc32c;
+	bool        is_local;
+	bool        do_crc;     /* replace with CRC_METHOD */
+	bool        use_crc32c; /* replace with CRC_METHOD */
 	pg_crc32    crc;
-	char       *errmsg;
+	ForkName    forkName;
+	bool        do_cfm_optimization;
+	bool        skip_next_read;  /* used only when reading CFM to cut trailing zeroes */
 
 #ifdef HAVE_LIBZ
 	gzFile		gzfp;
@@ -1146,13 +1148,13 @@ typedef struct PbkFile
 #endif
 } PbkFile;
 
-extern PbkFile* InitPbkFile(bool enable_buffering, CrcMethod crc_method, CompressAlg calg, int clevel);
-extern PbkFile* open_for_read(const char *pathname, CompressAlg calg, CrcMethod crc_method);
-extern PbkFile* open_for_write(const char *pathname, CompressAlg calg, int clevel, mode_t mode, CrcMethod crc_method);
+extern PbkFile* InitPbkFile(const char *fullpath, CrcMethod crc_method, CompressAlg calg, int clevel, bool is_local);
+extern void open_for_read(PbkFile* f);
+extern void open_for_write(PbkFile* f, mode_t mode);
 extern ssize_t read_file(PbkFile *f, void *buf, size_t len);
 extern ssize_t write_file(PbkFile *f, const void *buf, size_t count);
 extern ssize_t get_offset(PbkFile *f);
-extern ssize_t flush_file(PbkFile *f);
+extern ssize_t fio_flush_file(PbkFile *f);
 extern int close_file(PbkFile *f);
 extern void free_file(PbkFile *f);
 
@@ -1273,6 +1275,7 @@ extern int copy_pages(const char *to_fullpath, const char *from_fullpath,
 					  BackupMode backup_mode);
 
 /* FIO */
+extern ssize_t fio_write_all(int fd, void const* buf, size_t size);
 extern int fio_send_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
 	                      XLogRecPtr horizonLsn, int calg, int clevel, uint32 checksum_version,
 	                      bool use_pagemap, BlockNumber *err_blknum, char **errormsg,
@@ -1283,8 +1286,8 @@ extern int fio_copy_pages(const char *to_fullpath, const char *from_fullpath, pg
 extern int fio_send_file_gz(const char *from_fullpath, const char *to_fullpath, FILE* out, char **errormsg);
 extern int fio_send_file(const char *from_fullpath, const char *to_fullpath, FILE* out,
 														pgFile *file, char **errormsg);
-extern int fio_send_file_new(const char *from_fullpath, const char *to_fullpath,
-							 pgFile *file, CompressAlg calg, int clevel, char **errormsg);
+extern int fio_copy_file(const char *from_fullpath, const char *to_fullpath,
+						 pgFile *file, CompressAlg calg, int clevel, char **errormsg);
 
 extern bool pgut_rmtree(const char *path, bool rmtopdir, bool strict);
 

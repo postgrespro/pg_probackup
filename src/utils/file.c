@@ -32,14 +32,21 @@ typedef struct
 	int         path_len;
 } fio_send_request;
 
-//typedef struct
-//{
-//	int         calg;
-//	int         clevel;
-//	int         path_len;
-//	int         read_len;
-//	pg_crc      uncompressed_crc;
-//} fio_send_file_request;
+typedef struct
+{
+	CrcMethod   crc_method;
+	CompressAlg calg;
+	int         clevel;
+	ForkName    fork_name;
+} fio_copy_request;
+
+typedef struct
+{
+	pg_crc32 crc;
+	pg_crc32 z_crc;
+	int      read_size;
+} fio_copy_results;
+
 //
 //typedef struct
 //{
@@ -265,7 +272,7 @@ fio_read_all(int fd, void* buf, size_t size)
 }
 
 /* Try to write specified amount of bytes unless error is encountered */
-static ssize_t
+ssize_t
 fio_write_all(int fd, void const* buf, size_t size)
 {
 	size_t offs = 0;
@@ -1433,8 +1440,7 @@ fio_get_crc32(fio_location location, const char *file_path, bool decompress, boo
 		if (decompress)
 			hdr.arg = 1;
 
-		/* TODO: send missing_ok flag */
-
+		/*TODO: send flags: missing_ok, calg, crc_method, do_cfm_optimize */
 		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
 		IO_CHECK(fio_write_all(fio_stdout, file_path, path_len), path_len);
 		IO_CHECK(fio_read_all(fio_stdin, &crc, sizeof(crc)), sizeof(crc));
@@ -2832,34 +2838,40 @@ fio_send_file(const char *from_fullpath, const char *to_fullpath, FILE* out,
  * Return codes:
  *   SEND_OK         (0)
  *   FILE_MISSING    (-1)
- *   OPEN_FAILED_DST (-3)
- *   READ_FAILED     (-4)
- *   WRITE_FAILED    (-5)
- *   CLOSE_FAILED    (-6)
+ *   OPEN_FAILED_SRC (-3)
+ *   OPEN_FAILED_DST (-4)
+ *   READ_FAILED     (-5)
+ *   WRITE_FAILED    (-6)
+ *   CLOSE_FAILED    (-10)
  *
  * OPEN_FAILED and READ_FAIL should also set errormsg.
- * If pgFile is not NULL then we must calculate crc and read_size for it.
  *
- * TODO: data compression and calculation of uncompressed crc must be done on the agent.
- * At this point for the purpose of backward compatibility we cannot compress data on the
- * agent to avoid changing agent API and forcing user to update.
+ * data compression and crc calculation happens on an agent.
  */
-int fio_send_file_new(const char *from_fullpath, const char *to_fullpath,
-					  pgFile *file, CompressAlg calg, int clevel, char **errormsg)
+int fio_copy_file(const char *from_fullpath, const char *to_fullpath,
+				  pgFile *file, CompressAlg calg, int clevel, char **errormsg)
 {
-	fio_header hdr;
-	int exit_code = SEND_OK;
+	int      exit_code = SEND_OK;
 	size_t   path_len = strlen(from_fullpath) + 1;
-	char    *buf = pgut_malloc(CHUNK_SIZE);    /* buffer */
+	size_t   buf_size = CHUNK_SIZE;
+	char    *buf = pgut_malloc(buf_size);    /* buffer */
 	PbkFile *out = NULL;
+	fio_header hdr;
+	struct {
+		fio_header hdr;
+		fio_copy_request arg;
+	} req;
 
-	hdr.cop = FIO_SEND_FILE;
-	hdr.size = path_len;
+	req.hdr.cop = FIO_COPY_FILE;
+	req.hdr.size = sizeof(fio_copy_request) + strlen(from_fullpath) + 1;
+	req.arg.calg = calg;
+	req.arg.clevel = clevel;
+	req.arg.crc_method = CRC32C; /* maybe should parameterize */
+	req.arg.fork_name = file->forkName;
 
-	if (file)
-		INIT_FILE_CRC32(true, file->crc);
-
-	IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
+	/* send header */
+	IO_CHECK(fio_write_all(fio_stdout, &req, sizeof(req)), sizeof(req));
+	/* send file path */
 	IO_CHECK(fio_write_all(fio_stdout, from_fullpath, path_len), path_len);
 
 	for (;;)
@@ -2867,8 +2879,24 @@ int fio_send_file_new(const char *from_fullpath, const char *to_fullpath,
 		/* receive data */
 		IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
 
-		if (hdr.cop == FIO_SEND_FILE_EOF)
+		if (hdr.size > buf_size)
 		{
+			buf_size = hdr.size;
+			/* expand receive buffer on demand */
+			buf = (char*)pgut_realloc(buf, hdr.size);
+		}
+
+		if (hdr.cop == FIO_COPY_EOF)
+		{
+			fio_copy_results res;
+			/* Get read_len, crc and z_crc (if file is compressed) */
+			IO_CHECK(fio_read_all(fio_stdin, &res, sizeof(res)), sizeof(res));
+			if (file)
+			{
+				file->read_size = res.read_size;
+				file->z_crc = res.z_crc;
+				file->crc = res.crc;
+			}
 			break;
 		}
 		else if (hdr.cop == FIO_ERROR)
@@ -2880,19 +2908,20 @@ int fio_send_file_new(const char *from_fullpath, const char *to_fullpath,
 				*errormsg = pgut_malloc(hdr.size);
 				snprintf(*errormsg, hdr.size, "%s", buf);
 			}
-			/* possible values are FILE_MISSING, OPEN_FAILED, READ_FAILED */
+			/* possible values are FILE_MISSING, OPEN_FAILED_SRC, READ_FAILED */
 			exit_code = hdr.arg;
 			break;
 		}
-		else if (hdr.cop == FIO_PAGE)
+		else if (hdr.cop == FIO_CHUNK)
 		{
-			Assert(hdr.size <= CHUNK_SIZE);
+			Assert(hdr.size <= buf_size);
 			IO_CHECK(fio_read_all(fio_stdin, buf, hdr.size), hdr.size);
 
 			if (!out)
 			{
-				/* open backup file for write  */
-				out = open_for_write(to_fullpath, calg, clevel, (file) ? file->mode : FILE_PERMISSIONS, CRC32C);
+				/* open destination local file for write */
+				out = InitPbkFile(to_fullpath, NONE_CRC, NONE_COMPRESS, 0, true);
+				open_for_write(out, file->mode);
 				if (out->fd <= 0)
 				{
 					exit_code = OPEN_FAILED_DST;
@@ -2900,10 +2929,6 @@ int fio_send_file_new(const char *from_fullpath, const char *to_fullpath,
 					break;
 				}
 			}
-
-			/* calculate uncompressed crc  */
-			if (file)
-				COMP_FILE_CRC32(true, file->crc, buf, hdr.size);
 
 			/* We have received a chunk of data data, lets write it out */
 			if (write_file(out, buf, hdr.size) < 0)
@@ -2920,26 +2945,132 @@ int fio_send_file_new(const char *from_fullpath, const char *to_fullpath,
 		}
 	}
 
-	if (out)
-	{
-		if (close_file(out) < 0 && exit_code == SEND_OK)
-			exit_code = CLOSE_FAILED;
+	if (close_file(out) < 0 && exit_code == SEND_OK)
+		exit_code = CLOSE_FAILED;
 
-		if (file)
-		{
-			file->z_crc = out->crc;
-			file->write_size = out->currpos;
-			/* finish uncompressed CRC calculation */
-			FIN_FILE_CRC32(true, file->crc);
-		}
-		free_file(out);
-	}
+	if (out && file)
+		file->write_size = out->currpos;
+
+	free_file(out);
 
 	if (exit_code < FILE_MISSING)
 		fio_disconnect(); /* discard possible pending data in pipe */
 
 	pg_free(buf);
 	return exit_code;
+}
+
+/* Send file content to the caller with optional compression
+ * On error we return FIO_ERROR message with following codes
+ *  FIO_ERROR:
+ *      FILE_MISSING
+ *      OPEN_FAILED_SRC
+ *      READ_FAILED
+ * 		TODO: compression errors currently are not reported
+ *
+ *  FIO_CHUNK
+ *  FIO_COPY_EOF
+ */
+
+static void
+fio_copy_impl(int out, char* buf)
+{
+	PbkFile   *in_file = NULL;
+	PbkFile   *out_file = NULL;
+	fio_header hdr;
+	char      *in_buf = pgut_malloc(CHUNK_SIZE);
+	fio_copy_results res;
+	fio_copy_request *req = (fio_copy_request*) buf;
+    char             *from_fullpath = (char*) buf + sizeof(fio_copy_request);
+
+	/* open source file for read */
+	in_file = InitPbkFile(from_fullpath, req->crc_method, NONE_COMPRESS, 1, true);
+	in_file->forkName = req->fork_name;
+	in_file->do_cfm_optimization = true;
+	open_for_read(in_file);
+
+	if (in_file->fd < 0)
+	{
+		hdr.cop = FIO_ERROR;
+		hdr.size = 0;
+
+		/* do not send exact wording of ENOENT error message
+		 * because it is a very common error in our case, so
+		 * error code is enough.
+		 */
+		if (errno == ENOENT)
+			hdr.arg = FILE_MISSING;
+		else
+		{
+			hdr.arg = OPEN_FAILED_SRC;
+			hdr.size = strlen(in_file->errmsg) + 1;
+		}
+
+		/* send header and message */
+		IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
+		IO_CHECK(fio_write_all(out, in_file->errmsg, hdr.size), hdr.size);
+
+		goto cleanup;
+	}
+
+	/* copy content */
+	for (;;)
+	{
+		ssize_t read_len = read_file(in_file, in_buf, CHUNK_SIZE);
+
+		if (read_len < 0)
+		{
+			hdr.cop = FIO_ERROR;
+			hdr.arg = READ_FAILED;
+			hdr.size = strlen(in_file->errmsg) + 1;
+			/* send header and message */
+			IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
+			IO_CHECK(fio_write_all(out, in_file->errmsg, hdr.size), hdr.size);
+
+			close_file(in_file);
+			goto cleanup;
+		}
+		else if (read_len == 0)
+			break;
+		else if (!out_file)
+		{
+			out_file = InitPbkFile("remote fd",
+								/* no point in double crc calculation if file is not compressed */
+								   (req->calg == NONE_COMPRESS) ? NONE_CRC : req->crc_method,
+								   req->calg, req->clevel, false);
+			open_for_write(out_file, 0);
+			out_file->fd = out;
+		}
+
+		write_file(out_file, in_buf, read_len);
+	}
+
+	/* finish computing crc and close file  */
+	close_file(in_file);
+
+	/* flush left-overs, finish computing crc (if requested) and close file */
+	close_file(out_file); /* We could possibly miss compression error here */
+
+	/* we are done, send eof */
+	hdr.cop = FIO_COPY_EOF;
+	hdr.size = 0;
+	IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
+
+	/* Send crc of compressed and compressed data, read_lean */
+	res.read_size = in_file ? in_file->currpos : 0;
+	res.crc = in_file ? in_file->crc : 0;
+	res.z_crc = out_file ? out_file->crc : 0;
+	IO_CHECK(fio_write_all(out, &res, sizeof(res)), sizeof(res));
+
+cleanup:
+	if (out_file)
+		pg_free(out_file->errmsg);
+	if (in_file)
+		pg_free(in_file->errmsg);
+	free_file(out_file);
+	free_file(in_file);
+	pg_free(in_buf);
+	return;
 }
 
 /* Send file content
@@ -3598,6 +3729,10 @@ fio_communicate(int in, int out)
 			/* buf contain fio_send_request header and bitmap. */
 			fio_send_pages_impl(out, buf);
 			break;
+		  case FIO_COPY_FILE:
+			/* buf contain fio_send_request header and bitmap. */
+			fio_copy_impl(out, buf);
+			break;
 		  case FIO_SEND_FILE:
 			fio_send_file_impl(out, buf);
 			break;
@@ -3670,4 +3805,41 @@ fio_communicate(int in, int out)
 		perror("read");
 		exit(EXIT_FAILURE);
 	}
+}
+
+ssize_t
+fio_flush_file(PbkFile *f)
+{
+	ssize_t rc = 0;
+
+	/* Update CRC */
+	if (f->do_crc)
+		COMP_FILE_CRC32(f->use_crc32c, f->crc, f->buffer, f->buf_pos);
+
+	if (f->is_local)
+		rc = durable_write(f->fd, (const void *) f->buffer, f->buf_pos);
+	else
+	{
+		fio_header hdr;
+
+		/* send chunk */
+		hdr.cop = FIO_CHUNK;
+		hdr.size = f->buf_pos;
+		IO_CHECK(fio_write_all(f->fd, &hdr, sizeof(hdr)), sizeof(hdr));
+		IO_CHECK(fio_write_all(f->fd, f->buffer, hdr.size), hdr.size);
+		rc = f->buf_pos;
+	}
+
+	if (rc > 0)
+	{
+		f->buf_pos = 0;
+		f->currpos += rc;
+	}
+	else
+	{
+		f->errmsg = pgut_malloc(ERRMSG_MAX_LEN);
+		snprintf(f->errmsg, ERRMSG_MAX_LEN, "Cannot write to file \"%s\": %s", f->fullpath, strerror(errno));
+	}
+
+	return rc;
 }

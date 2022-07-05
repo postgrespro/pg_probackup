@@ -365,7 +365,7 @@ pgBackupValidateFiles(void *arg)
 
 			if (crc != expected_crc)
 			{
-				elog(WARNING, "Invalid CRC of backup file \"%s\" : %X. Expected %X",
+				elog(WARNING, "Invalid CRC of backup file \"%s\" : %u. Expected %u",
 						file_fullpath, crc, expected_crc);
 				arguments->corrupted = true;
 			}

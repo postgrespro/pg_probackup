@@ -44,7 +44,6 @@ typedef enum
 	FIO_SEND_PAGES,
 	FIO_ERROR,
 	FIO_SEND_FILE,
-//	FIO_CHUNK,
 	FIO_SEND_FILE_EOF,
 	FIO_SEND_FILE_CORRUPTION,
 	FIO_SEND_FILE_HEADERS,
@@ -55,7 +54,11 @@ typedef enum
 	FIO_CHECK_POSTMASTER,
 	FIO_GET_ASYNC_ERROR,
 	FIO_WRITE_ASYNC,
-	FIO_READLINK
+	FIO_READLINK,
+	/* Used for non-data file backup */
+	FIO_COPY_FILE,
+	FIO_CHUNK,
+	FIO_COPY_EOF
 } fio_operations;
 
 typedef struct

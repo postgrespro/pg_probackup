@@ -87,7 +87,7 @@ bool perm_slot = false;
 /* backup options */
 bool         backup_logs = false;
 bool         smooth_checkpoint;
-char        *remote_agent;
+bool         remote_agent = false;
 static char *backup_note = NULL;
 /* catchup options */
 static char *catchup_source_pgdata = NULL;
@@ -348,6 +348,7 @@ main(int argc, char *argv[])
 				 *   /old/binary  -> ssh execute -> /newer/binary agent version_num
 				 * If we are executed as an agent for older binary, then exit with error
 				 */
+				remote_agent = true;
 				if (argc > 2)
 					elog(ERROR, "Version mismatch, pg_probackup binary with version '%s' "
 							"is launched as an agent for pg_probackup binary with version '%s'",
