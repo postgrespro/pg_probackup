@@ -261,15 +261,16 @@ help_pg_probackup(void)
 	printf(_("                 [--remote-proto] [--remote-host]\n"));
 	printf(_("                 [--remote-port] [--remote-path] [--remote-user]\n"));
 	printf(_("                 [--ssh-options]\n"));
+	printf(_("                 [--dry-run]\n"));
 	printf(_("                 [--help]\n"));
 
 	if ((PROGRAM_URL || PROGRAM_EMAIL))
 	{
 		printf("\n");
 		if (PROGRAM_URL)
-			printf("Read the website for details. <%s>\n", PROGRAM_URL);
+			printf(_("Read the website for details <%s>.\n"), PROGRAM_URL);
 		if (PROGRAM_EMAIL)
-			printf("Report bugs to <%s>.\n", PROGRAM_EMAIL);
+			printf(_("Report bugs to <%s>.\n"), PROGRAM_EMAIL);
 	}
 }
 
@@ -1047,6 +1048,7 @@ help_catchup(void)
 	printf(_("                 [--remote-proto] [--remote-host]\n"));
 	printf(_("                 [--remote-port] [--remote-path] [--remote-user]\n"));
 	printf(_("                 [--ssh-options]\n"));
+	printf(_("                 [--dry-run]\n"));
 	printf(_("                 [--help]\n\n"));
 
 	printf(_("  -b, --backup-mode=catchup-mode   catchup mode=FULL|DELTA|PTRACK\n"));
@@ -1081,4 +1083,6 @@ help_catchup(void)
 	printf(_("      --remote-user=username       user name for ssh connection (default: current user)\n"));
 	printf(_("      --ssh-options=ssh_options    additional ssh options (default: none)\n"));
 	printf(_("                                   (example: --ssh-options='-c cipher_spec -F configfile')\n\n"));
+
+	printf(_("      --dry-run                    perform a trial run without any changes\n\n"));
 }
