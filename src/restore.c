@@ -1280,7 +1280,7 @@ done:
 			elog(ERROR, "Cannot write to the remote file \"%s\": %s", to_fullpath, errmsg);
 
 		/* Special crutch for CFM files */
-		if (file->forkName == cfm)
+		if (dest_file->forkName == cfm)
 			fio_ftruncate(out, CFM_MAX_SIZE);
 
 		/* close file */
