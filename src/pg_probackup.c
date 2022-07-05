@@ -297,6 +297,8 @@ main(int argc, char *argv[])
 
 	ft_init_log(elog_ft_log);
 	fobj_init();
+	init_pio_objects();
+
 	PROGRAM_NAME_FULL = argv[0];
 
 	/* Check terminal presense and initialize ANSI escape codes for Windows */
