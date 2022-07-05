@@ -1312,9 +1312,6 @@ restore_non_data_file_internal(FILE *out, pgFile *file,
 	if (close_file(in) < 0)
 		elog(ERROR, "%s", in->errmsg);
 
-	if (file->forkName == cfm)
-		fio_ftruncate(out, CFM_MAX_SIZE);
-
 	elog(VERBOSE, "Copied file \"%s\": %lu bytes", to_fullpath, in->currpos);
 
 	free_file(in);
