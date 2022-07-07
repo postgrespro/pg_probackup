@@ -1,0 +1,200 @@
+/* vim: set expandtab autoindent cindent ts=4 sw=4 sts=4 */
+#ifndef FOBJ_OBJ_PRIV2_H
+#define FOBJ_OBJ_PRIV2_H
+
+#include <ft_util.h>
+#include <fo_obj.h>
+#include <impl/fo_impl.h>
+
+ft_inline fobjStr*
+fobj_str(const char* s) {
+    return fobj_newstr(ft_cstr(s), false);
+}
+
+ft_inline fobjStr*
+fobj_strbuf_steal(ft_strbuf_t *buf) {
+    fobjStr*    str = fobj_newstr(ft_strbuf_ref(buf), buf->alloced);
+    *buf = (ft_strbuf_t){NULL};
+    return str;
+}
+
+ft_inline ft_str_t
+fobj_getstr(fobjStr *str) {
+    return ft_str(str->ptr, str->len);
+}
+
+ft_inline fobjStr*
+fobj_strcatc(fobjStr *ostr, const char *str) {
+    return fobj_strcat(ostr, ft_cstr(str));
+}
+
+ft_inline fobjStr*
+fobj_strcatc2(fobjStr *ostr, const char *str1, const char *str2) {
+    /* a bit lazy to do it in a fast way */
+    return fobj_strcatf(ostr, "%s%s", str1, str2);
+}
+
+ft_inline fobjStr*
+fobj_stradd(fobjStr *ostr, fobjStr *other) {
+    return fobj_strcat(ostr, fobj_getstr(other));
+}
+
+ft_inline bool
+fobj_streq(fobjStr* self, fobjStr *oth) {
+    return ft_streq(fobj_getstr(self), fobj_getstr(oth));
+}
+
+ft_inline FT_CMP_RES
+fobj_strcmp(fobjStr* self, fobjStr *oth) {
+    return ft_strcmp(fobj_getstr(self), fobj_getstr(oth));
+}
+
+ft_inline bool
+fobj_streq_str(fobjStr* self, ft_str_t oth) {
+    return ft_streq(fobj_getstr(self), oth);
+}
+
+ft_inline FT_CMP_RES
+fobj_strcmp_str(fobjStr* self, ft_str_t oth) {
+    return ft_strcmp(fobj_getstr(self), oth);
+}
+
+ft_inline bool
+fobj_streq_c(fobjStr* self, const char *oth) {
+    return ft_streqc(fobj_getstr(self), oth);
+}
+
+ft_inline FT_CMP_RES
+fobj_strcmp_c(fobjStr* self, const char *oth) {
+    return ft_strcmpc(fobj_getstr(self), oth);
+}
+
+ft_inline fobjInt*
+fobj_int(int64_t i) {
+    return $alloc(fobjInt, .i = i);
+}
+
+ft_inline fobjUInt*
+fobj_uint(uint64_t u) {
+    return $alloc(fobjUInt, .u = u);
+}
+
+ft_inline fobjFloat*
+fobj_float(double f) {
+    return $alloc(fobjFloat, .f = f);
+}
+
+ft_inline fobjBool*
+fobj_bool(bool b) {
+    return $alloc(fobjBool, .b = b);
+}
+
+typedef struct fobjErr fobjErr;
+struct fobjErr {
+    const char*     type;
+    const char*     message;
+    ft_source_position_t src;
+    fobjErr*        sibling; /* sibling error */
+    fobj_err_kv_t   kv[];
+};
+
+#define fobj_make_err(type, ...) \
+        fm_cat(fobj_make_err_, fm_va_012(__VA_ARGS__))(type, __VA_ARGS__)
+#define fobj_make_err_0(type, ...) ({ \
+    fobj__make_err(fobj_error_kind_##type(), \
+                  ft__srcpos(), "Unspecified Error", NULL, 0); \
+})
+#define fobj_make_err_1(type, msg) ({ \
+    fobj__make_err(fobj_error_kind_##type(), \
+                  ft__srcpos(), msg, NULL, 0); \
+})
+#define fobj_make_err_2(type, msg, ...) ({ \
+    fobj_err_kv_t  kvs[] = {            \
+        fobj__err_transform_kv(__VA_ARGS__) \
+    };                                     \
+    fobj__make_err(fobj_error_kind_##type(), \
+                  ft__srcpos(), msg, \
+                  kvs, ft_arrsz(kvs)); \
+})
+
+#define fobj_make_syserr( ...) \
+        fm_cat(fobj_make_syserr_, fm_va_01(__VA_ARGS__))(__VA_ARGS__)
+#define fobj_make_syserr_0(...) ({ \
+    fobj_err_kv_t  kvs[] = {                \
+        {"errNo", ft_mka_i(errno)},         \
+        {"errStr", ft_mka_s((char*)ft_strerror(errno))}, \
+    };                                \
+    fobj__make_err(fobj_error_kind_SysErr(), \
+                   ft__srcpos(), "System Error: {errStr}", \
+                   kvs, ft_arrsz(kvs));\
+})
+#define fobj_make_syserr_1(msg, ...) ({ \
+    fobj_err_kv_t  kvs[] = {                \
+        {"errNo", ft_mka_i(errno)},         \
+        {"errStr", ft_mka_s((char*)ft_strerror(errno))}, \
+        {"__msgSuffix", ft_mka_s((char*)": {errStr}")},  \
+        fobj__err_transform_kv(__VA_ARGS__) \
+    };                                \
+    fobj__make_err(fobj_error_kind_SysErr(), \
+                   ft__srcpos(), msg, \
+                   kvs, ft_arrsz(kvs));\
+})
+
+extern err_i fobj__make_err(const char *type,
+                                ft_source_position_t src,
+                                const char *msg,
+                                fobj_err_kv_t *kvs,
+                                size_t kvn);
+
+#define fobj__err_transform_kv_do(key, ...) \
+    fobj__err_mkkv_##key(__VA_ARGS__)
+#define fobj__err_transform_kv(...) \
+    fm_eval_tuples_comma(fobj__err_transform_kv_do, __VA_ARGS__)
+
+#define fobj__err_getkey(key, err, ...) \
+    fobj__err_getkv_##key(err, fm_or_default(__VA_ARGS__)(NULL))
+
+ft_inline int
+getErrno(err_i err) {
+    return $errkey(errNo, err);
+}
+
+ft_inline const char*
+getErrnoStr(err_i err) {
+    return $errkey(errStr, err);
+}
+
+ft_inline const char*
+fobj_errtype(err_i err) {
+    fobjErr*    self = (fobjErr*)(err.self);
+    ft_assert(fobj_real_klass_of(self) == fobjErr__kh());                                               \
+    return self->type ? self->type : "RT";
+}
+
+ft_inline const char*
+fobj_errmsg(err_i err) {
+    fobjErr*    self = (fobjErr*)(err.self);
+    ft_assert(fobj_real_klass_of(self) == fobjErr__kh());                                               \
+    return self->message ? self->message : "Unspecified Error";
+}
+
+ft_inline ft_source_position_t
+fobj_errsrc(err_i err) {
+    fobjErr*    self = (fobjErr*)(err.self);
+    ft_assert(fobj_real_klass_of(self) == fobjErr__kh());                                               \
+    return self->src;
+}
+
+#define fobj__printkv(fmt, ...) ({ \
+    fobj_kv kvs[] = {                \
+        fobj__transform_fokv(__VA_ARGS__) \
+    };                             \
+    fobj_printkv(fmt, ft_slc_fokv_make(kvs, ft_arrsz(kvs))); \
+})
+
+#define fobj__transform_fokv_do(key, val) \
+    { #key, val }
+#define fobj__transform_fokv(...) \
+    fm_eval_tuples_comma(fobj__transform_fokv_do, __VA_ARGS__)
+
+#endif // FOBJ_OBJ_PRIV2_H

@@ -10,6 +10,8 @@
 #include <zlib.h>
 #endif
 
+#include <fo_obj.h>
+
 typedef enum
 {
 	/* message for compatibility check */
@@ -55,7 +57,9 @@ typedef enum
 	FIO_CHECK_POSTMASTER,
 	FIO_GET_ASYNC_ERROR,
 	FIO_WRITE_ASYNC,
-	FIO_READLINK
+	FIO_READLINK,
+    FIO_SYNC_FILE,
+    FIO_SEND_FILE_CONTENT,
 } fio_operations;
 
 typedef struct
@@ -176,4 +180,134 @@ struct datapagemap; /* defined in datapagemap.h */
 extern struct datapagemap *fio_get_lsn_map(fio_location location, const char *fullpath, uint32 checksum_version,
 									  int n_blocks, XLogRecPtr horizonLsn, BlockNumber segmentno);
 
+
+// OBJECTS
+
+extern void init_pio_objects(void);
+
+typedef const char* path_t;
+
+fobj_error_cstr_key(remotemsg);
+fobj_error_int_key(writtenSz);
+fobj_error_int_key(wantedSz);
+
+#ifdef HAVE_LIBZ
+fobj_error_kind(GZ);
+fobj_error_int_key(gzErrNo);
+fobj_error_cstr_key(gzErrStr);
+#endif
+
+// File
+#define mth__pioClose  		err_i, (bool, sync)
+#define mth__pioClose__optional() (sync, false)
+#define mth__pioRead  		size_t, (ft_bytes_t, buf), (err_i *, err)
+#define mth__pioWrite  		size_t, (ft_bytes_t, buf), (err_i *, err)
+#define mth__pioTruncate 	err_i, (size_t, sz)
+#define mth__pioFlush		err_i
+fobj_method(pioClose);
+fobj_method(pioRead);
+fobj_method(pioWrite);
+fobj_method(pioTruncate);
+fobj_method(pioFlush);
+
+#define iface__pioFile				mth(pioWrite, pioFlush, pioRead, pioTruncate, pioClose)
+#define iface__pioWriteFlush		mth(pioWrite, pioFlush)
+#define iface__pioWriteCloser		mth(pioWrite, pioFlush, pioClose)
+#define iface__pioReadCloser  		mth(pioRead, pioClose)
+fobj_iface(pioFile);
+fobj_iface(pioWriteFlush);
+fobj_iface(pioWriteCloser);
+fobj_iface(pioReadCloser);
+
+// Drive
+#define mth__pioOpen 		pioFile_i, (path_t, path), (int, flags), \
+									   (int, permissions), (err_i *, err)
+#define mth__pioOpen__optional() (permissions, FILE_PERMISSION)
+#define mth__pioStat 		struct stat, (path_t, path), (bool, follow_symlink), \
+										 (err_i *, err)
+#define mth__pioRemove 		err_i, (path_t, path), (bool, missing_ok)
+#define mth__pioRename 		err_i, (path_t, old_path), (path_t, new_path)
+#define mth__pioExists 		bool, (path_t, path), (err_i *, err)
+#define mth__pioGetCRC32 	pg_crc32, (path_t, path), (bool, compressed), \
+									  (err_i *, err)
+#define mth__pioIsRemote 	bool
+
+fobj_method(pioOpen);
+fobj_method(pioStat);
+fobj_method(pioRemove);
+fobj_method(pioRename);
+fobj_method(pioExists);
+fobj_method(pioIsRemote);
+fobj_method(pioGetCRC32);
+
+#define iface__pioDrive 	mth(pioOpen, pioStat, pioRemove, pioRename), \
+					        mth(pioExists, pioGetCRC32, pioIsRemote)
+fobj_iface(pioDrive);
+
+#define kls__pioLocalDrive	iface__pioDrive, iface(pioDrive)
+#define kls__pioRemoteDrive	iface__pioDrive, iface(pioDrive)
+fobj_klass(pioLocalDrive);
+fobj_klass(pioRemoteDrive);
+
+extern pioDrive_i pioDriveForLocation(fio_location location);
+
+#define pioFile__common_methods mth(pioRead, pioWrite, pioFlush, pioTruncate, pioClose)
+
+#define kls__pioLocalFile	iface__pioFile, iface(pioFile)
+fobj_klass(pioLocalFile);
+
+#define mth__pioSetAsync    err_i, (bool, async)
+#define mth__pioSetAsync__optional()  (async, true)
+#define mth__pioAsyncRead   size_t, (ft_bytes_t, buf), (err_i*, err)
+#define mth__pioAsyncWrite  size_t, (ft_bytes_t, buf), (err_i*, err)
+#define mth__pioAsyncError  err_i
+fobj_method(pioSetAsync);
+fobj_method(pioAsyncRead);
+fobj_method(pioAsyncWrite);
+fobj_method(pioAsyncError);
+
+#define kls__pioRemoteFile	iface__pioFile, iface(pioFile), \
+                            mth(pioSetAsync, pioAsyncRead, pioAsyncWrite, pioAsyncError)
+fobj_klass(pioRemoteFile);
+
+// Filter
+typedef struct pioTransformResult {
+    size_t	consumed;
+    size_t	produced;
+} pioTransformResult;
+
+#define mth__pioTransform	pioTransformResult, (ft_bytes_t, in), \
+												(ft_bytes_t, out), \
+												(err_i*, err)
+fobj_method(pioTransform);
+#define mth__pioFinish		size_t, (ft_bytes_t, out), (err_i*, err)
+fobj_method(pioFinish);
+
+#define iface__pioFilter	mth(pioTransform), opt(pioFinish)
+fobj_iface(pioFilter);
+
+#define kls__pioReadFilter	mth(pioRead, pioClose)
+#define kls__pioWriteFilter iface__pioWriteFlush, iface(pioWriteFlush), \
+                            mth(pioClose)
+fobj_klass(pioReadFilter);
+fobj_klass(pioWriteFilter);
+
+extern pioWriteFlush_i pioWrapWriteFilter(pioWriteFlush_i fl,
+                                          pioFilter_i flt,
+                                          size_t buf_size);
+extern pioRead_i       pioWrapReadFilter(pioRead_i fl,
+                                         pioFilter_i flt,
+                                         size_t buf_size);
+
+#ifdef HAVE_LIBZ
+extern pioFilter_i	pioGZCompressFilter(int level);
+extern pioFilter_i	pioGZDecompressFilter(bool ignoreTruncate);
+#endif
+
+extern err_i    pioCopyWithFilters(pioWriteFlush_i dest, pioRead_i src,
+                                       pioFilter_i *filters, int nfilters, size_t *copied);
+#define pioCopy(dest, src, ...) ({ \
+        pioFilter_i _fltrs_[] = {__VA_ARGS__}; \
+        pioCopyWithFilters((dest), (src), _fltrs_, ft_arrsz(_fltrs_), NULL); \
+})
 #endif
