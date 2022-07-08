@@ -149,19 +149,14 @@
 #endif
 
 #define fm_eval(...) fm__eval_0(__VA_ARGS__)
-#define fm_eval2(...) fm__eval_0(__VA_ARGS__)
-#define fm_eval3(...) fm__eval_0(__VA_ARGS__)
-#define fm_eval4(...) fm__eval_0(__VA_ARGS__)
-#define fm_eval5(...) fm__eval_0(__VA_ARGS__)
-#define fm__eval_0(...) fm__eval_1(fm__eval_1(fm__eval_1(fm__eval_1(__VA_ARGS__))))
-#define fm__eval_1(...) fm__eval_2(fm__eval_2(fm__eval_2(__VA_ARGS__)))
-#define fm__eval_2(...) fm__eval_3(fm__eval_3(fm__eval_3(__VA_ARGS__)))
 #ifdef FU_LONG_EVAL
-#define fm__eval_3(...) fm__eval_4(fm__eval_4(fm__eval_4(__VA_ARGS__)))
-#define fm__eval_4(...) __VA_ARGS__
+#define fm__eval_0(...) fm__eval_1(fm__eval_1(fm__eval_1(fm__eval_1(__VA_ARGS__))))
 #else
-#define fm__eval_3(...) __VA_ARGS__
+#define fm__eval_0(...) fm__eval_1(fm__eval_1(__VA_ARGS__))
 #endif
+#define fm__eval_1(...) fm__eval_2(fm__eval_2(__VA_ARGS__))
+#define fm__eval_2(...) fm__eval_3(fm__eval_3(__VA_ARGS__))
+#define fm__eval_3(...) __VA_ARGS__
 
 #define fm_foreach(macro, ...) \
     fm_when(fm_va_01(__VA_ARGS__))( \
