@@ -283,7 +283,7 @@ fobj_method(pioTransform);
 #define mth__pioFinish		size_t, (ft_bytes_t, out), (err_i*, err)
 fobj_method(pioFinish);
 
-#define iface__pioFilter	mth(pioTransform), opt(pioFinish)
+#define iface__pioFilter	mth(pioTransform, pioFinish)
 fobj_iface(pioFilter);
 
 #define kls__pioReadFilter	mth(pioRead, pioClose)
