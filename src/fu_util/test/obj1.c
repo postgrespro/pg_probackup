@@ -19,7 +19,7 @@ fobj_method(ioStatus);
 fobj_method(fobjGetError);
 
 #define iface__ioReader		mth(ioRead)
-#define iface__ioReadCloser	iface__ioReader, mth(ioClose), opt(ioStatus)
+#define iface__ioReadCloser	iface__ioReader, mth(ioClose, ioStatus)
 #define	iface__obj
 fobj_iface(ioReadCloser);
 fobj_iface(ioReader);
@@ -232,7 +232,7 @@ int main(int argc, char** argv) {
 
     Klass0 *k0 = $alloc(Klass0);
     aird = bind_ioRead(k0);
-    ioRead__cb k0_ioRead = fetch_cb_ioRead(k0, fobj_self_klass);
+    ioRead__cb k0_ioRead = fetch_cb_ioRead(k0, fobj_self_klass, true);
     for (i = 0; i < benchcnt; i++) {
         switch (benchmode) {
             case 0: ioRead(k0, b, 100); break;

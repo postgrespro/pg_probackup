@@ -14,18 +14,20 @@ target_link_libraries(fu_utils PRIVATE Threads::Threads)
 
 # Detect for installed beautiful https://github.com/ianlancetaylor/libbacktrace
 include_directories(.)
-find_library(LIBBACKTRACE backtrace)
-if(LIBBACKTRACE)
-    set(CMAKE_REQUIRED_LIBRARIES backtrace)
-    check_c_source_compiles("
-        #include <backtrace.h>
-        int main(void) {
-            struct backtrace_state *st = backtrace_create_state(NULL, 0, NULL, NULL);
-            return 0;
-        }
-    " HAVE_LIBBACKTRACE)
-    if (HAVE_LIBBACKTRACE)
-        target_compile_definitions(fu_utils PRIVATE HAVE_LIBBACKTRACE)
+if(NOT CMAKE_C_COMPILER MATCHES tcc)
+    find_library(LIBBACKTRACE backtrace)
+    if(LIBBACKTRACE)
+        set(CMAKE_REQUIRED_LIBRARIES backtrace)
+        check_c_source_compiles("
+            #include <backtrace.h>
+            int main(void) {
+                struct backtrace_state *st = backtrace_create_state(NULL, 0, NULL, NULL);
+                return 0;
+            }
+        " HAVE_LIBBACKTRACE)
+        if (HAVE_LIBBACKTRACE)
+            target_compile_definitions(fu_utils PRIVATE HAVE_LIBBACKTRACE)
+        endif()
     endif()
 endif()
 

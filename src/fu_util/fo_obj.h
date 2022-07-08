@@ -347,9 +347,6 @@ extern fobj_klass_handle_t fobj_real_klass_of(fobj_t);
 #define $ifdef(assignment, meth, self, ...) \
     fobj_ifdef(assignment, meth, (self), __VA_ARGS__)
 
-#define $iifdef(assignment, meth, iface, ...) \
-    fobj_iface_ifdef(assignment, meth, iface, __VA_ARGS__)
-
 #define $bind(iface_type, obj) 		fobj_bind(iface_type, (obj))
 #define $reduce(newiface, iface)	fobj_reduce(newiface, (iface))
 
