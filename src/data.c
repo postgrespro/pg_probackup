@@ -1735,20 +1735,21 @@ close_file(PbkFile *f)
 	if (f->do_crc)
 		FIN_FILE_CRC32(f->use_crc32c, f->crc);
 
-	if (!remote_agent)
+	if (f->is_local)
 	{
 #ifdef HAVE_LIBZ
-	if (f->read && f->calg == ZLIB_COMPRESS)
-		rc = gzclose(f->gzfp);
-	else
+		if (f->read && f->calg == ZLIB_COMPRESS)
+			rc = gzclose(f->gzfp);
+		else
 #endif
-		rc = close(f->fd); /* TODO: report close error */
+			rc = close(f->fd);
 	}
 
-	/* error message already in place */
+	/* error message already in place, report flush errmsg */
 	if (flush_r < 0)
 		return flush_r;
 
+	/* Report close() error */
 	if (rc != 0)
 	{
 		f->errmsg = pgut_malloc(ERRMSG_MAX_LEN);
