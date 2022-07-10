@@ -44,10 +44,12 @@ cd %{_topdir}/BUILD/postgrespro-%{edition}-%{pgsql_full}
 %if "%{pgsql_major}" == "9.6"
 ./configure --enable-debug --without-readline
 %else
-./configure --prefix=/opt/pgpro/ent-12 --enable-debug --without-readline
+./configure --enable-debug --without-readline --prefix=%{prefix}
 %endif
-make -j4
-make --no-print-directory -C contrib/pg_probackup
+make -C 'src/common'
+make -C 'src/port'
+make -C 'src/interfaces'
+cd contrib/pg_probackup && make
 
 %install
 cd %{_topdir}/BUILD/postgrespro-%{edition}-%{pgsql_full}
