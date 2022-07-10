@@ -29,7 +29,7 @@
 top_pbk_srcdir := $(dir $(realpath $(firstword $(MAKEFILE_LIST))))
 
 # get postgres version
-PG_MAJORVER != $(MAKE) USE_PGXS=$(USE_PGXS) PG_CONFIG=$(PG_CONFIG) --silent --makefile=$(top_pbk_srcdir)get_pg_version.mk
+PG_MAJORVER := 12
 #$(info Making with PG_MAJORVER=$(PG_MAJORVER))
 
 PROGRAM := pg_probackup
