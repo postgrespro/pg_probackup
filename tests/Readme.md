@@ -51,31 +51,19 @@ Usage:
  python -m unittest [-v] tests[.specific_module][.class.test]
 ```
 
-### Troubleshooting FAQ
+# Troubleshooting FAQ
 
-#### python test failures
-1. Test failure reason like 
+## Python tests failure
+### 1. Could not open extension "..."
 ```
-testgres.exceptions.QueryException ERROR:  could not open extension control file "/home/avaness/postgres/postgres.build/share/extension/amcheck.control": No such file or directory
+testgres.exceptions.QueryException ERROR:  could not open extension control file "<postgres_build_dir>/share/extension/amcheck.control": No such file or directory
 ```
 
-*Solution*: you have no `<postgres_src_root>/contrib/` extensions installed
+#### Solution:
+
+You have no `<postgres_src_root>/contrib/...` extension installed, please do
 
 ```commandline
 cd <postgres_src_root>
-make world install
-```
-
-2. Test failure
-
-```
-FAIL: test_help_6 (tests.option.OptionTest)
-```
-
-*Solution*: you didn't configure postgres build with `--enable-nls` 
-
-```commandline
-cd <postgres_src_root>
-make distclean
-<your-./configure-cmdline> --enable-nls
+make install-world
 ```

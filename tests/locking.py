@@ -17,6 +17,8 @@ class LockingTest(ProbackupTest, unittest.TestCase):
         run validate, expect it to successfully executed,
         concurrent RUNNING backup with pid file and active process is legal
         """
+        self._check_gdb_flag_or_skip_test()
+
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
@@ -72,6 +74,8 @@ class LockingTest(ProbackupTest, unittest.TestCase):
         RUNNING backup with pid file AND without active pid is legal,
         but his status must be changed to ERROR and pid file is deleted
         """
+        self._check_gdb_flag_or_skip_test()
+
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
@@ -142,6 +146,8 @@ class LockingTest(ProbackupTest, unittest.TestCase):
         RUNNING backup with pid file AND without active pid is legal,
         but his status must be changed to ERROR and pid file is deleted
         """
+        self._check_gdb_flag_or_skip_test()
+
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
@@ -240,6 +246,8 @@ class LockingTest(ProbackupTest, unittest.TestCase):
         RUNNING backup without pid file AND without active pid is legal,
         his status must be changed to ERROR
         """
+        self._check_gdb_flag_or_skip_test()
+
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
@@ -310,6 +318,8 @@ class LockingTest(ProbackupTest, unittest.TestCase):
         Expect restore to sucseed because read-only locks
         do not conflict
         """
+        self._check_gdb_flag_or_skip_test()
+
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
@@ -352,6 +362,8 @@ class LockingTest(ProbackupTest, unittest.TestCase):
         Expect restore to fail because validation of
         intermediate backup is impossible
         """
+        self._check_gdb_flag_or_skip_test()
+
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
@@ -443,6 +455,8 @@ class LockingTest(ProbackupTest, unittest.TestCase):
         and stop it in the middle, delete full backup.
         Expect it to fail.
         """
+        self._check_gdb_flag_or_skip_test()
+
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
@@ -585,6 +599,8 @@ class LockingTest(ProbackupTest, unittest.TestCase):
         """
         Make sure that shared lock leaves no files with pids
         """
+        self._check_gdb_flag_or_skip_test()
+
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),

@@ -44,7 +44,6 @@
 /docker-compose.yml
 /Dockerfile
 /Dockerfile.in
-/run_tests.sh
 /make_dockerfile.sh
 /backup_restore.sh
 
