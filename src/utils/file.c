@@ -3631,6 +3631,17 @@ pioLocalDrive_pioIsRemote(VSelf)
 }
 
 /* LOCAL FILE */
+static void
+pioLocalFile_fobjDispose(VSelf)
+{
+	Self(pioLocalFile);
+	if (!self->p.closed)
+	{
+		close(self->fd);
+		self->fd = -1;
+		self->p.closed = true;
+	}
+}
 
 static err_i
 pioLocalFile_pioClose(VSelf, bool sync)
@@ -3911,40 +3922,49 @@ pioRemoteFile_pioSync(VSelf)
 }
 
 static err_i
+pioRemoteFile_doClose(VSelf)
+{
+	Self(pioRemoteFile);
+	err_i err = $noerr();
+	fio_header hdr;
+
+	hdr = (fio_header){
+			.cop = FIO_CLOSE,
+			.handle = self->handle,
+			.size = 0,
+			.arg = 0,
+	};
+
+	fio_fdset &= ~(1 << hdr.handle);
+	IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
+
+	/* Wait for response */
+	IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
+	ft_dbg_assert(hdr.cop == FIO_CLOSE);
+
+	if (hdr.arg != 0 && $isNULL(err))
+	{
+		err = $syserr((int)hdr.arg, "Cannot close remote file {path:q}",
+					  path(self->p.path));
+	}
+
+	self->p.closed = true;
+
+	return err;
+}
+
+static err_i
 pioRemoteFile_pioClose(VSelf, bool sync)
 {
-    Self(pioRemoteFile);
-    err_i err = $noerr();
-    fio_header hdr;
+	Self(pioRemoteFile);
+	err_i err = $noerr();
 
-    ft_assert(self->handle >= 0, "Remote closed file abused \"%s\"", self->p.path);
+	ft_assert(self->handle >= 0, "Remote closed file abused \"%s\"", self->p.path);
 
-    if (sync && (self->p.flags & O_ACCMODE) != O_RDONLY)
-        err = pioRemoteFile_pioSync(self);
+	if (sync && (self->p.flags & O_ACCMODE) != O_RDONLY)
+		err = pioRemoteFile_pioSync(self);
 
-    hdr = (fio_header){
-            .cop = FIO_CLOSE,
-            .handle = self->handle,
-            .size = 0,
-            .arg = 0,
-    };
-
-    fio_fdset &= ~(1 << hdr.handle);
-    IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
-
-    /* Wait for response */
-    IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
-    ft_dbg_assert(hdr.cop == FIO_CLOSE);
-
-    if (hdr.arg != 0 && $isNULL(err))
-    {
-        err = $syserr((int)hdr.arg, "Cannot close remote file {path:q}",
-					  path(self->p.path));
-    }
-
-    self->p.closed = true;
-
-    return err;
+	return fobj_err_combine(err, pioRemoteFile_doClose(self));
 }
 
 static size_t
@@ -4245,6 +4265,14 @@ static void
 pioRemoteFile_fobjDispose(VSelf)
 {
     Self(pioRemoteFile);
+	if (!self->p.closed)
+	{
+		err_i	err;
+
+		err = pioRemoteFile_doClose(self);
+		if ($haserr(err))
+			elog(WARNING, "%s", $errmsg(err));
+	}
     $idel(&self->asyncError);
     ft_free(self->asyncChunk);
 }
@@ -4818,7 +4846,7 @@ pioCopyWithFilters(pioWriteFlush_i dest, pioRead_i src,
 fobj_klass_handle(pioFile);
 fobj_klass_handle(pioLocalDrive);
 fobj_klass_handle(pioRemoteDrive);
-fobj_klass_handle(pioLocalFile, inherits(pioFile), mth(fobjRepr));
+fobj_klass_handle(pioLocalFile, inherits(pioFile), mth(fobjDispose, fobjRepr));
 fobj_klass_handle(pioRemoteFile, inherits(pioFile), mth(fobjDispose, fobjRepr));
 fobj_klass_handle(pioWriteFilter, mth(fobjDispose, fobjRepr));
 fobj_klass_handle(pioReadFilter, mth(fobjDispose, fobjRepr));
