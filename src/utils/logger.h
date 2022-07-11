@@ -21,6 +21,8 @@
 #define ERROR		1
 #define LOG_OFF		10
 
+#define FULL		11
+
 typedef struct LoggerConfig
 {
 	int			log_level_console;
@@ -32,6 +34,7 @@ typedef struct LoggerConfig
 	uint64		log_rotation_size;
 	/* Maximum lifetime of an individual log file in minutes */
 	uint64		log_rotation_age;
+	int			log_format_json;
 } LoggerConfig;
 
 /* Logger parameters */
@@ -56,4 +59,6 @@ extern void init_console(void);
 extern int parse_log_level(const char *level);
 extern const char *deparse_log_level(int level);
 
+extern int parse_log_format_json(const char *level);
+extern const char *deparse_log_format_json(int level);
 #endif   /* LOGGER_H */
