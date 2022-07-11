@@ -2379,6 +2379,8 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
     # @unittest.skip("skip")
     def test_restore_concurrent_drop_table(self):
         """"""
+        self._check_gdb_flag_or_skip_test()
+
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
@@ -3797,6 +3799,8 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
     # @unittest.skip("skip")
     def test_concurrent_restore(self):
         """"""
+        self._check_gdb_flag_or_skip_test()
+
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(

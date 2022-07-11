@@ -472,11 +472,8 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
         make node, make full and delta stream backups,
         restore them and check data correctness
         """
-        if not self.gdb:
-            self.skipTest(
-                "Specify PGPROBACKUP_GDB and build without "
-                "optimizations for run this test"
-            )
+        self._check_gdb_flag_or_skip_test()
+
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(

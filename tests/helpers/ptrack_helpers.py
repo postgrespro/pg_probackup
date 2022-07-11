@@ -180,8 +180,8 @@ class ProbackupTest(object):
         self.test_env['LC_MESSAGES'] = 'C'
         self.test_env['LC_TIME'] = 'C'
 
-        self.gdb = 'PGPROBACKUP_GDB' in os.environ and \
-              os.environ['PGPROBACKUP_GDB'] == 'ON'
+        self.gdb = 'PGPROBACKUP_GDB' in self.test_env and \
+              self.test_env['PGPROBACKUP_GDB'] == 'ON'
 
         self.paranoia = 'PG_PROBACKUP_PARANOIA' in self.test_env and \
             self.test_env['PG_PROBACKUP_PARANOIA'] == 'ON'
@@ -810,7 +810,7 @@ class ProbackupTest(object):
             if self.verbose:
                 print(self.cmd)
             if gdb:
-                return GDBobj([binary_path] + command, self.verbose)
+                return GDBobj([binary_path] + command, self)
             if asynchronous:
                 return subprocess.Popen(
                     [binary_path] + command,
@@ -1861,22 +1861,34 @@ class ProbackupTest(object):
         self.assertFalse(fail, error_message)
 
     def gdb_attach(self, pid):
-        return GDBobj([str(pid)], self.verbose, attach=True)
+        return GDBobj([str(pid)], self, attach=True)
+
+    def _check_gdb_flag_or_skip_test(self):
+        if not self.gdb:
+            self.skipTest(
+                "Specify PGPROBACKUP_GDB and build without "
+                "optimizations for run this test"
+            )
 
 
 class GdbException(Exception):
-    def __init__(self, message=False):
+    def __init__(self, message="False"):
         self.message = message
 
     def __str__(self):
         return '\n ERROR: {0}\n'.format(repr(self.message))
 
 
-class GDBobj(ProbackupTest):
-    def __init__(self, cmd, verbose, attach=False):
-        self.verbose = verbose
+class GDBobj:
+    def __init__(self, cmd, env: ProbackupTest, attach=False):
+        self.verbose = env.verbose
         self.output = ''
 
+        # Check gdb flag is set up
+        if not env.gdb:
+            raise GdbException("No `PGPROBACKUP_GDB=on` is set, "
+                               "test should call ProbackupTest::check_gdb_flag_or_skip_test() on its start "
+                               "and be skipped")
         # Check gdb presense
         try:
             gdb_version, _ = subprocess.Popen(

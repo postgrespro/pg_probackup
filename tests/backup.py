@@ -1095,6 +1095,8 @@ class BackupTest(ProbackupTest, unittest.TestCase):
     # @unittest.skip("skip")
     def test_drop_rel_during_full_backup(self):
         """"""
+        self._check_gdb_flag_or_skip_test()
+
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
@@ -1244,6 +1246,8 @@ class BackupTest(ProbackupTest, unittest.TestCase):
     # @unittest.skip("skip")
     def test_drop_rel_during_backup_delta(self):
         """"""
+        self._check_gdb_flag_or_skip_test()
+
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
@@ -1313,6 +1317,8 @@ class BackupTest(ProbackupTest, unittest.TestCase):
     # @unittest.skip("skip")
     def test_drop_rel_during_backup_page(self):
         """"""
+        self._check_gdb_flag_or_skip_test()
+
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
@@ -1445,6 +1451,8 @@ class BackupTest(ProbackupTest, unittest.TestCase):
     # @unittest.skip("skip")
     def test_backup_concurrent_drop_table(self):
         """"""
+        self._check_gdb_flag_or_skip_test()
+
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
@@ -1579,6 +1587,8 @@ class BackupTest(ProbackupTest, unittest.TestCase):
     # @unittest.skip("skip")
     def test_sigint_handling(self):
         """"""
+        self._check_gdb_flag_or_skip_test()
+
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
@@ -1618,6 +1628,8 @@ class BackupTest(ProbackupTest, unittest.TestCase):
     # @unittest.skip("skip")
     def test_sigterm_handling(self):
         """"""
+        self._check_gdb_flag_or_skip_test()
+
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
@@ -1656,6 +1668,8 @@ class BackupTest(ProbackupTest, unittest.TestCase):
     # @unittest.skip("skip")
     def test_sigquit_handling(self):
         """"""
+        self._check_gdb_flag_or_skip_test()
+
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
@@ -2906,6 +2920,8 @@ class BackupTest(ProbackupTest, unittest.TestCase):
     # @unittest.skip("skip")
     def test_missing_wal_segment(self):
         """"""
+        self._check_gdb_flag_or_skip_test()
+
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
@@ -3292,6 +3308,8 @@ class BackupTest(ProbackupTest, unittest.TestCase):
     # @unittest.skip("skip")
     def test_backup_atexit(self):
         """"""
+        self._check_gdb_flag_or_skip_test()
+
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(
