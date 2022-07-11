@@ -254,7 +254,7 @@ typedef struct {
 
 #define fobj__special_void_method(meth) \
         \
-        static ft_unused fobj_method_handle_t fobj__nm_mhandle(meth) (void) { \
+        ft_inline ft_gcc_const fobj_method_handle_t fobj__nm_mhandle(meth) (void) { \
             static volatile fobj_method_handle_t hndl = 0; \
             fobj_method_handle_t h = hndl; \
             if (h) return h; \

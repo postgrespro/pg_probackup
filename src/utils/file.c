@@ -3544,11 +3544,10 @@ common_pioExists(fobj_t self, path_t path, err_i *err)
         return false;
     }
     if ($noerr(*err) && !S_ISREG(buf.st_mode))
-        *err = $err(SysErr, "File {path:q} is not regular", (path, path));
+        *err = $err(SysErr, "File {path:q} is not regular", path(path));
     if ($haserr(*err)) {
-        *err = $err(SysErr, "Could not check file existance: {cause:$M}",
-                    (cause, (*err).self), (errNo, getErrno(*err)),
-                    (errStr, getErrnoStr(*err)));
+        *err = $syserr(getErrno(*err), "Could not check file existance: {cause:$M}",
+					   cause((*err).self));
     }
     return $noerr(*err);
 }
@@ -3569,7 +3568,7 @@ pioLocalDrive_pioOpen(VSelf, path_t path, int flags,
         fd = open(path, flags, permissions);
     if (fd < 0)
     {
-        *err = $syserr("Cannot open file {path:q}", (path, path));
+        *err = $syserr(errno, "Cannot open file {path:q}", path(path));
         return (pioFile_i){NULL};
     }
 
@@ -3587,7 +3586,7 @@ pioLocalDrive_pioStat(VSelf, path_t path, bool follow_symlink, err_i *err)
 
     r = follow_symlink ? stat(path, &st) : lstat(path, &st);
     if (r < 0)
-        *err = $syserr("Cannot stat file {path:q}", (path, path));
+        *err = $syserr(errno, "Cannot stat file {path:q}", path(path));
     return st;
 }
 
@@ -3599,7 +3598,7 @@ pioLocalDrive_pioRemove(VSelf, path_t path, bool missing_ok)
     if (remove_file_or_dir(path) != 0)
     {
         if (!missing_ok || errno != ENOENT)
-            return $syserr("Cannot remove {path:q}", (path, path));
+            return $syserr(errno, "Cannot remove {path:q}", path(path));
     }
     return $noerr();
 }
@@ -3608,8 +3607,8 @@ static err_i
 pioLocalDrive_pioRename(VSelf, path_t old_path, path_t new_path)
 {
     if (rename(old_path, new_path) != 0)
-        return $syserr("Cannot rename file {old_path:q} to {new_path:q}",
-                       (old_path, old_path), (new_path, new_path));
+        return $syserr(errno, "Cannot rename file {old_path:q} to {new_path:q}",
+                       old_path(old_path), new_path(new_path));
     return $noerr();
 }
 
@@ -3646,11 +3645,13 @@ pioLocalFile_pioClose(VSelf, bool sync)
     {
         r = fsync(self->fd);
         if (r < 0)
-            err = $syserr("Cannot fsync file {path:q}", (path, self->p.path));
+            err = $syserr(errno, "Cannot fsync file {path:q}",
+						  path(self->p.path));
     }
     r = close(self->fd);
     if (r < 0 && $isNULL(err))
-        err = $syserr("Cannot close file {path:q}", (path, self->p.path));
+        err = $syserr(errno, "Cannot close file {path:q}",
+					  path(self->p.path));
     self->fd = -1;
     self->p.closed = true;
     return err;
@@ -3668,7 +3669,8 @@ pioLocalFile_pioRead(VSelf, ft_bytes_t buf, err_i *err)
     r = read(self->fd, buf.ptr, buf.len);
     if (r < 0)
     {
-        *err = $syserr("Cannot read from {path:q}", (path, self->p.path));
+        *err = $syserr(errno, "Cannot read from {path:q}",
+					   path(self->p.path));
         return 0;
     }
     return r;
@@ -3689,13 +3691,14 @@ pioLocalFile_pioWrite(VSelf, ft_bytes_t buf, err_i *err)
     r = durable_write(self->fd, buf.ptr, buf.len);
     if (r < 0)
     {
-        *err = $syserr("Cannot write to file {path:q}", (path, self->p.path));
+        *err = $syserr(errno, "Cannot write to file {path:q}",
+					   path(self->p.path));
         return 0;
     }
     if (r < buf.len)
     {
         *err = $err(SysErr, "Short write on {path:q}: {writtenSz} < {wantedSz}",
-                    (path, self->p.path), (writtenSz, r), (wantedSz, buf.len));
+                    path(self->p.path), writtenSz(r), wantedSz(buf.len));
     }
     return r;
 }
@@ -3716,7 +3719,8 @@ pioLocalFile_pioTruncate(VSelf, size_t sz)
     ft_assert(self->fd >= 0, "Closed file abused \"%s\"", self->p.path);
 
     if (ftruncate(self->fd, sz) < 0)
-        return $syserr("Cannot truncate file {path:q}", (path, self->p.path));
+        return $syserr(errno, "Cannot truncate file {path:q}",
+					   path(self->p.path));
     return $noerr();
 }
 
@@ -3761,8 +3765,8 @@ pioRemoteDrive_pioOpen(VSelf, path_t path,
 
     if (hdr.arg != 0)
     {
-        errno = (int)hdr.arg;
-        *err = $syserr("Cannot open remote file {path:q}", (path, path));
+        *err = $syserr((int)hdr.arg, "Cannot open remote file {path:q}",
+					   path(path));
         fio_fdset &= ~(1 << hdr.handle);
         return (pioFile_i){NULL};
     }
@@ -3792,8 +3796,8 @@ pioRemoteDrive_pioStat(VSelf, path_t path, bool follow_symlink, err_i *err)
 
     if (hdr.arg != 0)
     {
-        errno = (int)hdr.arg;
-        *err = $syserr("Cannot stat remote file {path:q}", (path, path));
+        *err = $syserr((int)hdr.arg, "Cannot stat remote file {path:q}",
+					   path(path));
     }
     return st;
 }
@@ -3818,8 +3822,8 @@ pioRemoteDrive_pioRemove(VSelf, path_t path, bool missing_ok)
 
     if (hdr.arg != 0)
     {
-        errno = (int)hdr.arg;
-        return $syserr("Cannot remove remote file {path:q}", (path, path));
+        return $syserr((int)hdr.arg, "Cannot remove remote file {path:q}",
+					   path(path));
     }
     return $noerr();
 }
@@ -3845,9 +3849,8 @@ pioRemoteDrive_pioRename(VSelf, path_t old_path, path_t new_path)
 
     if (hdr.arg != 0)
     {
-        errno = (int)hdr.arg;
-        return $syserr("Cannot rename remote file {old_path:q} to {new_path:q}",
-                       (old_path, old_path), (new_path, new_path));
+        return $syserr((int)hdr.arg, "Cannot rename remote file {old_path:q} to {new_path:q}",
+                       old_path(old_path), new_path(new_path));
     }
     return $noerr();
 }
@@ -3901,8 +3904,8 @@ pioRemoteFile_pioSync(VSelf)
 
     if (hdr.arg != 0)
     {
-        errno = (int)hdr.arg;
-        return $syserr("Cannot fsync remote file {path:q}", (path, self->p.path));
+        return $syserr((int)hdr.arg, "Cannot fsync remote file {path:q}",
+					   path(self->p.path));
     }
     return $noerr();
 }
@@ -3935,8 +3938,8 @@ pioRemoteFile_pioClose(VSelf, bool sync)
 
     if (hdr.arg != 0 && $isNULL(err))
     {
-        errno = (int)hdr.arg;
-        err = $syserr("Cannot close remote file {path:q}", (path, self->p.path));
+        err = $syserr((int)hdr.arg, "Cannot close remote file {path:q}",
+					  path(self->p.path));
     }
 
     self->p.closed = true;
@@ -4013,17 +4016,16 @@ pioRemoteFile_pioAsyncRead(VSelf, ft_bytes_t buf, err_i *err)
             {
                 ft_assert(hdr.size < CHUNK_SIZE);
                 IO_CHECK(fio_read_all(fio_stdin, self->asyncChunk, hdr.size), hdr.size);
-                errno = erno;
                 ft_assert(((char*)self->asyncChunk)[hdr.size] == 0);
-                *err = $syserr("Cannot async read remote file {path:q}: {remotemsg}",
-                               (remotemsg, self->asyncChunk),
-                               (path, self->p.path));
+                *err = $syserr(erno, "Cannot async read remote file {path:q}: {remotemsg}",
+                               remotemsg(self->asyncChunk),
+                               path(self->p.path));
                 break;
             }
             else
             {
-                errno = erno;
-                *err = $syserr("Cannot async read remote file {path:q}", (path, self->p.path));
+                *err = $syserr(erno, "Cannot async read remote file {path:q}",
+							   path(self->p.path));
             }
             fio_disconnect(); /* discard possible pending data in pipe */
             break;
@@ -4078,8 +4080,8 @@ pioRemoteFile_pioRead(VSelf, ft_bytes_t buf, err_i *err)
     ft_dbg_assert(hdr.cop == FIO_SEND);
     IO_CHECK(fio_read_all(fio_stdin, buf.ptr, hdr.size), hdr.size);
     if (hdr.arg != 0) {
-        errno = (int)hdr.arg;
-        *err = $syserr("Cannot read remote file {path:q}", (path, self->p.path));
+        *err = $syserr((int)hdr.arg, "Cannot read remote file {path:q}",
+					   path(self->p.path));
         return 0;
     }
 
@@ -4117,8 +4119,8 @@ pioRemoteFile_pioWrite(VSelf, ft_bytes_t buf, err_i *err)
 
     /* set errno */
     if (hdr.arg != 0) {
-        errno = (int)hdr.arg;
-        *err = $syserr("Cannot write remote file {path:q}", (path, self->p.path));
+        *err = $syserr((int)hdr.arg, "Cannot write remote file {path:q}",
+					   path(self->p.path));
         return 0;
     }
 
@@ -4233,7 +4235,7 @@ pioRemoteFile_pioAsyncError(VSelf)
 
     errmsg = pgut_malloc(ERRMSG_MAX_LEN);
     IO_CHECK(fio_read_all(fio_stdin, errmsg, hdr.size), hdr.size);
-    self->asyncError = $err(SysErr, "{remotemsg}", (remotemsg, errmsg));
+    self->asyncError = $err(SysErr, "{remotemsg}", remotemsg(errmsg));
     self->didAsync = false;
     free(errmsg);
     return self->asyncError;
@@ -4430,7 +4432,7 @@ pioWriteFilter_pioWrite(VSelf, ft_bytes_t rbuf, err_i *err)
     if (rbuf.len)
     {
         *err = $err(SysErr, "short write: {writtenSz} < {wantedSz}",
-                    (writtenSz, rlen - rbuf.len), (wantedSz, rbuf.len));
+                    writtenSz(rlen - rbuf.len), wantedSz(rbuf.len));
     }
     return rlen - rbuf.len;
 }
@@ -4516,10 +4518,10 @@ newGZError(const char *gzmsg, int gzerrno)
     if (gzerrno == Z_OK && errno == 0)
         return $noerr();
     if (gzerrno == Z_ERRNO) {
-        return $syserr("System error during GZ");
+        return $syserr(errno, "System error during GZ");
     }
 
-    return $err(GZ, "GZ error: {gzErrStr}", (gzErrStr, gzmsg), (gzErrNo, gzerrno));
+    return $err(GZ, "GZ error: {gzErrStr}", gzErrStr(gzmsg), gzErrNo(gzerrno));
 }
 
 pioFilter_i
@@ -4800,8 +4802,8 @@ pioCopyWithFilters(pioWriteFlush_i dest, pioRead_i src,
                 $ireturn(err);
 
             $ireturn($err(SysErr, "Short write to destination file {path}: {writtenSz} < {wantedSz}",
-                         (path, $irepr(dest)->ptr),
-                         (wantedSz, read_len), (writtenSz, write_len)));
+                         path($irepr(dest)->ptr),
+                         wantedSz(read_len), writtenSz(write_len)));
         }
     }
 
@@ -4809,7 +4811,7 @@ pioCopyWithFilters(pioWriteFlush_i dest, pioRead_i src,
     err = $i(pioFlush, dest);
     if ($haserr(err))
         $ireturn($err(SysErr, "Cannot flush file {path}: {cause}",
-                     (path, $irepr(dest)->ptr), (cause, err.self)));
+                     path($irepr(dest)->ptr), cause(err.self)));
     return $noerr();
 }
 

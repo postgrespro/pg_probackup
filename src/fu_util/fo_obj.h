@@ -194,21 +194,10 @@ extern fobj_t fobj_swap(fobj_t* var, fobj_t newval);
 
 /*
  * fobjDispose should finish all object's activity and release resources.
- * It is called automatically before destroying object, but could be
- * called manually as well using `fobj_dispose` function. `fobjDispose` could
- * not be called directly.
- * Therefore after fobjDispose object should be accessible, ie call of any
- * method should not be undefined. But it should not be usable, ie should
- * not do any meaningful job.
+ * It is called automatically before destroying object.
  */
 #define mth__fobjDispose    void
 fobj__special_void_method(fobjDispose);
-#define $dispose(obj) fobj_dispose(obj)
-extern void fobj_dispose(fobj_t);
-
-/* check if object is disposing or was disposed */
-extern bool fobj_disposing(fobj_t);
-extern bool fobj_disposed(fobj_t);
 
 /*
  * returns globally allocated klass name.
@@ -474,7 +463,7 @@ typedef struct fobjBool {
     bool        b;
 } fobjBool;
 
-ft_inline   fobjBool*   fobj_bool(bool f);
+extern fobjBool*        fobj_bool(bool f);
 #define $B(f)           fobj_bool(f)
 
 #define kls__fobjBool   mth(fobjRepr, fobjFormat)
@@ -507,7 +496,10 @@ extern  fobjStr*        fobj_printkv(const char *fmt, ft_slc_fokv_t kv);
  * ERRORS
  */
 
-#define iface__err
+#define mth___fobjErr_marker_DONT_IMPLEMENT_ME void
+fobj__special_void_method(_fobjErr_marker_DONT_IMPLEMENT_ME);
+
+#define iface__err      mth(_fobjErr_marker_DONT_IMPLEMENT_ME)
 fobj_iface(err);
 
 #define fobj_error_kind(err)        fobj__error_kind(err)
@@ -526,8 +518,8 @@ fobj_error_kind(SysErr);
 
 fobj_error_object_key(cause);
 fobj_error_int_key(errNo);
-fobj_error_cstr_key(errStr);
-#define fobj_errno_keys(errno) (errNo, errno), (errStr, ft_strerror(errno))
+fobj_error_cstr_key(errNoStr);
+#define fobj_errno_keys(errno) (errNo, errno), (errNoStr, ft_strerror(errno))
 fobj_error_cstr_key(path);
 fobj_error_cstr_key(old_path);
 fobj_error_cstr_key(new_path);
@@ -541,19 +533,32 @@ fobj_error_cstr_key(__msgSuffix);
  * $err(Type, "Some bad thing happens at {path}", (path, filename))
  */
 #define $err(type, ...)     fobj_make_err(type, __VA_ARGS__)
+/*
+ * $noerr() - empty error
+ * $noerr(err) - true, if $isNULL(err)
+ */
 #define $noerr(...)         fm_if(fm_va_01(__VA_ARGS__), $isNULL(__VA_ARGS__), $null(err))
+/*
+ * $haserr(err) - true if $notNULL(err)
+ */
 #define $haserr(err)        $notNULL(err)
 
 /*
- * $syserr()
- * $syserr("allocation error")
- * $syserr("Could not open file {path}", (path, filename))
+ * $syserr(errno)
+ * $syserr(errno, "allocation error")
+ * $syserr(errno, "Could not open file {path}", (path, filename))
  */
-#define $syserr(...)       fobj_make_syserr(__VA_ARGS__)
+#define $syserr(erno, ...)       fobj_make_syserr((erno), __VA_ARGS__)
 
 /* fetch key back */
 #define $errkey(key, err, ...)  fobj__err_getkey(key, err, __VA_ARGS__)
+/*
+ * Get errno stored in `errNo` error key
+ */
 ft_inline int           getErrno(err_i err);
+/*
+ * Get errno string stored in `errNoStr` error key
+ */
 ft_inline const char*   getErrnoStr(err_i err);
 
 /*

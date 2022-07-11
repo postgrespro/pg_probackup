@@ -511,26 +511,6 @@ fobj__do_dispose(fobj_t self, fobj_header_t *h, fobj_klass_registration_t *kreg)
     }
 }
 
-void
-fobj_dispose(fobj_t self) {
-    fobj_header_t *h;
-    fobj_klass_handle_t klass;
-    fobj_klass_registration_t *kreg;
-
-    ft_assert(fobj_global_state != FOBJ_RT_NOT_INITIALIZED);
-
-    if (self == NULL)
-        return;
-
-    h = ((fobj_header_t*)self - 1);
-    assert(h->magic == FOBJ_HEADER_MAGIC);
-    klass = h->klass;
-    ft_dbg_assert(klass > 0 && klass <= atload(&fobj_klasses_n));
-    kreg = &fobj_klasses[klass];
-
-    fobj__do_dispose(self, h, kreg);
-}
-
 static void
 fobj_release(fobj_t self) {
     fobj_header_t *h;
@@ -553,6 +533,27 @@ fobj_release(fobj_t self) {
         return;
     if ((atload(&h->flags) & FOBJ_DISPOSING) != 0)
         return;
+    fobj__do_dispose(self, h, kreg);
+}
+
+#if 0
+void
+fobj_dispose(fobj_t self) {
+    fobj_header_t *h;
+    fobj_klass_handle_t klass;
+    fobj_klass_registration_t *kreg;
+
+    ft_assert(fobj_global_state != FOBJ_RT_NOT_INITIALIZED);
+
+    if (self == NULL)
+        return;
+
+    h = ((fobj_header_t*)self - 1);
+    assert(h->magic == FOBJ_HEADER_MAGIC);
+    klass = h->klass;
+    ft_dbg_assert(klass > 0 && klass <= atload(&fobj_klasses_n));
+    kreg = &fobj_klasses[klass];
+
     fobj__do_dispose(self, h, kreg);
 }
 
@@ -579,6 +580,8 @@ fobj_disposed(fobj_t self) {
     assert(h->magic == FOBJ_HEADER_MAGIC);
     return (atload(&h->flags) & FOBJ_DISPOSED) != 0;
 }
+
+#endif
 
 static fobj_klass_handle_t
 fobjBase_fobjKlass(fobj_t self) {
@@ -844,7 +847,7 @@ fobjUInt_fobjFormat(VSelf, ft_strbuf_t *buf, const char *fmt) {
 static fobjStr*
 fobjFloat_fobjRepr(VSelf) {
     Self(fobjFloat);
-    return fobj_sprintf("%f", self->f);
+    return fobj_sprintf("$F(%f)", self->f);
 }
 
 static void
@@ -865,10 +868,15 @@ fobjFloat_fobjFormat(VSelf, ft_strbuf_t *buf, const char *fmt) {
     fobj_format_float(buf, self->f, fmt);
 }
 
-static fobjStr* trueRepr = NULL;
-static fobjStr* falseRepr = NULL;
-static fobjStr* trueStr = NULL;
-static fobjStr* falseStr = NULL;
+static fobjBool*    fobjTrue = NULL;
+static fobjBool*    fobjFalse = NULL;
+static fobjStr*     trueRepr = NULL;
+static fobjStr*     falseRepr = NULL;
+
+fobjBool*
+fobj_bool(bool b) {
+    return b ? fobjTrue : fobjFalse;
+}
 
 static fobjStr*
 fobjBool_fobjRepr(VSelf) {
@@ -1081,6 +1089,10 @@ fobj__make_err(const char *type,
 }
 
 static void
+fobjErr__fobjErr_marker_DONT_IMPLEMENT_ME(VSelf) {
+}
+
+static void
 fobjErr_fobjDispose(VSelf) {
     Self(fobjErr);
     fobj_err_kv_t *kv;
@@ -1263,7 +1275,7 @@ fobjBase__kh(void) {
     return khandle;
 }
 
-fobj_klass_handle(fobjErr, mth(fobjRepr), varsized(kv));
+fobj_klass_handle(fobjErr, mth(fobjRepr, _fobjErr_marker_DONT_IMPLEMENT_ME), varsized(kv));
 fobj_klass_handle(fobjStr, mth(fobjDispose), varsized(_buf));
 fobj_klass_handle(fobjInt);
 fobj_klass_handle(fobjUInt);
@@ -1298,8 +1310,10 @@ fobj_init(void) {
 
     FOBJ_FUNC_ARP();
 
-    falseStr = $ref($S("false"));
-    trueStr = $ref($S("true"));
+    fobjTrue    = $alloc(fobjBool, .b = true);
+    fobjFalse   = $alloc(fobjBool, .b = false);
+    falseRepr   = $ref($S("$B(false)"));
+    trueRepr    = $ref($S("$B(true)"));
 }
 
 void

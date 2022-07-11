@@ -84,11 +84,6 @@ fobj_float(double f) {
     return $alloc(fobjFloat, .f = f);
 }
 
-ft_inline fobjBool*
-fobj_bool(bool b) {
-    return $alloc(fobjBool, .b = b);
-}
-
 typedef struct fobjErr fobjErr;
 struct fobjErr {
     const char*     type;
@@ -117,22 +112,24 @@ struct fobjErr {
                   kvs, ft_arrsz(kvs)); \
 })
 
-#define fobj_make_syserr( ...) \
-        fm_cat(fobj_make_syserr_, fm_va_01(__VA_ARGS__))(__VA_ARGS__)
-#define fobj_make_syserr_0(...) ({ \
+#define fobj_make_syserr(erno_, ...) \
+        fm_cat(fobj_make_syserr_, fm_va_01(__VA_ARGS__))((erno_), fm_uniq(erno), __VA_ARGS__)
+#define fobj_make_syserr_0(erno_, erno, ...) ({ \
+    int erno = erno_;                           \
     fobj_err_kv_t  kvs[] = {                \
-        {"errNo", ft_mka_i(errno)},         \
-        {"errStr", ft_mka_s((char*)ft_strerror(errno))}, \
+        {"errNo", ft_mka_i(erno)},         \
+        {"errNoStr", ft_mka_s((char*)ft_strerror(erno))}, \
     };                                \
     fobj__make_err(fobj_error_kind_SysErr(), \
-                   ft__srcpos(), "System Error: {errStr}", \
+                   ft__srcpos(), "System Error: {errNoStr}", \
                    kvs, ft_arrsz(kvs));\
 })
-#define fobj_make_syserr_1(msg, ...) ({ \
+#define fobj_make_syserr_1(erno_, erno, msg, ...) ({ \
+    int erno = erno_;                           \
     fobj_err_kv_t  kvs[] = {                \
-        {"errNo", ft_mka_i(errno)},         \
-        {"errStr", ft_mka_s((char*)ft_strerror(errno))}, \
-        {"__msgSuffix", ft_mka_s((char*)": {errStr}")},  \
+        {"errNo", ft_mka_i(erno)},         \
+        {"errNoStr", ft_mka_s((char*)ft_strerror(erno))}, \
+        {"__msgSuffix", ft_mka_s((char*)": {errNoStr}")},  \
         fobj__err_transform_kv(__VA_ARGS__) \
     };                                \
     fobj__make_err(fobj_error_kind_SysErr(), \
@@ -146,10 +143,10 @@ extern err_i fobj__make_err(const char *type,
                                 fobj_err_kv_t *kvs,
                                 size_t kvn);
 
-#define fobj__err_transform_kv_do(key, ...) \
-    fobj__err_mkkv_##key(__VA_ARGS__)
+#define fobj__err_transform_kv_do(v) \
+    fobj__err_mkkv_##v
 #define fobj__err_transform_kv(...) \
-    fm_eval_tuples_comma(fobj__err_transform_kv_do, __VA_ARGS__)
+    fm_eval_foreach_comma(fobj__err_transform_kv_do, __VA_ARGS__)
 
 #define fobj__err_getkey(key, err, ...) \
     fobj__err_getkv_##key(err, fm_or_default(__VA_ARGS__)(NULL))
@@ -161,7 +158,7 @@ getErrno(err_i err) {
 
 ft_inline const char*
 getErrnoStr(err_i err) {
-    return $errkey(errStr, err);
+    return $errkey(errNoStr, err);
 }
 
 ft_inline const char*

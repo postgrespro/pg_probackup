@@ -45,12 +45,14 @@
 #define fm__xor_11 0
 
 #define fm_if(x, y, ...) fm_cat(fm__if_, x)(y, __VA_ARGS__)
-#define fm_iif(x) fm_cat(fm__if_, x)
 #define fm__if_1(y, ...) y
 #define fm__if_0(y, ...) __VA_ARGS__
 #define fm_when(x) fm_cat(fm__when_, x)
 #define fm__when_1(...) __VA_ARGS__
 #define fm__when_0(...)
+#define fm_iif(x) fm_cat(fm__iif_, x)
+#define fm__iif_1(...) __VA_ARGS__ fm_empty
+#define fm__iif_0(...) fm_expand
 
 #define fm_va_comma(...) \
     fm_cat(fm__va_comma_, fm_va_01(__VA_ARGS__))()
@@ -58,15 +60,12 @@
 #define fm__va_comma_1() ,
 
 #define fm_or_default(...) \
-    fm_cat(fm__or_default_, fm_va_01(__VA_ARGS__))(__VA_ARGS__)
-#define fm__or_default_0(...) fm_expand
-#define fm__or_default_1(...) __VA_ARGS__ fm_empty
+    fm_iif(fm_va_01(__VA_ARGS__))(__VA_ARGS__)
 
 #define fm__primitive_compare(x, y) fm_is_tuple(COMPARE_##x(COMPARE_##y)(()))
 #define fm__is_comparable(x) fm_is_tuple(fm_cat(COMPARE_,x)(()))
 #define fm_not_equal(x, y) \
-    fm_iif(fm_and(fm__is_comparable(x),fm__is_comparable(y))) \
-    (fm__primitive_compare, 1 fm_empty)(x, y)
+    fm_if(fm_and(fm__is_comparable(x),fm__is_comparable(y)), fm__primitive_compare, 1 fm_empty)(x, y)
 #define fm_equal(x, y) \
     fm_compl(fm_not_equal(x, y))
 
@@ -133,10 +132,11 @@
 
 // recursion handle
 #define fm_defer(id) id fm_empty()
-#define fm_recurs(id) id fm_defer(fm_empty)()
+#define fm_recurs(id) id fm_empty fm_empty() ()
+#define fm_recurs2(a,b) fm_cat fm_empty fm_empty() () (a,b)
 
 #if __STRICT_ANSI__
-#define fm__is_emptyfirst(x, ...) fm_iif(fm_is_tuple(x))(0, fm__is_emptyfirst_impl(x))
+#define fm__is_emptyfirst(x, ...) fm_if(fm_is_tuple(x), 0, fm__is_emptyfirst_impl(x))
 #define fm__is_emptyfirst_impl(x,...) fm_tuple_2((\
             fm__is_emptyfirst_do1 x (fm__is_emptyfirst_do2), 1, 0))
 #define fm__is_emptyfirst_do1(F) F()
@@ -161,7 +161,7 @@
 #define fm_foreach(macro, ...) \
     fm_when(fm_va_01(__VA_ARGS__))( \
             fm_apply_1(macro, __VA_ARGS__) \
-            fm_recurs(fm_cat) (fm_, foreach) (\
+            fm_recurs2(fm_, foreach) (\
                 macro, fm_tail(__VA_ARGS__) \
                 ) \
             )
@@ -169,17 +169,16 @@
 #define fm_foreach_arg(macro, arg, ...) \
     fm_when(fm_va_01(__VA_ARGS__))( \
             fm_apply_2(macro, arg, __VA_ARGS__) \
-            fm_recurs(fm_cat) (fm_, foreach_arg) (\
+            fm_recurs2(fm_, foreach_arg) (\
                 macro, arg, fm_tail(__VA_ARGS__) \
             ) \
         )
 
-#define fm_catx(x, y) fm_cat_impl(x, y)
 #define fm_foreach_comma(macro, ...) \
     fm_when(fm_va_01(__VA_ARGS__))( \
             fm_apply_1(macro, __VA_ARGS__\
             )fm_if(fm_va_single(__VA_ARGS__), , fm__comma)\
-            fm_recurs(fm_catx) (fm_, foreach_comma) (\
+            fm_recurs2(fm_, foreach_comma) (\
                 macro, fm_tail(__VA_ARGS__) \
             ) \
         )
@@ -188,7 +187,7 @@
 #define fm_foreach_tuple(macro, ...) \
     fm_when(fm_va_01(__VA_ARGS__))( \
             fm_apply_tuple_1(macro, __VA_ARGS__) \
-            fm_recurs(fm_cat) (fm_, foreach_tuple) (\
+            fm_recurs2(fm_, foreach_tuple) (\
                 macro, fm_tail(__VA_ARGS__) \
             ) \
         )
@@ -196,7 +195,7 @@
 #define fm_foreach_tuple_arg(macro, arg, ...) \
     fm_when(fm_va_01(__VA_ARGS__))( \
             fm_apply_tuple_2(macro, arg, __VA_ARGS__) \
-            fm_recurs(fm_cat) (fm_, foreach_tuple_arg) (\
+            fm_recurs2(fm_, foreach_tuple_arg) (\
                 macro, arg, fm_tail(__VA_ARGS__) \
             ) \
         )
@@ -205,7 +204,7 @@
     fm_when(fm_va_01(__VA_ARGS__))( \
             fm_apply_tuple_1(macro, __VA_ARGS__\
             )fm_if(fm_va_single(__VA_ARGS__), fm_empty(), fm__comma)\
-            fm_recurs(fm_cat) (fm_, foreach_tuple_comma) (\
+            fm_recurs2(fm_, foreach_tuple_comma) (\
                 macro, fm_tail(__VA_ARGS__) \
             ) \
         )
@@ -213,6 +212,9 @@
 
 #define fm_eval_foreach(macro, ...) \
         fm_eval(fm_foreach(macro, __VA_ARGS__))
+
+#define fm_eval_foreach_comma(macro, ...) \
+        fm_eval(fm_foreach_comma(macro, __VA_ARGS__))
 
 #define fm_eval_foreach_arg(macro, arg, ...) \
         fm_eval(fm_foreach_arg(macro, arg, __VA_ARGS__))
