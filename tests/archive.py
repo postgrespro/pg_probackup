@@ -317,7 +317,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         gdb.set_breakpoint('pg_stop_backup')
         gdb.run_until_break()
 
-        self.set_auto_conf(node, {'archive_command': "'exit 1'"})
+        self.set_auto_conf(node, {'archive_command': 'exit 1'})
         node.reload()
 
         os.environ["PGAPPNAME"] = "foo"
