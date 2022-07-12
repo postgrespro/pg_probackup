@@ -1880,7 +1880,7 @@ class GdbException(Exception):
 
 
 class GDBobj:
-    def __init__(self, cmd, env: ProbackupTest, attach=False):
+    def __init__(self, cmd, env, attach=False):
         self.verbose = env.verbose
         self.output = ''
 
