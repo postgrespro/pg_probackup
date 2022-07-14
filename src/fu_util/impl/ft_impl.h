@@ -321,7 +321,7 @@ ft_strdup(ft_str_t str) {
     if (str.ptr != NULL)
         memcpy(mem, str.ptr, str.len+1);
     else
-        mem[0] = '0';
+        mem[0] = '\0';
     str.ptr = mem;
     return str;
 }
