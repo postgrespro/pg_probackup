@@ -34,6 +34,9 @@ typedef struct DataPage
 static bool get_page_header(FILE *in, const char *fullpath, BackupPageHeader *bph,
 							pg_crc32 *crc, bool use_crc32c);
 
+static BackupPageHeader2_v1*
+get_data_file_headers_v1(HeaderMap *hdr_map, pgFile *file, uint32 backup_version, bool strict);
+
 #ifdef HAVE_LIBZ
 /* Implementation of zlib compression method */
 static int32
@@ -489,7 +492,7 @@ backup_data_file(pgFile *file, const char *from_fullpath, const char *to_fullpat
 				 CompressAlg calg, int clevel, uint32 checksum_version,
 				 HeaderMap *hdr_map, bool is_merge)
 {
-	int         rc;
+	int64         rc;
 	bool        use_pagemap;
 	char	   *errmsg = NULL;
 	BlockNumber err_blknum = 0;
@@ -609,7 +612,7 @@ backup_data_file(pgFile *file, const char *from_fullpath, const char *to_fullpat
 			elog(ERROR, "Cannot read file \"%s\"", from_fullpath);
 	}
 
-	file->read_size = ((int64)rc) * BLCKSZ;
+	file->read_size = rc * BLCKSZ;
 
 	/* refresh n_blocks for FULL and DELTA */
 	if (backup_mode == BACKUP_MODE_FULL ||
@@ -905,7 +908,8 @@ restore_data_file(parray *parent_chain, pgFile *dest_file, FILE *out,
 		if (use_headers && tmp_file->n_headers > 0)
 			headers = get_data_file_headers(&(backup->hdr_map), tmp_file,
 											parse_program_version(backup->program_version),
-											true);
+											true,
+											backup->large_file);
 
 		if (use_headers && !headers && tmp_file->n_headers > 0)
 			elog(ERROR, "Failed to get page headers for file \"%s\"", from_fullpath);
@@ -949,7 +953,7 @@ restore_data_file(parray *parent_chain, pgFile *dest_file, FILE *out,
  */
 size_t
 restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_version,
-						   const char *from_fullpath, const char *to_fullpath, int nblocks,
+						   const char *from_fullpath, const char *to_fullpath, int64 nblocks,
 						   datapagemap_t *map, PageState *checksum_map, int checksum_version,
 						   datapagemap_t *lsn_map, BackupPageHeader2 *headers)
 {
@@ -1123,7 +1127,7 @@ restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_vers
 			cur_pos_in != headers[n_hdr].pos)
 		{
 			if (fseek(in, headers[n_hdr].pos, SEEK_SET) != 0)
-				elog(ERROR, "Cannot seek to offset %ld of \"%s\": %s",
+				elog(ERROR, "Cannot seek to offset " INT64_FORMAT " of \"%s\": %s",
 					headers[n_hdr].pos, from_fullpath, strerror(errno));
 
 			cur_pos_in = headers[n_hdr].pos;
@@ -1672,7 +1676,7 @@ check_data_file(ConnectionArgs *arguments, pgFile *file,
 /* Valiate pages of datafile in backup one by one */
 bool
 validate_file_pages(pgFile *file, const char *fullpath, XLogRecPtr stop_lsn,
-					uint32 checksum_version, uint32 backup_version, HeaderMap *hdr_map)
+					uint32 checksum_version, uint32 backup_version, HeaderMap *hdr_map, bool large_file)
 {
 	size_t		read_len = 0;
 	bool		is_valid = true;
@@ -1693,7 +1697,7 @@ validate_file_pages(pgFile *file, const char *fullpath, XLogRecPtr stop_lsn,
 		elog(ERROR, "Cannot open file \"%s\": %s",
 			 fullpath, strerror(errno));
 
-	headers = get_data_file_headers(hdr_map, file, backup_version, false);
+	headers = get_data_file_headers(hdr_map, file, backup_version, false, large_file);
 
 	if (!headers && file->n_headers > 0)
 	{
@@ -1742,7 +1746,7 @@ validate_file_pages(pgFile *file, const char *fullpath, XLogRecPtr stop_lsn,
 					elog(ERROR, "Cannot seek block %u of \"%s\": %s",
 						blknum, fullpath, strerror(errno));
 				else
-					elog(INFO, "Seek to %ld", headers[n_hdr].pos);
+					elog(INFO, "Seek to " INT64_FORMAT, headers[n_hdr].pos);
 
 				cur_pos_in = headers[n_hdr].pos;
 			}
@@ -1894,7 +1898,7 @@ get_checksum_map(const char *fullpath, uint32 checksum_version,
 
 	/* truncate up to blocks */
 	if (ftruncate(fileno(in), n_blocks * BLCKSZ) != 0)
-		elog(ERROR, "Cannot truncate file to blknum %ld \"%s\": %s",
+		elog(ERROR, "Cannot truncate file to blknum " INT64_FORMAT " \"%s\": %s",
 				n_blocks, fullpath, strerror(errno));
 
 	setvbuf(in, in_buf, _IOFBF, STDIO_BUFSIZE);
@@ -1965,7 +1969,7 @@ get_lsn_map(const char *fullpath, uint32 checksum_version,
 
 	/* truncate up to blocks */
 	if (ftruncate(fileno(in), n_blocks * BLCKSZ) != 0)
-		elog(ERROR, "Cannot truncate file to blknum %ld \"%s\": %s",
+		elog(ERROR, "Cannot truncate file to blknum " INT64_FORMAT " \"%s\": %s",
 				n_blocks, fullpath, strerror(errno));
 
 	setvbuf(in, in_buf, _IOFBF, STDIO_BUFSIZE);
@@ -2032,10 +2036,10 @@ get_page_header(FILE *in, const char *fullpath, BackupPageHeader* bph,
 			return false;		/* EOF found */
 		else if (read_len != 0 && feof(in))
 			elog(ERROR,
-				 "Odd size page found at offset %ld of \"%s\"",
+				 "Odd size page found at offset " INT64_FORMAT " of \"%s\"",
 				 ftello(in), fullpath);
 		else
-			elog(ERROR, "Cannot read header at offset %ld of \"%s\": %s",
+			elog(ERROR, "Cannot read header at offset " INT64_FORMAT " of \"%s\": %s",
 				 ftello(in), fullpath, strerror(errno));
 	}
 
@@ -2358,20 +2362,142 @@ copy_pages(const char *to_fullpath, const char *from_fullpath,
 	return n_blocks_read;
 }
 
-/*
- * Attempt to open header file, read content and return as
- * array of headers.
- * TODO: some access optimizations would be great here:
- * less fseeks, buffering, descriptor sharing, etc.
- */
 BackupPageHeader2*
-get_data_file_headers(HeaderMap *hdr_map, pgFile *file, uint32 backup_version, bool strict)
+get_data_file_headers(HeaderMap *hdr_map, pgFile *file, uint32 backup_version, bool strict, bool large_file)
 {
 	bool     success = false;
 	FILE    *in = NULL;
 	size_t   read_len = 0;
 	pg_crc32 hdr_crc;
 	BackupPageHeader2 *headers = NULL;
+	/* header decompression */
+	int     z_len = 0;
+	char   *zheaders = NULL;
+	const char *errormsg = NULL;
+
+	if (backup_version < 20400)
+		return NULL;
+
+	if (file->n_headers <= 0)
+		return NULL;
+
+	if(!large_file)
+	{
+		BackupPageHeader2_v1 *tmp_headers;
+		read_len = (file->n_headers+1) * sizeof(BackupPageHeader2);
+		tmp_headers = get_data_file_headers_v1(hdr_map, file, backup_version, strict);
+		headers = pgut_malloc(read_len);
+		memset(headers, 0, read_len);
+		if(!tmp_headers)
+		{
+			return NULL;
+		}
+		for(int i=0; i<file->n_headers+1; i++)
+		{
+			headers[i].block = tmp_headers[i].block;
+			headers[i].lsn = tmp_headers[i].lsn;
+			headers[i].pos = tmp_headers[i].pos;
+			headers[i].checksum = tmp_headers[i].checksum;
+		}
+		return headers;
+	}
+	/* TODO: consider to make this descriptor thread-specific */
+	in = fopen(hdr_map->path, PG_BINARY_R);
+
+	if (!in)
+	{
+		elog(strict ? ERROR : WARNING, "Cannot open header file \"%s\": %s", hdr_map->path, strerror(errno));
+		return NULL;
+	}
+	/* disable buffering for header file */
+	setvbuf(in, NULL, _IONBF, 0);
+
+	if (fseeko(in, file->hdr_off, SEEK_SET))
+	{
+		elog(strict ? ERROR : WARNING, "Cannot seek to position %llu in page header map \"%s\": %s",
+			file->hdr_off, hdr_map->path, strerror(errno));
+		goto cleanup;
+	}
+
+	/*
+	 * The actual number of headers in header file is n+1, last one is a dummy header,
+	 * used for calculation of read_len for actual last header.
+	 */
+	read_len = (file->n_headers+1) * sizeof(BackupPageHeader2);
+
+	/* allocate memory for compressed headers */
+	zheaders = pgut_malloc(file->hdr_size);
+	memset(zheaders, 0, file->hdr_size);
+
+	if (fread(zheaders, 1, file->hdr_size, in) != file->hdr_size)
+	{
+		elog(strict ? ERROR : WARNING, "Cannot read header file at offset: %llu len: %i \"%s\": %s",
+			file->hdr_off, file->hdr_size, hdr_map->path, strerror(errno));
+		goto cleanup;
+	}
+
+	/* allocate memory for uncompressed headers */
+	headers = pgut_malloc(read_len);
+	memset(headers, 0, read_len);
+
+	z_len = do_decompress(headers, read_len, zheaders, file->hdr_size,
+						  ZLIB_COMPRESS, &errormsg);
+	if (z_len <= 0)
+	{
+		if (errormsg)
+			elog(strict ? ERROR : WARNING, "An error occured during metadata decompression for file \"%s\": %s",
+				 file->rel_path, errormsg);
+		else
+			elog(strict ? ERROR : WARNING, "An error occured during metadata decompression for file \"%s\": %i",
+				 file->rel_path, z_len);
+
+		goto cleanup;
+	}
+
+	/* validate checksum */
+	INIT_FILE_CRC32(true, hdr_crc);
+	COMP_FILE_CRC32(true, hdr_crc, headers, read_len);
+	FIN_FILE_CRC32(true, hdr_crc);
+
+	if (hdr_crc != file->hdr_crc)
+	{
+		elog(strict ? ERROR : WARNING, "Header map for file \"%s\" crc mismatch \"%s\" "
+				"offset: %llu, len: %lu, current: %u, expected: %u",
+			file->rel_path, hdr_map->path, file->hdr_off, read_len, hdr_crc, file->hdr_crc);
+		goto cleanup;
+	}
+
+	success = true;
+
+cleanup:
+
+	pg_free(zheaders);
+	if (in && fclose(in))
+		elog(ERROR, "Cannot close file \"%s\"", hdr_map->path);
+
+	if (!success)
+	{
+		pg_free(headers);
+		headers = NULL;
+	}
+
+	return headers;
+}
+
+/*
+ * Attempt to open header file, read content and return as
+ * array of headers.
+ * TODO: some access optimizations would be great here:
+ * less fseeks, buffering, descriptor sharing, etc.
+ */
+BackupPageHeader2_v1*
+get_data_file_headers_v1(HeaderMap *hdr_map, pgFile *file, uint32 backup_version, bool strict)
+{
+	bool     success = false;
+	FILE    *in = NULL;
+	size_t   read_len = 0;
+	pg_crc32 hdr_crc;
+	BackupPageHeader2_v1 *headers = NULL;
 	/* header decompression */
 	int     z_len = 0;
 	char   *zheaders = NULL;
@@ -2405,7 +2531,7 @@ get_data_file_headers(HeaderMap *hdr_map, pgFile *file, uint32 backup_version, b
 	 * The actual number of headers in header file is n+1, last one is a dummy header,
 	 * used for calculation of read_len for actual last header.
 	 */
-	read_len = (file->n_headers+1) * sizeof(BackupPageHeader2);
+	read_len = (file->n_headers+1) * sizeof(BackupPageHeader2_v1);
 
 	/* allocate memory for compressed headers */
 	zheaders = pgut_malloc(file->hdr_size);

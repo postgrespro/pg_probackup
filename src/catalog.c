@@ -2340,6 +2340,7 @@ pgBackupWriteControl(FILE *out, pgBackup *backup, bool utc)
 		fio_fprintf(out, "program-version = %s\n", backup->program_version);
 	if (backup->server_version[0] != '\0')
 		fio_fprintf(out, "server-version = %s\n", backup->server_version);
+	fio_fprintf(out,"large-file = %u\n",backup->large_file);
 
 	fio_fprintf(out, "\n#Result backup info\n");
 	fio_fprintf(out, "timelineid = %d\n", backup->tli);
@@ -2568,7 +2569,7 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 			len += sprintf(line+len, ",\"linked\":\"%s\"", file->linked);
 
 		if (file->n_blocks > 0)
-			len += sprintf(line+len, ",\"n_blocks\":\"%ld\"", file->n_blocks);
+			len += sprintf(line+len, ",\"n_blocks\":\"" INT64_FORMAT "\"", file->n_blocks);
 
 		if (file->n_headers > 0)
 		{
@@ -2632,6 +2633,7 @@ readBackupControlFile(const char *path)
 	char	   *merge_dest_backup = NULL;
 	char	   *program_version = NULL;
 	char	   *server_version = NULL;
+	bool       large_file = false;
 	char	   *compress_alg = NULL;
 	int			parsed_options;
 
@@ -2667,6 +2669,7 @@ readBackupControlFile(const char *path)
 		{'s', 0, "external-dirs",		&backup->external_dir_str, SOURCE_FILE_STRICT},
 		{'s', 0, "note",				&backup->note, SOURCE_FILE_STRICT},
 		{'u', 0, "content-crc",			&backup->content_crc, SOURCE_FILE_STRICT},
+		{'b',0, "large-file",			&large_file,SOURCE_FILE_STRICT},
 		{0}
 	};
 
@@ -2780,6 +2783,7 @@ readBackupControlFile(const char *path)
 	if (compress_alg)
 		backup->compress_alg = parse_compress_alg(compress_alg);
 
+	backup->large_file = large_file;
 	return backup;
 }
 
@@ -2936,6 +2940,7 @@ pgBackupInit(pgBackup *backup)
 	backup->files = NULL;
 	backup->note = NULL;
 	backup->content_crc = 0;
+	backup->large_file = true;
 }
 
 /* free pgBackup object */

@@ -1085,7 +1085,7 @@ merge_files(void *arg)
 				tmp_file->n_headers = file->n_headers;
 				headers = get_data_file_headers(&(arguments->full_backup->hdr_map), file,
 						parse_program_version(arguments->full_backup->program_version),
-						true);
+						true, arguments->full_backup->large_file);
 
 				/* sanity */
 				if (!headers && file->n_headers > 0)
