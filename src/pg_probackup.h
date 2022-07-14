@@ -267,7 +267,7 @@ typedef struct pgFile
 	Oid		relOid;			/* relOid extracted from path, if applicable */
 	ForkName   forkName;	/* forkName extracted from path, if applicable */
 	int		segno;			/* Segment number for ptrack */
-	int		n_blocks;		/* number of blocks in the data file in data directory */
+	int64		n_blocks;		/* number of blocks in the data file in data directory */
 	bool	is_cfs;			/* Flag to distinguish files compressed by CFS*/
 	int		external_dir_num;	/* Number of external directory. 0 if not external */
 	bool	exists_in_prev;		/* Mark files, both data and regular, that exists in previous backup */
@@ -677,8 +677,8 @@ typedef struct BackupPageHeader
 typedef struct BackupPageHeader2
 {
 	XLogRecPtr  lsn;
-	int32	    block;			 /* block number */
-	int32       pos;             /* position in backup file */
+	int64	    block;			 /* block number */
+	int64       pos;             /* position in backup file */
 	uint16      checksum;
 } BackupPageHeader2;
 
@@ -1115,9 +1115,9 @@ extern bool create_empty_file(fio_location from_location, const char *to_root,
 							  fio_location to_location, pgFile *file);
 
 extern PageState *get_checksum_map(const char *fullpath, uint32 checksum_version,
-								int n_blocks, XLogRecPtr dest_stop_lsn, BlockNumber segmentno);
+								int64 n_blocks, XLogRecPtr dest_stop_lsn, BlockNumber segmentno);
 extern datapagemap_t *get_lsn_map(const char *fullpath, uint32 checksum_version,
-								  int n_blocks, XLogRecPtr shift_lsn, BlockNumber segmentno);
+								  int64 n_blocks, XLogRecPtr shift_lsn, BlockNumber segmentno);
 extern bool validate_file_pages(pgFile *file, const char *fullpath, XLogRecPtr stop_lsn,
 							    uint32 checksum_version, uint32 backup_version, HeaderMap *hdr_map);
 

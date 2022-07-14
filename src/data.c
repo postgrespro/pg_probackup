@@ -300,7 +300,7 @@ prepare_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 	while (!page_is_valid && try_again--)
 	{
 		/* read the block */
-		int read_len = fio_pread(in, page, blknum * BLCKSZ);
+		int read_len = fio_pread(in, page, ((int64)blknum) * BLCKSZ);
 
 		/* The block could have been truncated. It is fine. */
 		if (read_len == 0)
@@ -609,7 +609,7 @@ backup_data_file(pgFile *file, const char *from_fullpath, const char *to_fullpat
 			elog(ERROR, "Cannot read file \"%s\"", from_fullpath);
 	}
 
-	file->read_size = rc * BLCKSZ;
+	file->read_size = ((int64)rc) * BLCKSZ;
 
 	/* refresh n_blocks for FULL and DELTA */
 	if (backup_mode == BACKUP_MODE_FULL ||
@@ -758,7 +758,7 @@ catchup_data_file(pgFile *file, const char *from_fullpath, const char *to_fullpa
 			elog(ERROR, "Cannot read file \"%s\"", from_fullpath);
 	}
 
-	file->read_size = rc * BLCKSZ;
+	file->read_size = ((int64)rc) * BLCKSZ;
 
 	/* Determine that file didn`t changed in case of incremental catchup */
 	if (backup_mode != BACKUP_MODE_FULL &&
@@ -1072,7 +1072,7 @@ restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_vers
 			if (fio_fseek(out, 0) < 0)
 				elog(ERROR, "Cannot seek to the start of file \"%s\": %s", to_fullpath, strerror(errno));
 
-			if (fio_ftruncate(out, blknum * BLCKSZ) != 0)
+			if (fio_ftruncate(out, ((int64)blknum) * BLCKSZ) != 0)
 				elog(ERROR, "Cannot truncate file \"%s\": %s", to_fullpath, strerror(errno));
 
 			break;
@@ -1123,7 +1123,7 @@ restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_vers
 			cur_pos_in != headers[n_hdr].pos)
 		{
 			if (fseek(in, headers[n_hdr].pos, SEEK_SET) != 0)
-				elog(ERROR, "Cannot seek to offset %u of \"%s\": %s",
+				elog(ERROR, "Cannot seek to offset %ld of \"%s\": %s",
 					headers[n_hdr].pos, from_fullpath, strerror(errno));
 
 			cur_pos_in = headers[n_hdr].pos;
@@ -1158,7 +1158,7 @@ restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_vers
 		 * When restoring file from FULL backup, pages are written sequentially,
 		 * so there is no need to issue fseek for every page.
 		 */
-		write_pos = blknum * BLCKSZ;
+		write_pos = ((int64)blknum) * BLCKSZ;
 
 		if (cur_pos_out != write_pos)
 		{
@@ -1742,7 +1742,7 @@ validate_file_pages(pgFile *file, const char *fullpath, XLogRecPtr stop_lsn,
 					elog(ERROR, "Cannot seek block %u of \"%s\": %s",
 						blknum, fullpath, strerror(errno));
 				else
-					elog(INFO, "Seek to %u", headers[n_hdr].pos);
+					elog(INFO, "Seek to %ld", headers[n_hdr].pos);
 
 				cur_pos_in = headers[n_hdr].pos;
 			}
@@ -1879,7 +1879,7 @@ validate_file_pages(pgFile *file, const char *fullpath, XLogRecPtr stop_lsn,
 /* read local data file and construct map with block checksums */
 PageState*
 get_checksum_map(const char *fullpath, uint32 checksum_version,
-							int n_blocks, XLogRecPtr dest_stop_lsn, BlockNumber segmentno)
+							int64 n_blocks, XLogRecPtr dest_stop_lsn, BlockNumber segmentno)
 {
 	PageState  *checksum_map = NULL;
 	FILE       *in = NULL;
@@ -1894,7 +1894,7 @@ get_checksum_map(const char *fullpath, uint32 checksum_version,
 
 	/* truncate up to blocks */
 	if (ftruncate(fileno(in), n_blocks * BLCKSZ) != 0)
-		elog(ERROR, "Cannot truncate file to blknum %u \"%s\": %s",
+		elog(ERROR, "Cannot truncate file to blknum %ld \"%s\": %s",
 				n_blocks, fullpath, strerror(errno));
 
 	setvbuf(in, in_buf, _IOFBF, STDIO_BUFSIZE);
@@ -1948,7 +1948,7 @@ get_checksum_map(const char *fullpath, uint32 checksum_version,
 /* return bitmap of valid blocks, bitmap is empty, then NULL is returned */
 datapagemap_t *
 get_lsn_map(const char *fullpath, uint32 checksum_version,
-			int n_blocks, XLogRecPtr shift_lsn, BlockNumber segmentno)
+			int64 n_blocks, XLogRecPtr shift_lsn, BlockNumber segmentno)
 {
 	FILE          *in = NULL;
 	BlockNumber	   blknum = 0;
@@ -1965,7 +1965,7 @@ get_lsn_map(const char *fullpath, uint32 checksum_version,
 
 	/* truncate up to blocks */
 	if (ftruncate(fileno(in), n_blocks * BLCKSZ) != 0)
-		elog(ERROR, "Cannot truncate file to blknum %u \"%s\": %s",
+		elog(ERROR, "Cannot truncate file to blknum %ld \"%s\": %s",
 				n_blocks, fullpath, strerror(errno));
 
 	setvbuf(in, in_buf, _IOFBF, STDIO_BUFSIZE);
@@ -2296,9 +2296,9 @@ copy_pages(const char *to_fullpath, const char *from_fullpath,
 
 		else if (rc == PageIsOk)
 		{
-			if (fseek(out, blknum * BLCKSZ, SEEK_SET) != 0)
-				elog(ERROR, "Cannot seek to position %u in destination file \"%s\": %s",
-					 blknum * BLCKSZ, to_fullpath, strerror(errno));
+			if (fseek(out, ((int64)blknum) * BLCKSZ, SEEK_SET) != 0)
+				elog(ERROR, "Cannot seek to position %ld in destination file \"%s\": %s",
+					 ((int64)blknum) * BLCKSZ, to_fullpath, strerror(errno));
 
 			if (write_page(file, out, curr_page) != BLCKSZ)
 				elog(ERROR, "File: \"%s\", cannot write at block %u: %s",

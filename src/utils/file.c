@@ -2138,7 +2138,7 @@ fio_copy_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
 
 			COMP_FILE_CRC32(true, file->crc, buf, hdr.size);
 
-			if (fio_fseek(out, blknum * BLCKSZ) < 0)
+			if (fio_fseek(out, ((int64)blknum) * BLCKSZ) < 0)
 			{
 				elog(ERROR, "Cannot seek block %u of \"%s\": %s",
 					blknum, to_fullpath, strerror(errno));
@@ -2196,7 +2196,7 @@ fio_send_pages_impl(int out, char* buf)
 	datapagemap_iterator_t *iter = NULL;
 	/* page headers */
 	int32       hdr_num = -1;
-	int32       cur_pos_out = 0;
+	int64       cur_pos_out = 0;
 	BackupPageHeader2 *headers = NULL;
 
 	/* open source file */

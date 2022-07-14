@@ -1117,7 +1117,7 @@ get_backup_filelist(pgBackup *backup, bool strict)
 			file->segno = (int) segno;
 
 		if (get_control_value_int64(buf, "n_blocks", &n_blocks, false))
-			file->n_blocks = (int) n_blocks;
+			file->n_blocks = (int64) n_blocks;
 
 		if (get_control_value_int64(buf, "n_headers", &n_headers, false))
 			file->n_headers = (int) n_headers;
@@ -2568,7 +2568,7 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 			len += sprintf(line+len, ",\"linked\":\"%s\"", file->linked);
 
 		if (file->n_blocks > 0)
-			len += sprintf(line+len, ",\"n_blocks\":\"%i\"", file->n_blocks);
+			len += sprintf(line+len, ",\"n_blocks\":\"%ld\"", file->n_blocks);
 
 		if (file->n_headers > 0)
 		{
