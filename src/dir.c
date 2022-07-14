@@ -11,6 +11,7 @@
 #include <assert.h>
 #include "pg_probackup.h"
 #include "utils/file.h"
+#include <fo_obj.h>
 
 
 #if PG_VERSION_NUM < 110000
@@ -24,6 +25,20 @@
 
 #include "utils/configuration.h"
 
+// Directory object hierarchy declaration
+typedef struct pioDir {
+	const char *path;
+} pioDir;
+
+typedef struct pioLocalDir {
+	pioDir p;
+} pioLocalDir;
+
+typedef struct pioRemoteDir {
+	pioDir p;
+} pioRemoteDir;
+
+typedef struct 
 /*
  * The contents of these directories are removed or recreated during server
  * start so they are not included in backups.  The directories themselves are
@@ -542,6 +557,46 @@ dir_list_file(parray *files, const char *root, bool exclude, bool follow_symlink
 		pgFileFree(file);
 }
 
+void
+dir_list_file_pio(parray *files, const char *root, bool exclude, bool follow_symlink,
+			  bool add_root, bool backup_logs, bool skip_hidden, int external_dir_num,
+			  fio_location location)
+{
+	FOBJ_FUNC_ARP();
+	pioDir_i root;
+	struct stat st;
+	err_i err = $noerr(); 
+	pioDirve_i db_drive = pioDirveForLocation(FIO_DB_HOST);
+	pioDrive_i backup_drive = pioDriveForLocation(FIO_BACKUP_HOST);
+	
+	st = $i(pioStat, db_drive, .path = root, .follow_symlink = follow_symlink, .err = &err);
+	
+	if ($haserr(err)) {
+		/* For external directory this is not ok */
+		if (external_dir_num > 0)
+			elog(ERROR, "External directory is not found: \"%s\"", root);
+		else
+			return;
+	}
+	
+	if (!S_ISDIR(st->st_mode)) {
+		if (external_dir_num > 0)
+			elog(ERROR, " --external-dirs option \"%s\": directory or symbolic link expected",
+						root);
+			else
+				elog(WARNING, "Skip \"%s\": unexpected file format", root);
+		return;
+	}
+
+	if (add_root)
+		parray_append(files, st);
+
+	dir_list_file_internal_pio(files, file, root, exclude, follow_symlink,
+						   backup_logs, skip_hidden, external_dir_num, location);
+}
+
+
+
 #define CHECK_FALSE				0
 #define CHECK_TRUE				1
 #define CHECK_EXCLUDE_FALSE		2
@@ -790,6 +845,108 @@ dir_list_file_internal(parray *files, pgFile *parent, const char *parent_dir,
 	while ((dent = fio_readdir(dir)))
 	{
 		pgFile	   *file;
+		char		child[MAXPGPATH];
+		char		rel_child[MAXPGPATH];
+		char		check_res;
+
+		join_path_components(child, parent_dir, dent->d_name);
+		join_path_components(rel_child, parent->rel_path, dent->d_name);
+
+		file = pgFileNew(child, rel_child, follow_symlink, external_dir_num,
+						 location);
+		if (file == NULL)
+			continue;
+
+		/* Skip entries point current dir or parent dir */
+		if (S_ISDIR(file->mode) &&
+			(strcmp(dent->d_name, ".") == 0 || strcmp(dent->d_name, "..") == 0))
+		{
+			pgFileFree(file);
+			continue;
+		}
+
+		/* skip hidden files and directories */
+		if (skip_hidden && file->name[0] == '.')
+		{
+			elog(WARNING, "Skip hidden file: '%s'", child);
+			pgFileFree(file);
+			continue;
+		}
+
+		/*
+		 * Add only files, directories and links. Skip sockets and other
+		 * unexpected file formats.
+		 */
+		if (!S_ISDIR(file->mode) && !S_ISREG(file->mode))
+		{
+			elog(WARNING, "Skip '%s': unexpected file format", child);
+			pgFileFree(file);
+			continue;
+		}
+
+		if (exclude)
+		{
+			check_res = dir_check_file(file, backup_logs);
+			if (check_res == CHECK_FALSE)
+			{
+				/* Skip */
+				pgFileFree(file);
+				continue;
+			}
+			else if (check_res == CHECK_EXCLUDE_FALSE)
+			{
+				/* We add the directory itself which content was excluded */
+				parray_append(files, file);
+				continue;
+			}
+		}
+
+		parray_append(files, file);
+
+		/*
+		 * If the entry is a directory call dir_list_file_internal()
+		 * recursively.
+		 */
+		if (S_ISDIR(file->mode))
+			dir_list_file_internal(files, file, child, exclude, follow_symlink,
+								   backup_logs, skip_hidden, external_dir_num, location);
+	}
+
+	if (errno && errno != ENOENT)
+	{
+		int			errno_tmp = errno;
+		fio_closedir(dir);
+		elog(ERROR, "Cannot read directory \"%s\": %s",
+				parent_dir, strerror(errno_tmp));
+	}
+	fio_closedir(dir);
+}
+
+static void
+dir_list_file_internal_pio(parray *files, struct stat parent, const char *parent_dir,
+					   bool exclude, bool follow_symlink, bool backup_logs,
+					   bool skip_hidden, int external_dir_num, fio_location location)
+{
+	pioDir_i dir;
+	err_i err;
+
+	if (!S_ISDIR(parent.st_mode))
+		elog(ERROR, "\"%s\" is not a directory", parent_dir);
+
+	/* Open directory and list contents */
+	dir = $i(pioOpenDir, db_drive, parent_dir, .err = &err);
+	if ($haserr(err)) {
+		if (getErrno(err) == ENOENT) {
+			/* Maybe the directory was removed */
+			return;
+		}
+		elog(ERROR, "Cannot open directory \"%s\": %s",
+				parent_dir, strerror(errno));
+	}
+
+	errno = 0;
+	while (dent = $i(pioReadDir, dir, .err = &err)) {
+		struct stat	st;
 		char		child[MAXPGPATH];
 		char		rel_child[MAXPGPATH];
 		char		check_res;
