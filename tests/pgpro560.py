@@ -84,20 +84,12 @@ class CheckSystemID(ProbackupTest, unittest.TestCase):
                 "Expecting Error because of SYSTEM ID mismatch.\n "
                 "Output: {0} \n CMD: {1}".format(repr(self.output), self.cmd))
         except ProbackupException as e:
-            if self.get_version(node1) > 90600:
-                self.assertTrue(
-                    'ERROR: Backup data directory was '
-                    'initialized for system id' in e.message and
-                    'but connected instance system id is' in e.message,
-                    '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
-                        repr(e.message), self.cmd))
-            else:
-                self.assertIn(
-                    'ERROR: System identifier mismatch. '
-                    'Connected PostgreSQL instance has system id',
-                    e.message,
-                    '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
-                        repr(e.message), self.cmd))
+            self.assertTrue(
+                'ERROR: Backup data directory was '
+                'initialized for system id' in e.message and
+                'but connected instance system id is' in e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
 
         sleep(1)
 
@@ -111,20 +103,12 @@ class CheckSystemID(ProbackupTest, unittest.TestCase):
                 "Expecting Error because of of SYSTEM ID mismatch.\n "
                 "Output: {0} \n CMD: {1}".format(repr(self.output), self.cmd))
         except ProbackupException as e:
-            if self.get_version(node1) > 90600:
-                self.assertTrue(
-                    'ERROR: Backup data directory was initialized '
-                    'for system id' in e.message and
-                    'but connected instance system id is' in e.message,
-                    '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
-                        repr(e.message), self.cmd))
-            else:
-                self.assertIn(
-                    'ERROR: System identifier mismatch. '
-                    'Connected PostgreSQL instance has system id',
-                    e.message,
-                    '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
-                        repr(e.message), self.cmd))
+            self.assertTrue(
+                'ERROR: Backup data directory was initialized '
+                'for system id' in e.message and
+                'but connected instance system id is' in e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)

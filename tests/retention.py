@@ -1575,11 +1575,6 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         self.show_pb(backup_dir, 'node')[1]['id']
 
-        if self.get_version(node) < 90600:
-            node.safe_psql(
-                'postgres',
-                'SELECT pg_catalog.pg_stop_backup()')
-
         # Take DELTA backup
         self.backup_node(
             backup_dir, 'node', node, backup_type='delta',
@@ -1598,10 +1593,6 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'])
-
-        if self.get_version(node) < 90600:
-            self.del_test_dir(module_name, fname)
-            return unittest.skip('Skipped because ptrack support is disabled')
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
@@ -1648,10 +1639,6 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             initdb_params=['--data-checksums'])
-
-        if self.get_version(node) < 90600:
-            self.del_test_dir(module_name, fname)
-            return unittest.skip('Skipped because ptrack support is disabled')
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)

@@ -32,8 +32,6 @@ env:
     - PG_VERSION=12 PG_BRANCH=REL_12_STABLE PTRACK_PATCH_PG_BRANCH=REL_12_STABLE
     - PG_VERSION=11 PG_BRANCH=REL_11_STABLE PTRACK_PATCH_PG_BRANCH=REL_11_STABLE
     - PG_VERSION=10 PG_BRANCH=REL_10_STABLE
-    - PG_VERSION=9.6 PG_BRANCH=REL9_6_STABLE
-    - PG_VERSION=9.5 PG_BRANCH=REL9_5_STABLE
 #    - PG_VERSION=13 PG_BRANCH=REL_13_STABLE PTRACK_PATCH_PG_BRANCH=OFF MODE=archive
 #    - PG_VERSION=13 PG_BRANCH=REL_13_STABLE PTRACK_PATCH_PG_BRANCH=REL_13_STABLE MODE=backup
 #    - PG_VERSION=13 PG_BRANCH=REL_13_STABLE PTRACK_PATCH_PG_BRANCH=REL_13_STABLE MODE=catchup
@@ -52,8 +50,6 @@ env:
 jobs:
     allow_failures:
         - if: env(PG_BRANCH) = master
-        - if: env(PG_BRANCH) = REL9_6_STABLE
-        - if: env(PG_BRANCH) = REL9_5_STABLE
 #        - if: env(MODE) IN (archive, backup, delta, locking, merge, replica, retention, restore)
 
 # Only run CI for master branch commits to limit our travis usage

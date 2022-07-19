@@ -185,9 +185,6 @@ catchup_preflight_checks(PGNodeInfo *source_node_info, PGconn *source_conn,
 			elog(ERROR, "Ptrack is disabled");
 	}
 
-	if (current.from_replica && exclusive_backup)
-		elog(ERROR, "Catchup from standby is only available for PostgreSQL >= 9.6");
-
 	/* check that we don't overwrite tablespace in source pgdata */
 	catchup_check_tablespaces_existance_in_tbsmapping(source_conn);
 
@@ -1012,13 +1009,13 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 		pg_silent_client_messages(source_conn);
 
 		/* Execute pg_stop_backup using PostgreSQL connection */
-		pg_stop_backup_send(source_conn, source_node_info.server_version, current.from_replica, exclusive_backup, &stop_backup_query_text);
+		pg_stop_backup_send(source_conn, source_node_info.server_version, current.from_replica, &stop_backup_query_text);
 
 		/*
 		 * Wait for the result of pg_stop_backup(), but no longer than
 		 * archive_timeout seconds
 		 */
-		pg_stop_backup_consume(source_conn, source_node_info.server_version, exclusive_backup, timeout, stop_backup_query_text, &stop_backup_result);
+		pg_stop_backup_consume(source_conn, source_node_info.server_version, timeout, stop_backup_query_text, &stop_backup_result);
 
 		/* Cleanup */
 		pg_free(stop_backup_query_text);
@@ -1076,12 +1073,10 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 	}
 
 	/*
-	 * In case of backup from replica >= 9.6 we must fix minRecPoint
+	 * In case of backup from replica we must fix minRecPoint
 	 */
-	if (current.from_replica && !exclusive_backup)
-	{
+	if (current.from_replica)
 		set_min_recovery_point(source_pg_control_file, dest_pgdata, current.stop_lsn);
-	}
 
 	/* close ssh session in main thread */
 	fio_disconnect();

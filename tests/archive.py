@@ -84,11 +84,6 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
                 'checkpoint_timeout': '30s'}
             )
 
-        if self.get_version(node) < self.version_to_num('9.6.0'):
-            self.del_test_dir(module_name, fname)
-            return unittest.skip(
-                'Skipped because pg_control_checkpoint() is not supported in PG 9.5')
-
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -264,15 +259,9 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         with open(log_file, 'r') as f:
             log_content = f.read()
 
-        # in PG =< 9.6 pg_stop_backup always wait
-        if self.get_version(node) < 100000:
-            self.assertIn(
-                "ERROR: pg_stop_backup doesn't answer in 60 seconds, cancel it",
-                log_content)
-        else:
-            self.assertIn(
-                "ERROR: WAL segment 000000010000000000000003 could not be archived in 60 seconds",
-                log_content)
+        self.assertIn(
+            "ERROR: WAL segment 000000010000000000000003 could not be archived in 60 seconds",
+            log_content)
 
         log_file = os.path.join(node.logs_dir, 'postgresql.log')
         with open(log_file, 'r') as f:
@@ -418,12 +407,8 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         self.assertNotIn(
             'pg_probackup archive-push completed successfully', log_content)
 
-        if self.get_version(node) < 100000:
-            wal_src = os.path.join(
-                node.data_dir, 'pg_xlog', '000000010000000000000001')
-        else:
-            wal_src = os.path.join(
-                node.data_dir, 'pg_wal', '000000010000000000000001')
+        wal_src = os.path.join(
+            node.data_dir, 'pg_wal', '000000010000000000000001')
 
         if self.archive_compress:
             with open(wal_src, 'rb') as f_in, gzip.open(
@@ -555,16 +540,10 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             "postgres",
             "INSERT INTO t1 VALUES (1) RETURNING (xmin)").decode('utf-8').rstrip()
 
-        if self.get_version(node) < 100000:
-            filename_orig = node.safe_psql(
-                "postgres",
-                "SELECT file_name "
-                "FROM pg_xlogfile_name_offset(pg_current_xlog_location());").rstrip()
-        else:
-            filename_orig = node.safe_psql(
-                "postgres",
-                "SELECT file_name "
-                "FROM pg_walfile_name_offset(pg_current_wal_flush_lsn());").rstrip()
+        filename_orig = node.safe_psql(
+            "postgres",
+            "SELECT file_name "
+            "FROM pg_walfile_name_offset(pg_current_wal_flush_lsn());").rstrip()
 
         filename_orig = filename_orig.decode('utf-8')
 
@@ -634,16 +613,10 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             "postgres",
             "create table t2()")
 
-        if self.get_version(node) < 100000:
-            filename_orig = node.safe_psql(
-                "postgres",
-                "SELECT file_name "
-                "FROM pg_xlogfile_name_offset(pg_current_xlog_location());").rstrip()
-        else:
-            filename_orig = node.safe_psql(
-                "postgres",
-                "SELECT file_name "
-                "FROM pg_walfile_name_offset(pg_current_wal_flush_lsn());").rstrip()
+        filename_orig = node.safe_psql(
+            "postgres",
+            "SELECT file_name "
+            "FROM pg_walfile_name_offset(pg_current_wal_flush_lsn());").rstrip()
 
         filename_orig = filename_orig.decode('utf-8')
 
@@ -707,11 +680,6 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
                 'archive_timeout': '10s',
                 'checkpoint_timeout': '30s',
                 'max_wal_size': '32MB'})
-
-        if self.get_version(master) < self.version_to_num('9.6.0'):
-            self.del_test_dir(module_name, fname)
-            return unittest.skip(
-                'Skipped because backup from replica is not supported in PG 9.5')
 
         self.init_pb(backup_dir)
         # ADD INSTANCE 'MASTER'
@@ -839,11 +807,6 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
                 'archive_timeout': '10s'}
             )
 
-        if self.get_version(master) < self.version_to_num('9.6.0'):
-            self.del_test_dir(module_name, fname)
-            return unittest.skip(
-                'Skipped because backup from replica is not supported in PG 9.5')
-
         replica = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'replica'))
         replica.cleanup()
@@ -921,9 +884,6 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             set replica with archiving,
             make sure that archiving on both node is working.
         """
-        if self.pg_config_version < self.version_to_num('9.6.0'):
-            return unittest.skip('You need PostgreSQL >= 9.6 for this test')
-
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         master = self.make_simple_node(
@@ -933,11 +893,6 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             pg_options={
                 'checkpoint_timeout': '30s',
                 'archive_timeout': '10s'})
-
-        if self.get_version(master) < self.version_to_num('9.6.0'):
-            self.del_test_dir(module_name, fname)
-            return unittest.skip(
-                'Skipped because backup from replica is not supported in PG 9.5')
 
         replica = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'replica'))
@@ -1115,10 +1070,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
-        if self.get_version(node) < 100000:
-            pg_receivexlog_path = self.get_bin_path('pg_receivexlog')
-        else:
-            pg_receivexlog_path = self.get_bin_path('pg_receivewal')
+        pg_receivexlog_path = self.get_bin_path('pg_receivewal')
 
         pg_receivexlog = self.run_binary(
             [
@@ -1188,11 +1140,8 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
-        if self.get_version(node) < self.version_to_num('10.0'):
-            return unittest.skip('You need PostgreSQL >= 10 for this test')
-        else:
-            pg_receivexlog_path = self.get_bin_path('pg_receivewal')
 
+        pg_receivexlog_path = self.get_bin_path('pg_receivewal')
         pg_receivexlog = self.run_binary(
             [
                 pg_receivexlog_path, '-p', str(node.port), '--synchronous',
@@ -1268,11 +1217,6 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             pg_options={
                 'archive_timeout': '30s',
                 'checkpoint_timeout': '30s'})
-
-        if self.get_version(master) < self.version_to_num('9.6.0'):
-            self.del_test_dir(module_name, fname)
-            return unittest.skip(
-                'Skipped because backup from replica is not supported in PG 9.5')
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'master', master)
@@ -1930,10 +1874,6 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         """
         check that archive-push works correct with symlinked waldir
         """
-        if self.pg_config_version < self.version_to_num('10.0'):
-            return unittest.skip(
-                'Skipped because waldir outside pgdata is supported since PG 10')
-
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         external_wal_dir = os.path.join(self.tmp_path, module_name, fname, 'ext_wal_dir')
@@ -2041,10 +1981,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         self.set_archiving(backup_dir, 'node', node, log_level='verbose')
         node.slow_start()
 
-        if self.get_version(node) < 100000:
-            pg_receivexlog_path = self.get_bin_path('pg_receivexlog')
-        else:
-            pg_receivexlog_path = self.get_bin_path('pg_receivewal')
+        pg_receivexlog_path = self.get_bin_path('pg_receivewal')
 
         # "pg_receivewal --create-slot --slot archive_slot --if-not-exists "
         # "&& pg_receivewal --synchronous -Z 1 /tmp/wal --slot archive_slot --no-loop"
@@ -2167,22 +2104,13 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'])
 
-        if self.get_version(node) < self.version_to_num('9.6.0'):
-            self.del_test_dir(module_name, fname)
-            return unittest.skip(
-                'Skipped because backup from replica is not supported in PG 9.5')
-
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
 
         node.slow_start()
 
-        if self.get_version(node) < 100000:
-            app_name = 'pg_receivexlog'
-            pg_receivexlog_path = self.get_bin_path('pg_receivexlog')
-        else:
-            app_name = 'pg_receivewal'
-            pg_receivexlog_path = self.get_bin_path('pg_receivewal')
+        app_name = 'pg_receivewal'
+        pg_receivexlog_path = self.get_bin_path('pg_receivewal')
 
         cmdline = [
             pg_receivexlog_path, '-p', str(node.port), '--synchronous',
@@ -2375,11 +2303,6 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
-
-        if self.get_version(node) < self.version_to_num('9.6.0'):
-            self.del_test_dir(module_name, fname)
-            return unittest.skip(
-                'Skipped because backup from replica is not supported in PG 9.5')
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -2600,16 +2523,10 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             "postgres",
             "create table t1()")
 
-        if self.get_version(node) < 100000:
-            filename = node.safe_psql(
-                "postgres",
-                "SELECT file_name "
-                "FROM pg_xlogfile_name_offset(pg_current_xlog_location())").rstrip()
-        else:
-            filename = node.safe_psql(
-                "postgres",
-                "SELECT file_name "
-                "FROM pg_walfile_name_offset(pg_current_wal_flush_lsn())").rstrip()
+        filename = node.safe_psql(
+            "postgres",
+            "SELECT file_name "
+            "FROM pg_walfile_name_offset(pg_current_wal_flush_lsn())").rstrip()
 
         filename = filename.decode('utf-8')
 
@@ -2624,16 +2541,10 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             "postgres",
             "create table t2()")
 
-        if self.get_version(node) < 100000:
-            filename = node.safe_psql(
-                "postgres",
-                "SELECT file_name "
-                "FROM pg_xlogfile_name_offset(pg_current_xlog_location())").rstrip()
-        else:
-            filename = node.safe_psql(
-                "postgres",
-                "SELECT file_name "
-                "FROM pg_walfile_name_offset(pg_current_wal_flush_lsn())").rstrip()
+        filename = node.safe_psql(
+            "postgres",
+            "SELECT file_name "
+            "FROM pg_walfile_name_offset(pg_current_wal_flush_lsn())").rstrip()
 
         filename = filename.decode('utf-8')
 
@@ -2648,16 +2559,10 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             "postgres",
             "create table t3()")
 
-        if self.get_version(node) < 100000:
-            filename = node.safe_psql(
-                "postgres",
-                "SELECT file_name "
-                "FROM pg_xlogfile_name_offset(pg_current_xlog_location())").rstrip()
-        else:
-            filename = node.safe_psql(
-                "postgres",
-                "SELECT file_name "
-                "FROM pg_walfile_name_offset(pg_current_wal_flush_lsn())").rstrip()
+        filename = node.safe_psql(
+            "postgres",
+            "SELECT file_name "
+            "FROM pg_walfile_name_offset(pg_current_wal_flush_lsn())").rstrip()
 
         filename = filename.decode('utf-8')
 
@@ -2672,16 +2577,10 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             "postgres",
             "create table t4()")
 
-        if self.get_version(node) < 100000:
-            filename = node.safe_psql(
-                "postgres",
-                "SELECT file_name "
-                "FROM pg_xlogfile_name_offset(pg_current_xlog_location())").rstrip()
-        else:
-            filename = node.safe_psql(
-                "postgres",
-                "SELECT file_name "
-                "FROM pg_walfile_name_offset(pg_current_wal_flush_lsn())").rstrip()
+        filename = node.safe_psql(
+            "postgres",
+            "SELECT file_name "
+            "FROM pg_walfile_name_offset(pg_current_wal_flush_lsn())").rstrip()
 
         filename = filename.decode('utf-8')
 

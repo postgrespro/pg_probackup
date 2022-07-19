@@ -782,8 +782,6 @@ extern bool		smooth_checkpoint;
 /* remote probackup options */
 extern char* remote_agent;
 
-extern bool exclusive_backup;
-
 /* delete options */
 extern bool		delete_wal;
 extern bool		delete_expired;
@@ -1273,9 +1271,9 @@ extern void pg_start_backup(const char *label, bool smooth, pgBackup *backup,
 							PGNodeInfo *nodeInfo, PGconn *conn);
 extern void pg_silent_client_messages(PGconn *conn);
 extern void pg_create_restore_point(PGconn *conn, time_t backup_start_time);
-extern void pg_stop_backup_send(PGconn *conn, int server_version, bool is_started_on_replica, bool is_exclusive, char **query_text);
+extern void pg_stop_backup_send(PGconn *conn, int server_version, bool is_started_on_replica, char **query_text);
 extern void pg_stop_backup_consume(PGconn *conn, int server_version,
-		bool is_exclusive, uint32 timeout, const char *query_text,
+		uint32 timeout, const char *query_text,
 		PGStopBackupResult *result);
 extern void pg_stop_backup_write_file_helper(const char *path, const char *filename, const char *error_msg_filename,
 		const void *data, size_t len, parray *file_list);

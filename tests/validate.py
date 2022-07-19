@@ -1757,14 +1757,9 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             con.commit()
             target_xid = res[0][0]
 
-        if self.get_version(node) < self.version_to_num('10.0'):
-            walfile = node.safe_psql(
-                'postgres',
-                'select pg_xlogfile_name(pg_current_xlog_location())').decode('utf-8').rstrip()
-        else:
-            walfile = node.safe_psql(
-                'postgres',
-                'select pg_walfile_name(pg_current_wal_lsn())').decode('utf-8').rstrip()
+        walfile = node.safe_psql(
+            'postgres',
+            'select pg_walfile_name(pg_current_wal_lsn())').decode('utf-8').rstrip()
 
         if self.archive_compress:
             walfile = walfile + '.gz'
@@ -3506,12 +3501,8 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 
         backup_id = self.backup_node(backup_dir, 'node', node)
 
-        if self.get_version(node) < 100000:
-            pg_resetxlog_path = self.get_bin_path('pg_resetxlog')
-            wal_dir = 'pg_xlog'
-        else:
-            pg_resetxlog_path = self.get_bin_path('pg_resetwal')
-            wal_dir = 'pg_wal'
+        pg_resetxlog_path = self.get_bin_path('pg_resetwal')
+        wal_dir = 'pg_wal'
 
         os.mkdir(
             os.path.join(

@@ -547,13 +547,7 @@ class ProbackupTest(object):
 
     def get_ptrack_bits_per_page_for_fork(self, node, file, size=[]):
 
-        if self.get_pgpro_edition(node) == 'enterprise':
-            if self.get_version(node) < self.version_to_num('10.0'):
-                header_size = 48
-            else:
-                header_size = 24
-        else:
-            header_size = 24
+        header_size = 24
         ptrack_bits_for_fork = []
 
         # TODO: use macro instead of hard coded 8KB
@@ -1517,25 +1511,15 @@ class ProbackupTest(object):
 
     def switch_wal_segment(self, node):
         """
-        Execute pg_switch_wal/xlog() in given node
+        Execute pg_switch_wal() in given node
 
         Args:
             node: an instance of PostgresNode or NodeConnection class
         """
         if isinstance(node, testgres.PostgresNode):
-            if self.version_to_num(
-                node.safe_psql('postgres', 'show server_version').decode('utf-8')
-                    ) >= self.version_to_num('10.0'):
-                node.safe_psql('postgres', 'select pg_switch_wal()')
-            else:
-                node.safe_psql('postgres', 'select pg_switch_xlog()')
+            node.safe_psql('postgres', 'select pg_switch_wal()')
         else:
-            if self.version_to_num(
-                node.execute('show server_version')[0][0]
-                    ) >= self.version_to_num('10.0'):
-                node.execute('select pg_switch_wal()')
-            else:
-                node.execute('select pg_switch_xlog()')
+            node.execute('select pg_switch_wal()')
 
         sleep(1)
 
@@ -1545,12 +1529,8 @@ class ProbackupTest(object):
             'postgres',
             'show server_version').decode('utf-8').rstrip()
 
-        if self.version_to_num(version) >= self.version_to_num('10.0'):
-            master_function = 'pg_catalog.pg_current_wal_lsn()'
-            replica_function = 'pg_catalog.pg_last_wal_replay_lsn()'
-        else:
-            master_function = 'pg_catalog.pg_current_xlog_location()'
-            replica_function = 'pg_catalog.pg_last_xlog_replay_location()'
+        master_function = 'pg_catalog.pg_current_wal_lsn()'
+        replica_function = 'pg_catalog.pg_last_wal_replay_lsn()'
 
         lsn = master.safe_psql(
             'postgres',

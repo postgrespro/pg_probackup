@@ -83,11 +83,7 @@ static char *pgdata_exclude_files[] =
 	"probackup_recovery.conf",
 	"recovery.signal",
 	"standby.signal",
-	NULL
-};
 
-static char *pgdata_exclude_files_non_exclusive[] =
-{
 	/*skip in non-exclusive backup */
 	"backup_label",
 	"tablespace_map",
@@ -571,18 +567,6 @@ dir_check_file(pgFile *file, bool backup_logs)
 	/* Check if we need to exclude file by name */
 	if (S_ISREG(file->mode))
 	{
-		if (!exclusive_backup)
-		{
-			for (i = 0; pgdata_exclude_files_non_exclusive[i]; i++)
-				if (strcmp(file->rel_path,
-						   pgdata_exclude_files_non_exclusive[i]) == 0)
-				{
-					/* Skip */
-					elog(VERBOSE, "Excluding file: %s", file->name);
-					return CHECK_FALSE;
-				}
-		}
-
 		for (i = 0; pgdata_exclude_files[i]; i++)
 			if (strcmp(file->rel_path, pgdata_exclude_files[i]) == 0)
 			{
