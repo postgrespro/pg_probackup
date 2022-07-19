@@ -66,13 +66,7 @@ catchup_init_state(PGNodeInfo	*source_node_info, const char *source_pgdata, cons
 		source_node_info->is_ptrack_enabled = pg_is_ptrack_enabled(source_conn, source_node_info->ptrack_version_num);
 
 	/* Obtain current timeline */
-#if PG_VERSION_NUM >= 90600
 	current.tli = get_current_timeline(source_conn);
-#else
-	/* PG-9.5 */
-	instance_config.pgdata = source_pgdata;
-	current.tli = get_current_timeline_from_control(FIO_DB_HOST, source_pgdata, false);
-#endif
 
 	elog(INFO, "Catchup start, pg_probackup version: %s, "
 			"PostgreSQL version: %s, "
@@ -1033,7 +1027,6 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 	if (!dry_run)
 		wait_wal_and_calculate_stop_lsn(dest_xlog_path, stop_backup_result.lsn, &current);
 
-#if PG_VERSION_NUM >= 90600
 	/* Write backup_label */
 	Assert(stop_backup_result.backup_label_content != NULL);
 	if (!dry_run)
@@ -1061,7 +1054,6 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 		stop_backup_result.tablespace_map_content = NULL;
 		stop_backup_result.tablespace_map_content_len = 0;
 	}
-#endif
 
 	/* wait for end of wal streaming and calculate wal size transfered */
 	if (!dry_run)

@@ -133,12 +133,7 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 	pg_start_backup(label, smooth_checkpoint, &current, nodeInfo, backup_conn);
 
 	/* Obtain current timeline */
-#if PG_VERSION_NUM >= 90600
 	current.tli = get_current_timeline(backup_conn);
-#else
-	/* PG-9.5 */
-	current.tli = get_current_timeline_from_control(FIO_DB_HOST, instance_config.pgdata, false);
-#endif
 
 	/*
 	 * In incremental backup mode ensure that already-validated
@@ -1053,7 +1048,6 @@ pg_start_backup(const char *label, bool smooth, pgBackup *backup,
 
 /*
  * Switch to a new WAL segment. It should be called only for master.
- * For PG 9.5 it should be called only if pguser is superuser.
  */
 void
 pg_switch_wal(PGconn *conn)
@@ -1062,11 +1056,7 @@ pg_switch_wal(PGconn *conn)
 
 	pg_silent_client_messages(conn);
 
-#if PG_VERSION_NUM >= 100000
 	res = pgut_execute(conn, "SELECT pg_catalog.pg_switch_wal()", 0, NULL);
-#else
-	res = pgut_execute(conn, "SELECT pg_catalog.pg_switch_xlog()", 0, NULL);
-#endif
 
 	PQclear(res);
 }

@@ -65,13 +65,8 @@ extern const char  *PROGRAM_EMAIL;
 #define DATABASE_DIR			"database"
 #define BACKUPS_DIR				"backups"
 #define WAL_SUBDIR				"wal"
-#if PG_VERSION_NUM >= 100000
 #define PG_XLOG_DIR				"pg_wal"
 #define PG_LOG_DIR 				"log"
-#else
-#define PG_XLOG_DIR				"pg_xlog"
-#define PG_LOG_DIR 				"pg_log"
-#endif
 #define PG_TBLSPC_DIR			"pg_tblspc"
 #define PG_GLOBAL_DIR			"global"
 #define BACKUP_CONTROL_FILE		"backup.control"
@@ -777,11 +772,8 @@ extern bool		stream_wal;
 extern bool		show_color;
 extern bool		progress;
 extern bool     is_archive_cmd; /* true for archive-{get,push} */
-/* In pre-10 'replication_slot' is defined in receivelog.h */
 extern char	   *replication_slot;
-#if PG_VERSION_NUM >= 100000
 extern bool 	temp_slot;
-#endif
 extern bool perm_slot;
 
 /* backup options */

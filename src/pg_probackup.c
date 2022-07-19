@@ -78,10 +78,8 @@ pid_t       my_pid = 0;
 __thread int  my_thread_num = 1;
 bool		progress = false;
 bool		no_sync = false;
-#if PG_VERSION_NUM >= 100000
 char	   *replication_slot = NULL;
 bool		temp_slot = false;
-#endif
 bool perm_slot = false;
 
 /* backup options */
@@ -205,9 +203,7 @@ static ConfigOption cmd_options[] =
 	{ 'f', 'b', "backup-mode",		opt_backup_mode,	SOURCE_CMD_STRICT },
 	{ 'b', 'C', "smooth-checkpoint", &smooth_checkpoint,	SOURCE_CMD_STRICT },
 	{ 's', 'S', "slot",				&replication_slot,	SOURCE_CMD_STRICT },
-#if PG_VERSION_NUM >= 100000
 	{ 'b', 181, "temp-slot",		&temp_slot,			SOURCE_CMD_STRICT },
-#endif
 	{ 'b', 'P', "perm-slot",	&perm_slot,	SOURCE_CMD_STRICT },
 	{ 'b', 182, "delete-wal",		&delete_wal,		SOURCE_CMD_STRICT },
 	{ 'b', 183, "delete-expired",	&delete_expired,	SOURCE_CMD_STRICT },
@@ -905,14 +901,13 @@ main(int argc, char *argv[])
 					wal_file_name, instanceState->instance_name, instance_config.system_identifier, system_id);
 	}
 
-#if PG_VERSION_NUM >= 100000
 	if (temp_slot && perm_slot)
 		elog(ERROR, "You cannot specify \"--perm-slot\" option with the \"--temp-slot\" option");
 
 	/* if slot name was not provided for temp slot, use default slot name */
 	if (!replication_slot && temp_slot)
 		replication_slot = DEFAULT_TEMP_SLOT_NAME;
-#endif
+
 	if (!replication_slot && perm_slot)
 		replication_slot = DEFAULT_PERMANENT_SLOT_NAME;
 

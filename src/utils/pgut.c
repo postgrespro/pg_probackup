@@ -3,7 +3,7 @@
  * pgut.c
  *
  * Portions Copyright (c) 2009-2013, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
- * Portions Copyright (c) 2017-2021, Postgres Professional
+ * Portions Copyright (c) 2017-2022, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */
@@ -20,11 +20,7 @@
 #include "common/string.h"
 #endif
 
-#if PG_VERSION_NUM >= 100000
 #include "common/connect.h"
-#else
-#include "fe_utils/connect.h"
-#endif
 
 #include <time.h>
 
@@ -94,7 +90,7 @@ prompt_for_password(const char *username)
 		snprintf(message, lengthof(message), "Password for user %s: ", username);
 		password = simple_prompt(message , false);
 	}
-#elif PG_VERSION_NUM >= 100000
+#else
 	password = (char *) pgut_malloc(sizeof(char) * 100 + 1);
 	if (username == NULL)
 		simple_prompt("Password: ", password, 100, false);
@@ -104,17 +100,7 @@ prompt_for_password(const char *username)
 		snprintf(message, lengthof(message), "Password for user %s: ", username);
 		simple_prompt(message, password, 100, false);
 	}
-#else
-	if (username == NULL)
-		password = simple_prompt("Password: ", 100, false);
-	else
-	{
-		char	message[256];
-		snprintf(message, lengthof(message), "Password for user %s: ", username);
-		password = simple_prompt(message, 100, false);
-	}
 #endif
-
 	in_password = false;
 }
 

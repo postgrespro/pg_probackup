@@ -102,11 +102,7 @@ checkControlFile(ControlFileData *ControlFile)
 static void
 digestControlFile(ControlFileData *ControlFile, char *src, size_t size)
 {
-#if PG_VERSION_NUM >= 100000
 	int			ControlFileSize = PG_CONTROL_FILE_SIZE;
-#else
-	int			ControlFileSize = PG_CONTROL_SIZE;
-#endif
 
 	if (size != ControlFileSize)
 		elog(ERROR, "unexpected control file size %d, expected %d",
@@ -127,11 +123,7 @@ writeControlFile(fio_location location, const char *path, ControlFileData *Contr
 	int			fd;
 	char       *buffer = NULL;
 
-#if PG_VERSION_NUM >= 100000
 	int			ControlFileSize = PG_CONTROL_FILE_SIZE;
-#else
-	int			ControlFileSize = PG_CONTROL_SIZE;
-#endif
 
 	/* copy controlFileSize */
 	buffer = pg_malloc0(ControlFileSize);
@@ -207,44 +199,25 @@ get_current_timeline_from_control(fio_location location, const char *pgdata_path
 }
 
 /*
- * Get last check point record ptr from pg_tonrol.
+ * Get last check point record ptr from pg_control.
  */
 XLogRecPtr
 get_checkpoint_location(PGconn *conn)
 {
-#if PG_VERSION_NUM >= 90600
 	PGresult   *res;
 	uint32		lsn_hi;
 	uint32		lsn_lo;
 	XLogRecPtr	lsn;
 
-#if PG_VERSION_NUM >= 100000
 	res = pgut_execute(conn,
 					   "SELECT checkpoint_lsn FROM pg_catalog.pg_control_checkpoint()",
 					   0, NULL);
-#else
-	res = pgut_execute(conn,
-					   "SELECT checkpoint_location FROM pg_catalog.pg_control_checkpoint()",
-					   0, NULL);
-#endif
 	XLogDataFromLSN(PQgetvalue(res, 0, 0), &lsn_hi, &lsn_lo);
 	PQclear(res);
 	/* Calculate LSN */
 	lsn = ((uint64) lsn_hi) << 32 | lsn_lo;
 
 	return lsn;
-#else
-	/* PG-9.5 */
-	char	   *buffer;
-	size_t		size;
-	ControlFileData ControlFile;
-
-	buffer = slurpFile(FIO_DB_HOST, instance_config.pgdata, XLOG_CONTROL_FILE, &size, false);
-	digestControlFile(&ControlFile, buffer, size);
-	pg_free(buffer);
-
-	return ControlFile.checkPoint;
-#endif
 }
 
 uint64
@@ -267,7 +240,6 @@ get_system_identifier(fio_location location, const char *pgdata_path, bool safe)
 uint64
 get_remote_system_identifier(PGconn *conn)
 {
-#if PG_VERSION_NUM >= 90600
 	PGresult   *res;
 	uint64		system_id_conn;
 	char	   *val;
@@ -284,18 +256,6 @@ get_remote_system_identifier(PGconn *conn)
 	PQclear(res);
 
 	return system_id_conn;
-#else
-	/* PG-9.5 */
-	char	   *buffer;
-	size_t		size;
-	ControlFileData ControlFile;
-
-	buffer = slurpFile(FIO_DB_HOST, instance_config.pgdata, XLOG_CONTROL_FILE, &size, false);
-	digestControlFile(&ControlFile, buffer, size);
-	pg_free(buffer);
-
-	return ControlFile.system_identifier;
-#endif
 }
 
 uint32

@@ -417,52 +417,21 @@ class ProbackupTest(object):
             'postgres',
             'CREATE ROLE {0} WITH LOGIN REPLICATION'.format(role))
 
-        # PG 9.5
-        if self.get_version(node) < 90600:
-            node.safe_psql(
-                'postgres',
-                'GRANT USAGE ON SCHEMA pg_catalog TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean) TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup() TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_create_restore_point(text) TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_switch_xlog() TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.txid_current() TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO {0};'.format(role))
-        # PG 9.6
-        elif self.get_version(node) > 90600 and self.get_version(node) < 100000:
-            node.safe_psql(
-                'postgres',
-                'GRANT USAGE ON SCHEMA pg_catalog TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean, boolean) TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup(boolean) TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_create_restore_point(text) TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_switch_xlog() TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_last_xlog_replay_location() TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.txid_current() TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_checkpoint() TO {0};'.format(role))
-        # >= 10
-        else:
-            node.safe_psql(
-                'postgres',
-                'GRANT USAGE ON SCHEMA pg_catalog TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean, boolean) TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup(boolean, boolean) TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_create_restore_point(text) TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_switch_wal() TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_last_wal_replay_lsn() TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.txid_current() TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_checkpoint() TO {0};'.format(role))
+        # PG >= 10
+        node.safe_psql(
+            'postgres',
+            'GRANT USAGE ON SCHEMA pg_catalog TO {0}; '
+            'GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO {0}; '
+            'GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO {0}; '
+            'GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean, boolean) TO {0}; '
+            'GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup(boolean, boolean) TO {0}; '
+            'GRANT EXECUTE ON FUNCTION pg_catalog.pg_create_restore_point(text) TO {0}; '
+            'GRANT EXECUTE ON FUNCTION pg_catalog.pg_switch_wal() TO {0}; '
+            'GRANT EXECUTE ON FUNCTION pg_catalog.pg_last_wal_replay_lsn() TO {0}; '
+            'GRANT EXECUTE ON FUNCTION pg_catalog.txid_current() TO {0}; '
+            'GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO {0}; '
+            'GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO {0}; '
+            'GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_checkpoint() TO {0};'.format(role))
 
     def create_tblspace_in_node(self, node, tblspc_name, tblspc_path=None, cfs=False):
         res = node.execute(
