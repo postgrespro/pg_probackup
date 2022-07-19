@@ -3423,11 +3423,6 @@ fio_communicate(int in, int out)
 }
 
 // CLASSES
-typedef struct pioError {
-    fobjErr	p; /* parent */
-    int		_errno;
-} pioError;
-
 typedef struct pioLocalDrive
 {
 } pioLocalDrive;
@@ -3481,11 +3476,6 @@ typedef struct pioWriteFilter {
 } pioWriteFilter;
 
 #ifdef HAVE_LIBZ
-typedef struct pioGZError {
-    fobjErr	p; /* parent */
-    int		_gzerrno;
-} pioGZError;
-
 typedef struct pioGZCompress {
     z_stream    strm;
     bool        finished;
