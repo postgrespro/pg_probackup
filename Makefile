@@ -17,20 +17,16 @@
 # git clone https://github.com/postgrespro/pg_probackup postgresql/contrib/pg_probackup
 # cd postgresql
 # ./configure ... && make
-# make --no-print-directory -C contrib/pg_probackup
+# make -C contrib/pg_probackup
 #
 # 4. out of PG source and without PGXS
 # git clone https://git.postgresql.org/git/postgresql.git postgresql-src
 # git clone https://github.com/postgrespro/pg_probackup postgresql-src/contrib/pg_probackup
 # mkdir postgresql-build && cd postgresql-build
 # ../postgresql-src/configure ... && make
-# make --no-print-directory -C contrib/pg_probackup
+# make -C contrib/pg_probackup
 #
 top_pbk_srcdir := $(dir $(realpath $(firstword $(MAKEFILE_LIST))))
-
-# get postgres version
-PG_MAJORVER != $(MAKE) USE_PGXS=$(USE_PGXS) PG_CONFIG=$(PG_CONFIG) --silent --makefile=$(top_pbk_srcdir)get_pg_version.mk
-#$(info Making with PG_MAJORVER=$(PG_MAJORVER))
 
 PROGRAM := pg_probackup
 
@@ -47,18 +43,14 @@ OBJS += src/archive.o src/backup.o src/catalog.o src/checkdb.o src/configure.o s
 BORROWED_H_SRC := \
 	src/include/portability/instr_time.h \
 	src/bin/pg_basebackup/receivelog.h \
-	src/bin/pg_basebackup/streamutil.h
+	src/bin/pg_basebackup/streamutil.h \
+	src/bin/pg_basebackup/walmethods.h
 BORROWED_C_SRC := \
 	src/backend/access/transam/xlogreader.c \
 	src/backend/utils/hash/pg_crc.c \
 	src/bin/pg_basebackup/receivelog.c \
-	src/bin/pg_basebackup/streamutil.c
-ifneq ($(PG_MAJORVER), $(findstring $(PG_MAJORVER), 9.5 9.6))
-BORROWED_H_SRC += \
-	src/bin/pg_basebackup/walmethods.h
-BORROWED_C_SRC += \
+	src/bin/pg_basebackup/streamutil.c \
 	src/bin/pg_basebackup/walmethods.c
-endif
 
 BORROW_DIR := src/borrowed
 BORROWED_H := $(addprefix $(BORROW_DIR)/, $(notdir $(BORROWED_H_SRC)))
@@ -84,9 +76,6 @@ include $(top_builddir)/src/Makefile.global
 include $(top_srcdir)/contrib/contrib-global.mk
 endif
 
-# now we can use standard MAJORVERSION variable instead of calculated PG_MAJORVER
-undefine PG_MAJORVER
-
 #
 PG_CPPFLAGS = -I$(libpq_srcdir) ${PTHREAD_CFLAGS} -I$(top_pbk_srcdir)src -I$(BORROW_DIR)
 PG_CPPFLAGS += -I$(top_pbk_srcdir)src/fu_util -Wno-declaration-after-statement
@@ -99,11 +88,8 @@ PG_LIBS_INTERNAL = $(libpq_pgport) ${PTHREAD_CFLAGS}
 # additional dependencies on borrowed files
 src/archive.o: $(BORROW_DIR)/instr_time.h
 src/backup.o src/catchup.o src/pg_probackup.o: $(BORROW_DIR)/streamutil.h
-src/stream.o $(BORROW_DIR)/receivelog.o $(BORROW_DIR)/streamutil.o: $(BORROW_DIR)/receivelog.h
-ifneq ($(MAJORVERSION), $(findstring $(MAJORVERSION), 9.5 9.6))
+src/stream.o $(BORROW_DIR)/receivelog.o $(BORROW_DIR)/streamutil.o $(BORROW_DIR)/walmethods.o: $(BORROW_DIR)/receivelog.h
 $(BORROW_DIR)/receivelog.h: $(BORROW_DIR)/walmethods.h
-$(BORROW_DIR)/walmethods.o: $(BORROW_DIR)/receivelog.h
-endif
 
 # generate separate makefile to handle borrowed files
 borrowed.mk: $(firstword $(MAKEFILE_LIST))
