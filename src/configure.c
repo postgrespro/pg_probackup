@@ -90,32 +90,6 @@ ConfigOption instance_options[] =
 		&instance_config.conn_opt.pguser, SOURCE_CMD, 0,
 		OPTION_CONN_GROUP, 0, option_get_value
 	},
-	/* Replica options */
-	{
-		's', 202, "master-db",
-		&instance_config.master_conn_opt.pgdatabase, SOURCE_CMD, 0,
-		OPTION_REPLICA_GROUP, 0, option_get_value
-	},
-	{
-		's', 203, "master-host",
-		&instance_config.master_conn_opt.pghost, SOURCE_CMD, 0,
-		OPTION_REPLICA_GROUP, 0, option_get_value
-	},
-	{
-		's', 204, "master-port",
-		&instance_config.master_conn_opt.pgport, SOURCE_CMD, 0,
-		OPTION_REPLICA_GROUP, 0, option_get_value
-	},
-	{
-		's', 205, "master-user",
-		&instance_config.master_conn_opt.pguser, SOURCE_CMD, 0,
-		OPTION_REPLICA_GROUP, 0, option_get_value
-	},
-	{
-		'u', 206, "replica-timeout",
-		&instance_config.replica_timeout, SOURCE_CMD, SOURCE_DEFAULT,
-		OPTION_REPLICA_GROUP, OPTION_UNIT_S, option_get_value
-	},
 	/* Archive options */
 	{
 		'u', 207, "archive-timeout",
@@ -362,8 +336,6 @@ init_config(InstanceConfig *config, const char *instance_name)
 	config->xlog_seg_size = XLOG_SEG_SIZE;
 #endif
 
-	config->replica_timeout = REPLICA_TIMEOUT_DEFAULT;
-
 	config->archive_timeout = ARCHIVE_TIMEOUT_DEFAULT;
 
 	/* Copy logger defaults */
@@ -436,32 +408,6 @@ readInstanceConfigFile(InstanceState *instanceState)
 			's', 'U', "pguser",
 			&instance->conn_opt.pguser, SOURCE_CMD, 0,
 			OPTION_CONN_GROUP, 0, option_get_value
-		},
-		/* Replica options */
-		{
-			's', 202, "master-db",
-			&instance->master_conn_opt.pgdatabase, SOURCE_CMD, 0,
-			OPTION_REPLICA_GROUP, 0, option_get_value
-		},
-		{
-			's', 203, "master-host",
-			&instance->master_conn_opt.pghost, SOURCE_CMD, 0,
-			OPTION_REPLICA_GROUP, 0, option_get_value
-		},
-		{
-			's', 204, "master-port",
-			&instance->master_conn_opt.pgport, SOURCE_CMD, 0,
-			OPTION_REPLICA_GROUP, 0, option_get_value
-		},
-		{
-			's', 205, "master-user",
-			&instance->master_conn_opt.pguser, SOURCE_CMD, 0,
-			OPTION_REPLICA_GROUP, 0, option_get_value
-		},
-		{
-			'u', 206, "replica-timeout",
-			&instance->replica_timeout, SOURCE_CMD, SOURCE_DEFAULT,
-			OPTION_REPLICA_GROUP, OPTION_UNIT_S, option_get_value
 		},
 		/* Archive options */
 		{

@@ -152,11 +152,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
         backup_id = self.backup_node(
             backup_dir, 'replica', replica,
-            options=[
-                '--stream',
-                '--master-host=localhost',
-                '--master-db=postgres',
-                '--master-port={0}'.format(master.port)])
+            options=['--stream'])
         self.validate_pb(backup_dir, 'replica')
         self.assertEqual(
             'OK', self.show_pb(backup_dir, 'replica', backup_id)['status'])
@@ -188,11 +184,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
         backup_id = self.backup_node(
             backup_dir, 'replica', replica, backup_type='ptrack',
-            options=[
-                '--stream',
-                '--master-host=localhost',
-                '--master-db=postgres',
-                '--master-port={0}'.format(master.port)])
+            options=['--stream'])
         self.validate_pb(backup_dir, 'replica')
         self.assertEqual(
             'OK', self.show_pb(backup_dir, 'replica', backup_id)['status'])
@@ -279,11 +271,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
         backup_id = self.backup_node(
             backup_dir, 'replica', replica,
-            options=[
-                '--archive-timeout=60',
-                '--master-host=localhost',
-                '--master-db=postgres',
-                '--master-port={0}'.format(master.port)])
+            options=['--archive-timeout=60'])
 
         self.validate_pb(backup_dir, 'replica')
         self.assertEqual(
@@ -315,11 +303,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         backup_id = self.backup_node(
             backup_dir, 'replica',
             replica, backup_type='page',
-            options=[
-                '--archive-timeout=60',
-                '--master-host=localhost',
-                '--master-db=postgres',
-                '--master-port={0}'.format(master.port)])
+            options=['--archive-timeout=60'])
 
         pgbench.wait()
 

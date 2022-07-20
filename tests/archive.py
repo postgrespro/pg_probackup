@@ -725,9 +725,6 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'replica', replica,
             options=[
                 '--archive-timeout=30',
-                '--master-host=localhost',
-                '--master-db=postgres',
-                '--master-port={0}'.format(master.port),
                 '--stream'])
 
         self.validate_pb(backup_dir, 'replica')
@@ -764,9 +761,6 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             replica, backup_type='page',
             options=[
                 '--archive-timeout=60',
-                '--master-db=postgres',
-                '--master-host=localhost',
-                '--master-port={0}'.format(master.port),
                 '--stream'])
 
         self.validate_pb(backup_dir, 'replica')
@@ -857,9 +851,6 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'replica', replica,
             options=[
                 '--archive-timeout=30',
-                '--master-host=localhost',
-                '--master-db=postgres',
-                '--master-port={0}'.format(master.port),
                 '--stream'])
 
         self.validate_pb(backup_dir, 'replica')
