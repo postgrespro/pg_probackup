@@ -10,13 +10,13 @@
 
 #include <assert.h>
 #include "pg_probackup.h"
-#include "utils/file.h"
+#include "utils/pio_storage.h"
 
 
 #if PG_VERSION_NUM < 110000
 #include "catalog/catalog.h"
 #endif
-#include "catalog/pg_tablespace.h"
+#include "catalog/pg_tablespace_d.h"
 
 #include <unistd.h>
 #include <sys/stat.h>
@@ -168,8 +168,8 @@ pgFileNew(const char *path, const char *rel_path, bool follow_symlink,
 pgFile *
 pgFileInit(const char *rel_path)
 {
-	pgFile	   *file;
-	char	   *file_name = NULL;
+	pgFile		*file;
+	char		*file_name = NULL;
 
 	file = (pgFile *) pgut_malloc(sizeof(pgFile));
 	MemSet(file, 0, sizeof(pgFile));
@@ -181,9 +181,8 @@ pgFileInit(const char *rel_path)
 	file_name = last_dir_separator(file->rel_path);
 
 	if (file_name == NULL)
-		file->name = file->rel_path;
-	else
-	{
+	    file->name = file->rel_path;
+	else {
 		file_name++;
 		file->name = file_name;
 	}
@@ -197,6 +196,35 @@ pgFileInit(const char *rel_path)
 	// May be add?
 	// pg_atomic_clear_flag(file->lock);
 	file->excluded = false;
+	return file;
+}
+
+pgFile *
+pgFileNew_pio(const char *path, const char *rel_path, bool follow_symlink,
+		  int external_dir_num, fio_location location)
+{
+	struct stat		st;
+	err_i			err;
+	pgFile		   *file;
+	pioDrive_i		drive = pioDriveForLocation(location);
+
+	/* stat the file */
+	st = $i(pioStat, drive, path, follow_symlink, &err);
+	if ($haserr(err))
+	{
+		/* file not found is not an error case */
+		if (getErrno(err) == ENOENT)
+			return NULL;
+		elog(ERROR, "cannot stat file \"%s\": %s", path,
+			strerror(getErrno(err)));
+	}
+
+	file = pgFileInit(rel_path);
+	file->size = st.st_size;
+	file->mode = st.st_mode;
+	file->mtime = st.st_mtime;
+	file->external_dir_num = external_dir_num;
+
 	return file;
 }
 
@@ -769,6 +797,7 @@ dir_list_file_internal(parray *files, pgFile *parent, const char *parent_dir,
 {
 	DIR			  *dir;
 	struct dirent *dent;
+	pioDrive_i	  drive = pioDriveForLocation(location);
 
 	if (!S_ISDIR(parent->mode))
 		elog(ERROR, "\"%s\" is not a directory", parent_dir);

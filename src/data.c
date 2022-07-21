@@ -13,7 +13,7 @@
 #include "storage/checksum.h"
 #include "storage/checksum_impl.h"
 #include <common/pg_lzcompress.h>
-#include "utils/file.h"
+#include "utils/pio_storage.h"
 
 #include <unistd.h>
 #include <sys/stat.h>

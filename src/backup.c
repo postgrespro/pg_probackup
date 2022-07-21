@@ -13,7 +13,7 @@
 #if PG_VERSION_NUM < 110000
 #include "catalog/catalog.h"
 #endif
-#include "catalog/pg_tablespace.h"
+#include "catalog/pg_tablespace_d.h"
 #include "pgtar.h"
 #include "streamutil.h"
 
@@ -22,7 +22,7 @@
 #include <unistd.h>
 
 #include "utils/thread.h"
-#include "utils/file.h"
+#include "utils/pio_storage.h"
 
 //const char *progname = "pg_probackup";
 

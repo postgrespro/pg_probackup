@@ -1,5 +1,5 @@
-#ifndef __FILE__H__
-#define __FILE__H__
+#ifndef __PIO_STORAGE__H__
+#define __PIO_STORAGE__H__
 
 #include "storage/bufpage.h"
 #include <stdio.h>
@@ -84,6 +84,13 @@ typedef enum
 	FIO_REMOTE_HOST  /* date is located at remote host */
 } fio_location;
 
+extern __thread unsigned long fio_fdset;
+extern __thread void* fio_stdin_buffer;
+extern __thread int fio_stdout;
+extern __thread int fio_stdin;
+extern __thread int fio_stderr;
+extern char *async_errormsg;
+
 extern fio_location MyLocation;
 
 extern void    setMyLocation(ProbackupSubcmd const subcmd);
@@ -111,10 +118,12 @@ extern void    fio_error(int rc, int size, const char* file, int line);
 /* fd-style functions */
 extern int     fio_open(fio_location location, const char* name, int mode);
 extern ssize_t fio_write(int fd, void const* buf, size_t size);
+extern ssize_t fio_write_all(int fd, void const* buf, size_t size);
 extern ssize_t fio_write_async(int fd, void const* buf, size_t size);
 extern int     fio_check_error_fd(int fd, char **errmsg);
 extern int     fio_check_error_fd_gz(gzFile f, char **errmsg);
 extern ssize_t fio_read(int fd, void* buf, size_t size);
+extern ssize_t fio_read_all(int fd, void* buf, size_t size);
 extern int     fio_flush(int fd);
 extern int     fio_seek(int fd, off_t offs);
 extern int     fio_fstat(int fd, struct stat* st);
@@ -179,10 +188,10 @@ extern struct PageState *fio_get_checksum_map(fio_location location, const char 
 struct datapagemap; /* defined in datapagemap.h */
 extern struct datapagemap *fio_get_lsn_map(fio_location location, const char *fullpath, uint32 checksum_version,
 									  int n_blocks, XLogRecPtr horizonLsn, BlockNumber segmentno);
-
-
 // OBJECTS
 
+//extern void init_file_objects(void);
+extern void init_drive_objects(void);
 extern void init_pio_objects(void);
 
 typedef const char* path_t;
@@ -231,6 +240,10 @@ fobj_iface(pioReadCloser);
 #define mth__pioGetCRC32 	pg_crc32, (path_t, path), (bool, compressed), \
 									  (err_i *, err)
 #define mth__pioIsRemote 	bool
+#define mth__pioListDir		void, (parray*, files), (const char*, root), \
+								(bool, exclude), (bool, follow_symlink), \
+								(bool, add_root), (bool, backup_logs), \
+								(bool, skip_hidden), (int, external_dir_num)
 
 fobj_method(pioOpen);
 fobj_method(pioStat);
@@ -239,9 +252,10 @@ fobj_method(pioRename);
 fobj_method(pioExists);
 fobj_method(pioIsRemote);
 fobj_method(pioGetCRC32);
+fobj_method(pioListDir);
 
 #define iface__pioDrive 	mth(pioOpen, pioStat, pioRemove, pioRename), \
-					        mth(pioExists, pioGetCRC32, pioIsRemote)
+					        mth(pioExists, pioGetCRC32, pioIsRemote, pioListDir)
 fobj_iface(pioDrive);
 
 #define kls__pioLocalDrive	iface__pioDrive, iface(pioDrive)
@@ -292,6 +306,84 @@ fobj_iface(pioFilter);
 fobj_klass(pioReadFilter);
 fobj_klass(pioWriteFilter);
 
+// CLASSES
+typedef struct pioError {
+    fobjErr	p; /* parent */
+    int		_errno;
+} pioError;
+
+typedef struct pioFile
+{
+    const char *path;
+    int		flags;
+    bool	closed;
+} pioFile;
+
+typedef struct pioLocalFile
+{
+    pioFile	p;
+    int		fd;
+} pioLocalFile;
+
+typedef struct pioRemoteFile
+{
+    pioFile	p;
+    int		handle;
+    bool    asyncMode;
+    bool    asyncEof;
+    bool	didAsync;
+    err_i asyncError;
+    /* chunks size is CHUNK_SIZE */
+    void*   asyncChunk;
+    ft_bytes_t  chunkRest;
+} pioRemoteFile;
+
+typedef struct pioReadFilter {
+    pioRead_i	wrapped;
+    pioFilter_i	filter;
+    char*		buffer;
+    size_t		len;
+    size_t		capa;
+    bool        eof;
+    bool        finished;
+} pioReadFilter;
+
+typedef struct pioWriteFilter {
+    pioWriteFlush_i	wrapped;
+    pioFilter_i		filter;
+    char*			buffer;
+    size_t			capa;
+    bool			finished;
+} pioWriteFilter;
+
+#ifdef HAVE_LIBZ
+typedef struct pioGZError {
+    fobjErr	p; /* parent */
+    int		_gzerrno;
+} pioGZError;
+
+typedef struct pioGZCompress {
+    z_stream    strm;
+    bool        finished;
+} pioGZCompress;
+
+typedef struct pioGZDecompress {
+    z_stream    strm;
+    bool        eof;
+    bool        finished;
+    bool        ignoreTruncate;
+} pioGZDecompress;
+
+#define kls__pioGZCompress	iface__pioFilter, mth(fobjDispose), iface(pioFilter)
+fobj_klass(pioGZCompress);
+#define kls__pioGZDecompress	iface__pioFilter, mth(fobjDispose), iface(pioFilter)
+fobj_klass(pioGZDecompress);
+#endif
+
+/* Base physical file type */
+#define kls__pioFile	mth(fobjDispose)
+fobj_klass(pioFile);
+
 extern pioWriteFlush_i pioWrapWriteFilter(pioWriteFlush_i fl,
                                           pioFilter_i flt,
                                           size_t buf_size);
@@ -310,4 +402,21 @@ extern err_i    pioCopyWithFilters(pioWriteFlush_i dest, pioRead_i src,
         pioFilter_i _fltrs_[] = {__VA_ARGS__}; \
         pioCopyWithFilters((dest), (src), _fltrs_, ft_arrsz(_fltrs_), NULL); \
 })
+
+extern bool common_pioExists(fobj_t self, path_t path, err_i *err);
+
+#ifdef WIN32
+int
+remove_file_or_dir(const char* path)
+{
+	int rc = remove(path);
+
+	if (rc < 0 && errno == EACCESS)
+		rc = rmdir(path);
+	return rc;
+}
+#else
+#define remove_file_or_dir(path) remove(path)
+#endif
+
 #endif

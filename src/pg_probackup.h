@@ -37,7 +37,7 @@
 #include "utils/remote.h"
 #include "utils/parray.h"
 #include "utils/pgut.h"
-#include "utils/file.h"
+#include "utils/pio_storage.h"
 
 #include "datapagemap.h"
 #include "utils/thread.h"

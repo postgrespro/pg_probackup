@@ -12,7 +12,7 @@
 #endif
 
 #include "pg_probackup.h"
-#include "file.h"
+#include "pio_storage.h"
 
 #define MAX_CMDLINE_LENGTH  4096
 #define MAX_CMDLINE_OPTIONS 256

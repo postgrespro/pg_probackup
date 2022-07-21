@@ -45,7 +45,7 @@
 
 #include "pg_getopt.h"
 #include "streamutil.h"
-#include "utils/file.h"
+#include "utils/pio_storage.h"
 
 #include <sys/stat.h>
 

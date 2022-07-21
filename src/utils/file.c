@@ -5,17 +5,17 @@
 /* sys/stat.h must be included after pg_probackup.h (see problems with compilation for windows described in PGPRO-5750) */
 #include <sys/stat.h>
 
-#include "file.h"
+#include "pio_storage.h"
 #include "storage/checksum.h"
 
 #define PRINTF_BUF_SIZE  1024
 
-static __thread unsigned long fio_fdset = 0;
-static __thread void* fio_stdin_buffer;
-static __thread int fio_stdout = 0;
-static __thread int fio_stdin = 0;
-static __thread int fio_stderr = 0;
-static char *async_errormsg = NULL;
+__thread unsigned long fio_fdset = 0;
+__thread void* fio_stdin_buffer;
+__thread int fio_stdout = 0;
+__thread int fio_stdin = 0;
+__thread int fio_stderr = 0;
+char *async_errormsg = NULL;
 
 fio_location MyLocation;
 
@@ -83,6 +83,29 @@ typedef struct
 #undef fopen(a, b)
 #endif
 
+bool
+common_pioExists(fobj_t self, path_t path, err_i *err)
+{
+    struct stat buf;
+    fobj_reset_err(err);
+
+    /* follow symlink ? */
+    buf = $(pioStat, self, path, true, err);
+    if (getErrno(*err) == ENOENT)
+    {
+        *err = $noerr();
+        return false;
+    }
+    if ($noerr(*err) && !S_ISREG(buf.st_mode))
+        *err = $err(SysErr, "File {path:q} is not regular", (path, path));
+    if ($haserr(*err)) {
+        *err = $err(SysErr, "Could not check file existance: {cause:$M}",
+                    (cause, (*err).self), (errNo, getErrno(*err)),
+                    (errStr, getErrnoStr(*err)));
+    }
+    return $noerr(*err);
+}
+
 void
 setMyLocation(ProbackupSubcmd const subcmd)
 {
@@ -99,6 +122,11 @@ setMyLocation(ProbackupSubcmd const subcmd)
 		      ? FIO_BACKUP_HOST
 		      : FIO_LOCAL_HOST
 		: FIO_LOCAL_HOST;
+}
+
+void init_pio_objects() {
+//	init_file_objects();
+	init_drive_objects();
 }
 
 /* Use specified file descriptors as stdin/stdout for FIO functions */
@@ -189,20 +217,6 @@ pread(int fd, void* buf, size_t size, off_t off)
 }
 #endif /* WIN32 */
 
-#ifdef WIN32
-static int
-remove_file_or_dir(const char* path)
-{
-	int rc = remove(path);
-
-	if (rc < 0 && errno == EACCESS)
-		rc = rmdir(path);
-	return rc;
-}
-#else
-#define remove_file_or_dir(path) remove(path)
-#endif
-
 /* Check if specified location is local for current node */
 bool
 fio_is_remote(fio_location location)
@@ -226,7 +240,7 @@ fio_is_remote_simple(fio_location location)
 }
 
 /* Try to read specified amount of bytes unless error or EOF are encountered */
-static ssize_t
+ssize_t
 fio_read_all(int fd, void* buf, size_t size)
 {
 	size_t offs = 0;
@@ -249,7 +263,7 @@ fio_read_all(int fd, void* buf, size_t size)
 }
 
 /* Try to write specified amount of bytes unless error is encountered */
-static ssize_t
+ssize_t
 fio_write_all(int fd, void const* buf, size_t size)
 {
 	size_t offs = 0;
@@ -3422,104 +3436,6 @@ fio_communicate(int in, int out)
 	}
 }
 
-// CLASSES
-typedef struct pioError {
-    fobjErr	p; /* parent */
-    int		_errno;
-} pioError;
-
-typedef struct pioLocalDrive
-{
-} pioLocalDrive;
-
-typedef struct pioRemoteDrive
-{
-} pioRemoteDrive;
-
-typedef struct pioFile
-{
-    const char *path;
-    int		flags;
-    bool	closed;
-} pioFile;
-
-typedef struct pioLocalFile
-{
-    pioFile	p;
-    int		fd;
-} pioLocalFile;
-
-typedef struct pioRemoteFile
-{
-    pioFile	p;
-    int		handle;
-    bool    asyncMode;
-    bool    asyncEof;
-    bool	didAsync;
-    err_i asyncError;
-    /* chunks size is CHUNK_SIZE */
-    void*   asyncChunk;
-    ft_bytes_t  chunkRest;
-} pioRemoteFile;
-
-typedef struct pioReadFilter {
-    pioRead_i	wrapped;
-    pioFilter_i	filter;
-    char*		buffer;
-    size_t		len;
-    size_t		capa;
-    bool        eof;
-    bool        finished;
-} pioReadFilter;
-
-typedef struct pioWriteFilter {
-    pioWriteFlush_i	wrapped;
-    pioFilter_i		filter;
-    char*			buffer;
-    size_t			capa;
-    bool			finished;
-} pioWriteFilter;
-
-#ifdef HAVE_LIBZ
-typedef struct pioGZError {
-    fobjErr	p; /* parent */
-    int		_gzerrno;
-} pioGZError;
-
-typedef struct pioGZCompress {
-    z_stream    strm;
-    bool        finished;
-} pioGZCompress;
-
-typedef struct pioGZDecompress {
-    z_stream    strm;
-    bool        eof;
-    bool        finished;
-    bool        ignoreTruncate;
-} pioGZDecompress;
-
-#define kls__pioGZCompress	iface__pioFilter, mth(fobjDispose), iface(pioFilter)
-fobj_klass(pioGZCompress);
-#define kls__pioGZDecompress	iface__pioFilter, mth(fobjDispose), iface(pioFilter)
-fobj_klass(pioGZDecompress);
-#endif
-
-static pioDrive_i localDrive;
-static pioDrive_i remoteDrive;
-
-pioDrive_i
-pioDriveForLocation(fio_location loc)
-{
-    if (fio_is_remote(loc))
-        return remoteDrive;
-    else
-        return localDrive;
-}
-
-/* Base physical file type */
-#define kls__pioFile	mth(fobjDispose)
-fobj_klass(pioFile);
-
 static void
 pioFile_fobjDispose(VSelf)
 {
@@ -3528,107 +3444,6 @@ pioFile_fobjDispose(VSelf)
     ft_assert(self->closed, "File \"%s\" is disposing unclosed", self->path);
     ft_free((void*)self->path);
     self->path = NULL;
-}
-
-static bool
-common_pioExists(fobj_t self, path_t path, err_i *err)
-{
-    struct stat buf;
-    fobj_reset_err(err);
-
-    /* follow symlink ? */
-    buf = $(pioStat, self, path, true, err);
-    if (getErrno(*err) == ENOENT)
-    {
-        *err = $noerr();
-        return false;
-    }
-    if ($noerr(*err) && !S_ISREG(buf.st_mode))
-        *err = $err(SysErr, "File {path:q} is not regular", (path, path));
-    if ($haserr(*err)) {
-        *err = $err(SysErr, "Could not check file existance: {cause:$M}",
-                    (cause, (*err).self), (errNo, getErrno(*err)),
-                    (errStr, getErrnoStr(*err)));
-    }
-    return $noerr(*err);
-}
-
-/* LOCAL DRIVE */
-
-static pioFile_i
-pioLocalDrive_pioOpen(VSelf, path_t path, int flags,
-                      int permissions, err_i *err)
-{
-    int	fd;
-    fobj_reset_err(err);
-    fobj_t file;
-
-    if (permissions == 0)
-        fd = open(path, flags, FILE_PERMISSION);
-    else
-        fd = open(path, flags, permissions);
-    if (fd < 0)
-    {
-        *err = $syserr("Cannot open file {path:q}", (path, path));
-        return (pioFile_i){NULL};
-    }
-
-    file = $alloc(pioLocalFile, .fd = fd,
-                  .p = { .path = ft_cstrdup(path), .flags = flags } );
-    return bind_pioFile(file);
-}
-
-static struct stat
-pioLocalDrive_pioStat(VSelf, path_t path, bool follow_symlink, err_i *err)
-{
-    struct stat	st = {0};
-    int	r;
-    fobj_reset_err(err);
-
-    r = follow_symlink ? stat(path, &st) : lstat(path, &st);
-    if (r < 0)
-        *err = $syserr("Cannot stat file {path:q}", (path, path));
-    return st;
-}
-
-#define pioLocalDrive_pioExists common_pioExists
-
-static err_i
-pioLocalDrive_pioRemove(VSelf, path_t path, bool missing_ok)
-{
-    if (remove_file_or_dir(path) != 0)
-    {
-        if (!missing_ok || errno != ENOENT)
-            return $syserr("Cannot remove {path:q}", (path, path));
-    }
-    return $noerr();
-}
-
-static err_i
-pioLocalDrive_pioRename(VSelf, path_t old_path, path_t new_path)
-{
-    if (rename(old_path, new_path) != 0)
-        return $syserr("Cannot rename file {old_path:q} to {new_path:q}",
-                       (old_path, old_path), (new_path, new_path));
-    return $noerr();
-}
-
-static pg_crc32
-pioLocalDrive_pioGetCRC32(VSelf, path_t path, bool compressed, err_i *err)
-{
-    fobj_reset_err(err);
-    elog(VERBOSE, "Local Drive calculate crc32 for '%s', compressed=%d",
-         path, compressed);
-    if (compressed)
-        return pgFileGetCRCgz(path, true, true);
-    else
-        return pgFileGetCRC(path, true, true);
-}
-
-static bool
-pioLocalDrive_pioIsRemote(VSelf)
-{
-    return false;
 }
 
 /* LOCAL FILE */
@@ -3726,161 +3541,6 @@ pioLocalFile_fobjRepr(VSelf)
     Self(pioLocalFile);
     return $fmt("pioLocalFile({path:q}, fd:{fd}",
                 (path, $S(self->p.path)), (fd, $I(self->fd)));
-}
-
-/* REMOTE DRIVE */
-
-static pioFile_i
-pioRemoteDrive_pioOpen(VSelf, path_t path,
-                       int flags, int permissions,
-                       err_i *err)
-{
-    int i;
-    fio_header hdr;
-    unsigned long mask;
-    fobj_reset_err(err);
-    fobj_t file;
-
-    mask = fio_fdset;
-    for (i = 0; (mask & 1) != 0; i++, mask >>= 1);
-    if (i == FIO_FDMAX)
-        elog(ERROR, "Descriptor pool for remote files is exhausted, "
-                    "probably too many remote files are opened");
-
-    hdr.cop = FIO_OPEN;
-    hdr.handle = i;
-    hdr.size = strlen(path) + 1;
-    hdr.arg = flags;
-    fio_fdset |= 1 << i;
-
-    IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
-    IO_CHECK(fio_write_all(fio_stdout, path, hdr.size), hdr.size);
-
-    /* check results */
-    IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
-
-    if (hdr.arg != 0)
-    {
-        errno = (int)hdr.arg;
-        *err = $syserr("Cannot open remote file {path:q}", (path, path));
-        fio_fdset &= ~(1 << hdr.handle);
-        return (pioFile_i){NULL};
-    }
-    file = $alloc(pioRemoteFile, .handle = i,
-                  .p = { .path = ft_cstrdup(path), .flags = flags });
-    return bind_pioFile(file);
-}
-
-static struct stat
-pioRemoteDrive_pioStat(VSelf, path_t path, bool follow_symlink, err_i *err)
-{
-    struct stat	st = {0};
-    fio_header hdr = {
-            .cop = FIO_STAT,
-            .handle = -1,
-            .size = strlen(path) + 1,
-            .arg = follow_symlink,
-    };
-    fobj_reset_err(err);
-
-    IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
-    IO_CHECK(fio_write_all(fio_stdout, path, hdr.size), hdr.size);
-
-    IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
-    ft_dbg_assert(hdr.cop == FIO_STAT);
-    IO_CHECK(fio_read_all(fio_stdin, &st, sizeof(st)), sizeof(st));
-
-    if (hdr.arg != 0)
-    {
-        errno = (int)hdr.arg;
-        *err = $syserr("Cannot stat remote file {path:q}", (path, path));
-    }
-    return st;
-}
-
-#define pioRemoteDrive_pioExists common_pioExists
-
-static err_i
-pioRemoteDrive_pioRemove(VSelf, path_t path, bool missing_ok)
-{
-    fio_header hdr = {
-            .cop = FIO_REMOVE,
-            .handle = -1,
-            .size = strlen(path) + 1,
-            .arg = missing_ok ? 1 : 0,
-    };
-
-    IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
-    IO_CHECK(fio_write_all(fio_stdout, path, hdr.size), hdr.size);
-
-    IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
-    ft_dbg_assert(hdr.cop == FIO_REMOVE);
-
-    if (hdr.arg != 0)
-    {
-        errno = (int)hdr.arg;
-        return $syserr("Cannot remove remote file {path:q}", (path, path));
-    }
-    return $noerr();
-}
-
-static err_i
-pioRemoteDrive_pioRename(VSelf, path_t old_path, path_t new_path)
-{
-    size_t old_path_len = strlen(old_path) + 1;
-    size_t new_path_len = strlen(new_path) + 1;
-    fio_header hdr = {
-            .cop = FIO_RENAME,
-            .handle = -1,
-            .size = old_path_len + new_path_len,
-            .arg = 0,
-    };
-
-    IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
-    IO_CHECK(fio_write_all(fio_stdout, old_path, old_path_len), old_path_len);
-    IO_CHECK(fio_write_all(fio_stdout, new_path, new_path_len), new_path_len);
-
-    IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
-    ft_dbg_assert(hdr.cop == FIO_RENAME);
-
-    if (hdr.arg != 0)
-    {
-        errno = (int)hdr.arg;
-        return $syserr("Cannot rename remote file {old_path:q} to {new_path:q}",
-                       (old_path, old_path), (new_path, new_path));
-    }
-    return $noerr();
-}
-
-static pg_crc32
-pioRemoteDrive_pioGetCRC32(VSelf, path_t path, bool compressed, err_i *err)
-{
-    fio_header hdr;
-    size_t path_len = strlen(path) + 1;
-    pg_crc32 crc = 0;
-    fobj_reset_err(err);
-
-    hdr.cop = FIO_GET_CRC32;
-    hdr.handle = -1;
-    hdr.size = path_len;
-    hdr.arg = 0;
-
-    if (compressed)
-        hdr.arg = 1;
-    elog(VERBOSE, "Remote Drive calculate crc32 for '%s', hdr.arg=%d",
-         path, compressed);
-
-    IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
-    IO_CHECK(fio_write_all(fio_stdout, path, path_len), path_len);
-    IO_CHECK(fio_read_all(fio_stdin, &crc, sizeof(crc)), sizeof(crc));
-
-    return crc;
-}
-
-static bool
-pioRemoteDrive_pioIsRemote(VSelf)
-{
-    return true;
 }
 
 /* REMOTE FILE */
@@ -4814,8 +4474,6 @@ pioCopyWithFilters(pioWriteFlush_i dest, pioRead_i src,
 }
 
 fobj_klass_handle(pioFile);
-fobj_klass_handle(pioLocalDrive);
-fobj_klass_handle(pioRemoteDrive);
 fobj_klass_handle(pioLocalFile, inherits(pioFile), mth(fobjRepr));
 fobj_klass_handle(pioRemoteFile, inherits(pioFile), mth(fobjDispose, fobjRepr));
 fobj_klass_handle(pioWriteFilter, mth(fobjDispose, fobjRepr));
@@ -4826,11 +4484,9 @@ fobj_klass_handle(pioGZCompress, mth(fobjRepr));
 fobj_klass_handle(pioGZDecompress, mth(fobjRepr));
 #endif
 
-void
-init_pio_objects(void)
-{
-    FOBJ_FUNC_ARP();
-
-    localDrive = bindref_pioDrive($alloc(pioLocalDrive));
-    remoteDrive = bindref_pioDrive($alloc(pioRemoteDrive));
-}
+//void
+//init_file_objects(void)
+//{
+//    FOBJ_FUNC_ARP();
+//
+//}

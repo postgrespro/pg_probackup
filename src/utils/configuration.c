@@ -12,7 +12,7 @@
 #include "configuration.h"
 #include "logger.h"
 #include "pgut.h"
-#include "file.h"
+#include "pio_storage.h"
 
 #include "datatype/timestamp.h"
 

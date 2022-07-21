@@ -30,7 +30,7 @@
 
 #include "pgut.h"
 #include "logger.h"
-#include "file.h"
+#include "pio_storage.h"
 
 
 static char	   *password = NULL;

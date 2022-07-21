@@ -16,7 +16,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#include "utils/file.h"
+#include "utils/pio_storage.h"
 #include "utils/configuration.h"
 
 static pgBackup* get_closest_backup(timelineInfo *tlinfo);

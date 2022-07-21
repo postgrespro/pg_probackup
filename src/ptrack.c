@@ -12,7 +12,7 @@
 #if PG_VERSION_NUM < 110000
 #include "catalog/catalog.h"
 #endif
-#include "catalog/pg_tablespace.h"
+#include "catalog/pg_tablespace_d.h"
 
 /*
  * Macro needed to parse ptrack.
