@@ -67,6 +67,10 @@ BORROWED_C := $(addprefix $(BORROW_DIR)/, $(notdir $(BORROWED_C_SRC)))
 OBJS += $(patsubst %.c, %.o, $(BORROWED_C))
 EXTRA_CLEAN := $(BORROWED_H) $(BORROWED_C) $(BORROW_DIR) borrowed.mk
 
+#S3 module
+# !!! must compile s3 with -lcurl flag
+OBJS += s3c/s3.o
+
 # off-source build support
 ifneq ($(abspath $(CURDIR))/, $(top_pbk_srcdir))
 VPATH := $(top_pbk_srcdir)
@@ -77,6 +81,7 @@ endif
 ifdef USE_PGXS
 PG_CONFIG = pg_config
 PGXS := $(shell $(PG_CONFIG) --pgxs)
+SHLIB_LINK += -lcurl
 include $(PGXS)
 else
 subdir=contrib/pg_probackup
@@ -99,7 +104,7 @@ PG_LIBS_INTERNAL = $(libpq_pgport) ${PTHREAD_CFLAGS}
 
 # additional dependencies on borrowed files
 src/archive.o: $(BORROW_DIR)/instr_time.h
-src/backup.o src/catchup.o src/pg_probackup.o: $(BORROW_DIR)/streamutil.h
+src/backup.o src/catchup.o src/pg_probackup.o: $(BORROW_DIR)/streamutil.h s3c/s3.h
 src/stream.o $(BORROW_DIR)/receivelog.o $(BORROW_DIR)/streamutil.o: $(BORROW_DIR)/receivelog.h
 ifneq ($(MAJORVERSION), $(findstring $(MAJORVERSION), 9.5 9.6))
 $(BORROW_DIR)/receivelog.h: $(BORROW_DIR)/walmethods.h

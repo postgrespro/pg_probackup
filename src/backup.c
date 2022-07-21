@@ -24,6 +24,8 @@
 #include "utils/thread.h"
 #include "utils/file.h"
 
+#include "s3c/s3.h"
+
 //const char *progname = "pg_probackup";
 
 /* list of files contained in backup */
@@ -702,8 +704,31 @@ do_backup(InstanceState *instanceState, pgSetBackupParams *set_backup_params,
 	PGNodeInfo	nodeInfo;
 	char		pretty_bytes[20];
 
+	int err;
+	S3_config 	*config = NULL;
+	parray		*test_arr;
+	pgFile		*file = (pgFile*)palloc(sizeof(pgFile));
+
 	/* Initialize PGInfonode */
 	pgNodeInit(&nodeInfo);
+
+	elog(INFO, "Calling for S3_put_object");
+	/* S3_put_object random test (returns 0 for now) */
+	config = (S3_config*)palloc(sizeof(S3_config));
+	config->access_key = "access_key";
+	config->secret_access_key = "secret_access_key";
+	config->bucket_name = "bucket_name";
+	config->region = "region";
+	test_arr = parray_new();
+	file->name = "/home/sofia/Downloads/31459698.pdf";
+	file->size = 212812;
+	parray_append(test_arr, file);
+
+	err = S3_put_files(test_arr, config);
+	elog(LOG, "S3_put_object returned: %d", err);
+	pfree(config);
+	/* temporary dirty test */
+	return 0;
 
 	/* Save list of external directories */
 	if (instance_config.external_dir_str &&

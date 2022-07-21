@@ -1,0 +1,41 @@
+#-------------------------------------------------------------------------
+#
+# Makefile--
+#    Makefile for pg_probackup/s3c
+#
+# IDENTIFICATION
+#    contrib/pg_probackup/s3c
+#
+#-------------------------------------------------------------------------
+
+CFLAGS += -lcurl
+
+ifdef USE_PGXS
+PG_CONFIG = pg_config
+PGXS := $(shell $(PG_CONFIG) --pgxs)
+include $(PGXS)
+else
+subdir=contrib/pg_probackup/s3c
+top_builddir=../../..
+include $(top_builddir)/src/Makefile.global
+#include $(top_srcdir)/contrib/contrib-global.mk
+endif
+
+OBJS = s3c.o
+# $(WIN32RES) ???
+
+PGFILEDESC = "pg_probackup module for S3 filesystem compability"
+NAME = s3c
+
+all: all-shared-lib
+
+include $(top_srcdir)/src/Makefile.shlib
+
+install: all installdirs install-lib
+
+installdirs: installdirs-lib
+
+uninstall: uninstall-lib
+
+clean distclean maintainer-clean: clean-lib
+	rm -f $(OBJS)
