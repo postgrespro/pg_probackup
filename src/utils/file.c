@@ -2961,12 +2961,13 @@ fio_list_dir(parray *files, const char *root, bool exclude,
 				  bool follow_symlink, bool add_root, bool backup_logs,
 				  bool skip_hidden, int external_dir_num)
 {
+	pioDrive_i drive = pioDriveForLocation(FIO_LOCAL_HOST);
 	if (fio_is_remote(FIO_DB_HOST))
 		fio_list_dir_internal(files, root, exclude, follow_symlink, add_root,
 							  backup_logs, skip_hidden, external_dir_num);
 	else
-		dir_list_file(files, root, exclude, follow_symlink, add_root,
-					  backup_logs, skip_hidden, external_dir_num, FIO_LOCAL_HOST);
+		$i(pioListDir, drive, files, root, exclude, follow_symlink, add_root,
+					  backup_logs, skip_hidden, external_dir_num);
 }
 
 PageState *

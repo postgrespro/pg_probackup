@@ -797,7 +797,6 @@ dir_list_file_internal(parray *files, pgFile *parent, const char *parent_dir,
 {
 	DIR			  *dir;
 	struct dirent *dent;
-	pioDrive_i	  drive = pioDriveForLocation(location);
 
 	if (!S_ISDIR(parent->mode))
 		elog(ERROR, "\"%s\" is not a directory", parent_dir);

@@ -278,8 +278,8 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 	join_path_components(external_prefix, current.root_dir, EXTERNAL_DIR);
 
 	/* list files with the logical path. omit $PGDATA */
-	fio_list_dir(backup_files_list, instance_config.pgdata,
-				 true, true, false, backup_logs, true, 0);
+	pioDrive_i drive = pioDriveForLocation(FIO_BACKUP_HOST);
+	$i(pioListDir, drive, backup_files_list, instance_config.pgdata, true, true, false, backup_logs, true, 0);
 
 	/*
 	 * Get database_map (name to oid) for use in partial restore feature.
