@@ -71,7 +71,7 @@ ft_func_shsort_r(FT_SORT_TYPE *arr, size_t len, _ft_cmp_def_r(cmp), ft_arg_t arg
 
 ft_inline ft_optimize3 void
 ft_func_shsort(FT_SORT_TYPE *arr, size_t len, _ft_cmp_def(cmp)) {
-    ft_func_shsort_r(arr, len, (_ft_cmp_def_r()) cmp, ft_mka_z());
+    ft_func_shsort_r(arr, len, (_ft_cmp_def_r())(void*) cmp, ft_mka_z());
 }
 
 ft_inline ft_optimize3 void
@@ -159,7 +159,7 @@ ft_func_qsort_r(FT_SORT_TYPE *arr_, size_t len_, _ft_cmp_def_r(cmp), ft_arg_t ar
 
 ft_inline ft_optimize3 void
 ft_func_qsort(FT_SORT_TYPE *arr, size_t len, _ft_cmp_def(cmp)) {
-    ft_func_qsort_r(arr, len, (_ft_cmp_def_r()) cmp, ft_mka_z());
+    ft_func_qsort_r(arr, len, (_ft_cmp_def_r())(void*) cmp, ft_mka_z());
 }
 
 

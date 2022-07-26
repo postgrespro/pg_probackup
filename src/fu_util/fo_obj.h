@@ -39,6 +39,9 @@ extern void fobj_freeze(void);
 /* Generate all method boilerplate. */
 #define fobj_method(method) fobj__define_method(method)
 
+/* Generates runtime privately called method boilerplate */
+#define fobj_special_method(meth) fobj__special_method(meth)
+
 /*
  * Ensure method initialized.
  * Calling fobj_method_init is not required,
@@ -197,7 +200,7 @@ extern fobj_t fobj_swap(fobj_t* var, fobj_t newval);
  * It is called automatically before destroying object.
  */
 #define mth__fobjDispose    void
-fobj__special_void_method(fobjDispose);
+fobj_special_method(fobjDispose);
 
 /*
  * returns globally allocated klass name.
@@ -343,16 +346,21 @@ extern fobj_klass_handle_t fobj_real_klass_of(fobj_t);
 #define $notNULL(iface)    ((iface).self != NULL)
 #define $setNULL(ifacep)   ((ifacep)->self = NULL)
 #define $null(iface_type)  ((iface_type##_i){NULL})
+
 /*
  * Base type
  */
-#define mth__fobjRepr   struct fobjStr*
-fobj_method(fobjRepr);
-#define mth__fobjKlass  fobj_klass_handle_t
-fobj_method(fobjKlass);
+#define iface__fobj     mth(fobjKlass, fobjRepr)
+/* hardcoded instantiation because of fobj_iface always include iface__fobj */
+fobj__iface_declare_i(fobj, (mth, fobjKlass, fobjRepr));
 
-#define $repr(obj)      $(fobjRepr, (obj))
-#define $irepr(iface)   $(fobjRepr, (iface).self)
+#define mth__fobjRepr   union fobjStr*
+fobj__define_base_method(fobjRepr);
+#define mth__fobjKlass  fobj_klass_handle_t
+fobj__define_base_method(fobjKlass);
+
+#define $repr(obj)      fobj_getstr(fobjRepr(obj)).ptr
+#define $irepr(iface)   fobj_getstr(fobjRepr((iface).self)).ptr
 
 typedef struct fobjBase {
     char fobj__base[0];
@@ -371,15 +379,17 @@ fobj_method(fobjFormat);
  * String
  */
 
-typedef struct fobjStr {
-    const char *ptr;
-    uint32_t    len;
-    char        _buf[]; /* private buffer for copied string */
-} fobjStr;
+typedef union fobjStr fobjStr;
 
 ft_inline   fobjStr*    fobj_str(const char* s);
-#define $S(s)           fobj_str(s)
-extern      fobjStr*    fobj_newstr(ft_str_t str, bool gifted);
+ft_inline   fobjStr*    fobj_str_const(const char* s);
+#define $S(s)           (__builtin_constant_p(s) ? fobj_str_const(s) : fobj_str(s))
+enum FOBJ_STR_ALLOC {
+    FOBJ_STR_GIFTED,
+    FOBJ_STR_CONST,
+    FOBJ_STR_COPY,
+};
+extern      fobjStr*    fobj_newstr(ft_str_t str, enum FOBJ_STR_ALLOC ownership);
 ft_inline   ft_str_t    fobj_getstr(fobjStr *str);
 
 /*
@@ -391,6 +401,7 @@ ft_inline   fobjStr*    fobj_strbuf_steal(ft_strbuf_t *buf);
 ft_gnu_printf(1, 2)
 extern      fobjStr*    fobj_sprintf(const char* fmt, ...);
 extern      fobjStr*    fobj_strcat(fobjStr *ostr, ft_str_t str);
+extern      fobjStr*    fobj_strcat2(fobjStr *ostr, ft_str_t str1, ft_str_t str2);
 ft_inline   fobjStr*    fobj_strcatc(fobjStr *ostr, const char *str);
 ft_inline   fobjStr*    fobj_strcatc2(fobjStr *ostr, const char *str1, const char *str2);
 ft_inline   fobjStr*    fobj_stradd(fobjStr *ostr, fobjStr *other);
@@ -407,8 +418,8 @@ ft_inline   FT_CMP_RES  fobj_strcmp_c(fobjStr* self, const char *oth);
 
 /* turn object to string using fobjFormat */
 extern      fobjStr*    fobj_tostr(fobj_t obj, const char* fmt);
-#define $tostr(obj, ...)  fobj_tostr((obj), fm_or_default(__VA_ARGS__)(NULL))
-#define $itostr(obj, ...) fobj_tostr((obj).self, fm_or_default(__VA_ARGS__)(NULL))
+#define $tostr(obj, ...)    fobj_getstr(fobj_tostr((obj), fm_or_default(__VA_ARGS__)(NULL))).ptr
+#define $itostr(obj, ...)   fobj_getstr(fobj_tostr((obj).self, fm_or_default(__VA_ARGS__)(NULL))).ptr
 
 #define kls__fobjStr    mth(fobjRepr, fobjFormat)
 fobj_klass(fobjStr);
@@ -497,7 +508,7 @@ extern  fobjStr*        fobj_printkv(const char *fmt, ft_slc_fokv_t kv);
  */
 
 #define mth___fobjErr_marker_DONT_IMPLEMENT_ME void
-fobj__special_void_method(_fobjErr_marker_DONT_IMPLEMENT_ME);
+fobj_special_method(_fobjErr_marker_DONT_IMPLEMENT_ME);
 
 #define iface__err      mth(_fobjErr_marker_DONT_IMPLEMENT_ME)
 fobj_iface(err);
@@ -548,7 +559,7 @@ fobj_error_cstr_key(__msgSuffix);
  * $syserr(errno, "allocation error")
  * $syserr(errno, "Could not open file {path}", (path, filename))
  */
-#define $syserr(erno, ...)       fobj_make_syserr((erno), __VA_ARGS__)
+#define $syserr(erno, ...)      fobj_make_syserr((erno), __VA_ARGS__)
 
 /* fetch key back */
 #define $errkey(key, err, ...)  fobj__err_getkey(key, err, __VA_ARGS__)

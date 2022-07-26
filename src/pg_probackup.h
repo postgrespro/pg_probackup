@@ -98,10 +98,6 @@ extern const char  *PROGRAM_EMAIL;
 #define LOCK_STALE_TIMEOUT			30
 #define LOG_FREQ					10
 
-/* Directory/File permission */
-#define DIR_PERMISSION		(0700)
-#define FILE_PERMISSION		(0600)
-
 /* 64-bit xid support for PGPRO_EE */
 #ifndef PGPRO_EE
 #define XID_FMT "%u"

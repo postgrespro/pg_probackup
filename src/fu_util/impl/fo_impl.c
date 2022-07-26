@@ -70,9 +70,9 @@ typedef struct fobj_method_registration {
 
 typedef struct fobj_method_impl {
     uint16_t    method;
+    uint16_t    next_for_klass;
     uint16_t    klass;
     uint16_t    next_for_method;
-    uint16_t    next_for_klass;
     void*       impl;
 } fobj_method_impl_t;
 
@@ -153,11 +153,11 @@ fobj_search_impl(fobj_method_handle_t meth, fobj_klass_handle_t klass) {
     uint32_t i;
 
     i = atload(&fobj_klasses[klass].method_lists[meth%METHOD_PARTITIONS]);
-    do {
+    while (i != 0) {
         if (fobj_method_impl[i].method == meth)
             return fobj_method_impl[i].impl;
         i = fobj_method_impl[i].next_for_klass;
-    } while (i != 0);
+    }
 
     return NULL;
 }
@@ -185,8 +185,8 @@ fobj_method_search(const fobj_t self, fobj_method_handle_t meth, fobj_klass_hand
     fobj_klass_handle_t         klass;
     fobj__method_callback_t     cb = {self, NULL};
 
-    ft_assert(fobj_global_state != FOBJ_RT_NOT_INITIALIZED);
-    if (ft_dbg_enabled()) {
+    if (ft_unlikely(ft_dbg_enabled())) {
+        ft_assert(fobj_global_state != FOBJ_RT_NOT_INITIALIZED);
         ft_assert(meth > 0 && meth <= atload(&fobj_methods_n));
         ft_assert(meth != fobj__nm_mhandle(fobjDispose)());
     }
@@ -200,11 +200,13 @@ fobj_method_search(const fobj_t self, fobj_method_handle_t meth, fobj_klass_hand
     h = ((fobj_header_t*)self - 1);
     assert(h->magic == FOBJ_HEADER_MAGIC);
     klass = h->klass;
-    ft_dbg_assert(klass > 0 && klass <= atload(&fobj_klasses_n));
-    ft_assert((h->flags & FOBJ_DISPOSED) == 0, "Call '%s' on disposed object '%s'",
-              fobj_methods[meth].name, fobj_klasses[klass].name);
+    if (ft_unlikely(ft_dbg_enabled())) {
+        ft_assert(klass > 0 && klass <= atload(&fobj_klasses_n));
+        ft_assert((h->flags & FOBJ_DISPOSED) == 0, "Call '%s' on disposed object '%s'",
+                  fobj_methods[meth].name, fobj_klasses[klass].name);
+    }
 
-    if (ft_unlikely(for_child != 0)) {
+    if (for_child != 0) {
         if (ft_unlikely(ft_dbg_enabled())) {
             while (klass && klass != for_child) {
                 klass = fobj_klasses[klass].parent;
@@ -258,7 +260,7 @@ fobj_method_implements(const fobj_t self, fobj_method_handle_t meth) {
 extern void
 fobj__validate_args(fobj_method_handle_t meth,
                     fobj_t self,
-                    const char** paramnames,
+                    const char* const * paramnames,
                     const char *set,
                     size_t cnt) {
     fobj_header_t              *h;
@@ -588,7 +590,7 @@ fobjBase_fobjKlass(fobj_t self) {
     return fobj_real_klass_of(self);
 }
 
-static struct fobjStr*
+static fobjStr*
 fobjBase_fobjRepr(VSelf) {
     Self(fobjBase);
     fobj_klass_handle_t klass = fobjKlass(self);
@@ -616,43 +618,101 @@ fobj_err_combine(err_i fst, err_i scnd) {
     return fst;
 }
 
-fobjStr*
-fobj_newstr(ft_str_t s, bool gifted) {
+static fobjStr*
+fobj_reservestr(size_t size) {
     fobjStr *str;
-    ft_assert(s.len < UINT32_MAX-2);
-    if (!gifted) {
-        str = fobj_alloc_sized(fobjStr, s.len + 1, .len = s.len);
-        memcpy(str->_buf, s.ptr, s.len);
-        str->_buf[s.len] = '\0';
-        str->ptr = str->_buf;
+#if __SIZEOF_POINTER__ < 8
+    ft_assert(size < (1<<30)-2);
+#else
+    ft_assert(size < UINT32_MAX-2);
+#endif
+    if (size < FOBJ_STR_SMALL_SIZE) {
+        if (size < FOBJ_STR_FREE_SPACE)
+            str = fobj_alloc(fobjStr);
+        else {
+            size_t diff = size + 1 - FOBJ_STR_FREE_SPACE;
+            str = fobj_alloc_sized(fobjStr, diff);
+        }
+        str->small.type = FOBJ_STR_SMALL;
+        str->small.len = size;
+        str->small.buf[size] = '\0';
     } else {
-        str = fobj_alloc(fobjStr, .len = s.len, .ptr = s.ptr);
+        str = fobj_alloc_sized(fobjStr, size + 1);
+        str->ptr.type = FOBJ_STR_UNOWNED; // abuse it because we don't need separate deallocation
+        str->ptr.len = size;
+        str->ptr.ptr = (char*)(str+1);
+        str->ptr.ptr[size] = '\0';
     }
     return str;
 }
 
+fobjStr*
+fobj_newstr(ft_str_t s, enum FOBJ_STR_ALLOC ownership) {
+    fobjStr *str;
+#if __SIZEOF_POINTER__ < 8
+    ft_assert(size < (1<<30)-2);
+#else
+    ft_assert(s.len < UINT32_MAX-2);
+#endif
+    if (s.len >= FOBJ_STR_FREE_SPACE &&
+            (ownership == FOBJ_STR_GIFTED || ownership == FOBJ_STR_CONST)) {
+        str = fobj_alloc(fobjStr);
+        str->ptr.type = ownership == FOBJ_STR_GIFTED ? FOBJ_STR_PTR : FOBJ_STR_UNOWNED;
+        str->ptr.len = s.len;
+        str->ptr.ptr = s.ptr;
+        return str;
+    }
+    str = fobj_reservestr(s.len);
+    memcpy(fobj_getstr(str).ptr, s.ptr, s.len);
+    if (ownership == FOBJ_STR_GIFTED)
+        ft_free(s.ptr);
+    return str;
+}
+
+ft_inline   fobjStr*    fobj_str_const(const char* s);
+
 static void
 fobjStr_fobjDispose(VSelf) {
     Self(fobjStr);
-    if (self->ptr != self->_buf) {
-        ft_free((void*)self->ptr);
+    if (self->type == FOBJ_STR_PTR) {
+        ft_free(self->ptr.ptr);
     }
 }
 
 fobjStr*
 fobj_strcat(fobjStr *self, ft_str_t s) {
     fobjStr *newstr;
-    size_t alloc_len = self->len + s.len + 1;
+    ft_str_t news;
+    ft_str_t selfs = fobj_getstr(self);
+    size_t alloc_len = selfs.len + s.len + 1;
     ft_assert(alloc_len < UINT32_MAX-2);
 
     if (s.len == 0)
-        return $unref($ref(self));
+        return self;
 
-    newstr = fobj_alloc_sized(fobjStr, alloc_len, .len = alloc_len-1);
-    memcpy(newstr->_buf, self->ptr, self->len);
-    memcpy(newstr->_buf + self->len, s.ptr, s.len);
-    newstr->_buf[newstr->len] = '\0';
-    newstr->ptr = newstr->_buf;
+    newstr = fobj_reservestr(alloc_len-1);
+    news = fobj_getstr(newstr);
+    memcpy(news.ptr, selfs.ptr, selfs.len);
+    memcpy(news.ptr + selfs.len, s.ptr, s.len);
+    return newstr;
+}
+
+fobjStr*
+fobj_strcat2(fobjStr *self, ft_str_t s1, ft_str_t s2) {
+    fobjStr *newstr;
+    ft_str_t news;
+    ft_str_t selfs = fobj_getstr(self);
+    size_t alloc_len = selfs.len + s1.len + s2.len + 1;
+    ft_assert(alloc_len < UINT32_MAX-2);
+
+    if (s1.len + s2.len == 0)
+        return self;
+
+    newstr = fobj_reservestr(alloc_len-1);
+    news = fobj_getstr(newstr);
+    memcpy(news.ptr, selfs.ptr, selfs.len);
+    memcpy(news.ptr + selfs.len, s1.ptr, s1.len);
+    memcpy(news.ptr + selfs.len + s1.len, s2.ptr, s2.len);
     return newstr;
 }
 
@@ -685,10 +745,10 @@ fobj_strcatf(fobjStr *ostr, const char *fmt, ...) {
     }
 
     /* empty print? */
-    if (buf.ptr == ostr->ptr) {
-        return $unref($ref(ostr));
+    if (ft_strbuf_ref(&buf).ptr == fobj_getstr(ostr).ptr) {
+        return ostr;
     }
-    return fobj_newstr(ft_strbuf_steal(&buf), true);
+    return fobj_strbuf_steal(&buf);
 }
 
 fobjStr*
@@ -698,6 +758,10 @@ fobj_tostr(fobj_t obj, const char *fmt) {
 
     if (obj == NULL) {
         return fobj_str("<null>");
+    }
+
+    if (fobj_real_klass_of(obj) == fobjStr__kh() && (fmt == NULL || fmt[0] == '\0')) {
+        return obj;
     }
 
     if (!$ifdef(, fobjFormat, obj, &buf, fmt)) {
@@ -1243,7 +1307,7 @@ fobj_printkv(const char *fmt, ft_slc_fokv_t kvs) {
             ft_strbuf_catc(&out, "NULL");
         } else if (!$ifdef(, fobjFormat, kvs.ptr[i].value, &out, format)) {
             /* fallback to repr */
-            ft_strbuf_cat(&out, fobj_getstr($repr(kvs.ptr[i].value)));
+            ft_strbuf_cat(&out, fobj_getstr(fobjRepr(kvs.ptr[i].value)));
         }
         cur = closebrace;
     }
@@ -1276,7 +1340,7 @@ fobjBase__kh(void) {
 }
 
 fobj_klass_handle(fobjErr, mth(fobjRepr, _fobjErr_marker_DONT_IMPLEMENT_ME), varsized(kv));
-fobj_klass_handle(fobjStr, mth(fobjDispose), varsized(_buf));
+fobj_klass_handle(fobjStr, mth(fobjDispose), varsized());
 fobj_klass_handle(fobjInt);
 fobj_klass_handle(fobjUInt);
 fobj_klass_handle(fobjFloat);

@@ -12,6 +12,10 @@
 
 #include <fo_obj.h>
 
+/* Directory/File permission */
+#define DIR_PERMISSION		(0700)
+#define FILE_PERMISSION		(0600)
+
 typedef enum
 {
 	/* message for compatibility check */
