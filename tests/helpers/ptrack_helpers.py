@@ -1,3 +1,4 @@
+
 # you need os for unittest to work
 import os
 import gc
@@ -13,6 +14,9 @@ import select
 from time import sleep
 import re
 import json
+
+from testgres.logger import log
+from fabric import Connection
 
 idx_ptrack = {
     't_heap': {
@@ -87,20 +91,42 @@ def dir_files(base_dir):
     return out_list
 
 
+# XXX
+# make universal code for the cummunity test cases 
+# pg_config --help
+# env PGPRO_TESTGRES_DOCKER_DB1
 def is_enterprise():
-    # pg_config --help
-    if os.name == 'posix':
-        cmd = [os.environ['PG_CONFIG'], '--help']
+    pg_config = os.environ.get(
+        'PG_CONFIG',
+        default='/usr/local/pgsql/bin/pg_config')
+    
+    docker_mode = os.environ.get(
+        'PGPRO_TESTGRES_DOCKER_DB1', default=False)
+    posix_mode = (os.name == 'posix')
+    windows_mode = (os.name == 'nt')
 
-    elif os.name == 'nt':
-        cmd = [[os.environ['PG_CONFIG']], ['--help']]
+    cmd = None
+    if docker_mode and posix_mode:
+        cmd = ['docker',
+               'exec',  docker_mode,
+               '/bin/bash', '-c', pg_config, '--help']
+        
+    elif posix_mode:
+        cmd = [pg_config, '--help']
 
-    p = subprocess.Popen(
-        cmd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE
-    )
-    if b'postgrespro.ru' in p.communicate()[0]:
+    elif windows_mode:
+        cmd = [[pg_config], ['--help']]
+
+    if cmd is not None:
+        process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
+        
+
+    stdout = process.communicate()
+    if b'postgrespro.ru' in stdout[0]:
         return True
     else:
         return False
@@ -148,6 +174,7 @@ def slow_start(self, replica=False):
 
         sleep(0.5)
 
+
 class ProbackupTest(object):
     # Class attributes
     enterprise = is_enterprise()
@@ -159,6 +186,7 @@ class ProbackupTest(object):
         else:
             self.verbose = False
 
+        # DDD change test_env -> self.env 
         self.test_env = os.environ.copy()
         envs_list = [
             'LANGUAGE',
@@ -174,7 +202,7 @@ class ProbackupTest(object):
             'PGPORT',
             'PGHOST'
         ]
-
+        
         for e in envs_list:
             try:
                 del self.test_env[e]
@@ -184,6 +212,7 @@ class ProbackupTest(object):
         self.test_env['LC_MESSAGES'] = 'C'
         self.test_env['LC_TIME'] = 'C'
 
+        # DDD remove duplication in the code to concreate logic with self.env and setdefault()
         self.gdb = 'PGPROBACKUP_GDB' in os.environ and \
               os.environ['PGPROBACKUP_GDB'] == 'ON'
 
@@ -341,13 +370,17 @@ class ProbackupTest(object):
 #                exit(1)
 
     def make_empty_node(
-            self,
-            base_dir=None):
+            self, base_dir=None, hostname='localhost', ssh_key=None):
+        """
+        """
+        
         real_base_dir = os.path.join(self.tmp_path, base_dir)
         shutil.rmtree(real_base_dir, ignore_errors=True)
         os.makedirs(real_base_dir)
 
-        node = testgres.get_new_node('test', base_dir=real_base_dir)
+        node = testgres.get_new_node(
+            'test', base_dir=real_base_dir, hostname=hostname)
+        
         # bound method slow_start() to 'node' class instance
         node.slow_start = slow_start.__get__(node)
         node.should_rm_dirs = True
@@ -356,12 +389,16 @@ class ProbackupTest(object):
     def make_simple_node(
             self,
             base_dir=None,
+            hostname='localhost',
+            ssh_key=None,
             set_replication=False,
             ptrack_enable=False,
             initdb_params=[],
             pg_options={}):
+        """
+        """
 
-        node = self.make_empty_node(base_dir)
+        node = self.make_empty_node(base_dir, hostname=hostname, ssh_key=ssh_key)
         node.init(
            initdb_params=initdb_params, allow_streaming=set_replication)
 
@@ -796,7 +833,11 @@ class ProbackupTest(object):
                     )
                 )
 
-    def run_pb(self, command, asynchronous=False, gdb=False, old_binary=False, return_id=True, env=None):
+    def run_pb(self, command, asynchronous=False,
+               gdb=False, old_binary=False, return_id=True, env=None,
+               host_kwargs={}):
+        # DDD use testgres execute utility
+        
         if not self.probackup_old_path and old_binary:
             print('PGPROBACKUPBIN_OLD is not set')
             exit(1)
@@ -812,10 +853,12 @@ class ProbackupTest(object):
         try:
             self.cmd = [' '.join(map(str, [binary_path] + command))]
             if self.verbose:
-                print(self.cmd)
+                log.debug('Execute command: %s' % self.cmd)
+                
             if gdb:
                 return GDBobj([binary_path] + command, self.verbose)
             if asynchronous:
+                # XXX check output! 
                 return subprocess.Popen(
                     [binary_path] + command,
                     stdout=subprocess.PIPE,
@@ -823,17 +866,28 @@ class ProbackupTest(object):
                     env=env
                 )
             else:
+                if 'hostname' in host_kwargs and 'ssh_key' in host_kwargs:
+                    conn = Connection(
+                        host_kwargs['hostname'],
+                        connect_kwargs={'key_filename': host_kwargs['ssh_key']})
+
+                    # TODO pass env and add logger from testgres
+                    cmd = binary_path + ' ' + ' '.join(map(str, command))
+                    result = conn.run(cmd)
+                    return result
+                
                 self.output = subprocess.check_output(
                     [binary_path] + command,
                     stderr=subprocess.STDOUT,
                     env=env
                     ).decode('utf-8')
                 if command[0] == 'backup' and return_id:
+                    # XXX check output! 
                     # return backup ID
                     for line in self.output.splitlines():
                         if 'INFO: Backup' and 'completed' in line:
                             return line.split()[2]
-                else:
+                else:                    
                     return self.output
         except subprocess.CalledProcessError as e:
             raise ProbackupException(e.output.decode('utf-8'), self.cmd)
@@ -1040,7 +1094,9 @@ class ProbackupTest(object):
     def catchup_node(
             self,
             backup_mode, source_pgdata, destination_node,
-            options = []
+            remote_host='localhost',
+            options = [],
+            host_kwargs={},
             ):
 
         cmd_list = [
@@ -1050,14 +1106,14 @@ class ProbackupTest(object):
             '--destination-pgdata={0}'.format(destination_node.data_dir)
         ]
         if self.remote:
-            cmd_list += ['--remote-proto=ssh', '--remote-host=localhost']
+            cmd_list += ['--remote-proto=ssh', '--remote-host=%s'%remote_host]
         if self.verbose:
             cmd_list += [
                 '--log-level-file=VERBOSE',
                 '--log-directory={0}'.format(destination_node.logs_dir)
             ]
-
-        return self.run_pb(cmd_list + options)
+            
+        return self.run_pb(cmd_list + options, host_kwargs=host_kwargs)
 
     def show_pb(
             self, backup_dir, instance=None, backup_id=None,

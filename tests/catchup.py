@@ -2,14 +2,196 @@ import os
 from pathlib import Path
 import signal
 import unittest
+import socket
+import random
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
+from testgres.logger import log
 
 module_name = 'catchup'
+
+__all__ = ['MulstihostCatchupTest', 'CatchupTest']
+
+# print('##')
+# XXX no changes in the test runing if we dons use print here
+
+class MultihostCatchupTest(ProbackupTest, unittest.TestCase):
+    """
+    Requirements: Two RDBMS hosts using Docker or VMs wrappers for Postgres nodes launch separatly with pg_probackup utility. Shared SSH-keys between Postgres nodes or "ssh-keys" 
+    
+    @PGPROBACKUP_SSH_REMOTE=ON
+    @RDBMS1_HOST
+    @RDBMS2_HOST
+    @PROBACKUP_HOST
+
+    SSH-KEY
+    SSH-KEY
+    
+    Test-case scrip:
+
+    -- Init test RDBMS Node on the RDBMS_HOST1
+    -- Launch pg_prbackup on the RDBMS_HOST2 and catchup changes from RDBMS_HOST1(src) -> RDBMS_HOST2(dst) 
+    -- Check data equal using SSH on the RDBMS_HOST1(src) == RDBMS_HOST2(dst)
+
+    """
+    #host1 = ''
+    #host2 = 'db2'
+    
+    def setUp(self):
+        # DDD self.fname, 
+        # fname are for logging file path
+        self.fname = self.id().split('.')[3]
+        
+        self.hostname = socket.gethostname()
+
+        # we need ipaddr to check hosts, because docker uses name alias in the compose file
+        # and id in thedocker container. 
+        self.ipaddr = socket.gethostbyname(self.hostname)
+        
+        # TODO use self.env in all test classes instead self.test_env
+        # here are an example for setUp
+        self.env = dict()
+        self.env.setdefault(
+            'PGPROBACKUP_SSH_REMOTE', os.environ.get(
+                'PGPROBACKUP_SSH_REMOTE', default='ON'))
+        self.env.setdefault(
+            'RDBMS_TESTPOOL1_HOST', os.environ.get(
+                'RDBMS_TESTPOOL1_HOST', default=self.hostname))
+        self.env.setdefault(
+            'RDBMS_TESTPOOL1_SSHKEY', os.environ.get(
+                'RDBMS_TESTPOOL1_SSHKEY', default='/mnt/ssh/id_rsa'))
+
+        self.env.setdefault(
+            'RDBMS_TESTPOOL2_HOST', os.environ.get(
+                'RDBMS_TESTPOOL2_HOST', default=None))
+        self.env.setdefault(
+            'RDBMS_TESTPOOL2_SSHKEY', os.environ.get(
+                'RDBMS_TESTPOOL2_SSHKEY', default='/mnt/ssh/id_rsa'))
+        
+        log.debug('Current RDBMS host [%s:%s]'% (self.hostname, self.ipaddr))
+        log.debug('Setup environment: %s'% self.env)
+        log.debug('Setup environment: %s'% self.test_env)
+
+        #self.rdbms1 = object() # testgres.PostgresNode(self, hostname=selg.env.rdbms_testpool1_host, set_replication=True)
+        #self.rdbms2 = object() # testgres.PGProProbackupNode(hostname=self.env.rdbms_testpool1_host, set_replication=True)
+
+        #self.db1.flush()
+        #self.db1.rebuild()
+        #self.db1.build()
+        #self.db1.empty()
+
+
+    #def tearDown(self):
+    #    #self.db1.flush()
+    #    #self.db2.flush()
+    #    return
+        
+    def test_basic_full_catchup(self):
+        """
+        Test 'multithreaded basebackup' mode (aka FULL catchup)
+
+        @ self.fname -- name of test for logs stored 
+        """
+
+        # TODO raise Exception if we dont prepare host for multihost tests launch
+        # TODO fix logging system from Testgres to use TestClass name in the log path
+        # because right now tests rewrites each others
+        
+        # self.db1.init()
+        # self.db2.empty()
+        # self.probackup.catchup(self.db1, self.db2)
+        # self.assertEqual(self.db1, self.db2)
+
+        # self.db1.query('slomat cod')
+        # self.probackup.catchup(self.db1, self.db2)
+        # self.assertEqual(self.db1, self.db2)
+
+        # self.db1.init()
+        # self.db2.create_empty()
+        # self.db3 = testgres.PostgresNode(hostname=self.env.db_test_pool3)
+        # # localhost do not call SSH 
+        
+        # self.probackup.catchup(self.db1, self.db2)
+        # self.assertEqual(self.db1, self.db2)
+
+        # self.db1.query('slomat cod')
+        # self.probackup.catchup(self.db1, self.db2)
+        # self.assertEqual(self.db1, self.db2)        
+
+        
+        src_pg = self.make_simple_node(
+            base_dir = os.path.join(module_name, self.fname, 'src'),
+            hostname=self.env['RDBMS_TESTPOOL1_HOST'],
+            #ssh_key=self.env['RDBMS_TESTPOOL1_SSHKEY'],
+            set_replication = True
+            )
+
+        # start db and wait while DB will by ready to use
+        src_pg.slow_start()
+        src_pg.safe_psql(
+            "postgres",
+
+            # DDD better to use random() value instead 42 to check in the test context equal values per each test session        
+            "CREATE TABLE ultimate_question AS SELECT %s AS answer" % random.randrange(1000000))        
+        src_query_result = src_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
+
+        log.debug('Source RDBMS: %s' %src_pg)
+        
+        # do full catchup
+        # create empty Node for tests
+        dst_pg = self.make_empty_node(
+            os.path.join(module_name, self.fname, 'dst'),
+            hostname=self.env['RDBMS_TESTPOOL2_HOST'],
+            #host_kwargs=#ssh_key=self.env['RDBMS_TESTPOOL1_SSHKEY']
+        )
+        log.debug('Destionation RDBMS: %s' % dst_pg)
+        
+        # fill up EmptyNode by SRC data
+        # run command on the DST host database
+        
+        self.catchup_node(
+            backup_mode = 'FULL',
+            source_pgdata = src_pg.data_dir,
+            destination_node = dst_pg,
+            
+            # remote_host == host where we read data for dst
+            remote_host='vanilla_db1',
+            host_kwargs={
+                'hostname': self.env['RDBMS_TESTPOOL2_HOST'],
+                'ssh_key': self.env['RDBMS_TESTPOOL2_SSHKEY']},
+            
+            options = ['-d', 'postgres', '-p', str(src_pg.port), '--stream']
+            )
+        log.debug('Catchup to %s -> %s' % (dst_pg.hostname, dst_pg))
+
+        # XXX compare data        
+        # 1st check: compare data directories
+        # compare dirs and checksums 
+        self.compare_pgdata(
+            self.pgdata_content(src_pg.data_dir),
+            self.pgdata_content(dst_pg.data_dir)
+            )
+
+        # run&recover catchup'ed instance
+        src_pg.stop()
+        dst_options = {}
+        dst_options['port'] = str(dst_pg.port)
+        self.set_auto_conf(dst_pg, dst_options)
+        dst_pg.slow_start()
+
+        # 2nd check: run verification query
+        dst_query_result = dst_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
+        self.assertEqual(src_query_result, dst_query_result, 'Different answer from copy')
+
+        # Cleanup
+        dst_pg.stop()
+        #self.assertEqual(1, 0, 'Stop test')
+        self.del_test_dir(module_name, self.fname)
+
 
 class CatchupTest(ProbackupTest, unittest.TestCase):
     def setUp(self):
         self.fname = self.id().split('.')[3]
-
+        
 #########################################
 # Basic tests
 #########################################
@@ -35,8 +217,8 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             source_pgdata = src_pg.data_dir,
             destination_node = dst_pg,
             options = ['-d', 'postgres', '-p', str(src_pg.port), '--stream']
-            )
-
+            )        
+        
         # 1st check: compare data directories
         self.compare_pgdata(
             self.pgdata_content(src_pg.data_dir),
@@ -59,6 +241,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         #self.assertEqual(1, 0, 'Stop test')
         self.del_test_dir(module_name, self.fname)
 
+        
     def test_full_catchup_with_tablespace(self):
         """
         Test tablespace transfers
