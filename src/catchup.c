@@ -11,8 +11,10 @@
 
 #if PG_VERSION_NUM < 110000
 #include "catalog/catalog.h"
-#endif
 #include "catalog/pg_tablespace.h"
+#else
+#include "catalog/pg_tablespace_d.h"
+#endif
 #include "access/timeline.h"
 #include "pgtar.h"
 #include "streamutil.h"

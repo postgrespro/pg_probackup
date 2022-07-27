@@ -15,8 +15,10 @@
 
 #if PG_VERSION_NUM < 110000
 #include "catalog/catalog.h"
-#endif
 #include "catalog/pg_tablespace.h"
+#else
+#include "catalog/pg_tablespace_d.h"
+#endif
 
 #include <unistd.h>
 #include <sys/stat.h>
@@ -122,8 +124,6 @@ typedef struct TablespaceCreatedList
 	TablespaceCreatedListCell *tail;
 } TablespaceCreatedList;
 
-static char dir_check_file(pgFile *file, bool backup_logs);
-
 static void dir_list_file_internal(parray *files, pgFile *parent, const char *parent_dir,
 								   bool exclude, bool follow_symlink, bool backup_logs,
 								   bool skip_hidden, int external_dir_num, fio_location location);
@@ -154,6 +154,33 @@ pgFileNew(const char *path, const char *rel_path, bool follow_symlink,
 			return NULL;
 		elog(ERROR, "cannot stat file \"%s\": %s", path,
 			strerror(errno));
+	}
+
+	file = pgFileInit(rel_path);
+	file->size = st.st_size;
+	file->mode = st.st_mode;
+	file->mtime = st.st_mtime;
+	file->external_dir_num = external_dir_num;
+
+	return file;
+}
+
+pgFile *
+pgFileNew_pio(const char *path, const char *rel_path, bool follow_symlink,
+		int external_dir_num, pioDrive_i drive)
+{
+	struct stat		st;
+	err_i			err;
+	pgFile			*file;
+
+	/* stat the file */
+	st = $i(pioStat, drive, path, follow_symlink, &err);
+	if ($haserr(err)) {
+		/* file not found is not an error case */
+		if (getErrno(err) == ENOENT)
+			return NULL;
+		elog(ERROR, "cannot stat file \"%s\": %s", path,
+		strerror(getErrno(err)));
 	}
 
 	file = pgFileInit(rel_path);
@@ -559,7 +586,7 @@ dir_list_file(parray *files, const char *root, bool exclude, bool follow_symlink
  * - database directories
  * - datafiles
  */
-static char
+char
 dir_check_file(pgFile *file, bool backup_logs)
 {
 	int			i;

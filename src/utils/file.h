@@ -231,6 +231,10 @@ fobj_iface(pioReadCloser);
 #define mth__pioGetCRC32 	pg_crc32, (path_t, path), (bool, compressed), \
 									  (err_i *, err)
 #define mth__pioIsRemote 	bool
+#define mth__pioListDir		void, (parray*, files), (const char*, root), \
+								(bool, exclude), (bool, follow_symlink), \
+								(bool, add_root), (bool, backup_logs), \
+								(bool, skip_hidden), (int, external_dir_num)
 
 fobj_method(pioOpen);
 fobj_method(pioStat);
@@ -239,9 +243,10 @@ fobj_method(pioRename);
 fobj_method(pioExists);
 fobj_method(pioIsRemote);
 fobj_method(pioGetCRC32);
+fobj_method(pioListDir);
 
 #define iface__pioDrive 	mth(pioOpen, pioStat, pioRemove, pioRename), \
-					        mth(pioExists, pioGetCRC32, pioIsRemote)
+					        mth(pioExists, pioGetCRC32, pioIsRemote, pioListDir)
 fobj_iface(pioDrive);
 
 #define kls__pioLocalDrive	iface__pioDrive, iface(pioDrive)

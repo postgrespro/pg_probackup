@@ -19,6 +19,17 @@ static char *async_errormsg = NULL;
 
 fio_location MyLocation;
 
+static void dir_list_file_internal_local(parray *files, pgFile *parent, const char *parent_dir,
+									bool exclude, bool follow_symlink, bool backup_logs,
+									bool skip_hidden, int external_dir_num, pioDrive_i drive);
+
+static void dir_list_file_internal_remote(parray *files, pgFile *parent, const char *parent_dir,
+									bool exclude, bool follow_symlink, bool backup_logs,
+									bool skip_hidden, int external_dir_num, pioDrive_i drive);
+
+static pioDrive_i localDrive;
+static pioDrive_i remoteDrive;
+
 typedef struct
 {
 	BlockNumber nblocks;
@@ -2947,12 +2958,14 @@ fio_list_dir(parray *files, const char *root, bool exclude,
 				  bool follow_symlink, bool add_root, bool backup_logs,
 				  bool skip_hidden, int external_dir_num)
 {
+	pioDrive_i drive = pioDriveForLocation(FIO_LOCAL_HOST);
+
 	if (fio_is_remote(FIO_DB_HOST))
 		fio_list_dir_internal(files, root, exclude, follow_symlink, add_root,
 							  backup_logs, skip_hidden, external_dir_num);
 	else
-		dir_list_file(files, root, exclude, follow_symlink, add_root,
-					  backup_logs, skip_hidden, external_dir_num, FIO_LOCAL_HOST);
+		$i(pioListDir, drive, files, root, exclude, follow_symlink, add_root,
+					  backup_logs, skip_hidden, external_dir_num);
 }
 
 PageState *
@@ -3620,6 +3633,202 @@ pioLocalDrive_pioIsRemote(VSelf)
     return false;
 }
 
+static void
+pioLocalDrive_pioListDir(VSelf, parray *files, const char* root, bool exclude,
+						bool follow_symlink, bool add_root, bool backup_logs,
+						bool skip_hidden, int external_dir_num)
+{
+	Self(pioLocalDrive);
+	pgFile		*file;
+
+	file = pgFileNew_pio(root, "", follow_symlink, external_dir_num, bind_pioDrive(self));
+	if (file == NULL) {
+		/* For external directory this is not ok */
+		if (external_dir_num > 0)
+			elog(ERROR, "External directory is not found: \"%s\"", root);
+		else
+			return;
+	}
+
+	if (!S_ISDIR(file->mode)) {
+		if (external_dir_num > 0)
+			elog(ERROR, " --external-dirs option \"%s\": directory or symbolic link expected",
+						root);
+		else
+			elog(WARNING, "Skip \"%s\": unexpected file format", root);
+		return;
+	}
+
+	if (add_root)
+		parray_append(files, file);
+
+	dir_list_file_internal_local(files, file, root, exclude, follow_symlink,
+							backup_logs, skip_hidden, external_dir_num, bind_pioDrive(self));
+
+	if (!add_root)
+		pgFileFree(file);
+}
+
+#define CHECK_FALSE				0
+#define CHECK_TRUE				1
+#define CHECK_EXCLUDE_FALSE		2
+
+static DIR*
+remote_opendir(const char* path) {
+	int i;
+	fio_header hdr;
+	unsigned long mask;
+
+	mask = fio_fdset;
+	for (i = 0; (mask & 1) != 0; i++, mask >>= 1);
+	if (i == FIO_FDMAX) {
+		elog(ERROR, "Descriptor pool for remote files is exhausted, "
+				"probably too many remote directories are opened");
+	}
+	hdr.cop = FIO_OPENDIR;
+	hdr.handle = i;
+	hdr.size = strlen(path) + 1;
+	fio_fdset |= 1 << i;
+
+	IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
+	IO_CHECK(fio_write_all(fio_stdout, path, hdr.size), hdr.size);
+
+	IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
+
+	if (hdr.arg != 0) {
+		errno = hdr.arg;
+		fio_fdset &= ~(1 << hdr.handle);
+		return NULL;
+	}
+	return (DIR*)(size_t)(i + 1);
+}
+
+static struct dirent*
+remote_readdir(DIR* dir) {
+	fio_header hdr;
+	static __thread struct dirent entry;
+
+	hdr.cop = FIO_READDIR;
+	hdr.handle = (size_t)dir - 1;
+	hdr.size = 0;
+	IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
+
+	IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
+	Assert(hdr.cop == FIO_SEND);
+	if (hdr.size) {
+		Assert(hdr.size == sizeof(entry));
+		IO_CHECK(fio_read_all(fio_stdin, &entry, sizeof(entry)), sizeof(entry));
+	}
+
+	return hdr.size ? &entry : NULL;
+}
+
+static int
+remote_closedir(DIR* dir) {
+	fio_header hdr;
+	hdr.cop = FIO_CLOSEDIR;
+	hdr.handle = (size_t)dir - 1;
+	hdr.size = 0;
+	fio_fdset &= ~(1 << hdr.handle);
+
+	IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
+	return 0;
+}
+
+static void dir_list_file_internal_local(parray *files, pgFile *parent, const char *parent_dir,
+									bool exclude, bool follow_symlink, bool backup_logs,
+									bool skip_hidden, int external_dir_num, pioDrive_i drive)
+{
+	DIR				*dir;
+	struct dirent	*dent;
+
+	if (!S_ISDIR(parent->mode))
+		elog(ERROR, "\"%s\" is not a directory", parent_dir);
+
+	/* Open directory and list contents */
+	dir = opendir(parent_dir);
+	if (dir == NULL) {
+		if (errno == ENOENT) {
+			/* Maybe the directory was removed */
+			return;
+		}
+		elog(ERROR, "Cannot open directory \"%s\": %s",
+					parent_dir, strerror(errno));
+	}
+
+	errno = 0;
+	while ((dent = readdir(dir))) {
+		pgFile		*file;
+		char		child[MAXPGPATH];
+		char		rel_child[MAXPGPATH];
+		char		check_res;
+
+		join_path_components(child, parent_dir, dent->d_name);
+		join_path_components(rel_child, parent->rel_path, dent->d_name);
+
+		file = pgFileNew_pio(child, rel_child, follow_symlink, external_dir_num, drive);
+		if (file == NULL)
+			continue;
+
+		/* Skip entries point current dir or parent dir */
+		if (S_ISDIR(file->mode) &&
+			(strcmp(dent->d_name, ".") == 0 || strcmp(dent->d_name, "..") == 0))
+		{
+			pgFileFree(file);
+			continue;
+		}
+
+        /* skip hidden files and directories */
+        if (skip_hidden && file->name[0] == '.') {
+            elog(WARNING, "Skip hidden file: '%s'", child);
+            pgFileFree(file);
+            continue;
+        }
+
+		/*
+		 * Add only files, directories and links. Skip sockets and other
+		 * unexpected file formats.
+		 */
+		if (!S_ISDIR(file->mode) && !S_ISREG(file->mode)) {
+			elog(WARNING, "Skip '%s': unexpected file format", child);
+			pgFileFree(file);
+			continue;
+		}
+
+		if (exclude) {
+			check_res = dir_check_file(file, backup_logs);
+			if (check_res == CHECK_FALSE) {
+				/* Skip */
+				pgFileFree(file);
+				continue;
+			} else if (check_res == CHECK_EXCLUDE_FALSE) {
+				/* We add the directory itself which content was excluded */
+				parray_append(files, file);
+				continue;
+			}
+		}
+
+		parray_append(files, file);
+
+		/*
+		 * If the entry is a directory call dir_list_file_internal()
+		 * recursively.
+		 */
+		if (S_ISDIR(file->mode))
+			dir_list_file_internal_local(files, file, child, exclude, follow_symlink,
+						backup_logs, skip_hidden, external_dir_num, drive);
+	}
+
+	if (errno && errno != ENOENT) {
+		int	errno_tmp = errno;
+		closedir(dir);
+		elog(ERROR, "Cannot read directory \"%s\": %s",
+		parent_dir, strerror(errno_tmp));
+	}
+
+	closedir(dir);
+}
+
 /* LOCAL FILE */
 static void
 pioLocalFile_fobjDispose(VSelf)
@@ -3885,6 +4094,135 @@ static bool
 pioRemoteDrive_pioIsRemote(VSelf)
 {
     return true;
+}
+
+static void
+pioRemoteDrive_pioListDir(VSelf, parray *files, const char* root, bool exclude,
+						bool follow_symlink, bool add_root, bool backup_logs,
+						bool skip_hidden, int external_dir_num)
+{
+	Self(pioRemoteDrive);
+	pgFile	*file;
+
+	file = pgFileNew_pio(root, "", follow_symlink, external_dir_num, bind_pioDrive(self));
+	if (file == NULL) {
+		/* For external directory this is not ok */
+		if (external_dir_num > 0)
+			elog(ERROR, "External directory is not found: \"%s\"", root);
+		else
+			return;
+	}
+
+	if (!S_ISDIR(file->mode)) {
+		if (external_dir_num > 0)
+			elog(ERROR, " --external-dirs option \"%s\": directory or symbolic link expected",
+						root);
+		else
+			elog(WARNING, "Skip \"%s\": unexpected file format", root);
+		return;
+	}
+
+	if (add_root)
+		parray_append(files, file);
+
+	dir_list_file_internal_remote(files, file, root, exclude, follow_symlink,
+							backup_logs, skip_hidden, external_dir_num, bind_pioDrive(self));
+
+	if (!add_root)
+		pgFileFree(file);
+}
+
+static void dir_list_file_internal_remote(parray *files, pgFile *parent, const char *parent_dir,
+									bool exclude, bool follow_symlink, bool backup_logs,
+									bool skip_hidden, int external_dir_num, pioDrive_i drive)
+{
+	DIR				*dir;
+	struct dirent	*dent;
+
+	if (!S_ISDIR(parent->mode))
+		elog(ERROR, "\"%s\" is not a directory", parent_dir);
+
+	/* Open directory and list contents */
+	dir = remote_opendir(parent_dir);
+	if (dir == NULL) {
+		if (errno == ENOENT) {
+			/* Maybe the directory was removed */
+			return;
+		}
+		elog(ERROR, "Cannot open directory \"%s\": %s",
+		parent_dir, strerror(errno));
+	}
+
+	errno = 0;
+	while ((dent = remote_readdir(dir))) {
+		pgFile	*file;
+		char	child[MAXPGPATH];
+		char	rel_child[MAXPGPATH];
+		char	check_res;
+
+		join_path_components(child, parent_dir, dent->d_name);
+		join_path_components(rel_child, parent->rel_path, dent->d_name);
+
+		file = pgFileNew_pio(child, rel_child, follow_symlink, external_dir_num, drive);
+		if (file == NULL)
+		continue;
+
+		/* Skip entries point current dir or parent dir */
+		if (S_ISDIR(file->mode) &&
+			(strcmp(dent->d_name, ".") == 0 || strcmp(dent->d_name, "..") == 0))
+		{
+			pgFileFree(file);
+			continue;
+		}
+
+		/* skip hidden files and directories */
+		if (skip_hidden && file->name[0] == '.') {
+			elog(WARNING, "Skip hidden file: '%s'", child);
+			pgFileFree(file);
+			continue;
+		}
+
+		/*
+		 * Add only files, directories and links. Skip sockets and other
+		 * unexpected file formats.
+		 */
+		if (!S_ISDIR(file->mode) && !S_ISREG(file->mode)) {
+			elog(WARNING, "Skip '%s': unexpected file format", child);
+			pgFileFree(file);
+			continue;
+		}
+
+		if (exclude) {
+			check_res = dir_check_file(file, backup_logs);
+			if (check_res == CHECK_FALSE) {
+				/* Skip */
+				pgFileFree(file);
+				continue;
+			} else if (check_res == CHECK_EXCLUDE_FALSE) {
+				/* We add the directory itself which content was excluded */
+				parray_append(files, file);
+				continue;
+			}
+		}
+
+		parray_append(files, file);
+
+		/*
+		 * If the entry is a directory call dir_list_file_internal()
+		 * recursively.
+		 */
+		if (S_ISDIR(file->mode))
+			dir_list_file_internal_remote(files, file, child, exclude, follow_symlink,
+									backup_logs, skip_hidden, external_dir_num, drive);
+	}
+
+	if (errno && errno != ENOENT) {
+		int	errno_tmp = errno;
+		remote_closedir(dir);
+		elog(ERROR, "Cannot read directory \"%s\": %s",
+		parent_dir, strerror(errno_tmp));
+	}
+	remote_closedir(dir);
 }
 
 /* REMOTE FILE */

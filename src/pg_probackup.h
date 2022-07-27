@@ -1074,6 +1074,10 @@ extern int pgCompareString(const void *str1, const void *str2);
 extern int pgPrefixCompareString(const void *str1, const void *str2);
 extern int pgCompareOid(const void *f1, const void *f2);
 extern void pfilearray_clear_locks(parray *file_list);
+extern char dir_check_file(pgFile *file, bool backup_logs);
+extern pgFile *pgFileNew_pio(const char *path, const char *rel_path,
+						bool follow_symlink, int external_dir_num,
+						pioDrive_i drive);
 
 /* in data.c */
 extern bool check_data_file(ConnectionArgs *arguments, pgFile *file,
