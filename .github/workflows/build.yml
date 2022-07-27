@@ -20,6 +20,7 @@ jobs:
       - windows-2019
 
     env:
+      VSINSTALLDIR: C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\
       zlib_dir: C:\dep\zlib
 
     steps:
@@ -58,11 +59,12 @@ jobs:
         run: |
           $env:PATH += ";C:\msys64\usr\bin"
           cd postgres\src\tools\msvc
+          Add-Content buildenv.pl '$ENV{MSBFLAGS}="/m";'
           (Get-Content config_default.pl) -Replace "zlib *=>(.*?)(?=,? *#)", "zlib => '${{ env.zlib_dir }}'" | Set-Content config.pl
-          cmd.exe /s /c "`"C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\VC\Auxiliary\Build\vcvarsall.bat`" amd64 && .\build.bat"
+          cmd.exe /s /c "`"%VSINSTALLDIR%VC\Auxiliary\Build\vcvarsall.bat`" amd64 && .\build.bat"
 
       - name: Build Probackup
-        run: cmd.exe /s /c "`"C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\VC\Auxiliary\Build\vcvarsall.bat`" amd64 && perl .\gen_probackup_project.pl `"${{ github.workspace }}`"\postgres"
+        run: cmd.exe /s /c "`"%VSINSTALLDIR%VC\Auxiliary\Build\vcvarsall.bat`" amd64 && set MSBFLAGS=/m /p:CLToolExe=clang-cl.exe /p:CLToolPath=`"%VSINSTALLDIR%VC\Tools\Llvm\x64\bin`" && perl .\gen_probackup_project.pl `"${{ github.workspace }}`"\postgres"
 
       - name: Install Postgres
         run: |
