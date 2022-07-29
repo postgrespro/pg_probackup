@@ -614,7 +614,7 @@ merge_chain(InstanceState *instanceState,
 
 	/* Create directories */
 	create_data_directories(dest_backup->files, full_database_dir,
-							dest_backup->root_dir, false, false, FIO_BACKUP_HOST);
+							dest_backup->root_dir, false, false, FIO_BACKUP_HOST, NULL);
 
 	/* External directories stuff */
 	if (dest_backup->external_dir_str)
