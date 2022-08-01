@@ -150,7 +150,6 @@ help_pg_probackup(void)
 	printf(_("                 [--remote-port] [--remote-path] [--remote-user]\n"));
 	printf(_("                 [--ssh-options]\n"));
 	printf(_("                 [--ttl=interval] [--expire-time=timestamp] [--note=text]\n"));
-	printf(_("                 [--start-time]\n"));
 	printf(_("                 [--help]\n"));
 
 
@@ -324,7 +323,6 @@ help_backup(void)
 	printf(_("                 [--remote-port] [--remote-path] [--remote-user]\n"));
 	printf(_("                 [--ssh-options]\n"));
 	printf(_("                 [--ttl=interval] [--expire-time=timestamp] [--note=text]\n\n"));
-	printf(_("                 [--start-time]\n"));
 
 	printf(_("  -B, --backup-path=backup-path    location of the backup storage area\n"));
 	printf(_("  -b, --backup-mode=backup-mode    backup mode=FULL|PAGE|DELTA|PTRACK\n"));
@@ -345,7 +343,6 @@ help_backup(void)
 	printf(_("      --no-sync                    do not sync backed up files to disk\n"));
 	printf(_("      --note=text                  add note to backup\n"));
 	printf(_("                                   (example: --note='backup before app update to v13.1')\n"));
-	printf(_("      --start-time                 set time of starting backup as a parameter for naming backup\n"));
 
 	printf(_("\n  Logging options:\n"));
 	printf(_("      --log-level-console=log-level-console\n"));
