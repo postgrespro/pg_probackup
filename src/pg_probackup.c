@@ -944,6 +944,11 @@ main(int argc, char *argv[])
 				current.stream = stream_wal;
 				if (start_time == 0)
 					start_time = current_time;
+				else
+					elog(WARNING, "Please do not use the --start-time option to start backup. "
+							"This is a service option required to work with other extensions. "
+							"We do not guarantee future support for this flag.");
+
 
 				/* sanity */
 				if (current.backup_mode == BACKUP_MODE_INVALID)
