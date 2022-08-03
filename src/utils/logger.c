@@ -19,14 +19,19 @@
 
 #include "utils/configuration.h"
 
+#include "json.h"
+
 /* Logger parameters */
 LoggerConfig logger_config = {
 	LOG_LEVEL_CONSOLE_DEFAULT,
 	LOG_LEVEL_FILE_DEFAULT,
 	LOG_FILENAME_DEFAULT,
 	NULL,
+	NULL,
 	LOG_ROTATION_SIZE_DEFAULT,
-	LOG_ROTATION_AGE_DEFAULT
+	LOG_ROTATION_AGE_DEFAULT,
+	LOG_FORMAT_CONSOLE_DEFAULT,
+	LOG_FORMAT_FILE_DEFAULT
 };
 
 /* Implementation for logging.h */
@@ -227,6 +232,35 @@ write_elevel(FILE *stream, int elevel)
 	}
 }
 
+static void
+write_elevel_for_json(PQExpBuffer buf, int elevel)
+{
+	switch (elevel)
+	{
+		case VERBOSE:
+			appendPQExpBufferStr(buf, "\"VERBOSE\"");
+			break;
+		case LOG:
+			appendPQExpBufferStr(buf, "\"LOG\"");
+			break;
+		case INFO:
+			appendPQExpBufferStr(buf, "\"INFO\"");
+			break;
+		case NOTICE:
+			appendPQExpBufferStr(buf, "\"NOTICE\"");
+			break;
+		case WARNING:
+			appendPQExpBufferStr(buf, "\"WARNING\"");
+			break;
+		case ERROR:
+			appendPQExpBufferStr(buf, "\"ERROR\"");
+			break;
+		default:
+			elog_stderr(ERROR, "invalid logging level: %d", elevel);
+			break;
+	}
+}
+
 /*
  * Exit with code if it is an error.
  * Check for in_cleanup flag to avoid deadlock in case of ERROR in cleanup
@@ -276,6 +310,12 @@ elog_internal(int elevel, bool file_only, const char *message)
 	time_t		log_time = (time_t) time(NULL);
 	char		strfbuf[128];
 	char		str_pid[128];
+	char		str_pid_json[128];
+	char		str_thread_json[64];
+	PQExpBufferData show_buf;
+	PQExpBuffer	buf_json = &show_buf;
+	int8		format_console,
+				format_file;
 
 	write_to_file = elevel >= logger_config.log_level_file
 		&& logger_config.log_directory
@@ -283,6 +323,8 @@ elog_internal(int elevel, bool file_only, const char *message)
 	write_to_error_log = elevel >= ERROR && logger_config.error_log_filename &&
 		logger_config.log_directory && logger_config.log_directory[0] != '\0';
 	write_to_stderr = elevel >= logger_config.log_level_console && !file_only;
+	format_console = logger_config.log_format_console;
+	format_file = logger_config.log_format_file;
 
 	if (remote_agent)
 	{
@@ -292,9 +334,26 @@ elog_internal(int elevel, bool file_only, const char *message)
 	pthread_lock(&log_file_mutex);
 	loggin_in_progress = true;
 
-	if (write_to_file || write_to_error_log || is_archive_cmd)
+	if (write_to_file || write_to_error_log || is_archive_cmd ||
+		format_console == JSON)
 		strftime(strfbuf, sizeof(strfbuf), "%Y-%m-%d %H:%M:%S %Z",
 				 localtime(&log_time));
+
+	if (format_file == JSON || format_console == JSON)
+	{
+		snprintf(str_pid_json, sizeof(str_pid_json), "%d", my_pid);
+		snprintf(str_thread_json, sizeof(str_thread_json), "[%d-1]", my_thread_num);
+
+		initPQExpBuffer(&show_buf);
+		json_add_min(buf_json, JT_BEGIN_OBJECT);
+		json_add_value(buf_json, "ts", strfbuf, 0, true);
+		json_add_value(buf_json, "pid", str_pid_json, 0, true);
+		json_add_key(buf_json, "level", 0);
+		write_elevel_for_json(buf_json, elevel);
+		json_add_value(buf_json, "msg", message, 0, true);
+		json_add_value(buf_json, "my_thread_num", str_thread_json, 0, true);
+		json_add_min(buf_json, JT_END_OBJECT);
+	}
 
 	snprintf(str_pid, sizeof(str_pid), "[%d]:", my_pid);
 
@@ -307,12 +366,18 @@ elog_internal(int elevel, bool file_only, const char *message)
 	{
 		if (log_file == NULL)
 			open_logfile(&log_file, logger_config.log_filename ? logger_config.log_filename : LOG_FILENAME_DEFAULT);
+		if (format_file == JSON)
+		{
+			fputs(buf_json->data, log_file);
+		}
+		else
+		{
+			fprintf(log_file, "%s ", strfbuf);
+			fprintf(log_file, "%s ", str_pid);
+			write_elevel(log_file, elevel);
 
-		fprintf(log_file, "%s ", strfbuf);
-		fprintf(log_file, "%s ", str_pid);
-		write_elevel(log_file, elevel);
-
-		fprintf(log_file, "%s\n", message);
+			fprintf(log_file, "%s\n", message);
+		}
 		fflush(log_file);
 	}
 
@@ -326,11 +391,18 @@ elog_internal(int elevel, bool file_only, const char *message)
 		if (error_log_file == NULL)
 			open_logfile(&error_log_file, logger_config.error_log_filename);
 
-		fprintf(error_log_file, "%s ", strfbuf);
-		fprintf(error_log_file, "%s ", str_pid);
-		write_elevel(error_log_file, elevel);
+		if (format_file == JSON)
+		{
+			fputs(buf_json->data, error_log_file);
+		}
+		else
+		{
+			fprintf(error_log_file, "%s ", strfbuf);
+			fprintf(error_log_file, "%s ", str_pid);
+			write_elevel(error_log_file, elevel);
 
-		fprintf(error_log_file, "%s\n", message);
+			fprintf(error_log_file, "%s\n", message);
+		}
 		fflush(error_log_file);
 	}
 
@@ -340,35 +412,47 @@ elog_internal(int elevel, bool file_only, const char *message)
 	 */
 	if (write_to_stderr)
 	{
-		if (is_archive_cmd)
+		if (format_console == JSON)
 		{
-			char		str_thread[64];
-			/* [Issue #213] fix pgbadger parsing */
-			snprintf(str_thread, sizeof(str_thread), "[%d-1]:", my_thread_num);
-
-			fprintf(stderr, "%s ", strfbuf);
-			fprintf(stderr, "%s ", str_pid);
-			fprintf(stderr, "%s ", str_thread);
+			fprintf(stderr, "%s", buf_json->data);
 		}
-		else if (show_color)
+		else
 		{
-			/* color WARNING and ERROR messages */
-			if (elevel == WARNING)
-				fprintf(stderr, "%s", TC_YELLOW_BOLD);
-			else if (elevel == ERROR)
-				fprintf(stderr, "%s", TC_RED_BOLD);
+			if (is_archive_cmd)
+			{
+				char		str_thread[64];
+				/* [Issue #213] fix pgbadger parsing */
+				snprintf(str_thread, sizeof(str_thread), "[%d-1]:", my_thread_num);
+
+				fprintf(stderr, "%s ", strfbuf);
+				fprintf(stderr, "%s ", str_pid);
+				fprintf(stderr, "%s ", str_thread);
+			}
+			else if (show_color)
+			{
+				/* color WARNING and ERROR messages */
+				if (elevel == WARNING)
+					fprintf(stderr, "%s", TC_YELLOW_BOLD);
+				else if (elevel == ERROR)
+					fprintf(stderr, "%s", TC_RED_BOLD);
+			}
+
+			write_elevel(stderr, elevel);
+
+			/* main payload */
+			fprintf(stderr, "%s", message);
+
+			/* reset color to default */
+			if (show_color && (elevel == WARNING || elevel == ERROR))
+				fprintf(stderr, "%s", TC_RESET);
+
+			fprintf(stderr, "\n");
 		}
 
-		write_elevel(stderr, elevel);
-
-		/* main payload */
-		fprintf(stderr, "%s", message);
-
-		/* reset color to default */
-		if (show_color && (elevel == WARNING || elevel == ERROR))
-			fprintf(stderr, "%s", TC_RESET);
-
-		fprintf(stderr, "\n");
+		if (format_file == JSON || format_console == JSON)
+		{
+			termPQExpBuffer(buf_json);
+		}
 
 		fflush(stderr);
 	}
@@ -386,7 +470,15 @@ elog_internal(int elevel, bool file_only, const char *message)
 static void
 elog_stderr(int elevel, const char *fmt, ...)
 {
-	va_list		args;
+	va_list			args;
+	PQExpBufferData show_buf;
+	PQExpBuffer		buf_json = &show_buf;
+	time_t			log_time = (time_t) time(NULL);
+	char			strfbuf[128];
+	char			str_pid[128];
+	char			str_thread_json[64];
+	char			*message;
+	int8			format_console;
 
 	/*
 	 * Do not log message if severity level is less than log_level.
@@ -397,11 +489,37 @@ elog_stderr(int elevel, const char *fmt, ...)
 
 	va_start(args, fmt);
 
-	write_elevel(stderr, elevel);
-	vfprintf(stderr, fmt, args);
-	fputc('\n', stderr);
-	fflush(stderr);
+	format_console = logger_config.log_format_console;
 
+	if (format_console == JSON)
+	{
+		strftime(strfbuf, sizeof(strfbuf), "%Y-%m-%d %H:%M:%S %Z",
+				 localtime(&log_time));
+		snprintf(str_pid, sizeof(str_pid), "%d", my_pid);
+		snprintf(str_thread_json, sizeof(str_thread_json), "[%d-1]", my_thread_num);
+
+		initPQExpBuffer(&show_buf);
+		json_add_min(buf_json, JT_BEGIN_OBJECT);
+		json_add_value(buf_json, "ts", strfbuf, 0, true);
+		json_add_value(buf_json, "pid", str_pid, 0, true);
+		json_add_key(buf_json, "level", 0);
+		write_elevel_for_json(buf_json, elevel);
+		message = get_log_message(fmt, args);
+		json_add_value(buf_json, "msg", message, 0, true);
+		json_add_value(buf_json, "my_thread_num", str_thread_json, 0, true);
+		json_add_min(buf_json, JT_END_OBJECT);
+		fputs(buf_json->data, stderr);
+		pfree(message);
+		termPQExpBuffer(buf_json);
+	}
+	else
+	{
+		write_elevel(stderr, elevel);
+		vfprintf(stderr, fmt, args);
+		fputc('\n', stderr);
+	}
+
+	fflush(stderr);
 	va_end(args);
 
 	exit_if_necessary(elevel);
@@ -570,6 +688,36 @@ parse_log_level(const char *level)
 	return 0;
 }
 
+int
+parse_log_format(const char *format)
+{
+	const char *v = format;
+	size_t		len;
+
+	if (v == NULL)
+	{
+		elog(ERROR, "log-format got invalid value");
+		return 0;
+	}
+
+	/* Skip all spaces detected */
+	while (isspace((unsigned char)*v))
+		v++;
+	len = strlen(v);
+
+	if (len == 0)
+		elog(ERROR, "log-format is empty");
+
+	if (pg_strncasecmp("plain", v, len) == 0)
+		return PLAIN;
+	else if (pg_strncasecmp("json", v, len) == 0)
+		return JSON;
+
+	/* Log format is invalid */
+	elog(ERROR, "invalid log-format \"%s\"", format);
+	return 0;
+}
+
 /*
  * Converts integer representation of log level to string.
  */
@@ -594,6 +742,22 @@ deparse_log_level(int level)
 			return "ERROR";
 		default:
 			elog(ERROR, "invalid log-level %d", level);
+	}
+
+	return NULL;
+}
+
+const char *
+deparse_log_format(int format)
+{
+	switch (format)
+	{
+		case PLAIN:
+			return "PLAIN";
+		case JSON:
+			return "JSON";
+		default:
+			elog(ERROR, "invalid log-format %d", format);
 	}
 
 	return NULL;

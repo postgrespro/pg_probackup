@@ -427,6 +427,17 @@ main(int argc, char *argv[])
 	/* Parse command line only arguments */
 	config_get_opt(argc, argv, cmd_options, instance_options);
 
+	if (backup_subcmd == SET_CONFIG_CMD)
+	{
+		for (int i = 0; i < argc; i++)
+		{
+			if (strncmp("--log-format-console", argv[i], strlen("--log-format-console")) == 0)
+			{
+				elog(ERROR, "Option 'log-format-console' set only from terminal\n");
+			}
+		}
+	}
+
 	pgut_init();
 
 	if (no_color)
