@@ -1040,12 +1040,19 @@ opt_externaldir_map(ConfigOption *opt, const char *arg)
  */
 void
 create_data_directories(parray *dest_files, const char *data_dir, const char *backup_dir,
-						bool extract_tablespaces, bool incremental, fio_location location)
+						bool extract_tablespaces, bool incremental, fio_location location, 
+						const char* waldir_path)
 {
 	int			i;
 	parray		*links = NULL;
 	mode_t		pg_tablespace_mode = DIR_PERMISSION;
 	char		to_path[MAXPGPATH];
+
+	if (waldir_path && !dir_is_empty(waldir_path, location))
+	{
+		elog(ERROR, "WAL directory location is not empty: \"%s\"", waldir_path);
+	}
+
 
 	/* get tablespace map */
 	if (extract_tablespaces)
@@ -1111,6 +1118,27 @@ create_data_directories(parray *dest_files, const char *data_dir, const char *ba
 		/* skip external directory content */
 		if (dir->external_dir_num != 0)
 			continue;
+		/* Create WAL directory and symlink if waldir_path is setting */
+		if (waldir_path && strcmp(dir->rel_path, PG_XLOG_DIR) == 0) {
+			/* get full path to PG_XLOG_DIR */
+
+			join_path_components(to_path, data_dir, PG_XLOG_DIR);
+
+			elog(VERBOSE, "Create directory \"%s\" and symbolic link \"%s\"",
+				waldir_path, to_path);
+
+			/* create tablespace directory from waldir_path*/
+			fio_mkdir(waldir_path, pg_tablespace_mode, location);
+
+			/* create link to linked_path */
+			if (fio_symlink(waldir_path, to_path, incremental, location) < 0)
+				elog(ERROR, "Could not create symbolic link \"%s\": %s",
+					to_path, strerror(errno));
+
+			continue;
+
+
+		}
 
 		/* tablespace_map exists */
 		if (links)
