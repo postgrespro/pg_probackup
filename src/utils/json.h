@@ -25,6 +25,7 @@ typedef enum
 } JsonToken;
 
 extern void json_add(PQExpBuffer buf, JsonToken type, int32 *level);
+extern void json_add_min(PQExpBuffer buf, JsonToken type);
 extern void json_add_key(PQExpBuffer buf, const char *name, int32 level);
 extern void json_add_value(PQExpBuffer buf, const char *name, const char *value,
 						   int32 level, bool escaped);
