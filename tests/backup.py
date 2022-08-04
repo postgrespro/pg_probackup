@@ -1929,6 +1929,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                 "GRANT EXECUTE ON FUNCTION pg_catalog.pg_last_xlog_replay_location() TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;"
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_edition() TO backup;"
             )
         # >= 10
         else:
@@ -1967,6 +1968,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                 "GRANT EXECUTE ON FUNCTION pg_catalog.pg_last_wal_replay_lsn() TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;"
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_edition() TO backup;"
             )
 
         if self.ptrack:
@@ -1980,9 +1982,6 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                 "GRANT EXECUTE ON FUNCTION ptrack.ptrack_init_lsn() TO backup;")
 
         if ProbackupTest.enterprise:
-            node.safe_psql(
-                "backupdb",
-                "GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_edition() TO backup")
 
             node.safe_psql(
                 "backupdb",
@@ -3068,7 +3067,9 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                 "GRANT EXECUTE ON FUNCTION pg_catalog.pg_switch_xlog() TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.pg_last_xlog_replay_location() TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup; "
-                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;")
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;"
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_edition() TO backup;"
+                )
         # >= 10
         else:
             node.safe_psql(
@@ -3091,12 +3092,12 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                 "GRANT EXECUTE ON FUNCTION pg_catalog.pg_last_wal_replay_lsn() TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;"
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_edition() TO backup;"
             )
 
         if ProbackupTest.enterprise:
             node.safe_psql(
                 "backupdb",
-                "GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_edition() TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_version() TO backup")
         
         sleep(2)
@@ -3201,6 +3202,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                 "GRANT EXECUTE ON FUNCTION pg_catalog.pg_last_xlog_replay_location() TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;"
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_edition() TO backup;"
             )
         # >= 10
         else:
@@ -3224,12 +3226,13 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                 "GRANT EXECUTE ON FUNCTION pg_catalog.pg_last_wal_replay_lsn() TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;"
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_edition() TO backup;"
+                
             )
 
         if ProbackupTest.enterprise:
             node.safe_psql(
                 "backupdb",
-                "GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_edition() TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_version() TO backup")
 
         replica.promote()
