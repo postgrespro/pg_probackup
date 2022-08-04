@@ -947,7 +947,7 @@ class ProbackupTest(object):
             backup_type='full', datname=False, options=[],
             asynchronous=False, gdb=False,
             old_binary=False, return_id=True, no_remote=False,
-            env=None
+            env=None, startTime=None
             ):
         if not node and not data_dir:
             print('You must provide ether node or data_dir for backup')
@@ -979,6 +979,9 @@ class ProbackupTest(object):
 
         if not old_binary:
             cmd_list += ['--no-sync']
+
+        if startTime:
+            cmd_list += ['--start-time', startTime]
 
         return self.run_pb(cmd_list + options, asynchronous, gdb, old_binary, return_id, env=env)
 
