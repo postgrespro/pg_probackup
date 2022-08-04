@@ -3,7 +3,7 @@
  * dir.c: directory operation utility.
  *
  * Portions Copyright (c) 2009-2013, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
- * Portions Copyright (c) 2015-2019, Postgres Professional
+ * Portions Copyright (c) 2015-2022, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */
@@ -640,7 +640,7 @@ dir_check_file(pgFile *file, bool backup_logs)
 						   pgdata_exclude_files_non_exclusive[i]) == 0)
 				{
 					/* Skip */
-					elog(VERBOSE, "Excluding file: %s", file->name);
+					elog(LOG, "Excluding file: %s", file->name);
 					return CHECK_FALSE;
 				}
 		}
@@ -649,7 +649,7 @@ dir_check_file(pgFile *file, bool backup_logs)
 			if (strcmp(file->rel_path, pgdata_exclude_files[i]) == 0)
 			{
 				/* Skip */
-				elog(VERBOSE, "Excluding file: %s", file->name);
+				elog(LOG, "Excluding file: %s", file->name);
 				return CHECK_FALSE;
 			}
 	}
@@ -669,7 +669,7 @@ dir_check_file(pgFile *file, bool backup_logs)
 			/* exclude by dirname */
 			if (strcmp(file->name, pgdata_exclude_dir[i]) == 0)
 			{
-				elog(VERBOSE, "Excluding directory content: %s", file->rel_path);
+				elog(LOG, "Excluding directory content: %s", file->rel_path);
 				return CHECK_EXCLUDE_FALSE;
 			}
 		}
@@ -679,7 +679,7 @@ dir_check_file(pgFile *file, bool backup_logs)
 			if (strcmp(file->rel_path, PG_LOG_DIR) == 0)
 			{
 				/* Skip */
-				elog(VERBOSE, "Excluding directory content: %s", file->rel_path);
+				elog(LOG, "Excluding directory content: %s", file->rel_path);
 				return CHECK_EXCLUDE_FALSE;
 			}
 		}
@@ -1166,7 +1166,7 @@ create_data_directories(parray *dest_files, const char *data_dir, const char *ba
 
 					join_path_components(to_path, data_dir, dir->rel_path);
 
-					elog(VERBOSE, "Create directory \"%s\" and symbolic link \"%s\"",
+					elog(LOG, "Create directory \"%s\" and symbolic link \"%s\"",
 							 linked_path, to_path);
 
 					/* create tablespace directory */
@@ -1183,7 +1183,7 @@ create_data_directories(parray *dest_files, const char *data_dir, const char *ba
 		}
 
 		/* This is not symlink, create directory */
-		elog(VERBOSE, "Create directory \"%s\"", dir->rel_path);
+		elog(LOG, "Create directory \"%s\"", dir->rel_path);
 
 		join_path_components(to_path, data_dir, dir->rel_path);
 
@@ -1934,7 +1934,7 @@ cleanup_tablespace(const char *path)
 		join_path_components(fullpath, path, file->rel_path);
 
 		fio_delete(file->mode, fullpath, FIO_DB_HOST);
-		elog(VERBOSE, "Deleted file \"%s\"", fullpath);
+		elog(LOG, "Deleted file \"%s\"", fullpath);
 	}
 
 	parray_walk(files, pgFileFree);

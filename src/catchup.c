@@ -2,7 +2,7 @@
  *
  * catchup.c: sync DB cluster
  *
- * Copyright (c) 2022, Postgres Professional
+ * Copyright (c) 2021-2022, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */
@@ -203,7 +203,7 @@ catchup_preflight_checks(PGNodeInfo *source_node_info, PGconn *source_conn,
 
 		/* fill dest_redo.lsn and dest_redo.tli */
 		get_redo(dest_pgdata, FIO_LOCAL_HOST, &dest_redo);
-		elog(VERBOSE, "source.tli = %X, dest_redo.lsn = %X/%X, dest_redo.tli = %X",
+		elog(LOG, "source.tli = %X, dest_redo.lsn = %X/%X, dest_redo.tli = %X",
 			current.tli, (uint32) (dest_redo.lsn >> 32), (uint32) dest_redo.lsn, dest_redo.tli);
 
 		if (current.tli != 1)
@@ -398,9 +398,8 @@ catchup_thread_runner(void *arg)
 		if (interrupted || thread_interrupted)
 			elog(ERROR, "Interrupted during catchup");
 
-		if (progress)
-			elog(INFO, "Progress: (%d/%d). Process file \"%s\"",
-				 i + 1, n_files, file->rel_path);
+		elog(progress ? INFO : LOG, "Progress: (%d/%d). Process file \"%s\"",
+			 i + 1, n_files, file->rel_path);
 
 		/* construct destination filepath */
 		Assert(file->external_dir_num == 0);
@@ -447,12 +446,12 @@ catchup_thread_runner(void *arg)
 
 		if (file->write_size == BYTES_INVALID)
 		{
-			elog(VERBOSE, "Skipping the unchanged file: \"%s\", read %li bytes", from_fullpath, file->read_size);
+			elog(LOG, "Skipping the unchanged file: \"%s\", read %li bytes", from_fullpath, file->read_size);
 			continue;
 		}
 
 		arguments->transfered_bytes += file->write_size;
-		elog(VERBOSE, "File \"%s\". Copied "INT64_FORMAT " bytes",
+		elog(LOG, "File \"%s\". Copied "INT64_FORMAT " bytes",
 						from_fullpath, file->write_size);
 	}
 
@@ -607,7 +606,7 @@ filter_filelist(parray *filelist, const char *pgdata,
 			&& parray_bsearch(exclude_relative_paths_list, file->rel_path, pgPrefixCompareString)!= NULL)
 			)
 		{
-			elog(LOG, "%s file \"%s\" excluded with --exclude-path option", logging_string, full_path);
+			elog(INFO, "%s file \"%s\" excluded with --exclude-path option", logging_string, full_path);
 			file->excluded = true;
 		}
 	}
@@ -650,7 +649,7 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 	if (exclude_relative_paths_list != NULL)
 		parray_qsort(exclude_relative_paths_list, pgCompareString);
 
-	elog(LOG, "Database catchup start");
+	elog(INFO, "Database catchup start");
 
 	if (current.backup_mode != BACKUP_MODE_FULL)
 	{
@@ -697,7 +696,7 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 
 		/* Call pg_start_backup function in PostgreSQL connect */
 		pg_start_backup(label, smooth_checkpoint, &current, &source_node_info, source_conn);
-		elog(LOG, "pg_start_backup START LSN %X/%X", (uint32) (current.start_lsn >> 32), (uint32) (current.start_lsn));
+		elog(INFO, "pg_start_backup START LSN %X/%X", (uint32) (current.start_lsn >> 32), (uint32) (current.start_lsn));
 	}
 
 	/* Sanity: source cluster must be "in future" relatively to dest cluster */
@@ -772,11 +771,11 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 		elog(INFO, "Source PGDATA size: %s (excluded %s)", pretty_source_bytes, pretty_bytes);
 	}
 
-	elog(LOG, "Start LSN (source): %X/%X, TLI: %X",
+	elog(INFO, "Start LSN (source): %X/%X, TLI: %X",
 			(uint32) (current.start_lsn >> 32), (uint32) (current.start_lsn),
 			current.tli);
 	if (current.backup_mode != BACKUP_MODE_FULL)
-		elog(LOG, "LSN in destination: %X/%X, TLI: %X",
+		elog(INFO, "LSN in destination: %X/%X, TLI: %X",
 			 (uint32) (dest_redo.lsn >> 32), (uint32) (dest_redo.lsn),
 			 dest_redo.tli);
 
@@ -829,7 +828,8 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 			char		dirpath[MAXPGPATH];
 
 			join_path_components(dirpath, dest_pgdata, file->rel_path);
-			elog(VERBOSE, "Create directory '%s'", dirpath);
+
+			elog(LOG, "Create directory '%s'", dirpath);
 			if (!dry_run)
 				fio_mkdir(dirpath, DIR_PERMISSION, FIO_LOCAL_HOST);
 		}
@@ -859,7 +859,7 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 
 			join_path_components(to_path, dest_pgdata, file->rel_path);
 
-			elog(VERBOSE, "Create directory \"%s\" and symbolic link \"%s\"",
+			elog(INFO, "Create directory \"%s\" and symbolic link \"%s\"",
 					 linked_path, to_path);
 
 			if (!dry_run)
@@ -946,7 +946,7 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 				{
 					fio_delete(file->mode, fullpath, FIO_LOCAL_HOST);
 				}
-				elog(VERBOSE, "Deleted file \"%s\"", fullpath);
+				elog(LOG, "Deleted file \"%s\"", fullpath);
 
 				/* shrink dest pgdata list */
 				pgFileFree(file);
