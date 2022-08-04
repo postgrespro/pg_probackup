@@ -89,11 +89,7 @@ def dir_files(base_dir):
 
 def is_enterprise():
     # pg_config --help
-    if os.name == 'posix':
-        cmd = [os.environ['PG_CONFIG'], '--pgpro-edition']
-
-    elif os.name == 'nt':
-        cmd = [[os.environ['PG_CONFIG']], ['--pgpro-edition']]
+    cmd = [os.environ['PG_CONFIG'], '--help']
 
     p = subprocess.Popen(
         cmd,
@@ -101,6 +97,18 @@ def is_enterprise():
         stderr=subprocess.PIPE
     )
     return b'postgrespro.ru' in p.communicate()[0]
+
+ 
+def is_nls_enabled():
+    cmd = [os.environ['PG_CONFIG'], '--configure']
+
+    p = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE
+    )
+    return b'enable-nls' in p.communicate()[0]
+
 
 class ProbackupException(Exception):
     def __init__(self, message, cmd):
@@ -147,6 +155,7 @@ def slow_start(self, replica=False):
 class ProbackupTest(object):
     # Class attributes
     enterprise = is_enterprise()
+    enable_nls = is_nls_enabled()
 
     def __init__(self, *args, **kwargs):
         super(ProbackupTest, self).__init__(*args, **kwargs)
@@ -180,8 +189,8 @@ class ProbackupTest(object):
         self.test_env['LC_MESSAGES'] = 'C'
         self.test_env['LC_TIME'] = 'C'
 
-        self.gdb = 'PGPROBACKUP_GDB' in os.environ and \
-              os.environ['PGPROBACKUP_GDB'] == 'ON'
+        self.gdb = 'PGPROBACKUP_GDB' in self.test_env and \
+              self.test_env['PGPROBACKUP_GDB'] == 'ON'
 
         self.paranoia = 'PG_PROBACKUP_PARANOIA' in self.test_env and \
             self.test_env['PG_PROBACKUP_PARANOIA'] == 'ON'
@@ -810,7 +819,7 @@ class ProbackupTest(object):
             if self.verbose:
                 print(self.cmd)
             if gdb:
-                return GDBobj([binary_path] + command, self.verbose)
+                return GDBobj([binary_path] + command, self)
             if asynchronous:
                 return subprocess.Popen(
                     [binary_path] + command,
@@ -1861,22 +1870,34 @@ class ProbackupTest(object):
         self.assertFalse(fail, error_message)
 
     def gdb_attach(self, pid):
-        return GDBobj([str(pid)], self.verbose, attach=True)
+        return GDBobj([str(pid)], self, attach=True)
+
+    def _check_gdb_flag_or_skip_test(self):
+        if not self.gdb:
+            self.skipTest(
+                "Specify PGPROBACKUP_GDB and build without "
+                "optimizations for run this test"
+            )
 
 
 class GdbException(Exception):
-    def __init__(self, message=False):
+    def __init__(self, message="False"):
         self.message = message
 
     def __str__(self):
         return '\n ERROR: {0}\n'.format(repr(self.message))
 
 
-class GDBobj(ProbackupTest):
-    def __init__(self, cmd, verbose, attach=False):
-        self.verbose = verbose
+class GDBobj:
+    def __init__(self, cmd, env, attach=False):
+        self.verbose = env.verbose
         self.output = ''
 
+        # Check gdb flag is set up
+        if not env.gdb:
+            raise GdbException("No `PGPROBACKUP_GDB=on` is set, "
+                               "test should call ProbackupTest::check_gdb_flag_or_skip_test() on its start "
+                               "and be skipped")
         # Check gdb presense
         try:
             gdb_version, _ = subprocess.Popen(

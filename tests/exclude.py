@@ -203,8 +203,10 @@ class ExcludeTest(ProbackupTest, unittest.TestCase):
     # @unittest.skip("skip")
     def test_exclude_unlogged_tables_2(self):
         """
-        make node, create unlogged, take FULL, check
-        that unlogged was not backed up
+        1. make node, create unlogged, take FULL, DELTA, PAGE,
+            check that unlogged table files was not backed up
+        2. restore FULL, DELTA, PAGE to empty db,
+            ensure unlogged table exist and is epmty
         """
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
@@ -220,6 +222,8 @@ class ExcludeTest(ProbackupTest, unittest.TestCase):
         self.set_archiving(backup_dir, 'node', node)
         node.slow_start()
 
+        backup_ids = []
+
         for backup_type in ['full', 'delta', 'page']:
 
             if backup_type == 'full':
@@ -231,13 +235,15 @@ class ExcludeTest(ProbackupTest, unittest.TestCase):
                     'postgres',
                     'insert into test select generate_series(0,20050000)::text')
 
-            rel_path = node.safe_psql(
+            rel_path = node.execute(
                 'postgres',
-                "select pg_relation_filepath('test')").decode('utf-8').rstrip()
+                "select pg_relation_filepath('test')")[0][0]
 
             backup_id = self.backup_node(
                 backup_dir, 'node', node,
                 backup_type=backup_type, options=['--stream'])
+
+            backup_ids.append(backup_id)
 
             filelist = self.get_backup_filelist(
                 backup_dir, 'node', backup_id)
@@ -258,8 +264,24 @@ class ExcludeTest(ProbackupTest, unittest.TestCase):
                 rel_path + '.3', filelist,
                 "Unlogged table was not excluded")
 
+        # ensure restoring retrieves back only empty unlogged table
+        for backup_id in backup_ids:
+            node.stop()
+            node.cleanup()
+
+            self.restore_node(backup_dir, 'node', node, backup_id=backup_id)
+
+            node.slow_start()
+
+            self.assertEqual(
+                node.execute(
+                    'postgres',
+                    'select count(*) from test')[0][0],
+                0)
+
         # Clean after yourself
         self.del_test_dir(module_name, fname)
+
 
     # @unittest.skip("skip")
     def test_exclude_log_dir(self):

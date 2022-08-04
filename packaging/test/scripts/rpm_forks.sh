@@ -15,7 +15,15 @@ PG_TOG=$(echo $PG_VERSION | sed 's|\.||g')
 
 if [ ${DISTRIB} != 'rhel' -o ${DISTRIB_VERSION} != '7' ]; then
     # update of rpm package is broken in rhel-7 (26/12/2022)
+    if [ ${DISTRIB} = 'centos' -a ${DISTRIB_VERSION} = '8' ]; then
+       sed -i 's|mirrorlist|#mirrorlist|g' /etc/yum.repos.d/CentOS-*.repo
+       sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/CentOS-*.repo
+    fi
     yum update -y
+    if [ ${DISTRIB} = 'centos' -a ${DISTRIB_VERSION} = '8' ]; then
+        sed -i 's|mirrorlist|#mirrorlist|g' /etc/yum.repos.d/CentOS-*.repo
+        sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/CentOS-*.repo
+    fi
 fi
 
 if [ ${PBK_EDITION} == 'ent' ]; then
@@ -80,11 +88,13 @@ if [ $PBK_EDITION == 'std' ] ; then
 
     # install POSTGRESQL
     # rpm -ivh https://download.postgresql.org/pub/repos/yum/reporpms/EL-${DISTRIB_VERSION}-x86_64/pgdg-redhat-repo-latest.noarch.rpm
-    if [[ ${PG_VERSION} == '11' ]] || [[ ${PG_VERSION} == '12' ]]; then
-        rpm -ivh https://repo.postgrespro.ru/pgpro-${PG_VERSION}/keys/postgrespro-std-${PG_VERSION}.${DISTRIB}.yum-${PG_VERSION}-0.3.noarch.rpm
-    else
-        rpm -ivh https://repo.postgrespro.ru/pgpro-${PG_VERSION}/keys/postgrespro-std-${PG_VERSION}.${DISTRIB}.yum-${PG_VERSION}-0.3.noarch.rpm
-    fi
+    #if [[ ${PG_VERSION} == '11' ]] || [[ ${PG_VERSION} == '12' ]]; then
+    #    rpm -ivh https://repo.postgrespro.ru/pgpro-${PG_VERSION}/keys/postgrespro-std-${PG_VERSION}.${DISTRIB}.yum-${PG_VERSION}-0.3.noarch.rpm
+    #else
+    #    rpm -ivh https://repo.postgrespro.ru/pgpro-${PG_VERSION}/keys/postgrespro-std-${PG_VERSION}.${DISTRIB}.yum-${PG_VERSION}-0.3.noarch.rpm
+    #fi
+    curl -o pgpro-repo-add.sh https://repo.postgrespro.ru/pgpro-${PG_VERSION}/keys/pgpro-repo-add.sh
+    sh pgpro-repo-add.sh
 
     if [[ ${PG_VERSION} == '9.6' ]]; then
         yum install -y postgrespro${PG_TOG}-server.x86_64

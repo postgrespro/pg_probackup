@@ -2,6 +2,7 @@ import os
 import unittest
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 from datetime import datetime, timedelta
+from pathlib import Path
 import subprocess
 from sys import exit
 import time
@@ -58,7 +59,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             with open(log_file_path) as f:
                 log_content = f.read()
                 self.assertIn(
-                    'File: "{0}" blknum 1, empty page'.format(file),
+                    'File: "{0}" blknum 1, empty page'.format(Path(file).as_posix()),
                     log_content,
                     'Failed to detect nullified block')
 
@@ -1088,11 +1089,8 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         """
         check that interrupt during validation is handled correctly
         """
-        if not self.gdb:
-            self.skipTest(
-                "Specify PGPROBACKUP_GDB and build without "
-                "optimizations for run this test"
-            )
+        self._check_gdb_flag_or_skip_test()
+
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
@@ -3564,6 +3562,8 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
     # @unittest.skip("skip")
     def test_validation_after_backup(self):
         """"""
+        self._check_gdb_flag_or_skip_test()
+
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         node = self.make_simple_node(

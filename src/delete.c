@@ -36,7 +36,7 @@ do_delete(InstanceState *instanceState, time_t backup_id)
 	parray	   *backup_list,
 			   *delete_list;
 	pgBackup   *target_backup = NULL;
-	size_t		size_to_delete = 0;
+	int64		size_to_delete = 0;
 	char		size_to_delete_pretty[20];
 
 	/* Get complete list of backups */
@@ -682,12 +682,11 @@ do_retention_wal(InstanceState *instanceState, bool dry_run)
 		 * at least one backup and no file should be removed.
 		 * Unless wal-depth is enabled.
 		 */
-		if ((tlinfo->closest_backup) && instance_config.wal_depth <= 0)
+		if ((tlinfo->closest_backup) && instance_config.wal_depth == 0)
 			continue;
 
 		/* WAL retention keeps this timeline from purge */
-		if (instance_config.wal_depth >= 0 && tlinfo->anchor_tli > 0 &&
-			tlinfo->anchor_tli != tlinfo->tli)
+		if (tlinfo->anchor_tli > 0 && tlinfo->anchor_tli != tlinfo->tli)
 			continue;
 
 		/*
@@ -701,7 +700,7 @@ do_retention_wal(InstanceState *instanceState, bool dry_run)
 		 */
 		if (tlinfo->oldest_backup)
 		{
-			if (instance_config.wal_depth >= 0 && !(XLogRecPtrIsInvalid(tlinfo->anchor_lsn)))
+			if (!(XLogRecPtrIsInvalid(tlinfo->anchor_lsn)))
 			{
 				delete_walfiles_in_tli(instanceState, tlinfo->anchor_lsn,
 								tlinfo, instance_config.xlog_seg_size, dry_run);
@@ -714,7 +713,7 @@ do_retention_wal(InstanceState *instanceState, bool dry_run)
 		}
 		else
 		{
-			if (instance_config.wal_depth >= 0 && !(XLogRecPtrIsInvalid(tlinfo->anchor_lsn)))
+			if (!(XLogRecPtrIsInvalid(tlinfo->anchor_lsn)))
 				delete_walfiles_in_tli(instanceState, tlinfo->anchor_lsn,
 								tlinfo, instance_config.xlog_seg_size, dry_run);
 			else
@@ -942,7 +941,7 @@ delete_walfiles_in_tli(InstanceState *instanceState, XLogRecPtr keep_lsn, timeli
 			join_path_components(wal_fullpath, instanceState->instance_wal_subdir_path, wal_file->file.name);
 
 			/* save segment from purging */
-			if (instance_config.wal_depth >= 0 && wal_file->keep)
+			if (wal_file->keep)
 			{
 				elog(VERBOSE, "Retain WAL segment \"%s\"", wal_fullpath);
 				continue;
@@ -1027,7 +1026,7 @@ do_delete_status(InstanceState *instanceState, InstanceConfig *instance_config, 
 	parray     *backup_list, *delete_list;
 	const char *pretty_status;
 	int         n_deleted = 0, n_found = 0;
-	size_t      size_to_delete = 0;
+	int64       size_to_delete = 0;
 	char        size_to_delete_pretty[20];
 	pgBackup   *backup;
 

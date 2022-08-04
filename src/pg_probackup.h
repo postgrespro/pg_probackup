@@ -338,7 +338,7 @@ typedef enum ShowFormat
 #define BYTES_INVALID		(-1) /* file didn`t changed since previous backup, DELTA backup do not rely on it */
 #define FILE_NOT_FOUND		(-2) /* file disappeared during backup */
 #define BLOCKNUM_INVALID	(-1)
-#define PROGRAM_VERSION	"2.5.5"
+#define PROGRAM_VERSION	"2.5.6"
 
 /* update when remote agent API or behaviour changes */
 #define AGENT_PROTOCOL_VERSION 20501
@@ -566,6 +566,8 @@ typedef struct pgRestoreParams
 	/* options for partial restore */
 	PartialRestoreType partial_restore_type;
 	parray *partial_db_list;
+	
+	char* waldir;
 } pgRestoreParams;
 
 /* Options needed for set-backup command */
@@ -1010,8 +1012,9 @@ extern CompressAlg parse_compress_alg(const char *arg);
 extern const char* deparse_compress_alg(int alg);
 
 /* in dir.c */
-extern bool get_control_value(const char *str, const char *name,
-				  char *value_str, int64 *value_int64, bool is_mandatory);
+extern bool get_control_value_int64(const char *str, const char *name, int64 *value_int64, bool is_mandatory);
+extern bool get_control_value_str(const char *str, const char *name,
+                                  char *value_str, size_t value_str_size, bool is_mandatory);
 extern void dir_list_file(parray *files, const char *root, bool exclude,
 						  bool follow_symlink, bool add_root, bool backup_logs,
 						  bool skip_hidden, int external_dir_num, fio_location location);
@@ -1022,7 +1025,8 @@ extern void create_data_directories(parray *dest_files,
 										const char *backup_dir,
 										bool extract_tablespaces,
 										bool incremental,
-										fio_location location);
+										fio_location location,
+										const char *waldir_path);
 
 extern void read_tablespace_map(parray *links, const char *backup_dir);
 extern void opt_tablespace_map(ConfigOption *opt, const char *arg);

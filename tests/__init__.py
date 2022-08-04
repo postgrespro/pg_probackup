@@ -7,7 +7,7 @@ from . import init, merge, option, show, compatibility, \
     compression, page, ptrack, archive, exclude, cfs_backup, cfs_restore, \
     cfs_validate_backup, auth_test, time_stamp, logging, \
     locking, remote, external, config, checkdb, set_backup, incr_restore, \
-    catchup, CVE_2018_1058
+    catchup, CVE_2018_1058, time_consuming
 
 
 def load_tests(loader, tests, pattern):
@@ -20,6 +20,12 @@ def load_tests(loader, tests, pattern):
     if 'PG_PROBACKUP_PTRACK' in os.environ:
         if os.environ['PG_PROBACKUP_PTRACK'] == 'ON':
             suite.addTests(loader.loadTestsFromModule(ptrack))
+
+    # PG_PROBACKUP_LONG section for tests that are long
+    # by design e.g. they contain loops, sleeps and so on
+    if 'PG_PROBACKUP_LONG' in os.environ:
+        if os.environ['PG_PROBACKUP_LONG'] == 'ON':
+            suite.addTests(loader.loadTestsFromModule(time_consuming))
 
 #    suite.addTests(loader.loadTestsFromModule(auth_test))
     suite.addTests(loader.loadTestsFromModule(archive))

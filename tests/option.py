@@ -1,6 +1,7 @@
 import unittest
 import os
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
+import locale
 
 
 module_name = 'option'
@@ -23,7 +24,7 @@ class OptionTest(ProbackupTest, unittest.TestCase):
         """help options"""
         with open(os.path.join(self.dir_path, "expected/option_version.out"), "rb") as version_out:
             self.assertIn(
-                version_out.read().decode("utf-8"),
+                version_out.read().decode("utf-8").strip(),
                 self.run_pb(["--version"])
             )
 
@@ -226,3 +227,17 @@ class OptionTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_help_6(self):
+        """help options"""
+        if ProbackupTest.enable_nls:
+            self.test_env['LC_ALL'] = 'ru_RU.utf-8'
+            with open(os.path.join(self.dir_path, "expected/option_help_ru.out"), "rb") as help_out:
+                self.assertEqual(
+                    self.run_pb(["--help"]),
+                    help_out.read().decode("utf-8")
+                )
+        else:
+            return unittest.skip(
+                'You need configure PostgreSQL with --enabled-nls option for this test')

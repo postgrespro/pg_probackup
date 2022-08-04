@@ -47,7 +47,7 @@ cd postgres # Go to postgres dir
 if [ "$PG_PROBACKUP_PTRACK" = "ON" ]; then
     git apply -3 ../ptrack/patches/${PTRACK_PATCH_PG_BRANCH}-ptrack-core.diff
 fi
-CFLAGS="-O0" ./configure --prefix=$PGHOME --enable-debug --enable-cassert --enable-depend --enable-tap-tests
+CFLAGS="-O0" ./configure --prefix=$PGHOME --enable-debug --enable-cassert --enable-depend --enable-tap-tests --enable-nls
 make -s -j$(nproc) install
 #make -s -j$(nproc) -C 'src/common' install
 #make -s -j$(nproc) -C 'src/port' install
@@ -100,11 +100,20 @@ source pyenv/bin/activate
 pip3 install testgres
 
 echo "############### Testing:"
+echo PG_PROBACKUP_PARANOIA=${PG_PROBACKUP_PARANOIA}
+echo ARCHIVE_COMPRESSION=${ARCHIVE_COMPRESSION}
+echo PGPROBACKUPBIN_OLD=${PGPROBACKUPBIN_OLD}
+echo PGPROBACKUPBIN=${PGPROBACKUPBIN}
+echo PGPROBACKUP_SSH_REMOTE=${PGPROBACKUP_SSH_REMOTE}
+echo PGPROBACKUP_GDB=${PGPROBACKUP_GDB}
+echo PG_PROBACKUP_PTRACK=${PG_PROBACKUP_PTRACK}
 if [ "$MODE" = "basic" ]; then
     export PG_PROBACKUP_TEST_BASIC=ON
+    echo PG_PROBACKUP_TEST_BASIC=${PG_PROBACKUP_TEST_BASIC}
     python3 -m unittest -v tests
     python3 -m unittest -v tests.init
 else
+    echo PG_PROBACKUP_TEST_BASIC=${PG_PROBACKUP_TEST_BASIC}
     python3 -m unittest -v tests.$MODE
 fi
 

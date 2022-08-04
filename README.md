@@ -224,3 +224,17 @@ Postgres Professional, Moscow, Russia.
 ## Credits
 
 `pg_probackup` utility is based on `pg_arman`, that was originally written by NTT and then developed and maintained by Michael Paquier.
+
+
+### Localization files (*.po)
+
+Description of how to add new translation languages.
+1. Add a flag --enable-nls in configure.
+2. Build postgres.
+3. Adding to nls.mk in folder pg_probackup required files in GETTEXT_FILES.
+4. In folder pg_probackup do 'make update-po'.
+5. As a result, the progname.pot file will be created. Copy the content and add it to the file with the desired language.
+6. Adding to nls.mk in folder pg_probackup required language in AVAIL_LANGUAGES.
+
+For more information, follow the link below:
+https://postgrespro.ru/docs/postgresql/12/nls-translator
