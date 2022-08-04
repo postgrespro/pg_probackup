@@ -801,7 +801,7 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 	create_data_directories(dest_files, instance_config.pgdata,
 							dest_backup->root_dir, backup_has_tblspc,
 							params->incremental_mode != INCR_NONE,
-							FIO_DB_HOST);
+							FIO_DB_HOST, params->waldir);
 
 	/*
 	 * Restore dest_backup external directories.

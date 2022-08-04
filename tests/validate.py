@@ -2,6 +2,7 @@ import os
 import unittest
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 from datetime import datetime, timedelta
+from pathlib import Path
 import subprocess
 from sys import exit
 import time
@@ -58,7 +59,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             with open(log_file_path) as f:
                 log_content = f.read()
                 self.assertIn(
-                    'File: "{0}" blknum 1, empty page'.format(file),
+                    'File: "{0}" blknum 1, empty page'.format(Path(file).as_posix()),
                     log_content,
                     'Failed to detect nullified block')
 
