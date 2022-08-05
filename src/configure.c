@@ -158,102 +158,102 @@ ConfigOption instance_options[] =
 		OPTION_LOG_GROUP, 0, get_log_level_file
 	},
 	{
-		's', 214, "log-filename",
+		'f', 214, "log-format-console",
+		assign_log_format_console, SOURCE_CMD, 0,
+		OPTION_LOG_GROUP, 0, get_log_format_console
+	},
+	{
+		'f', 215, "log-format-file",
+		assign_log_format_file, SOURCE_CMD, 0,
+		OPTION_LOG_GROUP, 0, get_log_format_file
+	},
+	{
+		's', 216, "log-filename",
 		&instance_config.logger.log_filename, SOURCE_CMD, 0,
 		OPTION_LOG_GROUP, 0, option_get_value
 	},
 	{
-		's', 215, "error-log-filename",
+		's', 217, "error-log-filename",
 		&instance_config.logger.error_log_filename, SOURCE_CMD, 0,
 		OPTION_LOG_GROUP, 0, option_get_value
 	},
 	{
-		's', 216, "log-directory",
+		's', 218, "log-directory",
 		&instance_config.logger.log_directory, SOURCE_CMD, 0,
 		OPTION_LOG_GROUP, 0, option_get_value
 	},
 	{
-		'U', 217, "log-rotation-size",
+		'U', 219, "log-rotation-size",
 		&instance_config.logger.log_rotation_size, SOURCE_CMD, SOURCE_DEFAULT,
 		OPTION_LOG_GROUP, OPTION_UNIT_KB, option_get_value
 	},
 	{
-		'U', 218, "log-rotation-age",
+		'U', 220, "log-rotation-age",
 		&instance_config.logger.log_rotation_age, SOURCE_CMD, SOURCE_DEFAULT,
 		OPTION_LOG_GROUP, OPTION_UNIT_MS, option_get_value
 	},
 	/* Retention options */
 	{
-		'u', 219, "retention-redundancy",
+		'u', 221, "retention-redundancy",
 		&instance_config.retention_redundancy, SOURCE_CMD, 0,
 		OPTION_RETENTION_GROUP, 0, option_get_value
 	},
 	{
-		'u', 220, "retention-window",
+		'u', 222, "retention-window",
 		&instance_config.retention_window, SOURCE_CMD, 0,
 		OPTION_RETENTION_GROUP, 0, option_get_value
 	},
 	{
-		'u', 221, "wal-depth",
+		'u', 223, "wal-depth",
 		&instance_config.wal_depth, SOURCE_CMD, 0,
 		OPTION_RETENTION_GROUP, 0, option_get_value
 	},
 	/* Compression options */
 	{
-		'f', 222, "compress-algorithm",
+		'f', 224, "compress-algorithm",
 		assign_compress_alg, SOURCE_CMD, 0,
 		OPTION_COMPRESS_GROUP, 0, get_compress_alg
 	},
 	{
-		'u', 223, "compress-level",
+		'u', 225, "compress-level",
 		&instance_config.compress_level, SOURCE_CMD, 0,
 		OPTION_COMPRESS_GROUP, 0, option_get_value
 	},
 	/* Remote backup options */
 	{
-		's', 224, "remote-proto",
+		's', 226, "remote-proto",
 		&instance_config.remote.proto, SOURCE_CMD, 0,
 		OPTION_REMOTE_GROUP, 0, option_get_value
 	},
 	{
-		's', 225, "remote-host",
+		's', 227, "remote-host",
 		&instance_config.remote.host, SOURCE_CMD, 0,
 		OPTION_REMOTE_GROUP, 0, option_get_value
 	},
 	{
-		's', 226, "remote-port",
+		's', 228, "remote-port",
 		&instance_config.remote.port, SOURCE_CMD, 0,
 		OPTION_REMOTE_GROUP, 0, option_get_value
 	},
 	{
-		's', 227, "remote-path",
+		's', 229, "remote-path",
 		&instance_config.remote.path, SOURCE_CMD, 0,
 		OPTION_REMOTE_GROUP, 0, option_get_value
 	},
 	{
-		's', 228, "remote-user",
+		's', 230, "remote-user",
 		&instance_config.remote.user, SOURCE_CMD, 0,
 		OPTION_REMOTE_GROUP, 0, option_get_value
 	},
 	{
-		's', 229, "ssh-options",
+		's', 231, "ssh-options",
 		&instance_config.remote.ssh_options, SOURCE_CMD, 0,
 		OPTION_REMOTE_GROUP, 0, option_get_value
 	},
 	{
-		's', 230, "ssh-config",
+		's', 232, "ssh-config",
 		&instance_config.remote.ssh_config, SOURCE_CMD, 0,
 		OPTION_REMOTE_GROUP, 0, option_get_value
-	},
-	{
-		'f', 231, "log-format-console",
-		assign_log_format_console, SOURCE_CMD, 0,
-		OPTION_LOG_GROUP, 0, get_log_format_console
-	},
-	{
-		'f', 232, "log-format-file",
-		assign_log_format_file, SOURCE_CMD, 0,
-		OPTION_LOG_GROUP, 0, get_log_format_file
 	},
 	{ 0 }
 };
@@ -525,102 +525,102 @@ readInstanceConfigFile(InstanceState *instanceState)
 			OPTION_LOG_GROUP, 0, option_get_value
 		},
 		{
-			's', 214, "log-filename",
+			's', 214, "log-format-console",
+			&log_format_console, SOURCE_CMD, 0,
+			OPTION_LOG_GROUP, 0, option_get_value
+		},
+		{
+			's', 215, "log-format-file",
+			&log_format_file, SOURCE_CMD, 0,
+			OPTION_LOG_GROUP, 0, option_get_value
+		},
+		{
+			's', 216, "log-filename",
 			&instance->logger.log_filename, SOURCE_CMD, 0,
 			OPTION_LOG_GROUP, 0, option_get_value
 		},
 		{
-			's', 215, "error-log-filename",
+			's', 217, "error-log-filename",
 			&instance->logger.error_log_filename, SOURCE_CMD, 0,
 			OPTION_LOG_GROUP, 0, option_get_value
 		},
 		{
-			's', 216, "log-directory",
+			's', 218, "log-directory",
 			&instance->logger.log_directory, SOURCE_CMD, 0,
 			OPTION_LOG_GROUP, 0, option_get_value
 		},
 		{
-			'U', 217, "log-rotation-size",
+			'U', 219, "log-rotation-size",
 			&instance->logger.log_rotation_size, SOURCE_CMD, SOURCE_DEFAULT,
 			OPTION_LOG_GROUP, OPTION_UNIT_KB, option_get_value
 		},
 		{
-			'U', 218, "log-rotation-age",
+			'U', 220, "log-rotation-age",
 			&instance->logger.log_rotation_age, SOURCE_CMD, SOURCE_DEFAULT,
 			OPTION_LOG_GROUP, OPTION_UNIT_MS, option_get_value
 		},
 		/* Retention options */
 		{
-			'u', 219, "retention-redundancy",
+			'u', 221, "retention-redundancy",
 			&instance->retention_redundancy, SOURCE_CMD, 0,
 			OPTION_RETENTION_GROUP, 0, option_get_value
 		},
 		{
-			'u', 220, "retention-window",
+			'u', 222, "retention-window",
 			&instance->retention_window, SOURCE_CMD, 0,
 			OPTION_RETENTION_GROUP, 0, option_get_value
 		},
 		{
-			'u', 221, "wal-depth",
+			'u', 223, "wal-depth",
 			&instance->wal_depth, SOURCE_CMD, 0,
 			OPTION_RETENTION_GROUP, 0, option_get_value
 		},
 		/* Compression options */
 		{
-			's', 222, "compress-algorithm",
+			's', 224, "compress-algorithm",
 			&compress_alg, SOURCE_CMD, 0,
 			OPTION_LOG_GROUP, 0, option_get_value
 		},
 		{
-			'u', 223, "compress-level",
+			'u', 225, "compress-level",
 			&instance->compress_level, SOURCE_CMD, 0,
 			OPTION_COMPRESS_GROUP, 0, option_get_value
 		},
 		/* Remote backup options */
 		{
-			's', 224, "remote-proto",
+			's', 226, "remote-proto",
 			&instance->remote.proto, SOURCE_CMD, 0,
 			OPTION_REMOTE_GROUP, 0, option_get_value
 		},
 		{
-			's', 225, "remote-host",
+			's', 227, "remote-host",
 			&instance->remote.host, SOURCE_CMD, 0,
 			OPTION_REMOTE_GROUP, 0, option_get_value
 		},
 		{
-			's', 226, "remote-port",
+			's', 228, "remote-port",
 			&instance->remote.port, SOURCE_CMD, 0,
 			OPTION_REMOTE_GROUP, 0, option_get_value
 		},
 		{
-			's', 227, "remote-path",
+			's', 229, "remote-path",
 			&instance->remote.path, SOURCE_CMD, 0,
 			OPTION_REMOTE_GROUP, 0, option_get_value
 		},
 		{
-			's', 228, "remote-user",
+			's', 230, "remote-user",
 			&instance->remote.user, SOURCE_CMD, 0,
 			OPTION_REMOTE_GROUP, 0, option_get_value
 		},
 		{
-			's', 229, "ssh-options",
+			's', 231, "ssh-options",
 			&instance->remote.ssh_options, SOURCE_CMD, 0,
 			OPTION_REMOTE_GROUP, 0, option_get_value
 		},
 		{
-			's', 230, "ssh-config",
+			's', 232, "ssh-config",
 			&instance->remote.ssh_config, SOURCE_CMD, 0,
 			OPTION_REMOTE_GROUP, 0, option_get_value
-		},
-		{
-			's', 231, "log-format-console",
-			&log_format_console, SOURCE_CMD, 0,
-			OPTION_LOG_GROUP, 0, option_get_value
-		},
-		{
-			's', 232, "log-format-file",
-			&log_format_file, SOURCE_CMD, 0,
-			OPTION_LOG_GROUP, 0, option_get_value
 		},
 		{ 0 }
 	};
