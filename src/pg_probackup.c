@@ -315,6 +315,10 @@ main(int argc, char *argv[])
 	set_pglocale_pgservice(argv[0], PG_TEXTDOMAIN("pg_probackup"));
 	PROGRAM_FULL_PATH = palloc0(MAXPGPATH);
 
+	// Setting C locale for numeric values in order to impose dot-based floating-point representation
+	memorize_environment_locale();
+	setlocale(LC_NUMERIC, "C");
+
 	/* Get current time */
 	current_time = time(NULL);
 
@@ -1049,6 +1053,8 @@ main(int argc, char *argv[])
 			/* Silence compiler warnings, these already handled earlier */
 			break;
 	}
+
+	free_environment_locale();
 
 	return 0;
 }
