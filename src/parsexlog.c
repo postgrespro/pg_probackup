@@ -1773,7 +1773,11 @@ extractPageInfo(XLogReaderState *record, XLogReaderData *reader_data,
 	/* Is this a special record type that I recognize? */
 
 	if (rmid == RM_DBASE_ID
+#if PG_VERSION_NUM >= 150000
 		&& (rminfo == XLOG_DBASE_CREATE_WAL_LOG || rminfo == XLOG_DBASE_CREATE_FILE_COPY))
+#else
+		&& rminfo == XLOG_DBASE_CREATE)
+#endif
 	{
 		/*
 		 * New databases can be safely ignored. They would be completely
@@ -1827,13 +1831,21 @@ extractPageInfo(XLogReaderState *record, XLogReaderData *reader_data,
 				 RmgrNames[rmid], info);
 	}
 
+#if PG_VERSION_NUM >= 150000
 	for (block_id = 0; block_id <= record->record->max_block_id; block_id++)
+#else
+	for (block_id = 0; block_id <= record->max_block_id; block_id++)
+#endif
 	{
 		RelFileNode rnode;
 		ForkNumber	forknum;
 		BlockNumber blkno;
 
+#if PG_VERSION_NUM >= 150000
 		if (!XLogRecGetBlockTagExtended(record, block_id, &rnode, &forknum, &blkno, NULL))
+#else
+		if (!XLogRecGetBlockTag(record, block_id, &rnode, &forknum, &blkno))
+#endif
 			continue;
 
 		/* We only care about the main fork; others are copied as is */
