@@ -1066,10 +1066,10 @@ create_data_directories(parray *dest_files, const char *data_dir, const char *ba
 				waldir_path, to_path);
 
 			/* create tablespace directory from waldir_path*/
-			fio_mkdir(waldir_path, pg_tablespace_mode, location);
+			fio_mkdir(location, waldir_path, pg_tablespace_mode, false);
 
 			/* create link to linked_path */
-			if (fio_symlink(waldir_path, to_path, incremental, location) < 0)
+			if (fio_symlink(location, waldir_path, to_path, incremental) < 0)
 				elog(ERROR, "Could not create symbolic link \"%s\": %s",
 					to_path, strerror(errno));
 

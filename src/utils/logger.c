@@ -506,12 +506,12 @@ elog_stderr(int elevel, const char *fmt, ...)
 		json_add_value(buf_json, "pid", str_pid, 0, true);
 		json_add_key(buf_json, "level", 0);
 		write_elevel_for_json(buf_json, elevel);
-		message = get_log_message(fmt, args);
+		message = ft_vasprintf(fmt, args).ptr;
 		json_add_value(buf_json, "msg", message, 0, true);
 		json_add_value(buf_json, "my_thread_num", str_thread_json, 0, true);
 		json_add_min(buf_json, JT_END_OBJECT);
 		fputs(buf_json->data, stderr);
-		pfree(message);
+		ft_free(message);
 		termPQExpBuffer(buf_json);
 	}
 	else
