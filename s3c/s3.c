@@ -16,7 +16,13 @@
 
 #include "pg_probackup.h"
 
-#include "common/scram-common.h" /* for hmac-sha256 */
+#if PG_VERSION_NUM >= 140000
+#include "common/hmac.h" /* for hmac-sha256 */
+/*TODO !!!fix paths in Makefile and replase it */
+#include "../../src/common/sha2_int.h"
+#else
+#include "common/scram-common.h"
+#endif
 
 #include "s3.h"
 
@@ -204,11 +210,18 @@ static void
 S3_get_SHA256(char *out, const char *data, size_t len)
 {
 	/* size of out >= PG_SHA256_DIGEST_LENGTH + 1 */
-	pg_sha256_ctx		sha256_ctx;
 
+#if PG_VERSION_NUM < 140000
+	pg_sha256_ctx		sha256_ctx;
 	pg_sha256_init(&sha256_ctx);
-	pg_sha256_update(&sha256_ctx, data, len);
-	pg_sha256_final(&sha256_ctx, out);
+	pg_sha256_update(&sha256_ctx, (uint8 *)data, len);
+	pg_sha256_final(&sha256_ctx, (uint8 *)out);
+#else
+	pg_cryptohash_ctx 	*ctx = pg_cryptohash_create(PG_SHA256);
+	pg_cryptohash_init(ctx);
+	pg_cryptohash_update(ctx, (uint8 *)data, len);
+	pg_cryptohash_final(ctx, (uint8 *)out, strlen(out));
+#endif
 
 	out[PG_SHA256_DIGEST_LENGTH] = 0;
 }
@@ -218,12 +231,19 @@ static void
 S3_get_HMAC_SHA256(char *out, const char *key, const char *data)
 {
 	/* size of out >= PG_SHA256_DIGEST_LENGTH + 1 */
+#if PG_VERSION_NUM < 140000
 	scram_HMAC_ctx		hmac_ctx;
 
-	scram_HMAC_init(&hmac_ctx, (uint8 *) key, strlen(key));
+	scram_HMAC_init(&hmac_ctx, (uint8 *)key, strlen(key));
 	scram_HMAC_update(&hmac_ctx, data, strlen(data));
-	scram_HMAC_final(out, &hmac_ctx);
+	scram_HMAC_final((uint8 *)out, &hmac_ctx);
 	out[PG_SHA256_DIGEST_LENGTH] = 0;
+#else
+	pg_hmac_ctx * hmac_ctx = pg_hmac_create(PG_SHA256);
+	pg_hmac_init(hmac_ctx, (uint8 *)key, strlen(key));
+	pg_hmac_update(hmac_ctx,  (uint8 *)data, strlen(data));
+	pg_hmac_final(hmac_ctx, (uint8 *)out, strlen(out));
+#endif
 }
 
 
@@ -246,6 +266,7 @@ binary_hmac_sha256(char *out, const char *key, const char *data)
 	}
 	out[PG_SHA256_DIGEST_LENGTH * 2] = 0;
 }
+
 
 
 static char*
@@ -740,7 +761,7 @@ put_object(FILE *fd, S3_query_params *params, S3_config *config)
 	/* output of all params */
 
 	/* Perform the request, res will get the return code */
-	/*res = curl_easy_perform(curl);*/
+	res = curl_easy_perform(curl);
 
 	/* check for errors*/
 	if (res != CURLE_OK)
