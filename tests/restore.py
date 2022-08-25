@@ -3270,6 +3270,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
                 "GRANT EXECUTE ON FUNCTION pg_catalog.pg_last_xlog_replay_location() TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;"
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_edition() TO backup;"
             )
         # >= 10
         else:
@@ -3307,6 +3308,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
                 "GRANT EXECUTE ON FUNCTION pg_catalog.pg_last_wal_replay_lsn() TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;"
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_edition() TO backup;"
             )
 
         if self.ptrack:
@@ -3321,9 +3323,6 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
                 "CREATE EXTENSION ptrack WITH SCHEMA ptrack")
 
         if ProbackupTest.enterprise:
-            node.safe_psql(
-                "backupdb",
-                "GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_edition() TO backup")
 
             node.safe_psql(
                 "backupdb",
@@ -3917,6 +3916,62 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
                 e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_restore_with_waldir(self):
+        """recovery using tablespace-mapping option and page backup"""
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'])
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+
+        with node.connect("postgres") as con:
+            con.execute(
+                "CREATE TABLE tbl AS SELECT * "
+                "FROM generate_series(0,3) AS integer")
+            con.commit()
+
+        # Full backup
+        backup_id = self.backup_node(backup_dir, 'node', node)
+
+        node.stop()
+        node.cleanup()
+
+        # Create waldir
+        waldir_path = os.path.join(node.base_dir, "waldir")
+        os.makedirs(waldir_path)
+
+        # Test recovery from latest
+        self.assertIn(
+            "INFO: Restore of backup {0} completed.".format(backup_id),
+            self.restore_node(
+                backup_dir, 'node', node,
+                options=[
+                    "-X", "%s" % (waldir_path)]),
+            '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                repr(self.output), self.cmd))
+        node.slow_start()
+
+        count = node.execute("postgres", "SELECT count(*) FROM tbl")
+        self.assertEqual(count[0][0], 4)
+
+	# check pg_wal is symlink
+        if node.major_version >= 10:
+            wal_path=os.path.join(node.data_dir, "pg_wal")
+        else:
+            wal_path=os.path.join(node.data_dir, "pg_xlog")
+
+        self.assertEqual(os.path.islink(wal_path), True)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)

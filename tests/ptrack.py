@@ -24,6 +24,8 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         """
         drop relation during ptrack backup
         """
+        self._check_gdb_flag_or_skip_test()
+
         backup_dir = os.path.join(self.tmp_path, module_name, self.fname, 'backup')
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, self.fname, 'node'),
@@ -582,6 +584,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
                 "GRANT EXECUTE ON FUNCTION pg_catalog.pg_last_xlog_replay_location() TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;"
+                'GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_edition() TO backup; '
             )
         # >= 10
         else:
@@ -618,6 +621,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
                 "GRANT EXECUTE ON FUNCTION pg_catalog.pg_last_wal_replay_lsn() TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;"
+                'GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_edition() TO backup; '
             )
 
         node.safe_psql(
@@ -635,10 +639,6 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             "GRANT SELECT ON TABLE pg_catalog.pg_extension TO backup")
 
         if ProbackupTest.enterprise:
-            node.safe_psql(
-                "backupdb",
-                "GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_edition() TO backup")
-
             node.safe_psql(
                 "backupdb",
                 "GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_version() TO backup")
@@ -996,6 +996,8 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         make node, make full and ptrack stream backups,
         restore them and check data correctness
         """
+        self._check_gdb_flag_or_skip_test()
+
         backup_dir = os.path.join(self.tmp_path, module_name, self.fname, 'backup')
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, self.fname, 'node'),

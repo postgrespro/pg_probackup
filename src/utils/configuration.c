@@ -18,6 +18,9 @@
 
 #include "getopt_long.h"
 
+#ifndef WIN32
+#include <pwd.h>
+#endif
 #include <time.h>
 
 #define MAXPG_LSNCOMPONENT	8

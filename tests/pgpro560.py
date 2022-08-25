@@ -32,15 +32,16 @@ class CheckSystemID(ProbackupTest, unittest.TestCase):
         node.slow_start()
 
         file = os.path.join(node.base_dir, 'data', 'global', 'pg_control')
-        os.remove(file)
+        # Not delete this file permanently
+        os.rename(file, os.path.join(node.base_dir, 'data', 'global', 'pg_control_copy'))
 
         try:
             self.backup_node(backup_dir, 'node', node, options=['--stream'])
             # we should die here because exception is what we expect to happen
             self.assertEqual(
-                1, 0,
-                "Expecting Error because pg_control was deleted.\n "
-                "Output: {0} \n CMD: {1}".format(repr(self.output), self.cmd))
+               1, 0,
+               "Expecting Error because pg_control was deleted.\n "
+               "Output: {0} \n CMD: {1}".format(repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertTrue(
                 'ERROR: Could not open file' in e.message and
@@ -49,6 +50,8 @@ class CheckSystemID(ProbackupTest, unittest.TestCase):
                     repr(e.message), self.cmd))
 
         # Clean after yourself
+        # Return this file to avoid Postger fail
+        os.rename(os.path.join(node.base_dir, 'data', 'global', 'pg_control_copy'), file)
         self.del_test_dir(module_name, fname)
 
     def test_pgpro560_systemid_mismatch(self):

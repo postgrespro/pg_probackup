@@ -697,6 +697,7 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
                 'GRANT EXECUTE ON FUNCTION pg_catalog.array_position(anyarray, anyelement) TO backup; '
 #                'GRANT EXECUTE ON FUNCTION bt_index_check(regclass) TO backup; '
                 'GRANT EXECUTE ON FUNCTION bt_index_check(regclass, bool) TO backup;'
+                'GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_edition() TO backup; '
             )
         # PG 10
         elif self.get_version(node) > 100000 and self.get_version(node) < 110000:
@@ -725,6 +726,9 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
                 'GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_system() TO backup; '
                 'GRANT EXECUTE ON FUNCTION pg_catalog.string_to_array(text, text) TO backup; '
                 'GRANT EXECUTE ON FUNCTION pg_catalog.array_position(anyarray, anyelement) TO backup;'
+                'GRANT EXECUTE ON FUNCTION bt_index_check(regclass) TO backup; '
+                'GRANT EXECUTE ON FUNCTION bt_index_check(regclass, bool) TO backup;'
+                'GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_edition() TO backup; '
             )
             if ProbackupTest.enterprise:
                 # amcheck-1.1
@@ -765,6 +769,7 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
                 'GRANT EXECUTE ON FUNCTION pg_catalog.array_position(anyarray, anyelement) TO backup; '
                 'GRANT EXECUTE ON FUNCTION bt_index_check(regclass) TO backup; '
                 'GRANT EXECUTE ON FUNCTION bt_index_check(regclass, bool) TO backup;'
+                'GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_edition() TO backup; '
             )
             # checkunique parameter
             if ProbackupTest.enterprise:
@@ -803,17 +808,13 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
                 'GRANT EXECUTE ON FUNCTION pg_catalog.array_position(anycompatiblearray, anycompatible) TO backup; '
                 'GRANT EXECUTE ON FUNCTION bt_index_check(regclass) TO backup; '
                 'GRANT EXECUTE ON FUNCTION bt_index_check(regclass, bool) TO backup;'
+                'GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_edition() TO backup; '
             )
             # checkunique parameter
             if ProbackupTest.enterprise:
                 node.safe_psql(
                     "backupdb",
                     "GRANT EXECUTE ON FUNCTION bt_index_check(regclass, bool, bool) TO backup")
-
-        if ProbackupTest.enterprise:
-            node.safe_psql(
-                "backupdb",
-                "GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_edition() TO backup")
 
         # checkdb
         try:
