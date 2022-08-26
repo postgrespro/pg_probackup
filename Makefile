@@ -40,7 +40,6 @@ OBJS += src/archive.o src/backup.o src/catalog.o src/checkdb.o src/configure.o s
 
 # sources borrowed from postgresql (paths are relative to pg top dir)
 BORROWED_H_SRC := \
-	src/include/portability/instr_time.h \
 	src/bin/pg_basebackup/receivelog.h \
 	src/bin/pg_basebackup/streamutil.h \
 	src/bin/pg_basebackup/walmethods.h
@@ -87,7 +86,6 @@ override CPPFLAGS := -DFRONTEND $(CPPFLAGS) $(PG_CPPFLAGS)
 PG_LIBS_INTERNAL = $(libpq_pgport) ${PTHREAD_CFLAGS}
 
 # additional dependencies on borrowed files
-src/archive.o: $(BORROW_DIR)/instr_time.h
 src/backup.o src/catchup.o src/pg_probackup.o: $(BORROW_DIR)/streamutil.h
 src/stream.o $(BORROW_DIR)/receivelog.o $(BORROW_DIR)/streamutil.o $(BORROW_DIR)/walmethods.o: $(BORROW_DIR)/receivelog.h
 $(BORROW_DIR)/receivelog.h: $(BORROW_DIR)/walmethods.h
