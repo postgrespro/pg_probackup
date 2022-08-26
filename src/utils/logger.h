@@ -21,6 +21,9 @@
 #define ERROR		1
 #define LOG_OFF		10
 
+#define PLAIN		0
+#define JSON		1
+
 typedef struct LoggerConfig
 {
 	int			log_level_console;
@@ -32,6 +35,8 @@ typedef struct LoggerConfig
 	uint64		log_rotation_size;
 	/* Maximum lifetime of an individual log file in minutes */
 	uint64		log_rotation_age;
+	int8		log_format_console;
+	int8		log_format_file;
 } LoggerConfig;
 
 /* Logger parameters */
@@ -42,6 +47,9 @@ extern LoggerConfig logger_config;
 
 #define LOG_LEVEL_CONSOLE_DEFAULT	INFO
 #define LOG_LEVEL_FILE_DEFAULT		LOG_OFF
+
+#define LOG_FORMAT_CONSOLE_DEFAULT	PLAIN
+#define LOG_FORMAT_FILE_DEFAULT		PLAIN
 
 #define LOG_FILENAME_DEFAULT		"pg_probackup.log"
 #define LOG_DIRECTORY_DEFAULT		"log"
@@ -59,4 +67,6 @@ extern void init_console(void);
 extern int parse_log_level(const char *level);
 extern const char *deparse_log_level(int level);
 
+extern int parse_log_format(const char *format);
+extern const char *deparse_log_format(int format);
 #endif   /* LOGGER_H */

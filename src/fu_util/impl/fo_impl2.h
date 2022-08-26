@@ -6,21 +6,58 @@
 #include <fo_obj.h>
 #include <impl/fo_impl.h>
 
+enum fobjStrType {
+    FOBJ_STR_SMALL = 1,
+    FOBJ_STR_UNOWNED,
+    FOBJ_STR_PTR,
+};
+#define FOBJ_STR_SMALL_SIZE ((1<<14)-1)
+#define FOBJ_STR_FREE_SPACE (sizeof(fobjStr) - offsetof(fobjStr, small.buf))
+
+union fobjStr {
+    struct {
+        uint16_t    type:2;
+    };
+    struct {
+        uint16_t    type:2;
+        uint16_t    len:14;
+        char        buf[];
+    } small;
+    struct {
+        uint16_t    type:2;
+        uint32_t    len;
+        char* ptr;
+    } ptr;
+};
+
 ft_inline fobjStr*
 fobj_str(const char* s) {
-    return fobj_newstr(ft_cstr(s), false);
+    return fobj_newstr(ft_cstr(s), FOBJ_STR_COPY);
+}
+
+ft_inline fobjStr*
+fobj_str_const(const char* s) {
+    return fobj_newstr(ft_cstr(s), FOBJ_STR_CONST);
 }
 
 ft_inline fobjStr*
 fobj_strbuf_steal(ft_strbuf_t *buf) {
-    fobjStr*    str = fobj_newstr(ft_strbuf_ref(buf), buf->alloced);
-    *buf = (ft_strbuf_t){NULL};
-    return str;
+    if (buf->len < FOBJ_STR_FREE_SPACE && !buf->alloced)
+        return fobj_newstr(ft_strbuf_ref(buf), FOBJ_STR_COPY);
+    return fobj_newstr(ft_strbuf_steal(buf), FOBJ_STR_GIFTED);
 }
 
 ft_inline ft_str_t
 fobj_getstr(fobjStr *str) {
-    return ft_str(str->ptr, str->len);
+    switch (str->type) {
+    case FOBJ_STR_SMALL:
+        return ft_str(str->small.buf, str->small.len);
+    case FOBJ_STR_PTR:
+    case FOBJ_STR_UNOWNED:
+        return ft_str(str->ptr.ptr, str->ptr.len);
+    default:
+        ft_log(FT_FATAL, "Unknown fobj_str type %d", str->type);
+    }
 }
 
 ft_inline fobjStr*
@@ -31,7 +68,7 @@ fobj_strcatc(fobjStr *ostr, const char *str) {
 ft_inline fobjStr*
 fobj_strcatc2(fobjStr *ostr, const char *str1, const char *str2) {
     /* a bit lazy to do it in a fast way */
-    return fobj_strcatf(ostr, "%s%s", str1, str2);
+    return fobj_strcat2(ostr, ft_cstr(str1), ft_cstr(str2));
 }
 
 ft_inline fobjStr*
@@ -94,7 +131,7 @@ struct fobjErr {
 };
 
 #define fobj_make_err(type, ...) \
-        fm_cat(fobj_make_err_, fm_va_012(__VA_ARGS__))(type, __VA_ARGS__)
+        fm_cat(fobj_make_err_, fm_va_01n(__VA_ARGS__))(type, __VA_ARGS__)
 #define fobj_make_err_0(type, ...) ({ \
     fobj__make_err(fobj_error_kind_##type(), \
                   ft__srcpos(), "Unspecified Error", NULL, 0); \
@@ -103,7 +140,7 @@ struct fobjErr {
     fobj__make_err(fobj_error_kind_##type(), \
                   ft__srcpos(), msg, NULL, 0); \
 })
-#define fobj_make_err_2(type, msg, ...) ({ \
+#define fobj_make_err_n(type, msg, ...) ({ \
     fobj_err_kv_t  kvs[] = {            \
         fobj__err_transform_kv(__VA_ARGS__) \
     };                                     \
@@ -182,7 +219,13 @@ fobj_errsrc(err_i err) {
     return self->src;
 }
 
-#define fobj__printkv(fmt, ...) ({ \
+#define fobj__printkv(fmt, ...) \
+    fm_cat(fobj__printkv_, fm_va_01(__VA_ARGS__))(fmt, __VA_ARGS__)
+
+#define fobj__printkv_0(fmt, ...) \
+    fobj_printkv(fmt, ft_slc_fokv_make(NULL, 0))
+
+#define fobj__printkv_1(fmt, ...) ({ \
     fobj_kv kvs[] = {                \
         fobj__transform_fokv(__VA_ARGS__) \
     };                             \

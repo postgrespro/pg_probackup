@@ -113,7 +113,7 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 	char		pretty_time[20];
 	char		pretty_bytes[20];
 
-	elog(LOG, "Database backup start");
+	elog(INFO, "Database backup start");
 	if(current.external_dir_str)
 	{
 		external_dirs = make_external_directory_list(current.external_dir_str,
@@ -329,11 +329,11 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 	/* Extract information about files in backup_list parsing their names:*/
 	parse_filelist_filenames(backup_files_list, instance_config.pgdata);
 
-	elog(LOG, "Current Start LSN: %X/%X, TLI: %X",
+	elog(INFO, "Current Start LSN: %X/%X, TLI: %X",
 			(uint32) (current.start_lsn >> 32), (uint32) (current.start_lsn),
 			current.tli);
 	if (current.backup_mode != BACKUP_MODE_FULL)
-		elog(LOG, "Parent Start LSN: %X/%X, TLI: %X",
+		elog(INFO, "Parent Start LSN: %X/%X, TLI: %X",
 			 (uint32) (prev_backup->start_lsn >> 32), (uint32) (prev_backup->start_lsn),
 			 prev_backup->tli);
 
@@ -405,7 +405,7 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 			else
 				join_path_components(dirpath, current.database_dir, file->rel_path);
 
-			elog(VERBOSE, "Create directory '%s'", dirpath);
+			elog(LOG, "Create directory '%s'", dirpath);
 			fio_mkdir(FIO_BACKUP_HOST, dirpath, DIR_PERMISSION, false);
 		}
 
@@ -666,7 +666,7 @@ pgdata_basic_setup(ConnectionOptions conn_opt, PGNodeInfo *nodeInfo)
 	nodeInfo->checksum_version = current.checksum_version;
 
 	if (current.checksum_version)
-		elog(LOG, "This PostgreSQL instance was initialized with data block checksums. "
+		elog(INFO, "This PostgreSQL instance was initialized with data block checksums. "
 					"Data block corruption will be detected");
 	else
 		elog(WARNING, "This PostgreSQL instance was initialized without data block checksums. "
@@ -688,7 +688,7 @@ pgdata_basic_setup(ConnectionOptions conn_opt, PGNodeInfo *nodeInfo)
  */
 int
 do_backup(InstanceState *instanceState, pgSetBackupParams *set_backup_params,
-		  bool no_validate, bool no_sync, bool backup_logs)
+		  bool no_validate, bool no_sync, bool backup_logs, time_t start_time)
 {
 	PGconn		*backup_conn = NULL;
 	PGNodeInfo	nodeInfo;
@@ -703,7 +703,7 @@ do_backup(InstanceState *instanceState, pgSetBackupParams *set_backup_params,
 		current.external_dir_str = instance_config.external_dir_str;
 
 	/* Create backup directory and BACKUP_CONTROL_FILE */
-	pgBackupCreateDir(&current, instanceState->instance_backup_subdir_path);
+	pgBackupCreateDir(&current, instanceState, start_time);
 
 	if (!instance_config.pgdata)
 		elog(ERROR, "required parameter not specified: PGDATA "
@@ -1473,7 +1473,7 @@ wait_wal_and_calculate_stop_lsn(const char *xlog_path, XLogRecPtr stop_lsn, pgBa
 		stop_lsn_exists = true;
 	}
 
-	elog(LOG, "stop_lsn: %X/%X",
+	elog(INFO, "stop_lsn: %X/%X",
 		(uint32) (stop_lsn >> 32), (uint32) (stop_lsn));
 
 	/*
@@ -1811,7 +1811,7 @@ pg_stop_backup(InstanceState *instanceState, pgBackup *backup, PGconn *pg_startb
 
 	backup->recovery_xid = stop_backup_result.snapshot_xid;
 
-	elog(LOG, "Getting the Recovery Time from WAL");
+	elog(INFO, "Getting the Recovery Time from WAL");
 
 	/* iterate over WAL from stop_backup lsn to start_backup lsn */
 	if (!read_recovery_info(xlog_path, backup->tli,
@@ -1819,7 +1819,7 @@ pg_stop_backup(InstanceState *instanceState, pgBackup *backup, PGconn *pg_startb
 						backup->start_lsn, backup->stop_lsn,
 						&backup->recovery_time))
 	{
-		elog(LOG, "Failed to find Recovery Time in WAL, forced to trust current_timestamp");
+		elog(INFO, "Failed to find Recovery Time in WAL, forced to trust current_timestamp");
 		backup->recovery_time = stop_backup_result.invocation_time;
 	}
 
@@ -1901,9 +1901,8 @@ backup_files(void *arg)
 		if (interrupted || thread_interrupted)
 			elog(ERROR, "interrupted during backup");
 
-		if (progress)
-			elog(INFO, "Progress: (%d/%d). Process file \"%s\"",
-				 i + 1, n_backup_files_list, file->rel_path);
+		elog(progress ? INFO : LOG, "Progress: (%d/%d). Process file \"%s\"",
+			 i + 1, n_backup_files_list, file->rel_path);
 
 		/* Handle zero sized files */
 		if (file->size == 0)
@@ -1973,11 +1972,11 @@ backup_files(void *arg)
 
 		if (file->write_size == BYTES_INVALID)
 		{
-			elog(VERBOSE, "Skipping the unchanged file: \"%s\"", from_fullpath);
+			elog(LOG, "Skipping the unchanged file: \"%s\"", from_fullpath);
 			continue;
 		}
 
-		elog(VERBOSE, "File \"%s\". Copied "INT64_FORMAT " bytes",
+		elog(LOG, "File \"%s\". Copied "INT64_FORMAT " bytes",
 						from_fullpath, file->write_size);
 	}
 
@@ -2095,26 +2094,26 @@ set_cfs_datafiles(parray *files, const char *root, char *relative, size_t i)
 		elog(ERROR, "Out of memory");
 	len = strlen("/pg_compression");
 	cfs_tblspc_path[strlen(cfs_tblspc_path) - len] = 0;
-	elog(VERBOSE, "CFS DIRECTORY %s, pg_compression path: %s", cfs_tblspc_path, relative);
+	elog(LOG, "CFS DIRECTORY %s, pg_compression path: %s", cfs_tblspc_path, relative);
 
 	for (p = (int) i; p >= 0; p--)
 	{
 		prev_file = (pgFile *) parray_get(files, (size_t) p);
 
-		elog(VERBOSE, "Checking file in cfs tablespace %s", prev_file->rel_path);
+		elog(LOG, "Checking file in cfs tablespace %s", prev_file->rel_path);
 
 		if (strstr(prev_file->rel_path, cfs_tblspc_path) != NULL)
 		{
 			if (S_ISREG(prev_file->mode) && prev_file->is_datafile)
 			{
-				elog(VERBOSE, "Setting 'is_cfs' on file %s, name %s",
+				elog(LOG, "Setting 'is_cfs' on file %s, name %s",
 					prev_file->rel_path, prev_file->name);
 				prev_file->is_cfs = true;
 			}
 		}
 		else
 		{
-			elog(VERBOSE, "Breaking on %s", prev_file->rel_path);
+			elog(LOG, "Breaking on %s", prev_file->rel_path);
 			break;
 		}
 	}

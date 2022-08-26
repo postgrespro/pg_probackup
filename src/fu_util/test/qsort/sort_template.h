@@ -117,7 +117,6 @@
  */
 #define CppConcat(x, y) x##y
 #define pg_noinline __attribute__((noinline))
-typedef uint8_t uint8;
 #define Min(a, b) ((a) < (b) ? (a) : (b))
 
 #define ST_MAKE_PREFIX(a) CppConcat(a,_)
@@ -237,7 +236,7 @@ ST_SCOPE void ST_SORT(ST_ELEMENT_TYPE * first, size_t n
 #define DO_SWAPN(a_, b_, n_) ST_SWAPN((a_), (b_), (n_))
 #define DO_SWAP(a_, b_) ST_SWAP((a_), (b_))
 #else
-#define ST_POINTER_TYPE uint8
+#define ST_POINTER_TYPE uint8_t
 #define ST_POINTER_STEP element_size
 #define DO_SWAPN(a_, b_, n_) ST_SWAPN((a_), (b_), (n_))
 #define DO_SWAP(a_, b_) DO_SWAPN((a_), (b_), element_size)

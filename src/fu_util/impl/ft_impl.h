@@ -84,7 +84,7 @@ extern void ft__register_source(const char *file,
 } while(0)
 
 #define ft__log_fmt_msg(fmt, ...) \
-    fm_tuple_expand(fm_if(fm_no_va(__VA_ARGS__), ("%s", fmt), (fmt, __VA_ARGS__)))
+    fm_iif(fm_no_va(__VA_ARGS__))("%s", fmt)(fmt, __VA_ARGS__)
 
 extern ft_gnu_printf(4, 5)
 void ft__log(enum FT_LOG_LEVEL level, ft_source_position_t srcpos, const char* error, const char *fmt, ...);
@@ -224,6 +224,17 @@ ft_fast_randmod(uint32_t v, uint32_t mod) {
 
 ft_inline uint32_t ft_randn(uint32_t mod) {
     return ft_fast_randmod(ft_rand(), mod);
+}
+
+ft_inline uint32_t ft_rand32(uint32_t* state, uint32_t mod) {
+    uint32_t x = *state;
+    uint32_t r = ft_rol32(x, 15);
+    x ^= x << 13;
+    x ^= x >> 17;
+    x ^= x << 5;
+    *state = x;
+    r += x;
+    return mod ? ft_fast_randmod(r, mod) : r;
 }
 
 /* ft_val_t */

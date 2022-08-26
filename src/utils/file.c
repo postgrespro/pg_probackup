@@ -3420,11 +3420,6 @@ fio_communicate(int in, int out)
 }
 
 // CLASSES
-typedef struct pioError {
-    fobjErr	p; /* parent */
-    int		_errno;
-} pioError;
-
 typedef struct pioLocalDrive
 {
 } pioLocalDrive;
@@ -3478,11 +3473,6 @@ typedef struct pioWriteFilter {
 } pioWriteFilter;
 
 #ifdef HAVE_LIBZ
-typedef struct pioGZError {
-    fobjErr	p; /* parent */
-    int		_gzerrno;
-} pioGZError;
-
 typedef struct pioGZCompress {
     z_stream    strm;
     bool        finished;
@@ -4796,11 +4786,11 @@ pioCopyWithFilters(pioWriteFlush_i dest, pioRead_i src,
 
     if ($ifdef(err = , pioSetAsync, src.self) && $haserr(err))
         elog(ERROR, "Cannot enable async mode on source \"%s\": %s",
-             $irepr(src)->ptr, $errmsg(err));
+             $irepr(src), $errmsg(err));
 
     if ($ifdef(err = , pioSetAsync, dest.self) && $haserr(err))
         elog(ERROR, "Cannot enable async mode on destination \"%s\": %s",
-             $irepr(dest)->ptr, $errmsg(err));
+             $irepr(dest), $errmsg(err));
 
     for (i = nfilters - 1; i >= 0; i--)
         dest = pioWrapWriteFilter(dest, filters[i], OUT_BUF_SIZE);
@@ -4827,7 +4817,7 @@ pioCopyWithFilters(pioWriteFlush_i dest, pioRead_i src,
                 $ireturn(err);
 
             $ireturn($err(SysErr, "Short write to destination file {path}: {writtenSz} < {wantedSz}",
-                         path($irepr(dest)->ptr),
+                         path($irepr(dest)),
                          wantedSz(read_len), writtenSz(write_len)));
         }
     }
@@ -4836,7 +4826,7 @@ pioCopyWithFilters(pioWriteFlush_i dest, pioRead_i src,
     err = $i(pioFlush, dest);
     if ($haserr(err))
         $ireturn($err(SysErr, "Cannot flush file {path}: {cause}",
-                     path($irepr(dest)->ptr), cause(err.self)));
+                     path($irepr(dest)), cause(err.self)));
     return $noerr();
 }
 

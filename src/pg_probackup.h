@@ -93,10 +93,6 @@ extern const char  *PROGRAM_EMAIL;
 #define LOCK_STALE_TIMEOUT			30
 #define LOG_FREQ					10
 
-/* Directory/File permission */
-#define DIR_PERMISSION		(0700)
-#define FILE_PERMISSION		(0600)
-
 /* 64-bit xid support for PGPRO_EE */
 #ifndef PGPRO_EE
 #define XID_FMT "%u"
@@ -334,7 +330,7 @@ typedef enum ShowFormat
 #define BYTES_INVALID		(-1) /* file didn`t changed since previous backup, DELTA backup do not rely on it */
 #define FILE_NOT_FOUND		(-2) /* file disappeared during backup */
 #define BLOCKNUM_INVALID	(-1)
-#define PROGRAM_VERSION	"2.5.6"
+#define PROGRAM_VERSION	"2.5.7"
 
 /* update when remote agent API or behaviour changes */
 #define AGENT_PROTOCOL_VERSION 20600
@@ -559,6 +555,8 @@ typedef struct pgRestoreParams
 	/* options for partial restore */
 	PartialRestoreType partial_restore_type;
 	parray *partial_db_list;
+	
+	char* waldir;
 } pgRestoreParams;
 
 /* Options needed for set-backup command */
@@ -828,7 +826,7 @@ extern char** commands_args;
 
 /* in backup.c */
 extern int do_backup(InstanceState *instanceState, pgSetBackupParams *set_backup_params,
-					 bool no_validate, bool no_sync, bool backup_logs);
+					 bool no_validate, bool no_sync, bool backup_logs, time_t start_time);
 extern void do_checkdb(bool need_amcheck, ConnectionOptions conn_opt,
 				  char *pgdata);
 extern BackupMode parse_backup_mode(const char *value);
@@ -893,6 +891,8 @@ extern InstanceConfig *readInstanceConfigFile(InstanceState *instanceState);
 /* in show.c */
 extern int do_show(CatalogState *catalogState, InstanceState *instanceState,
 				   time_t requested_backup_id, bool show_archive);
+extern void memorize_environment_locale(void);
+extern void free_environment_locale(void);
 
 /* in delete.c */
 extern void do_delete(InstanceState *instanceState, time_t backup_id);
@@ -969,7 +969,7 @@ extern void write_backup_filelist(pgBackup *backup, parray *files,
 								  const char *root, parray *external_list, bool sync);
 
 
-extern void pgBackupCreateDir(pgBackup *backup, const char *backup_instance_path);
+extern void pgBackupCreateDir(pgBackup *backup, InstanceState *instanceState, time_t start_time);
 extern void pgNodeInit(PGNodeInfo *node);
 extern void pgBackupInit(pgBackup *backup);
 extern void pgBackupFree(void *backup);
@@ -1011,7 +1011,8 @@ extern void create_data_directories(parray *dest_files,
 										const char *backup_dir,
 										bool extract_tablespaces,
 										bool incremental,
-										fio_location location);
+										fio_location location,
+										const char *waldir_path);
 
 extern void read_tablespace_map(parray *links, const char *backup_dir);
 extern void opt_tablespace_map(ConfigOption *opt, const char *arg);

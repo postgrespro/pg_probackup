@@ -23,7 +23,7 @@ typedef SSIZE_T ssize_t;
 #ifdef __GNUC__
 #define ft_gcc_const __attribute__((const))
 #define ft_gcc_pure __attribute__((pure))
-#if __GNUC__ > 10
+#if __GNUC__ > 10 && !defined(__clang__)
 #define ft_gcc_malloc(free, idx) __attribute__((malloc, malloc(free, idx)))
 #else
 #define ft_gcc_malloc(free, idx) __attribute__((malloc))
@@ -32,6 +32,7 @@ typedef SSIZE_T ssize_t;
 #define ft_gnu_printf(fmt, arg) __attribute__((format(printf,fmt,arg)))
 #define ft_likely(x)    __builtin_expect(!!(x), 1)
 #define ft_unlikely(x)  __builtin_expect(!!(x), 0)
+#define ft_always_inline __attribute__((always_inline))
 #else
 #define ft_gcc_const
 #define ft_gcc_pure
@@ -40,7 +41,9 @@ typedef SSIZE_T ssize_t;
 #define ft_gnu_printf(fmt, arg)
 #define ft_likely(x)    (x)
 #define ft_unlikely(x)  (x)
+#define ft_always_inline
 #endif
+#define ft_static static ft_unused
 #define ft_inline static ft_unused inline
 
 #if defined(__GNUC__) && !defined(__clang__)
@@ -158,9 +161,8 @@ extern void* ft_realloc_arr(void* ptr, size_t elem_sz, size_t old_elems, size_t 
 #define ft_free(ptr)            ft_realloc((ptr), 0)
 #define ft_calloc_arr(sz, cnt)  ft_calloc(ft_mul_size((sz), (cnt)))
 
-extern void ft_set_allocators(
-        void *(*_realloc)(void *, size_t),
-        void (*_free)(void*));
+extern void ft_set_allocators(void *(*_realloc)(void *, size_t),
+                              void (*_free)(void*));
 
 /* overflow checking size addition and multiplication */
 ft_inline size_t ft_add_size(size_t a, size_t b);
@@ -214,6 +216,8 @@ ft_inline uint32_t ft_mix32(uint32_t data);
 extern uint32_t ft_rand(void);
 /* Dumb quality random 0<=r<mod */
 ft_inline uint32_t ft_randn(uint32_t mod);
+/* Xorshift32 random */
+ft_inline uint32_t ft_rand32(uint32_t *state, uint32_t mod);
 
 /* hash for small c strings */
 extern uint32_t ft_small_cstr_hash(const char *key);

@@ -347,7 +347,7 @@ push_file(WALSegno *xlogfile, const char *archive_status_dir,
 		canonicalize_path(wal_file_ready);
 		canonicalize_path(wal_file_done);
 		/* It is ok to rename status file in archive_status directory */
-		elog(VERBOSE, "Rename \"%s\" to \"%s\"", wal_file_ready, wal_file_done);
+		elog(LOG, "Rename \"%s\" to \"%s\"", wal_file_ready, wal_file_done);
 
 		/* do not error out, if rename failed */
 		if (fio_rename(FIO_DB_HOST, wal_file_ready, wal_file_done) < 0)
@@ -502,7 +502,7 @@ push_file_internal(const char *wal_file_name, const char *pg_xlog_dir,
         elog(ERROR, "Temp WAL: %s", $errmsg(err));
 
     part_opened:
-    elog(VERBOSE, "Temp WAL file successfully created: \"%s\"", to_fullpath_part);
+    elog(LOG, "Temp WAL file successfully created: \"%s\"", to_fullpath_part);
 
     if ($i(pioExists, backup_drive, to_fullpath, &err))
     {
@@ -872,7 +872,7 @@ do_archive_get(InstanceState *instanceState, InstanceConfig *instance, const cha
 		if (get_wal_file(wal_file_name, backup_wal_file_path, absolute_wal_file_path, false))
 		{
 			fail_count = 0;
-			elog(INFO, "pg_probackup archive-get copied WAL file %s", wal_file_name);
+			elog(LOG, "pg_probackup archive-get copied WAL file %s", wal_file_name);
 			n_fetched++;
 			break;
 		}

@@ -96,10 +96,18 @@ def is_enterprise():
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE
     )
-    if b'postgrespro.ru' in p.communicate()[0]:
-        return True
-    else:
-        return False
+    return b'postgrespro.ru' in p.communicate()[0]
+
+ 
+def is_nls_enabled():
+    cmd = [os.environ['PG_CONFIG'], '--configure']
+
+    p = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE
+    )
+    return b'enable-nls' in p.communicate()[0]
 
 
 class ProbackupException(Exception):
@@ -147,6 +155,7 @@ def slow_start(self, replica=False):
 class ProbackupTest(object):
     # Class attributes
     enterprise = is_enterprise()
+    enable_nls = is_nls_enabled()
 
     def __init__(self, *args, **kwargs):
         super(ProbackupTest, self).__init__(*args, **kwargs)
@@ -901,7 +910,7 @@ class ProbackupTest(object):
             backup_type='full', datname=False, options=[],
             asynchronous=False, gdb=False,
             old_binary=False, return_id=True, no_remote=False,
-            env=None
+            env=None, startTime=None
             ):
         if not node and not data_dir:
             print('You must provide ether node or data_dir for backup')
@@ -933,6 +942,9 @@ class ProbackupTest(object):
 
         if not old_binary:
             cmd_list += ['--no-sync']
+
+        if startTime:
+            cmd_list += ['--start-time', startTime]
 
         return self.run_pb(cmd_list + options, asynchronous, gdb, old_binary, return_id, env=env)
 
@@ -1829,7 +1841,7 @@ class GdbException(Exception):
 
 
 class GDBobj:
-    def __init__(self, cmd, env: ProbackupTest, attach=False):
+    def __init__(self, cmd, env, attach=False):
         self.verbose = env.verbose
         self.output = ''
 

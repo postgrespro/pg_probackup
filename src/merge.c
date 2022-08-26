@@ -171,7 +171,7 @@ do_merge(InstanceState *instanceState, time_t backup_id, bool no_validate, bool 
 				elog(ERROR, "Merge target is full backup and has multiple direct children, "
 					"you must specify child backup id you want to merge with");
 
-			elog(LOG, "Looking for closest incremental backup to merge with");
+			elog(INFO, "Looking for closest incremental backup to merge with");
 
 			/* Look for closest child backup */
 			for (i = 0; i < parray_num(backups); i++)
@@ -614,7 +614,7 @@ merge_chain(InstanceState *instanceState,
 
 	/* Create directories */
 	create_data_directories(dest_backup->files, full_database_dir,
-							dest_backup->root_dir, false, false, FIO_BACKUP_HOST);
+							dest_backup->root_dir, false, false, FIO_BACKUP_HOST, NULL);
 
 	/* External directories stuff */
 	if (dest_backup->external_dir_str)
@@ -810,7 +810,7 @@ merge_chain(InstanceState *instanceState,
 			join_path_components(full_file_path, full_database_dir, full_file->rel_path);
 
 			if (fio_remove(FIO_BACKUP_HOST, full_file_path, true) == 0)
-				elog(VERBOSE, "Deleted \"%s\"", full_file_path);
+				elog(LOG, "Deleted \"%s\"", full_file_path);
 			else
 				elog(ERROR, "Cannot delete file or directory \"%s\": %s", full_file_path, strerror(errno));
 		}
@@ -958,9 +958,8 @@ merge_files(void *arg)
 		if (S_ISDIR(dest_file->mode))
 			goto done;
 
-		if (progress)
-			elog(INFO, "Progress: (%d/%lu). Merging file \"%s\"",
-				i + 1, n_files, dest_file->rel_path);
+		elog(progress ? INFO : LOG, "Progress: (%d/%lu). Merging file \"%s\"",
+			i + 1, n_files, dest_file->rel_path);
 
 		if (dest_file->is_datafile && !dest_file->is_cfs)
 			tmp_file->segno = dest_file->segno;
@@ -1065,7 +1064,7 @@ merge_files(void *arg)
 			{
 				BackupPageHeader2 *headers = NULL;
 
-				elog(VERBOSE, "The file didn`t changed since FULL backup, skip merge: \"%s\"",
+				elog(LOG, "The file didn`t changed since FULL backup, skip merge: \"%s\"",
 								file->rel_path);
 
 				tmp_file->crc = file->crc;
@@ -1146,7 +1145,7 @@ remove_dir_with_files(const char *path)
 		join_path_components(full_path, path, file->rel_path);
 
 		if (fio_remove(FIO_LOCAL_HOST, full_path, true) == 0)
-			elog(VERBOSE, "Deleted \"%s\"", full_path);
+			elog(LOG, "Deleted \"%s\"", full_path);
 		else
 			elog(ERROR, "Cannot delete file or directory \"%s\": %s", full_path, strerror(errno));
 	}
@@ -1197,7 +1196,7 @@ reorder_external_dirs(pgBackup *to_backup, parray *to_external,
 			char new_path[MAXPGPATH];
 			makeExternalDirPathByNum(old_path, externaldir_template, i + 1);
 			makeExternalDirPathByNum(new_path, externaldir_template, from_num);
-			elog(VERBOSE, "Rename %s to %s", old_path, new_path);
+			elog(LOG, "Rename %s to %s", old_path, new_path);
 			if (rename (old_path, new_path) == -1)
 				elog(ERROR, "Could not rename directory \"%s\" to \"%s\": %s",
 					 old_path, new_path, strerror(errno));
@@ -1350,7 +1349,7 @@ merge_non_data_file(parray *parent_chain, pgBackup *full_backup,
 		 */
 		if (!from_file)
 		{
-			elog(ERROR, "Failed to locate nonedata file \"%s\" in backup %s",
+			elog(ERROR, "Failed to locate non-data file \"%s\" in backup %s",
 				dest_file->rel_path, base36enc(from_backup->start_time));
 			continue;
 		}
@@ -1361,11 +1360,11 @@ merge_non_data_file(parray *parent_chain, pgBackup *full_backup,
 
 	/* sanity */
 	if (!from_backup)
-		elog(ERROR, "Failed to found a backup containing full copy of nonedata file \"%s\"",
+		elog(ERROR, "Failed to found a backup containing full copy of non-data file \"%s\"",
 			dest_file->rel_path);
 
 	if (!from_file)
-		elog(ERROR, "Failed to locate a full copy of nonedata file \"%s\"", dest_file->rel_path);
+		elog(ERROR, "Failed to locate a full copy of non-data file \"%s\"", dest_file->rel_path);
 
 	/* set path to source file */
 	if (from_file->external_dir_num)

@@ -25,12 +25,11 @@ fobj_iface(ioReadCloser);
 fobj_iface(ioReader);
 fobj_iface(obj);
 
-
 #define kls__Klass0   mth(fobjDispose), \
     iface__ioReader, mth(fobjGetError)
 #define kls__KlassA   inherits(Klass0), \
     iface__ioReadCloser, \
-    mth(ioStatus), iface(ioReadCloser, ioReader)
+    mth(ioStatus), iface(ioReadCloser, ioReader, ioRead)
 
 fobj_klass(Klass0);
 fobj_klass(KlassA);
@@ -38,7 +37,6 @@ fobj_klass(KlassA);
 typedef struct Klass0 {
     int x;
 } Klass0;
-
 
 typedef struct KlassA {
     Klass0 p;
@@ -65,7 +63,7 @@ fobj_error_float_key(myy);
 static err_i
 Klass0_fobjGetError(VSelf) {
     Self(Klass0);
-    return $err(RT, "WTF ERROR {myx:05d} {myy:9.4f}", (myx, self->x), (myy, 100.001));
+    return $err(RT, "WTF ERROR {myx:05d} {myy:9.4f}", myx(self->x), myy(100.001));
 }
 
 static int
@@ -118,15 +116,18 @@ int main(int argc, char** argv) {
     if (verbose) {
         //ft_log_level_reset(FT_LOG);
         ft_log_level_set(__FILE__, FT_DEBUG);
+    } else {
+        ft_log_level_set("ALL", FT_ERROR);
     }
 
     fobj_klass_init(Klass0);
     fobj_klass_init(KlassA);
+    fobj_add_methods(KlassA, ioRead);
 
     fobj_freeze();
 
     KlassA *a = $alloc(KlassA, .offset = 1, .p.x = 2);
-    logf("a=%s", fobjRepr(a)->ptr);
+    logf("a=%s", $repr(a));
 
     logf("Before block 1 enter");
     {
@@ -209,30 +210,28 @@ int main(int argc, char** argv) {
 
     err = $(fobjGetError, a);
     logf("Error: %s", $errmsg(err));
-    logf("Error: %s", $itostr(err, NULL)->ptr);
-    logf("Error: %s", $itostr(err, "$T $M $K")->ptr);
+    logf("Error: %s", $itostr(err, NULL));
+    logf("Error: %s", $itostr(err, "$T $M $K"));
     ioRead(a, b, strlen($errmsg(err)));
     $(ioRead, a, b, strlen($errmsg(err)));
     $(ioRead, a, b, $(ioRead, a, b, $(ioStatus, a)));
     logf("Error: %s", $errmsg($(fobjGetError, a)));
 
-    errno = ENOENT;
-    err = $syserr();
+    err = $syserr(ENOENT);
     logf("Error: %s", $errmsg(err));
-    logf("Error: %s", $irepr(err)->ptr);
+    logf("Error: %s", $irepr(err));
     errno = ENOENT;
-    err = $syserr("Opening file");
+    err = $syserr(errno, "Opening file");
     logf("Error: %s", $errmsg(err));
-    logf("Error: %s", $irepr(err)->ptr);
-    errno = ENOENT;
-    err = $syserr("Opening file {path}", (path, "folder/read.me"));
+    logf("Error: %s", $irepr(err));
+    err = $syserr(ENOENT, "Opening file {path}", path("folder/read.me"));
     logf("Error: %s", $errmsg(err));
-    logf("Error: %s", $irepr(err)->ptr);
+    logf("Error: %s", $irepr(err));
     logf("Errno: %d", getErrno(err));
 
     Klass0 *k0 = $alloc(Klass0);
     aird = bind_ioRead(k0);
-    ioRead__cb k0_ioRead = fetch_cb_ioRead(k0, fobj_self_klass, true);
+    ioRead__cb_t k0_ioRead = ioRead__fetch_cb(k0, fobj_self_klass, true);
     for (i = 0; i < benchcnt; i++) {
         switch (benchmode) {
             case 0: ioRead(k0, b, 100); break;
@@ -247,7 +246,7 @@ int main(int argc, char** argv) {
     $(ioStatus, a);
 
 	{
-		ioRead_i bird = {NULL};
+		ioRead_i bird = $null(ioRead);
 		$iset(&bird, aird);
 		$iswap(&bird, aird);
 		$iref(bird);
@@ -269,7 +268,6 @@ int main(int argc, char** argv) {
 
     fobjStr *stre = fobj_stradd(strc, strd);
 
-    ft_assert(stre->len == strc->len + strd->len);
     ft_assert(fobj_streq_c(stre, "this is string a??????this is b!!"));
 
     stre = fobj_sprintf("%s:%d", "hello", 1);
@@ -285,7 +283,7 @@ int main(int argc, char** argv) {
     strf = $fmt("Some {usual:8s} things cost > $${money:-8.4f}$$",
                 (usual, $S("scary")), (money, $F(12.48)));
     ft_assert(fobj_streq_c(strf, "Some    scary things cost > $$12.4800 $$"),
-              "String is '%s'", strf->ptr);
+              "String is '%s'", $tostr(strf));
 
     logf("BEFORE EXIT");
 }

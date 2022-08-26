@@ -552,7 +552,7 @@ datapagemap_print_debug(datapagemap_t *map)
 
 	iter = datapagemap_iterate(map);
 	while (datapagemap_next(iter, &blocknum))
-		elog(INFO, "  block %u", blocknum);
+		elog(VERBOSE, "  block %u", blocknum);
 
 	pg_free(iter);
 }

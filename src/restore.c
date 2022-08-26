@@ -801,7 +801,7 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 	create_data_directories(dest_files, instance_config.pgdata,
 							dest_backup->root_dir, backup_has_tblspc,
 							params->incremental_mode != INCR_NONE,
-							FIO_DB_HOST);
+							FIO_DB_HOST, params->waldir);
 
 	/*
 	 * Restore dest_backup external directories.
@@ -843,7 +843,7 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 			external_path = parray_get(external_dirs, file->external_dir_num - 1);
 			join_path_components(dirpath, external_path, file->rel_path);
 
-			elog(VERBOSE, "Create external directory \"%s\"", dirpath);
+			elog(LOG, "Create external directory \"%s\"", dirpath);
 			fio_mkdir(FIO_DB_HOST, dirpath, file->mode, false);
 		}
 	}
@@ -923,7 +923,7 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 				join_path_components(fullpath, pgdata_path, file->rel_path);
 
 				if (fio_remove(FIO_DB_HOST, fullpath, false) == 0)
-					elog(VERBOSE, "Deleted file \"%s\"", fullpath);
+					elog(LOG, "Deleted file \"%s\"", fullpath);
 				else
 					elog(ERROR, "Cannot delete redundant file \"%s\": %s", fullpath, strerror(errno));
 
@@ -1133,9 +1133,8 @@ restore_files(void *arg)
 		if (interrupted || thread_interrupted)
 			elog(ERROR, "Interrupted during restore");
 
-		if (progress)
-			elog(INFO, "Progress: (%d/%lu). Restore file \"%s\"",
-				 i + 1, n_files, dest_file->rel_path);
+		elog(progress ? INFO : LOG, "Progress: (%d/%lu). Restore file \"%s\"",
+			 i + 1, n_files, dest_file->rel_path);
 
 		/* Only files from pgdata can be skipped by partial restore */
 		if (arguments->dbOid_exclude_list && dest_file->external_dir_num == 0)
@@ -1151,7 +1150,7 @@ restore_files(void *arg)
 				create_empty_file(FIO_BACKUP_HOST,
 					  arguments->to_root, FIO_DB_HOST, dest_file);
 
-				elog(VERBOSE, "Skip file due to partial restore: \"%s\"",
+				elog(LOG, "Skip file due to partial restore: \"%s\"",
 						dest_file->rel_path);
 				continue;
 			}
@@ -1161,7 +1160,7 @@ restore_files(void *arg)
 		if ((dest_file->external_dir_num == 0) &&
 			strcmp(PG_TABLESPACE_MAP_FILE, dest_file->rel_path) == 0)
 		{
-			elog(VERBOSE, "Skip tablespace_map");
+			elog(LOG, "Skip tablespace_map");
 			continue;
 		}
 
@@ -1169,7 +1168,7 @@ restore_files(void *arg)
 		if ((dest_file->external_dir_num == 0) &&
 			strcmp(DATABASE_MAP, dest_file->rel_path) == 0)
 		{
-			elog(VERBOSE, "Skip database_map");
+			elog(LOG, "Skip database_map");
 			continue;
 		}
 
@@ -1243,9 +1242,9 @@ restore_files(void *arg)
 				 strerror(errno));
 
 		if (!dest_file->is_datafile || dest_file->is_cfs)
-			elog(VERBOSE, "Restoring nonedata file: \"%s\"", to_fullpath);
+			elog(LOG, "Restoring non-data file: \"%s\"", to_fullpath);
 		else
-			elog(VERBOSE, "Restoring data file: \"%s\"", to_fullpath);
+			elog(LOG, "Restoring data file: \"%s\"", to_fullpath);
 
 		// If destination file is 0 sized, then just close it and go for the next
 		if (dest_file->write_size == 0)
@@ -1265,10 +1264,10 @@ restore_files(void *arg)
 		}
 		else
 		{
-			/* disable stdio buffering for local destination nonedata file */
+			/* disable stdio buffering for local destination non-data file */
 			if (!fio_is_remote_file(out))
 				setvbuf(out, NULL, _IONBF, BUFSIZ);
-			/* Destination file is nonedata file */
+			/* Destination file is non-data file */
 			arguments->restored_bytes += restore_non_data_file(arguments->parent_chain,
 										arguments->dest_backup, dest_file, out, to_fullpath,
 										already_exists);
@@ -1777,7 +1776,7 @@ read_timeline_history(const char *arclog_path, TimeLineID targetTLI, bool strict
 	}
 
 	if (fd && (ferror(fd)))
-			elog(ERROR, "Failed to read from file: \"%s\"", path);
+		elog(ERROR, "Failed to read from file: \"%s\"", path);
 
 	if (fd)
 		fclose(fd);
@@ -2192,7 +2191,7 @@ check_incremental_compatibility(const char *pgdata, uint64 system_identifier,
 	 * data files content, because based on pg_control information we will
 	 * choose a backup suitable for lsn based incremental restore.
 	 */
-	elog(INFO, "Trying to read pg_control file in destination directory");
+	elog(LOG, "Trying to read pg_control file in destination directory");
 
 	system_id_pgdata = get_system_identifier(FIO_DB_HOST, pgdata, false);
 

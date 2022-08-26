@@ -540,7 +540,7 @@ ft_array_walk_r(ft_array_type *arr,
 
 ft_inline void
 ft_array_walk(ft_array_type *arr, FT_WALK_ACT (*walk)(FT_SLICE_TYPE *el)) {
-    ft_array_walk_r(arr, (FT_WALK_ACT (*)(FT_SLICE_TYPE*, ft_arg_t))walk, ft_mka_z());
+    ft_array_walk_r(arr, (FT_WALK_ACT (*)(FT_SLICE_TYPE*, ft_arg_t))(void*)walk, ft_mka_z());
 }
 
 #undef FT_SLICE

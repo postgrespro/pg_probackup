@@ -79,7 +79,7 @@ ft_func_bsearch_r(FT_SEARCH_TYPE *arr, size_t len, FT_SEARCH_PATTERN pat,
 ft_inline ft_bsres_t
 ft_func_bsearch(FT_SEARCH_TYPE *arr, size_t len, FT_SEARCH_PATTERN pat,
                 _ft_cmp_def(cmp)) {
-    return ft_func_bsearch_r(arr, len, pat, (_ft_cmp_def_r()) cmp, ft_mka_z());
+    return ft_func_bsearch_r(arr, len, pat, (_ft_cmp_def_r())(void*) cmp, ft_mka_z());
 }
 
 ft_inline size_t
@@ -96,7 +96,7 @@ ft_func_search_r(FT_SEARCH_TYPE *arr, size_t len, FT_SEARCH_PATTERN pat,
 ft_inline size_t
 ft_func_search(FT_SEARCH_TYPE *arr, size_t len, FT_SEARCH_PATTERN pat,
                 _ft_cmp_def(cmp)) {
-    return ft_func_search_r(arr, len, pat, (_ft_cmp_def_r()) cmp, ft_mka_z());
+    return ft_func_search_r(arr, len, pat, (_ft_cmp_def_r())(void*) cmp, ft_mka_z());
 }
 
 #undef FT_SEARCH
