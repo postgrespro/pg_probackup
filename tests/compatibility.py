@@ -1482,3 +1482,51 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_compatibility_master_options(self):
+        """
+        Test correctness of handling of removed master-db, master-host, master-port,
+        master-user and replica-timeout options
+        """
+        self.assertTrue(
+            self.version_to_num(self.old_probackup_version) <= self.version_to_num('2.6.0'),
+            'You need pg_probackup old_binary =< 2.6.0 for this test')
+
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(base_dir=os.path.join(module_name, fname, 'node'))
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+
+        self.init_pb(backup_dir, old_binary=True)
+        self.add_instance(backup_dir, 'node', node, old_binary=True)
+
+        # add deprecated options (using probackup< 2.6) into pg_probackup.conf
+        # don't care about option values, we can use random values here
+        self.set_config(
+            backup_dir, 'node',
+            options=[
+                '--master-db=postgres',
+                '--master-host=localhost',
+                '--master-port=5432',
+                '--master-user={0}'.format(self.user),
+                '--replica-timeout=100500'],
+            old_binary=True)
+
+        # and try to show config with new binary (those options must be silently skipped)
+        self.show_config(backup_dir, 'node', old_binary=False)
+
+        # store config with new version (those options must disappear from config)
+        self.set_config(
+            backup_dir, 'node',
+            options=[],
+            old_binary=False)
+
+        # and check absence
+        config_options = self.show_config(backup_dir, 'node', old_binary=False)
+        self.assertFalse(
+            ['master-db', 'master-host', 'master-port', 'master-user', 'replica-timeout'] & config_options.keys(),
+            'Obsolete options found in new config')
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+

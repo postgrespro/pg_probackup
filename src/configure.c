@@ -34,12 +34,14 @@ static void show_configure_json(ConfigOption *opt);
 
 #define OPTION_INSTANCE_GROUP	"Backup instance information"
 #define OPTION_CONN_GROUP		"Connection parameters"
-#define OPTION_REPLICA_GROUP	"Replica parameters"
 #define OPTION_ARCHIVE_GROUP	"Archive parameters"
 #define OPTION_LOG_GROUP		"Logging parameters"
 #define OPTION_RETENTION_GROUP	"Retention parameters"
 #define OPTION_COMPRESS_GROUP	"Compression parameters"
 #define OPTION_REMOTE_GROUP		"Remote access parameters"
+
+/* dummy placeholder for obsolete options to store in following instance_options[] */
+static char	*obsolete_option_placeholder = NULL;
 
 /*
  * Short name should be non-printable ASCII character.
@@ -89,6 +91,27 @@ ConfigOption instance_options[] =
 		's', 'U', "pguser",
 		&instance_config.conn_opt.pguser, SOURCE_CMD, 0,
 		OPTION_CONN_GROUP, 0, option_get_value
+	},
+	/* Obsolete options */
+	{
+		's', 202, "master-db",
+		&obsolete_option_placeholder, SOURCE_FILE_STRICT, SOURCE_CONST, "", 0, option_get_value
+	},
+	{
+		's', 203, "master-host",
+		&obsolete_option_placeholder, SOURCE_FILE_STRICT, SOURCE_CONST, "", 0, option_get_value
+	},
+	{
+		's', 204, "master-port",
+		&obsolete_option_placeholder, SOURCE_FILE_STRICT, SOURCE_CONST, "", 0, option_get_value
+	},
+	{
+		's', 205, "master-user",
+		&obsolete_option_placeholder, SOURCE_FILE_STRICT, SOURCE_CONST, "", 0, option_get_value
+	},
+	{
+		's', 206, "replica-timeout",
+		&obsolete_option_placeholder, SOURCE_FILE_STRICT, SOURCE_CONST, "", 0, option_get_value
 	},
 	/* Archive options */
 	{
