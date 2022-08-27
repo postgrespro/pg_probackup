@@ -208,28 +208,6 @@ typedef enum ForkName
 	ptrack
 } ForkName;
 
-#define INIT_FILE_CRC32(use_crc32c, crc) \
-do { \
-	if (use_crc32c) \
-		INIT_CRC32C(crc); \
-	else \
-		INIT_TRADITIONAL_CRC32(crc); \
-} while (0)
-#define COMP_FILE_CRC32(use_crc32c, crc, data, len) \
-do { \
-	if (use_crc32c) \
-		COMP_CRC32C((crc), (data), (len)); \
-	else \
-		COMP_TRADITIONAL_CRC32(crc, data, len); \
-} while (0)
-#define FIN_FILE_CRC32(use_crc32c, crc) \
-do { \
-	if (use_crc32c) \
-		FIN_CRC32C(crc); \
-	else \
-		FIN_TRADITIONAL_CRC32(crc); \
-} while (0)
-
 #define pg_off_t unsigned long long
 
 
@@ -1046,8 +1024,11 @@ extern pgFile *pgFileNew(const char *path, const char *rel_path,
 extern pgFile *pgFileInit(const char *rel_path);
 extern void pgFileFree(void *file);
 
-extern pg_crc32 pgFileGetCRC(const char *file_path, bool use_crc32c, bool missing_ok);
-extern pg_crc32 pgFileGetCRCgz(const char *file_path, bool use_crc32c, bool missing_ok);
+extern pg_crc32 pgFileGetCRC32C(const char *file_path, bool missing_ok);
+#if PG_VERSION_NUM < 120000
+extern pg_crc32 pgFileGetCRC32(const char *file_path, bool missing_ok);
+#endif
+extern pg_crc32 pgFileGetCRC32Cgz(const char *file_path, bool missing_ok);
 
 extern int pgFileMapComparePath(const void *f1, const void *f2);
 extern int pgFileCompareName(const void *f1, const void *f2);
