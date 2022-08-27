@@ -1091,15 +1091,15 @@ get_backup_filelist(pgBackup *backup, bool strict)
 
 		COMP_FILE_CRC32(true, content_crc, buf, strlen(buf));
 
-        get_control_value_str(buf, "path", path, sizeof(path),true);
-        get_control_value_int64(buf, "size", &write_size, true);
-        get_control_value_int64(buf, "mode", &mode, true);
-        get_control_value_int64(buf, "is_datafile", &is_datafile, true);
-        get_control_value_int64(buf, "is_cfs", &is_cfs, false);
-        get_control_value_int64(buf, "crc", &crc, true);
-        get_control_value_str(buf, "compress_alg", compress_alg_string, sizeof(compress_alg_string), false);
-        get_control_value_int64(buf, "external_dir_num", &external_dir_num, false);
-        get_control_value_int64(buf, "dbOid", &dbOid, false);
+		get_control_value_str(buf, "path", path, sizeof(path),true);
+		get_control_value_int64(buf, "size", &write_size, true);
+		get_control_value_int64(buf, "mode", &mode, true);
+		get_control_value_int64(buf, "is_datafile", &is_datafile, true);
+		get_control_value_int64(buf, "is_cfs", &is_cfs, false);
+		get_control_value_int64(buf, "crc", &crc, true);
+		get_control_value_str(buf, "compress_alg", compress_alg_string, sizeof(compress_alg_string), false);
+		get_control_value_int64(buf, "external_dir_num", &external_dir_num, false);
+		get_control_value_int64(buf, "dbOid", &dbOid, false);
 
 		file = pgFileInit(path);
 		file->write_size = (int64) write_size;
