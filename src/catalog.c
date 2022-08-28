@@ -23,7 +23,7 @@ static pgBackup* get_closest_backup(timelineInfo *tlinfo);
 static pgBackup* get_oldest_backup(timelineInfo *tlinfo);
 static const char *backupModes[] = {"", "PAGE", "PTRACK", "DELTA", "FULL"};
 static pgBackup *readBackupControlFile(const char *path);
-static void create_backup_dir(pgBackup *backup, const char *backup_instance_path);
+static time_t create_backup_dir(pgBackup *backup, const char *backup_instance_path);
 
 static bool backup_lock_exit_hook_registered = false;
 static parray *locks = NULL;
@@ -1420,12 +1420,10 @@ get_multi_timeline_parent(parray *backup_list, parray *tli_list,
  */
 
 void
-pgBackupCreateDir(pgBackup *backup, InstanceState *instanceState, time_t start_time)
+pgBackupCreateDir(pgBackup *backup, const char *backup_instance_path)
 {
 	int		i;
 	parray *subdirs = parray_new();
-	parray * backups;
-	pgBackup *target_backup;
 
 	parray_append(subdirs, pg_strdup(DATABASE_DIR));
 
@@ -1446,26 +1444,7 @@ pgBackupCreateDir(pgBackup *backup, InstanceState *instanceState, time_t start_t
 		free_dir_list(external_list);
 	}
 
-	/* Get list of all backups*/
-	backups = catalog_get_backup_list(instanceState, INVALID_BACKUP_ID);
-	if (parray_num(backups) > 0)
-	{
-		target_backup = (pgBackup *) parray_get(backups, 0);
-		if (start_time > target_backup->backup_id)
-		{
-			backup->backup_id = start_time;
-			create_backup_dir(backup, instanceState->instance_backup_subdir_path);
-		}
-		else
-		{
-			elog(ERROR, "Cannot create directory for older backup");
-		}
-	}
-	else
-	{
-		backup->backup_id = start_time;
-		create_backup_dir(backup, instanceState->instance_backup_subdir_path);
-	}
+	backup->backup_id = create_backup_dir(backup, backup_instance_path);
 
 	if (backup->backup_id == 0)
 		elog(ERROR, "Cannot create backup directory: %s", strerror(errno));
@@ -1492,7 +1471,7 @@ pgBackupCreateDir(pgBackup *backup, InstanceState *instanceState, time_t start_t
  * Create root directory for backup,
  * update pgBackup.root_dir if directory creation was a success
  */
-void
+time_t
 create_backup_dir(pgBackup *backup, const char *backup_instance_path)
 {
 	int     attempts = 10;
@@ -1501,8 +1480,9 @@ create_backup_dir(pgBackup *backup, const char *backup_instance_path)
 	{
 		int    rc;
 		char   path[MAXPGPATH];
+		time_t backup_id = time(NULL);
 
-		join_path_components(path, backup_instance_path, base36enc(backup->backup_id));
+		join_path_components(path, backup_instance_path, base36enc(backup_id));
 
 		/* TODO: add wrapper for remote mode */
 		rc = dir_create_dir(path, DIR_PERMISSION, true);
@@ -1510,7 +1490,7 @@ create_backup_dir(pgBackup *backup, const char *backup_instance_path)
 		if (rc == 0)
 		{
 			backup->root_dir = pgut_strdup(path);
-			return;
+			return backup_id;
 		}
 		else
 		{
@@ -1519,6 +1499,7 @@ create_backup_dir(pgBackup *backup, const char *backup_instance_path)
 		}
 	}
 
+	return 0;
 }
 
 /*

@@ -842,7 +842,7 @@ extern char** commands_args;
 
 /* in backup.c */
 extern int do_backup(InstanceState *instanceState, pgSetBackupParams *set_backup_params,
-					 bool no_validate, bool no_sync, bool backup_logs, time_t start_time);
+					 bool no_validate, bool no_sync, bool backup_logs);
 extern void do_checkdb(bool need_amcheck, ConnectionOptions conn_opt,
 				  char *pgdata);
 extern BackupMode parse_backup_mode(const char *value);
@@ -985,7 +985,7 @@ extern void write_backup_filelist(pgBackup *backup, parray *files,
 								  const char *root, parray *external_list, bool sync);
 
 
-extern void pgBackupCreateDir(pgBackup *backup, InstanceState *instanceState, time_t start_time);
+extern void pgBackupCreateDir(pgBackup *backup, const char *backup_instance_path);
 extern void pgNodeInit(PGNodeInfo *node);
 extern void pgBackupInit(pgBackup *backup);
 extern void pgBackupFree(void *backup);
