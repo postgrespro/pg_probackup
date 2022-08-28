@@ -3546,7 +3546,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     def test_start_time_few_nodes(self):
-
+        """Test, that we can synchronize backup_id's for different DBs"""
         fname = self.id().split('.')[3]
         node1 = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node1'),
@@ -3571,62 +3571,60 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         node2.slow_start()
 
         # FULL backup
-        startTime = int(time())
+        startTime = str(int(time()))
         self.backup_node(
-            backup_dir1, 'node1', node1, backup_type="full",
-            options=['--stream', '--start-time', str(startTime)])
+            backup_dir1, 'node1', node1, backup_type='full',
+            options=['--stream', '--start-time={0}'.format(startTime)])
         self.backup_node(
-            backup_dir2, 'node2', node2, backup_type="full",
-            options=['--stream', '--start-time', str(startTime)])
-
+            backup_dir2, 'node2', node2, backup_type='full',
+            options=['--stream', '--start-time={0}'.format(startTime)])
         show_backup1 = self.show_pb(backup_dir1, 'node1')[0]
         show_backup2 = self.show_pb(backup_dir2, 'node2')[0]
         self.assertEqual(show_backup1['id'], show_backup2['id'])
 
         # DELTA backup
-        startTime = int(time())
+        startTime = str(int(time()))
         self.backup_node(
-            backup_dir1, 'node1', node1, backup_type="delta",
-            options=['--stream', '--start-time', str(startTime)])
+            backup_dir1, 'node1', node1, backup_type='delta',
+            options=['--stream', '--start-time={0}'.format(startTime)])
         self.backup_node(
-            backup_dir2, 'node2', node2, backup_type="delta",
-            options=['--stream', '--start-time', str(startTime)])
+            backup_dir2, 'node2', node2, backup_type='delta',
+            options=['--stream', '--start-time={0}'.format(startTime)])
         show_backup1 = self.show_pb(backup_dir1, 'node1')[1]
         show_backup2 = self.show_pb(backup_dir2, 'node2')[1]
         self.assertEqual(show_backup1['id'], show_backup2['id'])
 
         # PAGE backup
-        startTime = int(time())
+        startTime = str(int(time()))
         self.backup_node(
-            backup_dir1, 'node1', node1, backup_type="page",
-            options=['--stream', '--start-time', str(startTime)])
+            backup_dir1, 'node1', node1, backup_type='page',
+            options=['--stream', '--start-time={0}'.format(startTime)])
         self.backup_node(
-            backup_dir2, 'node2', node2, backup_type="page",
-            options=['--stream', '--start-time', str(startTime)])
+            backup_dir2, 'node2', node2, backup_type='page',
+            options=['--stream', '--start-time={0}'.format(startTime)])
         show_backup1 = self.show_pb(backup_dir1, 'node1')[2]
         show_backup2 = self.show_pb(backup_dir2, 'node2')[2]
         self.assertEqual(show_backup1['id'], show_backup2['id'])
 
         # PTRACK backup
-        startTime = int(time())
-        if self.ptrack and node1.major_version > 11:
+        if self.ptrack:
             node1.safe_psql(
-                "postgres",
-                "create extension ptrack")
-            self.backup_node(
-                backup_dir1, 'node1', node1, backup_type="ptrack",
-                options=['--stream', '--start-time', str(startTime)])
-
-        if self.ptrack and node2.major_version > 11:
+                'postgres',
+                'create extension ptrack')
             node2.safe_psql(
-                "postgres",
-                "create extension ptrack")
+                'postgres',
+                'create extension ptrack')
+
+            startTime = str(int(time()))
             self.backup_node(
-                backup_dir2, 'node2', node2, backup_type="ptrack",
-                options=['--stream', '--start-time', str(startTime)])
-        show_backup1 = self.show_pb(backup_dir1, 'node1')[3]
-        show_backup2 = self.show_pb(backup_dir2, 'node2')[3]
-        self.assertEqual(show_backup1['id'], show_backup2['id'])
+                backup_dir1, 'node1', node1, backup_type='ptrack',
+                options=['--stream', '--start-time={0}'.format(startTime)])
+            self.backup_node(
+                backup_dir2, 'node2', node2, backup_type='ptrack',
+                options=['--stream', '--start-time={0}'.format(startTime)])
+            show_backup1 = self.show_pb(backup_dir1, 'node1')[3]
+            show_backup2 = self.show_pb(backup_dir2, 'node2')[3]
+            self.assertEqual(show_backup1['id'], show_backup2['id'])
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
