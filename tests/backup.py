@@ -3481,7 +3481,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         except ProbackupException as e:
             self.assertRegex(
                 e.message,
-                "ERROR: Cannot create directory for older backup",
+                r"ERROR: Can't assign backup_id from requested start_time \(\w*\), this time must be later that backup \w*\n",
                 "\n Unexpected Error Message: {0}\n CMD: {1}".format(
                     repr(e.message), self.cmd))
 
@@ -3498,7 +3498,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         except ProbackupException as e:
             self.assertRegex(
                 e.message,
-                "ERROR: Cannot create directory for older backup",
+                r"ERROR: Can't assign backup_id from requested start_time \(\w*\), this time must be later that backup \w*\n",
                 "\n Unexpected Error Message: {0}\n CMD: {1}".format(
                     repr(e.message), self.cmd))
 
@@ -3515,7 +3515,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         except ProbackupException as e:
             self.assertRegex(
                 e.message,
-                "ERROR: Cannot create directory for older backup",
+                r"ERROR: Can't assign backup_id from requested start_time \(\w*\), this time must be later that backup \w*\n",
                 "\n Unexpected Error Message: {0}\n CMD: {1}".format(
                     repr(e.message), self.cmd))
 
@@ -3526,8 +3526,8 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 
             try:
                 self.backup_node(
-                backup_dir, 'node', node, backup_type="page",
-                options=['--stream', '--start-time', str(startTime-10000)])
+                    backup_dir, 'node', node, backup_type='ptrack',
+                    options=['--stream', '--start-time', str(startTime-10000)])
                 # we should die here because exception is what we expect to happen
                 self.assertEqual(
                     1, 0,
@@ -3537,7 +3537,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
             except ProbackupException as e:
                 self.assertRegex(
                     e.message,
-                    "ERROR: Cannot create directory for older backup",
+                    r"ERROR: Can't assign backup_id from requested start_time \(\w*\), this time must be later that backup \w*\n",
                     "\n Unexpected Error Message: {0}\n CMD: {1}".format(
                         repr(e.message), self.cmd))
 
