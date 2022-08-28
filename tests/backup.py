@@ -3684,9 +3684,9 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                     "\n Output: {0} \n CMD: {1}".format(
                         repr(self.output), self.cmd))
         except ProbackupException as e:
-            self.assertRegex(
+            self.assertIn(
+                "ERROR: Can't assign backup_id from requested start_time (7PS), this time must be later that backup",
                 e.message,
-                "ERROR: Cannot create directory for older backup",
                 "\n Unexpected Error Message: {0}\n CMD: {1}".format(
                     repr(e.message), self.cmd))
 
@@ -3710,9 +3710,9 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                     "\n Output: {0} \n CMD: {1}".format(
                         repr(self.output), self.cmd))
         except ProbackupException as e:
-            self.assertRegex(
+            self.assertIn(
+                "ERROR: Can't assign backup_id from requested start_time (7PS), this time must be later that backup",
                 e.message,
-                "ERROR: Cannot create directory for older backup",
                 "\n Unexpected Error Message: {0}\n CMD: {1}".format(
                     repr(e.message), self.cmd))
 
@@ -3722,7 +3722,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 
         # PTRACK backup
         startTime = int(time())
-        if self.ptrack and node1.major_version > 11:
+        if self.ptrack:
             node1.safe_psql(
                 "postgres",
                 "create extension ptrack")
@@ -3730,7 +3730,6 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                 backup_dir1, 'node1', node1, backup_type="ptrack",
                 options=['--stream', '--start-time', str(startTime)])
 
-        if self.ptrack and node2.major_version > 11:
             node2.safe_psql(
                 "postgres",
                 "create extension ptrack")
@@ -3745,9 +3744,9 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                     "\n Output: {0} \n CMD: {1}".format(
                         repr(self.output), self.cmd))
             except ProbackupException as e:
-                self.assertRegex(
+                self.assertIn(
+                    "ERROR: Can't assign backup_id from requested start_time (7PS), this time must be later that backup",
                     e.message,
-                    "ERROR: Cannot create directory for older backup",
                     "\n Unexpected Error Message: {0}\n CMD: {1}".format(
                         repr(e.message), self.cmd))
 
@@ -3760,7 +3759,8 @@ class BackupTest(ProbackupTest, unittest.TestCase):
             backup_dir2, 'node2', node2, backup_type="full",
             options=['--stream', '--start-time', str(startTime)])
 
-        show_backup1 = self.show_pb(backup_dir1, 'node1')[4]
+        show_backups_node1 = self.show_pb(backup_dir1, 'node1')
+        show_backup1 = show_backups_node1[len(show_backups_node1) - 1]
         show_backup2 = self.show_pb(backup_dir2, 'node2')[1]
         self.assertEqual(show_backup1['id'], show_backup2['id'])
 
