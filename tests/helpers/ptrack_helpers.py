@@ -980,9 +980,6 @@ class ProbackupTest(object):
         if not old_binary:
             cmd_list += ['--no-sync']
 
-        if startTime:
-            cmd_list += ['--start-time', startTime]
-
         return self.run_pb(cmd_list + options, asynchronous, gdb, old_binary, return_id, env=env)
 
     def checkdb_node(
