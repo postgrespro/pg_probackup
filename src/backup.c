@@ -712,7 +712,7 @@ do_backup(InstanceState *instanceState, pgSetBackupParams *set_backup_params,
 	/* Initialize PGInfonode */
 	pgNodeInit(&nodeInfo);
 
-	elog(INFO, "Calling for S3_put_object");
+	elog(LOG, "Calling for S3_put_object");
 	/* S3_put_object random test (returns 0 for now) */
 	config = (S3_config*)palloc(sizeof(S3_config));
 	config->access_key = "access_key";

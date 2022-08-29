@@ -171,7 +171,7 @@ S3_get_date_for_header(char **out, S3_query_params *params)
 	memset(*out, 0, MAX_DATE_HEADER_LEN + 1);
 	strftime(*out, MAX_DATE_HEADER_LEN + 1, "%a, %d %b %Y %H:%M:%S %Z", &(params->tm));
 	elog(LOG, "Time is: %s\n", *out);
-	*out = (char*)repalloc(*out, strlen(out) + 1);
+	*out = (char*)repalloc(*out, strlen(*out) + 1);
 }
 
 /* for make headers lowercase */
@@ -194,7 +194,6 @@ translate_checksum_to_hexadecimal(char *dst, char *src)
 {
 	/* size of dst >= PG_SHA256_DIGEST_LENGTH * 2 + 1 */
 	int		i = 0;
-	int		pos = 0;
 
 	for (i = 0; i < PG_SHA256_DIGEST_LENGTH; i++)
 	{
@@ -205,64 +204,59 @@ translate_checksum_to_hexadecimal(char *dst, char *src)
 	dst[PG_SHA256_DIGEST_LENGTH * 2] = 0;
 }
 
-
 static void
 S3_get_SHA256(char *out, const char *data, size_t len)
 {
 	/* size of out >= PG_SHA256_DIGEST_LENGTH + 1 */
 
 #if PG_VERSION_NUM < 140000
-	pg_sha256_ctx		sha256_ctx;
+	pg_sha256_ctx			sha256_ctx;
 	pg_sha256_init(&sha256_ctx);
 	pg_sha256_update(&sha256_ctx, (uint8 *)data, len);
 	pg_sha256_final(&sha256_ctx, (uint8 *)out);
 #else
-	pg_cryptohash_ctx 	*ctx = pg_cryptohash_create(PG_SHA256);
+	pg_cryptohash_ctx		*ctx = pg_cryptohash_create(PG_SHA256);
 	pg_cryptohash_init(ctx);
 	pg_cryptohash_update(ctx, (uint8 *)data, len);
-	pg_cryptohash_final(ctx, (uint8 *)out, strlen(out));
+	pg_cryptohash_final(ctx, (uint8 *)out, PG_SHA256_DIGEST_LENGTH);
 #endif
-
 	out[PG_SHA256_DIGEST_LENGTH] = 0;
 }
 
 
 static void
-S3_get_HMAC_SHA256(char *out, const char *key, const char *data)
+S3_get_HMAC_SHA256(char *out, const char *key, size_t keylen, const char *data, size_t datalen)
 {
 	/* size of out >= PG_SHA256_DIGEST_LENGTH + 1 */
 #if PG_VERSION_NUM < 140000
 	scram_HMAC_ctx		hmac_ctx;
-
-	scram_HMAC_init(&hmac_ctx, (uint8 *)key, strlen(key));
-	scram_HMAC_update(&hmac_ctx, data, strlen(data));
+	scram_HMAC_init(&hmac_ctx, (uint8 *)key, keylen);
+	scram_HMAC_update(&hmac_ctx, data, datalen);
 	scram_HMAC_final((uint8 *)out, &hmac_ctx);
-	out[PG_SHA256_DIGEST_LENGTH] = 0;
 #else
-	pg_hmac_ctx * hmac_ctx = pg_hmac_create(PG_SHA256);
-	pg_hmac_init(hmac_ctx, (uint8 *)key, strlen(key));
-	pg_hmac_update(hmac_ctx,  (uint8 *)data, strlen(data));
-	pg_hmac_final(hmac_ctx, (uint8 *)out, strlen(out));
+	pg_hmac_ctx 		*hmac_ctx = pg_hmac_create(PG_SHA256);
+	pg_hmac_init(hmac_ctx, (uint8 *)key, keylen);
+	pg_hmac_update(hmac_ctx,  (uint8 *)data, datalen);
+	pg_hmac_final(hmac_ctx, (uint8 *)out, PG_SHA256_DIGEST_LENGTH);
 #endif
+	out[PG_SHA256_DIGEST_LENGTH] = 0;
 }
 
 
 static void
-binary_hmac_sha256(char *out, const char *key, const char *data)
+binary_hmac_sha256(char *out, const char *key, size_t keylen, const char *data, size_t datalen)
 {
 	/* size of out >= PG_SHA256_DIGEST_LENGTH * 2 + 1 */
 	char		hmac_buffer[PG_SHA256_DIGEST_LENGTH + 1];
 	int			i = 0;
-	int			pos = 0;
 
-	S3_get_HMAC_SHA256(hmac_buffer, key, data);
+	S3_get_HMAC_SHA256(hmac_buffer, key, keylen, data, datalen);
 
 	for (i = 0; i < PG_SHA256_DIGEST_LENGTH; i++)
 	{
 		char ch = hmac_buffer[i];
-		out[pos] = (ch >> 4) & 0x0f;
-		out[pos + 1] = ch & 0x0f;
-		pos += 2;
+		out[i * 2] = (ch >> 4) & 0x0f;
+		out[i * 2 + 1] = ch & 0x0f;
 	}
 	out[PG_SHA256_DIGEST_LENGTH * 2] = 0;
 }
@@ -274,17 +268,17 @@ S3_create_string_to_sign(const char *scope, const char *canonical_request, S3_qu
 {
 	char		*retptr = NULL;
 	/* 20150915T124500Z */
-	char		time_buf[17];
+	char		time_buf[18];
 	char		checksum[PG_SHA256_DIGEST_LENGTH + 1];
 	char		hex_checksum[PG_SHA256_DIGEST_LENGTH * 2 + 1];
 
-	strftime(time_buf, 16, "%Y%m%dT%H%M%SZ", &(params->tm));
-	time_buf[16] = 0;
+	strftime(time_buf, 17, "%Y%m%dT%H%M%SZ", &(params->tm));
+	time_buf[17] = 0;
 
 	S3_get_SHA256(checksum, canonical_request, strlen(canonical_request));
 	translate_checksum_to_hexadecimal(hex_checksum, checksum);
 
-	retptr = concatenate_multiple_strings(5, "AWS4-HMAC-SHA256\n", time_buf, "\n", scope, "\n", hex_checksum);
+	retptr = concatenate_multiple_strings(6, "AWS4-HMAC-SHA256\n", time_buf, "\n", scope, "\n", hex_checksum);
 	elog(LOG, "String to sign: %s", retptr);
 
 	return retptr;
@@ -354,12 +348,12 @@ S3_get_canonical_headers(S3_query_params *params)
  * (for future extracting of canonical query string)
  */
 static size_t
-get_canonical_url(char *out, char *url)
+get_canonical_url(char **out, char *url)
 {
 	size_t		size = 0;
 	size_t		capacity = 1;
-	char		*res = (char*)palloc(1);
 
+	*out = (char*)palloc(1);
 	while(*url)
 	{
 		if (url[0] == '?')
@@ -369,16 +363,17 @@ get_canonical_url(char *out, char *url)
 		if (size >= capacity)
 		{
 			capacity = size * 2;
-			res = (char*)repalloc(res, capacity);
+			*out = (char*)repalloc(*out, capacity);
 		}
 
-		res[size-1] = url[0];
+		(*out)[size-1] = url[0];
 
 		url += 1;
 	}
 
-	res = repalloc(res, size + 1);
-	res[size] = 0;
+	*out = (char*)repalloc((*out), size + 1);
+	(*out)[size] = 0;
+	elog(LOG, "Canonical URL: %s", *out);
 
 	return size;
 }
@@ -394,14 +389,13 @@ S3_create_canonical_request(const char *signed_headers, S3_query_params *params)
 	 * canonical_url is a part of url starting with the "/" that follows
 	 * the domain name and up to the end of the string or to the '?' sign
 	 */
-	char		canonical_url[100];
+	char		*canonical_url = NULL;
 	size_t		query_begins = 0;
 	/* query string is a part of url that follows '?' sign, excluding the '?' */
 	char		*canonical_query_string = NULL;
 	size_t		canonical_qs_size = 0;
 
 
-	memset(canonical_url, 0, 100);
 	memset(query, 0, 5);
 
 	/* realization only for PutObject now */
@@ -418,7 +412,7 @@ S3_create_canonical_request(const char *signed_headers, S3_query_params *params)
 			break;
 	}
 
-	query_begins = get_canonical_url(canonical_url, params->url + strlen(params->host));
+	query_begins = get_canonical_url(&canonical_url, params->url + strlen(params->host));
 	canonical_qs_size = strlen(params->url + strlen(params->host) + query_begins);
 	if (canonical_qs_size == 0)
 	{
@@ -430,9 +424,11 @@ S3_create_canonical_request(const char *signed_headers, S3_query_params *params)
 		canonical_query_string = (char*)palloc(canonical_qs_size);
 		strcpy(canonical_query_string, params->url + query_begins);
 	}
+	elog(LOG, "Canonical query string: %s", canonical_query_string);
 
 	/* canonical headers divided by \n */
 	canonical_headers = S3_get_canonical_headers(params);
+	elog(LOG, "Canonical headers: %s", canonical_headers);
 	/* canonical headers finished */
 
 	retptr = concatenate_multiple_strings(11, query, "\n", canonical_url, "\n", canonical_query_string, "\n",
@@ -466,7 +462,8 @@ get_content_sha256(S3_query_params *params)
 	S3_get_SHA256(hashed_payload, buf, read_bytes);
 	translate_checksum_to_hexadecimal(hex_hashed_payload, hashed_payload);
 	/* set field content_sha256 in params to re-use in header x-amz-checksum-sha256 */
-	memcpy(params->content_sha256, hex_hashed_payload, PG_SHA256_DIGEST_LENGTH + 2);
+	memcpy(params->content_sha256, hex_hashed_payload, PG_SHA256_DIGEST_LENGTH * 2);
+	params->content_sha256[PG_SHA256_DIGEST_LENGTH * 2] = 0;
 	pfree(buf);
 }
 
@@ -481,7 +478,7 @@ static char*
 S3_get_authorization_string(S3_query_params *params, S3_config *config)
 {
 	char		*retptr = NULL;
-	char		date_ptr[9];
+	char		date_ptr[10];
 	char		*credential_scope = NULL;
 	char		*canonical_request = NULL;
 	char		*string_to_sign = NULL;
@@ -496,8 +493,8 @@ S3_get_authorization_string(S3_query_params *params, S3_config *config)
 	retptr = concatenate_multiple_strings(1, "AWS4-HMAC-SHA256 ");
 
 	/* Credential */
-	date_ptr[8] = 0;
-	strftime(date_ptr, 8, "%Y%m%d", &(params->tm));
+	date_ptr[9] = 0;
+	strftime(date_ptr,9, "%Y%m%d", &(params->tm));
 
 	/* create credential scope */
 	credential_scope = concatenate_multiple_strings(4, date_ptr, "/", config->region, "/s3/aws4_request");
@@ -528,14 +525,14 @@ S3_get_authorization_string(S3_query_params *params, S3_config *config)
 	/* signature = HexEncode(HMAC(derived signing key, string to sign)) -- hexadecimal (symbols) of size 64 */
 	buf = concatenate_multiple_strings(2, "AWS4", config->secret_access_key);
 
-	binary_hmac_sha256(hmac_buffer, buf, date_ptr); /* kDate = HMAC("AWS4" + kSecret,"20150830") */
-	binary_hmac_sha256(hmac_buffer, hmac_buffer, config->region); /* kRegion = HMAC(kDate, Region) */
-	binary_hmac_sha256(hmac_buffer, hmac_buffer, "s3"); /* kService = HMAC(kRegion, Service) */
-	binary_hmac_sha256(signing_key, hmac_buffer, "aws4_request"); /* kSigning = HMAC(kService, "aws4_request") */
+	binary_hmac_sha256(hmac_buffer, buf, strlen(buf), date_ptr, strlen(date_ptr)); /* kDate = HMAC("AWS4" + kSecret,"20150830") */
+	binary_hmac_sha256(hmac_buffer, hmac_buffer, PG_SHA256_DIGEST_LENGTH * 2, config->region, strlen(config->region)); /* kRegion = HMAC(kDate, Region) */
+	binary_hmac_sha256(hmac_buffer, hmac_buffer, PG_SHA256_DIGEST_LENGTH * 2, "s3", 2); /* kService = HMAC(kRegion, Service) */
+	binary_hmac_sha256(signing_key, hmac_buffer, PG_SHA256_DIGEST_LENGTH * 2, "aws4_request", 12); /* kSigning = HMAC(kService, "aws4_request") */
 	/* we got the signing key */
 
 	/* final step to obtain a signature */
-	S3_get_HMAC_SHA256(hmac_buffer, signing_key, string_to_sign);
+	S3_get_HMAC_SHA256(hmac_buffer, signing_key, PG_SHA256_DIGEST_LENGTH * 2, string_to_sign, strlen(string_to_sign));
 	translate_checksum_to_hexadecimal(signature, hmac_buffer);
 
 	tmp = retptr;
@@ -761,7 +758,7 @@ put_object(FILE *fd, S3_query_params *params, S3_config *config)
 	/* output of all params */
 
 	/* Perform the request, res will get the return code */
-	res = curl_easy_perform(curl);
+	/*res = curl_easy_perform(curl);*/
 
 	/* check for errors*/
 	if (res != CURLE_OK)
