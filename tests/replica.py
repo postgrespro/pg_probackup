@@ -806,7 +806,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             log_content)
 
         self.assertIn(
-            'LOG: stop_lsn: 0/4000000',
+            'INFO: stop_lsn: 0/4000000',
             log_content)
 
         self.assertTrue(self.show_pb(backup_dir, 'replica')[0]['status'] == 'DONE')
