@@ -3406,6 +3406,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
             ptrack_enable=self.ptrack,
             initdb_params=['--data-checksums'])
 
@@ -3453,6 +3454,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
             ptrack_enable=self.ptrack,
             initdb_params=['--data-checksums'])
 
@@ -3550,6 +3552,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         node1 = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node1'),
+            set_replication=True,
             ptrack_enable=self.ptrack,
             initdb_params=['--data-checksums'])
 
@@ -3635,6 +3638,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         fname = self.id().split('.')[3]
         node1 = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node1'),
+            set_replication=True,
             ptrack_enable=self.ptrack,
             initdb_params=['--data-checksums'])
 
