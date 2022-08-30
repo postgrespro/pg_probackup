@@ -3508,6 +3508,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 
         node2 = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node2'),
+            set_replication=True,
             ptrack_enable=self.ptrack,
             initdb_params=['--data-checksums'])
 
