@@ -731,7 +731,7 @@ do_backup(InstanceState *instanceState, pgSetBackupParams *set_backup_params,
 	if (start_time != INVALID_BACKUP_ID)
 	{
 		/* If user already choosed backup_id for us, then try to use it. */
-		if (start_time < latest_backup_id)
+		if (start_time <= latest_backup_id)
 			/* don't care about freeing base36enc_dup memory, we exit anyway */
 			elog(ERROR, "Can't assign backup_id from requested start_time (%s), "
 						"this time must be later that backup %s",
