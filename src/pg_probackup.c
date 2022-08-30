@@ -993,8 +993,6 @@ main(int argc, char *argv[])
 			return do_catchup(catchup_source_pgdata, catchup_destination_pgdata, num_threads, !no_sync,
 				exclude_absolute_paths_list, exclude_relative_paths_list);
 		case RESTORE_CMD:
-			if (start_time != INVALID_BACKUP_ID)
-				current.backup_id = start_time;
 			return do_restore_or_validate(instanceState, current.backup_id,
 							recovery_target_options,
 							restore_params, no_sync);

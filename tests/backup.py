@@ -1,7 +1,7 @@
 import unittest
 import os
 from time import sleep, time
-from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
+from .helpers.ptrack_helpers import base36enc, ProbackupTest, ProbackupException
 import shutil
 from distutils.dir_util import copy_tree
 from testgres import ProcessType, QueryException
@@ -3417,22 +3417,22 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         node.slow_start()
 
         # FULL backup
-        startTime = str(int(time()))
+        startTime = int(time())
         self.backup_node(
             backup_dir, 'node', node, backup_type='full',
-            options=['--stream', '--start-time={0}'.format(startTime)])
-        # restore FULL backup by the start-time
-        node.cleanup()
+            options=['--stream', '--start-time={0}'.format(str(startTime))])
+        # restore FULL backup by backup_id calculated from start-time
         self.restore_node(
-            backup_dir, 'node', node,
-            options=['--start-time={0}'.format(startTime)])
+            backup_dir, 'node',
+            data_dir=os.path.join(self.tmp_path, module_name, fname, 'node_restored_full'),
+            backup_id=base36enc(startTime))
 
         #FULL backup with incorrect start time
         try:
             startTime = str(int(time()-100000))
             self.backup_node(
-            backup_dir, 'node', node, backup_type='full',
-            options=['--stream', '--start-time={0}'.format(startTime)])
+                backup_dir, 'node', node, backup_type='full',
+                options=['--stream', '--start-time={0}'.format(startTime)])
             # we should die here because exception is what we expect to happen
             self.assertEqual(
                 1, 0,
@@ -3447,45 +3447,42 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                     repr(e.message), self.cmd))
 
         # DELTA backup
-        node.slow_start()
-        startTime = str(int(time()))
+        startTime = int(time())
         self.backup_node(
             backup_dir, 'node', node, backup_type='delta',
-            options=['--stream', '--start-time={0}'.format(startTime)])
-        # restore DELTA backup by the start-time
-        node.cleanup()
+            options=['--stream', '--start-time={0}'.format(str(startTime))])
+        # restore DELTA backup by backup_id calculated from start-time
         self.restore_node(
-            backup_dir, 'node', node,
-            options=['--start-time={0}'.format(startTime)])
+            backup_dir, 'node',
+            data_dir=os.path.join(self.tmp_path, module_name, fname, 'node_restored_delta'),
+            backup_id=base36enc(startTime))
 
         # PAGE backup
-        node.slow_start()
-        startTime = str(int(time()))
+        startTime = int(time())
         self.backup_node(
             backup_dir, 'node', node, backup_type='page',
-            options=['--stream', '--start-time={0}'.format(startTime)])
-        # restore PAGE backup by the start-time
-        node.cleanup()
+            options=['--stream', '--start-time={0}'.format(str(startTime))])
+        # restore PAGE backup by backup_id calculated from start-time
         self.restore_node(
-            backup_dir, 'node', node,
-            options=['--start-time={0}'.format(startTime)])
+            backup_dir, 'node',
+            data_dir=os.path.join(self.tmp_path, module_name, fname, 'node_restored_page'),
+            backup_id=base36enc(startTime))
 
         # PTRACK backup
         if self.ptrack:
-            node.slow_start()
             node.safe_psql(
                 'postgres',
                 'create extension ptrack')
 
-            startTime = str(int(time()))
+            startTime = int(time())
             self.backup_node(
                 backup_dir, 'node', node, backup_type='ptrack',
-                options=['--stream', '--start-time={0}'.format(startTime)])
-
-            node.cleanup()
+                options=['--stream', '--start-time={0}'.format(str(startTime))])
+            # restore PTRACK backup by backup_id calculated from start-time
             self.restore_node(
-                backup_dir, 'node', node,
-                options=['--start-time={0}'.format(startTime)])
+                backup_dir, 'node',
+                data_dir=os.path.join(self.tmp_path, module_name, fname, 'node_restored_ptrack'),
+                backup_id=base36enc(startTime))
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
