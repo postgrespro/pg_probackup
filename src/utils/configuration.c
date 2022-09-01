@@ -19,6 +19,7 @@
 #include "getopt_long.h"
 
 #include <time.h>
+#include <pwd.h>
 
 #define MAXPG_LSNCOMPONENT	8
 

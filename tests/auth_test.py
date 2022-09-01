@@ -51,16 +51,29 @@ class SimpleAuthTest(ProbackupTest, unittest.TestCase):
                 1, 0,
                 "Expecting Error due to missing grant on EXECUTE.")
         except ProbackupException as e:
-            self.assertIn(
-                "ERROR: query failed: ERROR:  permission denied "
-                "for function pg_start_backup", e.message,
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
-                    repr(e.message), self.cmd))
+            if self.get_version(node) < 150000:
+                self.assertIn(
+                    "ERROR: query failed: ERROR:  permission denied "
+                    "for function pg_start_backup", e.message,
+                    '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                        repr(e.message), self.cmd))
+            else:
+                self.assertIn(
+                    "ERROR: query failed: ERROR:  permission denied "
+                    "for function pg_backup_start", e.message,
+                    '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                        repr(e.message), self.cmd))
 
-        node.safe_psql(
-            "postgres",
-            "GRANT EXECUTE ON FUNCTION"
-            " pg_start_backup(text, boolean, boolean) TO backup;")
+        if self.get_version(node) < 150000:
+            node.safe_psql(
+                "postgres",
+                "GRANT EXECUTE ON FUNCTION"
+                " pg_start_backup(text, boolean, boolean) TO backup;")
+        else:
+            node.safe_psql(
+                "postgres",
+                "GRANT EXECUTE ON FUNCTION"
+                " pg_backup_start(text, boolean) TO backup;")
 
         if self.get_version(node) < 100000:
             node.safe_psql(
@@ -97,17 +110,24 @@ class SimpleAuthTest(ProbackupTest, unittest.TestCase):
                 1, 0,
                 "Expecting Error due to missing grant on EXECUTE.")
         except ProbackupException as e:
-            self.assertIn(
-                "ERROR: query failed: ERROR:  permission denied "
-                "for function pg_stop_backup", e.message,
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
-                    repr(e.message), self.cmd))
+            if self.get_version(node) < 150000:
+                self.assertIn(
+                    "ERROR: query failed: ERROR:  permission denied "
+                    "for function pg_stop_backup", e.message,
+                    '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                        repr(e.message), self.cmd))
+            else:
+                self.assertIn(
+                    "ERROR: query failed: ERROR:  permission denied "
+                    "for function pg_backup_stop", e.message,
+                    '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                        repr(e.message), self.cmd))
 
         if self.get_version(node) < self.version_to_num('10.0'):
             node.safe_psql(
                 "postgres",
                 "GRANT EXECUTE ON FUNCTION pg_stop_backup(boolean) TO backup")
-        else:
+        elif self.get_vestion(node) < self.version_to_num('15.0'):
             node.safe_psql(
                 "postgres",
                 "GRANT EXECUTE ON FUNCTION "
@@ -116,6 +136,16 @@ class SimpleAuthTest(ProbackupTest, unittest.TestCase):
             node.safe_psql(
                 "postgres",
                 "GRANT EXECUTE ON FUNCTION pg_stop_backup() TO backup")
+        else:
+            node.safe_psql(
+                "postgres",
+                "GRANT EXECUTE ON FUNCTION "
+                "pg_backup_stop(boolean) TO backup")
+            # Do this for ptrack backups
+            node.safe_psql(
+                "postgres",
+                "GRANT EXECUTE ON FUNCTION pg_backup_stop() TO backup")
+
 
         self.backup_node(
                 backup_dir, 'node', node, options=['-U', 'backup'])
@@ -177,20 +207,37 @@ class AuthTest(unittest.TestCase):
         except StartNodeException:
             raise unittest.skip("Node hasn't started")
 
-        cls.node.safe_psql(
-            "postgres",
-            "CREATE ROLE backup WITH LOGIN PASSWORD 'password'; "
-            "GRANT USAGE ON SCHEMA pg_catalog TO backup; "
-            "GRANT EXECUTE ON FUNCTION current_setting(text) TO backup; "
-            "GRANT EXECUTE ON FUNCTION pg_is_in_recovery() TO backup; "
-            "GRANT EXECUTE ON FUNCTION pg_start_backup(text, boolean, boolean) TO backup; "
-            "GRANT EXECUTE ON FUNCTION pg_stop_backup() TO backup; "
-            "GRANT EXECUTE ON FUNCTION pg_stop_backup(boolean) TO backup; "
-            "GRANT EXECUTE ON FUNCTION pg_create_restore_point(text) TO backup; "
-            "GRANT EXECUTE ON FUNCTION pg_switch_xlog() TO backup; "
-            "GRANT EXECUTE ON FUNCTION txid_current() TO backup; "
-            "GRANT EXECUTE ON FUNCTION txid_current_snapshot() TO backup; "
-            "GRANT EXECUTE ON FUNCTION txid_snapshot_xmax(txid_snapshot) TO backup;")
+        if cls.pb.get_version(cls.node) < 150000:
+            cls.node.safe_psql(
+                "postgres",
+                "CREATE ROLE backup WITH LOGIN PASSWORD 'password'; "
+                "GRANT USAGE ON SCHEMA pg_catalog TO backup; "
+                "GRANT EXECUTE ON FUNCTION current_setting(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_is_in_recovery() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_start_backup(text, boolean, boolean) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_stop_backup() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_stop_backup(boolean) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_create_restore_point(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_switch_xlog() TO backup; "
+                "GRANT EXECUTE ON FUNCTION txid_current() TO backup; "
+                "GRANT EXECUTE ON FUNCTION txid_current_snapshot() TO backup; "
+                "GRANT EXECUTE ON FUNCTION txid_snapshot_xmax(txid_snapshot) TO backup;")
+        else:
+            cls.node.safe_psql(
+                "postgres",
+                "CREATE ROLE backup WITH LOGIN PASSWORD 'password'; "
+                "GRANT USAGE ON SCHEMA pg_catalog TO backup; "
+                "GRANT EXECUTE ON FUNCTION current_setting(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_is_in_recovery() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_backup_start(text, boolean) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_backup_stop() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_backup_stop(boolean) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_create_restore_point(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_switch_xlog() TO backup; "
+                "GRANT EXECUTE ON FUNCTION txid_current() TO backup; "
+                "GRANT EXECUTE ON FUNCTION txid_current_snapshot() TO backup; "
+                "GRANT EXECUTE ON FUNCTION txid_snapshot_xmax(txid_snapshot) TO backup;")
+
         cls.pgpass_file = os.path.join(os.path.expanduser('~'), '.pgpass')
 
     @classmethod
