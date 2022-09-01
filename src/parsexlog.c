@@ -29,13 +29,8 @@
  * RmgrNames is an array of resource manager names, to make error messages
  * a bit nicer.
  */
-#if PG_VERSION_NUM >= 100000
 #define PG_RMGR(symname,name,redo,desc,identify,startup,cleanup,mask) \
   name,
-#else
-#define PG_RMGR(symname,name,redo,desc,identify,startup,cleanup) \
-  name,
-#endif
 
 static const char *RmgrNames[RM_MAX_ID + 1] = {
 #include "access/rmgrlist.h"

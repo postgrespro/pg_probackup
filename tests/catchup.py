@@ -1231,27 +1231,26 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             ).decode('utf-8').rstrip()
         self.assertEqual(slot_name, 'pg_probackup_perm_slot', 'Slot name mismatch')
 
-        # 5. --perm-slot --temp-slot (PG>=10)
-        if self.get_version(src_pg) >= self.version_to_num('10.0'):
-            dst_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'dst_5'))
-            try:
-                self.catchup_node(
-                    backup_mode = 'FULL',
-                    source_pgdata = src_pg.data_dir,
-                    destination_node = dst_pg,
-                    options = [
-                        '-d', 'postgres', '-p', str(src_pg.port), '--stream',
-                        '--perm-slot',
-                        '--temp-slot'
-                        ]
-                    )
-                self.assertEqual(1, 0, "Expecting Error because conflicting options --perm-slot and --temp-slot used together\n Output: {0} \n CMD: {1}".format(
-                    repr(self.output), self.cmd))
-            except ProbackupException as e:
-                self.assertIn(
-                    'ERROR: You cannot specify "--perm-slot" option with the "--temp-slot" option',
-                    e.message,
-                    '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
+        # 5. --perm-slot --temp-slot
+        dst_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'dst_5'))
+        try:
+            self.catchup_node(
+                backup_mode = 'FULL',
+                source_pgdata = src_pg.data_dir,
+                destination_node = dst_pg,
+                options = [
+                    '-d', 'postgres', '-p', str(src_pg.port), '--stream',
+                    '--perm-slot',
+                    '--temp-slot'
+                    ]
+                )
+            self.assertEqual(1, 0, "Expecting Error because conflicting options --perm-slot and --temp-slot used together\n Output: {0} \n CMD: {1}".format(
+                repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                'ERROR: You cannot specify "--perm-slot" option with the "--temp-slot" option',
+                e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
 
         #self.assertEqual(1, 0, 'Stop test')
         self.del_test_dir(module_name, self.fname)

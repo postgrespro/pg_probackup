@@ -65,13 +65,8 @@ extern const char  *PROGRAM_EMAIL;
 #define DATABASE_DIR			"database"
 #define BACKUPS_DIR				"backups"
 #define WAL_SUBDIR				"wal"
-#if PG_VERSION_NUM >= 100000
 #define PG_XLOG_DIR				"pg_wal"
 #define PG_LOG_DIR 				"log"
-#else
-#define PG_XLOG_DIR				"pg_xlog"
-#define PG_LOG_DIR 				"pg_log"
-#endif
 #define PG_TBLSPC_DIR			"pg_tblspc"
 #define PG_GLOBAL_DIR			"global"
 #define BACKUP_CONTROL_FILE		"backup.control"
@@ -93,7 +88,6 @@ extern const char  *PROGRAM_EMAIL;
 
 /* Timeout defaults */
 #define ARCHIVE_TIMEOUT_DEFAULT		300
-#define REPLICA_TIMEOUT_DEFAULT		300
 #define LOCK_TIMEOUT				60
 #define LOCK_STALE_TIMEOUT			30
 #define LOG_FREQ					10
@@ -379,9 +373,6 @@ typedef struct InstanceConfig
 	char	   *external_dir_str;
 
 	ConnectionOptions conn_opt;
-	ConnectionOptions master_conn_opt;
-
-	uint32		replica_timeout; //Deprecated. Not used anywhere
 
 	/* Wait timeout for WAL segment archiving */
 	uint32		archive_timeout;
@@ -775,11 +766,8 @@ extern bool		stream_wal;
 extern bool		show_color;
 extern bool		progress;
 extern bool     is_archive_cmd; /* true for archive-{get,push} */
-/* In pre-10 'replication_slot' is defined in receivelog.h */
 extern char	   *replication_slot;
-#if PG_VERSION_NUM >= 100000
 extern bool 	temp_slot;
-#endif
 extern bool perm_slot;
 
 /* backup options */
@@ -787,8 +775,6 @@ extern bool		smooth_checkpoint;
 
 /* remote probackup options */
 extern char* remote_agent;
-
-extern bool exclusive_backup;
 
 /* delete options */
 extern bool		delete_wal;
@@ -1282,9 +1268,9 @@ extern void pg_start_backup(const char *label, bool smooth, pgBackup *backup,
 							PGNodeInfo *nodeInfo, PGconn *conn);
 extern void pg_silent_client_messages(PGconn *conn);
 extern void pg_create_restore_point(PGconn *conn, time_t backup_start_time);
-extern void pg_stop_backup_send(PGconn *conn, int server_version, bool is_started_on_replica, bool is_exclusive, char **query_text);
+extern void pg_stop_backup_send(PGconn *conn, int server_version, bool is_started_on_replica, char **query_text);
 extern void pg_stop_backup_consume(PGconn *conn, int server_version,
-		bool is_exclusive, uint32 timeout, const char *query_text,
+		uint32 timeout, const char *query_text,
 		PGStopBackupResult *result);
 extern void pg_stop_backup_write_file_helper(const char *path, const char *filename, const char *error_msg_filename,
 		const void *data, size_t len, parray *file_list);

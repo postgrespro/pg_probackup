@@ -66,13 +66,7 @@ catchup_init_state(PGNodeInfo	*source_node_info, const char *source_pgdata, cons
 		source_node_info->is_ptrack_enabled = pg_is_ptrack_enabled(source_conn, source_node_info->ptrack_version_num);
 
 	/* Obtain current timeline */
-#if PG_VERSION_NUM >= 90600
 	current.tli = get_current_timeline(source_conn);
-#else
-	/* PG-9.5 */
-	instance_config.pgdata = source_pgdata;
-	current.tli = get_current_timeline_from_control(FIO_DB_HOST, source_pgdata, false);
-#endif
 
 	elog(INFO, "Catchup start, pg_probackup version: %s, "
 			"PostgreSQL version: %s, "
@@ -190,9 +184,6 @@ catchup_preflight_checks(PGNodeInfo *source_node_info, PGconn *source_conn,
 		else if (!source_node_info->is_ptrack_enabled)
 			elog(ERROR, "Ptrack is disabled");
 	}
-
-	if (current.from_replica && exclusive_backup)
-		elog(ERROR, "Catchup from standby is only available for PostgreSQL >= 9.6");
 
 	/* check that we don't overwrite tablespace in source pgdata */
 	catchup_check_tablespaces_existance_in_tbsmapping(source_conn);
@@ -1018,13 +1009,13 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 		pg_silent_client_messages(source_conn);
 
 		/* Execute pg_stop_backup using PostgreSQL connection */
-		pg_stop_backup_send(source_conn, source_node_info.server_version, current.from_replica, exclusive_backup, &stop_backup_query_text);
+		pg_stop_backup_send(source_conn, source_node_info.server_version, current.from_replica, &stop_backup_query_text);
 
 		/*
 		 * Wait for the result of pg_stop_backup(), but no longer than
 		 * archive_timeout seconds
 		 */
-		pg_stop_backup_consume(source_conn, source_node_info.server_version, exclusive_backup, timeout, stop_backup_query_text, &stop_backup_result);
+		pg_stop_backup_consume(source_conn, source_node_info.server_version, timeout, stop_backup_query_text, &stop_backup_result);
 
 		/* Cleanup */
 		pg_free(stop_backup_query_text);
@@ -1033,7 +1024,6 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 	if (!dry_run)
 		wait_wal_and_calculate_stop_lsn(dest_xlog_path, stop_backup_result.lsn, &current);
 
-#if PG_VERSION_NUM >= 90600
 	/* Write backup_label */
 	Assert(stop_backup_result.backup_label_content != NULL);
 	if (!dry_run)
@@ -1061,7 +1051,6 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 		stop_backup_result.tablespace_map_content = NULL;
 		stop_backup_result.tablespace_map_content_len = 0;
 	}
-#endif
 
 	/* wait for end of wal streaming and calculate wal size transfered */
 	if (!dry_run)
@@ -1084,12 +1073,10 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 	}
 
 	/*
-	 * In case of backup from replica >= 9.6 we must fix minRecPoint
+	 * In case of backup from replica we must fix minRecPoint
 	 */
-	if (current.from_replica && !exclusive_backup)
-	{
+	if (current.from_replica)
 		set_min_recovery_point(source_pg_control_file, dest_pgdata, current.stop_lsn);
-	}
 
 	/* close ssh session in main thread */
 	fio_disconnect();

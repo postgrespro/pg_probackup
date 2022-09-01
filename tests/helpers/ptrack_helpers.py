@@ -426,52 +426,21 @@ class ProbackupTest(object):
             'postgres',
             'CREATE ROLE {0} WITH LOGIN REPLICATION'.format(role))
 
-        # PG 9.5
-        if self.get_version(node) < 90600:
-            node.safe_psql(
-                'postgres',
-                'GRANT USAGE ON SCHEMA pg_catalog TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean) TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup() TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_create_restore_point(text) TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_switch_xlog() TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.txid_current() TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO {0};'.format(role))
-        # PG 9.6
-        elif self.get_version(node) > 90600 and self.get_version(node) < 100000:
-            node.safe_psql(
-                'postgres',
-                'GRANT USAGE ON SCHEMA pg_catalog TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean, boolean) TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup(boolean) TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_create_restore_point(text) TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_switch_xlog() TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_last_xlog_replay_location() TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.txid_current() TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_checkpoint() TO {0};'.format(role))
-        # >= 10
-        else:
-            node.safe_psql(
-                'postgres',
-                'GRANT USAGE ON SCHEMA pg_catalog TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean, boolean) TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup(boolean, boolean) TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_create_restore_point(text) TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_switch_wal() TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_last_wal_replay_lsn() TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.txid_current() TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_checkpoint() TO {0};'.format(role))
+        # PG >= 10
+        node.safe_psql(
+            'postgres',
+            'GRANT USAGE ON SCHEMA pg_catalog TO {0}; '
+            'GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO {0}; '
+            'GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO {0}; '
+            'GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean, boolean) TO {0}; '
+            'GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup(boolean, boolean) TO {0}; '
+            'GRANT EXECUTE ON FUNCTION pg_catalog.pg_create_restore_point(text) TO {0}; '
+            'GRANT EXECUTE ON FUNCTION pg_catalog.pg_switch_wal() TO {0}; '
+            'GRANT EXECUTE ON FUNCTION pg_catalog.pg_last_wal_replay_lsn() TO {0}; '
+            'GRANT EXECUTE ON FUNCTION pg_catalog.txid_current() TO {0}; '
+            'GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO {0}; '
+            'GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO {0}; '
+            'GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_checkpoint() TO {0};'.format(role))
 
     def create_tblspace_in_node(self, node, tblspc_name, tblspc_path=None, cfs=False):
         res = node.execute(
@@ -587,13 +556,7 @@ class ProbackupTest(object):
 
     def get_ptrack_bits_per_page_for_fork(self, node, file, size=[]):
 
-        if self.get_pgpro_edition(node) == 'enterprise':
-            if self.get_version(node) < self.version_to_num('10.0'):
-                header_size = 48
-            else:
-                header_size = 24
-        else:
-            header_size = 24
+        header_size = 24
         ptrack_bits_for_fork = []
 
         # TODO: use macro instead of hard coded 8KB
@@ -1560,25 +1523,15 @@ class ProbackupTest(object):
 
     def switch_wal_segment(self, node):
         """
-        Execute pg_switch_wal/xlog() in given node
+        Execute pg_switch_wal() in given node
 
         Args:
             node: an instance of PostgresNode or NodeConnection class
         """
         if isinstance(node, testgres.PostgresNode):
-            if self.version_to_num(
-                node.safe_psql('postgres', 'show server_version').decode('utf-8')
-                    ) >= self.version_to_num('10.0'):
-                node.safe_psql('postgres', 'select pg_switch_wal()')
-            else:
-                node.safe_psql('postgres', 'select pg_switch_xlog()')
+            node.safe_psql('postgres', 'select pg_switch_wal()')
         else:
-            if self.version_to_num(
-                node.execute('show server_version')[0][0]
-                    ) >= self.version_to_num('10.0'):
-                node.execute('select pg_switch_wal()')
-            else:
-                node.execute('select pg_switch_xlog()')
+            node.execute('select pg_switch_wal()')
 
         sleep(1)
 
@@ -1588,12 +1541,8 @@ class ProbackupTest(object):
             'postgres',
             'show server_version').decode('utf-8').rstrip()
 
-        if self.version_to_num(version) >= self.version_to_num('10.0'):
-            master_function = 'pg_catalog.pg_current_wal_lsn()'
-            replica_function = 'pg_catalog.pg_last_wal_replay_lsn()'
-        else:
-            master_function = 'pg_catalog.pg_current_xlog_location()'
-            replica_function = 'pg_catalog.pg_last_xlog_replay_location()'
+        master_function = 'pg_catalog.pg_current_wal_lsn()'
+        replica_function = 'pg_catalog.pg_last_wal_replay_lsn()'
 
         lsn = master.safe_psql(
             'postgres',

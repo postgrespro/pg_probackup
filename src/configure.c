@@ -38,12 +38,14 @@ static void show_configure_json(ConfigOption *opt);
 
 #define OPTION_INSTANCE_GROUP	"Backup instance information"
 #define OPTION_CONN_GROUP		"Connection parameters"
-#define OPTION_REPLICA_GROUP	"Replica parameters"
 #define OPTION_ARCHIVE_GROUP	"Archive parameters"
 #define OPTION_LOG_GROUP		"Logging parameters"
 #define OPTION_RETENTION_GROUP	"Retention parameters"
 #define OPTION_COMPRESS_GROUP	"Compression parameters"
 #define OPTION_REMOTE_GROUP		"Remote access parameters"
+
+/* dummy placeholder for obsolete options to store in following instance_options[] */
+static char	*obsolete_option_placeholder = NULL;
 
 /*
  * Short name should be non-printable ASCII character.
@@ -94,31 +96,26 @@ ConfigOption instance_options[] =
 		&instance_config.conn_opt.pguser, SOURCE_CMD, 0,
 		OPTION_CONN_GROUP, 0, option_get_value
 	},
-	/* Replica options */
+	/* Obsolete options */
 	{
 		's', 202, "master-db",
-		&instance_config.master_conn_opt.pgdatabase, SOURCE_CMD, 0,
-		OPTION_REPLICA_GROUP, 0, option_get_value
+		&obsolete_option_placeholder, SOURCE_FILE_STRICT, SOURCE_CONST, "", 0, option_get_value
 	},
 	{
 		's', 203, "master-host",
-		&instance_config.master_conn_opt.pghost, SOURCE_CMD, 0,
-		OPTION_REPLICA_GROUP, 0, option_get_value
+		&obsolete_option_placeholder, SOURCE_FILE_STRICT, SOURCE_CONST, "", 0, option_get_value
 	},
 	{
 		's', 204, "master-port",
-		&instance_config.master_conn_opt.pgport, SOURCE_CMD, 0,
-		OPTION_REPLICA_GROUP, 0, option_get_value
+		&obsolete_option_placeholder, SOURCE_FILE_STRICT, SOURCE_CONST, "", 0, option_get_value
 	},
 	{
 		's', 205, "master-user",
-		&instance_config.master_conn_opt.pguser, SOURCE_CMD, 0,
-		OPTION_REPLICA_GROUP, 0, option_get_value
+		&obsolete_option_placeholder, SOURCE_FILE_STRICT, SOURCE_CONST, "", 0, option_get_value
 	},
 	{
-		'u', 206, "replica-timeout",
-		&instance_config.replica_timeout, SOURCE_CMD, SOURCE_DEFAULT,
-		OPTION_REPLICA_GROUP, OPTION_UNIT_S, option_get_value
+		's', 206, "replica-timeout",
+		&obsolete_option_placeholder, SOURCE_FILE_STRICT, SOURCE_CONST, "", 0, option_get_value
 	},
 	/* Archive options */
 	{
@@ -376,8 +373,6 @@ init_config(InstanceConfig *config, const char *instance_name)
 	config->xlog_seg_size = XLOG_SEG_SIZE;
 #endif
 
-	config->replica_timeout = REPLICA_TIMEOUT_DEFAULT;
-
 	config->archive_timeout = ARCHIVE_TIMEOUT_DEFAULT;
 
 	/* Copy logger defaults */
@@ -452,32 +447,6 @@ readInstanceConfigFile(InstanceState *instanceState)
 			's', 'U', "pguser",
 			&instance->conn_opt.pguser, SOURCE_CMD, 0,
 			OPTION_CONN_GROUP, 0, option_get_value
-		},
-		/* Replica options */
-		{
-			's', 202, "master-db",
-			&instance->master_conn_opt.pgdatabase, SOURCE_CMD, 0,
-			OPTION_REPLICA_GROUP, 0, option_get_value
-		},
-		{
-			's', 203, "master-host",
-			&instance->master_conn_opt.pghost, SOURCE_CMD, 0,
-			OPTION_REPLICA_GROUP, 0, option_get_value
-		},
-		{
-			's', 204, "master-port",
-			&instance->master_conn_opt.pgport, SOURCE_CMD, 0,
-			OPTION_REPLICA_GROUP, 0, option_get_value
-		},
-		{
-			's', 205, "master-user",
-			&instance->master_conn_opt.pguser, SOURCE_CMD, 0,
-			OPTION_REPLICA_GROUP, 0, option_get_value
-		},
-		{
-			'u', 206, "replica-timeout",
-			&instance->replica_timeout, SOURCE_CMD, SOURCE_DEFAULT,
-			OPTION_REPLICA_GROUP, OPTION_UNIT_S, option_get_value
 		},
 		/* Archive options */
 		{

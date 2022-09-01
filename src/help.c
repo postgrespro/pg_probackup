@@ -2,7 +2,7 @@
  *
  * help.c
  *
- * Copyright (c) 2017-2021, Postgres Professional
+ * Copyright (c) 2017-2022, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */
@@ -428,13 +428,6 @@ help_backup(void)
 	printf(_("      --remote-user=username       user name for ssh connection (default: current user)\n"));
 	printf(_("      --ssh-options=ssh_options    additional ssh options (default: none)\n"));
 	printf(_("                                   (example: --ssh-options='-c cipher_spec -F configfile')\n"));
-
-	printf(_("\n  Replica options:\n"));
-	printf(_("      --master-user=user_name      user name to connect to master (deprecated)\n"));
-	printf(_("      --master-db=db_name          database to connect to master (deprecated)\n"));
-	printf(_("      --master-host=host_name      database server host of master (deprecated)\n"));
-	printf(_("      --master-port=port           database server port of master (deprecated)\n"));
-	printf(_("      --replica-timeout=timeout    wait timeout for WAL segment streaming through replication (deprecated)\n\n"));
 }
 
 static void
@@ -931,13 +924,6 @@ help_set_config(void)
 	printf(_("      --archive-host=destination   address or hostname for ssh connection to archive host\n"));
 	printf(_("      --archive-port=port          port for ssh connection to archive host (default: 22)\n"));
 	printf(_("      --archive-user=username      user name for ssh connection to archive host (default: PostgreSQL user)\n"));
-
-	printf(_("\n  Replica options:\n"));
-	printf(_("      --master-user=user_name      user name to connect to master (deprecated)\n"));
-	printf(_("      --master-db=db_name          database to connect to master (deprecated)\n"));
-	printf(_("      --master-host=host_name      database server host of master (deprecated)\n"));
-	printf(_("      --master-port=port           database server port of master (deprecated)\n"));
-	printf(_("      --replica-timeout=timeout    wait timeout for WAL segment streaming through replication (deprecated)\n\n"));
 }
 
 static void

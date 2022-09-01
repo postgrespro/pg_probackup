@@ -62,14 +62,9 @@ class SimpleAuthTest(ProbackupTest, unittest.TestCase):
             "GRANT EXECUTE ON FUNCTION"
             " pg_start_backup(text, boolean, boolean) TO backup;")
 
-        if self.get_version(node) < 100000:
-            node.safe_psql(
-                'postgres',
-                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_switch_xlog() TO backup")
-        else:
-            node.safe_psql(
-                'postgres',
-                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_switch_wal() TO backup")
+        node.safe_psql(
+            'postgres',
+            "GRANT EXECUTE ON FUNCTION pg_catalog.pg_switch_wal() TO backup")
 
         try:
             self.backup_node(
@@ -103,19 +98,10 @@ class SimpleAuthTest(ProbackupTest, unittest.TestCase):
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
-        if self.get_version(node) < self.version_to_num('10.0'):
-            node.safe_psql(
-                "postgres",
-                "GRANT EXECUTE ON FUNCTION pg_stop_backup(boolean) TO backup")
-        else:
-            node.safe_psql(
-                "postgres",
-                "GRANT EXECUTE ON FUNCTION "
-                "pg_stop_backup(boolean, boolean) TO backup")
-            # Do this for ptrack backups
-            node.safe_psql(
-                "postgres",
-                "GRANT EXECUTE ON FUNCTION pg_stop_backup() TO backup")
+        node.safe_psql(
+            "postgres",
+            "GRANT EXECUTE ON FUNCTION "
+            "pg_stop_backup(boolean, boolean) TO backup")
 
         self.backup_node(
                 backup_dir, 'node', node, options=['-U', 'backup'])
@@ -184,8 +170,6 @@ class AuthTest(unittest.TestCase):
             "GRANT EXECUTE ON FUNCTION current_setting(text) TO backup; "
             "GRANT EXECUTE ON FUNCTION pg_is_in_recovery() TO backup; "
             "GRANT EXECUTE ON FUNCTION pg_start_backup(text, boolean, boolean) TO backup; "
-            "GRANT EXECUTE ON FUNCTION pg_stop_backup() TO backup; "
-            "GRANT EXECUTE ON FUNCTION pg_stop_backup(boolean) TO backup; "
             "GRANT EXECUTE ON FUNCTION pg_create_restore_point(text) TO backup; "
             "GRANT EXECUTE ON FUNCTION pg_switch_xlog() TO backup; "
             "GRANT EXECUTE ON FUNCTION txid_current() TO backup; "

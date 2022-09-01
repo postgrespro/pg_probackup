@@ -136,29 +136,7 @@ class BugTest(ProbackupTest, unittest.TestCase):
             recovery_config, "recovery_target_action = 'pause'")
         replica.slow_start(replica=True)
 
-        if self.get_version(node) < 100000:
-            script = '''
-DO
-$$
-relations = plpy.execute("select class.oid from pg_class class WHERE class.relkind IN ('r', 'i', 't', 'm')  and class.relpersistence = 'p'")
-current_xlog_lsn = plpy.execute("SELECT min_recovery_end_location as lsn FROM pg_control_recovery()")[0]['lsn']
-plpy.notice('CURRENT LSN: {0}'.format(current_xlog_lsn))
-found_corruption = False
-for relation in relations:
-    pages_from_future = plpy.execute("with number_of_blocks as (select blknum from generate_series(0, pg_relation_size({0}) / 8192 -1) as blknum) select blknum, lsn, checksum, flags, lower, upper, special, pagesize, version, prune_xid from number_of_blocks, page_header(get_raw_page('{0}'::oid::regclass::text, number_of_blocks.blknum::int)) where lsn > '{1}'::pg_lsn".format(relation['oid'], current_xlog_lsn))
-
-    if pages_from_future.nrows() == 0:
-        continue
-
-    for page in pages_from_future:
-        plpy.notice('Found page from future. OID: {0}, BLKNUM: {1}, LSN: {2}'.format(relation['oid'], page['blknum'], page['lsn']))
-        found_corruption = True
-if found_corruption:
-    plpy.error('Found Corruption')
-$$ LANGUAGE plpython3u;
-'''
-        else:
-            script = '''
+        script = '''
 DO
 $$
 relations = plpy.execute("select class.oid from pg_class class WHERE class.relkind IN ('r', 'i', 't', 'm')  and class.relpersistence = 'p'")

@@ -38,7 +38,6 @@ typedef struct
 	bool follow_symlink;
 	bool add_root;
 	bool backup_logs;
-	bool exclusive_backup;
 	bool skip_hidden;
 	int  external_dir_num;
 } fio_list_dir_request;
@@ -2798,7 +2797,6 @@ fio_list_dir_internal(parray *files, const char *root, bool exclude,
 	req.follow_symlink = follow_symlink;
 	req.add_root = add_root;
 	req.backup_logs = backup_logs;
-	req.exclusive_backup = exclusive_backup;
 	req.skip_hidden = skip_hidden;
 	req.external_dir_num = external_dir_num;
 
@@ -2891,7 +2889,6 @@ fio_list_dir_impl(int out, char* buf)
 	 * TODO: correctly send elog messages from agent to main process.
 	 */
 	instance_config.logger.log_level_console = ERROR;
-	exclusive_backup = req->exclusive_backup;
 
 	dir_list_file(file_files, req->path, req->exclude, req->follow_symlink,
 				  req->add_root, req->backup_logs, req->skip_hidden,

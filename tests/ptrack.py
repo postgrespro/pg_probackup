@@ -513,116 +513,41 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             "postgres",
             "CREATE DATABASE backupdb")
 
-        # PG 9.5
-        if self.get_version(node) < 90600:
-            node.safe_psql(
-                'backupdb',
-                "REVOKE ALL ON DATABASE backupdb from PUBLIC; "
-                "REVOKE ALL ON SCHEMA public from PUBLIC; "
-                "REVOKE ALL ON ALL TABLES IN SCHEMA public FROM PUBLIC; "
-                "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA public FROM PUBLIC; "
-                "REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM PUBLIC; "
-                "REVOKE ALL ON SCHEMA pg_catalog from PUBLIC; "
-                "REVOKE ALL ON ALL TABLES IN SCHEMA pg_catalog FROM PUBLIC; "
-                "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA pg_catalog FROM PUBLIC; "
-                "REVOKE ALL ON ALL SEQUENCES IN SCHEMA pg_catalog FROM PUBLIC; "
-                "REVOKE ALL ON SCHEMA information_schema from PUBLIC; "
-                "REVOKE ALL ON ALL TABLES IN SCHEMA information_schema FROM PUBLIC; "
-                "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA information_schema FROM PUBLIC; "
-                "REVOKE ALL ON ALL SEQUENCES IN SCHEMA information_schema FROM PUBLIC; "
-                "CREATE ROLE backup WITH LOGIN REPLICATION; "
-                "GRANT CONNECT ON DATABASE backupdb to backup; "
-                "GRANT USAGE ON SCHEMA pg_catalog TO backup; "
-                "GRANT SELECT ON TABLE pg_catalog.pg_proc TO backup; "
-                "GRANT SELECT ON TABLE pg_catalog.pg_database TO backup; " # for partial restore, checkdb and ptrack
-                "GRANT EXECUTE ON FUNCTION pg_catalog.oideq(oid, oid) TO backup; "
-                "GRANT EXECUTE ON FUNCTION pg_catalog.nameeq(name, name) TO backup; "
-                "GRANT EXECUTE ON FUNCTION pg_catalog.textout(text) TO backup; "
-                "GRANT EXECUTE ON FUNCTION pg_catalog.timestamptz(timestamp with time zone, integer) TO backup; "
-                "GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup; "
-                "GRANT EXECUTE ON FUNCTION pg_catalog.set_config(text, text, boolean) TO backup; "
-                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup; "
-                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean) TO backup; "
-                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup() TO backup; "
-                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup; "
-                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;"
-            )
-        # PG 9.6
-        elif self.get_version(node) > 90600 and self.get_version(node) < 100000:
-            node.safe_psql(
-                'backupdb',
-                "REVOKE ALL ON DATABASE backupdb from PUBLIC; "
-                "REVOKE ALL ON SCHEMA public from PUBLIC; "
-                "REVOKE ALL ON ALL TABLES IN SCHEMA public FROM PUBLIC; "
-                "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA public FROM PUBLIC; "
-                "REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM PUBLIC; "
-                "REVOKE ALL ON SCHEMA pg_catalog from PUBLIC; "
-                "REVOKE ALL ON ALL TABLES IN SCHEMA pg_catalog FROM PUBLIC; "
-                "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA pg_catalog FROM PUBLIC; "
-                "REVOKE ALL ON ALL SEQUENCES IN SCHEMA pg_catalog FROM PUBLIC; "
-                "REVOKE ALL ON SCHEMA information_schema from PUBLIC; "
-                "REVOKE ALL ON ALL TABLES IN SCHEMA information_schema FROM PUBLIC; "
-                "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA information_schema FROM PUBLIC; "
-                "REVOKE ALL ON ALL SEQUENCES IN SCHEMA information_schema FROM PUBLIC; "
-                "CREATE ROLE backup WITH LOGIN REPLICATION; "
-                "GRANT CONNECT ON DATABASE backupdb to backup; "
-                "GRANT USAGE ON SCHEMA pg_catalog TO backup; "
-                "GRANT SELECT ON TABLE pg_catalog.pg_proc TO backup; "
-                "GRANT SELECT ON TABLE pg_catalog.pg_database TO backup; " # for partial restore, checkdb and ptrack
-                "GRANT EXECUTE ON FUNCTION pg_catalog.oideq(oid, oid) TO backup; "
-                "GRANT EXECUTE ON FUNCTION pg_catalog.nameeq(name, name) TO backup; "
-                "GRANT EXECUTE ON FUNCTION pg_catalog.textout(text) TO backup; "
-                "GRANT EXECUTE ON FUNCTION pg_catalog.timestamptz(timestamp with time zone, integer) TO backup; "
-                "GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup; "
-                "GRANT EXECUTE ON FUNCTION pg_catalog.set_config(text, text, boolean) TO backup; "
-                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup; "
-                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_system() TO backup; "
-                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean, boolean) TO backup; "
-                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup(boolean) TO backup; "
-                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_create_restore_point(text) TO backup; "
-                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_switch_xlog() TO backup; "
-                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_last_xlog_replay_location() TO backup; "
-                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup; "
-                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;"
-                'GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_edition() TO backup; '
-            )
-        # >= 10
-        else:
-            node.safe_psql(
-                'backupdb',
-                "REVOKE ALL ON DATABASE backupdb from PUBLIC; "
-                "REVOKE ALL ON SCHEMA public from PUBLIC; "
-                "REVOKE ALL ON ALL TABLES IN SCHEMA public FROM PUBLIC; "
-                "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA public FROM PUBLIC; "
-                "REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM PUBLIC; "
-                "REVOKE ALL ON SCHEMA pg_catalog from PUBLIC; "
-                "REVOKE ALL ON ALL TABLES IN SCHEMA pg_catalog FROM PUBLIC; "
-                "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA pg_catalog FROM PUBLIC; "
-                "REVOKE ALL ON ALL SEQUENCES IN SCHEMA pg_catalog FROM PUBLIC; "
-                "REVOKE ALL ON SCHEMA information_schema from PUBLIC; "
-                "REVOKE ALL ON ALL TABLES IN SCHEMA information_schema FROM PUBLIC; "
-                "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA information_schema FROM PUBLIC; "
-                "REVOKE ALL ON ALL SEQUENCES IN SCHEMA information_schema FROM PUBLIC; "
-                "CREATE ROLE backup WITH LOGIN REPLICATION; "
-                "GRANT CONNECT ON DATABASE backupdb to backup; "
-                "GRANT USAGE ON SCHEMA pg_catalog TO backup; "
-                "GRANT SELECT ON TABLE pg_catalog.pg_proc TO backup; "
-                "GRANT SELECT ON TABLE pg_catalog.pg_database TO backup; " # for partial restore, checkdb and ptrack
-                "GRANT EXECUTE ON FUNCTION pg_catalog.oideq(oid, oid) TO backup; "
-                "GRANT EXECUTE ON FUNCTION pg_catalog.nameeq(name, name) TO backup; "
-                "GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup; "
-                "GRANT EXECUTE ON FUNCTION pg_catalog.set_config(text, text, boolean) TO backup; "
-                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup; "
-                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_system() TO backup; "
-                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean, boolean) TO backup; "
-                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup(boolean, boolean) TO backup; "
-                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_create_restore_point(text) TO backup; "
-                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_switch_wal() TO backup; "
-                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_last_wal_replay_lsn() TO backup; "
-                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup; "
-                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;"
-                'GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_edition() TO backup; '
-            )
+        # PG >= 10
+        node.safe_psql(
+            'backupdb',
+            "REVOKE ALL ON DATABASE backupdb from PUBLIC; "
+            "REVOKE ALL ON SCHEMA public from PUBLIC; "
+            "REVOKE ALL ON ALL TABLES IN SCHEMA public FROM PUBLIC; "
+            "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA public FROM PUBLIC; "
+            "REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM PUBLIC; "
+            "REVOKE ALL ON SCHEMA pg_catalog from PUBLIC; "
+            "REVOKE ALL ON ALL TABLES IN SCHEMA pg_catalog FROM PUBLIC; "
+            "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA pg_catalog FROM PUBLIC; "
+            "REVOKE ALL ON ALL SEQUENCES IN SCHEMA pg_catalog FROM PUBLIC; "
+            "REVOKE ALL ON SCHEMA information_schema from PUBLIC; "
+            "REVOKE ALL ON ALL TABLES IN SCHEMA information_schema FROM PUBLIC; "
+            "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA information_schema FROM PUBLIC; "
+            "REVOKE ALL ON ALL SEQUENCES IN SCHEMA information_schema FROM PUBLIC; "
+            "CREATE ROLE backup WITH LOGIN REPLICATION; "
+            "GRANT CONNECT ON DATABASE backupdb to backup; "
+            "GRANT USAGE ON SCHEMA pg_catalog TO backup; "
+            "GRANT SELECT ON TABLE pg_catalog.pg_proc TO backup; "
+            "GRANT SELECT ON TABLE pg_catalog.pg_database TO backup; " # for partial restore, checkdb and ptrack
+            "GRANT EXECUTE ON FUNCTION pg_catalog.oideq(oid, oid) TO backup; "
+            "GRANT EXECUTE ON FUNCTION pg_catalog.nameeq(name, name) TO backup; "
+            "GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup; "
+            "GRANT EXECUTE ON FUNCTION pg_catalog.set_config(text, text, boolean) TO backup; "
+            "GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup; "
+            "GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_system() TO backup; "
+            "GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean, boolean) TO backup; "
+            "GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup(boolean, boolean) TO backup; "
+            "GRANT EXECUTE ON FUNCTION pg_catalog.pg_create_restore_point(text) TO backup; "
+            "GRANT EXECUTE ON FUNCTION pg_catalog.pg_switch_wal() TO backup; "
+            "GRANT EXECUTE ON FUNCTION pg_catalog.pg_last_wal_replay_lsn() TO backup; "
+            "GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup; "
+            "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;"
+        )
 
         node.safe_psql(
             "backupdb",
@@ -1635,13 +1560,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         self.backup_node(
             backup_dir, 'replica', replica,
-            options=[
-                '-j10',
-                '--master-host=localhost',
-                '--master-db=postgres',
-                '--master-port={0}'.format(node.port),
-                '--stream'
-                ]
+            options=['-j10', '--stream']
             )
 
         # CREATE DATABASE DB1
@@ -1659,13 +1578,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         backup_id = self.backup_node(
             backup_dir, 'replica',
             replica, backup_type='ptrack',
-            options=[
-                '-j10',
-                '--stream',
-                '--master-host=localhost',
-                '--master-db=postgres',
-                '--master-port={0}'.format(node.port)
-                ]
+            options=['-j10', '--stream']
             )
 
         if self.paranoia:
@@ -2379,11 +2292,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             backup_dir,
             'replica',
             replica,
-            options=[
-                '-j10', '--stream',
-                '--master-host=localhost',
-                '--master-db=postgres',
-                '--master-port={0}'.format(master.port)])
+            options=['-j10', '--stream'])
         master.safe_psql('postgres', 'checkpoint')
 
         for i in idx_ptrack:
@@ -2410,11 +2319,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             'replica',
             replica,
             backup_type='ptrack',
-            options=[
-                '-j10', '--stream',
-                '--master-host=localhost',
-                '--master-db=postgres',
-                '--master-port={0}'.format(master.port)])
+            options=['-j10', '--stream'])
         master.safe_psql('postgres', 'checkpoint')
 
         for i in idx_ptrack:
@@ -2442,11 +2347,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             'replica',
             replica,
             backup_type='page',
-            options=[
-                '-j10', '--master-host=localhost',
-                '--master-db=postgres',
-                '--master-port={0}'.format(master.port),
-                '--stream'])
+            options=['-j10', '--stream'])
         master.safe_psql('postgres', 'checkpoint')
 
         for i in idx_ptrack:
@@ -2512,8 +2413,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
                 idx_ptrack[i]['old_pages'] = self.get_md5_per_page_for_fork(
                     idx_ptrack[i]['path'], idx_ptrack[i]['old_size'])
 
-        self.backup_node(
-            backup_dir, 'node', node, options=['-j10', '--stream'])
+        self.backup_node(backup_dir, 'node', node, options=['-j10', '--stream'])
 
         node.safe_psql('postgres', 'delete from t_heap where id%2 = 1')
         node.safe_psql('postgres', 'cluster t_heap using t_btree')
@@ -2648,11 +2548,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         master.safe_psql('postgres', 'vacuum t_heap')
         master.safe_psql('postgres', 'checkpoint')
 
-        self.backup_node(
-            backup_dir, 'replica', replica, options=[
-                '-j10', '--stream', '--master-host=localhost',
-                '--master-db=postgres', '--master-port={0}'.format(
-                    master.port)])
+        self.backup_node(backup_dir, 'replica', replica, options=['-j10', '--stream'])
 
         for i in idx_ptrack:
             # get size of heap and indexes. size calculated in pages
@@ -2749,9 +2645,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         self.backup_node(
             backup_dir, 'replica', replica, options=[
-                '-j10', '--stream', '--master-host=localhost',
-                '--master-db=postgres', '--master-port={0}'.format(
-                    master.port)])
+                '-j10', '--stream'])
 
         for i in idx_ptrack:
             # get size of heap and indexes. size calculated in pages
@@ -2919,11 +2813,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             backup_dir,
             'replica',
             replica,
-            options=[
-                '-j10', '--stream',
-                '--master-host=localhost',
-                '--master-db=postgres',
-                '--master-port={0}'.format(master.port)])
+            options=['-j10', '--stream'])
 
         # Create indexes
         for i in idx_ptrack:
@@ -2943,11 +2833,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             'replica',
             replica,
             backup_type='ptrack',
-            options=[
-                '-j1', '--stream',
-                '--master-host=localhost',
-                '--master-db=postgres',
-                '--master-port={0}'.format(master.port)])
+            options=['-j1', '--stream'])
 
         if self.paranoia:
             pgdata = self.pgdata_content(replica.data_dir)
@@ -3116,12 +3002,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         # Make backup to clean every ptrack
         self.backup_node(
             backup_dir, 'replica', replica,
-            options=[
-                '-j10',
-                '--stream',
-                '--master-host=localhost',
-                '--master-db=postgres',
-                '--master-port={0}'.format(master.port)])
+            options=['-j10', '--stream'])
 
         if replica.major_version < 11:
             for i in idx_ptrack:
@@ -3145,12 +3026,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         self.backup_node(
             backup_dir, 'replica', replica, backup_type='ptrack',
-            options=[
-                '-j10',
-                '--stream',
-                '--master-host=localhost',
-                '--master-db=postgres',
-                '--master-port={0}'.format(master.port)])
+            options=['-j10', '--stream'])
 
         pgdata = self.pgdata_content(replica.data_dir)
 
@@ -3320,12 +3196,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         replica.safe_psql('postgres', 'checkpoint')
 
         # Make FULL backup to clean every ptrack
-        self.backup_node(
-            backup_dir, 'replica', replica, options=[
-                '-j10', '--master-host=localhost',
-                '--master-db=postgres',
-                '--master-port={0}'.format(master.port),
-                '--stream'])
+        self.backup_node(backup_dir, 'replica', replica, options=['-j10', '--stream'])
 
         if replica.major_version < 11:
             for i in idx_ptrack:
@@ -3505,12 +3376,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         # Take backup to clean every ptrack
         self.backup_node(
             backup_dir, 'replica', replica,
-            options=[
-                '-j10',
-                '--master-host=localhost',
-                '--master-db=postgres',
-                '--master-port={0}'.format(master.port),
-                '--stream'])
+            options=['-j10', '--stream'])
 
         if replica.major_version < 11:
             for i in idx_ptrack:
@@ -3763,12 +3629,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         # Take FULL backup to clean every ptrack
         self.backup_node(
             backup_dir, 'replica', replica,
-            options=[
-                '-j10',
-                '--master-host=localhost',
-                '--master-db=postgres',
-                '--master-port={0}'.format(master.port),
-                '--stream'])
+            options=['-j10', '--stream'])
 
         if replica.major_version < 11:
             for i in idx_ptrack:
@@ -3935,13 +3796,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         # Take FULL backup to clean every ptrack
         self.backup_node(
             backup_dir, 'replica', replica,
-            options=[
-                '-j10',
-                '--stream',
-                '--master-host=localhost',
-                '--master-db=postgres',
-                '--master-port={0}'.format(master.port)
-                ]
+            options=['-j10', '--stream']
             )
 
         if master.major_version < 11:

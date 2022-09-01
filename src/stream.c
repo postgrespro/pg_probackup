@@ -2,7 +2,7 @@
  *
  * stream.c: pg_probackup specific code for WAL streaming
  *
- * Portions Copyright (c) 2015-2020, Postgres Professional
+ * Portions Copyright (c) 2015-2022, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */
@@ -174,10 +174,10 @@ checkpoint_timeout(PGconn *backup_conn)
  * CreateReplicationSlot(PGconn *conn, const char *slot_name, const char *plugin,
  *                                           bool is_temporary, bool is_physical, bool reserve_wal,
  *                                           bool slot_exists_ok)
- * PG 9.5-10
+ * PG 10
  * CreateReplicationSlot(PGconn *conn, const char *slot_name, const char *plugin,
  *                                           bool is_physical, bool slot_exists_ok)
- * NOTE: PG 9.6 and 10 support reserve_wal in
+ * NOTE: PG 10 support reserve_wal in
  * pg_catalog.pg_create_physical_replication_slot(slot_name name [, immediately_reserve boolean])
  * and
  * CREATE_REPLICATION_SLOT slot_name { PHYSICAL [ RESERVE_WAL ] | LOGICAL output_plugin }
@@ -194,7 +194,7 @@ CreateReplicationSlot_compat(PGconn *conn, const char *slot_name, const char *pl
 #elif PG_VERSION_NUM >= 110000
 	return CreateReplicationSlot(conn, slot_name, plugin, is_temporary, is_physical,
 		/* reserve_wal = */ true, slot_exists_ok);
-#elif PG_VERSION_NUM >= 100000
+#else
 	/*
 	 * PG-10 doesn't support creating temp_slot by calling CreateReplicationSlot(), but
 	 * it will be created by setting StreamCtl.temp_slot later in StreamLog()
@@ -203,10 +203,6 @@ CreateReplicationSlot_compat(PGconn *conn, const char *slot_name, const char *pl
 		return CreateReplicationSlot(conn, slot_name, plugin, /*is_temporary,*/ is_physical, /*reserve_wal,*/ slot_exists_ok);
 	else
 		return true;
-#else
-	/* these parameters not supported in PG < 10 */
-	Assert(!is_temporary);
-	return CreateReplicationSlot(conn, slot_name, plugin, /*is_temporary,*/ is_physical, /*reserve_wal,*/ slot_exists_ok);
 #endif
 }
 
@@ -229,13 +225,8 @@ StreamLog(void *arg)
 	stream_stop_begin = 0;
 
 	/* Create repslot */
-#if PG_VERSION_NUM >= 100000
 	if (temp_slot || perm_slot)
 		if (!CreateReplicationSlot_compat(stream_arg->conn, replication_slot, NULL, temp_slot, true, false))
-#else
-	if (perm_slot)
-		if (!CreateReplicationSlot_compat(stream_arg->conn, replication_slot, NULL, false, true, false))
-#endif
 		{
 			interrupted = true;
 			elog(ERROR, "Couldn't create physical replication slot %s", replication_slot);
@@ -248,18 +239,13 @@ StreamLog(void *arg)
 		elog(LOG, "started streaming WAL at %X/%X (timeline %u) using%s slot %s",
 			(uint32) (stream_arg->startpos >> 32), (uint32) stream_arg->startpos,
 			stream_arg->starttli,
-#if PG_VERSION_NUM >= 100000
 			temp_slot ? " temporary" : "",
-#else
-			"",
-#endif
 			replication_slot);
 	else
 		elog(LOG, "started streaming WAL at %X/%X (timeline %u)",
 			 (uint32) (stream_arg->startpos >> 32), (uint32) stream_arg->startpos,
 			  stream_arg->starttli);
 
-#if PG_VERSION_NUM >= 90600
 	{
 		StreamCtl	ctl;
 
@@ -274,7 +260,6 @@ StreamLog(void *arg)
 		ctl.synchronous = false;
 		ctl.mark_done = false;
 
-#if PG_VERSION_NUM >= 100000
 		ctl.walmethod = CreateWalDirectoryMethod(
 			stream_arg->basedir,
 //			(instance_config.compress_alg == NONE_COMPRESS) ? 0 : instance_config.compress_level,
@@ -284,13 +269,10 @@ StreamLog(void *arg)
 		ctl.stop_socket = PGINVALID_SOCKET;
 		ctl.do_sync = false; /* We sync all files at the end of backup */
 //		ctl.mark_done        /* for future use in s3 */
-#if PG_VERSION_NUM >= 100000 && PG_VERSION_NUM < 110000
+#if PG_VERSION_NUM < 110000
 		/* StreamCtl.temp_slot used only for PG-10, in PG>10, temp_slots are created by calling CreateReplicationSlot() */
 		ctl.temp_slot = temp_slot;
-#endif /* PG_VERSION_NUM >= 100000 && PG_VERSION_NUM < 110000 */
-#else /* PG_VERSION_NUM < 100000 */
-		ctl.basedir = (char *) stream_arg->basedir;
-#endif /* PG_VERSION_NUM >= 100000 */
+#endif /* PG_VERSION_NUM < 110000 */
 
 		if (ReceiveXlogStream(stream_arg->conn, &ctl) == false)
 		{
@@ -298,25 +280,13 @@ StreamLog(void *arg)
 			elog(ERROR, "Problem in receivexlog");
 		}
 
-#if PG_VERSION_NUM >= 100000
 		if (!ctl.walmethod->finish())
 		{
 			interrupted = true;
 			elog(ERROR, "Could not finish writing WAL files: %s",
 				 strerror(errno));
 		}
-#endif /* PG_VERSION_NUM >= 100000 */
 	}
-#else /* PG_VERSION_NUM < 90600 */
-	/* PG-9.5 */
-	if (ReceiveXlogStream(stream_arg->conn, stream_arg->startpos, stream_arg->starttli,
-						NULL, (char *) stream_arg->basedir, stop_streaming,
-						standby_message_timeout, NULL, false, false) == false)
-	{
-		interrupted = true;
-		elog(ERROR, "Problem in receivexlog");
-	}
-#endif /* PG_VERSION_NUM >= 90600 */
 
 	/* be paranoid and sort xlog_files_list,
 	 * so if stop_lsn segno is already in the list,
