@@ -692,6 +692,8 @@ pgdata_basic_setup(ConnectionOptions conn_opt, PGNodeInfo *nodeInfo)
 
 /*
  * Entry point of pg_probackup BACKUP subcommand.
+ *
+ * if start_time == INVALID_BACKUP_ID then we can generate backup_id
  */
 int
 do_backup(InstanceState *instanceState, pgSetBackupParams *set_backup_params,
@@ -699,7 +701,12 @@ do_backup(InstanceState *instanceState, pgSetBackupParams *set_backup_params,
 {
 	PGconn		*backup_conn = NULL;
 	PGNodeInfo	nodeInfo;
+	time_t		latest_backup_id = INVALID_BACKUP_ID;
 	char		pretty_bytes[20];
+
+	if (!instance_config.pgdata)
+		elog(ERROR, "required parameter not specified: PGDATA "
+						 "(-D, --pgdata)");
 
 	/* Initialize PGInfonode */
 	pgNodeInit(&nodeInfo);
@@ -709,12 +716,55 @@ do_backup(InstanceState *instanceState, pgSetBackupParams *set_backup_params,
 		(pg_strcasecmp(instance_config.external_dir_str, "none") != 0))
 		current.external_dir_str = instance_config.external_dir_str;
 
-	/* Create backup directory and BACKUP_CONTROL_FILE */
-	pgBackupCreateDir(&current, instanceState, start_time);
+	/* Find latest backup_id */
+	{
+		parray	*backup_list =  catalog_get_backup_list(instanceState, INVALID_BACKUP_ID);
 
-	if (!instance_config.pgdata)
-		elog(ERROR, "required parameter not specified: PGDATA "
-						 "(-D, --pgdata)");
+		if (parray_num(backup_list) > 0)
+			latest_backup_id = ((pgBackup *)parray_get(backup_list, 0))->backup_id;
+
+		parray_walk(backup_list, pgBackupFree);
+		parray_free(backup_list);
+	}
+
+	/* Try to pick backup_id and create backup directory with BACKUP_CONTROL_FILE */
+	if (start_time != INVALID_BACKUP_ID)
+	{
+		/* If user already choosed backup_id for us, then try to use it. */
+		if (start_time <= latest_backup_id)
+			/* don't care about freeing base36enc_dup memory, we exit anyway */
+			elog(ERROR, "Can't assign backup_id from requested start_time (%s), "
+						"this time must be later that backup %s",
+				base36enc_dup(start_time), base36enc_dup(latest_backup_id));
+
+		current.backup_id = start_time;
+		pgBackupInitDir(&current, instanceState->instance_backup_subdir_path);
+	}
+	else
+	{
+		/* We can generate our own unique backup_id
+		 * Sometimes (when we try to backup twice in one second)
+		 * backup_id will be duplicated -> try more times.
+		 */
+		int	attempts = 10;
+
+		if (time(NULL) < latest_backup_id)
+			elog(ERROR, "Can't assign backup_id, there is already a backup in future (%s)",
+				base36enc(latest_backup_id));
+
+		do
+		{
+			current.backup_id = time(NULL);
+			pgBackupInitDir(&current, instanceState->instance_backup_subdir_path);
+			if (current.backup_id == INVALID_BACKUP_ID)
+				sleep(1);
+		}
+		while (current.backup_id == INVALID_BACKUP_ID && attempts-- > 0);
+	}
+
+	/* If creation of backup dir was unsuccessful, there will be WARNINGS in logs already */
+	if (current.backup_id == INVALID_BACKUP_ID)
+		elog(ERROR, "Can't create backup directory");
 
 	/* Update backup status and other metainfo. */
 	current.status = BACKUP_STATUS_RUNNING;

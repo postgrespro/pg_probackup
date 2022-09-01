@@ -1,7 +1,7 @@
 import unittest
 import os
 from time import sleep, time
-from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
+from .helpers.ptrack_helpers import base36enc, ProbackupTest, ProbackupException
 import shutil
 from distutils.dir_util import copy_tree
 from testgres import ProcessType, QueryException
@@ -313,7 +313,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.set_archiving(backup_dir, 'node', node)
         node.slow_start()
 
-        if self.ptrack and node.major_version > 11:
+        if self.ptrack:
             node.safe_psql(
                 "postgres",
                 "create extension ptrack")
@@ -459,7 +459,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.set_archiving(backup_dir, 'node', node)
         node.slow_start()
 
-        if self.ptrack and node.major_version > 11:
+        if self.ptrack:
             node.safe_psql(
                 "postgres",
                 "create extension ptrack")
@@ -600,7 +600,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.set_archiving(backup_dir, 'node', node)
         node.slow_start()
 
-        if self.ptrack and node.major_version > 11:
+        if self.ptrack:
             node.safe_psql(
                 "postgres",
                 "create extension ptrack")
@@ -3402,10 +3402,11 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     def test_start_time(self):
-
+        """Test, that option --start-time allows to set backup_id and restore"""
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
             ptrack_enable=self.ptrack,
             initdb_params=['--data-checksums'])
 
@@ -3418,138 +3419,81 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         # FULL backup
         startTime = int(time())
         self.backup_node(
-            backup_dir, 'node', node, backup_type="full",
-            options=['--stream', '--start-time', str(startTime)])
+            backup_dir, 'node', node, backup_type='full',
+            options=['--stream', '--start-time={0}'.format(str(startTime))])
+        # restore FULL backup by backup_id calculated from start-time
+        self.restore_node(
+            backup_dir, 'node',
+            data_dir=os.path.join(self.tmp_path, module_name, fname, 'node_restored_full'),
+            backup_id=base36enc(startTime))
+
+        #FULL backup with incorrect start time
+        try:
+            startTime = str(int(time()-100000))
+            self.backup_node(
+                backup_dir, 'node', node, backup_type='full',
+                options=['--stream', '--start-time={0}'.format(startTime)])
+            # we should die here because exception is what we expect to happen
+            self.assertEqual(
+                1, 0,
+                'Expecting Error because start time for new backup must be newer '
+                '\n Output: {0} \n CMD: {1}'.format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertRegex(
+                e.message,
+                r"ERROR: Can't assign backup_id from requested start_time \(\w*\), this time must be later that backup \w*\n",
+                "\n Unexpected Error Message: {0}\n CMD: {1}".format(
+                    repr(e.message), self.cmd))
 
         # DELTA backup
         startTime = int(time())
         self.backup_node(
-            backup_dir, 'node', node, backup_type="delta",
-            options=['--stream', '--start-time', str(startTime)])
+            backup_dir, 'node', node, backup_type='delta',
+            options=['--stream', '--start-time={0}'.format(str(startTime))])
+        # restore DELTA backup by backup_id calculated from start-time
+        self.restore_node(
+            backup_dir, 'node',
+            data_dir=os.path.join(self.tmp_path, module_name, fname, 'node_restored_delta'),
+            backup_id=base36enc(startTime))
 
         # PAGE backup
         startTime = int(time())
         self.backup_node(
-            backup_dir, 'node', node, backup_type="page",
-            options=['--stream', '--start-time', str(startTime)])
+            backup_dir, 'node', node, backup_type='page',
+            options=['--stream', '--start-time={0}'.format(str(startTime))])
+        # restore PAGE backup by backup_id calculated from start-time
+        self.restore_node(
+            backup_dir, 'node',
+            data_dir=os.path.join(self.tmp_path, module_name, fname, 'node_restored_page'),
+            backup_id=base36enc(startTime))
 
-        if self.ptrack and node.major_version > 11:
+        # PTRACK backup
+        if self.ptrack:
             node.safe_psql(
-                "postgres",
-                "create extension ptrack")
+                'postgres',
+                'create extension ptrack')
 
-            # PTRACK backup
             startTime = int(time())
             self.backup_node(
-                backup_dir, 'node', node, backup_type="ptrack",
-                options=['--stream', '--start-time', str(startTime)])
-
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
-    # @unittest.skip("skip")
-    def test_start_time_incorrect_time(self):
-
-        fname = self.id().split('.')[3]
-        node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
-            ptrack_enable=self.ptrack,
-            initdb_params=['--data-checksums'])
-
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
-        self.set_archiving(backup_dir, 'node', node)
-        node.slow_start()
-
-        startTime = int(time())
-        #backup with correct start time
-        self.backup_node(
-            backup_dir, 'node', node,
-            options=['--stream', '--start-time', str(startTime)])
-        #backups with incorrect start time
-        try:
-            self.backup_node(
-            backup_dir, 'node', node, backup_type="full",
-            options=['--stream', '--start-time', str(startTime-10000)])
-            # we should die here because exception is what we expect to happen
-            self.assertEqual(
-                1, 0,
-                "Expecting Error because start time for new backup must be newer "
-                "\n Output: {0} \n CMD: {1}".format(
-                    repr(self.output), self.cmd))
-        except ProbackupException as e:
-            self.assertRegex(
-                e.message,
-                "ERROR: Cannot create directory for older backup",
-                "\n Unexpected Error Message: {0}\n CMD: {1}".format(
-                    repr(e.message), self.cmd))
-
-        try:
-            self.backup_node(
-            backup_dir, 'node', node, backup_type="delta",
-            options=['--stream', '--start-time', str(startTime-10000)])
-            # we should die here because exception is what we expect to happen
-            self.assertEqual(
-                1, 0,
-                "Expecting Error because start time for new backup must be newer "
-                "\n Output: {0} \n CMD: {1}".format(
-                    repr(self.output), self.cmd))
-        except ProbackupException as e:
-            self.assertRegex(
-                e.message,
-                "ERROR: Cannot create directory for older backup",
-                "\n Unexpected Error Message: {0}\n CMD: {1}".format(
-                    repr(e.message), self.cmd))
-
-        try:
-            self.backup_node(
-            backup_dir, 'node', node, backup_type="page",
-            options=['--stream', '--start-time', str(startTime-10000)])
-            # we should die here because exception is what we expect to happen
-            self.assertEqual(
-                1, 0,
-                "Expecting Error because start time for new backup must be newer "
-                "\n Output: {0} \n CMD: {1}".format(
-                    repr(self.output), self.cmd))
-        except ProbackupException as e:
-            self.assertRegex(
-                e.message,
-                "ERROR: Cannot create directory for older backup",
-                "\n Unexpected Error Message: {0}\n CMD: {1}".format(
-                    repr(e.message), self.cmd))
-
-        if self.ptrack and node.major_version > 11:
-            node.safe_psql(
-                "postgres",
-                "create extension ptrack")
-
-            try:
-                self.backup_node(
-                backup_dir, 'node', node, backup_type="page",
-                options=['--stream', '--start-time', str(startTime-10000)])
-                # we should die here because exception is what we expect to happen
-                self.assertEqual(
-                    1, 0,
-                    "Expecting Error because start time for new backup must be newer "
-                    "\n Output: {0} \n CMD: {1}".format(
-                        repr(self.output), self.cmd))
-            except ProbackupException as e:
-                self.assertRegex(
-                    e.message,
-                    "ERROR: Cannot create directory for older backup",
-                    "\n Unexpected Error Message: {0}\n CMD: {1}".format(
-                        repr(e.message), self.cmd))
+                backup_dir, 'node', node, backup_type='ptrack',
+                options=['--stream', '--start-time={0}'.format(str(startTime))])
+            # restore PTRACK backup by backup_id calculated from start-time
+            self.restore_node(
+                backup_dir, 'node',
+                data_dir=os.path.join(self.tmp_path, module_name, fname, 'node_restored_ptrack'),
+                backup_id=base36enc(startTime))
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def test_start_time_few_nodes(self):
-
+        """Test, that we can synchronize backup_id's for different DBs"""
         fname = self.id().split('.')[3]
         node1 = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node1'),
+            set_replication=True,
             ptrack_enable=self.ptrack,
             initdb_params=['--data-checksums'])
 
@@ -3561,6 +3505,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 
         node2 = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node2'),
+            set_replication=True,
             ptrack_enable=self.ptrack,
             initdb_params=['--data-checksums'])
 
@@ -3571,200 +3516,61 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         node2.slow_start()
 
         # FULL backup
-        startTime = int(time())
+        startTime = str(int(time()))
         self.backup_node(
-            backup_dir1, 'node1', node1, backup_type="full",
-            options=['--stream', '--start-time', str(startTime)])
+            backup_dir1, 'node1', node1, backup_type='full',
+            options=['--stream', '--start-time={0}'.format(startTime)])
         self.backup_node(
-            backup_dir2, 'node2', node2, backup_type="full",
-            options=['--stream', '--start-time', str(startTime)])
-
+            backup_dir2, 'node2', node2, backup_type='full',
+            options=['--stream', '--start-time={0}'.format(startTime)])
         show_backup1 = self.show_pb(backup_dir1, 'node1')[0]
         show_backup2 = self.show_pb(backup_dir2, 'node2')[0]
         self.assertEqual(show_backup1['id'], show_backup2['id'])
 
         # DELTA backup
-        startTime = int(time())
+        startTime = str(int(time()))
         self.backup_node(
-            backup_dir1, 'node1', node1, backup_type="delta",
-            options=['--stream', '--start-time', str(startTime)])
+            backup_dir1, 'node1', node1, backup_type='delta',
+            options=['--stream', '--start-time={0}'.format(startTime)])
         self.backup_node(
-            backup_dir2, 'node2', node2, backup_type="delta",
-            options=['--stream', '--start-time', str(startTime)])
+            backup_dir2, 'node2', node2, backup_type='delta',
+            options=['--stream', '--start-time={0}'.format(startTime)])
         show_backup1 = self.show_pb(backup_dir1, 'node1')[1]
         show_backup2 = self.show_pb(backup_dir2, 'node2')[1]
         self.assertEqual(show_backup1['id'], show_backup2['id'])
 
         # PAGE backup
-        startTime = int(time())
+        startTime = str(int(time()))
         self.backup_node(
-            backup_dir1, 'node1', node1, backup_type="page",
-            options=['--stream', '--start-time', str(startTime)])
+            backup_dir1, 'node1', node1, backup_type='page',
+            options=['--stream', '--start-time={0}'.format(startTime)])
         self.backup_node(
-            backup_dir2, 'node2', node2, backup_type="page",
-            options=['--stream', '--start-time', str(startTime)])
+            backup_dir2, 'node2', node2, backup_type='page',
+            options=['--stream', '--start-time={0}'.format(startTime)])
         show_backup1 = self.show_pb(backup_dir1, 'node1')[2]
         show_backup2 = self.show_pb(backup_dir2, 'node2')[2]
         self.assertEqual(show_backup1['id'], show_backup2['id'])
 
         # PTRACK backup
-        startTime = int(time())
-        if self.ptrack and node1.major_version > 11:
+        if self.ptrack:
             node1.safe_psql(
-                "postgres",
-                "create extension ptrack")
-            self.backup_node(
-                backup_dir1, 'node1', node1, backup_type="ptrack",
-                options=['--stream', '--start-time', str(startTime)])
-
-        if self.ptrack and node2.major_version > 11:
+                'postgres',
+                'create extension ptrack')
             node2.safe_psql(
-                "postgres",
-                "create extension ptrack")
+                'postgres',
+                'create extension ptrack')
+
+            startTime = str(int(time()))
             self.backup_node(
-                backup_dir2, 'node2', node2, backup_type="ptrack",
-                options=['--stream', '--start-time', str(startTime)])
-        show_backup1 = self.show_pb(backup_dir1, 'node1')[3]
-        show_backup2 = self.show_pb(backup_dir2, 'node2')[3]
-        self.assertEqual(show_backup1['id'], show_backup2['id'])
+                backup_dir1, 'node1', node1, backup_type='ptrack',
+                options=['--stream', '--start-time={0}'.format(startTime)])
+            self.backup_node(
+                backup_dir2, 'node2', node2, backup_type='ptrack',
+                options=['--stream', '--start-time={0}'.format(startTime)])
+            show_backup1 = self.show_pb(backup_dir1, 'node1')[3]
+            show_backup2 = self.show_pb(backup_dir2, 'node2')[3]
+            self.assertEqual(show_backup1['id'], show_backup2['id'])
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
-    # @unittest.skip("skip")
-    def test_start_time_few_nodes_incorrect_time(self):
-
-        fname = self.id().split('.')[3]
-        node1 = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node1'),
-            ptrack_enable=self.ptrack,
-            initdb_params=['--data-checksums'])
-
-        backup_dir1 = os.path.join(self.tmp_path, module_name, fname, 'backup1')
-        self.init_pb(backup_dir1)
-        self.add_instance(backup_dir1, 'node1', node1)
-        self.set_archiving(backup_dir1, 'node1', node1)
-        node1.slow_start()
-
-        node2 = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node2'),
-            ptrack_enable=self.ptrack,
-            initdb_params=['--data-checksums'])
-
-        backup_dir2 = os.path.join(self.tmp_path, module_name, fname, 'backup2')
-        self.init_pb(backup_dir2)
-        self.add_instance(backup_dir2, 'node2', node2)
-        self.set_archiving(backup_dir2, 'node2', node2)
-        node2.slow_start()
-
-        # FULL backup
-        startTime = int(time())
-        self.backup_node(
-            backup_dir1, 'node1', node1, backup_type="full",
-            options=['--stream', '--start-time', str(startTime)])
-        self.backup_node(
-            backup_dir2, 'node2', node2, backup_type="full",
-            options=['--stream', '--start-time', str(startTime-10000)])
-
-        show_backup1 = self.show_pb(backup_dir1, 'node1')[0]
-        show_backup2 = self.show_pb(backup_dir2, 'node2')[0]
-        self.assertGreater(show_backup1['id'], show_backup2['id'])
-
-        # DELTA backup
-        startTime = int(time())
-        self.backup_node(
-            backup_dir1, 'node1', node1, backup_type="delta",
-            options=['--stream', '--start-time', str(startTime)])
-        # make backup with start time definitelly earlier, than existing
-        try:
-            self.backup_node(
-                backup_dir2, 'node2', node2, backup_type="delta",
-                options=['--stream', '--start-time', str(10000)])
-            self.assertEqual(
-                    1, 0,
-                    "Expecting Error because start time for new backup must be newer "
-                    "\n Output: {0} \n CMD: {1}".format(
-                        repr(self.output), self.cmd))
-        except ProbackupException as e:
-            self.assertRegex(
-                e.message,
-                "ERROR: Cannot create directory for older backup",
-                "\n Unexpected Error Message: {0}\n CMD: {1}".format(
-                    repr(e.message), self.cmd))
-
-        show_backup1 = self.show_pb(backup_dir1, 'node1')[1]
-        show_backup2 = self.show_pb(backup_dir2, 'node2')[0]
-        self.assertGreater(show_backup1['id'], show_backup2['id'])
-
-        # PAGE backup
-        startTime = int(time())
-        self.backup_node(
-            backup_dir1, 'node1', node1, backup_type="page",
-            options=['--stream', '--start-time', str(startTime)])
-        # make backup with start time definitelly earlier, than existing
-        try:
-            self.backup_node(
-                backup_dir2, 'node2', node2, backup_type="page",
-                options=['--stream', '--start-time', str(10000)])
-            self.assertEqual(
-                    1, 0,
-                    "Expecting Error because start time for new backup must be newer "
-                    "\n Output: {0} \n CMD: {1}".format(
-                        repr(self.output), self.cmd))
-        except ProbackupException as e:
-            self.assertRegex(
-                e.message,
-                "ERROR: Cannot create directory for older backup",
-                "\n Unexpected Error Message: {0}\n CMD: {1}".format(
-                    repr(e.message), self.cmd))
-
-        show_backup1 = self.show_pb(backup_dir1, 'node1')[2]
-        show_backup2 = self.show_pb(backup_dir2, 'node2')[0]
-        self.assertGreater(show_backup1['id'], show_backup2['id'])
-
-        # PTRACK backup
-        startTime = int(time())
-        if self.ptrack and node1.major_version > 11:
-            node1.safe_psql(
-                "postgres",
-                "create extension ptrack")
-            self.backup_node(
-                backup_dir1, 'node1', node1, backup_type="ptrack",
-                options=['--stream', '--start-time', str(startTime)])
-
-        if self.ptrack and node2.major_version > 11:
-            node2.safe_psql(
-                "postgres",
-                "create extension ptrack")
-            # make backup with start time definitelly earlier, than existing
-            try:
-                self.backup_node(
-                    backup_dir2, 'node2', node2, backup_type="ptrack",
-                    options=['--stream', '--start-time', str(10000)])
-                self.assertEqual(
-                    1, 0,
-                    "Expecting Error because start time for new backup must be newer "
-                    "\n Output: {0} \n CMD: {1}".format(
-                        repr(self.output), self.cmd))
-            except ProbackupException as e:
-                self.assertRegex(
-                    e.message,
-                    "ERROR: Cannot create directory for older backup",
-                    "\n Unexpected Error Message: {0}\n CMD: {1}".format(
-                        repr(e.message), self.cmd))
-
-        # FULL backup
-        startTime = int(time())
-        self.backup_node(
-            backup_dir1, 'node1', node1, backup_type="full",
-            options=['--stream', '--start-time', str(startTime)])
-        self.backup_node(
-            backup_dir2, 'node2', node2, backup_type="full",
-            options=['--stream', '--start-time', str(startTime)])
-
-        show_backup1 = self.show_pb(backup_dir1, 'node1')[4]
-        show_backup2 = self.show_pb(backup_dir2, 'node2')[1]
-        self.assertEqual(show_backup1['id'], show_backup2['id'])
-
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)

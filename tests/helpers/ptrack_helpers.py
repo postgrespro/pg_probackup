@@ -110,6 +110,26 @@ def is_nls_enabled():
     return b'enable-nls' in p.communicate()[0]
 
 
+def base36enc(number):
+    """Converts an integer to a base36 string."""
+    alphabet = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+    base36 = ''
+    sign = ''
+
+    if number < 0:
+        sign = '-'
+        number = -number
+
+    if 0 <= number < len(alphabet):
+        return sign + alphabet[number]
+
+    while number != 0:
+        number, i = divmod(number, len(alphabet))
+        base36 = alphabet[i] + base36
+
+    return sign + base36
+
+
 class ProbackupException(Exception):
     def __init__(self, message, cmd):
         self.message = message
@@ -947,7 +967,7 @@ class ProbackupTest(object):
             backup_type='full', datname=False, options=[],
             asynchronous=False, gdb=False,
             old_binary=False, return_id=True, no_remote=False,
-            env=None, startTime=None
+            env=None
             ):
         if not node and not data_dir:
             print('You must provide ether node or data_dir for backup')
@@ -979,9 +999,6 @@ class ProbackupTest(object):
 
         if not old_binary:
             cmd_list += ['--no-sync']
-
-        if startTime:
-            cmd_list += ['--start-time', startTime]
 
         return self.run_pb(cmd_list + options, asynchronous, gdb, old_binary, return_id, env=env)
 
