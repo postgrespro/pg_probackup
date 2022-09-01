@@ -1845,7 +1845,11 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
-    # @unittest.skip("skip")
+    # Skipped, because backups from the future are invalid.
+    # This cause a "ERROR: Can't assign backup_id, there is already a backup in future"
+    # now (PBCKP-259). We can conduct such a test again when we
+    # untie 'backup_id' from 'start_time'
+    @unittest.skip("skip")
     def test_restore_backup_from_future(self):
         """more complex test_restore_chain()"""
         fname = self.id().split('.')[3]

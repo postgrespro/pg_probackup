@@ -78,7 +78,7 @@ pid_t       my_pid = 0;
 __thread int  my_thread_num = 1;
 bool		progress = false;
 bool		no_sync = false;
-time_t		start_time = 0;
+time_t		start_time = INVALID_BACKUP_ID;
 char	   *replication_slot = NULL;
 bool		temp_slot = false;
 bool perm_slot = false;
@@ -200,7 +200,6 @@ static ConfigOption cmd_options[] =
 	{ 's', 'i', "backup-id",		&backup_id_string,	SOURCE_CMD_STRICT },
 	{ 'b', 133, "no-sync",			&no_sync,			SOURCE_CMD_STRICT },
 	{ 'b', 134, "no-color",			&no_color,			SOURCE_CMD_STRICT },
-	{ 'U', 241, "start-time",		&start_time,		SOURCE_CMD_STRICT },
 	/* backup options */
 	{ 'b', 180, "backup-pg-log",	&backup_logs,		SOURCE_CMD_STRICT },
 	{ 'f', 'b', "backup-mode",		opt_backup_mode,	SOURCE_CMD_STRICT },
@@ -213,6 +212,7 @@ static ConfigOption cmd_options[] =
 	{ 'b', 184, "merge-expired",	&merge_expired,		SOURCE_CMD_STRICT },
 	{ 'b', 185, "dry-run",			&dry_run,			SOURCE_CMD_STRICT },
 	{ 's', 238, "note",				&backup_note,		SOURCE_CMD_STRICT },
+	{ 'U', 241, "start-time",		&start_time,		SOURCE_CMD_STRICT },
 	/* catchup options */
 	{ 's', 239, "source-pgdata",		&catchup_source_pgdata,	SOURCE_CMD_STRICT },
 	{ 's', 240, "destination-pgdata",	&catchup_destination_pgdata,	SOURCE_CMD_STRICT },
@@ -975,9 +975,7 @@ main(int argc, char *argv[])
 		case BACKUP_CMD:
 			{
 				current.stream = stream_wal;
-				if (start_time == 0)
-					start_time = current_time;
-				else
+				if (start_time != INVALID_BACKUP_ID)
 					elog(WARNING, "Please do not use the --start-time option to start backup. "
 							"This is a service option required to work with other extensions. "
 							"We do not guarantee future support for this flag.");
