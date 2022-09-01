@@ -67,9 +67,9 @@ pgBackupValidate(pgBackup *backup, pgRestoreParams *params)
 
 	/* Check backup server version */
 	if (strcmp(backup->server_version, PG_MAJORVERSION) != 0)
-        elog(ERROR, "Backup %s has server version %s, but current pg_probackup binary "
+		elog(ERROR, "Backup %s has server version %s, but current pg_probackup binary "
 					"compiled with server version %s",
-                base36enc(backup->start_time), backup->server_version, PG_MAJORVERSION);
+			base36enc(backup->start_time), backup->server_version, PG_MAJORVERSION);
 
 	if (backup->status == BACKUP_STATUS_RUNNING)
 	{

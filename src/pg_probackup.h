@@ -88,7 +88,6 @@ extern const char  *PROGRAM_EMAIL;
 
 /* Timeout defaults */
 #define ARCHIVE_TIMEOUT_DEFAULT		300
-#define REPLICA_TIMEOUT_DEFAULT		300
 #define LOCK_TIMEOUT				60
 #define LOCK_STALE_TIMEOUT			30
 #define LOG_FREQ					10
@@ -308,7 +307,7 @@ typedef enum ShowFormat
 #define BYTES_INVALID		(-1) /* file didn`t changed since previous backup, DELTA backup do not rely on it */
 #define FILE_NOT_FOUND		(-2) /* file disappeared during backup */
 #define BLOCKNUM_INVALID	(-1)
-#define PROGRAM_VERSION	"2.5.7"
+#define PROGRAM_VERSION	"2.6.0"
 
 /* update when remote agent API or behaviour changes */
 #define AGENT_PROTOCOL_VERSION 20600
