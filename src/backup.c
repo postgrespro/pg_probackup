@@ -712,18 +712,24 @@ do_backup(InstanceState *instanceState, pgSetBackupParams *set_backup_params,
 	/* Initialize PGInfonode */
 	pgNodeInit(&nodeInfo);
 
-	elog(LOG, "Calling for S3_put_object");
-	/* S3_put_object random test (returns 0 for now) */
 	config = (S3_config*)palloc(sizeof(S3_config));
 	config->access_key = "access_key";
 	config->secret_access_key = "secret_access_key";
 	config->bucket_name = "bucket_name";
 	config->region = "region";
+
+	elog(LOG, "Calling for S3_pre_check");
+	err = S3_pre_start_check(config);
+	elog(LOG, "S3_pre_start_check returned: %d", err);
+	err = 0;
+
+	/* S3_put_object random test (returns 0 for now) */
 	test_arr = parray_new();
 	file->name = "/home/sofia/Downloads/31459698.pdf";
 	file->size = 212812;
 	parray_append(test_arr, file);
 
+	elog(LOG, "Calling for S3_put_files");
 	err = S3_put_files(test_arr, config);
 	elog(LOG, "S3_put_object returned: %d", err);
 	pfree(config);

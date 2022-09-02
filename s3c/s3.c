@@ -30,7 +30,7 @@
 /* list of defined constants */
 /* function error codes? */
 
-#define S3_PUT_SUCCESS 0
+#define S3_SUCCESS 0
 #define CURL_INIT_SUCCESS 0
 #define CURL_PERFORM_SUCCESS 0
 #define ERROR_OPENING_FILE 1
@@ -89,6 +89,9 @@ typedef struct S3_query_params
 	char			content_sha256[PG_SHA256_DIGEST_LENGTH * 2 + 1]; /* in hexadecimal format */
 
 	char			*host;
+	/* only simple query string with one parameter supported, for more write create_canonical_qs function */
+	/* p.3 in https://docs.aws.amazon.com/general/latest/gr/sigv4-create-canonical-request.html */
+	char			*query_string; /* please do not transfere auth parameters in query string */
 	char			*url;
 	parray			*headers; /* list of all headers: Host, Date, x-amz-...  */
 	parray			*contents; /* list of header contents: url of host, date in http format etc... */
@@ -343,11 +346,7 @@ S3_get_canonical_headers(S3_query_params *params)
 }
 
 
-/*
- * Returns index of first symbol after canonical url
- * (for future extracting of canonical query string)
- */
-static size_t
+static void
 get_canonical_url(char **out, char *url)
 {
 	size_t		size = 0;
@@ -374,8 +373,6 @@ get_canonical_url(char **out, char *url)
 	*out = (char*)repalloc((*out), size + 1);
 	(*out)[size] = 0;
 	elog(LOG, "Canonical URL: %s", *out);
-
-	return size;
 }
 
 
@@ -390,10 +387,8 @@ S3_create_canonical_request(const char *signed_headers, S3_query_params *params)
 	 * the domain name and up to the end of the string or to the '?' sign
 	 */
 	char		*canonical_url = NULL;
-	size_t		query_begins = 0;
 	/* query string is a part of url that follows '?' sign, excluding the '?' */
 	char		*canonical_query_string = NULL;
-	size_t		canonical_qs_size = 0;
 
 
 	memset(query, 0, 5);
@@ -412,17 +407,16 @@ S3_create_canonical_request(const char *signed_headers, S3_query_params *params)
 			break;
 	}
 
-	query_begins = get_canonical_url(&canonical_url, params->url + strlen(params->host));
-	canonical_qs_size = strlen(params->url + strlen(params->host) + query_begins);
-	if (canonical_qs_size == 0)
+	get_canonical_url(&canonical_url, params->url + strlen(params->host));
+	if (params->query_string) /* no query string in request */
 	{
-		canonical_query_string = (char*)palloc(1);
-		canonical_query_string[0] = 0;
+		canonical_query_string = (char*)palloc(strlen(params->query_string));
+		strcpy(canonical_query_string, params->query_string + 1);
 	}
 	else
 	{
-		canonical_query_string = (char*)palloc(canonical_qs_size);
-		strcpy(canonical_query_string, params->url + query_begins);
+		canonical_query_string = (char*)palloc(1);
+		canonical_query_string[0] = 0;
 	}
 	elog(LOG, "Canonical query string: %s", canonical_query_string);
 
@@ -452,19 +446,28 @@ get_content_sha256(S3_query_params *params)
 	char		hex_hashed_payload[PG_SHA256_DIGEST_LENGTH * 2 + 1];
 	size_t		read_bytes = 0;
 
-	/* read all file content to buf */
-	read_bytes = fread(buf, sizeof(char), params->content_length, params->current_file);
-	if (read_bytes != params->content_length)
+	if (params->content_length > 0)
 	{
+		/* read all file content to buf */
+		read_bytes = fread(buf, sizeof(char), params->content_length, params->current_file);
+		if (read_bytes != params->content_length)
+		{
+			pfree(buf);
+			elog(ERROR, "error reading file: %s", params->filename); /* TODO: format output */
+		}
+
+		S3_get_SHA256(hashed_payload, buf, read_bytes);
 		pfree(buf);
-		elog(ERROR, "error reading file: %s", params->filename); /* TODO: format output */
 	}
-	S3_get_SHA256(hashed_payload, buf, read_bytes);
+	else
+	{
+		S3_get_SHA256(hashed_payload, "", 0);
+	}
+
 	translate_checksum_to_hexadecimal(hex_hashed_payload, hashed_payload);
 	/* set field content_sha256 in params to re-use in header x-amz-checksum-sha256 */
 	memcpy(params->content_sha256, hex_hashed_payload, PG_SHA256_DIGEST_LENGTH * 2);
 	params->content_sha256[PG_SHA256_DIGEST_LENGTH * 2] = 0;
-	pfree(buf);
 }
 
 
@@ -572,20 +575,24 @@ S3_headers_init(S3_query_params *params, S3_config *config)
 {
 	char		*tmp_str = NULL;
 
+	/* we must calculate content SHA256 for future Authorization header */
+	get_content_sha256(params);
+
 	/* header: x-amz-content-sha256 */
 	/* Calculate content hash */
-	/* Required */
-	/* 24022437d7c046b585290c87a37cad2b88ff9d4bf55174f40f1ccb96f664aa38 */
-	tmp_str = (char*)palloc(21);
-	stpcpy(tmp_str, "x-amz-content-sha256");
-	tmp_str[21] = 0;
-	parray_append(params->headers, tmp_str);
-	tmp_str = (char*)palloc(PG_SHA256_DIGEST_LENGTH * 2 + 1);
-	tmp_str[PG_SHA256_DIGEST_LENGTH * 2] = 0;
-	get_content_sha256(params);
-	sprintf(tmp_str, "%s", params->content_sha256);
-	parray_append(params->contents, tmp_str);
-	tmp_str = NULL;
+	/* Required for PUT */
+	if (params->content_length > 0)
+	{
+		tmp_str = (char*)palloc(21);
+		stpcpy(tmp_str, "x-amz-content-sha256");
+		tmp_str[20] = 0;
+		parray_append(params->headers, tmp_str);
+		tmp_str = (char*)palloc(PG_SHA256_DIGEST_LENGTH * 2 + 1);
+		tmp_str[PG_SHA256_DIGEST_LENGTH * 2] = 0;
+		sprintf(tmp_str, "%s", params->content_sha256);
+		parray_append(params->contents, tmp_str);
+		tmp_str = NULL;
+	}
 }
 
 
@@ -595,9 +602,31 @@ S3_create_url(S3_query_params *params, S3_config *config)
 {
 	char		*host = NULL;
 	char		*url = NULL;
+	size_t		len;
 
 	host = concatenate_multiple_strings(5, "http://", config->bucket_name, ".s3.", config->region, ".s3.amazonaws.com");
-	url = concatenate_multiple_strings(3, host, "/", params->filename);
+	url = concatenate_multiple_strings(2, host, "/");
+	len = strlen(host) + 2;
+	if (params->filename)
+	{
+		len += strlen(params->filename);
+		url = (char*)repalloc(url, len);
+		strcpy(url, params->filename);
+	}
+
+	/* avoid adding extra "/" to url */
+	if (params->filename && params->query_string)
+	{
+		len += + 1;
+		url = (char*)repalloc(url, len);
+		strcpy(url, "/");
+	}
+	else if (params->query_string)
+	{
+		len += strlen(params->query_string);
+		url = (char*)repalloc(url, len);
+		strcpy(url, params->query_string);
+	}
 
 	elog(LOG, "host: %s", host);
 	elog(LOG, "url: %s", url);
@@ -687,17 +716,20 @@ headers_init(CURL *curl, struct curl_slist **headers, S3_query_params *params, S
 	/* Content-type ? */
 	/* x-amz-meta-author ??? */
 
-	/* header: Content-Length */
-	tmp_str = (char*)palloc(15);
-	stpcpy(tmp_str, "Content-Length");
-	tmp_str[14] = 0;
-	parray_append(params->headers, tmp_str);
-	tmp_str = (char*)palloc(100);
-	memset(tmp_str, 0, 100);
-	sprintf(tmp_str, "%lu", params->content_length);
-	tmp_str = repalloc(tmp_str, strlen(tmp_str) + 1);
-	parray_append(params->contents, tmp_str);
-	tmp_str = NULL;
+	if (params->content_length > 0)
+	{
+		/* header: Content-Length */
+		tmp_str = (char*)palloc(15);
+		stpcpy(tmp_str, "Content-Length");
+		tmp_str[14] = 0;
+		parray_append(params->headers, tmp_str);
+		tmp_str = (char*)palloc(100);
+		memset(tmp_str, 0, 100);
+		sprintf(tmp_str, "%lu", params->content_length);
+		tmp_str = repalloc(tmp_str, strlen(tmp_str) + 1);
+		parray_append(params->contents, tmp_str);
+		tmp_str = NULL;
+	}
 
 	/* initialize all other headers before computing authorization string */
 	S3_headers_init(params, config);
@@ -818,6 +850,7 @@ S3_put_files(parray *files_list/* global backup_files_list from backup.c */, S3_
 		params = (S3_query_params*)palloc(sizeof(S3_query_params));
 		params->request_type = PUT;
 		params->filename = elem->name;
+		params->query_string = NULL;
 		params->current_file = fd;
 
 		params->content_length = elem->size;
@@ -830,5 +863,71 @@ S3_put_files(parray *files_list/* global backup_files_list from backup.c */, S3_
 	} /*cycle end*/
 
 	curl_global_cleanup();
-	return S3_PUT_SUCCESS; /* 0 */
+	return S3_SUCCESS; /* 0 */
+}
+
+
+/*
+ * Before starting backup operations, we check if S3 remote bucket with
+ * specified paramaters is available by performing request GetBucketAcl
+ * (https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketAcl.html).
+ * If user made a mistake in config, he may fix it quickly.
+ */
+int
+S3_pre_start_check(S3_config *config)
+{
+	CURL				*curl;
+	CURLcode			res;
+	struct curl_slist	*headers = NULL;
+	long				http_response_code;
+	S3_query_params		*params = NULL;
+
+	curl_global_init(CURL_GLOBAL_ALL);
+
+	elog(LOG, "S3_pre_start_check in progress");
+
+	params = (S3_query_params*)palloc(sizeof(S3_query_params));
+	params->request_type = GET;
+	params->filename = NULL;
+	params->query_string = "?acl"; /* query string instead of filename */
+	params->content_length = 0;
+
+	curl = curl_easy_init();
+
+	if (!curl)
+		return ERROR_CURL_EASY_INIT;
+
+	headers_init(curl, &headers, params, config);
+	curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+
+
+	/* output of all params */
+
+	/* Perform the request, res will get the return code */
+	/*res = curl_easy_perform(curl);*/
+
+	/*
+	 * TODO!!!
+	 * Read received ACLs from xml response
+	 */
+	curl_easy_getinfo (curl, CURLINFO_RESPONSE_CODE, &http_response_code);
+	if (http_response_code == 200 && res != CURLE_ABORTED_BY_CALLBACK)
+	{
+		elog(LOG, "S3 pre-check successful, continue the operation");
+	}
+	else
+	{
+		elog(LOG, "curl_easy_perform() failed: %s\n", curl_easy_strerror(res));
+		return ERROR_CURL_EASY_PERFORM;
+	}
+
+	/* RETRY ????*/
+
+	/* cleanup */
+	pfree(params);
+	curl_slist_free_all(headers);
+	curl_easy_cleanup(curl);
+	curl_global_cleanup();
+
+	return S3_SUCCESS;
 }

@@ -1,0 +1,4 @@
+Access key: AKIAIOSFODNN7EXAMPLE
+Secret access key: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+Bucket name: MyBucket
+Region: us-west-2

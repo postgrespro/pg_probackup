@@ -46,6 +46,7 @@ typedef struct S3_config
 
 
 extern int S3_put_files (parray *files_list , S3_config *config);
+extern int S3_pre_start_check (S3_config *config);
 
 
 #endif /* PROBACKUP_S3_H */
