@@ -4017,9 +4017,9 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
                 "Output: {0} \n CMD: {1}".format(
                     self.output, self.cmd))
         except ProbackupException as e:
-            self.assertTrue(
-                'WARNING: An error occured during metadata decompression' in e.message and
-                'data error' in e.message,
+            self.assertRegex(
+                e.message,
+                r'WARNING: An error occured during metadata decompression for file "[\w/]+": (data|buffer) error',
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
