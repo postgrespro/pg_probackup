@@ -10,6 +10,78 @@ module_name = 'compatibility'
 
 class CompatibilityTest(ProbackupTest, unittest.TestCase):
 
+    def setUp(self):
+        self.fname = self.id().split('.')[3]
+
+    # @unittest.expectedFailure
+    # @unittest.skip("skip")
+    def test_catchup_with_different_remote_major_pg(self):
+        "Decription in jira issue PBCKP-236" #TODO REVIEW XXX explain the test
+        self.verbose = True
+        self.remote = True
+        pg_config = os.environ['PG_CONFIG']
+        pg_path_ee_9_6 = '/home/avaness/postgres/postgres.build.9.6/bin/'
+        pg_config_ee_9_6 = pg_path_ee_9_6 + 'pg_config'
+        probackup_path_ee_9_6 = pg_path_ee_9_6 + 'pg_probackup'
+        pg_path_ee_11 = '/home/avaness/postgres/postgres.build.11/bin/'
+        pg_config_ee_11 = pg_path_ee_11 + 'pg_config'
+        probackup_path_ee_11 = pg_path_ee_11 + 'pg_probackup'
+
+        os.environ['PG_CONFIG'] = pg_config_ee_11
+        self.probackup_path = probackup_path_ee_11
+        # os.environ['PG_CONFIG'] = pg_config_ee_9_6
+        # self.probackup_path = probackup_path_ee_9_6
+
+        # backup_dir = os.path.join(self.tmp_path, module_name, self.fname, 'backup')
+        src_pg = self.make_simple_node(
+            base_dir=os.path.join(module_name, self.fname, 'src'),
+            set_replication=True,
+            # initdb_params=['--data-checksums']
+            )
+        src_pg.slow_start()
+        src_pg.safe_psql(
+            "postgres",
+            "CREATE TABLE ultimate_question AS SELECT 42 AS answer")
+
+        # do full catchup
+        os.environ['PG_CONFIG'] = pg_config_ee_11
+        self.probackup_path = probackup_path_ee_11
+
+        dst_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'dst'))
+        # dst_pg = self.make_simple_node(
+        #     base_dir=os.path.join(module_name, self.fname, 'dst'),
+        #     set_replication=True,
+        #     # initdb_params=['--data-checksums']
+        #     )
+        self.catchup_node(
+            backup_mode = 'FULL',
+            source_pgdata = src_pg.data_dir,
+            destination_node = dst_pg,
+            options=['-d', 'postgres', '-p', str(src_pg.port), '--stream']#, '--remote-path=' + pg_path_ee_9_6]
+            )
+
+        dst_options = {}
+        dst_options['port'] = str(dst_pg.port)
+        self.set_auto_conf(dst_pg, dst_options)
+        dst_pg.slow_start()
+        dst_pg.stop()
+
+        src_pg.safe_psql(
+            "postgres",
+            "CREATE TABLE ultimate_question2 AS SELECT 42 AS answer")
+
+        # do delta catchup
+        #TODO REVIEW XXX try to apply only one catchup (FULL) for test failure
+        self.catchup_node(
+            backup_mode = 'DELTA',
+            source_pgdata = src_pg.data_dir,
+            destination_node = dst_pg,
+            options=['-d', 'postgres', '-p', str(src_pg.port), '--stream', '--remote-path=' + pg_path_ee_9_6]
+            )
+
+        # Clean after yourself
+        self.del_test_dir(module_name, self.fname)
+
     # @unittest.expectedFailure
     # @unittest.skip("skip")
     def test_backward_compatibility_page(self):
