@@ -1263,6 +1263,7 @@ uint32 run_wal_prefetch(const char *prefetch_dir, const char *archive_dir,
 
 			arg->thread_num = i+1;
 			arg->files = batch_files;
+			arg->n_fetched = 0;
 		}
 
 		/* Run threads */
