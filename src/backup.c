@@ -704,10 +704,8 @@ do_backup(InstanceState *instanceState, pgSetBackupParams *set_backup_params,
 	PGNodeInfo	nodeInfo;
 	char		pretty_bytes[20];
 
-	int err;
 	S3_config 	*config = NULL;
-	parray		*test_arr;
-	pgFile		*file = (pgFile*)palloc(sizeof(pgFile));
+	int			err = 0;
 
 	/* Initialize PGInfonode */
 	pgNodeInit(&nodeInfo);
@@ -721,20 +719,6 @@ do_backup(InstanceState *instanceState, pgSetBackupParams *set_backup_params,
 	elog(LOG, "Calling for S3_pre_check");
 	err = S3_pre_start_check(config);
 	elog(LOG, "S3_pre_start_check returned: %d", err);
-	err = 0;
-
-	/* S3_put_object random test (returns 0 for now) */
-	test_arr = parray_new();
-	file->name = "/home/sofia/Downloads/31459698.pdf";
-	file->size = 212812;
-	parray_append(test_arr, file);
-
-	elog(LOG, "Calling for S3_put_files");
-	err = S3_put_files(test_arr, config);
-	elog(LOG, "S3_put_object returned: %d", err);
-	pfree(config);
-	/* temporary dirty test */
-	return 0;
 
 	/* Save list of external directories */
 	if (instance_config.external_dir_str &&

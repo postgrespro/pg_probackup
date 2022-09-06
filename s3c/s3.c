@@ -26,23 +26,29 @@
 
 #include "s3.h"
 
+/* ?!?!?!?! где взять эту хрень */
+#include "utils/file.h"
+
 
 /* list of defined constants */
 /* function error codes? */
 
 #define S3_SUCCESS 0
-#define CURL_INIT_SUCCESS 0
+/*#define CURL_INIT_SUCCESS 0
 #define CURL_PERFORM_SUCCESS 0
-#define ERROR_OPENING_FILE 1
+#define ERROR_OPENING_FILE 1*/
 #define ERROR_CURL_EASY_INIT 2
-#define ERROR_CURL_HEADERS_APPEND 3
-#define ERROR_REDING_FILE 4
-#define ERROR_CURL_EASY_PERFORM 5
+/*#define ERROR_CURL_HEADERS_APPEND 3
+#define ERROR_REDING_FILE 4*/
+#define ERROR_CURL_EASY_PERFORM 5 
 
 
 #define MAX_DATE_HEADER_LEN 35
 #define MAX_SIGNED_HEADERS_LEN 900
 
+#define S3_CHUNK_SIZE 50 * 1024 * 1024 /* 50 MB */
+
+fobj_error_cstr_key(curlError);
 
 typedef enum Request_type
 {
@@ -51,42 +57,29 @@ typedef enum Request_type
 	POST
 } Request_type;
 
-/*
-// structure for current query params, such as file size (and maybe other settings)
-typedef struct Query_params
+
+typedef struct pioCloudFile
 {
-	Request_type	request_type;
-	FILE			*current_file;
-	char			*filename;
-	size_t			content_length;
-	struct			tm tm;
-	char			*url;
+	char		*path;
+	char			*filebuf;
+	size_t			buflen;
+	size_t			capacity;
 
-	parray			*headers;
-	parray			*contents;
-} Query_params;
+	S3_config		*config;
+} pioCloudFile;
 
-
-// S3 special structure that will be inherited from basic Query_params
-typedef struct S3_params
-{
-	Query_params	*params;
-
-	char			content_sha256[PG_SHA256_DIGEST_LENGTH * 2 + 1];
-	char			*host;
-	parray			*lower_headers;
-} S3_params;
-*/
+#define kls__pioCloudFile	mth(pioWrite, pioFlush)
+fobj_klass(pioCloudFile);
 
 /* structure for current query params, such as file size (and maybe other settings) */
 typedef struct S3_query_params
 {
 	Request_type	request_type;
-	FILE			*current_file;
 	char			*filename;
-	size_t			content_length;
 	struct			tm tm;
 	char			content_sha256[PG_SHA256_DIGEST_LENGTH * 2 + 1]; /* in hexadecimal format */
+	char			*buf;
+	size_t			content_length;
 
 	char			*host;
 	/* only simple query string with one parameter supported, for more write create_canonical_qs function */
@@ -441,28 +434,13 @@ S3_create_canonical_request(const char *signed_headers, S3_query_params *params)
 static void
 get_content_sha256(S3_query_params *params)
 {
-	char		*buf = (char*)palloc(params->content_length + 1);
 	char		hashed_payload[PG_SHA256_DIGEST_LENGTH + 1];
 	char		hex_hashed_payload[PG_SHA256_DIGEST_LENGTH * 2 + 1];
-	size_t		read_bytes = 0;
 
 	if (params->content_length > 0)
-	{
-		/* read all file content to buf */
-		read_bytes = fread(buf, sizeof(char), params->content_length, params->current_file);
-		if (read_bytes != params->content_length)
-		{
-			pfree(buf);
-			elog(ERROR, "error reading file: %s", params->filename); /* TODO: format output */
-		}
-
-		S3_get_SHA256(hashed_payload, buf, read_bytes);
-		pfree(buf);
-	}
+		S3_get_SHA256(hashed_payload, params->buf, params->content_length);
 	else
-	{
 		S3_get_SHA256(hashed_payload, "", 0);
-	}
 
 	translate_checksum_to_hexadecimal(hex_hashed_payload, hashed_payload);
 	/* set field content_sha256 in params to re-use in header x-amz-checksum-sha256 */
@@ -674,9 +652,6 @@ headers_init(CURL *curl, struct curl_slist **headers, S3_query_params *params, S
 			break;
 	}
 
-	/* TODO: https protocol */
-	curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
-
 	params->headers = parray_new();
 	params->contents = parray_new();
 
@@ -765,29 +740,57 @@ headers_init(CURL *curl, struct curl_slist **headers, S3_query_params *params, S
 	params_cleanup(params);
 }
 
+/* Здесь нет выделения памяти, только чтение. Как в fread */
+/* По факту здесь будет копирование данных из структуры pio_data_buffer. Даные уже считаны через pioRead */
+/* !!! Сюда передавать stream, который можно портить, т.к. делаем += к указателю, чтобы отметить прочитанные байты !!! */
+static size_t
+read_callback(char *dest, size_t blcksize, size_t count, ft_bytes_t *stream)
+{
+	/* Вместо EOF */
+	size_t writelen = blcksize * count > stream->len ? stream->len : blcksize * count;
+	/*
+	 * memcpy always returns pointer to destination -- dest.
+	 * If memcpy was not successful, it will result in segfault.
+	 * In all other cases read_callback is successful so we return number of copied bytes.
+	 */
+	memcpy(dest, stream->ptr, writelen);
+	stream->len -= writelen;
+	stream->ptr += writelen;
+
+	return writelen;
+}
 
 
-static int
-put_object(FILE *fd, S3_query_params *params, S3_config *config)
+static err_i
+put_object(S3_query_params *params, S3_config *config)
 {
 	CURL				*curl;
 	CURLcode			res;
 	struct curl_slist	*headers = NULL;
+	ft_bytes_t			*readbuf;
 	/*long http_response_code;*/
 
 	curl = curl_easy_init();
 
 	if (!curl)
-		return ERROR_CURL_EASY_INIT;
+	{
+		elog(LOG, "curl_easy_init() failed");
+		return $err(RT, "curl_easy_init() failed");
+	}
 
 	headers_init(curl, &headers, params, config);
 	/* Сразу всей пачкой, https://curl.se/libcurl/c/CURLOPT_HTTPHEADER.html*/
 	curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
 
-	curl_easy_setopt(curl, CURLOPT_READDATA, fd); // set file we are about to put
+	/* TODO: https protocol */
+	curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
 
-
-	/* output of all params */
+	readbuf = (ft_bytes_t*)palloc(sizeof(ft_bytes_t));
+	readbuf->ptr = params->buf;
+	readbuf->len = params->content_length;
+	/* I hope this f*ckin sh*t will work. */
+	curl_easy_setopt(curl, CURLOPT_READFUNCTION, read_callback);
+	curl_easy_setopt(curl, CURLOPT_READDATA, readbuf); // set file we are about to put
 
 	/* Perform the request, res will get the return code */
 	/*res = curl_easy_perform(curl);*/
@@ -795,8 +798,9 @@ put_object(FILE *fd, S3_query_params *params, S3_config *config)
 	/* check for errors*/
 	if (res != CURLE_OK)
 	{
-		elog(LOG, "curl_easy_perform() failed: %s\n", curl_easy_strerror(res));
-		return ERROR_CURL_EASY_PERFORM;
+		/* error format in $err ??? */
+		elog(LOG, "curl_easy_perform() failed: %s", curl_easy_strerror(res));
+		return $err(RT, "curl_easy_perform() failed: {curlError}", curlError(curl_easy_strerror(res)));
 	}
 	/* or */
 	/*curl_easy_getinfo (curl, CURLINFO_RESPONSE_CODE, &http_response_code);
@@ -810,7 +814,98 @@ put_object(FILE *fd, S3_query_params *params, S3_config *config)
 	/* cleanup */
 	curl_easy_cleanup(curl);
 	curl_slist_free_all(headers);
-	return CURL_PERFORM_SUCCESS;
+	return $noerr();
+}
+
+/*
+ * pioCloudFile_pioFlush
+ * 
+ * Send buffer contents to cloud
+ */
+static err_i
+pioCloudFile_pioFlush(VSelf)
+{
+	Self(pioCloudFile); /* file name from here */
+	err_i 				put_err = $noerr();
+	S3_query_params		*params = NULL;
+	S3_config			*config = NULL;
+	/*long http_response_code;*/
+
+
+	elog(LOG, "This is S3_put_files function");
+
+	if (self->buflen == 0)
+	{
+		elog(LOG, "Empty buffer in pioCloudFile_pioFlush");
+		return $noerr();
+	}
+
+	/* initializing something */
+
+	/* In windows, this will init the winsock stuff */
+	curl_global_init(CURL_GLOBAL_ALL);
+
+	/* TODO: проверки из push_file_internal */
+	config = self->config;
+
+	params = (S3_query_params*)palloc(sizeof(S3_query_params));
+	params->request_type = PUT;
+	params->filename = self->path; /* нужен ли нам полный путь с именем хоста базы данных ??? */
+	params->query_string = NULL;
+	params->buf = self->filebuf;
+	params->content_length = self->buflen;
+
+	put_err = put_object(params, config);
+	if ($haserr(put_err))
+	{
+		elog(ERROR, "S3 put_object error: %s", $errmsg(put_err));
+		return put_err;
+	}
+
+	/* cleanup */
+	pfree(params);
+	curl_global_cleanup();
+
+    return $noerr();
+}
+
+
+/*
+ * pioCloudFile_pioWrite
+ *
+ * In first version of S3 we write files to cloud in "as-is" way, so in
+ * pioWrite we only save file to buffer
+ */
+/* TODO: send part of file sized S3_chunk_size by multipart upload */
+/* https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateMultipartUpload.html */
+/* https://docs.aws.amazon.com/AmazonS3/latest/API/API_UploadPart.html */
+/* https://docs.aws.amazon.com/AmazonS3/latest/API/API_CompleteMultipartUpload.html */
+static size_t
+pioCloudFile_pioWrite(VSelf, ft_bytes_t buf, err_i *err)
+{
+	Self(pioCloudFile);
+
+	fobj_reset_err(err);
+
+	if (buf.len == 0)
+		return 0;
+
+	if (!self->filebuf)
+	{
+		self->capacity = buf.len;
+		self->filebuf = (char*)palloc(buf.len);
+	}
+
+	if (self->capacity <= (self->buflen + buf.len))
+	{
+		self->capacity *= 2;
+		self->filebuf = (char*)repalloc(self->filebuf, buf.len);
+	}
+
+	memcpy(self->filebuf, buf.ptr, buf.len);
+	self->buflen += buf.len;
+
+	return buf.len;
 }
 
 
@@ -819,52 +914,58 @@ put_object(FILE *fd, S3_query_params *params, S3_config *config)
  *
  * Prepares files for sending, calls for put_object
  */
+/*
 int
-S3_put_files(parray *files_list/* global backup_files_list from backup.c */, S3_config *config)
+S3_put_files(parray *files_list, S3_config *config)
 {
 	int		i = 0;
 
-	elog(LOG, "This is S3_put_object function");
+	elog(LOG, "This is S3_put_files function");
 
-	/* initializing something */
-
-	/* In windows, this will init the winsock stuff */
 	curl_global_init(CURL_GLOBAL_ALL);
 
-	/* Code for sending files */
-
-	/* for proper cycle ask Daria */
 	for (i = 0; i < parray_num(files_list); i++)
-	{ /* cycle start*/
+	{
 		pgFile				*elem = (pgFile*)parray_get(files_list, i);
 		S3_query_params		*params = NULL;
-		FILE				*fd;
+		pioFile_i			fd;
 		int					err = 0;
+		pio_data_buffer		*buf = (pio_data_buffer*)palloc(sizeof(pio_data_buffer));
+
+		char				fullpath[MAXPGPATH];
+		pioDrive_i			db_drive = pioDriveForLocation(FIO_DB_HOST);
+		err_i				pio_err = $noerr();
 
 		elog(LOG, "Processing file: %s", elem->name);
-		fd = fopen(elem->name, "rb");
+		elog(LOG, "current.database_dir: %s", current.database_dir);
 
-		if (!fd)
-			return ERROR_OPENING_FILE;
+		join_path_components(fullpath, current.database_dir, elem->rel_path);
+		canonicalize_path(fullpath);
+
+		fd = $i(pioOpen, db_drive, fullpath, O_RDONLY | PG_BINARY, .err = &pio_err);
+		if ($haserr(pio_err))
+			elog(ERROR, "Source file: %s", $errmsg(pio_err));
+
+		read_pio_file_to_buf($reduce(pioRead, fd), buf);
 
 		params = (S3_query_params*)palloc(sizeof(S3_query_params));
 		params->request_type = PUT;
-		params->filename = elem->name;
+		params->filename = fullpath;
 		params->query_string = NULL;
-		params->current_file = fd;
+		params->buf = buf;
 
-		params->content_length = elem->size;
-
-		err = put_object(fd, params, config);
+		err = put_object(params, config);
+		$i(pioClose, fd);
 		if (err)
 			return err;
 
 		pfree(params);
-	} /*cycle end*/
+	}
 
 	curl_global_cleanup();
-	return S3_SUCCESS; /* 0 */
+	return S3_SUCCESS;
 }
+*/
 
 
 /*
@@ -890,7 +991,7 @@ S3_pre_start_check(S3_config *config)
 	params->request_type = GET;
 	params->filename = NULL;
 	params->query_string = "?acl"; /* query string instead of filename */
-	params->content_length = 0;
+	params->buf = NULL;
 
 	curl = curl_easy_init();
 
@@ -931,3 +1032,5 @@ S3_pre_start_check(S3_config *config)
 
 	return S3_SUCCESS;
 }
+
+fobj_klass_handle(pioCloudFile);
