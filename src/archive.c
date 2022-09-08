@@ -969,7 +969,7 @@ uint32 run_wal_prefetch(const char *prefetch_dir, const char *archive_dir,
 
 		/* init thread args */
 		threads = (pthread_t *) palloc(sizeof(pthread_t) * num_threads);
-		threads_args = (archive_get_arg *) palloc(sizeof(archive_get_arg) * num_threads);
+		threads_args = (archive_get_arg *) palloc0(sizeof(archive_get_arg) * num_threads);
 
 		for (i = 0; i < num_threads; i++)
 		{
@@ -980,6 +980,7 @@ uint32 run_wal_prefetch(const char *prefetch_dir, const char *archive_dir,
 
 			arg->thread_num = i+1;
 			arg->files = batch_files;
+			arg->n_fetched = 0;
 		}
 
 		/* Run threads */
