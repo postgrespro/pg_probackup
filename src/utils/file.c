@@ -281,7 +281,7 @@ fio_get_agent_version(int* protocol, char* payload_buf, size_t payload_buf_size)
 	IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
 	if (hdr.size > payload_buf_size)
 	{
-		elog(ERROR, "Bad protocol, insufficient payload_buf_size=%u", payload_buf_size);
+		elog(ERROR, "Bad protocol, insufficient payload_buf_size=%zu", payload_buf_size);
 	}
 
 	*protocol = hdr.arg;
@@ -3323,7 +3323,6 @@ fio_communicate(int in, int out)
 		  case FIO_AGENT_VERSION:
 			hdr.arg = AGENT_PROTOCOL_VERSION;
 			IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
-			assert(false);
 			//TODO REVIEW XXX is it allowed by ANSI C to declare new scope inside???
 			{
 				size_t payload_size = prepare_remote_agent_compatibility_str(buf, buf_size);
@@ -3331,6 +3330,7 @@ fio_communicate(int in, int out)
 				//TODO REVIEW XXX make INFO to LOG or VERBOSE
 				elog(INFO, "TODO REVIEW XXX sent agent compatibility\n %s", buf);
 			}
+			assert(false);
 			break;
 		  case FIO_STAT: /* Get information about file with specified path */
 			hdr.size = sizeof(st);
