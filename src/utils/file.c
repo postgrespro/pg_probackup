@@ -3323,6 +3323,7 @@ fio_communicate(int in, int out)
 		  case FIO_AGENT_VERSION:
 			hdr.arg = AGENT_PROTOCOL_VERSION;
 			IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
+			assert(false);
 			//TODO REVIEW XXX is it allowed by ANSI C to declare new scope inside???
 			{
 				size_t payload_size = prepare_remote_agent_compatibility_str(buf, buf_size);
