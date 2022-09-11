@@ -254,7 +254,8 @@ bool launch_agent(void)
 size_t prepare_remote_agent_compatibility_str(char* compatibility_buf, size_t buf_size)
 {
 	size_t payload_size = snprintf(compatibility_buf, buf_size,
-								   "%s\n%s\n%s\n%s\n",
+//								   "%s\n%s\n%s\n%s\n",
+								   "%s\n%s\n",
 								   STR(PG_MAJORVERSION), PG_MAJORVERSION);
 //								   STR(PGPRO_EDN), PGPRO_EDN);
 	if (payload_size >= buf_size)
