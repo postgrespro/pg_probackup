@@ -268,9 +268,10 @@ fio_write_all(int fd, void const* buf, size_t size)
 	return offs;
 }
 
+//TODO REVIEW XXX move to remote.c????
 /* Get version of remote agent */
-int
-fio_get_agent_version(void)
+void
+fio_get_agent_version(int* protocol, char* payload_buf, size_t payload_buf_size)
 {
 	fio_header hdr;
 	hdr.cop = FIO_AGENT_VERSION;
@@ -278,8 +279,13 @@ fio_get_agent_version(void)
 
 	IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
 	IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
+	if (hdr.size > payload_buf_size)
+	{
+		elog(ERROR, "Bad protocol, insufficient payload_buf_size=%u", payload_buf_size);
+	}
 
-	return hdr.arg;
+	*protocol = hdr.arg;
+	IO_CHECK(fio_read_all(fio_stdin, payload_buf, hdr.size), hdr.size);
 }
 
 /* Open input stream. Remote file is fetched to the in-memory buffer and then accessed through Linux fmemopen */
@@ -3210,6 +3216,7 @@ fio_delete_impl(mode_t mode, char *buf)
 }
 
 /* Execute commands at remote host */
+//TODO REVIEW XXX move to remote.c?
 void
 fio_communicate(int in, int out)
 {
@@ -3316,6 +3323,13 @@ fio_communicate(int in, int out)
 		  case FIO_AGENT_VERSION:
 			hdr.arg = AGENT_PROTOCOL_VERSION;
 			IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
+			//TODO REVIEW XXX is it allowed by ANSI C to declare new scope inside???
+			{
+				size_t payload_size = prepare_remote_agent_compatibility_str(buf, buf_size);
+				IO_CHECK(fio_write_all(out, buf, payload_size), payload_size);
+				//TODO REVIEW XXX make INFO to LOG or VERBOSE
+				elog(INFO, "TODO REVIEW XXX sent agent compatibility\n %s", buf);
+			}
 			break;
 		  case FIO_STAT: /* Get information about file with specified path */
 			hdr.size = sizeof(st);
