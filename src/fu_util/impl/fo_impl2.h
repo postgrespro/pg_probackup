@@ -2,10 +2,6 @@
 #ifndef FOBJ_OBJ_PRIV2_H
 #define FOBJ_OBJ_PRIV2_H
 
-#include <ft_util.h>
-#include <fo_obj.h>
-#include <impl/fo_impl.h>
-
 enum fobjStrType {
     FOBJ_STR_SMALL = 1,
     FOBJ_STR_UNOWNED,
@@ -57,6 +53,7 @@ fobj_getstr(fobjStr *str) {
         return ft_str(str->ptr.ptr, str->ptr.len);
     default:
         ft_log(FT_FATAL, "Unknown fobj_str type %d", str->type);
+        return ft_str(NULL, 0);
     }
 }
 

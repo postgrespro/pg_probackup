@@ -7,7 +7,6 @@
 typedef void* fobj_t;
 
 #include <ft_util.h>
-#include <ft_ar_examples.h>
 
 /*
  * Pointer to "object*.

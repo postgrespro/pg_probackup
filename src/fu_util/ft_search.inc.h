@@ -1,3 +1,8 @@
+/* vim: set expandtab autoindent cindent ts=4 sw=4 sts=4 */
+#ifndef FU_UTIL_H
+#error "ft_util.h should be included"
+#endif
+
 /*
  * Sort template.
  * Accepts four macrosses:
@@ -38,8 +43,6 @@
  *          ft_arg_t arg)
  *
  */
-
-#include <ft_util.h>
 
 #define ft_func_bsearch     fm_cat(ft_bsearch_, FT_SEARCH)
 #define ft_func_bsearch_r   fm_cat3(ft_bsearch_, FT_SEARCH, _r)

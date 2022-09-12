@@ -1,25 +1,35 @@
 /* vim: set expandtab autoindent cindent ts=4 sw=4 sts=4 */
-#include <stdlib.h>
+#include <ft_util.h>
+
 #include <stdio.h>
-#include <stdarg.h>
-#include <string.h>
 #include <errno.h>
+#include <sys/types.h>
+#if !defined(WIN32) || defined(__MINGW64__) || defined(__MINGW32__)
 #include <unistd.h>
 #include <sys/time.h>
-#include <sys/types.h>
+#else
+#define WIN32_LEAN_AND_MEAN
+
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#include <windows.h>
+#undef small
+#include <process.h>
+#include <signal.h>
+#include <direct.h>
+#undef near
+#endif
+
 #ifdef HAVE_LIBBACKTRACE
 #include <backtrace.h>
-#else
+#if defined(__MINGW32__) || defined(__MINGW64__)
+#include <libloaderapi.h>
+#endif
+#elif HAVE_EXECINFO_H
 #include <execinfo.h>
 #endif
 
-#ifdef WIN32
-#define __thread __declspec(thread)
-#else
 #include <pthread.h>
-#endif
-
-#include <ft_util.h>
 
 #define FT_LOG_MAX_FILES (1<<12)
 
@@ -100,10 +110,20 @@ ft_strlcat(char *dest, const char* src, size_t dest_size) {
     ft_assert(dest_null, "destination has no zero byte");
     if (dest_len < dest_size-1) {
         size_t cpy_len = dest_size - dest_len - 1;
-        strncpy(dest+dest_len, src, cpy_len);
+        cpy_len = ft_min(cpy_len, strlen(src));
+        memcpy(dest+dest_len, src, cpy_len);
         dest[dest_len + cpy_len] = '\0';
     }
     return dest_len + strlen(src);
+}
+
+size_t
+ft_strlcpy(char *dest, const char* src, size_t dest_size) {
+	size_t cpy_len = dest_size - 1;
+	cpy_len = ft_min(cpy_len, strlen(src));
+	memcpy(dest, src, cpy_len);
+	dest[cpy_len] = '\0';
+	return strlen(src);
 }
 
 ft_str_t
@@ -302,9 +322,23 @@ ft__base_log_filename(const char *file) {
 static struct backtrace_state * volatile ft_btstate = NULL;
 static pthread_once_t ft_btstate_once = PTHREAD_ONCE_INIT;
 
+
+static void
+ft_backtrace_err(void *data, const char *msg, int errnum)
+{
+	fprintf(stderr, "ft_backtrace_err %s %d\n", msg, errnum);
+}
+
 static void
 ft_backtrace_init(void) {
-    __atomic_store_n(&ft_btstate, backtrace_create_state(NULL, 0, NULL, NULL),
+    const char *app = NULL;
+#if defined(__MINGW32__) || defined(__MINGW64__)
+    static char appbuf[2048] = {0};
+    /* 2048 should be enough, don't check error */
+    GetModuleFileNameA(0, appbuf, sizeof(appbuf)-1);
+    app = appbuf;
+#endif
+    __atomic_store_n(&ft_btstate, backtrace_create_state(app, 1, ft_backtrace_err, NULL),
 					 __ATOMIC_RELEASE);
 }
 
@@ -315,9 +349,9 @@ ft_backtrace_add(void *data, uintptr_t pc,
     struct ft_strbuf_t *buf = data;
     ssize_t sz;
     if (filename == NULL)
-        return 1;
-    return ft_strbuf_catf(buf, "\n%s:%-4d %s",
-                          ft__truncate_log_filename(filename), lineno, function);
+        return 0;
+    return !ft_strbuf_catf(buf, "\n\t%s:%-4d\t%s",
+                          ft__truncate_log_filename(filename), lineno, function ? function : "(unknown)");
 }
 #endif
 
@@ -355,9 +389,9 @@ ft_default_log(enum FT_LOG_LEVEL level, ft_source_position_t srcpos,
 #ifdef HAVE_LIBBACKTRACE
         if (__atomic_load_n(&ft_btstate, __ATOMIC_ACQUIRE) == NULL)
             pthread_once(&ft_btstate_once, ft_backtrace_init);
-
-        backtrace_full(ft_btstate, 1, ft_backtrace_add, NULL, &buf);
-#else
+        if (ft_btstate)
+            backtrace_full(ft_btstate, 0, ft_backtrace_add, NULL, &buf);
+#elif defined(HAVE_EXECINFO_H)
         void *backtr[32] = {0};
         char **syms = NULL;
         int i, n;
@@ -414,7 +448,15 @@ ft__log_fatal(ft_source_position_t srcpos, const char* error,
 
 const char*
 ft__strerror(int eno, char *buf, size_t len) {
-#if !_GNU_SOURCE && (_POSIX_C_SOURCE >= 200112L || _XOPEN_SOURCE >= 600)
+#ifndef HAVE_STRERROR_R
+	char	   *sbuf = strerror(eno);
+
+	if (sbuf == NULL)			/* can this still happen anywhere? */
+		return NULL;
+	/* To minimize thread-unsafety hazard, copy into caller's buffer */
+	ft_strlcpy(buf, sbuf, len);
+	return buf;
+#elif !_GNU_SOURCE && (_POSIX_C_SOURCE >= 200112L || _XOPEN_SOURCE >= 600)
     int saveno = errno;
     int e = strerror_r(eno, buf, len);
     if (e != 0) {

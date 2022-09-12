@@ -24,6 +24,9 @@
 /****************************************/
 // LOGIC
 
+#define fm_true 1
+#define fm_false 0
+
 #define fm_compl(v) fm_cat(fm_compl_, v)
 #define fm_compl_0 1
 #define fm_compl_1 0
@@ -81,38 +84,56 @@
 #define fm_tail(...) fm__tail(__VA_ARGS__)
 #define fm__tail(x, ...) __VA_ARGS__
 
-#define fm_or_default(...) \
-    fm_iif(fm_va_01(__VA_ARGS__))(__VA_ARGS__)
 #define fm_va_single(...) fm__va_single(__VA_ARGS__, fm__comma)
 #define fm_va_many(...) fm__va_many(__VA_ARGS__, fm__comma)
 #define fm__va_single(x, y, ...) fm__va_result(y, 1, 0)
 #define fm__va_many(x, y, ...) fm__va_result(y, 0, 1)
-#define fm__va_result(x, y, res, ...) res
+#define fm__va_result(...) fm__va_result_fin(__VA_ARGS__)
+#define fm__va_result_fin(x, y, res, ...) res
 
 #define fm_no_va fm_is_empty
 #define fm_va_01 fm_isnt_empty
+
+#ifndef FM_USE_STRICT
+  #if defined(__STRICT_ANSI__) || defined(_MSC_VER) /* well, clang-cl doesn't allow to distinguish std mode */
+    #define FM_USE_STRICT
+  #endif
+#endif
+
+#ifndef FM_USE_STRICT
+#define fm_is_empty(...) fm__is_empty(__VA_ARGS__)
+#define fm__is_empty(...) fm_va_single(~, ##__VA_ARGS__)
+#define fm_isnt_empty(...) fm__isnt_empty(__VA_ARGS__)
+#define fm__isnt_empty(...) fm_va_many(~, ##__VA_ARGS__)
+
 #define fm_va_01n(...) fm_cat3(fm__va_01n_, fm__isnt_empty(__VA_ARGS__), fm_va_many(__VA_ARGS__))
 #define fm__va_01n_00 0
 #define fm__va_01n_10 1
 #define fm__va_01n_11 n
 
-#if !__STRICT_ANSI__
-#define fm_is_empty(...) fm__is_empty(__VA_ARGS__)
-#define fm__is_empty(...) fm_va_single(~, ##__VA_ARGS__)
-#define fm_isnt_empty(...) fm__isnt_empty(__VA_ARGS__)
-#define fm__isnt_empty(...) fm_va_many(~, ##__VA_ARGS__)
+#define fm_when_isnt_empty(...) fm_cat(fm__when_, fm__isnt_empty(__VA_ARGS__))
 #else
 #define fm_is_empty(...) fm_and(fm__is_emptyfirst(__VA_ARGS__), fm_va_single(__VA_ARGS__))
 #define fm_isnt_empty(...) fm_nand(fm__is_emptyfirst(__VA_ARGS__), fm_va_single(__VA_ARGS__))
 
 #define fm__is_emptyfirst(x, ...) fm_iif(fm_is_tuple(x))(0)(fm__is_emptyfirst_impl(x))
-#define fm__is_emptyfirst_impl(x,...) fm_tuple_2((\
-            fm__is_emptyfirst_do1 x (fm__is_emptyfirst_do2), 1, 0))
+#define fm__is_emptyfirst_impl(x,...) fm__va_result(\
+            fm__is_emptyfirst_do1 x (fm__is_emptyfirst_do2), 1, 0)
 #define fm__is_emptyfirst_do1(F) F()
 #define fm__is_emptyfirst_do2(...) ,
+
+#define fm_when_isnt_empty(...) fm_cat(fm__when_, fm_isnt_empty(__VA_ARGS__))
+
+#define fm_va_01n(...) fm_cat3(fm__va_01n_, fm__is_emptyfirst(__VA_ARGS__), fm_va_many(__VA_ARGS__))
+#define fm__va_01n_10 0
+#define fm__va_01n_00 1
+#define fm__va_01n_01 n
+#define fm__va_01n_11 n
 #endif
 
-#define fm_when_isnt_empty(...) fm_cat(fm__when_, fm__isnt_empty(__VA_ARGS__))
+#define fm_or_default(...) \
+    fm_iif(fm_va_01(__VA_ARGS__))(__VA_ARGS__)
+
 #define fm_va_comma(...) \
     fm_when_isnt_empty(__VA_ARGS__)(fm__comma)
 #define fm_va_comma_fun(...) \
@@ -126,23 +147,6 @@
 #define fm__is_tuple_choose(a,b,x,...) x
 #define fm__is_tuple_help(...) ,
 #define fm__is_tuple_(...) fm__is_tuple_choose(__VA_ARGS__)
-
-#define fm_tuple_expand(x) fm_expand x
-#define fm_tuple_tag(x) fm_head x
-#define fm_tuple_data(x) fm_tail x
-#define fm_tuple_0(x) fm_head x
-#define fm_tuple_1(x) fm__tuple_1 x
-#define fm__tuple_1(_0, _1, ...) _1
-#define fm_tuple_2(x) fm__tuple_2 x
-#define fm__tuple_2(_0, _1, _2, ...) _2
-
-#define fm_tuple_tag_or_0(x) fm__tuple_tag_or_0_(fm__tuple_tag_or_0_help x, 0)
-#define fm__tuple_tag_or_0_(...) fm__tuple_tag_or_0_choose(__VA_ARGS__)
-#define fm__tuple_tag_or_0_choose(a,x,...) x
-#define fm__tuple_tag_or_0_help(tag, ...) , tag
-
-#define fm_dispatch_tag_or_0(prefix, x) \
-    fm_cat(prefix, fm_tuple_tag_or_0(x))
 
 /****************************************/
 // Iteration
@@ -160,20 +164,18 @@
 
 // recursion handle : delay macro expansion to next recursion iteration
 #define fm_recurs(id) id fm_empty fm_empty() ()
-#define fm_recurs2(a,b) fm_cat fm_empty fm_empty() () (a,b)
+#define fm_recurs2(a,b) fm_cat fm_empty() (a,b)
 #define fm_defer(id) id fm_empty()
 
 #define fm_foreach_join(join, macro, ...) \
-    fm_foreach_join_(fm_empty, join, macro, __VA_ARGS__)
-#define fm_foreach_join_(join1, join2, macro, ...) \
-    fm_cat(fm_foreach_join_, fm_va_01n(__VA_ARGS__))(join1, join2, macro, __VA_ARGS__)
+    fm_cat(fm_foreach_join_, fm_va_01n(__VA_ARGS__))(fm_empty, join, macro, __VA_ARGS__)
 #define fm_foreach_join_0(join1, join2, macro, ...)
 #define fm_foreach_join_1(join1, join2, macro, x) \
     join1() macro(x)
 #define fm_foreach_join_n(join1, join2, macro, x, y, ...) \
     join1() macro(x) \
     join2() macro(y) \
-    fm_recurs2(fm_, foreach_join_) (join2, join2, macro, __VA_ARGS__)
+    fm_recurs2(fm_foreach_join_, fm_va_01n(__VA_ARGS__))(join2, join2, macro, __VA_ARGS__)
 
 #define fm_foreach(macro, ...) \
     fm_foreach_join(fm_empty, macro, __VA_ARGS__)
@@ -181,16 +183,14 @@
     fm_foreach_join(fm_comma, macro, __VA_ARGS__)
 
 #define fm_foreach_arg_join(join, macro, arg, ...) \
-    fm_foreach_arg_join_(fm_empty, join, macro, arg, __VA_ARGS__)
-#define fm_foreach_arg_join_(join1, join2, macro, arg, ...) \
-    fm_cat(fm_foreach_arg_join_, fm_va_01n(__VA_ARGS__))(join1, join2, macro, arg, __VA_ARGS__)
+    fm_cat(fm_foreach_arg_join_, fm_va_01n(__VA_ARGS__))(fm_empty, join, macro, arg, __VA_ARGS__)
 #define fm_foreach_arg_join_0(join1, join2, macro, ...)
 #define fm_foreach_arg_join_1(join1, join2, macro, arg, x) \
     join1() macro(arg, x)
 #define fm_foreach_arg_join_n(join1, join2, macro, arg, x, y, ...) \
     join1() macro(arg, x) \
     join2() macro(arg, y) \
-    fm_recurs2(fm_, foreach_arg_join_) (join2, join2, macro, arg, __VA_ARGS__)
+    fm_recurs2(fm_foreach_arg_join_, fm_va_01n(__VA_ARGS__))(join1, join2, macro, arg, __VA_ARGS__)
 
 #define fm_foreach_arg(macro, arg, ...) \
     fm_foreach_arg_join(fm_empty, macro, arg, __VA_ARGS__)
@@ -198,16 +198,14 @@
     fm_foreach_arg_join(fm_comma, macro, arg, __VA_ARGS__)
 
 #define fm_foreach_tuple_join(join, macro, ...) \
-    fm_foreach_tuple_join_(fm_empty, join, macro, __VA_ARGS__)
-#define fm_foreach_tuple_join_(join1, join2, macro, ...) \
-    fm_cat(fm_foreach_tuple_join_, fm_va_01n(__VA_ARGS__))(join1, join2, macro, __VA_ARGS__)
+    fm_cat(fm_foreach_tuple_join_, fm_va_01n(__VA_ARGS__))(fm_empty, join, macro, __VA_ARGS__)
 #define fm_foreach_tuple_join_0(join1, join2, macro, ...)
 #define fm_foreach_tuple_join_1(join1, join2, macro, x) \
     join1() macro x
 #define fm_foreach_tuple_join_n(join1, join2, macro, x, y, ...) \
     join1() macro x  \
     join2() macro y  \
-    fm_recurs2(fm_, foreach_tuple_join_) (join2, join2, macro, __VA_ARGS__)
+    fm_recurs2(fm_foreach_tuple_join_, fm_va_01n(__VA_ARGS__))(join2, join2, macro, __VA_ARGS__)
 
 #define fm_foreach_tuple(macro, ...) \
     fm_foreach_tuple_join(fm_empty, macro, __VA_ARGS__)
@@ -215,16 +213,14 @@
     fm_foreach_tuple_join(fm_comma, macro, __VA_ARGS__)
 
 #define fm_foreach_tuple_arg_join(join, macro, arg, ...) \
-    fm_foreach_tuple_arg_join_(fm_empty, join, macro, arg, __VA_ARGS__)
-#define fm_foreach_tuple_arg_join_(join1, join2, macro, arg, ...) \
-    fm_cat(fm_foreach_tuple_arg_join_, fm_va_01n(__VA_ARGS__))(join1, join2, macro, arg, __VA_ARGS__)
+    fm_cat(fm_foreach_tuple_arg_join_, fm_va_01n(__VA_ARGS__))(fm_empty, join, macro, arg, __VA_ARGS__)
 #define fm_foreach_tuple_arg_join_0(join1, join2, macro, ...)
 #define fm_foreach_tuple_arg_join_1(join1, join2, macro, arg, x) \
     join1() fm_apply(macro, arg, fm_expand x)
 #define fm_foreach_tuple_arg_join_n(join1, join2, macro, arg, x, y, ...) \
     join1() fm_apply(macro, arg, fm_expand x) \
     join2() fm_apply(macro, arg, fm_expand y) \
-    fm_recurs2(fm_, foreach_tuple_arg_join_) (join2, join2, macro, arg, __VA_ARGS__)
+    fm_recurs2(fm_foreach_tuple_arg_join_, fm_va_01n(__VA_ARGS__))(join1, join2, macro, arg, __VA_ARGS__)
 
 #define fm_foreach_tuple_arg(macro, arg, ...) \
     fm_foreach_tuple_arg_join(fm_empty, macro, arg, __VA_ARGS__)

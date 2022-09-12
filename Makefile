@@ -51,13 +51,13 @@ BORROWED_C_SRC := \
 	src/bin/pg_basebackup/streamutil.c \
 	src/bin/pg_basebackup/walmethods.c
 
-OBJS += src/fu_util/impl/ft_impl.o src/fu_util/impl/fo_impl.o
-
 BORROW_DIR := src/borrowed
 BORROWED_H := $(addprefix $(BORROW_DIR)/, $(notdir $(BORROWED_H_SRC)))
 BORROWED_C := $(addprefix $(BORROW_DIR)/, $(notdir $(BORROWED_C_SRC)))
 OBJS += $(patsubst %.c, %.o, $(BORROWED_C))
 EXTRA_CLEAN := $(BORROWED_H) $(BORROWED_C) $(BORROW_DIR) borrowed.mk
+
+OBJS += src/fu_util/impl/ft_impl.o src/fu_util/impl/fo_impl.o
 
 # off-source build support
 ifneq ($(abspath $(CURDIR))/, $(top_pbk_srcdir))

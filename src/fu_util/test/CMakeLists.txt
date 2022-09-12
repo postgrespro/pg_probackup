@@ -1,5 +1,10 @@
 cmake_minimum_required(VERSION 3.11)
 
+add_executable(fm fm.c)
+add_executable(fm1 fm.c)
+
+target_compile_options(fm1 PRIVATE -DFM_USE_STRICT=1)
+
 add_executable(array array.c)
 target_link_libraries(array fu_utils)
 
@@ -20,6 +25,8 @@ target_link_libraries(obj1 fu_utils)
 
 enable_testing()
 
+add_test(NAME fm COMMAND fm)
+add_test(NAME fm1 COMMAND fm1)
 add_test(NAME array COMMAND array)
 add_test(NAME bsearch COMMAND bsearch)
 add_test(NAME fuprintf COMMAND fuprintf)
