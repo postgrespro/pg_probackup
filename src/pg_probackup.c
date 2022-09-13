@@ -47,8 +47,6 @@
 #include "streamutil.h"
 #include "utils/file.h"
 
-#include <sys/stat.h>
-
 #include "utils/configuration.h"
 #include "utils/thread.h"
 #include <time.h>

@@ -13,7 +13,6 @@
 
 #include <dirent.h>
 #include <signal.h>
-#include <sys/stat.h>
 #include <unistd.h>
 
 #include "utils/file.h"

@@ -3,7 +3,9 @@
 
 #include "storage/bufpage.h"
 #include <stdio.h>
+#ifndef WIN32
 #include <sys/stat.h>
+#endif
 #include <dirent.h>
 
 #ifdef HAVE_LIBZ
@@ -223,11 +225,13 @@ fobj_iface(pioWriteFlush);
 fobj_iface(pioWriteCloser);
 fobj_iface(pioReadCloser);
 
+typedef struct stat stat_t;
+
 // Drive
 #define mth__pioOpen 		pioFile_i, (path_t, path), (int, flags), \
 									   (int, permissions), (err_i *, err)
 #define mth__pioOpen__optional() (permissions, FILE_PERMISSION)
-#define mth__pioStat 		struct stat, (path_t, path), (bool, follow_symlink), \
+#define mth__pioStat 		stat_t, (path_t, path), (bool, follow_symlink), \
 										 (err_i *, err)
 #define mth__pioRemove 		err_i, (path_t, path), (bool, missing_ok)
 #define mth__pioRename 		err_i, (path_t, old_path), (path_t, new_path)

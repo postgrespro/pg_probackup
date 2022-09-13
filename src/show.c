@@ -13,7 +13,6 @@
 #include <time.h>
 #include <dirent.h>
 #include <locale.h>
-#include <sys/stat.h>
 
 #include "utils/json.h"
 

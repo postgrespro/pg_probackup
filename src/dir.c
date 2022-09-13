@@ -19,7 +19,6 @@
 #include "catalog/pg_tablespace.h"
 
 #include <unistd.h>
-#include <sys/stat.h>
 #include <dirent.h>
 
 #include "utils/configuration.h"

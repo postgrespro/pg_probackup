@@ -16,7 +16,6 @@
 #include "utils/file.h"
 
 #include <unistd.h>
-#include <sys/stat.h>
 
 #ifdef HAVE_LIBZ
 #include <zlib.h>

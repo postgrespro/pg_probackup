@@ -16,7 +16,6 @@
 
 #include "pg_probackup.h"
 
-#include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
 

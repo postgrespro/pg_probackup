@@ -10,7 +10,6 @@
 
 #include "pg_probackup.h"
 
-#include <sys/stat.h>
 #include <dirent.h>
 
 #include "utils/thread.h"

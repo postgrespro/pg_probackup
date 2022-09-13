@@ -11,7 +11,6 @@
 #include "pg_probackup.h"
 
 #include <unistd.h>
-#include <sys/stat.h>
 
 /*
  * Initialize backup catalog.
