@@ -277,41 +277,20 @@ static char* compatibility_params[] = {
  */
 size_t prepare_compatibility_str(char* compatibility_buf, size_t compatibility_buf_size)
 {
-	char tmp_buf[1024];
-	int size_inc = 0;
-	size_t result_size = 1;
+	size_t result_size = 0;
 	size_t compatibility_params_array_size = sizeof compatibility_params / sizeof compatibility_params[0];;
 
 	*compatibility_buf = '\0';
 	Assert(compatibility_params_array_size % 2 == 0);
 
-	//TODO !!!!
 	for (int i = 0; i < compatibility_params_array_size; i+=2)
 	{
-		size_inc = snprintf(compatibility_buf + size_inc, compatibility_buf_size,
-							"%s" COMPATIBILITY_VAL_SEPARATOR "%s" COMPATIBILITY_LINE_SEPARATOR,
-							compatibility_params[i], compatibility_params[i+1]);
-
-//		size_inc = snprintf(tmp_buf, sizeof tmp_buf,
-//							"%s" COMPATIBILITY_VAL_SEPARATOR "%s" COMPATIBILITY_LINE_SEPARATOR,
-//							compatibility_params[i], compatibility_params[i+1]);
-		if (size_inc >= sizeof tmp_buf)
-		{
-			//TODO make Assert
-			elog(ERROR, "Compatibility params from agent doesn't fit to %zu chars, %s=%s",
-				 sizeof tmp_buf - 1, compatibility_params[i], compatibility_params[i+1] );
-		}
-
-		result_size += size_inc;
-		if (result_size > compatibility_buf_size)
-		{
-			//TODO make Assert
-			elog(ERROR, "Can't fit compatibility string size %zu to buffer size %zu:\n%s\n%s",
-				 result_size, compatibility_buf_size, compatibility_buf, tmp_buf);
-		}
-		strcat(compatibility_buf, tmp_buf);
+		result_size += snprintf(compatibility_buf + result_size, compatibility_buf_size - result_size,
+								"%s" COMPATIBILITY_VAL_SEPARATOR "%s" COMPATIBILITY_LINE_SEPARATOR,
+								compatibility_params[i], compatibility_params[i+1]);
+		Assert(result_size < compatibility_buf_size);
 	}
-	return result_size;
+	return result_size + 1;
 }
 
 /*
@@ -319,7 +298,7 @@ size_t prepare_compatibility_str(char* compatibility_buf, size_t compatibility_b
  */
 void check_remote_agent_compatibility(int agent_version, char *compatibility_str, size_t compatibility_str_max_size)
 {
-	elog(LOG, "Agent version=%d", agent_version);
+	elog(LOG, "Agent version=%d\n", agent_version);
 
 	if (agent_version != AGENT_PROTOCOL_VERSION)
 	{
@@ -331,25 +310,24 @@ void check_remote_agent_compatibility(int agent_version, char *compatibility_str
 
 		elog(ERROR, "Remote agent protocol version %s does not match local program protocol version %s, "
 					"consider to upgrade pg_probackup binary",
-			agent_version_str, AGENT_PROTOCOL_VERSION_STR);
+			 agent_version_str, AGENT_PROTOCOL_VERSION_STR);
 	}
 
+	/* checking compatibility params */
 	if (strnlen(compatibility_str, compatibility_str_max_size) == compatibility_str_max_size)
 	{
 		elog(ERROR, "Corrupted remote compatibility protocol: compatibility string has no terminating \\0");
 	}
 
-	elog(LOG, "Agent compatibility params: '%s'", compatibility_str);
+	elog(LOG, "Agent compatibility params:\n%s", compatibility_str);
 
-	/* checking compatibility params */
 	{
-		char *buf[compatibility_str_max_size];
+		char buf[compatibility_str_max_size];
 
 		prepare_compatibility_str(buf, sizeof buf);
-		if(!strcmp(compatibility_str, buf))
+		if(strcmp(compatibility_str, buf))
 		{
-			elog(ERROR, "Incompatible agent params, expected %s", buf);
+			elog(ERROR, "Incompatible remote agent params, expected:\n%s", buf);
 		}
 	}
-
 }
