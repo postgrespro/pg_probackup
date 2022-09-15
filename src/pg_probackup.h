@@ -882,8 +882,9 @@ extern DestDirIncrCompatibility check_incremental_compatibility(const char *pgda
 																IncrRestoreMode incremental_mode);
 
 /* in remote.c */
-extern void check_remote_agent_compatibility(int agent_version, char *compatibility_str);
-extern size_t prepare_remote_agent_compatibility_str(char* compatibility_buf, size_t buf_size);
+extern void check_remote_agent_compatibility(int agent_version,
+											 char *compatibility_str, size_t compatibility_str_max_size);
+extern size_t prepare_compatibility_str(char* compatibility_buf, size_t compatibility_buf_size);
 
 /* in merge.c */
 extern void do_merge(InstanceState *instanceState, time_t backup_id, bool no_validate, bool no_sync);

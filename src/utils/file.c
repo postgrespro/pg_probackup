@@ -281,7 +281,8 @@ fio_get_agent_version(int* protocol, char* payload_buf, size_t payload_buf_size)
 	IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
 	if (hdr.size > payload_buf_size)
 	{
-		elog(ERROR, "Bad protocol, insufficient payload_buf_size=%zu", payload_buf_size);
+		//TODO REVIEW XXX %zu is C99 but not ANSI S standard, should we cast to unsigned long?
+		elog(ERROR, "Corrupted remote compatibility protocol: insufficient payload_buf_size=%zu", payload_buf_size);
 	}
 
 	*protocol = hdr.arg;
@@ -3321,17 +3322,18 @@ fio_communicate(int in, int out)
 				IO_CHECK(fio_write_all(out, buf, hdr.size),  hdr.size);
 			break;
 		  case FIO_AGENT_VERSION:
-			hdr.arg = AGENT_PROTOCOL_VERSION;
-			IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
-			//TODO REVIEW XXX is it allowed by ANSI C to declare new scope inside???
 			{
-				size_t payload_size = prepare_remote_agent_compatibility_str(buf, buf_size);
+				size_t payload_size = prepare_compatibility_str(buf, buf_size);
+
+				hdr.arg = AGENT_PROTOCOL_VERSION;
+				hdr.size = payload_size;
+
+				IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 				IO_CHECK(fio_write_all(out, buf, payload_size), payload_size);
 				//TODO REVIEW XXX make INFO to LOG or VERBOSE
 				elog(INFO, "TODO REVIEW XXX sent agent compatibility\n %s", buf);
+				break;
 			}
-			assert(false);
-			break;
 		  case FIO_STAT: /* Get information about file with specified path */
 			hdr.size = sizeof(st);
 			rc = hdr.arg ? stat(buf, &st) : lstat(buf, &st);
