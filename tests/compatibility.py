@@ -14,29 +14,30 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         self.fname = self.id().split('.')[3]
 
     # @unittest.expectedFailure
-    # @unittest.skip("skip")
+    @unittest.skip("skip")
     def test_catchup_with_different_remote_major_pg(self):
-        "Decription in jira issue PBCKP-236" #TODO REVIEW XXX explain the test
+        """
+        Decription in jira issue PBCKP-236
+        This test requires builds both PGPROEE11 and PGPROEE9_6
+
+        prerequisites:
+        - git tag for PBCKP 2.5.1
+        - master probackup build should be inside PGPROEE11
+        - agent probackup build is inside PGPROEE9_6
+
+        calling probackup PGPROEE9_6 agent from PGPROEE11 probackup master for DELTA backup causes the PBCKP-236 problem
+
+        please correct path for agent's pg_path_ee_9_6 = '/home/avaness/postgres/postgres.build.ee.9.6/bin/'
+        """
+
         self.verbose = True
         self.remote = True
-        pg_config = os.environ['PG_CONFIG']
-        pg_path_ee_9_6 = '/home/avaness/postgres/postgres.build.9.6/bin/'
-        pg_config_ee_9_6 = pg_path_ee_9_6 + 'pg_config'
-        probackup_path_ee_9_6 = pg_path_ee_9_6 + 'pg_probackup'
-        pg_path_ee_11 = '/home/avaness/postgres/postgres.build.11/bin/'
-        pg_config_ee_11 = pg_path_ee_11 + 'pg_config'
-        probackup_path_ee_11 = pg_path_ee_11 + 'pg_probackup'
+        # please use your own local path
+        pg_path_ee_9_6 = '/home/avaness/postgres/postgres.build.ee.9.6/bin/'
 
-        os.environ['PG_CONFIG'] = pg_config_ee_11
-        self.probackup_path = probackup_path_ee_11
-        # os.environ['PG_CONFIG'] = pg_config_ee_9_6
-        # self.probackup_path = probackup_path_ee_9_6
-
-        # backup_dir = os.path.join(self.tmp_path, module_name, self.fname, 'backup')
         src_pg = self.make_simple_node(
             base_dir=os.path.join(module_name, self.fname, 'src'),
             set_replication=True,
-            # initdb_params=['--data-checksums']
             )
         src_pg.slow_start()
         src_pg.safe_psql(
@@ -44,20 +45,12 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
             "CREATE TABLE ultimate_question AS SELECT 42 AS answer")
 
         # do full catchup
-        os.environ['PG_CONFIG'] = pg_config_ee_11
-        self.probackup_path = probackup_path_ee_11
-
         dst_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'dst'))
-        # dst_pg = self.make_simple_node(
-        #     base_dir=os.path.join(module_name, self.fname, 'dst'),
-        #     set_replication=True,
-        #     # initdb_params=['--data-checksums']
-        #     )
         self.catchup_node(
             backup_mode = 'FULL',
             source_pgdata = src_pg.data_dir,
             destination_node = dst_pg,
-            options=['-d', 'postgres', '-p', str(src_pg.port), '--stream']#, '--remote-path=' + pg_path_ee_9_6]
+            options=['-d', 'postgres', '-p', str(src_pg.port), '--stream']
             )
 
         dst_options = {}
@@ -70,12 +63,13 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
             "postgres",
             "CREATE TABLE ultimate_question2 AS SELECT 42 AS answer")
 
-        # do delta catchup
-        #TODO REVIEW XXX try to apply only one catchup (FULL) for test failure
+        # do delta catchup with remote pg_probackup agent with another postgres major version
+        # this DELTA backup should fail without PBCKP-236 patch.
         self.catchup_node(
             backup_mode = 'DELTA',
             source_pgdata = src_pg.data_dir,
             destination_node = dst_pg,
+            # here's substitution of --remoge-path pg_probackup agent compiled with another postgres version
             options=['-d', 'postgres', '-p', str(src_pg.port), '--stream', '--remote-path=' + pg_path_ee_9_6]
             )
 
