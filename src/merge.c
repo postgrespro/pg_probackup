@@ -957,7 +957,7 @@ merge_files(void *arg)
 		if (S_ISDIR(dest_file->mode))
 			goto done;
 
-		elog(progress ? INFO : LOG, "Progress: (%d/%lu). Merging file \"%s\"",
+		elog(progress ? INFO : LOG, "Progress: (%d/%zu). Merging file \"%s\"",
 			i + 1, n_files, dest_file->rel_path);
 
 		if (dest_file->is_datafile && !dest_file->is_cfs)

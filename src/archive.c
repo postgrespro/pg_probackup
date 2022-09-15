@@ -148,7 +148,7 @@ do_archive_push(InstanceState *instanceState, InstanceConfig *instance, char *pg
 		n_threads = parray_num(batch_files);
 
 	elog(INFO, "pg_probackup archive-push WAL file: %s, "
-					"threads: %i/%i, batch: %lu/%i, compression: %s",
+					"threads: %i/%i, batch: %zu/%i, compression: %s",
 						wal_file_name, n_threads, num_threads,
 						parray_num(batch_files), batch_size,
 						is_compress ? "zlib" : "none");

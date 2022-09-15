@@ -343,7 +343,7 @@ elog_internal(int elevel, bool file_only, const char *message)
 
 	if (format_file == JSON || format_console == JSON)
 	{
-		snprintf(str_pid_json, sizeof(str_pid_json), "%d", my_pid);
+		snprintf(str_pid_json, sizeof(str_pid_json), "%lld", (long long)my_pid);
 		snprintf(str_thread_json, sizeof(str_thread_json), "[%d-1]", my_thread_num());
 
 		initPQExpBuffer(&show_buf);
@@ -357,7 +357,7 @@ elog_internal(int elevel, bool file_only, const char *message)
 		json_add_min(buf_json, JT_END_OBJECT);
 	}
 
-	snprintf(str_pid, sizeof(str_pid), "[%d]:", my_pid);
+	snprintf(str_pid, sizeof(str_pid), "[%lld]:", (long long)my_pid);
 
 	/*
 	 * Write message to log file.
@@ -497,7 +497,7 @@ elog_stderr(int elevel, const char *fmt, ...)
 	{
 		strftime(strfbuf, sizeof(strfbuf), "%Y-%m-%d %H:%M:%S %Z",
 				 localtime(&log_time));
-		snprintf(str_pid, sizeof(str_pid), "%d", my_pid);
+		snprintf(str_pid, sizeof(str_pid), "%lld", (long long)my_pid);
 		snprintf(str_thread_json, sizeof(str_thread_json), "[%d-1]", my_thread_num());
 
 		initPQExpBuffer(&show_buf);
@@ -971,7 +971,7 @@ logfile_open:
 			elog_stderr(ERROR, "cannot open rotation file \"%s\": %s",
 						control, strerror(errno));
 
-		fprintf(control_file, "%ld", timestamp);
+		fprintf(control_file, "%lld", (long long)timestamp);
 
 		fclose(control_file);
 	}

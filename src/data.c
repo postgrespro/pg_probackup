@@ -204,12 +204,12 @@ get_header_errormsg(Page page, char **errormsg)
 
 	if (PageGetPageSize(phdr) != BLCKSZ)
 		snprintf(*errormsg, ERRMSG_MAX_LEN, "page header invalid, "
-				"page size %lu is not equal to block size %u",
+				"page size %zu is not equal to block size %u",
 				PageGetPageSize(phdr), BLCKSZ);
 
 	else if (phdr->pd_lower < SizeOfPageHeaderData)
 		snprintf(*errormsg, ERRMSG_MAX_LEN, "page header invalid, "
-				"pd_lower %i is less than page header size %lu",
+				"pd_lower %i is less than page header size %zu",
 				phdr->pd_lower, SizeOfPageHeaderData);
 
 	else if (phdr->pd_lower > phdr->pd_upper)
@@ -229,7 +229,7 @@ get_header_errormsg(Page page, char **errormsg)
 
 	else if (phdr->pd_special != MAXALIGN(phdr->pd_special))
 		snprintf(*errormsg, ERRMSG_MAX_LEN, "page header invalid, "
-				"pd_special %i is misaligned, expected %lu",
+				"pd_special %i is misaligned, expected %zu",
 				phdr->pd_special, MAXALIGN(phdr->pd_special));
 
 	else if (phdr->pd_flags & ~PD_VALID_FLAG_BITS)
@@ -1196,7 +1196,7 @@ restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_vers
 			datapagemap_add(map, blknum);
 	}
 
-	elog(LOG, "Copied file \"%s\": %lu bytes", from_fullpath, write_len);
+	elog(LOG, "Copied file \"%s\": %zu bytes", from_fullpath, write_len);
 	return write_len;
 }
 
@@ -1240,7 +1240,7 @@ restore_non_data_file_internal(FILE *in, FILE *out, pgFile *file,
 
 	pg_free(buf);
 
-	elog(LOG, "Copied file \"%s\": %lu bytes", from_fullpath, file->write_size);
+	elog(LOG, "Copied file \"%s\": %llu bytes", from_fullpath, (long long)file->write_size);
 }
 
 size_t
@@ -1317,9 +1317,9 @@ restore_non_data_file(parray *parent_chain, pgBackup *dest_backup,
 		elog(ERROR, "Failed to locate a full copy of non-data file \"%s\"", to_fullpath);
 
 	if (tmp_file->write_size <= 0)
-		elog(ERROR, "Full copy of non-data file has invalid size: %li. "
+		elog(ERROR, "Full copy of non-data file has invalid size: %lli. "
 				"Metadata corruption in backup %s in file: \"%s\"",
-				tmp_file->write_size, base36enc(tmp_backup->start_time),
+				(long long)tmp_file->write_size, base36enc(tmp_backup->start_time),
 				to_fullpath);
 
 	/* incremental restore */
@@ -2031,11 +2031,11 @@ get_page_header(FILE *in, const char *fullpath, BackupPageHeader* bph,
 			return false;		/* EOF found */
 		else if (read_len != 0 && feof(in))
 			elog(ERROR,
-				 "Odd size page found at offset %ld of \"%s\"",
-				 ftello(in), fullpath);
+				 "Odd size page found at offset %lld of \"%s\"",
+				 (long long)ftello(in), fullpath);
 		else
-			elog(ERROR, "Cannot read header at offset %ld of \"%s\": %s",
-				 ftello(in), fullpath, strerror(errno));
+			elog(ERROR, "Cannot read header at offset %lld of \"%s\": %s",
+				 (long long)ftello(in), fullpath, strerror(errno));
 	}
 
 	/* In older versions < 2.4.0, when crc for file was calculated, header was
@@ -2335,8 +2335,8 @@ copy_pages(const char *to_fullpath, const char *from_fullpath,
 					 to_fullpath, strerror(errno));
 
 			if (ftruncate(fileno(out), file->size) == -1)
-				elog(ERROR, "Cannot ftruncate file \"%s\" to size %lu: %s",
-					 to_fullpath, file->size, strerror(errno));
+				elog(ERROR, "Cannot ftruncate file \"%s\" to size %llu: %s",
+					 to_fullpath, (long long)file->size, strerror(errno));
 		}
 	}
 
@@ -2443,7 +2443,7 @@ get_data_file_headers(HeaderMap *hdr_map, pgFile *file, uint32 backup_version, b
 	if (hdr_crc != file->hdr_crc)
 	{
 		elog(strict ? ERROR : WARNING, "Header map for file \"%s\" crc mismatch \"%s\" "
-				"offset: %llu, len: %lu, current: %u, expected: %u",
+				"offset: %llu, len: %zu, current: %u, expected: %u",
 			file->rel_path, hdr_map->path, file->hdr_off, read_len, hdr_crc, file->hdr_crc);
 		goto cleanup;
 	}
