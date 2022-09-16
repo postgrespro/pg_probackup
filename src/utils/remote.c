@@ -249,25 +249,12 @@ bool launch_agent(void)
 	return true;
 }
 
-#define COMPATIBILITY_VAL(macro) #macro, macro
-#define COMPATIBILITY_STR(macro) #macro
-#define COMPATIBILITY_VAL_STR(macro) #macro, COMPATIBILITY_STR(macro)
+#define COMPATIBILITY_VAL_STR(macro) #macro, macro
+#define COMPATIBILITY_VAL_INT_HELPER(macro, helper_buf, buf_size) (snprintf(helper_buf, buf_size, "%d", macro), helper_buf)
+#define COMPATIBILITY_VAL_INT(macro, helper_buf, buf_size) #macro, COMPATIBILITY_VAL_INT_HELPER(macro, helper_buf, buf_size)
 
 #define COMPATIBILITY_VAL_SEPARATOR "="
 #define COMPATIBILITY_LINE_SEPARATOR "\n"
-
-static char* compatibility_params[] = {
-	COMPATIBILITY_VAL(PG_MAJORVERSION),
-	//TODO remove?
-	//TODO doesn't work macro name check for ints!!!!
-	COMPATIBILITY_VAL_STR(SIZEOF_VOID_P),
-	//TODO REVIEW XXX can use edition.h/extract_pgpro_edition()
-#ifdef PGPRO_EDN
-	//TODO add vanilla
-	//TODO make "1c" -> "vanilla"
-	COMPATIBILITY_VAL(PGPRO_EDN),
-#endif
-};
 
 /*
  * Compose compatibility string to be sent by pg_probackup agent
@@ -277,6 +264,18 @@ static char* compatibility_params[] = {
  */
 size_t prepare_compatibility_str(char* compatibility_buf, size_t compatibility_buf_size)
 {
+	char compatibility_val_int_macro_helper_buf[32];
+	char* compatibility_params[] = {
+		COMPATIBILITY_VAL_STR(PG_MAJORVERSION),
+#ifdef PGPRO_EDN
+		//TODO REVIEW can use edition.h/extract_pgpro_edition()
+		COMPATIBILITY_VAL_STR(PGPRO_EDN),
+#endif
+		//TODO REVIEW remove? no difference between 32/64 in global/pg_control.
+		COMPATIBILITY_VAL_INT(SIZEOF_VOID_P,
+							  compatibility_val_int_macro_helper_buf, sizeof compatibility_val_int_macro_helper_buf),
+	};
+
 	size_t result_size = 0;
 	size_t compatibility_params_array_size = sizeof compatibility_params / sizeof compatibility_params[0];;
 
