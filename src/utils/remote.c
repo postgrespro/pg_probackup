@@ -321,7 +321,7 @@ void check_remote_agent_compatibility(int agent_version, char *compatibility_str
 	elog(LOG, "Agent compatibility params:\n%s", compatibility_str);
 
 	{
-		char buf[compatibility_str_max_size];
+		char buf[1024];
 
 		prepare_compatibility_str(buf, sizeof buf);
 		if(strcmp(compatibility_str, buf))
