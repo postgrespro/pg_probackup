@@ -553,17 +553,17 @@ push_file_internal(const char *wal_file_name, const char *pg_xlog_dir,
 
     /* enable streaming compression */
     if (is_compress)
-#ifdef HAVE_LIBZ
     {
+#ifdef HAVE_LIBZ
         pioFilter_i flt = pioGZCompressFilter(compress_level);
         err = pioCopy($reduce(pioWriteFlush, out),
                       $reduce(pioRead, in),
                       flt);
+#else
+        elog(ERROR, "Compression is requested, but not compiled it");
+#endif
     }
     else
-#else
-    elog(ERROR, "Compression is requested, but not compiled it");
-#endif
     {
         err = pioCopy($reduce(pioWriteFlush, out),
                       $reduce(pioRead, in));
