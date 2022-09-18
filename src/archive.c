@@ -279,7 +279,7 @@ push_files(void *arg)
 	int		rc;
 	archive_push_arg *args = (archive_push_arg *) arg;
 
-	my_thread_num = args->thread_num;
+	set_my_thread_num(args->thread_num);
 
 	for (i = 0; i < parray_num(args->files); i++)
 	{
@@ -1011,7 +1011,7 @@ get_files(void *arg)
 	char    from_fullpath[MAXPGPATH];
 	archive_get_arg *args = (archive_get_arg *) arg;
 
-	my_thread_num = args->thread_num;
+	set_my_thread_num(args->thread_num);
 
 	for (i = 0; i < parray_num(args->files); i++)
 	{

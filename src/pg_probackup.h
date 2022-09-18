@@ -43,13 +43,6 @@
 
 #include "pg_probackup_state.h"
 
-
-#ifdef WIN32
-#define __thread __declspec(thread)
-#else
-#include <pthread.h>
-#endif
-
 /* Wrap the code that we're going to delete after refactoring in this define*/
 #define REFACTORE_ME
 
@@ -759,7 +752,6 @@ typedef struct StopBackupCallbackParams
 
 /* common options */
 extern pid_t    my_pid;
-extern __thread int my_thread_num;
 extern int		num_threads;
 extern bool		stream_wal;
 extern bool		show_color;

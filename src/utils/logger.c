@@ -344,7 +344,7 @@ elog_internal(int elevel, bool file_only, const char *message)
 	if (format_file == JSON || format_console == JSON)
 	{
 		snprintf(str_pid_json, sizeof(str_pid_json), "%d", my_pid);
-		snprintf(str_thread_json, sizeof(str_thread_json), "[%d-1]", my_thread_num);
+		snprintf(str_thread_json, sizeof(str_thread_json), "[%d-1]", my_thread_num());
 
 		initPQExpBuffer(&show_buf);
 		json_add_min(buf_json, JT_BEGIN_OBJECT);
@@ -424,7 +424,7 @@ elog_internal(int elevel, bool file_only, const char *message)
 			{
 				char		str_thread[64];
 				/* [Issue #213] fix pgbadger parsing */
-				snprintf(str_thread, sizeof(str_thread), "[%d-1]:", my_thread_num);
+				snprintf(str_thread, sizeof(str_thread), "[%d-1]:", my_thread_num());
 
 				fprintf(stderr, "%s ", strfbuf);
 				fprintf(stderr, "%s ", str_pid);
@@ -498,7 +498,7 @@ elog_stderr(int elevel, const char *fmt, ...)
 		strftime(strfbuf, sizeof(strfbuf), "%Y-%m-%d %H:%M:%S %Z",
 				 localtime(&log_time));
 		snprintf(str_pid, sizeof(str_pid), "%d", my_pid);
-		snprintf(str_thread_json, sizeof(str_thread_json), "[%d-1]", my_thread_num);
+		snprintf(str_thread_json, sizeof(str_thread_json), "[%d-1]", my_thread_num());
 
 		initPQExpBuffer(&show_buf);
 		json_add_min(buf_json, JT_BEGIN_OBJECT);
