@@ -419,6 +419,8 @@ class LockingTest(ProbackupTest, unittest.TestCase):
         and stop it in the middle, take page backup.
         Expect PAGE backup to be successfully executed
         """
+        self._check_gdb_flag_or_skip_test()
+
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
