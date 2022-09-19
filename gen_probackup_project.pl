@@ -188,23 +188,34 @@ sub build_pgprobackup
 		);
 	$probackup->AddFile("$pgsrc/src/backend/access/transam/xlogreader.c");
 	$probackup->AddFile("$pgsrc/src/backend/utils/hash/pg_crc.c");
+
+#	$probackup->AddFiles(
+#		"$pgsrc/src/bin/pg_basebackup", 
+#		'receivelog.c',
+#		'streamutil.c'
+#		);
 	$probackup->AddFiles(
-		"$pgsrc/src/bin/pg_basebackup", 
+		"$currpath/src/compatibility",
 		'receivelog.c',
-		'streamutil.c'
+		'streamutil.c',
+		'walmethods.c',
+		'file_compat.c',
+		'simple_prompt.c'
 		);
 
-	if (-e "$pgsrc/src/bin/pg_basebackup/walmethods.c") 
-	{
-		$probackup->AddFile("$pgsrc/src/bin/pg_basebackup/walmethods.c");
-	}
+#	if (-e "$pgsrc/src/bin/pg_basebackup/walmethods.c") 
+#	{
+#		$probackup->AddFile("$pgsrc/src/bin/pg_basebackup/walmethods.c");
+#	}
 
 	$probackup->AddFile("$pgsrc/src/bin/pg_rewind/datapagemap.c");
 
 	$probackup->AddFile("$pgsrc/src/interfaces/libpq/pthread-win32.c");
 	$probackup->AddFile("$pgsrc/src/timezone/strftime.c");
 
-        $probackup->AddIncludeDir("$pgsrc/src/bin/pg_basebackup");
+#        $probackup->AddIncludeDir("$pgsrc/src/bin/pg_basebackup");
+        $probackup->AddIncludeDir("$currpath/src/compatibility");
+
         $probackup->AddIncludeDir("$pgsrc/src/bin/pg_rewind");
         $probackup->AddIncludeDir("$pgsrc/src/interfaces/libpq");
         $probackup->AddIncludeDir("$pgsrc/src");

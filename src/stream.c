@@ -195,14 +195,18 @@ CreateReplicationSlot_compat(PGconn *conn, const char *slot_name, const char *pl
 	return CreateReplicationSlot(conn, slot_name, plugin, is_temporary, is_physical,
 		/* reserve_wal = */ true, slot_exists_ok);
 #elif PG_VERSION_NUM >= 100000
+	return CreateReplicationSlot(conn, slot_name, plugin, is_temporary, is_physical,
+		/* reserve_wal = */ true, slot_exists_ok);//vvs
 	/*
 	 * PG-10 doesn't support creating temp_slot by calling CreateReplicationSlot(), but
 	 * it will be created by setting StreamCtl.temp_slot later in StreamLog()
 	 */
-	if (!is_temporary)
-		return CreateReplicationSlot(conn, slot_name, plugin, /*is_temporary,*/ is_physical, /*reserve_wal,*/ slot_exists_ok);
-	else
-		return true;
+
+//vvs
+//	if (!is_temporary)
+//		return CreateReplicationSlot(conn, slot_name, plugin, /*is_temporary,*/ is_physical, /*reserve_wal,*/ slot_exists_ok);
+//	else
+//		return true;
 #else
 	/* these parameters not supported in PG < 10 */
 	Assert(!is_temporary);
@@ -294,7 +298,7 @@ StreamLog(void *arg)
 //		ctl.mark_done        /* for future use in s3 */
 #if PG_VERSION_NUM >= 100000 && PG_VERSION_NUM < 110000
 		/* StreamCtl.temp_slot used only for PG-10, in PG>10, temp_slots are created by calling CreateReplicationSlot() */
-		ctl.temp_slot = temp_slot;
+		//vvs ctl.temp_slot = temp_slot;
 #endif /* PG_VERSION_NUM >= 100000 && PG_VERSION_NUM < 110000 */
 #else /* PG_VERSION_NUM < 100000 */
 		ctl.basedir = (char *) stream_arg->basedir;
