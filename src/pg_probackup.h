@@ -43,6 +43,10 @@
 
 #include "pg_probackup_state.h"
 
+#if defined(WIN32) && !(defined(_UCRT) && defined(__MINGW64__))
+#error Windows port requires compilation in MinGW64 UCRT environment
+#endif
+
 /* Wrap the code that we're going to delete after refactoring in this define*/
 #define REFACTORE_ME
 
