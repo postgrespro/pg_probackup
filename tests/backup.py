@@ -3441,17 +3441,22 @@ class BackupTest(ProbackupTest, unittest.TestCase):
             self.assertIn(
                 'WARNING: backup in progress, stop backup',
                 log_content)
-            
-            self.assertIn(
-                'FROM pg_catalog.pg_backup_stop',
-                log_content)
+
+            if self.get_version(node) < 150000:
+                self.assertIn(
+                    'FROM pg_catalog.pg_stop_backup',
+                    log_content)
+            else:
+                self.assertIn(
+                    'FROM pg_catalog.pg_backup_stop',
+                    log_content)
             
             self.assertIn(
                 'setting its status to ERROR',
                 log_content)
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname)
+        #self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def test_pg_stop_backup_missing_permissions(self):
