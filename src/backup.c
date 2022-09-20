@@ -1056,20 +1056,22 @@ pg_start_backup(const char *label, bool smooth, pgBackup *backup,
 	uint32		lsn_lo;
 	params[0] = label;
 
+#if PG_VERSION_NUM >= 150000
+	elog(INFO, "wait for pg_backup_start()");
+#else
 	elog(INFO, "wait for pg_start_backup()");
+#endif
 
 	/* 2nd argument is 'fast'*/
 	params[1] = smooth ? "false" : "true";
-	if (!exclusive_backup)
-		res = pgut_execute(conn,
-						   "SELECT pg_catalog.pg_start_backup($1, $2, false)",
-						   2,
-						   params);
-	else
-		res = pgut_execute(conn,
-						   "SELECT pg_catalog.pg_start_backup($1, $2)",
-						   2,
-						   params);
+	res = pgut_execute(conn,
+#if PG_VERSION_NUM >= 150000
+						"SELECT pg_catalog.pg_backup_start($1, $2)",
+#else
+						"SELECT pg_catalog.pg_start_backup($1, $2, false)",
+#endif
+						2,
+						params);
 
 	/*
 	 * Set flag that pg_start_backup() was called. If an error will happen it
@@ -1635,6 +1637,14 @@ pg_stop_backup_send(PGconn *conn, int server_version, bool is_started_on_replica
 			" labelfile,"
 			" spcmapfile"
 			" FROM pg_catalog.pg_stop_backup(false)",
+		stop_backup_on_master_after15_query[] =
+			"SELECT"
+			" pg_catalog.txid_snapshot_xmax(pg_catalog.txid_current_snapshot()),"
+			" current_timestamp(0)::timestamptz,"
+			" lsn,"
+			" labelfile,"
+			" spcmapfile"
+			" FROM pg_catalog.pg_backup_stop(false)",
 		/*
 		 * In case of backup from replica >= 9.6 we do not trust minRecPoint
 		 * and stop_backup LSN, so we use latest replayed LSN as STOP LSN.
@@ -1654,19 +1664,33 @@ pg_stop_backup_send(PGconn *conn, int server_version, bool is_started_on_replica
 			" pg_catalog.pg_last_xlog_replay_location(),"
 			" labelfile,"
 			" spcmapfile"
-			" FROM pg_catalog.pg_stop_backup(false)";
+			" FROM pg_catalog.pg_stop_backup(false)",
+		stop_backup_on_replica_after15_query[] =
+			"SELECT"
+			" pg_catalog.txid_snapshot_xmax(pg_catalog.txid_current_snapshot()),"
+			" current_timestamp(0)::timestamptz,"
+			" pg_catalog.pg_last_wal_replay_lsn(),"
+			" labelfile,"
+			" spcmapfile"
+			" FROM pg_catalog.pg_backup_stop(false)";
 
 	const char * const stop_backup_query =
 		is_exclusive ?
 			stop_exlusive_backup_query :
-			server_version >= 100000 ?
+			server_version >= 150000 ?
 				(is_started_on_replica ?
-					stop_backup_on_replica_query :
-					stop_backup_on_master_query
+					stop_backup_on_replica_after15_query :
+					stop_backup_on_master_after15_query
 				) :
-				(is_started_on_replica ?
-					stop_backup_on_replica_before10_query :
-					stop_backup_on_master_before10_query
+				(server_version >= 100000 ?
+					(is_started_on_replica ?
+						stop_backup_on_replica_query :
+						stop_backup_on_master_query
+					) :
+					(is_started_on_replica ?
+						stop_backup_on_replica_before10_query :
+						stop_backup_on_master_before10_query
+					)
 				);
 	bool		sent = false;
 
@@ -1682,7 +1706,11 @@ pg_stop_backup_send(PGconn *conn, int server_version, bool is_started_on_replica
 	 */
 	sent = pgut_send(conn, stop_backup_query, 0, NULL, WARNING);
 	if (!sent)
+#if PG_VERSION_NUM >= 150000
+		elog(ERROR, "Failed to send pg_backup_stop query");
+#else
 		elog(ERROR, "Failed to send pg_stop_backup query");
+#endif
 
 	/* After we have sent pg_stop_backup, we don't need this callback anymore */
 	pgut_atexit_pop(backup_stopbackup_callback, &stop_callback_params);
@@ -1728,7 +1756,11 @@ pg_stop_backup_consume(PGconn *conn, int server_version,
 			if (interrupted)
 			{
 				pgut_cancel(conn);
+#if PG_VERSION_NUM >= 150000
+				elog(ERROR, "interrupted during waiting for pg_backup_stop");
+#else
 				elog(ERROR, "interrupted during waiting for pg_stop_backup");
+#endif
 			}
 
 			if (pg_stop_backup_timeout == 1)
@@ -1741,7 +1773,11 @@ pg_stop_backup_consume(PGconn *conn, int server_version,
 			if (pg_stop_backup_timeout > timeout)
 			{
 				pgut_cancel(conn);
+#if PG_VERSION_NUM >= 150000
+				elog(ERROR, "pg_backup_stop doesn't answer in %d seconds, cancel it", timeout);
+#else
 				elog(ERROR, "pg_stop_backup doesn't answer in %d seconds, cancel it", timeout);
+#endif
 			}
 		}
 		else
@@ -1753,7 +1789,11 @@ pg_stop_backup_consume(PGconn *conn, int server_version,
 
 	/* Check successfull execution of pg_stop_backup() */
 	if (!query_result)
+#if PG_VERSION_NUM >= 150000
+		elog(ERROR, "pg_backup_stop() failed");
+#else
 		elog(ERROR, "pg_stop_backup() failed");
+#endif
 	else
 	{
 		switch (PQresultStatus(query_result))

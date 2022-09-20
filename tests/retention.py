@@ -1519,6 +1519,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         gdb = self.backup_node(
             backup_dir, 'node', node, backup_type='page', gdb=True)
 
+        # Attention! this breakpoint has been set on internal probackup function, not on a postgres core one
         gdb.set_breakpoint('pg_stop_backup')
         gdb.run_until_break()
         gdb.remove_all_breakpoints()
@@ -1568,6 +1569,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         gdb = self.backup_node(
             backup_dir, 'node', node, backup_type='page', gdb=True)
 
+        # Attention! this breakpoint has been set on internal probackup function, not on a postgres core one
         gdb.set_breakpoint('pg_stop_backup')
         gdb.run_until_break()
         gdb._execute('signal SIGKILL')

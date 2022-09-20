@@ -275,11 +275,19 @@ StreamLog(void *arg)
 		ctl.mark_done = false;
 
 #if PG_VERSION_NUM >= 100000
+#if PG_VERSION_NUM >= 150000
+		ctl.walmethod = CreateWalDirectoryMethod(
+			stream_arg->basedir,
+			PG_COMPRESSION_NONE,
+			0,
+			false);
+#else /* PG_VERSION_NUM >= 100000 && PG_VERSION_NUM < 150000 */
 		ctl.walmethod = CreateWalDirectoryMethod(
 			stream_arg->basedir,
 //			(instance_config.compress_alg == NONE_COMPRESS) ? 0 : instance_config.compress_level,
 			0,
 			false);
+#endif /* PG_VERSION_NUM >= 150000 */
 		ctl.replication_slot = replication_slot;
 		ctl.stop_socket = PGINVALID_SOCKET;
 		ctl.do_sync = false; /* We sync all files at the end of backup */
