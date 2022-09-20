@@ -156,7 +156,7 @@ remove_file_or_dir(const char* path)
 {
 	int rc = remove(path);
 
-	if (rc < 0 && errno == EACCESS)
+	if (rc < 0 && errno == EACCES)
 		rc = rmdir(path);
 	return rc;
 }
