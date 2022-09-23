@@ -146,7 +146,7 @@ params_cleanup(S3_query_params *params)
 static char*
 concatenate_multiple_strings(int argno, ...)
 {
-	char		*res = (char*)palloc(1);
+	char		*res = (char*)pgut_malloc(1);
 	size_t		size = 0;
 	size_t		capacity = 1;
 	va_list		args;
@@ -162,14 +162,14 @@ concatenate_multiple_strings(int argno, ...)
 		if (size >= capacity)
 		{
 			capacity = size * 2;
-			res = (char*)repalloc(res, capacity);
+			res = (char*)pgut_realloc(res, capacity);
 		}
 
 		strcat(res, str);
 	}
 	va_end(args);
 
-	res = (char*)repalloc(res, size + 1);
+	res = (char*)pgut_realloc(res, size + 1);
 	res[size] = 0;
 	return res;
 }
@@ -181,12 +181,11 @@ concatenate_multiple_strings(int argno, ...)
 static void
 S3_get_date_for_header(char **out, S3_query_params *params)
 {
-	*out = (char*)palloc(MAX_DATE_HEADER_LEN + 1);
+	*out = (char*)pgut_malloc0(MAX_DATE_HEADER_LEN + 1);
 
-	memset(*out, 0, MAX_DATE_HEADER_LEN + 1);
 	strftime(*out, MAX_DATE_HEADER_LEN + 1, "%a, %d %b %Y %H:%M:%S %Z", &(params->tm));
 	elog(LOG, "Time is: %s\n", *out);
-	*out = (char*)repalloc(*out, strlen(*out) + 1);
+	*out = (char*)pgut_realloc(*out, strlen(*out) + 1);
 }
 
 /* for make headers lowercase */
@@ -311,7 +310,7 @@ S3_get_signed_headers(char *out, S3_query_params *params)
 	for (i = 0; i < parray_num(params->headers); i++)
 	{
 		char *elem = (char*)parray_get(params->headers, i);
-		char *header_lowercase = (char*)palloc((strlen(elem) + 1));
+		char *header_lowercase = (char*)pgut_malloc((strlen(elem) + 1));
 		to_lowecase(header_lowercase, elem);
 		header_lowercase[strlen(elem)] = 0;
 		parray_append(params->lower_headers, header_lowercase);
@@ -330,7 +329,7 @@ S3_get_canonical_headers(S3_query_params *params)
 	size_t		size = 0;
 	size_t		capacity = 1;
 	int			i = 0;
-	char		*res = (char*)palloc(1);
+	char		*res = (char*)pgut_malloc(1);
 
 	res[0] = 0;
 	for (i = 0; i < parray_num(params->headers); i++)
@@ -344,7 +343,7 @@ S3_get_canonical_headers(S3_query_params *params)
 		if (size >= capacity)
 		{
 			capacity = size * 2;
-			res = (char*)repalloc(res, capacity);
+			res = (char*)pgut_realloc(res, capacity);
 		}
 
 		res = strcat(res, header_lowercase);
@@ -352,7 +351,7 @@ S3_get_canonical_headers(S3_query_params *params)
 		res = strcat(res, content);
 		res = strcat(res, "\n");
 	}
-	res = repalloc(res, size + 1);
+	res = pgut_realloc(res, size + 1);
 
 	return res;
 }
@@ -364,7 +363,7 @@ get_canonical_url(char **out, char *url)
 	size_t		size = 0;
 	size_t		capacity = 1;
 
-	*out = (char*)palloc(1);
+	*out = (char*)pgut_malloc(1);
 	while(*url)
 	{
 		if (url[0] == '?')
@@ -374,7 +373,7 @@ get_canonical_url(char **out, char *url)
 		if (size >= capacity)
 		{
 			capacity = size * 2;
-			*out = (char*)repalloc(*out, capacity);
+			*out = (char*)pgut_realloc(*out, capacity);
 		}
 
 		(*out)[size-1] = url[0];
@@ -382,7 +381,7 @@ get_canonical_url(char **out, char *url)
 		url += 1;
 	}
 
-	*out = (char*)repalloc((*out), size + 1);
+	*out = (char*)pgut_realloc((*out), size + 1);
 	(*out)[size] = 0;
 	elog(LOG, "Canonical URL: %s", *out);
 }
@@ -422,12 +421,12 @@ S3_create_canonical_request(const char *signed_headers, S3_query_params *params)
 	get_canonical_url(&canonical_url, params->url + strlen(params->host));
 	if (params->query_string) /* no query string in request */
 	{
-		canonical_query_string = (char*)palloc(strlen(params->query_string));
+		canonical_query_string = (char*)pgut_malloc(strlen(params->query_string));
 		strcpy(canonical_query_string, params->query_string + 1);
 	}
 	else
 	{
-		canonical_query_string = (char*)palloc(1);
+		canonical_query_string = (char*)pgut_malloc(1);
 		canonical_query_string[0] = 0;
 	}
 	elog(LOG, "Canonical query string: %s", canonical_query_string);
@@ -580,11 +579,11 @@ S3_headers_init(S3_query_params *params, S3_config *config)
 	/* Required for PUT */
 	if ((params->request_type == PUT) && (params->content_length > 0))
 	{
-		tmp_str = (char*)palloc(21);
+		tmp_str = (char*)pgut_malloc(21);
 		stpcpy(tmp_str, "x-amz-content-sha256");
 		tmp_str[20] = 0;
 		parray_append(params->headers, tmp_str);
-		tmp_str = (char*)palloc(PG_SHA256_DIGEST_LENGTH * 2 + 1);
+		tmp_str = (char*)pgut_malloc(PG_SHA256_DIGEST_LENGTH * 2 + 1);
 		tmp_str[PG_SHA256_DIGEST_LENGTH * 2] = 0;
 		sprintf(tmp_str, "%s", params->content_sha256);
 		parray_append(params->contents, tmp_str);
@@ -607,7 +606,7 @@ S3_create_url(S3_query_params *params, S3_config *config)
 	if (params->filename)
 	{
 		len += strlen(params->filename);
-		url = (char*)repalloc(url, len);
+		url = (char*)pgut_realloc(url, len);
 		strcpy(url, params->filename);
 	}
 
@@ -615,13 +614,13 @@ S3_create_url(S3_query_params *params, S3_config *config)
 	if (params->filename && params->query_string)
 	{
 		len += + 1;
-		url = (char*)repalloc(url, len);
+		url = (char*)pgut_realloc(url, len);
 		strcpy(url, "/");
 	}
 	else if (params->query_string)
 	{
 		len += strlen(params->query_string);
-		url = (char*)repalloc(url, len);
+		url = (char*)pgut_realloc(url, len);
 		strcpy(url, params->query_string);
 	}
 
@@ -695,7 +694,7 @@ headers_init(CURL *curl, struct curl_slist **headers, S3_query_params *params, S
 	/* We can replace it if we will */
 
 	/*header: Date */
-	tmp_str = (char*)palloc(5);
+	tmp_str = (char*)pgut_malloc(5);
 	stpcpy(tmp_str, "Date");
 	tmp_str[4] = 0;
 	parray_append(params->headers, tmp_str);
@@ -715,31 +714,29 @@ headers_init(CURL *curl, struct curl_slist **headers, S3_query_params *params, S
 		if (params->request_type == GET) /* GET */
 		{
 			/* header: Range */
-			tmp_str = (char*)palloc(6);
+			tmp_str = (char*)pgut_malloc(6);
 			stpcpy(tmp_str, "Range");
 			tmp_str[5] = 0;
 			parray_append(params->headers, tmp_str);
-			tmp_str = (char*)palloc(100);
-			memset(tmp_str, 0, 100);
+			tmp_str = (char*)pgut_malloc0(100);
 			strcat(tmp_str, "bytes=");
 			sprintf(tmp_str, "%lu", params->start_pos);
 			strcat(tmp_str, "-");
 			sprintf(tmp_str, "%lu", params->start_pos + params->content_length);
-			tmp_str = repalloc(tmp_str, strlen(tmp_str) + 1);
+			tmp_str = pgut_realloc(tmp_str, strlen(tmp_str) + 1);
 			parray_append(params->contents, tmp_str);
 			tmp_str = NULL;
 		}
 		else /* PUT */
 		{
 			/* header: Content-Length */
-			tmp_str = (char*)palloc(15);
+			tmp_str = (char*)pgut_malloc(15);
 			stpcpy(tmp_str, "Content-Length");
 			tmp_str[14] = 0;
 			parray_append(params->headers, tmp_str);
-			tmp_str = (char*)palloc(100);
-			memset(tmp_str, 0, 100);
+			tmp_str = (char*)pgut_malloc0(100);
 			sprintf(tmp_str, "%lu", params->content_length);
-			tmp_str = repalloc(tmp_str, strlen(tmp_str) + 1);
+			tmp_str = pgut_realloc(tmp_str, strlen(tmp_str) + 1);
 			parray_append(params->contents, tmp_str);
 			tmp_str = NULL;
 		}
@@ -754,7 +751,7 @@ headers_init(CURL *curl, struct curl_slist **headers, S3_query_params *params, S
 	 * because we calculate params with used headers and canonical request
 	 */
 
-	tmp_str = (char*)palloc(14);
+	tmp_str = (char*)pgut_malloc(14);
 	stpcpy(tmp_str, "Authorization");
 	tmp_str[13] = 0;
 	authorization_string = S3_get_authorization_string(params, config);
@@ -824,7 +821,7 @@ put_object(S3_query_params *params, S3_config *config)
 	/* TODO: https protocol */
 	curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
 
-	readbuf = (ft_bytes_t*)palloc(sizeof(ft_bytes_t));
+	readbuf = (ft_bytes_t*)pgut_malloc(sizeof(ft_bytes_t));
 	readbuf->ptr = params->buf;
 	readbuf->len = params->content_length;
 	/* I hope this f*ckin sh*t will work. */
@@ -904,7 +901,7 @@ get_object(S3_query_params *params, S3_config *config)
 	/* TODO: https protocol */
 	curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
 
-	writebuf = (ft_bytes_t*)palloc(sizeof(ft_bytes_t));
+	writebuf = (ft_bytes_t*)pgut_malloc(sizeof(ft_bytes_t));
 	writebuf->ptr = params->buf;
 	writebuf->len = params->content_length;
 	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
@@ -965,7 +962,7 @@ pioCloudFile_pioFlush(VSelf)
 	/* TODO: проверки из push_file_internal */
 	config = self->config;
 
-	params = (S3_query_params*)palloc(sizeof(S3_query_params));
+	params = (S3_query_params*)pgut_malloc(sizeof(S3_query_params));
 	params->request_type = PUT;
 	params->filename = self->path; /* нужен ли нам полный путь с именем хоста базы данных ??? */
 	params->query_string = NULL;
@@ -1011,13 +1008,13 @@ pioCloudFile_pioWrite(VSelf, ft_bytes_t buf, err_i *err)
 	if (!self->filebuf)
 	{
 		self->capacity = buf.len;
-		self->filebuf = (char*)palloc(buf.len);
+		self->filebuf = (char*)pgut_malloc(buf.len);
 	}
 
 	if (self->capacity <= (self->buflen + buf.len))
 	{
 		self->capacity *= 2;
-		self->filebuf = (char*)repalloc(self->filebuf, buf.len);
+		self->filebuf = (char*)pgut_realloc(self->filebuf, buf.len);
 	}
 
 	memcpy(self->filebuf, buf.ptr, buf.len);
@@ -1054,7 +1051,7 @@ pioCloudFile_pioRead(VSelf, ft_bytes_t buf, err_i *err)
 
 	config = self->config;
 
-	params = (S3_query_params*)palloc(sizeof(S3_query_params));
+	params = (S3_query_params*)pgut_malloc(sizeof(S3_query_params));
 	params->request_type = GET;
 	params->filename = self->path; /* нужен ли нам полный путь с именем хоста базы данных ??? */
 	params->query_string = NULL;
@@ -1099,7 +1096,7 @@ S3_pre_start_check(S3_config *config)
 
 	elog(LOG, "S3_pre_start_check in progress");
 
-	params = (S3_query_params*)palloc(sizeof(S3_query_params));
+	params = (S3_query_params*)pgut_malloc(sizeof(S3_query_params));
 	params->request_type = GET;
 	params->filename = NULL;
 	params->query_string = "?acl"; /* query string instead of filename */
