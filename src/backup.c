@@ -711,14 +711,18 @@ do_backup(InstanceState *instanceState, pgSetBackupParams *set_backup_params,
 	pgNodeInit(&nodeInfo);
 
 	config = (S3_config*)palloc(sizeof(S3_config));
-	config->access_key = "access_key";
-	config->secret_access_key = "secret_access_key";
-	config->bucket_name = "bucket_name";
-	config->region = "region";
+	config->access_key = "minioadmin";
+	config->secret_access_key = "minioadmin";
+	config->bucket_name = "s3test";
+	config->region = "us-east-1";
+
+	config->endpoint_url = "127.0.0.1:9000";
 
 	elog(LOG, "Calling for S3_pre_check");
 	err = S3_pre_start_check(config);
 	elog(LOG, "S3_pre_start_check returned: %d", err);
+
+	return 0;
 
 	/* Save list of external directories */
 	if (instance_config.external_dir_str &&

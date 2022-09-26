@@ -64,7 +64,7 @@ typedef enum Request_type
 
 typedef struct pioCloudFile
 {
-	char			*path;
+	const char		*path;
 
 	/* buffer for gathering file to write in WriteFlush */
 	char			*filebuf;
@@ -93,18 +93,20 @@ fobj_klass(pioCloudDrive);
 typedef struct S3_query_params
 {
 	Request_type	request_type;
-	char			*filename;
+	const char		*filename;
 	struct			tm tm;
 	char			content_sha256[PG_SHA256_DIGEST_LENGTH * 2 + 1]; /* in hexadecimal format */
 	char			*buf;
 	size_t			start_pos; /* != 0 only for reading */
 	size_t			content_length;
 
+	char			*protocol;
 	char			*host;
-	/* only simple query string with one parameter supported, for more write create_canonical_qs function */
+	/* !!! query_string == Canonical query string, please !!! */
 	/* p.3 in https://docs.aws.amazon.com/general/latest/gr/sigv4-create-canonical-request.html */
-	char			*query_string; /* please do not transfere auth parameters in query string */
+	char			*query_string; /* do not transfer auth parameters in query string, they are in Authorization header */
 	char			*url;
+	char			*canonical_url;
 	parray			*headers; /* list of all headers: Host, Date, x-amz-...  */
 	parray			*contents; /* list of header contents: url of host, date in http format etc... */
 	parray			*lower_headers; /* list of header contents: url of host, date in http format etc... */
@@ -123,16 +125,16 @@ params_cleanup(S3_query_params *params)
 	{
 		char *elem = (char*)parray_get(params->headers, i);
 		elog(LOG, "Header: %s", elem);
-		pfree(elem);
+		free(elem);
 
 		elem = (char*)parray_get(params->contents, i);
 		elog(LOG, "Content: %s", elem);
-		pfree(elem);
+		free(elem);
 
 		elem = (char*)parray_get(params->lower_headers, i);
 		elog(LOG, "Lower header: %s", elem);
 		if (elem) /* NULL for Authorization header */
-			pfree(elem);
+			free(elem);
 	}
 	parray_free(params->headers);
 	parray_free(params->contents);
@@ -183,7 +185,8 @@ S3_get_date_for_header(char **out, S3_query_params *params)
 {
 	*out = (char*)pgut_malloc0(MAX_DATE_HEADER_LEN + 1);
 
-	strftime(*out, MAX_DATE_HEADER_LEN + 1, "%a, %d %b %Y %H:%M:%S %Z", &(params->tm));
+	/*strftime(*out, MAX_DATE_HEADER_LEN + 1, "%a, %d %b %Y %H:%M:%S %Z", &(params->tm));*/
+	strftime(*out, 17, "%Y%m%dT%H%M%SZ", &(params->tm));
 	elog(LOG, "Time is: %s\n", *out);
 	*out = (char*)pgut_realloc(*out, strlen(*out) + 1);
 }
@@ -212,8 +215,8 @@ translate_checksum_to_hexadecimal(char *dst, char *src)
 	for (i = 0; i < PG_SHA256_DIGEST_LENGTH; i++)
 	{
 		char ch = src[i];
-		sprintf(dst + i * 2, "%x\n", (ch >> 4) & 0x0f); /* first 4 bits */
-		sprintf(dst + i * 2 + 1,"%x\n", ch & 0x0f); /* second 4 bits */
+		sprintf(dst + i * 2, "%x", (ch >> 4) & 0x0f); /* first 4 bits */
+		sprintf(dst + i * 2 + 1,"%x", ch & 0x0f); /* second 4 bits */
 	}
 	dst[PG_SHA256_DIGEST_LENGTH * 2] = 0;
 }
@@ -255,26 +258,6 @@ S3_get_HMAC_SHA256(char *out, const char *key, size_t keylen, const char *data, 
 #endif
 	out[PG_SHA256_DIGEST_LENGTH] = 0;
 }
-
-
-static void
-binary_hmac_sha256(char *out, const char *key, size_t keylen, const char *data, size_t datalen)
-{
-	/* size of out >= PG_SHA256_DIGEST_LENGTH * 2 + 1 */
-	char		hmac_buffer[PG_SHA256_DIGEST_LENGTH + 1];
-	int			i = 0;
-
-	S3_get_HMAC_SHA256(hmac_buffer, key, keylen, data, datalen);
-
-	for (i = 0; i < PG_SHA256_DIGEST_LENGTH; i++)
-	{
-		char ch = hmac_buffer[i];
-		out[i * 2] = (ch >> 4) & 0x0f;
-		out[i * 2 + 1] = ch & 0x0f;
-	}
-	out[PG_SHA256_DIGEST_LENGTH * 2] = 0;
-}
-
 
 
 static char*
@@ -357,7 +340,7 @@ S3_get_canonical_headers(S3_query_params *params)
 }
 
 
-static void
+/*static void
 get_canonical_url(char **out, char *url)
 {
 	size_t		size = 0;
@@ -384,7 +367,7 @@ get_canonical_url(char **out, char *url)
 	*out = (char*)pgut_realloc((*out), size + 1);
 	(*out)[size] = 0;
 	elog(LOG, "Canonical URL: %s", *out);
-}
+}*/
 
 
 static char*
@@ -397,7 +380,7 @@ S3_create_canonical_request(const char *signed_headers, S3_query_params *params)
 	 * canonical_url is a part of url starting with the "/" that follows
 	 * the domain name and up to the end of the string or to the '?' sign
 	 */
-	char		*canonical_url = NULL;
+	/*char		*canonical_url = NULL;*/
 	/* query string is a part of url that follows '?' sign, excluding the '?' */
 	char		*canonical_query_string = NULL;
 
@@ -418,7 +401,7 @@ S3_create_canonical_request(const char *signed_headers, S3_query_params *params)
 			break;
 	}
 
-	get_canonical_url(&canonical_url, params->url + strlen(params->host));
+	/*get_canonical_url(&canonical_url, params->url + strlen(params->protocol) + strlen(params->host));*/
 	if (params->query_string) /* no query string in request */
 	{
 		canonical_query_string = (char*)pgut_malloc(strlen(params->query_string));
@@ -436,12 +419,12 @@ S3_create_canonical_request(const char *signed_headers, S3_query_params *params)
 	elog(LOG, "Canonical headers: %s", canonical_headers);
 	/* canonical headers finished */
 
-	retptr = concatenate_multiple_strings(11, query, "\n", canonical_url, "\n", canonical_query_string, "\n",
+	retptr = concatenate_multiple_strings(11, query, "\n", params->canonical_url, "\n", canonical_query_string, "\n",
 										  canonical_headers, "\n", signed_headers, "\n", params->content_sha256);
 
 	/* cleanup */
-	pfree(canonical_headers);
-	pfree(canonical_query_string);
+	free(canonical_headers);
+	free(canonical_query_string);
 
 	elog(LOG, "Canonical request: %s", retptr);
 
@@ -461,9 +444,28 @@ get_content_sha256(S3_query_params *params)
 		S3_get_SHA256(hashed_payload, "", 0);
 
 	translate_checksum_to_hexadecimal(hex_hashed_payload, hashed_payload);
+	elog(LOG, "hex_hashed_payload: %s", hex_hashed_payload);
 	/* set field content_sha256 in params to re-use in header x-amz-checksum-sha256 */
 	memcpy(params->content_sha256, hex_hashed_payload, PG_SHA256_DIGEST_LENGTH * 2);
 	params->content_sha256[PG_SHA256_DIGEST_LENGTH * 2] = 0;
+}
+
+
+static void
+binary_print(char *buf)
+{
+	/* sizeof buf >= PG_SHA256_DIGEST_LENGTH */
+	int			i = 0;
+	char		strbuf[PG_SHA256_DIGEST_LENGTH * 2 + 1];
+
+	for (i = 0; i < PG_SHA256_DIGEST_LENGTH; i++)
+	{
+		char ch = buf[i];
+		sprintf(strbuf + i * 2, "%x", (ch >> 4) & 0x0f); /* first 4 bits */
+		sprintf(strbuf + i * 2 + 1,"%x", ch & 0x0f); /* second 4 bits */
+	}
+
+	elog(LOG, "binary_print: %s", strbuf);
 }
 
 
@@ -483,8 +485,8 @@ S3_get_authorization_string(S3_query_params *params, S3_config *config)
 	char		*string_to_sign = NULL;
 	char		*buf = NULL;
 	char		signed_headers[MAX_SIGNED_HEADERS_LEN + 1];
-	char		hmac_buffer[PG_SHA256_DIGEST_LENGTH * 2 + 1];
-	char		signing_key[PG_SHA256_DIGEST_LENGTH * 2 + 1];
+	char		hmac_buffer[PG_SHA256_DIGEST_LENGTH + 1];
+	char		signing_key[PG_SHA256_DIGEST_LENGTH + 1];
 	char		signature[PG_SHA256_DIGEST_LENGTH * 2 + 1];
 
 	char		*tmp = NULL;
@@ -493,14 +495,15 @@ S3_get_authorization_string(S3_query_params *params, S3_config *config)
 
 	/* Credential */
 	date_ptr[9] = 0;
-	strftime(date_ptr,9, "%Y%m%d", &(params->tm));
+	strftime(date_ptr, 9, "%Y%m%d", &(params->tm));
+	//strcpy(date_ptr, "20150830");
 
 	/* create credential scope */
 	credential_scope = concatenate_multiple_strings(4, date_ptr, "/", config->region, "/s3/aws4_request");
 
 	tmp = retptr;
 	retptr = concatenate_multiple_strings(6, retptr, "Credential=", config->access_key, "/", credential_scope, ", ");
-	pfree(tmp);
+	free(tmp);
 	/* Credential finished */
 
 	/* SignedHeaders */
@@ -508,7 +511,7 @@ S3_get_authorization_string(S3_query_params *params, S3_config *config)
 
 	tmp = retptr;
 	retptr = concatenate_multiple_strings(4, retptr, "SignedHeaders=", signed_headers, ", ");
-	pfree(tmp);
+	free(tmp);
 	/* SignedHeaders finished */
 
 	/* signature */
@@ -523,27 +526,42 @@ S3_get_authorization_string(S3_query_params *params, S3_config *config)
 	/* signing key = HMAC(HMAC(HMAC(HMAC("AWS4" + kSecret,"20150830"),"us-east-1"),"iam"),"aws4_request") -- binary (numbers) of size 64 */
 	/* signature = HexEncode(HMAC(derived signing key, string to sign)) -- hexadecimal (symbols) of size 64 */
 	buf = concatenate_multiple_strings(2, "AWS4", config->secret_access_key);
+	//buf = concatenate_multiple_strings(2, "AWS4", "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY");
 
-	binary_hmac_sha256(hmac_buffer, buf, strlen(buf), date_ptr, strlen(date_ptr)); /* kDate = HMAC("AWS4" + kSecret,"20150830") */
-	binary_hmac_sha256(hmac_buffer, hmac_buffer, PG_SHA256_DIGEST_LENGTH * 2, config->region, strlen(config->region)); /* kRegion = HMAC(kDate, Region) */
-	binary_hmac_sha256(hmac_buffer, hmac_buffer, PG_SHA256_DIGEST_LENGTH * 2, "s3", 2); /* kService = HMAC(kRegion, Service) */
-	binary_hmac_sha256(signing_key, hmac_buffer, PG_SHA256_DIGEST_LENGTH * 2, "aws4_request", 12); /* kSigning = HMAC(kService, "aws4_request") */
+	S3_get_HMAC_SHA256(hmac_buffer, buf, strlen(buf), date_ptr, strlen(date_ptr)); /* kDate = HMAC("AWS4" + kSecret,"20150830") */
+	/*elog(LOG, "kDate");
+	binary_print(hmac_buffer);*/
+	S3_get_HMAC_SHA256(hmac_buffer, hmac_buffer, PG_SHA256_DIGEST_LENGTH, config->region, strlen(config->region)); /* kRegion = HMAC(kDate, Region) */
+	/*elog(LOG, "kRegion");
+	binary_print(hmac_buffer);*/
+	S3_get_HMAC_SHA256(hmac_buffer, hmac_buffer, PG_SHA256_DIGEST_LENGTH, "s3", 2); /* kService = HMAC(kRegion, Service) */
+	/*elog(LOG, "kService");
+	binary_print(hmac_buffer);*/
+	S3_get_HMAC_SHA256(signing_key, hmac_buffer, PG_SHA256_DIGEST_LENGTH, "aws4_request", 12); /* kSigning = HMAC(kService, "aws4_request") */
+	/*elog(LOG, "signing_key");
+	binary_print(hmac_buffer);*/
 	/* we got the signing key */
 
 	/* final step to obtain a signature */
-	S3_get_HMAC_SHA256(hmac_buffer, signing_key, PG_SHA256_DIGEST_LENGTH * 2, string_to_sign, strlen(string_to_sign));
+	//char		string_to_sign[] = "AWS4-HMAC-SHA256\n20150830T123600Z\n20150830/us-east-1/iam/aws4_request\nf536975d06c0309214f805bb90ccff089219ecd68b2577efef23edd43b7e1a59";
+	//S3_get_HMAC_SHA256(hmac_buffer, signing_key, PG_SHA256_DIGEST_LENGTH * 2, string_to_sign, strlen(string_to_sign));
+	S3_get_HMAC_SHA256(hmac_buffer, signing_key, PG_SHA256_DIGEST_LENGTH, string_to_sign, strlen(string_to_sign));
+	elog(LOG, "signature");
+	binary_print(hmac_buffer);
+
 	translate_checksum_to_hexadecimal(signature, hmac_buffer);
+	elog(LOG, "final signature: %s", signature);
 
 	tmp = retptr;
 	retptr = concatenate_multiple_strings(3, retptr, "Signature=", signature);
-	pfree(tmp);
+	free(tmp);
 	/* params finished */
 
 	/* cleanup */
-	pfree(credential_scope);
-	pfree(canonical_request);
-	pfree(string_to_sign);
-	pfree(buf);
+	free(credential_scope);
+	free(canonical_request);
+	free(string_to_sign);
+	free(buf);
 	return retptr;
 }
 
@@ -558,9 +576,10 @@ headers_append(struct curl_slist **headers, const char *header, const char *cont
 	temp = curl_slist_append((*headers), header_string);
 	if (!temp)
 		elog(ERROR, "Error in curl_slist_append. Aborting");
-	
+
+	elog(LOG, "headers_append header_string: %s", header_string);
 	(*headers) = temp;
-	pfree(header_string);
+	free(header_string);
 }
 
 
@@ -593,6 +612,7 @@ S3_headers_init(S3_query_params *params, S3_config *config)
 
 
 /* HOOK function for creating S3 url */
+/*  */
 static void
 S3_create_url(S3_query_params *params, S3_config *config)
 {
@@ -600,32 +620,47 @@ S3_create_url(S3_query_params *params, S3_config *config)
 	char		*url = NULL;
 	size_t		len;
 
-	host = concatenate_multiple_strings(5, "http://", config->bucket_name, ".s3.", config->region, ".s3.amazonaws.com");
-	url = concatenate_multiple_strings(2, host, "/");
-	len = strlen(host) + 2;
-	if (params->filename)
+	/* SWITCH for vault type (AWS, VK, Minio) */
+	/* This is Minio variant */
+	if (!config->endpoint_url) /* by default we call to Amazon S3 service */
 	{
-		len += strlen(params->filename);
-		url = (char*)pgut_realloc(url, len);
-		strcpy(url, params->filename);
+		ft_assert(config->bucket_name && config->region);
+		host = concatenate_multiple_strings(4, config->bucket_name, ".s3.", config->region, ".s3.amazonaws.com");
+	}
+	else /* user's service (like minio or !!! VK !!!) */
+	/* !!!!!!!!!!! ВОТ ЗДЕСЬ НАПИСАНА ХРЕНЬ !!!!!!!!!! */
+	{
+		host = concatenate_multiple_strings(1, config->endpoint_url);
+		/*host = concatenate_multiple_strings(3, "http://", config->bucket_name, ".", config->endpoint_url);*/
 	}
 
-	/* avoid adding extra "/" to url */
-	if (params->filename && params->query_string)
+	/* !!!!! */
+	/* MINIO variant */
+	/* !!!!! Важно помнить, что у нас не всегда есть даже bucket_name. В простейшем случае у нас только ключи */
+	url = concatenate_multiple_strings(4, params->protocol, host, "/", config->bucket_name);
+	/* TODO: AWS and VK variants */
+	len = strlen(params->protocol) + strlen(host) + 2;
+	if (params->filename)
 	{
-		len += + 1;
+		len += strlen(params->filename) + 1;
 		url = (char*)pgut_realloc(url, len);
-		strcpy(url, "/");
+		strcat(url, "/");
+		strcat(url, params->filename);
 	}
-	else if (params->query_string)
+
+	params->canonical_url = (char*)pgut_malloc0(strlen(url) - strlen(host) - strlen(params->protocol) + 1);
+	strcpy(params->canonical_url, url + strlen(host) + strlen(params->protocol));
+
+	if (params->query_string)
 	{
 		len += strlen(params->query_string);
 		url = (char*)pgut_realloc(url, len);
-		strcpy(url, params->query_string);
+		strcat(url, params->query_string);
 	}
 
 	elog(LOG, "host: %s", host);
 	elog(LOG, "url: %s", url);
+	elog(LOG, "canonical_url: %s", params->canonical_url);
 
 	params->url = url;
 	params->host = host;
@@ -693,10 +728,19 @@ headers_init(CURL *curl, struct curl_slist **headers, S3_query_params *params, S
 	/* Curl automatically provides header Host, based on url */
 	/* We can replace it if we will */
 
-	/*header: Date */
-	tmp_str = (char*)pgut_malloc(5);
-	stpcpy(tmp_str, "Date");
-	tmp_str[4] = 0;
+	/* header: Host */
+	/* Придется добавить руками, чтобы он попал в Signed Headers */
+	tmp_str = (char*)pgut_malloc0(5);
+	stpcpy(tmp_str, "Host");
+	parray_append(params->headers, tmp_str);
+	tmp_str = (char*)pgut_malloc0(strlen(params->host) + 1);;
+	strcpy(tmp_str, params->host);
+	parray_append(params->contents, tmp_str);
+	tmp_str = NULL;
+
+	/* header: Date */
+	tmp_str = (char*)pgut_malloc0(11);
+	stpcpy(tmp_str, "X-Amz-Date");
 	parray_append(params->headers, tmp_str);
 	tmp_str = NULL;
 	S3_get_date_for_header(&tmp_str, params);
@@ -714,9 +758,8 @@ headers_init(CURL *curl, struct curl_slist **headers, S3_query_params *params, S
 		if (params->request_type == GET) /* GET */
 		{
 			/* header: Range */
-			tmp_str = (char*)pgut_malloc(6);
+			tmp_str = (char*)pgut_malloc0(6);
 			stpcpy(tmp_str, "Range");
-			tmp_str[5] = 0;
 			parray_append(params->headers, tmp_str);
 			tmp_str = (char*)pgut_malloc0(100);
 			strcat(tmp_str, "bytes=");
@@ -730,9 +773,8 @@ headers_init(CURL *curl, struct curl_slist **headers, S3_query_params *params, S
 		else /* PUT */
 		{
 			/* header: Content-Length */
-			tmp_str = (char*)pgut_malloc(15);
+			tmp_str = (char*)pgut_malloc0(15);
 			stpcpy(tmp_str, "Content-Length");
-			tmp_str[14] = 0;
 			parray_append(params->headers, tmp_str);
 			tmp_str = (char*)pgut_malloc0(100);
 			sprintf(tmp_str, "%lu", params->content_length);
@@ -751,9 +793,8 @@ headers_init(CURL *curl, struct curl_slist **headers, S3_query_params *params, S
 	 * because we calculate params with used headers and canonical request
 	 */
 
-	tmp_str = (char*)pgut_malloc(14);
+	tmp_str = (char*)pgut_malloc0(14);
 	stpcpy(tmp_str, "Authorization");
-	tmp_str[13] = 0;
 	authorization_string = S3_get_authorization_string(params, config);
 	parray_append(params->headers, tmp_str);
 	parray_append(params->contents, authorization_string);
@@ -964,6 +1005,7 @@ pioCloudFile_pioFlush(VSelf)
 
 	params = (S3_query_params*)pgut_malloc(sizeof(S3_query_params));
 	params->request_type = PUT;
+	params->protocol = "http://";
 	params->filename = self->path; /* нужен ли нам полный путь с именем хоста базы данных ??? */
 	params->query_string = NULL;
 	params->buf = self->filebuf;
@@ -978,7 +1020,7 @@ pioCloudFile_pioFlush(VSelf)
 	}
 
 	/* cleanup */
-	pfree(params);
+	free(params);
 	curl_global_cleanup();
 
     return $noerr();
@@ -1068,7 +1110,7 @@ pioCloudFile_pioRead(VSelf, ft_bytes_t buf, err_i *err)
 	}
 
 	/* cleanup */
-	pfree(params);
+	free(params);
 	curl_global_cleanup();
 
 	return buf.len;
@@ -1092,35 +1134,43 @@ S3_pre_start_check(S3_config *config)
 	long				http_response_code;
 	S3_query_params		*params = NULL;
 
+/*	char				aws4_str[] = "AWS4:Amz:us-east-1:s3";
+	char				cred[] = "minioadmin:minioadmin";*/
+
 	curl_global_init(CURL_GLOBAL_ALL);
 
 	elog(LOG, "S3_pre_start_check in progress");
 
 	params = (S3_query_params*)pgut_malloc(sizeof(S3_query_params));
 	params->request_type = GET;
+	params->protocol = "http://";
 	params->filename = NULL;
-	params->query_string = "?acl"; /* query string instead of filename */
+	params->query_string = "?acl=";
+	//params->query_string = NULL;
 	params->buf = NULL;
+	params->content_length = 0;
 
 	curl = curl_easy_init();
 
 	if (!curl)
 		return ERROR_CURL_EASY_INIT;
 
+	/* available since libcurl 7.75.0, а у меня в не сильно старой системе 7.64.0 */
+	/*curl_easy_setopt(c, CURLOPT_AWS_SIGV4, aws4_str);
+	curl_easy_setopt(c, CURLOPT_USERPWD, cred);*/
+
 	headers_init(curl, &headers, params, config);
 	curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
 
-
-	/* output of all params */
-
 	/* Perform the request, res will get the return code */
-	/*res = curl_easy_perform(curl);*/
+	res = curl_easy_perform(curl);
 
 	/*
 	 * TODO!!!
 	 * Read received ACLs from xml response
 	 */
-	curl_easy_getinfo (curl, CURLINFO_RESPONSE_CODE, &http_response_code);
+	curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_response_code);
+	elog(LOG, "curl_easy_perform returned: %ld", http_response_code);
 	if (http_response_code == 200 && res != CURLE_ABORTED_BY_CALLBACK)
 	{
 		elog(LOG, "S3 pre-check successful, continue the operation");
@@ -1134,7 +1184,7 @@ S3_pre_start_check(S3_config *config)
 	/* RETRY ????*/
 
 	/* cleanup */
-	pfree(params);
+	free(params);
 	curl_slist_free_all(headers);
 	curl_easy_cleanup(curl);
 	curl_global_cleanup();
@@ -1184,6 +1234,8 @@ pioCloudDrive_pioOpen(VSelf, path_t path, int flags, int permissions, err_i *err
 		fd = open(path, flags, permissions);
 	*/
 
+	ft_assert(config->access_key && config->secret_access_key && config->bucket_name, "one of keys o bucket name not provided");
+
 	s3_err = S3_pre_start_check(config);
 
 	if (s3_err != S3_SUCCESS)
@@ -1211,7 +1263,16 @@ pioCloudFile_pioClose(VSelf, bool sync)
 	Self(pioCloudFile);
 	err_i err = $noerr();
 
-	return fobj_err_combine(err, pioCloudFile_pioFlush(self));
+	if (sync)
+		err = pioCloudFile_pioFlush(self);
+
+	if (self->filebuf && (self->buflen != 0))
+		free(self->filebuf);
+
+	/* ??????? */
+	/*free(self->path);*/
+
+	return fobj_err_combine($noerr(), err);
 }
 
 fobj_klass_handle(pioCloudFile);

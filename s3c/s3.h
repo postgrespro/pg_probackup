@@ -27,10 +27,12 @@
 /* I guess here we store parameters from commandline */
 typedef struct S3_config
 {
-	char *access_key;
-	char *secret_access_key;
-	char *bucket_name;
-	char *region;
+	const char *access_key;
+	const char *secret_access_key;
+	const char *bucket_name;
+	const char *region;
+
+	char *endpoint_url; /* default: s3.amazonaws.com */
 	/*
 	 * -- bucket size?? protocol put_object supports up to 5GB
 	 * -- retry?
