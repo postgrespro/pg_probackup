@@ -249,6 +249,57 @@ bool launch_agent(void)
 	return true;
 }
 
+/* PGPRO 10-13 check to be "(certified)", with exceptional case PGPRO_11 conforming to "(standard certified)" */
+static bool check_certified()
+{
+#ifdef PGPRO_VERSION_STR
+	return strstr(PGPRO_VERSION_STR, "(certified)") ||
+		   strstr(PGPRO_VERSION_STR, ("(standard certified)"));
+#endif
+	return false;
+}
+
+//TODO REVIEW review coding standard https://jira.postgrespro.ru/browse/PBCKP-251 with @funny_falcon, newlines, braces etc
+static char* extract_pg_edition_str()
+{
+	static char *vanilla = "vanilla";
+	static char *std = "standard";
+	static char *ent = "enterprise";
+	static char *std_cert = "standard-certified";
+	static char *ent_cert = "enterprise-certified";
+
+#ifdef PGPRO_EDITION
+    if (strcasecmp(PGPRO_EDITION, "1C") == 0)
+		return vanilla;
+
+	/* these "certified" checks are applicable to PGPRO from 9.6 up to 12 versions.
+	 * 13+ certified versions are compatible to non-certified ones */
+	if (PG_VERSION_NUM < 100000)
+	{
+		if (strcmp(PGPRO_EDITION, "standard-certified") == 0)
+			return std_cert;
+		else if (strcmp(PGPRO_EDITION, "enterprise-certified"))
+			return ent_cert;
+		else
+			Assert("Bad #define PGPRO_EDITION value" == 0);
+	}
+
+	if (check_certified())
+	{
+		if (strcmp(PGPRO_EDITION, "standard"))
+			return std_cert;
+		else if (strcmp(PGPRO_EDITION, "enterprise") == 0)
+			return ent_cert;
+		else
+			Assert("Bad #define PGPRO_EDITION value" == 0);
+	}
+
+	return PGPRO_EDITION;
+#else
+	return vanilla;
+#endif
+}
+
 #define COMPATIBILITY_VAL_STR(macro) #macro, macro
 #define COMPATIBILITY_VAL_INT_HELPER(macro, helper_buf, buf_size) (snprintf(helper_buf, buf_size, "%d", macro), helper_buf)
 #define COMPATIBILITY_VAL_INT(macro, helper_buf, buf_size) #macro, COMPATIBILITY_VAL_INT_HELPER(macro, helper_buf, buf_size)
@@ -267,11 +318,8 @@ size_t prepare_compatibility_str(char* compatibility_buf, size_t compatibility_b
 	char compatibility_val_int_macro_helper_buf[32];
 	char* compatibility_params[] = {
 		COMPATIBILITY_VAL_STR(PG_MAJORVERSION),
-#ifdef PGPRO_EDN
-		//TODO REVIEW can use edition.h/extract_pgpro_edition() or similar
-		COMPATIBILITY_VAL_STR(PGPRO_EDN),
-#endif
-		//TODO REVIEW remove? no difference between 32/64 in global/pg_control.
+		"edition", extract_pg_edition_str(),
+		/* 32/64 bits compatibility */
 		COMPATIBILITY_VAL_INT(SIZEOF_VOID_P,
 							  compatibility_val_int_macro_helper_buf, sizeof compatibility_val_int_macro_helper_buf),
 	};

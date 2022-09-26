@@ -280,7 +280,6 @@ fio_get_agent_version(int* protocol, char* payload_buf, size_t payload_buf_size)
 	IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
 	if (hdr.size > payload_buf_size)
 	{
-		//TODO REVIEW XXX %zu is C99 but not ANSI S compatible, should we use ints, %zu is also applied at data.c:501 data.c:1638??
 		elog(ERROR, "Corrupted remote compatibility protocol: insufficient payload_buf_size=%zu", payload_buf_size);
 	}
 
