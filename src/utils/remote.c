@@ -249,19 +249,18 @@ bool launch_agent(void)
 	return true;
 }
 
-/* PGPRO 10-13 check to be "(certified)", with exceptional case PGPRO_11 conforming to "(standard certified)" */
+#ifdef PGPRO_EDITION
+/* PGPRO 10-13 checks to be "(certified)", with exceptional case PGPRO_11 conforming to "(standard certified)" */
 static bool check_certified()
 {
-#ifdef PGPRO_VERSION_STR
 	return strstr(PGPRO_VERSION_STR, "(certified)") ||
 		   strstr(PGPRO_VERSION_STR, ("(standard certified)"));
-#endif
-	return false;
 }
+#endif
 
-//TODO REVIEW review coding standard https://jira.postgrespro.ru/browse/PBCKP-251 with @funny_falcon, newlines, braces etc
 static char* extract_pg_edition_str()
 {
+	static char *_1C = "1C";
 	static char *vanilla = "vanilla";
 	static char *std = "standard";
 	static char *ent = "enterprise";
@@ -269,26 +268,19 @@ static char* extract_pg_edition_str()
 	static char *ent_cert = "enterprise-certified";
 
 #ifdef PGPRO_EDITION
-    if (strcasecmp(PGPRO_EDITION, "1C") == 0)
+	if (strcmp(PGPRO_EDITION, _1C) == 0)
 		return vanilla;
 
-	/* these "certified" checks are applicable to PGPRO from 9.6 up to 12 versions.
-	 * 13+ certified versions are compatible to non-certified ones */
 	if (PG_VERSION_NUM < 100000)
-	{
-		if (strcmp(PGPRO_EDITION, "standard-certified") == 0)
-			return std_cert;
-		else if (strcmp(PGPRO_EDITION, "enterprise-certified"))
-			return ent_cert;
-		else
-			Assert("Bad #define PGPRO_EDITION value" == 0);
-	}
+		return PGPRO_EDITION;
 
-	if (check_certified())
+	/* these "certified" checks are applicable to PGPRO from 10 up to 12 versions.
+	 * 13+ certified versions are compatible to non-certified ones */
+	if (PG_VERSION_NUM < 130000 && check_certified())
 	{
-		if (strcmp(PGPRO_EDITION, "standard"))
+		if (strcmp(PGPRO_EDITION, std) == 0)
 			return std_cert;
-		else if (strcmp(PGPRO_EDITION, "enterprise") == 0)
+		else if (strcmp(PGPRO_EDITION, ent) == 0)
 			return ent_cert;
 		else
 			Assert("Bad #define PGPRO_EDITION value" == 0);
@@ -374,7 +366,7 @@ void check_remote_agent_compatibility(int agent_version, char *compatibility_str
 		prepare_compatibility_str(buf, sizeof buf);
 		if(strcmp(compatibility_str, buf))
 		{
-			elog(ERROR, "Incompatible remote agent params, expected:\n%s", buf);
+			elog(ERROR, "Incompatible remote agent params, expected:\n%s, actual:\n:%s ", buf, compatibility_str);
 		}
 	}
 }
