@@ -310,12 +310,9 @@ size_t prepare_compatibility_str(char* compatibility_buf, size_t compatibility_b
 	};
 
 	size_t result_size = 0;
-	size_t compatibility_params_array_size = sizeof compatibility_params / sizeof compatibility_params[0];;
-
 	*compatibility_buf = '\0';
-	Assert(compatibility_params_array_size % 2 == 0);
 
-	for (int i = 0; i < compatibility_params_array_size; i+=2)
+	for (int i = 0; i < sizeof compatibility_params; i+=2)
 	{
 		if (compatibility_params[i].strval != NULL)
 			result_size += snprintf(compatibility_buf + result_size, compatibility_buf_size - result_size,
@@ -366,7 +363,7 @@ void check_remote_agent_compatibility(int agent_version, char *compatibility_str
 		prepare_compatibility_str(buf, sizeof buf);
 		if(strcmp(compatibility_str, buf))
 		{
-			elog(ERROR, "Incompatible remote agent params, expected:\n%s, actual:\n:%s ", buf, compatibility_str);
+			elog(ERROR, "Incompatible remote agent params, expected:\n%s, actual:\n:%s", buf, compatibility_str);
 		}
 	}
 }

@@ -14,7 +14,7 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         self.fname = self.id().split('.')[3]
 
     # @unittest.expectedFailure
-    @unittest.skip("skip")
+    # @unittest.skip("skip")
     def test_catchup_with_different_remote_major_pg(self):
         """
         Decription in jira issue PBCKP-236
