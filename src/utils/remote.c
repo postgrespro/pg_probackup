@@ -292,12 +292,8 @@ static char* extract_pg_edition_str()
 #endif
 }
 
-#define COMPATIBILITY_VAL_STR(macro) #macro, macro
-#define COMPATIBILITY_VAL_INT_HELPER(macro, helper_buf, buf_size) (snprintf(helper_buf, buf_size, "%d", macro), helper_buf)
-#define COMPATIBILITY_VAL_INT(macro, helper_buf, buf_size) #macro, COMPATIBILITY_VAL_INT_HELPER(macro, helper_buf, buf_size)
-
-#define COMPATIBILITY_VAL_SEPARATOR "="
-#define COMPATIBILITY_LINE_SEPARATOR "\n"
+#define COMPATIBILITY_VAL_STR(macro) { #macro, macro, 0 }
+#define COMPATIBILITY_VAL_INT(macro) { #macro, NULL, macro }
 
 /*
  * Compose compatibility string to be sent by pg_probackup agent
@@ -307,13 +303,10 @@ static char* extract_pg_edition_str()
  */
 size_t prepare_compatibility_str(char* compatibility_buf, size_t compatibility_buf_size)
 {
-	char compatibility_val_int_macro_helper_buf[32];
-	char* compatibility_params[] = {
+	struct { const char* name; const char* strval; int intval; } compatibility_params[] = {
 		COMPATIBILITY_VAL_STR(PG_MAJORVERSION),
-		"edition", extract_pg_edition_str(),
-		/* 32/64 bits compatibility */
-		COMPATIBILITY_VAL_INT(SIZEOF_VOID_P,
-							  compatibility_val_int_macro_helper_buf, sizeof compatibility_val_int_macro_helper_buf),
+		{ "edition", extract_pg_edition_str(), 0 },
+		COMPATIBILITY_VAL_INT(SIZEOF_VOID_P),
 	};
 
 	size_t result_size = 0;
@@ -324,9 +317,16 @@ size_t prepare_compatibility_str(char* compatibility_buf, size_t compatibility_b
 
 	for (int i = 0; i < compatibility_params_array_size; i+=2)
 	{
-		result_size += snprintf(compatibility_buf + result_size, compatibility_buf_size - result_size,
-								"%s" COMPATIBILITY_VAL_SEPARATOR "%s" COMPATIBILITY_LINE_SEPARATOR,
-								compatibility_params[i], compatibility_params[i+1]);
+		if (compatibility_params[i].strval != NULL)
+			result_size += snprintf(compatibility_buf + result_size, compatibility_buf_size - result_size,
+									"%s=%s/n",
+									compatibility_params[i].name,
+									compatibility_params[i].strval);
+		else
+			result_size += snprintf(compatibility_buf + result_size, compatibility_buf_size - result_size,
+									"%s=%d/n",
+									compatibility_params[i].name,
+									compatibility_params[i].intval);
 		Assert(result_size < compatibility_buf_size);
 	}
 	return result_size + 1;
@@ -349,7 +349,7 @@ void check_remote_agent_compatibility(int agent_version, char *compatibility_str
 
 		elog(ERROR, "Remote agent protocol version %s does not match local program protocol version %s, "
 					"consider to upgrade pg_probackup binary",
-			 agent_version_str, AGENT_PROTOCOL_VERSION_STR);
+			agent_version_str, AGENT_PROTOCOL_VERSION_STR);
 	}
 
 	/* checking compatibility params */
