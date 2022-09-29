@@ -260,14 +260,14 @@ static bool check_certified()
 
 static char* extract_pg_edition_str()
 {
-	static char *_1C = "1C";
 	static char *vanilla = "vanilla";
+#ifdef PGPRO_EDITION
+	static char *_1C = "1C";
 	static char *std = "standard";
 	static char *ent = "enterprise";
 	static char *std_cert = "standard-certified";
 	static char *ent_cert = "enterprise-certified";
 
-#ifdef PGPRO_EDITION
 	if (strcmp(PGPRO_EDITION, _1C) == 0)
 		return vanilla;
 
