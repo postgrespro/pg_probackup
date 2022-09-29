@@ -295,6 +295,9 @@ static char* extract_pg_edition_str()
 #define COMPATIBILITY_VAL_STR(macro) { #macro, macro, 0 }
 #define COMPATIBILITY_VAL_INT(macro) { #macro, NULL, macro }
 
+#define COMPATIBILITY_VAL_SEPARATOR "="
+#define COMPATIBILITY_LINE_SEPARATOR "\n"
+
 /*
  * Compose compatibility string to be sent by pg_probackup agent
  * through ssh and to be verified by pg_probackup peer.
@@ -303,7 +306,13 @@ static char* extract_pg_edition_str()
  */
 size_t prepare_compatibility_str(char* compatibility_buf, size_t compatibility_buf_size)
 {
-	struct { const char* name; const char* strval; int intval; } compatibility_params[] = {
+	typedef struct compatibility_param_tag {
+		const char* name;
+		const char* strval;
+		int intval;
+	} compatibility_param;
+
+	compatibility_param compatibility_params[] = {
 		COMPATIBILITY_VAL_STR(PG_MAJORVERSION),
 		{ "edition", extract_pg_edition_str(), 0 },
 		COMPATIBILITY_VAL_INT(SIZEOF_VOID_P),
@@ -312,16 +321,16 @@ size_t prepare_compatibility_str(char* compatibility_buf, size_t compatibility_b
 	size_t result_size = 0;
 	*compatibility_buf = '\0';
 
-	for (int i = 0; i < sizeof compatibility_params; i+=2)
+	for (int i = 0; i < (sizeof compatibility_params / sizeof(compatibility_param)); i++)
 	{
 		if (compatibility_params[i].strval != NULL)
 			result_size += snprintf(compatibility_buf + result_size, compatibility_buf_size - result_size,
-									"%s=%s/n",
+									"%s" COMPATIBILITY_VAL_SEPARATOR "%s" COMPATIBILITY_LINE_SEPARATOR,
 									compatibility_params[i].name,
 									compatibility_params[i].strval);
 		else
 			result_size += snprintf(compatibility_buf + result_size, compatibility_buf_size - result_size,
-									"%s=%d/n",
+									"%s" COMPATIBILITY_VAL_SEPARATOR "%d" COMPATIBILITY_LINE_SEPARATOR,
 									compatibility_params[i].name,
 									compatibility_params[i].intval);
 		Assert(result_size < compatibility_buf_size);
