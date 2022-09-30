@@ -86,7 +86,7 @@ bool perm_slot = false;
 /* backup options */
 bool         backup_logs = false;
 bool         smooth_checkpoint;
-char        *remote_agent;
+bool         remote_agent = false;
 static char *backup_note = NULL;
 /* catchup options */
 static char *catchup_source_pgdata = NULL;
@@ -361,6 +361,7 @@ main(int argc, char *argv[])
 					elog(ERROR, "Version mismatch, pg_probackup binary with version '%s' "
 							"is launched as an agent for pg_probackup binary with version '%s'",
 							PROGRAM_VERSION, argv[2]);
+				remote_agent = true;
 				fio_communicate(STDIN_FILENO, STDOUT_FILENO);
 				return 0;
 			case HELP_CMD:
