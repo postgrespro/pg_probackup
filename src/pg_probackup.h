@@ -798,7 +798,7 @@ extern bool perm_slot;
 extern bool		smooth_checkpoint;
 
 /* remote probackup options */
-extern char* remote_agent;
+extern bool remote_agent;
 
 extern bool exclusive_backup;
 
