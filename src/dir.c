@@ -680,57 +680,22 @@ dir_check_file(pgFile *file, bool backup_logs)
 			return CHECK_FALSE;
 		else if (isdigit(file->name[0]))
 		{
-			char	   *fork_name;
-			int			len;
-			char		suffix[MAXPGPATH];
+			set_forkname(file);
 
-			fork_name = strstr(file->name, "_");
-			if (fork_name)
+			if (file->forkName == ptrack) /* Compatibility with left-overs from ptrack1 */
+				return CHECK_FALSE;
+			else if (file->forkName != none)
+				return CHECK_TRUE;
+
+			/* Set is_datafile flag */
 			{
-				/* Auxiliary fork of the relfile */
-				if (strcmp(fork_name, "_vm") == 0)
-					file->forkName = vm;
+				char suffix[MAXFNAMELEN];
 
-				else if (strcmp(fork_name, "_fsm") == 0)
-					file->forkName = fsm;
-
-				else if (strcmp(fork_name, "_cfm") == 0)
-					file->forkName = cfm;
-
-				else if (strcmp(fork_name, "_ptrack") == 0)
-					file->forkName = ptrack;
-
-				else if (strcmp(fork_name, "_init") == 0)
-					file->forkName = init;
-
-				// extract relOid for certain forks
-				if (file->forkName == vm ||
-					file->forkName == fsm ||
-					file->forkName == init ||
-					file->forkName == cfm)
-				{
-					// sanity
-					if (sscanf(file->name, "%u_*", &(file->relOid)) != 1)
-						file->relOid = 0;
-				}
-
-				/* Do not backup ptrack files */
-				if (file->forkName == ptrack)
-					return CHECK_FALSE;
-			}
-			else
-			{
-
-				len = strlen(file->name);
-				/* reloid.cfm */
-				if (len > 3 && strcmp(file->name + len - 3, "cfm") == 0)
-					return CHECK_TRUE;
-
+				/* check if file is datafile */
 				sscanf_res = sscanf(file->name, "%u.%d.%s", &(file->relOid),
 									&(file->segno), suffix);
-				if (sscanf_res == 0)
-					elog(ERROR, "Cannot parse file name \"%s\"", file->name);
-				else if (sscanf_res == 1 || sscanf_res == 2)
+				Assert(sscanf_res > 0); /* since first char is digit */
+				if (sscanf_res == 1 || sscanf_res == 2)
 					file->is_datafile = true;
 			}
 		}
@@ -1868,4 +1833,36 @@ pfilearray_clear_locks(parray *file_list)
 		pgFile *file = (pgFile *) parray_get(file_list, i);
 		pg_atomic_clear_flag(&file->lock);
 	}
+}
+
+/* Set forkName if possible */
+void
+set_forkname(pgFile *file)
+{
+	int name_len = strlen(file->name);
+
+	/* Auxiliary fork of the relfile */
+	if (name_len > 3 && strcmp(file->name + name_len - 3, "_vm") == 0)
+		file->forkName = vm;
+
+	else if (name_len > 4 && strcmp(file->name + name_len - 4, "_fsm") == 0)
+		file->forkName = fsm;
+
+	else if (name_len > 4 && strcmp(file->name + name_len - 4, ".cfm") == 0)
+		file->forkName = cfm;
+
+	else if (name_len > 5 && strcmp(file->name + name_len - 5, "_init") == 0)
+		file->forkName = init;
+
+	else if (name_len > 7 && strcmp(file->name + name_len - 7, "_ptrack") == 0)
+		file->forkName = ptrack;
+
+	// extract relOid for certain forks
+
+	if ((file->forkName == vm ||
+		 file->forkName == fsm ||
+		 file->forkName == init ||
+		 file->forkName == cfm) &&
+		(sscanf(file->name, "%u*", &(file->relOid)) != 1))
+		file->relOid = 0;
 }

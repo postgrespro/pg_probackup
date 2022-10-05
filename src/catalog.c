@@ -1138,6 +1138,9 @@ get_backup_filelist(pgBackup *backup, bool strict)
 		if (get_control_value_int64(buf, "hdr_size", &hdr_size, false))
 			file->hdr_size = (int) hdr_size;
 
+		if (file->external_dir_num == 0)
+			set_forkname(file);
+
 		parray_append(files, file);
 	}
 
@@ -2516,7 +2519,7 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 	char		control_path[MAXPGPATH];
 	char		control_path_temp[MAXPGPATH];
 	size_t		i = 0;
-	#define BUFFERSZ 1024*1024
+	#define BUFFERSZ (1024*1024)
 	char		*buf;
 	int64 		backup_size_on_disk = 0;
 	int64 		uncompressed_size_on_disk = 0;
