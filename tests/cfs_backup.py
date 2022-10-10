@@ -995,6 +995,11 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
             "FROM generate_series(0,256) i".format('t1', tblspace_name)
         )
 
+        self.node.safe_psql(
+            "postgres",
+            "CHECKPOINT"
+        )
+
         list_cmf = find_by_extensions(
             [self.get_tblspace_path(self.node, tblspace_name)],
             ['.cfm'])
@@ -1042,6 +1047,11 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
             "AS SELECT i AS id, MD5(i::text) AS text, "
             "MD5(repeat(i::text,10))::tsvector AS tsvector "
             "FROM generate_series(0,256) i".format('t1', tblspace_name)
+        )
+
+        self.node.safe_psql(
+            "postgres",
+            "CHECKPOINT"
         )
 
         list_data_files = find_by_pattern(
