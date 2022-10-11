@@ -254,7 +254,7 @@ bool launch_agent(void)
 static bool check_certified()
 {
 	return strstr(PGPRO_VERSION_STR, "(certified)") ||
-		   strstr(PGPRO_VERSION_STR, ("(standard certified)"));
+		   strstr(PGPRO_VERSION_STR, "(standard certified)");
 }
 #endif
 
