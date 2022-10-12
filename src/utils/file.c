@@ -18,6 +18,10 @@ static __thread int fio_stdin = 0;
 static __thread int fio_stderr = 0;
 static char *async_errormsg = NULL;
 
+#define PAGE_ZEROSEARCH_COARSE_GRANULARITY 4096
+#define PAGE_ZEROSEARCH_FINE_GRANULARITY 64
+static const char zerobuf[PAGE_ZEROSEARCH_COARSE_GRANULARITY] = {0};
+
 fio_location MyLocation;
 
 typedef struct
@@ -2455,7 +2459,7 @@ cleanup:
  *   REMOTE_ERROR (-6)
  */
 int
-fio_send_file_gz(const char *from_fullpath, const char *to_fullpath, FILE* out, char **errormsg)
+fio_send_file_gz(const char *from_fullpath, FILE* out, char **errormsg)
 {
 	fio_header hdr;
 	int exit_code = SEND_OK;
@@ -2604,6 +2608,105 @@ cleanup:
 	return exit_code;
 }
 
+typedef struct send_file_state {
+	bool		calc_crc;
+	uint32_t	crc;
+	int64_t		read_size;
+	int64_t		write_size;
+} send_file_state;
+
+/* find page border of all-zero tail */
+static size_t
+find_zero_tail(char *buf, size_t len)
+{
+	size_t i, l;
+	size_t granul = sizeof(zerobuf);
+
+	if (len == 0)
+		return 0;
+
+	/* fast check for last bytes */
+	i = (len-1) & ~(PAGE_ZEROSEARCH_FINE_GRANULARITY-1);
+	l = len - i;
+	if (memcmp(buf + i, zerobuf, i) != 0)
+		return len;
+
+	/* coarse search for zero tail */
+	i = (len-1) & ~(granul-1);
+	l = len - i;
+	for (;;)
+	{
+		if (memcmp(buf+i, zerobuf, l) != 0)
+		{
+			i += l;
+			break;
+		}
+		if (i == 0)
+			break;
+		i -= granul;
+		l = granul;
+	}
+
+	len = i;
+	/* search zero tail with finer granularity */
+	for (granul = sizeof(zerobuf)/2;
+		 len > 0 && granul >= PAGE_ZEROSEARCH_FINE_GRANULARITY;
+		 granul /= 2)
+	{
+		if (granul > l)
+			continue;
+		i = (len-1) & ~(granul-1);
+		l = len - i;
+		if (memcmp(buf+i, zerobuf, l) == 0)
+			len = i;
+	}
+
+	return len;
+}
+
+static void
+fio_send_file_crc(send_file_state* st, char *buf, size_t len)
+{
+	int64_t 	write_size;
+
+	if (!st->calc_crc)
+		return;
+
+	write_size = st->write_size;
+	while (st->read_size > write_size)
+	{
+		size_t	crc_len = Min(st->read_size - write_size, sizeof(zerobuf));
+		COMP_FILE_CRC32(true, st->crc, zerobuf, crc_len);
+		write_size += crc_len;
+	}
+
+	if (len > 0)
+		COMP_FILE_CRC32(true, st->crc, buf, len);
+}
+
+static bool
+fio_send_file_write(FILE* out, send_file_state* st, char *buf, size_t len)
+{
+	if (len == 0)
+		return true;
+
+	if (st->read_size > st->write_size &&
+		fseeko(out, st->read_size, SEEK_SET) != 0)
+	{
+		return false;
+	}
+
+	if (fwrite(buf, 1, len, out) != len)
+	{
+		return false;
+	}
+
+	st->read_size += len;
+	st->write_size = st->read_size;
+
+	return true;
+}
+
 /* Receive chunks of data and write them to destination file.
  * Return codes:
  *   SEND_OK       (0)
@@ -2616,13 +2719,22 @@ cleanup:
  * If pgFile is not NULL then we must calculate crc and read_size for it.
  */
 int
-fio_send_file(const char *from_fullpath, const char *to_fullpath, FILE* out,
+fio_send_file(const char *from_fullpath, FILE* out, bool cut_zero_tail,
 												pgFile *file, char **errormsg)
 {
 	fio_header hdr;
 	int exit_code = SEND_OK;
 	size_t path_len = strlen(from_fullpath) + 1;
 	char *buf = pgut_malloc(CHUNK_SIZE);    /* buffer */
+	send_file_state st = {false, 0, 0, 0};
+
+	memset(&hdr, 0, sizeof(hdr));
+
+	if (file)
+	{
+		st.calc_crc = true;
+		st.crc = file->crc;
+	}
 
 	hdr.cop = FIO_SEND_FILE;
 	hdr.size = path_len;
@@ -2640,6 +2752,37 @@ fio_send_file(const char *from_fullpath, const char *to_fullpath, FILE* out,
 
 		if (hdr.cop == FIO_SEND_FILE_EOF)
 		{
+			if (st.write_size < st.read_size)
+			{
+				/*
+				 * We still need to calc crc for zero tail.
+				 */
+				fio_send_file_crc(&st, NULL, 0);
+
+				if (!cut_zero_tail)
+				{
+					/*
+					 * Let's write single zero byte to the end of file to restore
+					 * logical size.
+					 * Well, it would be better to use ftruncate here actually,
+					 * but then we need to change interface.
+					 */
+					st.read_size -= 1;
+					buf[0] = 0;
+					if (!fio_send_file_write(out, &st, buf, 1))
+					{
+						exit_code = WRITE_FAILED;
+						break;
+					}
+				}
+			}
+
+			if (file)
+			{
+				file->crc = st.crc;
+				file->read_size = st.read_size;
+				file->write_size = st.write_size;
+			}
 			break;
 		}
 		else if (hdr.cop == FIO_ERROR)
@@ -2660,17 +2803,23 @@ fio_send_file(const char *from_fullpath, const char *to_fullpath, FILE* out,
 			IO_CHECK(fio_read_all(fio_stdin, buf, hdr.size), hdr.size);
 
 			/* We have received a chunk of data data, lets write it out */
-			if (fwrite(buf, 1, hdr.size, out) != hdr.size)
+			fio_send_file_crc(&st, buf, hdr.size);
+			if (!fio_send_file_write(out, &st, buf, hdr.size))
 			{
 				exit_code = WRITE_FAILED;
 				break;
 			}
+		}
+		else if (hdr.cop == FIO_PAGE_ZERO)
+		{
+			Assert(hdr.size == 0);
+			Assert(hdr.arg <= CHUNK_SIZE);
 
-			if (file)
-			{
-				file->read_size += hdr.size;
-				COMP_FILE_CRC32(true, file->crc, buf, hdr.size);
-			}
+			/*
+			 * We have received a chunk of zero data, lets just think we
+			 * wrote it.
+			 */
+			st.read_size += hdr.arg;
 		}
 		else
 		{
@@ -2683,6 +2832,117 @@ fio_send_file(const char *from_fullpath, const char *to_fullpath, FILE* out,
 		fio_disconnect(); /* discard possible pending data in pipe */
 
 	pg_free(buf);
+	return exit_code;
+}
+
+int
+fio_send_file_local(const char *from_fullpath, FILE* out, bool cut_zero_tail,
+			  pgFile *file, char **errormsg)
+{
+	FILE* in;
+	char* buf;
+	size_t read_len, non_zero_len;
+	int exit_code = SEND_OK;
+	send_file_state st = {false, 0, 0, 0};
+
+	if (file)
+	{
+		st.calc_crc = true;
+		st.crc = file->crc;
+	}
+
+	/* open source file for read */
+	in = fopen(from_fullpath, PG_BINARY_R);
+	if (in == NULL)
+	{
+		/* maybe deleted, it's not error in case of backup */
+		if (errno == ENOENT)
+			return FILE_MISSING;
+
+
+		*errormsg = psprintf("Cannot open file \"%s\": %s", from_fullpath,
+			 strerror(errno));
+		return OPEN_FAILED;
+	}
+
+	/* disable stdio buffering for local input/output files to avoid triple buffering */
+	setvbuf(in, NULL, _IONBF, BUFSIZ);
+	setvbuf(out, NULL, _IONBF, BUFSIZ);
+
+	/* allocate 64kB buffer */
+	buf = pgut_malloc(CHUNK_SIZE);
+
+	/* copy content and calc CRC */
+	for (;;)
+	{
+		read_len = fread(buf, 1, CHUNK_SIZE, in);
+
+		if (ferror(in))
+		{
+			*errormsg = psprintf("Cannot read from file \"%s\": %s",
+								 from_fullpath, strerror(errno));
+			exit_code = READ_FAILED;
+			goto cleanup;
+		}
+
+		if (read_len > 0)
+		{
+			non_zero_len = find_zero_tail(buf, read_len);
+			if (non_zero_len > 0)
+			{
+				fio_send_file_crc(&st, buf, non_zero_len);
+				if (!fio_send_file_write(out, &st, buf, non_zero_len))
+				{
+					exit_code = WRITE_FAILED;
+					goto cleanup;
+				}
+			}
+			if (non_zero_len < read_len)
+			{
+				/* Just pretend we wrote it. */
+				st.read_size += read_len - non_zero_len;
+			}
+		}
+
+		if (feof(in))
+			break;
+	}
+
+	if (st.write_size < st.read_size)
+	{
+		/*
+		 * We still need to calc crc for zero tail.
+		 */
+		fio_send_file_crc(&st, NULL, 0);
+
+		if (!cut_zero_tail)
+		{
+			/*
+			 * Let's write single zero byte to the end of file to restore
+			 * logical size.
+			 * Well, it would be better to use ftruncate here actually,
+			 * but then we need to change interface.
+			 */
+			st.read_size -= 1;
+			buf[0] = 0;
+			if (!fio_send_file_write(out, &st, buf, 1))
+			{
+				exit_code = WRITE_FAILED;
+				goto cleanup;
+			}
+		}
+	}
+
+	if (file)
+	{
+		file->crc = st.crc;
+		file->read_size = st.read_size;
+		file->write_size = st.write_size;
+	}
+
+cleanup:
+	free(buf);
+	fclose(in);
 	return exit_code;
 }
 
@@ -2746,6 +3006,7 @@ fio_send_file_impl(int out, char const* path)
 	for (;;)
 	{
 		read_len = fread(buf, 1, CHUNK_SIZE, fp);
+		memset(&hdr, 0, sizeof(hdr));
 
 		/* report error */
 		if (ferror(fp))
@@ -2766,10 +3027,22 @@ fio_send_file_impl(int out, char const* path)
 		if (read_len > 0)
 		{
 			/* send chunk */
-			hdr.cop = FIO_PAGE;
-			hdr.size = read_len;
-			IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
-			IO_CHECK(fio_write_all(out, buf, read_len), read_len);
+			size_t non_zero_len = find_zero_tail(buf, read_len);
+			if (non_zero_len > 0)
+			{
+				hdr.cop = FIO_PAGE;
+				hdr.size = non_zero_len;
+				IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
+				IO_CHECK(fio_write_all(out, buf, non_zero_len), non_zero_len);
+			}
+
+			if (non_zero_len < read_len)
+			{
+				hdr.cop = FIO_PAGE_ZERO;
+				hdr.size = 0;
+				hdr.arg = read_len - non_zero_len;
+				IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
+			}
 		}
 
 		if (feof(fp))

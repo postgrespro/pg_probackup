@@ -345,11 +345,11 @@ typedef enum ShowFormat
 #define BYTES_INVALID		(-1) /* file didn`t changed since previous backup, DELTA backup do not rely on it */
 #define FILE_NOT_FOUND		(-2) /* file disappeared during backup */
 #define BLOCKNUM_INVALID	(-1)
-#define PROGRAM_VERSION	"2.5.8"
+#define PROGRAM_VERSION	"2.5.9"
 
 /* update when remote agent API or behaviour changes */
-#define AGENT_PROTOCOL_VERSION 20501
-#define AGENT_PROTOCOL_VERSION_STR "2.5.1"
+#define AGENT_PROTOCOL_VERSION 20509
+#define AGENT_PROTOCOL_VERSION_STR "2.5.9"
 
 /* update only when changing storage format */
 #define STORAGE_FORMAT_VERSION "2.4.4"
@@ -1077,6 +1077,7 @@ extern void fio_pgFileDelete(pgFile *file, const char *full_path);
 extern void pgFileFree(void *file);
 
 extern pg_crc32 pgFileGetCRC(const char *file_path, bool use_crc32c, bool missing_ok);
+extern pg_crc32 pgFileGetCRCForTruncated(const char *file_path, bool use_crc32c, int64_t real_size);
 extern pg_crc32 pgFileGetCRCgz(const char *file_path, bool use_crc32c, bool missing_ok);
 
 extern int pgFileMapComparePath(const void *f1, const void *f2);
@@ -1240,9 +1241,11 @@ extern int fio_copy_pages(const char *to_fullpath, const char *from_fullpath, pg
 	                      XLogRecPtr horizonLsn, int calg, int clevel, uint32 checksum_version,
 	                      bool use_pagemap, BlockNumber *err_blknum, char **errormsg);
 /* return codes for fio_send_pages */
-extern int fio_send_file_gz(const char *from_fullpath, const char *to_fullpath, FILE* out, char **errormsg);
-extern int fio_send_file(const char *from_fullpath, const char *to_fullpath, FILE* out,
+extern int fio_send_file_gz(const char *from_fullpath, FILE* out, char **errormsg);
+extern int fio_send_file(const char *from_fullpath, FILE* out, bool cut_zero_tail,
 														pgFile *file, char **errormsg);
+extern int fio_send_file_local(const char *from_fullpath, FILE* out, bool cut_zero_tail,
+						 pgFile *file, char **errormsg);
 
 extern void fio_list_dir(parray *files, const char *root, bool exclude, bool follow_symlink,
 						 bool add_root, bool backup_logs, bool skip_hidden, int external_dir_num);

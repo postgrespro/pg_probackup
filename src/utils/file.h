@@ -56,7 +56,8 @@ typedef enum
 	FIO_CHECK_POSTMASTER,
 	FIO_GET_ASYNC_ERROR,
 	FIO_WRITE_ASYNC,
-	FIO_READLINK
+	FIO_READLINK,
+	FIO_PAGE_ZERO
 } fio_operations;
 
 typedef enum

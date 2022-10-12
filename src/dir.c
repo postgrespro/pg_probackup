@@ -324,6 +324,67 @@ pgFileGetCRC(const char *file_path, bool use_crc32c, bool missing_ok)
 	return crc;
 }
 
+static const char zerobuf[4096] = {0};
+
+/*
+ * Read the local file to compute CRC for it extened to real_size.
+ */
+pg_crc32
+pgFileGetCRCForTruncated(const char *file_path, bool use_crc32c, int64_t real_size)
+{
+	FILE	   *fp;
+	pg_crc32	crc = 0;
+	char	   *buf;
+	size_t		len = 0;
+	int64_t 	read_size = 0;
+
+	INIT_FILE_CRC32(use_crc32c, crc);
+
+	/* open file in binary read mode */
+	fp = fopen(file_path, PG_BINARY_R);
+	if (fp == NULL)
+	{
+		elog(ERROR, "Cannot open file \"%s\": %s",
+			 file_path, strerror(errno));
+	}
+
+	/* disable stdio buffering */
+	setvbuf(fp, NULL, _IONBF, BUFSIZ);
+	buf = pgut_malloc(STDIO_BUFSIZE);
+
+	/* calc CRC of file */
+	for (;;)
+	{
+		if (interrupted)
+			elog(ERROR, "interrupted during CRC calculation");
+
+		len = fread(buf, 1, STDIO_BUFSIZE, fp);
+
+		if (ferror(fp))
+			elog(ERROR, "Cannot read \"%s\": %s", file_path, strerror(errno));
+
+		/* update CRC */
+		COMP_FILE_CRC32(use_crc32c, crc, buf, len);
+
+		read_size += len;
+
+		if (feof(fp))
+			break;
+	}
+
+	while (read_size < real_size)
+	{
+		len = Min(real_size - read_size, sizeof(zerobuf));
+		COMP_FILE_CRC32(use_crc32c, crc, zerobuf, len);
+		read_size += len;
+	}
+
+	FIN_FILE_CRC32(use_crc32c, crc);
+	fclose(fp);
+	pg_free(buf);
+
+	return crc;
+}
 /*
  * Read the local file to compute its CRC.
  * We cannot make decision about file decompression because
@@ -1812,7 +1873,7 @@ write_database_map(pgBackup *backup, parray *database_map, parray *backup_files_
 								 FIO_BACKUP_HOST);
 	file->crc = pgFileGetCRC(database_map_path, true, false);
 	file->write_size = file->size;
-	file->uncompressed_size = file->read_size;
+	file->uncompressed_size = file->size;
 
 	parray_append(backup_files_list, file);
 }

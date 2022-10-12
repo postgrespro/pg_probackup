@@ -340,6 +340,14 @@ pgBackupValidateFiles(void *arg)
 				strcmp(file->name, "pg_control") == 0 &&
 				!file->external_dir_num)
 				crc = get_pgcontrol_checksum(arguments->base_path);
+			else if (!file->is_datafile &&
+					 file->uncompressed_size > file->write_size)
+			{
+				Assert(file->forkName == cfm);
+				Assert(arguments->backup_version >= 20509);
+				crc = pgFileGetCRCForTruncated(
+						file_fullpath, true, file->uncompressed_size);
+			}
 			else
 				crc = pgFileGetCRC(file_fullpath,
 								   arguments->backup_version <= 20021 ||
