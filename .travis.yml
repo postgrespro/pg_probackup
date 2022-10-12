@@ -53,7 +53,6 @@ env:
 jobs:
     allow_failures:
         - if: env(PG_BRANCH) = master
-        - if: env(PG_BRANCH) = REL_15_STABLE
         - if: env(PG_BRANCH) = REL9_5_STABLE
 #        - if: env(MODE) IN (archive, backup, delta, locking, merge, replica, retention, restore)
 
