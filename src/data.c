@@ -801,8 +801,11 @@ backup_non_data_file(pgFile *file, pgFile *prev_file,
 		(prev_file && file->exists_in_prev &&
 		 file->mtime <= parent_backup_time))
 	{
-
-		file->crc = fio_get_crc32(from_fullpath, FIO_DB_HOST, false);
+		/*
+		 * file could be deleted under our feets.
+		 * But then backup_non_data_file_internal will handle it safely
+		 */
+		file->crc = fio_get_crc32(from_fullpath, FIO_DB_HOST, false, true);
 
 		/* ...and checksum is the same... */
 		if (EQ_TRADITIONAL_CRC32(file->crc, prev_file->crc))
@@ -1327,7 +1330,7 @@ restore_non_data_file(parray *parent_chain, pgBackup *dest_backup,
 	if (already_exists)
 	{
 		/* compare checksums of already existing file and backup file */
-		pg_crc32 file_crc = fio_get_crc32(to_fullpath, FIO_DB_HOST, false);
+		pg_crc32 file_crc = fio_get_crc32(to_fullpath, FIO_DB_HOST, false, false);
 
 		if (file_crc == tmp_file->crc)
 		{
