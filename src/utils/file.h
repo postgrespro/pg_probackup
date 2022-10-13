@@ -120,7 +120,8 @@ extern int     fio_truncate(int fd, off_t size);
 extern int     fio_close(int fd);
 extern void    fio_disconnect(void);
 extern int     fio_sync(char const* path, fio_location location);
-extern pg_crc32 fio_get_crc32(const char *file_path, fio_location location, bool decompress);
+extern pg_crc32 fio_get_crc32(const char *file_path, fio_location location,
+							  bool decompress, bool missing_ok);
 
 extern int     fio_rename(char const* old_path, char const* new_path, fio_location location);
 extern int     fio_symlink(char const* target, char const* link_path, bool overwrite, fio_location location);

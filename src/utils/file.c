@@ -1355,9 +1355,15 @@ fio_sync(char const* path, fio_location location)
 	}
 }
 
+enum {
+	GET_CRC32_DECOMPRESS = 1,
+	GET_CRC32_MISSING_OK = 2
+};
+
 /* Get crc32 of file */
 pg_crc32
-fio_get_crc32(const char *file_path, fio_location location, bool decompress)
+fio_get_crc32(const char *file_path, fio_location location,
+			  bool decompress, bool missing_ok)
 {
 	if (fio_is_remote(location))
 	{
@@ -1370,7 +1376,9 @@ fio_get_crc32(const char *file_path, fio_location location, bool decompress)
 		hdr.arg = 0;
 
 		if (decompress)
-			hdr.arg = 1;
+			hdr.arg = GET_CRC32_DECOMPRESS;
+		if (missing_ok)
+			hdr.arg |= GET_CRC32_MISSING_OK;
 
 		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
 		IO_CHECK(fio_write_all(fio_stdout, file_path, path_len), path_len);
@@ -1381,9 +1389,9 @@ fio_get_crc32(const char *file_path, fio_location location, bool decompress)
 	else
 	{
 		if (decompress)
-			return pgFileGetCRCgz(file_path, true, true);
+			return pgFileGetCRCgz(file_path, true, missing_ok);
 		else
-			return pgFileGetCRC(file_path, true, true);
+			return pgFileGetCRC(file_path, true, missing_ok);
 	}
 }
 
@@ -3380,10 +3388,10 @@ fio_communicate(int in, int out)
 			break;
 		  case FIO_GET_CRC32:
 			/* calculate crc32 for a file */
-			if (hdr.arg == 1)
-				crc = pgFileGetCRCgz(buf, true, true);
+			if ((hdr.arg & GET_CRC32_DECOMPRESS))
+				crc = pgFileGetCRCgz(buf, true, (hdr.arg & GET_CRC32_MISSING_OK) != 0);
 			else
-				crc = pgFileGetCRC(buf, true, true);
+				crc = pgFileGetCRC(buf, true, (hdr.arg & GET_CRC32_MISSING_OK) != 0);
 			IO_CHECK(fio_write_all(out, &crc, sizeof(crc)), sizeof(crc));
 			break;
 		  case FIO_GET_CHECKSUM_MAP:
