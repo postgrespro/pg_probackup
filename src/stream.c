@@ -2,7 +2,7 @@
  *
  * stream.c: pg_probackup specific code for WAL streaming
  *
- * Portions Copyright (c) 2015-2022, Postgres Professional
+ * Copyright (c) 2015-2022, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */
@@ -689,7 +689,7 @@ add_walsegment_to_filelist(parray *filelist, uint32 timeline, XLogRecPtr xlogpos
     if (existing_file)
     {
         if (do_crc)
-            (*existing_file)->crc = pgFileGetCRC(wal_segment_fullpath, true, false);
+            (*existing_file)->crc = pgFileGetCRC32C(wal_segment_fullpath, false);
         (*existing_file)->write_size = xlog_seg_size;
         (*existing_file)->uncompressed_size = xlog_seg_size;
 
@@ -697,7 +697,7 @@ add_walsegment_to_filelist(parray *filelist, uint32 timeline, XLogRecPtr xlogpos
     }
 
     if (do_crc)
-        file->crc = pgFileGetCRC(wal_segment_fullpath, true, false);
+        file->crc = pgFileGetCRC32C(wal_segment_fullpath, false);
 
     /* Should we recheck it using stat? */
     file->write_size = xlog_seg_size;
@@ -728,7 +728,7 @@ add_history_file_to_filelist(parray *filelist, uint32 timeline, char *basedir)
 
     /* calculate crc */
     if (do_crc)
-        file->crc = pgFileGetCRC(fullpath, true, false);
+        file->crc = pgFileGetCRC32C(fullpath, false);
     file->write_size = file->size;
     file->uncompressed_size = file->size;
 

@@ -1390,9 +1390,9 @@ fio_get_crc32(fio_location location, const char *file_path, bool decompress)
 	else
 	{
 		if (decompress)
-			return pgFileGetCRCgz(file_path, true, true);
+			return pgFileGetCRC32Cgz(file_path, true);
 		else
-			return pgFileGetCRC(file_path, true, true);
+			return pgFileGetCRC32C(file_path, true);
 	}
 }
 
@@ -2044,7 +2044,7 @@ fio_send_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
 			Assert(hdr.size <= sizeof(buf));
 			IO_CHECK(fio_read_all(fio_stdin, buf, hdr.size), hdr.size);
 
-			COMP_FILE_CRC32(true, file->crc, buf, hdr.size);
+			COMP_CRC32C(file->crc, buf, hdr.size);
 
 			/* lazily open backup file */
 			if (!out)
@@ -2231,8 +2231,6 @@ fio_copy_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
 
 			Assert(hdr.size <= sizeof(buf));
 			IO_CHECK(fio_read_all(fio_stdin, buf, hdr.size), hdr.size);
-
-			COMP_FILE_CRC32(true, file->crc, buf, hdr.size);
 
 			if (fio_fseek(out, blknum * BLCKSZ) < 0)
 			{
@@ -2597,7 +2595,7 @@ fio_send_file(const char *from_fullpath, const char *to_fullpath, FILE* out,
 			if (file)
 			{
 				file->read_size += hdr.size;
-				COMP_FILE_CRC32(true, file->crc, buf, hdr.size);
+				COMP_CRC32C(file->crc, buf, hdr.size);
 			}
 		}
 		else
@@ -3333,9 +3331,9 @@ fio_communicate(int in, int out)
 		  case FIO_GET_CRC32:
 			/* calculate crc32 for a file */
 			if (hdr.arg == 1)
-				crc = pgFileGetCRCgz(buf, true, true);
+				crc = pgFileGetCRC32Cgz(buf, true);
 			else
-				crc = pgFileGetCRC(buf, true, true);
+				crc = pgFileGetCRC32C(buf, true);
 			IO_CHECK(fio_write_all(out, &crc, sizeof(crc)), sizeof(crc));
 			break;
 		  case FIO_GET_CHECKSUM_MAP:
@@ -3573,9 +3571,9 @@ pioLocalDrive_pioGetCRC32(VSelf, path_t path, bool compressed, err_i *err)
     elog(VERBOSE, "Local Drive calculate crc32 for '%s', compressed=%d",
          path, compressed);
     if (compressed)
-        return pgFileGetCRCgz(path, true, true);
+        return pgFileGetCRC32Cgz(path, true);
     else
-        return pgFileGetCRC(path, true, true);
+        return pgFileGetCRC32C(path, true);
 }
 
 static bool

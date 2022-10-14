@@ -36,17 +36,16 @@ OBJS := src/utils/configuration.o src/utils/json.o src/utils/logger.o \
 OBJS += src/archive.o src/backup.o src/catalog.o src/checkdb.o src/configure.o src/data.o \
 	src/delete.o src/dir.o src/fetch.o src/help.o src/init.o src/merge.o \
 	src/parsexlog.o src/ptrack.o src/pg_probackup.o src/restore.o src/show.o src/stream.o \
-	src/util.o src/validate.o src/datapagemap.o src/catchup.o
+	src/util.o src/validate.o src/datapagemap.o src/catchup.o \
+	src/compatibility/pg-11.o
 
 # sources borrowed from postgresql (paths are relative to pg top dir)
 BORROWED_H_SRC := \
-	src/include/portability/instr_time.h \
 	src/bin/pg_basebackup/receivelog.h \
 	src/bin/pg_basebackup/streamutil.h \
 	src/bin/pg_basebackup/walmethods.h
 BORROWED_C_SRC := \
 	src/backend/access/transam/xlogreader.c \
-	src/backend/utils/hash/pg_crc.c \
 	src/bin/pg_basebackup/receivelog.c \
 	src/bin/pg_basebackup/streamutil.c \
 	src/bin/pg_basebackup/walmethods.c
@@ -87,7 +86,6 @@ override CPPFLAGS := -DFRONTEND $(CPPFLAGS) $(PG_CPPFLAGS)
 PG_LIBS_INTERNAL = $(libpq_pgport) ${PTHREAD_CFLAGS}
 
 # additional dependencies on borrowed files
-src/archive.o: $(BORROW_DIR)/instr_time.h
 src/backup.o src/catchup.o src/pg_probackup.o: $(BORROW_DIR)/streamutil.h
 src/stream.o $(BORROW_DIR)/receivelog.o $(BORROW_DIR)/streamutil.o $(BORROW_DIR)/walmethods.o: $(BORROW_DIR)/receivelog.h
 $(BORROW_DIR)/receivelog.h: $(BORROW_DIR)/walmethods.h

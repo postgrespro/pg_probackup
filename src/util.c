@@ -304,7 +304,7 @@ get_pgcontrol_checksum(const char *pgdata_path)
 
 	/* First fetch file... */
 	buffer = slurpFile(FIO_BACKUP_HOST, pgdata_path, XLOG_CONTROL_FILE, &size, false);
-
+	elog(WARNING, "checking %s", pgdata_path);
 	digestControlFile(&ControlFile, buffer, size);
 	pg_free(buffer);
 

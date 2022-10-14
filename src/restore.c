@@ -2009,7 +2009,6 @@ get_dbOid_exclude_list(pgBackup *backup, parray *datname_list,
 {
 	int i;
 	int j;
-//	pg_crc32	crc;
 	parray		*database_map = NULL;
 	parray		*dbOid_exclude_list = NULL;
 	pgFile		*database_map_file = NULL;
@@ -2038,13 +2037,6 @@ get_dbOid_exclude_list(pgBackup *backup, parray *datname_list,
 
 	join_path_components(path, backup->root_dir, DATABASE_DIR);
 	join_path_components(database_map_path, path, DATABASE_MAP);
-
-	/* check database_map CRC */
-//	crc = pgFileGetCRC(database_map_path, true, true, NULL, FIO_LOCAL_HOST);
-//
-//	if (crc != database_map_file->crc)
-//		elog(ERROR, "Invalid CRC of backup file \"%s\" : %X. Expected %X",
-//				database_map_file->path, crc, database_map_file->crc);
 
 	/* get database_map from file */
 	database_map = read_database_map(backup);
