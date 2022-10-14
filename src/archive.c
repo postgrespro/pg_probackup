@@ -148,7 +148,7 @@ do_archive_push(InstanceState *instanceState, InstanceConfig *instance, char *pg
 		n_threads = parray_num(batch_files);
 
 	elog(INFO, "pg_probackup archive-push WAL file: %s, "
-					"threads: %i/%i, batch: %lu/%i, compression: %s",
+					"threads: %i/%i, batch: %zu/%i, compression: %s",
 						wal_file_name, n_threads, num_threads,
 						parray_num(batch_files), batch_size,
 						is_compress ? "zlib" : "none");
@@ -279,7 +279,7 @@ push_files(void *arg)
 	int		rc;
 	archive_push_arg *args = (archive_push_arg *) arg;
 
-	my_thread_num = args->thread_num;
+	set_my_thread_num(args->thread_num);
 
 	for (i = 0; i < parray_num(args->files); i++)
 	{
@@ -553,17 +553,17 @@ push_file_internal(const char *wal_file_name, const char *pg_xlog_dir,
 
     /* enable streaming compression */
     if (is_compress)
-#ifdef HAVE_LIBZ
     {
+#ifdef HAVE_LIBZ
         pioFilter_i flt = pioGZCompressFilter(compress_level);
         err = pioCopy($reduce(pioWriteFlush, out),
                       $reduce(pioRead, in),
                       flt);
+#else
+        elog(ERROR, "Compression is requested, but not compiled it");
+#endif
     }
     else
-#else
-    elog(ERROR, "Compression is requested, but not compiled it");
-#endif
     {
         err = pioCopy($reduce(pioWriteFlush, out),
                       $reduce(pioRead, in));
@@ -1012,7 +1012,7 @@ get_files(void *arg)
 	char    from_fullpath[MAXPGPATH];
 	archive_get_arg *args = (archive_get_arg *) arg;
 
-	my_thread_num = args->thread_num;
+	set_my_thread_num(args->thread_num);
 
 	for (i = 0; i < parray_num(args->files); i++)
 	{

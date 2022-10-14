@@ -12,7 +12,6 @@
 
 #include "access/timeline.h"
 
-#include <sys/stat.h>
 #include <unistd.h>
 
 #include "utils/thread.h"
@@ -1105,14 +1104,14 @@ static void *
 restore_files(void *arg)
 {
 	int         i;
-	uint64      n_files;
+	size_t      n_files;
 	char        to_fullpath[MAXPGPATH];
 	FILE       *out = NULL;
 	char       *out_buf = pgut_malloc(STDIO_BUFSIZE);
 
 	restore_files_arg *arguments = (restore_files_arg *) arg;
 
-	n_files = (unsigned long) parray_num(arguments->dest_files);
+	n_files = parray_num(arguments->dest_files);
 
 	for (i = 0; i < parray_num(arguments->dest_files); i++)
 	{
@@ -1133,7 +1132,7 @@ restore_files(void *arg)
 		if (interrupted || thread_interrupted)
 			elog(ERROR, "Interrupted during restore");
 
-		elog(progress ? INFO : LOG, "Progress: (%d/%lu). Restore file \"%s\"",
+		elog(progress ? INFO : LOG, "Progress: (%d/%zu). Restore file \"%s\"",
 			 i + 1, n_files, dest_file->rel_path);
 
 		/* Only files from pgdata can be skipped by partial restore */
@@ -2166,8 +2165,8 @@ check_incremental_compatibility(const char *pgdata, uint64 system_identifier,
 	}
 	else if (pid > 1) /* postmaster is up */
 	{
-		elog(WARNING, "Postmaster with pid %u is running in destination directory \"%s\"",
-			pid, pgdata);
+		elog(WARNING, "Postmaster with pid %llu is running in destination directory \"%s\"",
+			(long long)pid, pgdata);
 		success = false;
 		postmaster_is_up = true;
 	}
@@ -2190,9 +2189,9 @@ check_incremental_compatibility(const char *pgdata, uint64 system_identifier,
 	if (system_id_pgdata == instance_config.system_identifier)
 		system_id_match = true;
 	else
-		elog(WARNING, "Backup catalog was initialized for system id %lu, "
-					"but destination directory system id is %lu",
-					system_identifier, system_id_pgdata);
+		elog(WARNING, "Backup catalog was initialized for system id %llu, "
+					"but destination directory system id is %llu",
+					(long long)system_identifier, (long long)system_id_pgdata);
 
 	/*
 	 * TODO: maybe there should be some other signs, pointing to pg_control

@@ -1061,20 +1061,6 @@ init_cancel_handler(void)
 	SetConsoleCtrlHandler(consoleHandler, TRUE);
 }
 
-int
-sleep(unsigned int seconds)
-{
-	Sleep(seconds * 1000);
-	return 0;
-}
-
-int
-usleep(unsigned int usec)
-{
-	Sleep((usec + 999) / 1000);	/* rounded up */
-	return 0;
-}
-
 #undef select
 static int
 select_win32(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, const struct timeval * timeout)

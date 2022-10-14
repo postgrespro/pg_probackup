@@ -99,9 +99,4 @@ extern char *pgut_str_strip_trailing_filename(const char *filepath, const char *
 extern int wait_for_socket(int sock, struct timeval *timeout);
 extern int wait_for_sockets(int nfds, fd_set *fds, struct timeval *timeout);
 
-#ifdef WIN32
-extern int sleep(unsigned int seconds);
-extern int usleep(unsigned int usec);
-#endif
-
 #endif   /* PGUT_H */

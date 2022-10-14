@@ -285,6 +285,7 @@ int main(int argc, char** argv) {
     ft_assert(fobj_streq_c(strf, "Some    scary things cost > $$12.4800 $$"),
               "String is '%s'", $tostr(strf));
 
+    ft_log(FT_ERROR, "and try backtrace");
     logf("BEFORE EXIT");
 }
 

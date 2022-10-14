@@ -1,5 +1,7 @@
 /* vim: set expandtab autoindent cindent ts=4 sw=4 sts=4 */
-#include <ft_util.h>
+#ifndef FU_UTIL_H
+#error "ft_util.h should be included"
+#endif
 
 /*
  * Accepts 2 macroses:
@@ -176,7 +178,12 @@
 #define ft_array_walk       fm_cat(ft_array_pref, _walk)
 #define ft_array_walk_r     fm_cat(ft_array_pref, _walk_r)
 
-#define HUGE_SIZE ((uint64_t)UINT_MAX << 16)
+#if __SIZEOF_SIZE_T__ < 8
+#define HUGE_SIZE ((size_t)UINT_MAX >> 2)
+#else
+#define HUGE_SIZE ((size_t)UINT_MAX << 16)
+#endif
+
 #ifndef NDEBUG
 /* try to catch uninitialized vars */
 #define ft_slice_invariants(slc) \

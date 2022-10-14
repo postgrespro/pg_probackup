@@ -5,12 +5,6 @@
 #include <sys/wait.h>
 #include <signal.h>
 
-#ifdef WIN32
-#define __thread __declspec(thread)
-#else
-#include <pthread.h>
-#endif
-
 #include "pg_probackup.h"
 #include "file.h"
 
@@ -113,14 +107,14 @@ bool launch_agent(void)
 	char cmd[MAX_CMDLINE_LENGTH];
 	char* ssh_argv[MAX_CMDLINE_OPTIONS];
 	int ssh_argc;
-	int outfd[2];
-	int infd[2];
-	int errfd[2];
+	int outfd[2] = {0, 0};
+	int infd[2] = {0, 0};
+	int errfd[2] = {0, 0};
 	int agent_version;
 
 	ssh_argc = 0;
 #ifdef WIN32
-	ssh_argv[ssh_argc++] = PROGRAM_NAME_FULL;
+	ssh_argv[ssh_argc++] = (char *) PROGRAM_NAME_FULL;
 	ssh_argv[ssh_argc++] = "ssh";
 	ssh_argc += 2; /* reserve space for pipe descriptors */
 #endif
@@ -198,7 +192,9 @@ bool launch_agent(void)
 	ssh_argv[2] = psprintf("%d", outfd[0]);
 	ssh_argv[3] = psprintf("%d", infd[1]);
 	{
-	    intptr_t pid = _spawnvp(_P_NOWAIT, ssh_argv[0], ssh_argv);
+		intptr_t pid = _spawnvp(_P_NOWAIT,
+				(const char*)ssh_argv[0],
+				(const char * const *) ssh_argv);
 		if (pid < 0)
 			return false;
 		child_pid = GetProcessId((HANDLE)pid);

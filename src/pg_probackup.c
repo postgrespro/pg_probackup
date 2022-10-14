@@ -47,8 +47,6 @@
 #include "streamutil.h"
 #include "utils/file.h"
 
-#include <sys/stat.h>
-
 #include "utils/configuration.h"
 #include "utils/thread.h"
 #include <time.h>
@@ -75,7 +73,6 @@ bool		no_color = false;
 bool 		show_color = true;
 bool        is_archive_cmd = false;
 pid_t       my_pid = 0;
-__thread int  my_thread_num = 1;
 bool		progress = false;
 bool		no_sync = false;
 time_t		start_time = INVALID_BACKUP_ID;

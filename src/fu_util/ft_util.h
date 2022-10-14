@@ -1,24 +1,29 @@
 /* vim: set expandtab autoindent cindent ts=4 sw=4 sts=4 */
 #ifndef FU_UTIL_H
-#define FU_UTIL_H
+#define FU_UTIL_H 1
 
 #include <stdlib.h>
 #include <stdint.h>
+#include <string.h>
 #include <inttypes.h>
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdarg.h>
+#include <sys/types.h>
 /* trick to find ssize_t even on windows and strict ansi mode */
 #if defined(_MSC_VER)
 #include <BaseTsd.h>
 typedef SSIZE_T ssize_t;
-#else
-#include <sys/types.h>
+#define SSIZE_MAX ((ssize_t)((SIZE_MAX) >> 1))
+
+#if !defined(WIN32) && defined(_WIN32)
+#define WIN32 _WIN32
+#endif
+
 #endif
 #include <memory.h>
 #include <limits.h>
 #include <fm_util.h>
-#include <stdarg.h>
-
 
 #ifdef __GNUC__
 #define ft_gcc_const __attribute__((const))
@@ -29,7 +34,7 @@ typedef SSIZE_T ssize_t;
 #define ft_gcc_malloc(free, idx) __attribute__((malloc))
 #endif
 #define ft_unused __attribute__((unused))
-#define ft_gnu_printf(fmt, arg) __attribute__((format(printf,fmt,arg)))
+#define ft_gnu_printf(fmt, arg) __attribute__((format(gnu_printf,fmt,arg)))
 #define ft_likely(x)    __builtin_expect(!!(x), 1)
 #define ft_unlikely(x)  __builtin_expect(!!(x), 0)
 #define ft_always_inline __attribute__((always_inline))
@@ -103,6 +108,7 @@ typedef void ft_gnu_printf(4, 0) (*ft_log_hook_t)(enum FT_LOG_LEVEL,
 /*
  * Initialize logging in main executable file.
  * Pass custom hook or NULL.
+ * In MinGW if built with libbacktrace, pass executable path (argv[0]).
  */
 #define ft_init_log(hook) ft__init_log(hook, __FILE__)
 
@@ -135,7 +141,7 @@ const char* ft__truncate_log_filename(const char *file);
 
 #define ft_dbg_enabled()        ft__dbg_enabled()
 #define ft_dbg_assert(x, ...)   ft__dbg_assert(x, #x, __VA_ARGS__)
-#define ft_assert(x, ...)       ft__assert(x, #x, __VA_ARGS__)
+#define ft_assert(x, ...)       ft__assert(x, #x, ##__VA_ARGS__)
 #define ft_assyscall(syscall, ...)  ft__assyscall(syscall, fm_uniq(res), __VA_ARGS__)
 
 /* threadsafe strerror */
@@ -305,13 +311,14 @@ typedef struct ft_bytes_t {
 } ft_bytes_t;
 
 ft_inline ft_bytes_t ft_bytes(void* ptr, size_t len) {
-	return (ft_bytes_t){.ptr = ptr, .len = len};
+	return (ft_bytes_t){.ptr = (char*)ptr, .len = len};
 }
 
 ft_inline void ft_bytes_consume(ft_bytes_t *bytes, size_t cut);
 ft_inline void ft_bytes_move(ft_bytes_t *dest, ft_bytes_t *src);
 
 // String utils
+extern size_t ft_strlcpy(char *dest, const char* src, size_t dest_size);
 /*
  * Concat strings regarding destination buffer size.
  * Note: if dest already full and doesn't contain \0n character, then fatal log is issued.
@@ -411,7 +418,7 @@ extern bool         ft_strbuf_vcatf (ft_strbuf_t *buf, const char *fmt, va_list 
  * Use it if format string comes from user.
  */
 ft_gnu_printf(3, 0)
-extern bool         ft_strbuf_vcatf_err (ft_strbuf_t *buf, bool err[static 1],
+extern bool         ft_strbuf_vcatf_err (ft_strbuf_t *buf, bool err[1],
                                          const char *fmt, va_list args);
 /*
  * Returns string which points into the buffer.

@@ -2,8 +2,7 @@
 #include <unistd.h>
 
 #include "pg_probackup.h"
-/* sys/stat.h must be included after pg_probackup.h (see problems with compilation for windows described in PGPRO-5750) */
-#include <sys/stat.h>
+#include <signal.h>
 
 #include "file.h"
 #include "storage/checksum.h"
@@ -78,8 +77,8 @@ typedef struct
 #define fio_fileno(f) (((size_t)f - 1) | FIO_PIPE_MARKER)
 
 #if defined(WIN32)
-#undef open(a, b, c)
-#undef fopen(a, b)
+#undef open
+#undef fopen
 #endif
 
 void
@@ -140,43 +139,6 @@ fio_is_remote_fd(int fd)
 }
 
 #ifdef WIN32
-
-#undef stat
-
-/*
- * The stat() function in win32 is not guaranteed to update the st_size
- * field when run. So we define our own version that uses the Win32 API
- * to update this field.
- */
-static int
-fio_safestat(const char *path, struct stat *buf)
-{
-    int            r;
-    WIN32_FILE_ATTRIBUTE_DATA attr;
-
-    r = stat(path, buf);
-    if (r < 0)
-        return r;
-
-    if (!GetFileAttributesEx(path, GetFileExInfoStandard, &attr))
-    {
-        errno = ENOENT;
-        return -1;
-    }
-
-    /*
-     * XXX no support for large files here, but we don't do that in general on
-     * Win32 yet.
-     */
-    buf->st_size = attr.nFileSizeLow;
-
-    return 0;
-}
-
-#define stat(x, y) fio_safestat(x, y)
-#endif /* WIN32 */
-
-#ifdef WIN32
 /* TODO: use real pread on Linux */
 static ssize_t
 pread(int fd, void* buf, size_t size, off_t off)
@@ -194,7 +156,7 @@ remove_file_or_dir(const char* path)
 {
 	int rc = remove(path);
 
-	if (rc < 0 && errno == EACCESS)
+	if (rc < 0 && errno == EACCES)
 		rc = rmdir(path);
 	return rc;
 }
@@ -2211,10 +2173,10 @@ fio_copy_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
 		elog(ERROR, "Cannot change mode of \"%s\": %s", to_fullpath,
 			strerror(errno));
 
-	elog(VERBOSE, "ftruncate file \"%s\" to size %lu",
+	elog(VERBOSE, "ftruncate file \"%s\" to size %zu",
 			to_fullpath, file->size);
 	if (fio_ftruncate(out, file->size) == -1)
-		elog(ERROR, "Cannot ftruncate file \"%s\" to size %lu: %s",
+		elog(ERROR, "Cannot ftruncate file \"%s\" to size %zu: %s",
 			to_fullpath, file->size, strerror(errno));
 
 	if (!fio_is_remote_file(out))
@@ -3106,6 +3068,7 @@ local_check_postmaster(const char *pgdata)
 {
 	FILE  *fp;
 	pid_t  pid;
+	long long lpid;
 	char   pid_file[MAXPGPATH];
 
 	join_path_components(pid_file, pgdata, "postmaster.pid");
@@ -3121,7 +3084,11 @@ local_check_postmaster(const char *pgdata)
 				pid_file, strerror(errno));
 	}
 
-	if (fscanf(fp, "%i", &pid) != 1)
+	if (fscanf(fp, "%lli", &lpid) == 1)
+	{
+		pid = lpid;
+	}
+	else
 	{
 		/* something is wrong with the file content */
 		pid = 1;
@@ -3135,8 +3102,8 @@ local_check_postmaster(const char *pgdata)
 			if (errno == ESRCH)
 				pid = 0;
 			else
-				elog(ERROR, "Failed to send signal 0 to a process %d: %s",
-						pid, strerror(errno));
+				elog(ERROR, "Failed to send signal 0 to a process %lld: %s",
+						(long long)pid, strerror(errno));
 		}
 	}
 

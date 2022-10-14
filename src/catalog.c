@@ -13,7 +13,6 @@
 
 #include <dirent.h>
 #include <signal.h>
-#include <sys/stat.h>
 #include <unistd.h>
 
 #include "utils/file.h"
@@ -423,8 +422,8 @@ grab_excl_lock_file(const char *root_dir, const char *backup_id, bool strict)
 			/* complain every fifth interval */
 			if ((ntries % LOG_FREQ) == 0)
 			{
-				elog(WARNING, "Process %d is using backup %s, and is still running",
-					 encoded_pid, backup_id);
+				elog(WARNING, "Process %lld is using backup %s, and is still running",
+					 (long long)encoded_pid, backup_id);
 
 				elog(WARNING, "Waiting %u seconds on exclusive lock for backup %s",
 					 ntries, backup_id);
@@ -438,8 +437,8 @@ grab_excl_lock_file(const char *root_dir, const char *backup_id, bool strict)
 		else
 		{
 			if (errno == ESRCH)
-				elog(WARNING, "Process %d which used backup %s no longer exists",
-					 encoded_pid, backup_id);
+				elog(WARNING, "Process %lld which used backup %s no longer exists",
+					 (long long)encoded_pid, backup_id);
 			else
 				elog(ERROR, "Failed to send signal 0 to a process %d: %s",
 					encoded_pid, strerror(errno));
@@ -468,7 +467,7 @@ grab_lock:
 	/*
 	 * Successfully created the file, now fill it.
 	 */
-	snprintf(buffer, sizeof(buffer), "%d\n", my_pid);
+	snprintf(buffer, sizeof(buffer), "%lld\n", (long long)my_pid);
 
 	errno = 0;
 	if (fio_write(fd, buffer, strlen(buffer)) != strlen(buffer))
@@ -575,8 +574,8 @@ wait_shared_owners(pgBackup *backup)
                 /* complain from time to time */
                 if ((ntries % LOG_FREQ) == 0)
                 {
-                    elog(WARNING, "Process %d is using backup %s in shared mode, and is still running",
-                            encoded_pid, base36enc(backup->start_time));
+                    elog(WARNING, "Process %lld is using backup %s in shared mode, and is still running",
+                            (long long)encoded_pid, base36enc(backup->start_time));
 
                     elog(WARNING, "Waiting %u seconds on lock for backup %s", ntries,
                             base36enc(backup->start_time));
@@ -588,8 +587,8 @@ wait_shared_owners(pgBackup *backup)
                 continue;
             }
             else if (errno != ESRCH)
-                elog(ERROR, "Failed to send signal 0 to a process %d: %s",
-                        encoded_pid, strerror(errno));
+                elog(ERROR, "Failed to send signal 0 to a process %lld: %s",
+                        (long long)encoded_pid, strerror(errno));
 
             /* locker is dead */
             break;
@@ -606,8 +605,8 @@ wait_shared_owners(pgBackup *backup)
     /* some shared owners are still alive */
     if (ntries <= 0)
     {
-        elog(WARNING, "Cannot to lock backup %s in exclusive mode, because process %u owns shared lock",
-                base36enc(backup->start_time), encoded_pid);
+        elog(WARNING, "Cannot to lock backup %s in exclusive mode, because process %llu owns shared lock",
+                base36enc(backup->start_time), (long long)encoded_pid);
         return 1;
     }
 
@@ -662,11 +661,11 @@ grab_shared_lock_file(pgBackup *backup)
 			 * Somebody is still using this backup in shared mode,
 			 * copy this pid into a new file.
 			 */
-			buffer_len += snprintf(buffer+buffer_len, 4096, "%u\n", encoded_pid);
+			buffer_len += snprintf(buffer+buffer_len, 4096, "%llu\n", (long long)encoded_pid);
 		}
 		else if (errno != ESRCH)
-			elog(ERROR, "Failed to send signal 0 to a process %d: %s",
-					encoded_pid, strerror(errno));
+			elog(ERROR, "Failed to send signal 0 to a process %lld: %s",
+					(long long)encoded_pid, strerror(errno));
 	}
 
 	if (fp_in)
@@ -686,7 +685,7 @@ grab_shared_lock_file(pgBackup *backup)
 	}
 
 	/* add my own pid */
-	buffer_len += snprintf(buffer+buffer_len, sizeof(buffer), "%u\n", my_pid);
+	buffer_len += snprintf(buffer+buffer_len, sizeof(buffer), "%llu\n", (long long)my_pid);
 
 	/* write out the collected PIDs to temp lock file */
 	fwrite(buffer, 1, buffer_len, fp_out);
@@ -784,11 +783,11 @@ release_shared_lock_file(const char *backup_dir)
 			 * Somebody is still using this backup in shared mode,
 			 * copy this pid into a new file.
 			 */
-			buffer_len += snprintf(buffer+buffer_len, 4096, "%u\n", encoded_pid);
+			buffer_len += snprintf(buffer+buffer_len, 4096, "%llu\n", (long long)encoded_pid);
 		}
 		else if (errno != ESRCH)
-			elog(ERROR, "Failed to send signal 0 to a process %d: %s",
-					encoded_pid, strerror(errno));
+			elog(ERROR, "Failed to send signal 0 to a process %lld: %s",
+					(long long)encoded_pid, strerror(errno));
     }
 
 	if (ferror(fp_in))

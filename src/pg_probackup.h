@@ -14,7 +14,6 @@
 
 #include "postgres_fe.h"
 #include "libpq-fe.h"
-#include "libpq-int.h"
 
 #include "access/xlog_internal.h"
 #include "utils/pg_crc.h"
@@ -44,11 +43,8 @@
 
 #include "pg_probackup_state.h"
 
-
-#ifdef WIN32
-#define __thread __declspec(thread)
-#else
-#include <pthread.h>
+#if defined(WIN32) && !(defined(_UCRT) && defined(__MINGW64__))
+#error Windows port requires compilation in MinGW64 UCRT environment
 #endif
 
 /* Wrap the code that we're going to delete after refactoring in this define*/
@@ -742,7 +738,6 @@ typedef struct StopBackupCallbackParams
 
 /* common options */
 extern pid_t    my_pid;
-extern __thread int my_thread_num;
 extern int		num_threads;
 extern bool		stream_wal;
 extern bool		show_color;

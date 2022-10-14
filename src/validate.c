@@ -10,7 +10,6 @@
 
 #include "pg_probackup.h"
 
-#include <sys/stat.h>
 #include <dirent.h>
 
 #include "utils/thread.h"
@@ -313,8 +312,8 @@ pgBackupValidateFiles(void *arg)
 
 		if (file->write_size != st.st_size)
 		{
-			elog(WARNING, "Invalid size of backup file \"%s\" : " INT64_FORMAT ". Expected %lu",
-				 file_fullpath, (unsigned long) st.st_size, file->write_size);
+			elog(WARNING, "Invalid size of backup file \"%s\" : %lld. Expected %lld",
+				 file_fullpath, (long long) st.st_size, (long long)file->write_size);
 			arguments->corrupted = true;
 			break;
 		}

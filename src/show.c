@@ -13,7 +13,6 @@
 #include <time.h>
 #include <dirent.h>
 #include <locale.h>
-#include <sys/stat.h>
 
 #include "utils/json.h"
 
@@ -911,7 +910,7 @@ show_archive_plain(const char *instance_name, uint32 xlog_seg_size,
 		cur++;
 
 		/* N files */
-		snprintf(row->n_segments, lengthof(row->n_segments), "%lu",
+		snprintf(row->n_segments, lengthof(row->n_segments), "%zu",
 				 tlinfo->n_xlog_files);
 		widths[cur] = Max(widths[cur], strlen(row->n_segments));
 		cur++;
@@ -931,7 +930,7 @@ show_archive_plain(const char *instance_name, uint32 xlog_seg_size,
 		cur++;
 
 		/* N backups */
-		snprintf(row->n_backups, lengthof(row->n_backups), "%lu",
+		snprintf(row->n_backups, lengthof(row->n_backups), "%zu",
 				 tlinfo->backups?parray_num(tlinfo->backups):0);
 		widths[cur] = Max(widths[cur], strlen(row->n_backups));
 		cur++;
@@ -1087,10 +1086,10 @@ show_archive_json(const char *instance_name, uint32 xlog_seg_size,
 		json_add_value(buf, "max-segno", tmp_buf, json_level, true);
 
 		json_add_key(buf, "n-segments", json_level);
-		appendPQExpBuffer(buf, "%lu", tlinfo->n_xlog_files);
+		appendPQExpBuffer(buf, "%zu", tlinfo->n_xlog_files);
 
 		json_add_key(buf, "size", json_level);
-		appendPQExpBuffer(buf, "%lu", tlinfo->size);
+		appendPQExpBuffer(buf, "%zu", tlinfo->size);
 
 		json_add_key(buf, "zratio", json_level);
 

@@ -343,8 +343,8 @@ elog_internal(int elevel, bool file_only, const char *message)
 
 	if (format_file == JSON || format_console == JSON)
 	{
-		snprintf(str_pid_json, sizeof(str_pid_json), "%d", my_pid);
-		snprintf(str_thread_json, sizeof(str_thread_json), "[%d-1]", my_thread_num);
+		snprintf(str_pid_json, sizeof(str_pid_json), "%lld", (long long)my_pid);
+		snprintf(str_thread_json, sizeof(str_thread_json), "[%d-1]", my_thread_num());
 
 		initPQExpBuffer(&show_buf);
 		json_add_min(buf_json, JT_BEGIN_OBJECT);
@@ -357,7 +357,7 @@ elog_internal(int elevel, bool file_only, const char *message)
 		json_add_min(buf_json, JT_END_OBJECT);
 	}
 
-	snprintf(str_pid, sizeof(str_pid), "[%d]:", my_pid);
+	snprintf(str_pid, sizeof(str_pid), "[%lld]:", (long long)my_pid);
 
 	/*
 	 * Write message to log file.
@@ -424,7 +424,7 @@ elog_internal(int elevel, bool file_only, const char *message)
 			{
 				char		str_thread[64];
 				/* [Issue #213] fix pgbadger parsing */
-				snprintf(str_thread, sizeof(str_thread), "[%d-1]:", my_thread_num);
+				snprintf(str_thread, sizeof(str_thread), "[%d-1]:", my_thread_num());
 
 				fprintf(stderr, "%s ", strfbuf);
 				fprintf(stderr, "%s ", str_pid);
@@ -497,8 +497,8 @@ elog_stderr(int elevel, const char *fmt, ...)
 	{
 		strftime(strfbuf, sizeof(strfbuf), "%Y-%m-%d %H:%M:%S %Z",
 				 localtime(&log_time));
-		snprintf(str_pid, sizeof(str_pid), "%d", my_pid);
-		snprintf(str_thread_json, sizeof(str_thread_json), "[%d-1]", my_thread_num);
+		snprintf(str_pid, sizeof(str_pid), "%lld", (long long)my_pid);
+		snprintf(str_thread_json, sizeof(str_thread_json), "[%d-1]", my_thread_num());
 
 		initPQExpBuffer(&show_buf);
 		json_add_min(buf_json, JT_BEGIN_OBJECT);
@@ -811,11 +811,7 @@ logfile_getname(const char *format, time_t timestamp)
 	len = strlen(filename);
 
 	/* Treat log_filename as a strftime pattern */
-#ifdef WIN32
-	if (pg_strftime(filename + len, MAXPGPATH - len, format, tm) <= 0)
-#else
 	if (strftime(filename + len, MAXPGPATH - len, format, tm) <= 0)
-#endif
 		elog_stderr(ERROR, "strftime(%s) failed: %s", format, strerror(errno));
 
 	return filename;
@@ -971,7 +967,7 @@ logfile_open:
 			elog_stderr(ERROR, "cannot open rotation file \"%s\": %s",
 						control, strerror(errno));
 
-		fprintf(control_file, "%ld", timestamp);
+		fprintf(control_file, "%lld", (long long)timestamp);
 
 		fclose(control_file);
 	}

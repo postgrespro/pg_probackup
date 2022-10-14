@@ -17,7 +17,6 @@
 #include "pgtar.h"
 #include "streamutil.h"
 
-#include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -138,8 +137,8 @@ catchup_preflight_checks(PGNodeInfo *source_node_info, PGconn *source_conn,
 		}
 		else if (pid > 1) /* postmaster is up */
 		{
-			elog(ERROR, "Postmaster with pid %u is running in destination directory \"%s\"",
-				pid, dest_pgdata);
+			elog(ERROR, "Postmaster with pid %lld is running in destination directory \"%s\"",
+				(long long)pid, dest_pgdata);
 		}
 	}
 
@@ -161,15 +160,15 @@ catchup_preflight_checks(PGNodeInfo *source_node_info, PGconn *source_conn,
 		source_id = get_system_identifier(FIO_DB_HOST, source_pgdata, false); /* same as instance_config.system_identifier */
 
 		if (source_conn_id != source_id)
-			elog(ERROR, "Database identifiers mismatch: we connected to DB id %lu, but in \"%s\" we found id %lu",
-				source_conn_id, source_pgdata, source_id);
+			elog(ERROR, "Database identifiers mismatch: we connected to DB id %llu, but in \"%s\" we found id %llu",
+				(long long)source_conn_id, source_pgdata, (long long)source_id);
 
 		if (current.backup_mode != BACKUP_MODE_FULL)
 		{
 			dest_id = get_system_identifier(FIO_LOCAL_HOST, dest_pgdata, false);
 			if (source_conn_id != dest_id)
-			elog(ERROR, "Database identifiers mismatch: we connected to DB id %lu, but in \"%s\" we found id %lu",
-				source_conn_id, dest_pgdata, dest_id);
+			elog(ERROR, "Database identifiers mismatch: we connected to DB id %llu, but in \"%s\" we found id %llu",
+				(long long)source_conn_id, dest_pgdata, (long long)dest_id);
 		}
 	}
 
@@ -230,6 +229,7 @@ catchup_check_tablespaces_existance_in_tbsmapping(PGconn *conn)
 {
 	PGresult	*res;
 	int		i;
+	int 	ntups;
 	char		*tablespace_path = NULL;
 	const char	*linked_path = NULL;
 	char		*query = "SELECT pg_catalog.pg_tablespace_location(oid) "
@@ -241,7 +241,8 @@ catchup_check_tablespaces_existance_in_tbsmapping(PGconn *conn)
 	if (!res)
 		elog(ERROR, "Failed to get list of tablespaces");
 
-	for (i = 0; i < res->ntups; i++)
+	ntups = PQntuples(res);
+	for (i = 0; i < ntups; i++)
 	{
 		tablespace_path = PQgetvalue(res, i, 0);
 		Assert (strlen(tablespace_path) > 0);
@@ -438,7 +439,7 @@ catchup_thread_runner(void *arg)
 
 		if (file->write_size == BYTES_INVALID)
 		{
-			elog(LOG, "Skipping the unchanged file: \"%s\", read %li bytes", from_fullpath, file->read_size);
+			elog(LOG, "Skipping the unchanged file: \"%s\", read %zu bytes", from_fullpath, file->read_size);
 			continue;
 		}
 

@@ -5,13 +5,9 @@
 #include <string.h>
 #include <errno.h>
 
-#ifdef WIN32
-#define __thread __declspec(thread)
-#endif
-#include <pthread.h>
-
 #include <fo_obj.h>
-#include <ft_ar_examples.h>
+
+#include <pthread.h>
 
 /*
  * We limits total number of methods, klasses and method implementations.
@@ -650,7 +646,7 @@ fobjStr*
 fobj_newstr(ft_str_t s, enum FOBJ_STR_ALLOC ownership) {
     fobjStr *str;
 #if __SIZEOF_POINTER__ < 8
-    ft_assert(size < (1<<30)-2);
+    ft_assert(s.len < (1<<30)-2);
 #else
     ft_assert(s.len < UINT32_MAX-2);
 #endif
@@ -871,13 +867,13 @@ fobj_format_int(ft_strbuf_t *buf, uint64_t i, bool _signed, const char *fmt) {
 
     /* now add real suitable format */
     switch (base) {
-        case 'x': strcat(tfmt + fmtlen, PRIx64); break;
-        case 'X': strcat(tfmt + fmtlen, PRIX64); break;
-        case 'o': strcat(tfmt + fmtlen, PRIo64); break;
-        case 'u': strcat(tfmt + fmtlen, PRIu64); break;
-        case 'd': strcat(tfmt + fmtlen, PRId64); break;
+        case 'x': ft_strlcat(tfmt, PRIx64, sizeof(tfmt)); break;
+        case 'X': ft_strlcat(tfmt, PRIX64, sizeof(tfmt)); break;
+        case 'o': ft_strlcat(tfmt, PRIo64, sizeof(tfmt)); break;
+        case 'u': ft_strlcat(tfmt, PRIu64, sizeof(tfmt)); break;
+        case 'd': ft_strlcat(tfmt, PRId64, sizeof(tfmt)); break;
         default:
-        case 'i': strcat(tfmt + fmtlen, PRIi64); break;
+        case 'i': ft_strlcat(tfmt, PRIi64, sizeof(tfmt)); break;
     }
 
     switch (base) {
@@ -1082,11 +1078,11 @@ fobj__format_errmsg(const char* msg, fobj_err_kv_t *kvs) {
                   "ident is too long in message \"%s\"", msg);
         ft_assert(formatdelim == NULL || closebrace - formatdelim <= 31,
                   "format is too long in message \"%s\"", msg);
-        strncpy(ident, cur, identlen);
+        memcpy(ident, cur, identlen);
         ident[identlen] = 0;
         formatlen = formatdelim ? closebrace - (formatdelim+1) : 0;
         if (formatlen > 0) {
-            strncpy(format, formatdelim + 1, formatlen);
+            memcpy(format, formatdelim + 1, formatlen);
         }
         format[formatlen] = 0;
         kv = kvs;
@@ -1293,11 +1289,11 @@ fobj_printkv(const char *fmt, ft_slc_fokv_t kvs) {
                   "ident is too long in format \"%s\"", fmt);
         ft_assert(formatdelim == NULL || closebrace - formatdelim <= 31,
                   "format is too long in format \"%s\"", fmt);
-        strncpy(ident, cur, identlen);
+        memcpy(ident, cur, identlen);
         ident[identlen] = 0;
         formatlen = formatdelim ? closebrace - (formatdelim+1) : 0;
         if (formatlen > 0) {
-            strncpy(format, formatdelim + 1, formatlen);
+            memcpy(format, formatdelim + 1, formatlen);
         }
         format[formatlen] = 0;
         i = ft_search_fokv(kvs.ptr, kvs.len, ident, fobj_fokv_cmpc);
