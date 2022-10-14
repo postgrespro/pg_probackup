@@ -1902,10 +1902,10 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                 "GRANT EXECUTE ON FUNCTION ptrack.ptrack_init_lsn() TO backup;")
 
         if ProbackupTest.enterprise:
-
             node.safe_psql(
                 "backupdb",
-                "GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_version() TO backup")
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_version() TO backup;"
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_edition() TO backup;")
 
         # FULL backup
         self.backup_node(
