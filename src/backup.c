@@ -1775,7 +1775,7 @@ pg_stop_backup_write_file_helper(const char *path, const char *filename, const c
 
 		if (S_ISREG(file->mode))
 		{
-			file->crc = pgFileGetCRC(full_filename, true, false);
+			file->crc = pgFileGetCRC32C(full_filename, false);
 
 			file->write_size = file->size;
 			file->uncompressed_size = file->size;

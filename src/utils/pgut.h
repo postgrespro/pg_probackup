@@ -3,7 +3,7 @@
  * pgut.h
  *
  * Portions Copyright (c) 2009-2013, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
- * Portions Copyright (c) 2017-2021, Postgres Professional
+ * Portions Copyright (c) 2017-2022, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */
@@ -11,6 +11,7 @@
 #ifndef PGUT_H
 #define PGUT_H
 
+#include <assert.h>
 #include "postgres_fe.h"
 #include "libpq-fe.h"
 

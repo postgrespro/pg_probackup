@@ -1068,7 +1068,7 @@ get_backup_filelist(pgBackup *backup, bool strict)
 
 	files = parray_new();
 
-	INIT_FILE_CRC32(true, content_crc);
+	INIT_CRC32C(content_crc);
 
 	while (fgets(buf, lengthof(buf), fp))
 	{
@@ -1090,7 +1090,7 @@ get_backup_filelist(pgBackup *backup, bool strict)
 					hdr_size;
 		pgFile	   *file;
 
-		COMP_FILE_CRC32(true, content_crc, buf, strlen(buf));
+		COMP_CRC32C(content_crc, buf, strlen(buf));
 
 		get_control_value_str(buf, "path", path, sizeof(path),true);
 		get_control_value_int64(buf, "size", &write_size, true);
@@ -1145,7 +1145,7 @@ get_backup_filelist(pgBackup *backup, bool strict)
 		parray_append(files, file);
 	}
 
-	FIN_FILE_CRC32(true, content_crc);
+	FIN_CRC32C(content_crc);
 
 	if (ferror(fp))
 		elog(ERROR, "Failed to read from file: \"%s\"", backup_filelist_path);
@@ -2520,7 +2520,7 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 	setvbuf(out, buf, _IOFBF, BUFFERSZ);
 
 	if (sync)
-		INIT_FILE_CRC32(true, backup->content_crc);
+		INIT_CRC32C(backup->content_crc);
 
 	/* print each file in the list */
 	for (i = 0; i < parray_num(files); i++)
@@ -2588,13 +2588,13 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 		sprintf(line+len, "}\n");
 
 		if (sync)
-			COMP_FILE_CRC32(true, backup->content_crc, line, strlen(line));
+			COMP_CRC32C(backup->content_crc, line, strlen(line));
 
 		fprintf(out, "%s", line);
 	}
 
 	if (sync)
-		FIN_FILE_CRC32(true, backup->content_crc);
+		FIN_CRC32C(backup->content_crc);
 
 	if (fflush(out) != 0)
 		elog(ERROR, "Cannot flush file list \"%s\": %s",

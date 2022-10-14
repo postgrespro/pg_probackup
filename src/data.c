@@ -24,6 +24,9 @@
 
 #include "utils/thread.h"
 
+/* for crc32_compat macros */
+#include "compatibility/pg-11.h"
+
 /* Union to ease operations on relation pages */
 typedef struct DataPage
 {
@@ -32,7 +35,7 @@ typedef struct DataPage
 } DataPage;
 
 static bool get_page_header(FILE *in, const char *fullpath, BackupPageHeader *bph,
-							pg_crc32 *crc, bool use_crc32c);
+							pg_crc32 *crc, uint32 backup_version);
 
 #ifdef HAVE_LIBZ
 /* Implementation of zlib compression method */
@@ -448,7 +451,7 @@ compress_and_backup_page(pgFile *file, BlockNumber blknum,
 	write_buffer_size = compressed_size + sizeof(BackupPageHeader);
 
 	/* Update CRC */
-	COMP_FILE_CRC32(true, *crc, write_buffer, write_buffer_size);
+	COMP_CRC32C(*crc, write_buffer, write_buffer_size);
 
 	/* write data page */
 	if (fio_fwrite(out, write_buffer, write_buffer_size) != write_buffer_size)
@@ -529,7 +532,7 @@ backup_data_file(pgFile *file, const char *from_fullpath, const char *to_fullpat
 	file->read_size = 0;
 	file->write_size = 0;
 	file->uncompressed_size = 0;
-	INIT_FILE_CRC32(true, file->crc);
+	INIT_CRC32C(file->crc);
 
 	/*
 	 * Read each page, verify checksum and write it to backup.
@@ -628,7 +631,7 @@ backup_data_file(pgFile *file, const char *from_fullpath, const char *to_fullpat
 cleanup:
 
 	/* finish CRC calculation */
-	FIN_FILE_CRC32(true, file->crc);
+	FIN_CRC32C(file->crc);
 
 	/* dump page headers */
 	write_page_headers(headers, file, hdr_map, is_merge);
@@ -808,7 +811,7 @@ backup_non_data_file(pgFile *file, pgFile *prev_file,
 		file->crc = fio_get_crc32(FIO_DB_HOST, from_fullpath, false, true);
 
 		/* ...and checksum is the same... */
-		if (EQ_TRADITIONAL_CRC32(file->crc, prev_file->crc))
+		if (EQ_CRC32C(file->crc, prev_file->crc))
 		{
 			file->write_size = BYTES_INVALID;
 			return; /* ...skip copying file. */
@@ -1021,7 +1024,7 @@ restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_vers
 			 * or when merging something. Align read_len only when restoring
 			 * or merging old backups.
 			 */
-			if (get_page_header(in, from_fullpath, &(page).bph, NULL, false))
+			if (get_page_header(in, from_fullpath, &(page).bph, NULL, backup_version))
 			{
 				cur_pos_in += sizeof(BackupPageHeader);
 
@@ -1393,7 +1396,7 @@ backup_non_data_file_internal(const char *from_fullpath,
 	ssize_t  read_len = 0;
 	char	*buf = NULL;
 
-	INIT_FILE_CRC32(true, file->crc);
+	INIT_CRC32C(file->crc);
 
 	/* reset size summary */
 	file->read_size = 0;
@@ -1489,7 +1492,7 @@ backup_non_data_file_internal(const char *from_fullpath,
 						 strerror(errno));
 
 				/* update CRC */
-				COMP_FILE_CRC32(true, file->crc, buf, read_len);
+				COMP_CRC32C(file->crc, buf, read_len);
 				file->read_size += read_len;
 			}
 
@@ -1505,7 +1508,7 @@ backup_non_data_file_internal(const char *from_fullpath,
 
 cleanup:
 	/* finish CRC calculation and store into pgFile */
-	FIN_FILE_CRC32(true, file->crc);
+	FIN_CRC32C(file->crc);
 
 	if (in && fclose(in))
 		elog(ERROR, "Cannot close the file \"%s\": %s", from_fullpath, strerror(errno));
@@ -1682,7 +1685,6 @@ validate_file_pages(pgFile *file, const char *fullpath, XLogRecPtr stop_lsn,
 	bool		is_valid = true;
 	FILE		*in;
 	pg_crc32	crc;
-	bool		use_crc32c = backup_version <= 20021 || backup_version >= 20025;
 	BackupPageHeader2 *headers = NULL;
 	int         n_hdr = -1;
 	off_t       cur_pos_in = 0;
@@ -1706,7 +1708,7 @@ validate_file_pages(pgFile *file, const char *fullpath, XLogRecPtr stop_lsn,
 	}
 
 	/* calc CRC of backup file */
-	INIT_FILE_CRC32(use_crc32c, crc);
+	INIT_CRC32_COMPAT(backup_version, crc);
 
 	/* read and validate pages one by one */
 	while (true)
@@ -1722,7 +1724,7 @@ validate_file_pages(pgFile *file, const char *fullpath, XLogRecPtr stop_lsn,
 		if (interrupted || thread_interrupted)
 			elog(ERROR, "Interrupted during data file validation");
 
-		/* newer backups have page headers in separate storage */
+		/* newer backups (post 2.4.0) have page headers in separate storage */
 		if (headers)
 		{
 			n_hdr++;
@@ -1751,10 +1753,10 @@ validate_file_pages(pgFile *file, const char *fullpath, XLogRecPtr stop_lsn,
 				cur_pos_in = headers[n_hdr].pos;
 			}
 		}
-		/* old backups rely on header located directly in data file */
+		/* old backups (pre 2.4.0) rely on header located directly in data file */
 		else
 		{
-			if (get_page_header(in, fullpath, &(compressed_page).bph, &crc, use_crc32c))
+			if (get_page_header(in, fullpath, &(compressed_page).bph, &crc, backup_version))
 			{
 				/* Backward compatibility kludge, TODO: remove in 3.0
 				 * for some reason we padded compressed pages in old versions
@@ -1794,9 +1796,9 @@ validate_file_pages(pgFile *file, const char *fullpath, XLogRecPtr stop_lsn,
 		cur_pos_in += read_len;
 
 		if (headers)
-			COMP_FILE_CRC32(use_crc32c, crc, &compressed_page, read_len);
+			COMP_CRC32_COMPAT(backup_version, crc, &compressed_page, read_len);
 		else
-			COMP_FILE_CRC32(use_crc32c, crc, compressed_page.data, read_len);
+			COMP_CRC32_COMPAT(backup_version, crc, compressed_page.data, read_len);
 
 		if (compressed_size != BLCKSZ
 			|| page_may_be_compressed(compressed_page.data, file->compress_alg,
@@ -1865,7 +1867,7 @@ validate_file_pages(pgFile *file, const char *fullpath, XLogRecPtr stop_lsn,
 		}
 	}
 
-	FIN_FILE_CRC32(use_crc32c, crc);
+	FIN_CRC32_COMPAT(backup_version, crc);
 	fclose(in);
 
 	if (crc != file->crc)
@@ -2021,7 +2023,7 @@ get_lsn_map(const char *fullpath, uint32 checksum_version,
 /* Every page in data file contains BackupPageHeader, extract it */
 bool
 get_page_header(FILE *in, const char *fullpath, BackupPageHeader* bph,
-				pg_crc32 *crc, bool use_crc32c)
+				pg_crc32 *crc, uint32 backup_version)
 {
 	/* read BackupPageHeader */
 	size_t read_len = fread(bph, 1, sizeof(BackupPageHeader), in);
@@ -2048,7 +2050,7 @@ get_page_header(FILE *in, const char *fullpath, BackupPageHeader* bph,
 	 * the problem of backward compatibility for backups of old versions
 	 */
 	if (crc)
-		COMP_FILE_CRC32(use_crc32c, *crc, bph, read_len);
+		COMP_CRC32_COMPAT(backup_version, *crc, bph, read_len);
 
 	if (bph->block == 0 && bph->compressed_size == 0)
 		elog(ERROR, "Empty block in file \"%s\"", fullpath);
@@ -2367,6 +2369,8 @@ copy_pages(const char *to_fullpath, const char *from_fullpath,
  * array of headers.
  * TODO: some access optimizations would be great here:
  * less fseeks, buffering, descriptor sharing, etc.
+ *
+ * Used for post 2.4.0 backups
  */
 BackupPageHeader2*
 get_data_file_headers(HeaderMap *hdr_map, pgFile *file, uint32 backup_version, bool strict)
@@ -2441,9 +2445,9 @@ get_data_file_headers(HeaderMap *hdr_map, pgFile *file, uint32 backup_version, b
 	}
 
 	/* validate checksum */
-	INIT_FILE_CRC32(true, hdr_crc);
-	COMP_FILE_CRC32(true, hdr_crc, headers, read_len);
-	FIN_FILE_CRC32(true, hdr_crc);
+	INIT_CRC32C(hdr_crc);
+	COMP_CRC32C(hdr_crc, headers, read_len);
+	FIN_CRC32C(hdr_crc);
 
 	if (hdr_crc != file->hdr_crc)
 	{
@@ -2490,9 +2494,9 @@ write_page_headers(BackupPageHeader2 *headers, pgFile *file, HeaderMap *hdr_map,
 	read_len = (file->n_headers + 1) * sizeof(BackupPageHeader2);
 
 	/* calculate checksums */
-	INIT_FILE_CRC32(true, file->hdr_crc);
-	COMP_FILE_CRC32(true, file->hdr_crc, headers, read_len);
-	FIN_FILE_CRC32(true, file->hdr_crc);
+	INIT_CRC32C(file->hdr_crc);
+	COMP_CRC32C(file->hdr_crc, headers, read_len);
+	FIN_CRC32C(file->hdr_crc);
 
 	zheaders = pgut_malloc(read_len * 2);
 	memset(zheaders, 0, read_len * 2);

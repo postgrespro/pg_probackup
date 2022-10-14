@@ -3,7 +3,7 @@
  * validate.c: validate backup files.
  *
  * Portions Copyright (c) 2009-2011, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
- * Portions Copyright (c) 2015-2019, Postgres Professional
+ * Portions Copyright (c) 2015-2022, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */
@@ -341,14 +341,22 @@ pgBackupValidateFiles(void *arg)
 			 * Starting from 2.0.25 we calculate crc of pg_control differently.
 			 */
 			if (arguments->backup_version >= 20025 &&
-				strcmp(file->name, "pg_control") == 0 &&
-				!file->external_dir_num)
+				strcmp(file->rel_path, XLOG_CONTROL_FILE) == 0 &&
+				file->external_dir_num == 0)
 				crc = get_pgcontrol_checksum(arguments->base_path);
 			else
-				crc = pgFileGetCRC(file_fullpath,
-								   arguments->backup_version <= 20021 ||
-								   arguments->backup_version >= 20025,
-								   false);
+#if PG_VERSION_NUM >= 120000
+			{
+				Assert(arguments->backup_version >= 20025);
+				crc = pgFileGetCRC32C(file_fullpath, false);
+			}
+#else /* PG_VERSION_NUM < 120000 */
+				if (arguments->backup_version <= 20021 || arguments->backup_version >= 20025)
+					crc = pgFileGetCRC32C(file_fullpath, false);
+				else
+					crc = pgFileGetCRC32(file_fullpath, false);
+#endif /* PG_VERSION_NUM < 120000 */
+
 			if (crc != file->crc)
 			{
 				elog(WARNING, "Invalid CRC of backup file \"%s\" : %X. Expected %X",
@@ -720,8 +728,6 @@ validate_tablespace_map(pgBackup *backup, bool no_validate)
 	pgFile    **tablespace_map = NULL;
 	pg_crc32    crc;
 	parray     *files = get_backup_filelist(backup, true);
-	bool        use_crc32c = parse_program_version(backup->program_version) <= 20021 ||
-                             parse_program_version(backup->program_version) >= 20025;
 
 	parray_qsort(files, pgFileCompareRelPathWithExternal);
 	join_path_components(map_path, backup->database_dir, PG_TABLESPACE_MAP_FILE);
@@ -746,7 +752,16 @@ validate_tablespace_map(pgBackup *backup, bool no_validate)
 	/* check tablespace map checksumms */
 	if (!no_validate)
 	{
-		crc = pgFileGetCRC(map_path, use_crc32c, false);
+#if PG_VERSION_NUM >= 120000
+		Assert(parse_program_version(backup->program_version) >= 20025);
+		crc = pgFileGetCRC32C(map_path, false);
+#else /* PG_VERSION_NUM < 120000 */
+		if (parse_program_version(backup->program_version) <= 20021
+				|| parse_program_version(backup->program_version) >= 20025)
+			crc = pgFileGetCRC32C(map_path, false);
+		else
+			crc = pgFileGetCRC32(map_path, false);
+#endif /* PG_VERSION_NUM < 120000 */
 
 		if ((*tablespace_map)->crc != crc)
 			elog(ERROR, "Invalid CRC of tablespace map file \"%s\" : %X. Expected %X, "
