@@ -161,7 +161,9 @@ extern int     fio_closedir(DIR *dirp);
 
 /* pathname-style functions */
 extern int     fio_sync(fio_location location, const char* path);
-extern pg_crc32 fio_get_crc32(fio_location location, const char *file_path, bool decompress);
+extern pg_crc32
+fio_get_crc32(fio_location location, const char *file_path,
+			  bool decompress, bool missing_ok);
 
 extern int     fio_rename(fio_location location, const char* old_path, const char* new_path);
 extern int     fio_symlink(fio_location location, const char* target, const char* link_path, bool overwrite);
