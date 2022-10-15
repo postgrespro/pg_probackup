@@ -51,16 +51,29 @@ class SimpleAuthTest(ProbackupTest, unittest.TestCase):
                 1, 0,
                 "Expecting Error due to missing grant on EXECUTE.")
         except ProbackupException as e:
-            self.assertIn(
-                "ERROR: query failed: ERROR:  permission denied "
-                "for function pg_start_backup", e.message,
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
-                    repr(e.message), self.cmd))
+            if self.get_version(node) < 150000:
+                self.assertIn(
+                    "ERROR: query failed: ERROR:  permission denied "
+                    "for function pg_start_backup", e.message,
+                    '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                        repr(e.message), self.cmd))
+            else:
+                self.assertIn(
+                    "ERROR: query failed: ERROR:  permission denied "
+                    "for function pg_backup_start", e.message,
+                    '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                        repr(e.message), self.cmd))
 
-        node.safe_psql(
-            "postgres",
-            "GRANT EXECUTE ON FUNCTION"
-            " pg_start_backup(text, boolean, boolean) TO backup;")
+        if self.get_version(node) < 150000:
+            node.safe_psql(
+                "postgres",
+                "GRANT EXECUTE ON FUNCTION"
+                " pg_start_backup(text, boolean, boolean) TO backup;")
+        else:
+            node.safe_psql(
+                "postgres",
+                "GRANT EXECUTE ON FUNCTION"
+                " pg_backup_start(text, boolean) TO backup;")
 
         node.safe_psql(
             'postgres',
@@ -92,11 +105,18 @@ class SimpleAuthTest(ProbackupTest, unittest.TestCase):
                 1, 0,
                 "Expecting Error due to missing grant on EXECUTE.")
         except ProbackupException as e:
-            self.assertIn(
-                "ERROR: query failed: ERROR:  permission denied "
-                "for function pg_stop_backup", e.message,
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
-                    repr(e.message), self.cmd))
+            if self.get_version(node) < 150000:
+                self.assertIn(
+                    "ERROR: query failed: ERROR:  permission denied "
+                    "for function pg_stop_backup", e.message,
+                    '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                        repr(e.message), self.cmd))
+            else:
+                self.assertIn(
+                    "ERROR: query failed: ERROR:  permission denied "
+                    "for function pg_backup_stop", e.message,
+                    '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                        repr(e.message), self.cmd))
 
         node.safe_psql(
             "postgres",
