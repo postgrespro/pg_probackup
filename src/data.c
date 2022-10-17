@@ -2399,6 +2399,7 @@ get_data_file_headers(HeaderMap *hdr_map, pgFile *file, uint32 backup_version, b
 			headers[i].pos = tmp_headers[i].pos;
 			headers[i].checksum = tmp_headers[i].checksum;
 		}
+		pg_free(tmp_headers);
 		return headers;
 	}
 	/* TODO: consider to make this descriptor thread-specific */
