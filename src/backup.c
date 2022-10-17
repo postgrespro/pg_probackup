@@ -3,7 +3,7 @@
  * backup.c: backup DB cluster, archived WAL
  *
  * Portions Copyright (c) 2009-2013, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
- * Portions Copyright (c) 2015-2019, Postgres Professional
+ * Portions Copyright (c) 2015-2022, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */
@@ -116,7 +116,7 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 	char		pretty_time[20];
 	char		pretty_bytes[20];
 
-	elog(LOG, "Database backup start");
+	elog(INFO, "Database backup start");
 	if(current.external_dir_str)
 	{
 		external_dirs = make_external_directory_list(current.external_dir_str,
@@ -336,11 +336,11 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 	/* Extract information about files in backup_list parsing their names:*/
 	parse_filelist_filenames(backup_files_list, instance_config.pgdata);
 
-	elog(LOG, "Current Start LSN: %X/%X, TLI: %X",
+	elog(INFO, "Current Start LSN: %X/%X, TLI: %X",
 			(uint32) (current.start_lsn >> 32), (uint32) (current.start_lsn),
 			current.tli);
 	if (current.backup_mode != BACKUP_MODE_FULL)
-		elog(LOG, "Parent Start LSN: %X/%X, TLI: %X",
+		elog(INFO, "Parent Start LSN: %X/%X, TLI: %X",
 			 (uint32) (prev_backup->start_lsn >> 32), (uint32) (prev_backup->start_lsn),
 			 prev_backup->tli);
 
@@ -412,7 +412,7 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 			else
 				join_path_components(dirpath, current.database_dir, file->rel_path);
 
-			elog(VERBOSE, "Create directory '%s'", dirpath);
+			elog(LOG, "Create directory '%s'", dirpath);
 			fio_mkdir(dirpath, DIR_PERMISSION, FIO_BACKUP_HOST);
 		}
 
@@ -673,7 +673,7 @@ pgdata_basic_setup(ConnectionOptions conn_opt, PGNodeInfo *nodeInfo)
 	nodeInfo->checksum_version = current.checksum_version;
 
 	if (current.checksum_version)
-		elog(LOG, "This PostgreSQL instance was initialized with data block checksums. "
+		elog(INFO, "This PostgreSQL instance was initialized with data block checksums. "
 					"Data block corruption will be detected");
 	else
 		elog(WARNING, "This PostgreSQL instance was initialized without data block checksums. "
@@ -692,14 +692,21 @@ pgdata_basic_setup(ConnectionOptions conn_opt, PGNodeInfo *nodeInfo)
 
 /*
  * Entry point of pg_probackup BACKUP subcommand.
+ *
+ * if start_time == INVALID_BACKUP_ID then we can generate backup_id
  */
 int
 do_backup(InstanceState *instanceState, pgSetBackupParams *set_backup_params,
-		  bool no_validate, bool no_sync, bool backup_logs)
+		  bool no_validate, bool no_sync, bool backup_logs, time_t start_time)
 {
 	PGconn		*backup_conn = NULL;
 	PGNodeInfo	nodeInfo;
+	time_t		latest_backup_id = INVALID_BACKUP_ID;
 	char		pretty_bytes[20];
+
+	if (!instance_config.pgdata)
+		elog(ERROR, "required parameter not specified: PGDATA "
+						 "(-D, --pgdata)");
 
 	/* Initialize PGInfonode */
 	pgNodeInit(&nodeInfo);
@@ -709,12 +716,55 @@ do_backup(InstanceState *instanceState, pgSetBackupParams *set_backup_params,
 		(pg_strcasecmp(instance_config.external_dir_str, "none") != 0))
 		current.external_dir_str = instance_config.external_dir_str;
 
-	/* Create backup directory and BACKUP_CONTROL_FILE */
-	pgBackupCreateDir(&current, instanceState->instance_backup_subdir_path);
+	/* Find latest backup_id */
+	{
+		parray	*backup_list =  catalog_get_backup_list(instanceState, INVALID_BACKUP_ID);
 
-	if (!instance_config.pgdata)
-		elog(ERROR, "required parameter not specified: PGDATA "
-						 "(-D, --pgdata)");
+		if (parray_num(backup_list) > 0)
+			latest_backup_id = ((pgBackup *)parray_get(backup_list, 0))->backup_id;
+
+		parray_walk(backup_list, pgBackupFree);
+		parray_free(backup_list);
+	}
+
+	/* Try to pick backup_id and create backup directory with BACKUP_CONTROL_FILE */
+	if (start_time != INVALID_BACKUP_ID)
+	{
+		/* If user already choosed backup_id for us, then try to use it. */
+		if (start_time <= latest_backup_id)
+			/* don't care about freeing base36enc_dup memory, we exit anyway */
+			elog(ERROR, "Can't assign backup_id from requested start_time (%s), "
+						"this time must be later that backup %s",
+				base36enc_dup(start_time), base36enc_dup(latest_backup_id));
+
+		current.backup_id = start_time;
+		pgBackupInitDir(&current, instanceState->instance_backup_subdir_path);
+	}
+	else
+	{
+		/* We can generate our own unique backup_id
+		 * Sometimes (when we try to backup twice in one second)
+		 * backup_id will be duplicated -> try more times.
+		 */
+		int	attempts = 10;
+
+		if (time(NULL) < latest_backup_id)
+			elog(ERROR, "Can't assign backup_id, there is already a backup in future (%s)",
+				base36enc(latest_backup_id));
+
+		do
+		{
+			current.backup_id = time(NULL);
+			pgBackupInitDir(&current, instanceState->instance_backup_subdir_path);
+			if (current.backup_id == INVALID_BACKUP_ID)
+				sleep(1);
+		}
+		while (current.backup_id == INVALID_BACKUP_ID && attempts-- > 0);
+	}
+
+	/* If creation of backup dir was unsuccessful, there will be WARNINGS in logs already */
+	if (current.backup_id == INVALID_BACKUP_ID)
+		elog(ERROR, "Can't create backup directory");
 
 	/* Update backup status and other metainfo. */
 	current.status = BACKUP_STATUS_RUNNING;
@@ -1006,20 +1056,22 @@ pg_start_backup(const char *label, bool smooth, pgBackup *backup,
 	uint32		lsn_lo;
 	params[0] = label;
 
+#if PG_VERSION_NUM >= 150000
+	elog(INFO, "wait for pg_backup_start()");
+#else
 	elog(INFO, "wait for pg_start_backup()");
+#endif
 
 	/* 2nd argument is 'fast'*/
 	params[1] = smooth ? "false" : "true";
-	if (!exclusive_backup)
-		res = pgut_execute(conn,
-						   "SELECT pg_catalog.pg_start_backup($1, $2, false)",
-						   2,
-						   params);
-	else
-		res = pgut_execute(conn,
-						   "SELECT pg_catalog.pg_start_backup($1, $2)",
-						   2,
-						   params);
+	res = pgut_execute(conn,
+#if PG_VERSION_NUM >= 150000
+						"SELECT pg_catalog.pg_backup_start($1, $2)",
+#else
+						"SELECT pg_catalog.pg_start_backup($1, $2, false)",
+#endif
+						2,
+						params);
 
 	/*
 	 * Set flag that pg_start_backup() was called. If an error will happen it
@@ -1513,7 +1565,7 @@ wait_wal_and_calculate_stop_lsn(const char *xlog_path, XLogRecPtr stop_lsn, pgBa
 		stop_lsn_exists = true;
 	}
 
-	elog(LOG, "stop_lsn: %X/%X",
+	elog(INFO, "stop_lsn: %X/%X",
 		(uint32) (stop_lsn >> 32), (uint32) (stop_lsn));
 
 	/*
@@ -1585,6 +1637,14 @@ pg_stop_backup_send(PGconn *conn, int server_version, bool is_started_on_replica
 			" labelfile,"
 			" spcmapfile"
 			" FROM pg_catalog.pg_stop_backup(false)",
+		stop_backup_on_master_after15_query[] =
+			"SELECT"
+			" pg_catalog.txid_snapshot_xmax(pg_catalog.txid_current_snapshot()),"
+			" current_timestamp(0)::timestamptz,"
+			" lsn,"
+			" labelfile,"
+			" spcmapfile"
+			" FROM pg_catalog.pg_backup_stop(false)",
 		/*
 		 * In case of backup from replica >= 9.6 we do not trust minRecPoint
 		 * and stop_backup LSN, so we use latest replayed LSN as STOP LSN.
@@ -1604,19 +1664,33 @@ pg_stop_backup_send(PGconn *conn, int server_version, bool is_started_on_replica
 			" pg_catalog.pg_last_xlog_replay_location(),"
 			" labelfile,"
 			" spcmapfile"
-			" FROM pg_catalog.pg_stop_backup(false)";
+			" FROM pg_catalog.pg_stop_backup(false)",
+		stop_backup_on_replica_after15_query[] =
+			"SELECT"
+			" pg_catalog.txid_snapshot_xmax(pg_catalog.txid_current_snapshot()),"
+			" current_timestamp(0)::timestamptz,"
+			" pg_catalog.pg_last_wal_replay_lsn(),"
+			" labelfile,"
+			" spcmapfile"
+			" FROM pg_catalog.pg_backup_stop(false)";
 
 	const char * const stop_backup_query =
 		is_exclusive ?
 			stop_exlusive_backup_query :
-			server_version >= 100000 ?
+			server_version >= 150000 ?
 				(is_started_on_replica ?
-					stop_backup_on_replica_query :
-					stop_backup_on_master_query
+					stop_backup_on_replica_after15_query :
+					stop_backup_on_master_after15_query
 				) :
-				(is_started_on_replica ?
-					stop_backup_on_replica_before10_query :
-					stop_backup_on_master_before10_query
+				(server_version >= 100000 ?
+					(is_started_on_replica ?
+						stop_backup_on_replica_query :
+						stop_backup_on_master_query
+					) :
+					(is_started_on_replica ?
+						stop_backup_on_replica_before10_query :
+						stop_backup_on_master_before10_query
+					)
 				);
 	bool		sent = false;
 
@@ -1632,7 +1706,11 @@ pg_stop_backup_send(PGconn *conn, int server_version, bool is_started_on_replica
 	 */
 	sent = pgut_send(conn, stop_backup_query, 0, NULL, WARNING);
 	if (!sent)
+#if PG_VERSION_NUM >= 150000
+		elog(ERROR, "Failed to send pg_backup_stop query");
+#else
 		elog(ERROR, "Failed to send pg_stop_backup query");
+#endif
 
 	/* After we have sent pg_stop_backup, we don't need this callback anymore */
 	pgut_atexit_pop(backup_stopbackup_callback, &stop_callback_params);
@@ -1678,7 +1756,11 @@ pg_stop_backup_consume(PGconn *conn, int server_version,
 			if (interrupted)
 			{
 				pgut_cancel(conn);
+#if PG_VERSION_NUM >= 150000
+				elog(ERROR, "interrupted during waiting for pg_backup_stop");
+#else
 				elog(ERROR, "interrupted during waiting for pg_stop_backup");
+#endif
 			}
 
 			if (pg_stop_backup_timeout == 1)
@@ -1691,7 +1773,11 @@ pg_stop_backup_consume(PGconn *conn, int server_version,
 			if (pg_stop_backup_timeout > timeout)
 			{
 				pgut_cancel(conn);
+#if PG_VERSION_NUM >= 150000
+				elog(ERROR, "pg_backup_stop doesn't answer in %d seconds, cancel it", timeout);
+#else
 				elog(ERROR, "pg_stop_backup doesn't answer in %d seconds, cancel it", timeout);
+#endif
 			}
 		}
 		else
@@ -1703,7 +1789,11 @@ pg_stop_backup_consume(PGconn *conn, int server_version,
 
 	/* Check successfull execution of pg_stop_backup() */
 	if (!query_result)
+#if PG_VERSION_NUM >= 150000
+		elog(ERROR, "pg_backup_stop() failed");
+#else
 		elog(ERROR, "pg_stop_backup() failed");
+#endif
 	else
 	{
 		switch (PQresultStatus(query_result))
@@ -1902,7 +1992,7 @@ pg_stop_backup(InstanceState *instanceState, pgBackup *backup, PGconn *pg_startb
 
 	backup->recovery_xid = stop_backup_result.snapshot_xid;
 
-	elog(LOG, "Getting the Recovery Time from WAL");
+	elog(INFO, "Getting the Recovery Time from WAL");
 
 	/* iterate over WAL from stop_backup lsn to start_backup lsn */
 	if (!read_recovery_info(xlog_path, backup->tli,
@@ -1910,7 +2000,7 @@ pg_stop_backup(InstanceState *instanceState, pgBackup *backup, PGconn *pg_startb
 						backup->start_lsn, backup->stop_lsn,
 						&backup->recovery_time))
 	{
-		elog(LOG, "Failed to find Recovery Time in WAL, forced to trust current_timestamp");
+		elog(INFO, "Failed to find Recovery Time in WAL, forced to trust current_timestamp");
 		backup->recovery_time = stop_backup_result.invocation_time;
 	}
 
@@ -1992,9 +2082,8 @@ backup_files(void *arg)
 		if (interrupted || thread_interrupted)
 			elog(ERROR, "interrupted during backup");
 
-		if (progress)
-			elog(INFO, "Progress: (%d/%d). Process file \"%s\"",
-				 i + 1, n_backup_files_list, file->rel_path);
+		elog(progress ? INFO : LOG, "Progress: (%d/%d). Process file \"%s\"",
+			 i + 1, n_backup_files_list, file->rel_path);
 
 		/* Handle zero sized files */
 		if (file->size == 0)
@@ -2064,11 +2153,11 @@ backup_files(void *arg)
 
 		if (file->write_size == BYTES_INVALID)
 		{
-			elog(VERBOSE, "Skipping the unchanged file: \"%s\"", from_fullpath);
+			elog(LOG, "Skipping the unchanged file: \"%s\"", from_fullpath);
 			continue;
 		}
 
-		elog(VERBOSE, "File \"%s\". Copied "INT64_FORMAT " bytes",
+		elog(LOG, "File \"%s\". Copied "INT64_FORMAT " bytes",
 						from_fullpath, file->write_size);
 	}
 
@@ -2186,26 +2275,26 @@ set_cfs_datafiles(parray *files, const char *root, char *relative, size_t i)
 		elog(ERROR, "Out of memory");
 	len = strlen("/pg_compression");
 	cfs_tblspc_path[strlen(cfs_tblspc_path) - len] = 0;
-	elog(VERBOSE, "CFS DIRECTORY %s, pg_compression path: %s", cfs_tblspc_path, relative);
+	elog(LOG, "CFS DIRECTORY %s, pg_compression path: %s", cfs_tblspc_path, relative);
 
 	for (p = (int) i; p >= 0; p--)
 	{
 		prev_file = (pgFile *) parray_get(files, (size_t) p);
 
-		elog(VERBOSE, "Checking file in cfs tablespace %s", prev_file->rel_path);
+		elog(LOG, "Checking file in cfs tablespace %s", prev_file->rel_path);
 
 		if (strstr(prev_file->rel_path, cfs_tblspc_path) != NULL)
 		{
 			if (S_ISREG(prev_file->mode) && prev_file->is_datafile)
 			{
-				elog(VERBOSE, "Setting 'is_cfs' on file %s, name %s",
+				elog(LOG, "Setting 'is_cfs' on file %s, name %s",
 					prev_file->rel_path, prev_file->name);
 				prev_file->is_cfs = true;
 			}
 		}
 		else
 		{
-			elog(VERBOSE, "Breaking on %s", prev_file->rel_path);
+			elog(LOG, "Breaking on %s", prev_file->rel_path);
 			break;
 		}
 	}

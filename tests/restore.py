@@ -1853,7 +1853,11 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         self.del_test_dir(module_name, fname)
 
-    # @unittest.skip("skip")
+    # Skipped, because backups from the future are invalid.
+    # This cause a "ERROR: Can't assign backup_id, there is already a backup in future"
+    # now (PBCKP-259). We can conduct such a test again when we
+    # untie 'backup_id' from 'start_time'
+    @unittest.skip("skip")
     def test_restore_backup_from_future(self):
         """more complex test_restore_chain()"""
         fname = self.id().split('.')[3]
@@ -3230,8 +3234,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
                 "GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean) TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup() TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup; "
-                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;"
-            )
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;")
         # PG 9.6
         elif self.get_version(node) > 90600 and self.get_version(node) < 100000:
             node.safe_psql(
@@ -3271,8 +3274,8 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
                 "GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;"
             )
-        # >= 10
-        else:
+        # >= 10 && < 15
+        elif self.get_version(node) >= 100000 and self.get_version(node) < 150000:
             node.safe_psql(
                 'backupdb',
                 "REVOKE ALL ON DATABASE backupdb from PUBLIC; "
@@ -3308,6 +3311,43 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
                 "GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;"
             )
+        # >= 15
+        else:
+            node.safe_psql(
+                'backupdb',
+                "REVOKE ALL ON DATABASE backupdb from PUBLIC; "
+                "REVOKE ALL ON SCHEMA public from PUBLIC; "
+                "REVOKE ALL ON ALL TABLES IN SCHEMA public FROM PUBLIC; "
+                "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA public FROM PUBLIC; "
+                "REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM PUBLIC; "
+                "REVOKE ALL ON SCHEMA pg_catalog from PUBLIC; "
+                "REVOKE ALL ON ALL TABLES IN SCHEMA pg_catalog FROM PUBLIC; "
+                "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA pg_catalog FROM PUBLIC; "
+                "REVOKE ALL ON ALL SEQUENCES IN SCHEMA pg_catalog FROM PUBLIC; "
+                "REVOKE ALL ON SCHEMA information_schema from PUBLIC; "
+                "REVOKE ALL ON ALL TABLES IN SCHEMA information_schema FROM PUBLIC; "
+                "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA information_schema FROM PUBLIC; "
+                "REVOKE ALL ON ALL SEQUENCES IN SCHEMA information_schema FROM PUBLIC; "
+                "CREATE ROLE backup WITH LOGIN REPLICATION; "
+                "GRANT CONNECT ON DATABASE backupdb to backup; "
+                "GRANT USAGE ON SCHEMA pg_catalog TO backup; "
+                "GRANT SELECT ON TABLE pg_catalog.pg_proc TO backup; "
+                "GRANT SELECT ON TABLE pg_catalog.pg_extension TO backup; "
+                "GRANT SELECT ON TABLE pg_catalog.pg_database TO backup; " # for partial restore, checkdb and ptrack
+                "GRANT EXECUTE ON FUNCTION pg_catalog.oideq(oid, oid) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.nameeq(name, name) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.set_config(text, text, boolean) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_system() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_backup_start(text, boolean) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_backup_stop(boolean) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_create_restore_point(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_switch_wal() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_last_wal_replay_lsn() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;"
+            )
 
         if self.ptrack:
             # TODO why backup works without these grants ?
@@ -3321,13 +3361,11 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
                 "CREATE EXTENSION ptrack WITH SCHEMA ptrack")
 
         if ProbackupTest.enterprise:
-            node.safe_psql(
-                "backupdb",
-                "GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_edition() TO backup")
 
             node.safe_psql(
                 "backupdb",
-                "GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_version() TO backup")
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_version() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_edition() TO backup;")
 
         # FULL backup without database_map
         backup_id = self.backup_node(
@@ -3917,6 +3955,62 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
                 e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_restore_with_waldir(self):
+        """recovery using tablespace-mapping option and page backup"""
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'])
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+
+        with node.connect("postgres") as con:
+            con.execute(
+                "CREATE TABLE tbl AS SELECT * "
+                "FROM generate_series(0,3) AS integer")
+            con.commit()
+
+        # Full backup
+        backup_id = self.backup_node(backup_dir, 'node', node)
+
+        node.stop()
+        node.cleanup()
+
+        # Create waldir
+        waldir_path = os.path.join(node.base_dir, "waldir")
+        os.makedirs(waldir_path)
+
+        # Test recovery from latest
+        self.assertIn(
+            "INFO: Restore of backup {0} completed.".format(backup_id),
+            self.restore_node(
+                backup_dir, 'node', node,
+                options=[
+                    "-X", "%s" % (waldir_path)]),
+            '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                repr(self.output), self.cmd))
+        node.slow_start()
+
+        count = node.execute("postgres", "SELECT count(*) FROM tbl")
+        self.assertEqual(count[0][0], 4)
+
+	# check pg_wal is symlink
+        if node.major_version >= 10:
+            wal_path=os.path.join(node.data_dir, "pg_wal")
+        else:
+            wal_path=os.path.join(node.data_dir, "pg_xlog")
+
+        self.assertEqual(os.path.islink(wal_path), True)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)

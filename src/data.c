@@ -3,7 +3,7 @@
  * data.c: utils to parse and backup data pages
  *
  * Portions Copyright (c) 2009-2013, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
- * Portions Copyright (c) 2015-2019, Postgres Professional
+ * Portions Copyright (c) 2015-2022, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */
@@ -699,7 +699,7 @@ catchup_data_file(pgFile *file, const char *from_fullpath, const char *to_fullpa
 		use_pagemap = true;
 
 	if (use_pagemap)
-		elog(VERBOSE, "Using pagemap for file \"%s\"", file->rel_path);
+		elog(LOG, "Using pagemap for file \"%s\"", file->rel_path);
 
 	/* Remote mode */
 	if (fio_is_remote(FIO_DB_HOST))
@@ -798,14 +798,17 @@ backup_non_data_file(pgFile *file, pgFile *prev_file,
 	}
 
 	/*
-	 * If nonedata file exists in previous backup
+	 * If non-data file exists in previous backup
 	 * and its mtime is less than parent backup start time ... */
 	if ((pg_strcasecmp(file->name, RELMAPPER_FILENAME) != 0) &&
 		(prev_file && file->exists_in_prev &&
 		 file->mtime <= parent_backup_time))
 	{
-
-		file->crc = fio_get_crc32(from_fullpath, FIO_DB_HOST, false);
+		/*
+		 * file could be deleted under our feets.
+		 * But then backup_non_data_file_internal will handle it safely
+		 */
+		file->crc = fio_get_crc32(from_fullpath, FIO_DB_HOST, false, true);
 
 		/* ...and checksum is the same... */
 		if (EQ_TRADITIONAL_CRC32(file->crc, prev_file->crc))
@@ -1201,7 +1204,7 @@ restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_vers
 			datapagemap_add(map, blknum);
 	}
 
-	elog(VERBOSE, "Copied file \"%s\": %lu bytes", from_fullpath, write_len);
+	elog(LOG, "Copied file \"%s\": %lu bytes", from_fullpath, write_len);
 	return write_len;
 }
 
@@ -1224,7 +1227,7 @@ restore_non_data_file_internal(FILE *in, FILE *out, pgFile *file,
 
 		/* check for interrupt */
 		if (interrupted || thread_interrupted)
-			elog(ERROR, "Interrupted during nonedata file restore");
+			elog(ERROR, "Interrupted during non-data file restore");
 
 		read_len = fread(buf, 1, STDIO_BUFSIZE, in);
 
@@ -1245,7 +1248,7 @@ restore_non_data_file_internal(FILE *in, FILE *out, pgFile *file,
 
 	pg_free(buf);
 
-	elog(VERBOSE, "Copied file \"%s\": %lu bytes", from_fullpath, file->write_size);
+	elog(LOG, "Copied file \"%s\": %lu bytes", from_fullpath, file->write_size);
 }
 
 size_t
@@ -1290,7 +1293,7 @@ restore_non_data_file(parray *parent_chain, pgBackup *dest_backup,
 			 */
 			if (!tmp_file)
 			{
-				elog(ERROR, "Failed to locate nonedata file \"%s\" in backup %s",
+				elog(ERROR, "Failed to locate non-data file \"%s\" in backup %s",
 					dest_file->rel_path, base36enc(tmp_backup->start_time));
 				continue;
 			}
@@ -1315,14 +1318,14 @@ restore_non_data_file(parray *parent_chain, pgBackup *dest_backup,
 
 	/* sanity */
 	if (!tmp_backup)
-		elog(ERROR, "Failed to locate a backup containing full copy of nonedata file \"%s\"",
+		elog(ERROR, "Failed to locate a backup containing full copy of non-data file \"%s\"",
 			to_fullpath);
 
 	if (!tmp_file)
-		elog(ERROR, "Failed to locate a full copy of nonedata file \"%s\"", to_fullpath);
+		elog(ERROR, "Failed to locate a full copy of non-data file \"%s\"", to_fullpath);
 
 	if (tmp_file->write_size <= 0)
-		elog(ERROR, "Full copy of nonedata file has invalid size: %li. "
+		elog(ERROR, "Full copy of non-data file has invalid size: %li. "
 				"Metadata corruption in backup %s in file: \"%s\"",
 				tmp_file->write_size, base36enc(tmp_backup->start_time),
 				to_fullpath);
@@ -1331,11 +1334,11 @@ restore_non_data_file(parray *parent_chain, pgBackup *dest_backup,
 	if (already_exists)
 	{
 		/* compare checksums of already existing file and backup file */
-		pg_crc32 file_crc = fio_get_crc32(to_fullpath, FIO_DB_HOST, false);
+		pg_crc32 file_crc = fio_get_crc32(to_fullpath, FIO_DB_HOST, false, false);
 
 		if (file_crc == tmp_file->crc)
 		{
-			elog(VERBOSE, "Already existing nonedata file \"%s\" has the same checksum, skip restore",
+			elog(LOG, "Already existing non-data file \"%s\" has the same checksum, skip restore",
 				to_fullpath);
 			return 0;
 		}
@@ -1363,7 +1366,7 @@ restore_non_data_file(parray *parent_chain, pgBackup *dest_backup,
 		elog(ERROR, "Cannot open backup file \"%s\": %s", from_fullpath,
 			 strerror(errno));
 
-	/* disable stdio buffering for nonedata files */
+	/* disable stdio buffering for non-data files */
 	setvbuf(in, NULL, _IONBF, BUFSIZ);
 
 	/* do actual work */
@@ -1687,7 +1690,7 @@ validate_file_pages(pgFile *file, const char *fullpath, XLogRecPtr stop_lsn,
 	int         n_hdr = -1;
 	off_t       cur_pos_in = 0;
 
-	elog(VERBOSE, "Validate relation blocks for file \"%s\"", fullpath);
+	elog(LOG, "Validate relation blocks for file \"%s\"", fullpath);
 
 	/* should not be possible */
 	Assert(!(backup_version >= 20400 && file->n_headers <= 0));
@@ -1746,7 +1749,7 @@ validate_file_pages(pgFile *file, const char *fullpath, XLogRecPtr stop_lsn,
 					elog(ERROR, "Cannot seek block %u of \"%s\": %s",
 						blknum, fullpath, strerror(errno));
 				else
-					elog(INFO, "Seek to " INT64_FORMAT, headers[n_hdr].pos);
+					elog(VERBOSE, "Seek to " INT64_FORMAT, headers[n_hdr].pos);
 
 				cur_pos_in = headers[n_hdr].pos;
 			}
@@ -1770,7 +1773,7 @@ validate_file_pages(pgFile *file, const char *fullpath, XLogRecPtr stop_lsn,
 		/* backward compatibility kludge TODO: remove in 3.0 */
 		if (compressed_size == PageIsTruncated)
 		{
-			elog(INFO, "Block %u of \"%s\" is truncated",
+			elog(VERBOSE, "Block %u of \"%s\" is truncated",
 				 blknum, fullpath);
 			continue;
 		}
@@ -1841,10 +1844,10 @@ validate_file_pages(pgFile *file, const char *fullpath, XLogRecPtr stop_lsn,
 		switch (rc)
 		{
 			case PAGE_IS_NOT_FOUND:
-				elog(LOG, "File \"%s\", block %u, page is NULL", file->rel_path, blknum);
+				elog(VERBOSE, "File \"%s\", block %u, page is NULL", file->rel_path, blknum);
 				break;
 			case PAGE_IS_ZEROED:
-				elog(LOG, "File: %s blknum %u, empty zeroed page", file->rel_path, blknum);
+				elog(VERBOSE, "File: %s blknum %u, empty zeroed page", file->rel_path, blknum);
 				break;
 			case PAGE_HEADER_IS_INVALID:
 				elog(WARNING, "Page header is looking insane: %s, block %i", file->rel_path, blknum);

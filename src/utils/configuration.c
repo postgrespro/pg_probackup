@@ -18,7 +18,11 @@
 
 #include "getopt_long.h"
 
+#ifndef WIN32
+#include <pwd.h>
+#endif
 #include <time.h>
+#include <pwd.h>
 
 #define MAXPG_LSNCOMPONENT	8
 
@@ -527,7 +531,6 @@ config_get_opt(int argc, char **argv, ConfigOption cmd_options[],
 			opt = option_find(c, options);
 
 		if (opt
-			&& !remote_agent
 			&& opt->allowed < SOURCE_CMD && opt->allowed != SOURCE_CMD_STRICT)
 			elog(ERROR, "Option %s cannot be specified in command line",
 				 opt->lname);

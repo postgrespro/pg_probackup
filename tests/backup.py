@@ -1,7 +1,7 @@
 import unittest
 import os
-from time import sleep
-from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
+from time import sleep, time
+from .helpers.ptrack_helpers import base36enc, ProbackupTest, ProbackupException
 import shutil
 from distutils.dir_util import copy_tree
 from testgres import ProcessType, QueryException
@@ -313,7 +313,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.set_archiving(backup_dir, 'node', node)
         node.slow_start()
 
-        if self.ptrack and node.major_version > 11:
+        if self.ptrack:
             node.safe_psql(
                 "postgres",
                 "create extension ptrack")
@@ -459,7 +459,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.set_archiving(backup_dir, 'node', node)
         node.slow_start()
 
-        if self.ptrack and node.major_version > 11:
+        if self.ptrack:
             node.safe_psql(
                 "postgres",
                 "create extension ptrack")
@@ -600,7 +600,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.set_archiving(backup_dir, 'node', node)
         node.slow_start()
 
-        if self.ptrack and node.major_version > 11:
+        if self.ptrack:
             node.safe_psql(
                 "postgres",
                 "create extension ptrack")
@@ -1889,8 +1889,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                 "GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean) TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup() TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup; "
-                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;"
-            )
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;")
         # PG 9.6
         elif self.get_version(node) > 90600 and self.get_version(node) < 100000:
             node.safe_psql(
@@ -1930,8 +1929,8 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                 "GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;"
             )
-        # >= 10
-        else:
+        # >= 10 && < 15
+        elif self.get_version(node) >= 100000 and self.get_version(node) < 150000:
             node.safe_psql(
                 'backupdb',
                 "REVOKE ALL ON DATABASE backupdb from PUBLIC; "
@@ -1968,6 +1967,44 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                 "GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;"
             )
+        # >= 15
+        else:
+            node.safe_psql(
+                'backupdb',
+                "REVOKE ALL ON DATABASE backupdb from PUBLIC; "
+                "REVOKE ALL ON SCHEMA public from PUBLIC; "
+                "REVOKE ALL ON ALL TABLES IN SCHEMA public FROM PUBLIC; "
+                "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA public FROM PUBLIC; "
+                "REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM PUBLIC; "
+                "REVOKE ALL ON SCHEMA pg_catalog from PUBLIC; "
+                "REVOKE ALL ON ALL TABLES IN SCHEMA pg_catalog FROM PUBLIC; "
+                "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA pg_catalog FROM PUBLIC; "
+                "REVOKE ALL ON ALL SEQUENCES IN SCHEMA pg_catalog FROM PUBLIC; "
+                "REVOKE ALL ON SCHEMA information_schema from PUBLIC; "
+                "REVOKE ALL ON ALL TABLES IN SCHEMA information_schema FROM PUBLIC; "
+                "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA information_schema FROM PUBLIC; "
+                "REVOKE ALL ON ALL SEQUENCES IN SCHEMA information_schema FROM PUBLIC; "
+                "CREATE ROLE backup WITH LOGIN REPLICATION; "
+                "GRANT CONNECT ON DATABASE backupdb to backup; "
+                "GRANT USAGE ON SCHEMA pg_catalog TO backup; "
+                "GRANT SELECT ON TABLE pg_catalog.pg_extension TO backup; "
+                "GRANT SELECT ON TABLE pg_catalog.pg_proc TO backup; "
+                "GRANT SELECT ON TABLE pg_catalog.pg_extension TO backup; "
+                "GRANT SELECT ON TABLE pg_catalog.pg_database TO backup; " # for partial restore, checkdb and ptrack
+                "GRANT EXECUTE ON FUNCTION pg_catalog.oideq(oid, oid) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.nameeq(name, name) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.set_config(text, text, boolean) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_system() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_backup_start(text, boolean) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_backup_stop(boolean) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_create_restore_point(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_switch_wal() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_last_wal_replay_lsn() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;"
+            )
 
         if self.ptrack:
             node.safe_psql(
@@ -1982,11 +2019,8 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         if ProbackupTest.enterprise:
             node.safe_psql(
                 "backupdb",
-                "GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_edition() TO backup")
-
-            node.safe_psql(
-                "backupdb",
-                "GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_version() TO backup")
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_version() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_edition() TO backup;")
 
         # FULL backup
         self.backup_node(
@@ -2246,7 +2280,6 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         if self.get_version(node) < 90600:
             node.safe_psql(
                 'backupdb',
-                "BEGIN; "
                 "CREATE ROLE backup WITH LOGIN; "
                 "GRANT USAGE ON SCHEMA pg_catalog TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup; "
@@ -2257,14 +2290,11 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                 "GRANT EXECUTE ON FUNCTION pg_catalog.pg_switch_xlog() TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.txid_current() TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup; "
-                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup; "
-                "COMMIT;"
-            )
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;")
         # PG 9.6
         elif self.get_version(node) > 90600 and self.get_version(node) < 100000:
             node.safe_psql(
                 'backupdb',
-                "BEGIN; "
                 "CREATE ROLE backup WITH LOGIN; "
                 "GRANT USAGE ON SCHEMA pg_catalog TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup; "
@@ -2279,7 +2309,25 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                 "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup; "
                 "COMMIT;"
             )
-        # >= 10
+        # >= 10 && < 15
+        elif self.get_version(node) >= 100000 and self.get_version(node) < 150000:
+            node.safe_psql(
+                'backupdb',
+                "CREATE ROLE backup WITH LOGIN; "
+                "GRANT USAGE ON SCHEMA pg_catalog TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean, boolean) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup(boolean, boolean) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_create_restore_point(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_switch_wal() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_last_wal_replay_lsn() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_current() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup; "
+                "COMMIT;"
+            )
+        # >= 15
         else:
             node.safe_psql(
                 'backupdb',
@@ -2288,8 +2336,8 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                 "GRANT USAGE ON SCHEMA pg_catalog TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup; "
-                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean, boolean) TO backup; "
-                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup(boolean, boolean) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_backup_start(text, boolean) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_backup_stop(boolean) TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.pg_create_restore_point(text) TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.pg_switch_wal() TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.pg_last_wal_replay_lsn() TO backup; "
@@ -3069,8 +3117,8 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                 "GRANT EXECUTE ON FUNCTION pg_catalog.pg_last_xlog_replay_location() TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;")
-        # >= 10
-        else:
+        # >= 10 && < 15
+        elif self.get_version(node) >= 100000 and self.get_version(node) < 150000:
             node.safe_psql(
                 'backupdb',
                 "CREATE ROLE backup WITH LOGIN; "
@@ -3092,13 +3140,36 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                 "GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;"
             )
+        # >= 15
+        else:
+            node.safe_psql(
+                'backupdb',
+                "CREATE ROLE backup WITH LOGIN; "
+                "GRANT CONNECT ON DATABASE backupdb to backup; "
+                "GRANT USAGE ON SCHEMA pg_catalog TO backup; "
+                "GRANT SELECT ON TABLE pg_catalog.pg_extension TO backup; "
+                "GRANT SELECT ON TABLE pg_catalog.pg_proc TO backup; "
+                "GRANT SELECT ON TABLE pg_catalog.pg_extension TO backup; "
+                "GRANT SELECT ON TABLE pg_catalog.pg_database TO backup; " # for partial restore, checkdb and ptrack
+                "GRANT EXECUTE ON FUNCTION pg_catalog.nameeq(name, name) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_system() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_backup_start(text, boolean) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_backup_stop(boolean) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_create_restore_point(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_switch_wal() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_last_wal_replay_lsn() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;"
+            )
 
         if ProbackupTest.enterprise:
             node.safe_psql(
                 "backupdb",
-                "GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_edition() TO backup; "
-                "GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_version() TO backup")
-        
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_version() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_edition() TO backup;")
+
         sleep(2)
         replica.promote()
 
@@ -3176,8 +3247,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                 "GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean) TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup() TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup; "
-                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;"
-            )
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;")
         # PG 9.6
         elif self.get_version(node) > 90600 and self.get_version(node) < 100000:
             node.safe_psql(
@@ -3202,8 +3272,8 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                 "GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;"
             )
-        # >= 10
-        else:
+        # >= 10 && < 15
+        elif self.get_version(node) >= 100000 and self.get_version(node) < 150000:
             node.safe_psql(
                 'backupdb',
                 "CREATE ROLE backup WITH LOGIN; "
@@ -3225,12 +3295,35 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                 "GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;"
             )
+        # > 15
+        else:
+            node.safe_psql(
+                'backupdb',
+                "CREATE ROLE backup WITH LOGIN; "
+                "GRANT CONNECT ON DATABASE backupdb to backup; "
+                "GRANT USAGE ON SCHEMA pg_catalog TO backup; "
+                "GRANT SELECT ON TABLE pg_catalog.pg_extension TO backup; "
+                "GRANT SELECT ON TABLE pg_catalog.pg_proc TO backup; "
+                "GRANT SELECT ON TABLE pg_catalog.pg_extension TO backup; "
+                "GRANT SELECT ON TABLE pg_catalog.pg_database TO backup; " # for partial restore, checkdb and ptrack
+                "GRANT EXECUTE ON FUNCTION pg_catalog.nameeq(name, name) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_system() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_backup_start(text, boolean) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_backup_stop(boolean) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_create_restore_point(text) TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_switch_wal() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pg_last_wal_replay_lsn() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;"
+            )
 
         if ProbackupTest.enterprise:
             node.safe_psql(
                 "backupdb",
-                "GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_edition() TO backup; "
-                "GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_version() TO backup")
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_version() TO backup; "
+                "GRANT EXECUTE ON FUNCTION pg_catalog.pgpro_edition() TO backup;")
 
         replica.promote()
 
@@ -3350,7 +3443,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                 log_content)
             
             self.assertIn(
-                'FROM pg_catalog.pg_stop_backup',
+                'FROM pg_catalog.pg_backup_stop',
                 log_content)
             
             self.assertIn(
@@ -3388,10 +3481,15 @@ class BackupTest(ProbackupTest, unittest.TestCase):
             node.safe_psql(
                 'postgres',
                 'REVOKE EXECUTE ON FUNCTION pg_catalog.pg_stop_backup(boolean) FROM backup')
-        else:
+        elif self.get_version(node) < 150000:
             node.safe_psql(
                 'postgres',
                 'REVOKE EXECUTE ON FUNCTION pg_catalog.pg_stop_backup(boolean, boolean) FROM backup')
+        else:
+            node.safe_psql(
+                'postgres',
+                'REVOKE EXECUTE ON FUNCTION pg_catalog.pg_backup_stop(boolean) FROM backup')
+
 
         # Full backup in streaming mode
         try:
@@ -3399,17 +3497,32 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                 backup_dir, 'node', node,
                 options=['--stream', '-U', 'backup'])
             # we should die here because exception is what we expect to happen
-            self.assertEqual(
-                1, 0,
-                "Expecting Error because of missing permissions on pg_stop_backup "
-                "\n Output: {0} \n CMD: {1}".format(
-                    repr(self.output), self.cmd))
+            if self.get_version(node) < 150000:
+                self.assertEqual(
+                    1, 0,
+                    "Expecting Error because of missing permissions on pg_stop_backup "
+                    "\n Output: {0} \n CMD: {1}".format(
+                        repr(self.output), self.cmd))
+            else:
+                self.assertEqual(
+                    1, 0,
+                    "Expecting Error because of missing permissions on pg_backup_stop "
+                    "\n Output: {0} \n CMD: {1}".format(
+                        repr(self.output), self.cmd))
         except ProbackupException as e:
-            self.assertIn(
-                "ERROR:  permission denied for function pg_stop_backup",
-                e.message,
-                "\n Unexpected Error Message: {0}\n CMD: {1}".format(
-                    repr(e.message), self.cmd))
+            if self.get_version(node) < 150000:
+                self.assertIn(
+                    "ERROR:  permission denied for function pg_stop_backup",
+                    e.message,
+                    "\n Unexpected Error Message: {0}\n CMD: {1}".format(
+                        repr(e.message), self.cmd))
+            else:
+                self.assertIn(
+                    "ERROR:  permission denied for function pg_backup_stop",
+                    e.message,
+                    "\n Unexpected Error Message: {0}\n CMD: {1}".format(
+                        repr(e.message), self.cmd))
+
             self.assertIn(
                 "query was: SELECT pg_catalog.txid_snapshot_xmax",
                 e.message,
@@ -3418,3 +3531,178 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_start_time(self):
+        """Test, that option --start-time allows to set backup_id and restore"""
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            set_replication=True,
+            ptrack_enable=self.ptrack,
+            initdb_params=['--data-checksums'])
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # FULL backup
+        startTime = int(time())
+        self.backup_node(
+            backup_dir, 'node', node, backup_type='full',
+            options=['--stream', '--start-time={0}'.format(str(startTime))])
+        # restore FULL backup by backup_id calculated from start-time
+        self.restore_node(
+            backup_dir, 'node',
+            data_dir=os.path.join(self.tmp_path, module_name, fname, 'node_restored_full'),
+            backup_id=base36enc(startTime))
+
+        #FULL backup with incorrect start time
+        try:
+            startTime = str(int(time()-100000))
+            self.backup_node(
+                backup_dir, 'node', node, backup_type='full',
+                options=['--stream', '--start-time={0}'.format(startTime)])
+            # we should die here because exception is what we expect to happen
+            self.assertEqual(
+                1, 0,
+                'Expecting Error because start time for new backup must be newer '
+                '\n Output: {0} \n CMD: {1}'.format(
+                    repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertRegex(
+                e.message,
+                r"ERROR: Can't assign backup_id from requested start_time \(\w*\), this time must be later that backup \w*\n",
+                "\n Unexpected Error Message: {0}\n CMD: {1}".format(
+                    repr(e.message), self.cmd))
+
+        # DELTA backup
+        startTime = int(time())
+        self.backup_node(
+            backup_dir, 'node', node, backup_type='delta',
+            options=['--stream', '--start-time={0}'.format(str(startTime))])
+        # restore DELTA backup by backup_id calculated from start-time
+        self.restore_node(
+            backup_dir, 'node',
+            data_dir=os.path.join(self.tmp_path, module_name, fname, 'node_restored_delta'),
+            backup_id=base36enc(startTime))
+
+        # PAGE backup
+        startTime = int(time())
+        self.backup_node(
+            backup_dir, 'node', node, backup_type='page',
+            options=['--stream', '--start-time={0}'.format(str(startTime))])
+        # restore PAGE backup by backup_id calculated from start-time
+        self.restore_node(
+            backup_dir, 'node',
+            data_dir=os.path.join(self.tmp_path, module_name, fname, 'node_restored_page'),
+            backup_id=base36enc(startTime))
+
+        # PTRACK backup
+        if self.ptrack:
+            node.safe_psql(
+                'postgres',
+                'create extension ptrack')
+
+            startTime = int(time())
+            self.backup_node(
+                backup_dir, 'node', node, backup_type='ptrack',
+                options=['--stream', '--start-time={0}'.format(str(startTime))])
+            # restore PTRACK backup by backup_id calculated from start-time
+            self.restore_node(
+                backup_dir, 'node',
+                data_dir=os.path.join(self.tmp_path, module_name, fname, 'node_restored_ptrack'),
+                backup_id=base36enc(startTime))
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
+    # @unittest.skip("skip")
+    def test_start_time_few_nodes(self):
+        """Test, that we can synchronize backup_id's for different DBs"""
+        fname = self.id().split('.')[3]
+        node1 = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node1'),
+            set_replication=True,
+            ptrack_enable=self.ptrack,
+            initdb_params=['--data-checksums'])
+
+        backup_dir1 = os.path.join(self.tmp_path, module_name, fname, 'backup1')
+        self.init_pb(backup_dir1)
+        self.add_instance(backup_dir1, 'node1', node1)
+        self.set_archiving(backup_dir1, 'node1', node1)
+        node1.slow_start()
+
+        node2 = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node2'),
+            set_replication=True,
+            ptrack_enable=self.ptrack,
+            initdb_params=['--data-checksums'])
+
+        backup_dir2 = os.path.join(self.tmp_path, module_name, fname, 'backup2')
+        self.init_pb(backup_dir2)
+        self.add_instance(backup_dir2, 'node2', node2)
+        self.set_archiving(backup_dir2, 'node2', node2)
+        node2.slow_start()
+
+        # FULL backup
+        startTime = str(int(time()))
+        self.backup_node(
+            backup_dir1, 'node1', node1, backup_type='full',
+            options=['--stream', '--start-time={0}'.format(startTime)])
+        self.backup_node(
+            backup_dir2, 'node2', node2, backup_type='full',
+            options=['--stream', '--start-time={0}'.format(startTime)])
+        show_backup1 = self.show_pb(backup_dir1, 'node1')[0]
+        show_backup2 = self.show_pb(backup_dir2, 'node2')[0]
+        self.assertEqual(show_backup1['id'], show_backup2['id'])
+
+        # DELTA backup
+        startTime = str(int(time()))
+        self.backup_node(
+            backup_dir1, 'node1', node1, backup_type='delta',
+            options=['--stream', '--start-time={0}'.format(startTime)])
+        self.backup_node(
+            backup_dir2, 'node2', node2, backup_type='delta',
+            options=['--stream', '--start-time={0}'.format(startTime)])
+        show_backup1 = self.show_pb(backup_dir1, 'node1')[1]
+        show_backup2 = self.show_pb(backup_dir2, 'node2')[1]
+        self.assertEqual(show_backup1['id'], show_backup2['id'])
+
+        # PAGE backup
+        startTime = str(int(time()))
+        self.backup_node(
+            backup_dir1, 'node1', node1, backup_type='page',
+            options=['--stream', '--start-time={0}'.format(startTime)])
+        self.backup_node(
+            backup_dir2, 'node2', node2, backup_type='page',
+            options=['--stream', '--start-time={0}'.format(startTime)])
+        show_backup1 = self.show_pb(backup_dir1, 'node1')[2]
+        show_backup2 = self.show_pb(backup_dir2, 'node2')[2]
+        self.assertEqual(show_backup1['id'], show_backup2['id'])
+
+        # PTRACK backup
+        if self.ptrack:
+            node1.safe_psql(
+                'postgres',
+                'create extension ptrack')
+            node2.safe_psql(
+                'postgres',
+                'create extension ptrack')
+
+            startTime = str(int(time()))
+            self.backup_node(
+                backup_dir1, 'node1', node1, backup_type='ptrack',
+                options=['--stream', '--start-time={0}'.format(startTime)])
+            self.backup_node(
+                backup_dir2, 'node2', node2, backup_type='ptrack',
+                options=['--stream', '--start-time={0}'.format(startTime)])
+            show_backup1 = self.show_pb(backup_dir1, 'node1')[3]
+            show_backup2 = self.show_pb(backup_dir2, 'node2')[3]
+            self.assertEqual(show_backup1['id'], show_backup2['id'])
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+

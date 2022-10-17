@@ -78,6 +78,7 @@ pid_t       my_pid = 0;
 __thread int  my_thread_num = 1;
 bool		progress = false;
 bool		no_sync = false;
+time_t		start_time = INVALID_BACKUP_ID;
 #if PG_VERSION_NUM >= 100000
 char	   *replication_slot = NULL;
 bool		temp_slot = false;
@@ -87,7 +88,7 @@ bool perm_slot = false;
 /* backup options */
 bool         backup_logs = false;
 bool         smooth_checkpoint;
-char        *remote_agent;
+bool         remote_agent = false;
 static char *backup_note = NULL;
 /* catchup options */
 static char *catchup_source_pgdata = NULL;
@@ -122,6 +123,7 @@ static parray *datname_include_list = NULL;
 /* arrays for --exclude-path's */
 static parray *exclude_absolute_paths_list = NULL;
 static parray *exclude_relative_paths_list = NULL;
+static char* gl_waldir_path = NULL;
 
 /* checkdb options */
 bool need_amcheck = false;
@@ -214,6 +216,7 @@ static ConfigOption cmd_options[] =
 	{ 'b', 184, "merge-expired",	&merge_expired,		SOURCE_CMD_STRICT },
 	{ 'b', 185, "dry-run",			&dry_run,			SOURCE_CMD_STRICT },
 	{ 's', 238, "note",				&backup_note,		SOURCE_CMD_STRICT },
+	{ 'U', 241, "start-time",		&start_time,		SOURCE_CMD_STRICT },
 	/* catchup options */
 	{ 's', 239, "source-pgdata",		&catchup_source_pgdata,	SOURCE_CMD_STRICT },
 	{ 's', 240, "destination-pgdata",	&catchup_destination_pgdata,	SOURCE_CMD_STRICT },
@@ -238,6 +241,7 @@ static ConfigOption cmd_options[] =
 	{ 's', 160, "primary-conninfo",	&primary_conninfo,	SOURCE_CMD_STRICT },
 	{ 's', 'S', "primary-slot-name",&replication_slot,	SOURCE_CMD_STRICT },
 	{ 'f', 'I', "incremental-mode", opt_incr_restore_mode,	SOURCE_CMD_STRICT },
+	{ 's', 'X', "waldir",		&gl_waldir_path,	SOURCE_CMD_STRICT },
 	/* checkdb options */
 	{ 'b', 195, "amcheck",			&need_amcheck,		SOURCE_CMD_STRICT },
 	{ 'b', 196, "heapallindexed",	&heapallindexed,	SOURCE_CMD_STRICT },
@@ -311,6 +315,10 @@ main(int argc, char *argv[])
 	set_pglocale_pgservice(argv[0], PG_TEXTDOMAIN("pg_probackup"));
 	PROGRAM_FULL_PATH = palloc0(MAXPGPATH);
 
+	// Setting C locale for numeric values in order to impose dot-based floating-point representation
+	memorize_environment_locale();
+	setlocale(LC_NUMERIC, "C");
+
 	/* Get current time */
 	current_time = time(NULL);
 
@@ -353,6 +361,7 @@ main(int argc, char *argv[])
 					elog(ERROR, "Version mismatch, pg_probackup binary with version '%s' "
 							"is launched as an agent for pg_probackup binary with version '%s'",
 							PROGRAM_VERSION, argv[2]);
+				remote_agent = true;
 				fio_communicate(STDIN_FILENO, STDOUT_FILENO);
 				return 0;
 			case HELP_CMD:
@@ -422,6 +431,18 @@ main(int argc, char *argv[])
 	optind += 1;
 	/* Parse command line only arguments */
 	config_get_opt(argc, argv, cmd_options, instance_options);
+
+	if (backup_subcmd == SET_CONFIG_CMD)
+	{
+		int i;
+		for (i = 0; i < argc; i++)
+		{
+			if (strncmp("--log-format-console", argv[i], strlen("--log-format-console")) == 0)
+			{
+				elog(ERROR, "Option 'log-format-console' set only from terminal\n");
+			}
+		}
+	}
 
 	pgut_init();
 
@@ -754,6 +775,21 @@ main(int argc, char *argv[])
 			restore_params->partial_restore_type = INCLUDE;
 			restore_params->partial_db_list = datname_include_list;
 		}
+
+		if (gl_waldir_path)
+		{
+			/* clean up xlog directory name, check it's absolute */
+			canonicalize_path(gl_waldir_path);
+			if (!is_absolute_path(gl_waldir_path))
+			{
+				elog(ERROR, "WAL directory location must be an absolute path");
+			}
+			if (strlen(gl_waldir_path) > MAXPGPATH)
+				elog(ERROR, "Value specified to --waldir is too long");
+
+		}
+		restore_params->waldir = gl_waldir_path;
+
 	}
 
 	/*
@@ -940,6 +976,11 @@ main(int argc, char *argv[])
 		case BACKUP_CMD:
 			{
 				current.stream = stream_wal;
+				if (start_time != INVALID_BACKUP_ID)
+					elog(WARNING, "Please do not use the --start-time option to start backup. "
+							"This is a service option required to work with other extensions. "
+							"We do not guarantee future support for this flag.");
+
 
 				/* sanity */
 				if (current.backup_mode == BACKUP_MODE_INVALID)
@@ -947,7 +988,7 @@ main(int argc, char *argv[])
 						 "(-b, --backup-mode)");
 
 				return do_backup(instanceState, set_backup_params,
-								 no_validate, no_sync, backup_logs);
+								 no_validate, no_sync, backup_logs, start_time);
 			}
 		case CATCHUP_CMD:
 			return do_catchup(catchup_source_pgdata, catchup_destination_pgdata, num_threads, !no_sync,
@@ -1023,6 +1064,8 @@ main(int argc, char *argv[])
 			/* Silence compiler warnings, these already handled earlier */
 			break;
 	}
+
+	free_environment_locale();
 
 	return 0;
 }

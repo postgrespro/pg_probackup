@@ -50,6 +50,12 @@
 #include <pthread.h>
 #endif
 
+#if PG_VERSION_NUM >= 150000
+// _() is explicitly undefined in libpq-int.h
+// https://github.com/postgres/postgres/commit/28ec316787674dd74d00b296724a009b6edc2fb0
+#define _(s) gettext(s)
+#endif
+
 /* Wrap the code that we're going to delete after refactoring in this define*/
 #define REFACTORE_ME
 
@@ -209,6 +215,7 @@ typedef enum CompressAlg
 
 typedef enum ForkName
 {
+	none,
 	vm,
 	fsm,
 	cfm,
@@ -338,7 +345,7 @@ typedef enum ShowFormat
 #define BYTES_INVALID		(-1) /* file didn`t changed since previous backup, DELTA backup do not rely on it */
 #define FILE_NOT_FOUND		(-2) /* file disappeared during backup */
 #define BLOCKNUM_INVALID	(-1)
-#define PROGRAM_VERSION	"2.5.6"
+#define PROGRAM_VERSION	"2.5.9"
 
 /* update when remote agent API or behaviour changes */
 #define AGENT_PROTOCOL_VERSION 20501
@@ -450,7 +457,10 @@ struct pgBackup
 {
 	BackupMode		backup_mode; /* Mode - one of BACKUP_MODE_xxx above*/
 	time_t			backup_id;	 /* Identifier of the backup.
-								  * Currently it's the same as start_time */
+								  * By default it's the same as start_time
+								  * but can be increased if same backup_id
+								  * already exists. It can be also set by
+								  * start_time parameter */
 	BackupStatus	status;		/* Status - one of BACKUP_STATUS_xxx above*/
 	TimeLineID		tli; 		/* timeline of start and stop backup lsns */
 	XLogRecPtr		start_lsn;	/* backup's starting transaction log location */
@@ -567,6 +577,8 @@ typedef struct pgRestoreParams
 	/* options for partial restore */
 	PartialRestoreType partial_restore_type;
 	parray *partial_db_list;
+	
+	char* waldir;
 } pgRestoreParams;
 
 /* Options needed for set-backup command */
@@ -797,7 +809,7 @@ extern bool perm_slot;
 extern bool		smooth_checkpoint;
 
 /* remote probackup options */
-extern char* remote_agent;
+extern bool remote_agent;
 
 extern bool exclusive_backup;
 
@@ -850,7 +862,7 @@ extern char** commands_args;
 
 /* in backup.c */
 extern int do_backup(InstanceState *instanceState, pgSetBackupParams *set_backup_params,
-					 bool no_validate, bool no_sync, bool backup_logs);
+					 bool no_validate, bool no_sync, bool backup_logs, time_t start_time);
 extern void do_checkdb(bool need_amcheck, ConnectionOptions conn_opt,
 				  char *pgdata);
 extern BackupMode parse_backup_mode(const char *value);
@@ -915,6 +927,8 @@ extern InstanceConfig *readInstanceConfigFile(InstanceState *instanceState);
 /* in show.c */
 extern int do_show(CatalogState *catalogState, InstanceState *instanceState,
 				   time_t requested_backup_id, bool show_archive);
+extern void memorize_environment_locale(void);
+extern void free_environment_locale(void);
 
 /* in delete.c */
 extern void do_delete(InstanceState *instanceState, time_t backup_id);
@@ -991,7 +1005,7 @@ extern void write_backup_filelist(pgBackup *backup, parray *files,
 								  const char *root, parray *external_list, bool sync);
 
 
-extern void pgBackupCreateDir(pgBackup *backup, const char *backup_instance_path);
+extern void pgBackupInitDir(pgBackup *backup, const char *backup_instance_path);
 extern void pgNodeInit(PGNodeInfo *node);
 extern void pgBackupInit(pgBackup *backup);
 extern void pgBackupFree(void *backup);
@@ -1033,7 +1047,8 @@ extern void create_data_directories(parray *dest_files,
 										const char *backup_dir,
 										bool extract_tablespaces,
 										bool incremental,
-										fio_location location);
+										fio_location location,
+										const char *waldir_path);
 
 extern void read_tablespace_map(parray *links, const char *backup_dir);
 extern void opt_tablespace_map(ConfigOption *opt, const char *arg);
@@ -1087,6 +1102,7 @@ extern int pgCompareString(const void *str1, const void *str2);
 extern int pgPrefixCompareString(const void *str1, const void *str2);
 extern int pgCompareOid(const void *f1, const void *f2);
 extern void pfilearray_clear_locks(parray *file_list);
+extern void set_forkname(pgFile *file);
 
 /* in data.c */
 extern bool check_data_file(ConnectionArgs *arguments, pgFile *file,

@@ -3,7 +3,7 @@
  * dir.c: directory operation utility.
  *
  * Portions Copyright (c) 2009-2013, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
- * Portions Copyright (c) 2015-2019, Postgres Professional
+ * Portions Copyright (c) 2015-2022, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */
@@ -640,7 +640,7 @@ dir_check_file(pgFile *file, bool backup_logs)
 						   pgdata_exclude_files_non_exclusive[i]) == 0)
 				{
 					/* Skip */
-					elog(VERBOSE, "Excluding file: %s", file->name);
+					elog(LOG, "Excluding file: %s", file->name);
 					return CHECK_FALSE;
 				}
 		}
@@ -649,7 +649,7 @@ dir_check_file(pgFile *file, bool backup_logs)
 			if (strcmp(file->rel_path, pgdata_exclude_files[i]) == 0)
 			{
 				/* Skip */
-				elog(VERBOSE, "Excluding file: %s", file->name);
+				elog(LOG, "Excluding file: %s", file->name);
 				return CHECK_FALSE;
 			}
 	}
@@ -669,7 +669,7 @@ dir_check_file(pgFile *file, bool backup_logs)
 			/* exclude by dirname */
 			if (strcmp(file->name, pgdata_exclude_dir[i]) == 0)
 			{
-				elog(VERBOSE, "Excluding directory content: %s", file->rel_path);
+				elog(LOG, "Excluding directory content: %s", file->rel_path);
 				return CHECK_EXCLUDE_FALSE;
 			}
 		}
@@ -679,7 +679,7 @@ dir_check_file(pgFile *file, bool backup_logs)
 			if (strcmp(file->rel_path, PG_LOG_DIR) == 0)
 			{
 				/* Skip */
-				elog(VERBOSE, "Excluding directory content: %s", file->rel_path);
+				elog(LOG, "Excluding directory content: %s", file->rel_path);
 				return CHECK_EXCLUDE_FALSE;
 			}
 		}
@@ -758,57 +758,22 @@ dir_check_file(pgFile *file, bool backup_logs)
 			return CHECK_FALSE;
 		else if (isdigit(file->name[0]))
 		{
-			char	   *fork_name;
-			int			len;
-			char		suffix[MAXPGPATH];
+			set_forkname(file);
 
-			fork_name = strstr(file->name, "_");
-			if (fork_name)
+			if (file->forkName == ptrack) /* Compatibility with left-overs from ptrack1 */
+				return CHECK_FALSE;
+			else if (file->forkName != none)
+				return CHECK_TRUE;
+
+			/* Set is_datafile flag */
 			{
-				/* Auxiliary fork of the relfile */
-				if (strcmp(fork_name, "_vm") == 0)
-					file->forkName = vm;
+				char suffix[MAXFNAMELEN];
 
-				else if (strcmp(fork_name, "_fsm") == 0)
-					file->forkName = fsm;
-
-				else if (strcmp(fork_name, "_cfm") == 0)
-					file->forkName = cfm;
-
-				else if (strcmp(fork_name, "_ptrack") == 0)
-					file->forkName = ptrack;
-
-				else if (strcmp(fork_name, "_init") == 0)
-					file->forkName = init;
-
-				// extract relOid for certain forks
-				if (file->forkName == vm ||
-					file->forkName == fsm ||
-					file->forkName == init ||
-					file->forkName == cfm)
-				{
-					// sanity
-					if (sscanf(file->name, "%u_*", &(file->relOid)) != 1)
-						file->relOid = 0;
-				}
-
-				/* Do not backup ptrack files */
-				if (file->forkName == ptrack)
-					return CHECK_FALSE;
-			}
-			else
-			{
-
-				len = strlen(file->name);
-				/* reloid.cfm */
-				if (len > 3 && strcmp(file->name + len - 3, "cfm") == 0)
-					return CHECK_TRUE;
-
+				/* check if file is datafile */
 				sscanf_res = sscanf(file->name, "%u.%d.%s", &(file->relOid),
 									&(file->segno), suffix);
-				if (sscanf_res == 0)
-					elog(ERROR, "Cannot parse file name \"%s\"", file->name);
-				else if (sscanf_res == 1 || sscanf_res == 2)
+				Assert(sscanf_res > 0); /* since first char is digit */
+				if (sscanf_res == 1 || sscanf_res == 2)
 					file->is_datafile = true;
 			}
 		}
@@ -1040,12 +1005,19 @@ opt_externaldir_map(ConfigOption *opt, const char *arg)
  */
 void
 create_data_directories(parray *dest_files, const char *data_dir, const char *backup_dir,
-						bool extract_tablespaces, bool incremental, fio_location location)
+						bool extract_tablespaces, bool incremental, fio_location location, 
+						const char* waldir_path)
 {
 	int			i;
 	parray		*links = NULL;
 	mode_t		pg_tablespace_mode = DIR_PERMISSION;
 	char		to_path[MAXPGPATH];
+
+	if (waldir_path && !dir_is_empty(waldir_path, location))
+	{
+		elog(ERROR, "WAL directory location is not empty: \"%s\"", waldir_path);
+	}
+
 
 	/* get tablespace map */
 	if (extract_tablespaces)
@@ -1111,6 +1083,27 @@ create_data_directories(parray *dest_files, const char *data_dir, const char *ba
 		/* skip external directory content */
 		if (dir->external_dir_num != 0)
 			continue;
+		/* Create WAL directory and symlink if waldir_path is setting */
+		if (waldir_path && strcmp(dir->rel_path, PG_XLOG_DIR) == 0) {
+			/* get full path to PG_XLOG_DIR */
+
+			join_path_components(to_path, data_dir, PG_XLOG_DIR);
+
+			elog(VERBOSE, "Create directory \"%s\" and symbolic link \"%s\"",
+				waldir_path, to_path);
+
+			/* create tablespace directory from waldir_path*/
+			fio_mkdir(waldir_path, pg_tablespace_mode, location);
+
+			/* create link to linked_path */
+			if (fio_symlink(waldir_path, to_path, incremental, location) < 0)
+				elog(ERROR, "Could not create symbolic link \"%s\": %s",
+					to_path, strerror(errno));
+
+			continue;
+
+
+		}
 
 		/* tablespace_map exists */
 		if (links)
@@ -1138,7 +1131,7 @@ create_data_directories(parray *dest_files, const char *data_dir, const char *ba
 
 					join_path_components(to_path, data_dir, dir->rel_path);
 
-					elog(VERBOSE, "Create directory \"%s\" and symbolic link \"%s\"",
+					elog(LOG, "Create directory \"%s\" and symbolic link \"%s\"",
 							 linked_path, to_path);
 
 					/* create tablespace directory */
@@ -1155,7 +1148,7 @@ create_data_directories(parray *dest_files, const char *data_dir, const char *ba
 		}
 
 		/* This is not symlink, create directory */
-		elog(VERBOSE, "Create directory \"%s\"", dir->rel_path);
+		elog(LOG, "Create directory \"%s\"", dir->rel_path);
 
 		join_path_components(to_path, data_dir, dir->rel_path);
 
@@ -1906,7 +1899,7 @@ cleanup_tablespace(const char *path)
 		join_path_components(fullpath, path, file->rel_path);
 
 		fio_delete(file->mode, fullpath, FIO_DB_HOST);
-		elog(VERBOSE, "Deleted file \"%s\"", fullpath);
+		elog(LOG, "Deleted file \"%s\"", fullpath);
 	}
 
 	parray_walk(files, pgFileFree);
@@ -1925,4 +1918,36 @@ pfilearray_clear_locks(parray *file_list)
 		pgFile *file = (pgFile *) parray_get(file_list, i);
 		pg_atomic_clear_flag(&file->lock);
 	}
+}
+
+/* Set forkName if possible */
+void
+set_forkname(pgFile *file)
+{
+	int name_len = strlen(file->name);
+
+	/* Auxiliary fork of the relfile */
+	if (name_len > 3 && strcmp(file->name + name_len - 3, "_vm") == 0)
+		file->forkName = vm;
+
+	else if (name_len > 4 && strcmp(file->name + name_len - 4, "_fsm") == 0)
+		file->forkName = fsm;
+
+	else if (name_len > 4 && strcmp(file->name + name_len - 4, ".cfm") == 0)
+		file->forkName = cfm;
+
+	else if (name_len > 5 && strcmp(file->name + name_len - 5, "_init") == 0)
+		file->forkName = init;
+
+	else if (name_len > 7 && strcmp(file->name + name_len - 7, "_ptrack") == 0)
+		file->forkName = ptrack;
+
+	// extract relOid for certain forks
+
+	if ((file->forkName == vm ||
+		 file->forkName == fsm ||
+		 file->forkName == init ||
+		 file->forkName == cfm) &&
+		(sscanf(file->name, "%u*", &(file->relOid)) != 1))
+		file->relOid = 0;
 }

@@ -94,6 +94,7 @@ help_pg_probackup(void)
 	printf(_("                 [--external-dirs=external-directories-paths]\n"));
 	printf(_("                 [--log-level-console=log-level-console]\n"));
 	printf(_("                 [--log-level-file=log-level-file]\n"));
+	printf(_("                 [--log-format-file=log-format-file]\n"));
 	printf(_("                 [--log-filename=log-filename]\n"));
 	printf(_("                 [--error-log-filename=error-log-filename]\n"));
 	printf(_("                 [--log-directory=log-directory]\n"));
@@ -131,6 +132,8 @@ help_pg_probackup(void)
 	printf(_("                 [--no-sync]\n"));
 	printf(_("                 [--log-level-console=log-level-console]\n"));
 	printf(_("                 [--log-level-file=log-level-file]\n"));
+	printf(_("                 [--log-format-console=log-format-console]\n"));
+	printf(_("                 [--log-format-file=log-format-file]\n"));
 	printf(_("                 [--log-filename=log-filename]\n"));
 	printf(_("                 [--error-log-filename=error-log-filename]\n"));
 	printf(_("                 [--log-directory=log-directory]\n"));
@@ -169,6 +172,7 @@ help_pg_probackup(void)
 	printf(_("                 [-T OLDDIR=NEWDIR] [--progress]\n"));
 	printf(_("                 [--external-mapping=OLDDIR=NEWDIR]\n"));
 	printf(_("                 [--skip-external-dirs] [--no-sync]\n"));
+	printf(_("                 [-X WALDIR | --waldir=WALDIR]\n"));
 	printf(_("                 [-I | --incremental-mode=none|checksum|lsn]\n"));
 	printf(_("                 [--db-include | --db-exclude]\n"));
 	printf(_("                 [--remote-proto] [--remote-host]\n"));
@@ -305,6 +309,8 @@ help_backup(void)
 	printf(_("                 [--no-sync]\n"));
 	printf(_("                 [--log-level-console=log-level-console]\n"));
 	printf(_("                 [--log-level-file=log-level-file]\n"));
+	printf(_("                 [--log-format-console=log-format-console]\n"));
+	printf(_("                 [--log-format-file=log-format-file]\n"));
 	printf(_("                 [--log-filename=log-filename]\n"));
 	printf(_("                 [--error-log-filename=error-log-filename]\n"));
 	printf(_("                 [--log-directory=log-directory]\n"));
@@ -352,6 +358,12 @@ help_backup(void)
 	printf(_("      --log-level-file=log-level-file\n"));
 	printf(_("                                   level for file logging (default: off)\n"));
 	printf(_("                                   available options: 'off', 'error', 'warning', 'info', 'log', 'verbose'\n"));
+	printf(_("      --log-format-console=log-format-console\n"));
+	printf(_("                                   defines the format of the console log (default: plain)\n"));
+	printf(_("                                   available options: 'plain', 'json'\n"));
+	printf(_("      --log-format-file=log-format-file\n"));
+	printf(_("                                   defines the format of log files (default: plain)\n"));
+	printf(_("                                   available options: 'plain', 'json'\n"));
 	printf(_("      --log-filename=log-filename\n"));
 	printf(_("                                   filename for file logging (default: 'pg_probackup.log')\n"));
 	printf(_("                                   support strftime format (example: pg_probackup-%%Y-%%m-%%d_%%H%%M%%S.log)\n"));
@@ -435,6 +447,7 @@ help_restore(void)
 	printf(_("                 [-T OLDDIR=NEWDIR]\n"));
 	printf(_("                 [--external-mapping=OLDDIR=NEWDIR]\n"));
 	printf(_("                 [--skip-external-dirs]\n"));
+	printf(_("                 [-X WALDIR | --waldir=WALDIR]\n"));
 	printf(_("                 [-I | --incremental-mode=none|checksum|lsn]\n"));
 	printf(_("                 [--db-include dbname | --db-exclude dbname]\n"));
 	printf(_("                 [--recovery-target-time=time|--recovery-target-xid=xid\n"));
@@ -471,6 +484,10 @@ help_restore(void)
 	printf(_("      --external-mapping=OLDDIR=NEWDIR\n"));
 	printf(_("                                   relocate the external directory from OLDDIR to NEWDIR\n"));
 	printf(_("      --skip-external-dirs         do not restore all external directories\n"));
+
+
+	printf(_("  -X, --waldir=WALDIR              location for the write-ahead log directory\n"));
+
 
 	printf(_("\n  Incremental restore options:\n"));
 	printf(_("  -I, --incremental-mode=none|checksum|lsn\n"));
@@ -513,6 +530,12 @@ help_restore(void)
 	printf(_("      --log-level-file=log-level-file\n"));
 	printf(_("                                   level for file logging (default: off)\n"));
 	printf(_("                                   available options: 'off', 'error', 'warning', 'info', 'log', 'verbose'\n"));
+	printf(_("      --log-format-console=log-format-console\n"));
+	printf(_("                                   defines the format of the console log (default: plain)\n"));
+	printf(_("                                   available options: 'plain', 'json'\n"));
+	printf(_("      --log-format-file=log-format-file\n"));
+	printf(_("                                   defines the format of log files (default: plain)\n"));
+	printf(_("                                   available options: 'plain', 'json'\n"));
 	printf(_("      --log-filename=log-filename\n"));
 	printf(_("                                   filename for file logging (default: 'pg_probackup.log')\n"));
 	printf(_("                                   support strftime format (example: pg_probackup-%%Y-%%m-%%d_%%H%%M%%S.log)\n"));
@@ -580,6 +603,12 @@ help_validate(void)
 	printf(_("      --log-level-file=log-level-file\n"));
 	printf(_("                                   level for file logging (default: off)\n"));
 	printf(_("                                   available options: 'off', 'error', 'warning', 'info', 'log', 'verbose'\n"));
+	printf(_("      --log-format-console=log-format-console\n"));
+	printf(_("                                   defines the format of the console log (default: plain)\n"));
+	printf(_("                                   available options: 'plain', 'json'\n"));
+	printf(_("      --log-format-file=log-format-file\n"));
+	printf(_("                                   defines the format of log files (default: plain)\n"));
+	printf(_("                                   available options: 'plain', 'json'\n"));
 	printf(_("      --log-filename=log-filename\n"));
 	printf(_("                                   filename for file logging (default: 'pg_probackup.log')\n"));
 	printf(_("                                   support strftime format (example: pg_probackup-%%Y-%%m-%%d_%%H%%M%%S.log)\n"));
@@ -627,6 +656,12 @@ help_checkdb(void)
 	printf(_("      --log-level-file=log-level-file\n"));
 	printf(_("                                   level for file logging (default: off)\n"));
 	printf(_("                                   available options: 'off', 'error', 'warning', 'info', 'log', 'verbose'\n"));
+	printf(_("      --log-format-console=log-format-console\n"));
+	printf(_("                                   defines the format of the console log (default: plain)\n"));
+	printf(_("                                   available options: 'plain', 'json'\n"));
+	printf(_("      --log-format-file=log-format-file\n"));
+	printf(_("                                   defines the format of log files (default: plain)\n"));
+	printf(_("                                   available options: 'plain', 'json'\n"));
 	printf(_("      --log-filename=log-filename\n"));
 	printf(_("                                   filename for file logging (default: 'pg_probackup.log')\n"));
 	printf(_("                                   support strftime format (example: pg_probackup-%%Y-%%m-%%d_%%H%%M%%S.log\n"));
@@ -707,6 +742,12 @@ help_delete(void)
 	printf(_("      --log-level-file=log-level-file\n"));
 	printf(_("                                   level for file logging (default: off)\n"));
 	printf(_("                                   available options: 'off', 'error', 'warning', 'info', 'log', 'verbose'\n"));
+	printf(_("      --log-format-console=log-format-console\n"));
+	printf(_("                                   defines the format of the console log (default: plain)\n"));
+	printf(_("                                   available options: 'plain', 'json'\n"));
+	printf(_("      --log-format-file=log-format-file\n"));
+	printf(_("                                   defines the format of log files (default: plain)\n"));
+	printf(_("                                   available options: 'plain', 'json'\n"));
 	printf(_("      --log-filename=log-filename\n"));
 	printf(_("                                   filename for file logging (default: 'pg_probackup.log')\n"));
 	printf(_("                                   support strftime format (example: pg_probackup-%%Y-%%m-%%d_%%H%%M%%S.log)\n"));
@@ -731,6 +772,8 @@ help_merge(void)
 	printf(_("                 [--no-validate] [--no-sync]\n"));
 	printf(_("                 [--log-level-console=log-level-console]\n"));
 	printf(_("                 [--log-level-file=log-level-file]\n"));
+	printf(_("                 [--log-format-console=log-format-console]\n"));
+	printf(_("                 [--log-format-file=log-format-file]\n"));
 	printf(_("                 [--log-filename=log-filename]\n"));
 	printf(_("                 [--error-log-filename=error-log-filename]\n"));
 	printf(_("                 [--log-directory=log-directory]\n"));
@@ -753,6 +796,12 @@ help_merge(void)
 	printf(_("      --log-level-file=log-level-file\n"));
 	printf(_("                                   level for file logging (default: off)\n"));
 	printf(_("                                   available options: 'off', 'error', 'warning', 'info', 'log', 'verbose'\n"));
+	printf(_("      --log-format-console=log-format-console\n"));
+	printf(_("                                   defines the format of the console log (default: plain)\n"));
+	printf(_("                                   available options: 'plain', 'json'\n"));
+	printf(_("      --log-format-file=log-format-file\n"));
+	printf(_("                                   defines the format of log files (default: plain)\n"));
+	printf(_("                                   available options: 'plain', 'json'\n"));
 	printf(_("      --log-filename=log-filename\n"));
 	printf(_("                                   filename for file logging (default: 'pg_probackup.log')\n"));
 	printf(_("                                   support strftime format (example: pg_probackup-%%Y-%%m-%%d_%%H%%M%%S.log)\n"));
@@ -794,6 +843,7 @@ help_set_config(void)
 	printf(_("                 [--restore-command=cmdline]\n"));
 	printf(_("                 [--log-level-console=log-level-console]\n"));
 	printf(_("                 [--log-level-file=log-level-file]\n"));
+	printf(_("                 [--log-format-file=log-format-file]\n"));
 	printf(_("                 [--log-filename=log-filename]\n"));
 	printf(_("                 [--error-log-filename=error-log-filename]\n"));
 	printf(_("                 [--log-directory=log-directory]\n"));
@@ -825,6 +875,9 @@ help_set_config(void)
 	printf(_("      --log-level-file=log-level-file\n"));
 	printf(_("                                   level for file logging (default: off)\n"));
 	printf(_("                                   available options: 'off', 'error', 'warning', 'info', 'log', 'verbose'\n"));
+	printf(_("      --log-format-file=log-format-file\n"));
+	printf(_("                                   defines the format of log files (default: plain)\n"));
+	printf(_("                                   available options: 'plain', 'json'\n"));
 	printf(_("      --log-filename=log-filename\n"));
 	printf(_("                                   filename for file logging (default: 'pg_probackup.log')\n"));
 	printf(_("                                   support strftime format (example: pg_probackup-%%Y-%%m-%%d_%%H%%M%%S.log)\n"));

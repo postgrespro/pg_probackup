@@ -96,10 +96,38 @@ def is_enterprise():
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE
     )
-    if b'postgrespro.ru' in p.communicate()[0]:
-        return True
-    else:
-        return False
+    return b'postgrespro.ru' in p.communicate()[0]
+
+ 
+def is_nls_enabled():
+    cmd = [os.environ['PG_CONFIG'], '--configure']
+
+    p = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE
+    )
+    return b'enable-nls' in p.communicate()[0]
+
+
+def base36enc(number):
+    """Converts an integer to a base36 string."""
+    alphabet = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+    base36 = ''
+    sign = ''
+
+    if number < 0:
+        sign = '-'
+        number = -number
+
+    if 0 <= number < len(alphabet):
+        return sign + alphabet[number]
+
+    while number != 0:
+        number, i = divmod(number, len(alphabet))
+        base36 = alphabet[i] + base36
+
+    return sign + base36
 
 
 class ProbackupException(Exception):
@@ -147,6 +175,7 @@ def slow_start(self, replica=False):
 class ProbackupTest(object):
     # Class attributes
     enterprise = is_enterprise()
+    enable_nls = is_nls_enabled()
 
     def __init__(self, *args, **kwargs):
         super(ProbackupTest, self).__init__(*args, **kwargs)
@@ -447,8 +476,8 @@ class ProbackupTest(object):
                 'GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO {0}; '
                 'GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO {0}; '
                 'GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_checkpoint() TO {0};'.format(role))
-        # >= 10
-        else:
+        # >= 10 && < 15
+        elif self.get_version(node) >= 100000 and self.get_version(node) < 150000:
             node.safe_psql(
                 'postgres',
                 'GRANT USAGE ON SCHEMA pg_catalog TO {0}; '
@@ -456,6 +485,22 @@ class ProbackupTest(object):
                 'GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO {0}; '
                 'GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean, boolean) TO {0}; '
                 'GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup(boolean, boolean) TO {0}; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_create_restore_point(text) TO {0}; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_switch_wal() TO {0}; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_last_wal_replay_lsn() TO {0}; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.txid_current() TO {0}; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO {0}; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO {0}; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_checkpoint() TO {0};'.format(role))
+        # >= 15
+        else:
+            node.safe_psql(
+                'postgres',
+                'GRANT USAGE ON SCHEMA pg_catalog TO {0}; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO {0}; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO {0}; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_backup_start(text, boolean) TO {0}; '
+                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_backup_stop(boolean) TO {0}; '
                 'GRANT EXECUTE ON FUNCTION pg_catalog.pg_create_restore_point(text) TO {0}; '
                 'GRANT EXECUTE ON FUNCTION pg_catalog.pg_switch_wal() TO {0}; '
                 'GRANT EXECUTE ON FUNCTION pg_catalog.pg_last_wal_replay_lsn() TO {0}; '

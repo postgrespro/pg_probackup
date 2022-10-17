@@ -15,22 +15,28 @@ class TimeConsumingTests(ProbackupTest, unittest.TestCase):
         run pgbench, vacuum VERBOSE FULL and ptrack backups in parallel
         """
         # init node
+        if self.pg_config_version < self.version_to_num('11.0'):
+            return unittest.skip('You need PostgreSQL >= 11 for this test')
+        if not self.ptrack:
+            return unittest.skip('Skipped because ptrack support is disabled')
+
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(module_name, fname, 'node'),
             set_replication=True,
-            initdb_params=['--data-checksums'])
-        node.append_conf('postgresql.conf',
-        """
-            max_connections = 100
-            wal_keep_size = 16000
-            ptrack.map_size = 1
-            shared_preload_libraries='ptrack'
-            log_statement = 'none'
-            fsync = off
-            log_checkpoints = on
-            autovacuum = off
-        """)
+            ptrack_enable=self.ptrack,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'max_connections': 100,
+                'log_statement': 'none',
+                'log_checkpoints': 'on',
+                'autovacuum': 'off',
+                'ptrack.map_size': 1})
+
+        if node.major_version >= 13:
+            self.set_auto_conf(node, {'wal_keep_size': '16000MB'})
+        else:
+            self.set_auto_conf(node, {'wal_keep_segments': '1000'})
 
         # init probackup and add an instance
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
