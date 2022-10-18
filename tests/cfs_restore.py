@@ -13,7 +13,7 @@ import unittest
 import shutil
 
 from .helpers.cfs_helpers import find_by_name
-from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
+from .helpers.ptrack_helpers import ProbackupTest, ProbackupException, is_test_result_ok
 
 
 module_name = 'cfs_restore'
@@ -60,9 +60,12 @@ class CfsRestoreBase(ProbackupTest, unittest.TestCase):
     def add_data_in_cluster(self):
         pass
 
+    @unittest.skipUnless(ProbackupTest.enterprise, 'skip')
     def tearDown(self):
-        self.node.cleanup()
-        self.del_test_dir(module_name, self.fname)
+        module_name = self.id().split('.')[1]
+        fname = self.id().split('.')[3]
+        if is_test_result_ok(self):
+            self.del_test_dir(module_name, fname)
 
 
 class CfsRestoreNoencEmptyTablespaceTest(CfsRestoreBase):

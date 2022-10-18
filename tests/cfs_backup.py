@@ -4,7 +4,7 @@ import random
 import shutil
 
 from .helpers.cfs_helpers import find_by_extensions, find_by_name, find_by_pattern, corrupt_file
-from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
+from .helpers.ptrack_helpers import ProbackupTest, ProbackupException, is_test_result_ok
 
 module_name = 'cfs_backup'
 tblspace_name = 'cfs_tblspace'
@@ -1159,10 +1159,12 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
         )
 
 #    # --- End ---#
-#    @unittest.skipUnless(ProbackupTest.enterprise, 'skip')
-#    def tearDown(self):
-#        self.node.cleanup()
-#        self.del_test_dir(module_name, self.fname)
+    @unittest.skipUnless(ProbackupTest.enterprise, 'skip')
+    def tearDown(self):
+        module_name = self.id().split('.')[1]
+        fname = self.id().split('.')[3]
+        if is_test_result_ok(self):
+            self.del_test_dir(module_name, fname)
 
 
 #class CfsBackupEncTest(CfsBackupNoEncTest):
