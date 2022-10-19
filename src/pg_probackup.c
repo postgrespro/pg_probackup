@@ -322,13 +322,11 @@ main(int argc, char *argv[])
 	my_pid = getpid();
 	//set_pglocale_pgservice(argv[0], "pgscripts");
 
-#if PG_VERSION_NUM >= 110000
 	/*
 	 * Reset WAL segment size, we will retreive it using RetrieveWalSegSize()
 	 * later.
 	 */
 	WalSegSz = 0;
-#endif
 
 	/*
 	 * Save main thread's tid. It is used call exit() in case of errors.
@@ -713,14 +711,6 @@ main(int argc, char *argv[])
 
 	if (!instance_config.conn_opt.pghost && instance_config.remote.host)
 		instance_config.conn_opt.pghost = instance_config.remote.host;
-
-		/* Setup stream options. They are used in streamutil.c. */
-	if (instance_config.conn_opt.pghost != NULL)
-		dbhost = pstrdup(instance_config.conn_opt.pghost);
-	if (instance_config.conn_opt.pgport != NULL)
-		dbport = pstrdup(instance_config.conn_opt.pgport);
-	if (instance_config.conn_opt.pguser != NULL)
-		dbuser = pstrdup(instance_config.conn_opt.pguser);
 
 	if (backup_subcmd == VALIDATE_CMD || backup_subcmd == RESTORE_CMD)
 	{

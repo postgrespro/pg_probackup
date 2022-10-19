@@ -799,10 +799,8 @@ do_backup(InstanceState *instanceState, pgSetBackupParams *set_backup_params,
 	check_system_identifiers(backup_conn, instance_config.pgdata);
 
 	/* below perform checks specific for backup command */
-#if PG_VERSION_NUM >= 110000
 	if (!RetrieveWalSegSize(backup_conn))
 		elog(ERROR, "Failed to retrieve wal_segment_size");
-#endif
 
 	get_ptrack_version(backup_conn, &nodeInfo);
 	//	elog(WARNING, "ptrack_version_num %d", ptrack_version_num);

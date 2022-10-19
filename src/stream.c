@@ -188,22 +188,8 @@ CreateReplicationSlot_compat(PGconn *conn, const char *slot_name, const char *pl
                                           bool is_temporary, bool is_physical,
                                           bool slot_exists_ok)
 {
-#if PG_VERSION_NUM >= 150000
-	return CreateReplicationSlot(conn, slot_name, plugin, is_temporary, is_physical,
-		/* reserve_wal = */ true, slot_exists_ok, /* two_phase = */ false);
-#elif PG_VERSION_NUM >= 110000
 	return CreateReplicationSlot(conn, slot_name, plugin, is_temporary, is_physical,
 		/* reserve_wal = */ true, slot_exists_ok);
-#else
-	/*
-	 * PG-10 doesn't support creating temp_slot by calling CreateReplicationSlot(), but
-	 * it will be created by setting StreamCtl.temp_slot later in StreamLog()
-	 */
-	if (!is_temporary)
-		return CreateReplicationSlot(conn, slot_name, plugin, /*is_temporary,*/ is_physical, /*reserve_wal,*/ slot_exists_ok);
-	else
-		return true;
-#endif
 }
 
 /*
@@ -276,10 +262,6 @@ StreamLog(void *arg)
 		ctl.stop_socket = PGINVALID_SOCKET;
 		ctl.do_sync = false; /* We sync all files at the end of backup */
 //		ctl.mark_done        /* for future use in s3 */
-#if PG_VERSION_NUM < 110000
-		/* StreamCtl.temp_slot used only for PG-10, in PG>10, temp_slots are created by calling CreateReplicationSlot() */
-		ctl.temp_slot = temp_slot;
-#endif /* PG_VERSION_NUM < 110000 */
 
 		if (ReceiveXlogStream(stream_arg->conn, &ctl) == false)
 		{

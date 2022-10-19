@@ -27,6 +27,7 @@
 #include "pgut.h"
 #include "logger.h"
 #include "file.h"
+#include "simple_prompt.h"
 
 
 static char	   *password = NULL;
@@ -81,26 +82,15 @@ prompt_for_password(const char *username)
 		password = NULL;
 	}
 
-#if PG_VERSION_NUM >= 140000
-	if (username == NULL)
-		password = simple_prompt("Password: ", false);
-	else
-	{
-		char	message[256];
-		snprintf(message, lengthof(message), "Password for user %s: ", username);
-		password = simple_prompt(message , false);
-	}
-#else
 	password = (char *) pgut_malloc(sizeof(char) * 100 + 1);
 	if (username == NULL)
-		simple_prompt("Password: ", password, 100, false);
+		simple_prompt_compat("Password: ", password, 100, false);
 	else
 	{
 		char	message[256];
 		snprintf(message, lengthof(message), "Password for user %s: ", username);
-		simple_prompt(message, password, 100, false);
+		simple_prompt_compat(message, password, 100, false);
 	}
-#endif
 	in_password = false;
 }
 
