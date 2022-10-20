@@ -117,10 +117,16 @@ typedef struct TablespaceCreatedList
 	TablespaceCreatedListCell *tail;
 } TablespaceCreatedList;
 
+typedef struct exclude_cb_ctx {
+    bool	backup_logs;
+	size_t	pref_len;
+	char	exclude_dir_content_pref[MAXPGPATH];
+} exclude_cb_ctx;
+
 static char dir_check_file(pgFile *file, bool backup_logs);
 
 static void dir_list_file_internal(parray *files, pgFile *parent, const char *parent_dir,
-								   bool exclude, bool follow_symlink, bool backup_logs,
+								   bool handle_tablespaces, bool follow_symlink, bool backup_logs,
 								   bool skip_hidden, int external_dir_num, fio_location location);
 static void opt_path_map(ConfigOption *opt, const char *arg,
 						 TablespaceList *list, const char *type);
@@ -128,6 +134,7 @@ static void cleanup_tablespace(const char *path);
 
 static void control_string_bad_format(const char* str);
 
+static bool exclude_files_cb(void *value, void *exclude_args);
 
 /* Tablespace mapping */
 static TablespaceList tablespace_dirs = {NULL, NULL};
@@ -552,9 +559,8 @@ db_map_entry_free(void *entry)
  * TODO: make it strictly local
  */
 void
-dir_list_file(parray *files, const char *root, bool exclude, bool follow_symlink,
-			  bool add_root, bool backup_logs, bool skip_hidden, int external_dir_num,
-			  fio_location location)
+dir_list_file(parray *files, const char *root, bool handle_tablespaces, bool follow_symlink,
+			  bool backup_logs, bool skip_hidden, int external_dir_num, fio_location location)
 {
 	pgFile	   *file;
 
@@ -577,14 +583,11 @@ dir_list_file(parray *files, const char *root, bool exclude, bool follow_symlink
 			elog(WARNING, "Skip \"%s\": unexpected file format", root);
 		return;
 	}
-	if (add_root)
-		parray_append(files, file);
 
-	dir_list_file_internal(files, file, root, exclude, follow_symlink,
+	dir_list_file_internal(files, file, root, handle_tablespaces, follow_symlink,
 						   backup_logs, skip_hidden, external_dir_num, location);
 
-	if (!add_root)
-		pgFileFree(file);
+	pgFileFree(file);
 }
 
 #define CHECK_FALSE				0
@@ -656,54 +659,6 @@ dir_check_file(pgFile *file, bool backup_logs)
 		}
 	}
 
-	/*
-	 * Do not copy tablespaces twice. It may happen if the tablespace is located
-	 * inside the PGDATA.
-	 */
-	if (S_ISDIR(file->mode) &&
-		strcmp(file->name, TABLESPACE_VERSION_DIRECTORY) == 0)
-	{
-		Oid			tblspcOid;
-		char		tmp_rel_path[MAXPGPATH];
-
-		/*
-		 * Valid path for the tablespace is
-		 * pg_tblspc/tblsOid/TABLESPACE_VERSION_DIRECTORY
-		 */
-		if (!path_is_prefix_of_path(PG_TBLSPC_DIR, file->rel_path))
-			return CHECK_FALSE;
-		sscanf_res = sscanf(file->rel_path, PG_TBLSPC_DIR "/%u/%s",
-							&tblspcOid, tmp_rel_path);
-		if (sscanf_res == 0)
-			return CHECK_FALSE;
-	}
-
-	if (in_tablespace)
-	{
-		char		tmp_rel_path[MAXPGPATH];
-
-		sscanf_res = sscanf(file->rel_path, PG_TBLSPC_DIR "/%u/%[^/]/%u/",
-							&(file->tblspcOid), tmp_rel_path,
-							&(file->dbOid));
-
-		/*
-		 * We should skip other files and directories rather than
-		 * TABLESPACE_VERSION_DIRECTORY, if this is recursive tablespace.
-		 */
-		if (sscanf_res == 2 && strcmp(tmp_rel_path, TABLESPACE_VERSION_DIRECTORY) != 0)
-			return CHECK_FALSE;
-	}
-	else if (path_is_prefix_of_path("global", file->rel_path))
-	{
-		file->tblspcOid = GLOBALTABLESPACE_OID;
-	}
-	else if (path_is_prefix_of_path("base", file->rel_path))
-	{
-		file->tblspcOid = DEFAULTTABLESPACE_OID;
-
-		sscanf(file->rel_path, "base/%u/", &(file->dbOid));
-	}
-
 	/* Do not backup ptrack_init files */
 	if (S_ISREG(file->mode) && strcmp(file->name, "ptrack_init") == 0)
 		return CHECK_FALSE;
@@ -754,22 +709,104 @@ dir_check_file(pgFile *file, bool backup_logs)
 }
 
 /*
- * List files in parent->path directory.  If "exclude" is true do not add into
- * "files" files from pgdata_exclude_files and directories from
- * pgdata_exclude_dir.
+ * Excluding default files from the files list.
+ * Input:
+ *  parray *files - an array of pgFile* to filter.
+ *  croterion_fn - a callback that filters things out
+ * Output:
+ *  true - if the file must be deleted from the list
+ *  false - otherwise
+ */
+
+static bool
+exclude_files_cb(void *value, void *exclude_args) {
+    pgFile *file = (pgFile*) value;
+    exclude_cb_ctx *ex_ctx = (exclude_cb_ctx*) exclude_args;
+
+	/*
+	 * Check the file relative path for previously excluded dir prefix. These files
+	 * should not be in the list, only their empty parent directory, see dir_check_file.
+	 *
+	 * Assuming that the excluded dir is ALWAYS followed by its content like this:
+	 * 		pref/dir/
+	 *		pref/dir/file1
+	 *		pref/dir/file2
+	 *		pref/dir/file3
+	 *		...
+	 * we can make prefix checks only for files that subsequently follow the excluded dir
+	 * and avoid unnecessary checks for the rest of the files. So we store the prefix length,
+	 * update it and the prefix itself once we've got a CHECK_EXCLUDE_FALSE status code,
+	 * keep doing prefix checks while there are files in that directory and set prefix length
+	 * to 0 once they are gone.
+	 */
+	if(ex_ctx->pref_len > 0
+		&& strncmp(ex_ctx->exclude_dir_content_pref, file->rel_path, ex_ctx->pref_len) == 0) {
+		return true;
+	} else {
+		memset(ex_ctx->exclude_dir_content_pref, 0, ex_ctx->pref_len);
+		ex_ctx->pref_len = 0;
+	}
+
+    int check_res = dir_check_file(file, ex_ctx->backup_logs);
+
+	switch(check_res) {
+		case CHECK_FALSE:
+			return true;
+			break;
+		case CHECK_TRUE:;
+			return false;
+			break;
+		case CHECK_EXCLUDE_FALSE:
+			// since the excluded dir always goes before its contents, memorize it
+			// and use it for further files filtering.
+			strcpy(ex_ctx->exclude_dir_content_pref, file->rel_path);
+			ex_ctx->pref_len = strlen(file->rel_path);
+			return false;
+			break;
+		default:
+			// Should not get there normally.
+			assert(false);
+			return false;
+			break;
+	}
+
+	// Should not get there as well.
+	return false;
+}
+
+void exclude_files(parray *files, bool backup_logs) {
+    exclude_cb_ctx ctx = {
+		.pref_len = 0,
+        .backup_logs = backup_logs,
+		.exclude_dir_content_pref = "\0",
+    };
+
+    parray_remove_if(files, exclude_files_cb, (void*)&ctx, pgFileFree);
+}
+
+/*
+ * List files in parent->path directory.
+ * If "handle_tablespaces" is true, handle recursive tablespaces
+ * and the ones located inside pgdata.
+ * If "follow_symlink" is true, follow symlinks so that the
+ * fio_stat call fetches the info from the file pointed to by the
+ * symlink, not from the symlink itself.
  *
  * TODO: should we check for interrupt here ?
  */
 static void
 dir_list_file_internal(parray *files, pgFile *parent, const char *parent_dir,
-					   bool exclude, bool follow_symlink, bool backup_logs,
+					   bool handle_tablespaces, bool follow_symlink, bool backup_logs,
 					   bool skip_hidden, int external_dir_num, fio_location location)
 {
 	DIR			  *dir;
 	struct dirent *dent;
+	bool in_tablespace = false;
 
 	if (!S_ISDIR(parent->mode))
 		elog(ERROR, "\"%s\" is not a directory", parent_dir);
+
+	in_tablespace = path_is_prefix_of_path(PG_TBLSPC_DIR, parent->rel_path);
 
 	/* Open directory and list contents */
 	dir = fio_opendir(location, parent_dir);
@@ -790,13 +827,12 @@ dir_list_file_internal(parray *files, pgFile *parent, const char *parent_dir,
 		pgFile	   *file;
 		char		child[MAXPGPATH];
 		char		rel_child[MAXPGPATH];
-		char		check_res;
 
 		join_path_components(child, parent_dir, dent->d_name);
 		join_path_components(rel_child, parent->rel_path, dent->d_name);
 
-		file = pgFileNew(child, rel_child, follow_symlink, external_dir_num,
-						 location);
+		file = pgFileNew(child, rel_child, follow_symlink,
+					external_dir_num, location);
 		if (file == NULL)
 			continue;
 
@@ -809,8 +845,7 @@ dir_list_file_internal(parray *files, pgFile *parent, const char *parent_dir,
 		}
 
 		/* skip hidden files and directories */
-		if (skip_hidden && file->name[0] == '.')
-		{
+		if (skip_hidden && file->name[0] == '.') {
 			elog(WARNING, "Skip hidden file: '%s'", child);
 			pgFileFree(file);
 			continue;
@@ -827,21 +862,50 @@ dir_list_file_internal(parray *files, pgFile *parent, const char *parent_dir,
 			continue;
 		}
 
-		if (exclude)
-		{
-			check_res = dir_check_file(file, backup_logs);
-			if (check_res == CHECK_FALSE)
+		if(handle_tablespaces) {
+			/*
+			 * Do not copy tablespaces twice. It may happen if the tablespace is located
+			 * inside the PGDATA.
+			 */
+			if (S_ISDIR(file->mode) &&
+				strcmp(file->name, TABLESPACE_VERSION_DIRECTORY) == 0)
 			{
-				/* Skip */
-				pgFileFree(file);
-				continue;
+				Oid			tblspcOid;
+				char		tmp_rel_path[MAXPGPATH];
+				int			sscanf_res;
+			
+				/*
+				 * Valid path for the tablespace is
+				 * pg_tblspc/tblsOid/TABLESPACE_VERSION_DIRECTORY
+				 */
+				if (!path_is_prefix_of_path(PG_TBLSPC_DIR, file->rel_path))
+					continue;
+				sscanf_res = sscanf(file->rel_path, PG_TBLSPC_DIR "/%u/%s",
+							&tblspcOid, tmp_rel_path);
+				if (sscanf_res == 0)
+					continue;
 			}
-			else if (check_res == CHECK_EXCLUDE_FALSE)
-			{
-				/* We add the directory itself which content was excluded */
-				parray_append(files, file);
-				continue;
-			}
+	
+			if (in_tablespace) {
+	            char        tmp_rel_path[MAXPGPATH];
+				ssize_t      sscanf_res;
+	        
+	            sscanf_res = sscanf(file->rel_path, PG_TBLSPC_DIR "/%u/%[^/]/%u/",
+	                                &(file->tblspcOid), tmp_rel_path,
+	                                &(file->dbOid));
+	        
+	            /*
+	             * We should skip other files and directories rather than
+	             * TABLESPACE_VERSION_DIRECTORY, if this is recursive tablespace.
+	             */
+	            if (sscanf_res == 2 && strcmp(tmp_rel_path, TABLESPACE_VERSION_DIRECTORY) != 0)
+	                continue;
+	        } else if (path_is_prefix_of_path("global", file->rel_path)) {
+	            file->tblspcOid = GLOBALTABLESPACE_OID;
+	        } else if (path_is_prefix_of_path("base", file->rel_path)) {
+	            file->tblspcOid = DEFAULTTABLESPACE_OID;
+	            sscanf(file->rel_path, "base/%u/", &(file->dbOid));
+	        }
 		}
 
 		parray_append(files, file);
@@ -851,7 +915,7 @@ dir_list_file_internal(parray *files, pgFile *parent, const char *parent_dir,
 		 * recursively.
 		 */
 		if (S_ISDIR(file->mode))
-			dir_list_file_internal(files, file, child, exclude, follow_symlink,
+			dir_list_file_internal(files, file, child, handle_tablespaces, follow_symlink,
 								   backup_logs, skip_hidden, external_dir_num, location);
 	}
 
@@ -1845,29 +1909,8 @@ read_database_map(pgBackup *backup)
 void
 cleanup_tablespace(const char *path)
 {
-	int i;
-	char	fullpath[MAXPGPATH];
-	parray *files = parray_new();
-
-	fio_list_dir(files, path, false, false, false, false, false, 0);
-
-	/* delete leaf node first */
-	parray_qsort(files, pgFileCompareRelPathWithExternalDesc);
-
-	for (i = 0; i < parray_num(files); i++)
-	{
-		pgFile	   *file = (pgFile *) parray_get(files, i);
-
-		join_path_components(fullpath, path, file->rel_path);
-
-		if (fio_remove(FIO_DB_HOST, fullpath, true) == 0)
-			elog(LOG, "Deleted file \"%s\"", fullpath);
-		else
-			elog(ERROR, "Cannot delete file or directory \"%s\": %s", fullpath, strerror(errno));
-	}
-
-	parray_walk(files, pgFileFree);
-	parray_free(files);
+	pioDrive_i drive = pioDriveForLocation(FIO_BACKUP_HOST);
+	$i(pioRemoveDir, drive, .root = path, .root_as_well = false);
 }
 
 /*

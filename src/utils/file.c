@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <unistd.h>
+#include <ftw.h>
 
 #include "pg_probackup.h"
 #include <signal.h>
@@ -33,13 +34,17 @@ typedef struct
 typedef struct
 {
 	char path[MAXPGPATH];
-	bool exclude;
+	bool handle_tablespaces;
 	bool follow_symlink;
-	bool add_root;
 	bool backup_logs;
 	bool skip_hidden;
 	int  external_dir_num;
 } fio_list_dir_request;
+
+typedef struct {
+    char path[MAXPGPATH];
+	bool root_as_well;
+} fio_remove_dir_request;
 
 typedef struct
 {
@@ -2749,87 +2754,40 @@ fio_send_file_impl(int out, const char* path)
     close(fd);
 }
 
-/* Compile the array of files located on remote machine in directory root */
-static void
-fio_list_dir_internal(parray *files, const char *root, bool exclude,
-								  bool follow_symlink, bool add_root, bool backup_logs,
-								  bool skip_hidden, int external_dir_num)
-{
-	fio_header hdr;
-	fio_list_dir_request req;
-	char *buf = pgut_malloc(CHUNK_SIZE);
-
-	/* Send to the agent message with parameters for directory listing */
-	snprintf(req.path, MAXPGPATH, "%s", root);
-	req.exclude = exclude;
-	req.follow_symlink = follow_symlink;
-	req.add_root = add_root;
-	req.backup_logs = backup_logs;
-	req.skip_hidden = skip_hidden;
-	req.external_dir_num = external_dir_num;
-
-	hdr.cop = FIO_LIST_DIR;
-	hdr.size = sizeof(req);
-
-	IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
-	IO_CHECK(fio_write_all(fio_stdout, &req, hdr.size), hdr.size);
-
-	for (;;)
-	{
-		/* receive data */
-		IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
-
-		if (hdr.cop == FIO_SEND_FILE_EOF)
-		{
-			/* the work is done */
-			break;
-		}
-		else if (hdr.cop == FIO_SEND_FILE)
-		{
-			pgFile *file = NULL;
-			fio_pgFile  fio_file;
-
-			/* receive rel_path */
-			IO_CHECK(fio_read_all(fio_stdin, buf, hdr.size), hdr.size);
-			file = pgFileInit(buf);
-
-			/* receive metainformation */
-			IO_CHECK(fio_read_all(fio_stdin, &fio_file, sizeof(fio_file)), sizeof(fio_file));
-
-			file->mode = fio_file.mode;
-			file->size = fio_file.size;
-			file->mtime = fio_file.mtime;
-			file->is_datafile = fio_file.is_datafile;
-			file->tblspcOid = fio_file.tblspcOid;
-			file->dbOid = fio_file.dbOid;
-			file->relOid = fio_file.relOid;
-			file->forkName = fio_file.forkName;
-			file->segno = fio_file.segno;
-			file->external_dir_num = fio_file.external_dir_num;
-
-			if (fio_file.linked_len > 0)
-			{
-				IO_CHECK(fio_read_all(fio_stdin, buf, fio_file.linked_len), fio_file.linked_len);
-
-				file->linked = pgut_malloc(fio_file.linked_len);
-				snprintf(file->linked, fio_file.linked_len, "%s", buf);
-			}
-
-//			elog(INFO, "Received file: %s, mode: %u, size: %lu, mtime: %lu",
-//				file->rel_path, file->mode, file->size, file->mtime);
-
-			parray_append(files, file);
-		}
-		else
-		{
-			/* TODO: fio_disconnect may get assert fail when running after this */
-			elog(ERROR, "Remote agent returned message of unexpected type: %i", hdr.cop);
-		}
-	}
-
-	pg_free(buf);
+void db_list_dir(parray *files, const char *root, bool handle_tablespaces,
+					bool backup_logs, int external_dir_num) {
+	pioDrive_i drive = pioDriveForLocation(FIO_DB_HOST);
+	$i(pioListDir, drive, .files = files, .root = root, .handle_tablespaces = handle_tablespaces,
+			.symlink_and_hidden = true, .backup_logs = backup_logs, .skip_hidden = true,
+			.external_dir_num = external_dir_num);
 }
 
+void backup_list_dir(parray *files, const char *root) {
+	pioDrive_i drive = pioDriveForLocation(FIO_BACKUP_HOST);
+	$i(pioListDir, drive, .files = files, .root = root, .handle_tablespaces = false,
+			.symlink_and_hidden = false, .backup_logs = false, .skip_hidden = false,
+			.external_dir_num = 0);
+}
+
+/*
+ * WARNING! this function is not paired with fio_remove_dir
+ * because there is no such function. Instead, it is paired
+ * with pioRemoteDrive_pioRemoveDir, see PBCKP-234 for further details
+ */
+static void
+fio_remove_dir_impl(int out, char* buf) {
+    fio_remove_dir_request  *frdr = (fio_remove_dir_request *)buf;
+    pioDrive_i drive = pioDriveForLocation(FIO_LOCAL_HOST);
+
+    // In an essence this all is just a wrapper for a pioRemoveDir call on a local drive
+    $i(pioRemoveDir, drive, .root = frdr->path, .root_as_well = frdr->root_as_well);
+
+    fio_header hdr;
+    hdr.cop = FIO_REMOVE_DIR;
+    hdr.arg = 0;
+
+    IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
+}
 
 /*
  * To get the arrays of files we use the same function dir_list_file(),
@@ -2858,8 +2816,8 @@ fio_list_dir_impl(int out, char* buf)
 	 */
 	instance_config.logger.log_level_console = ERROR;
 
-	dir_list_file(file_files, req->path, req->exclude, req->follow_symlink,
-				  req->add_root, req->backup_logs, req->skip_hidden,
+	dir_list_file(file_files, req->path, req->handle_tablespaces,
+				  req->follow_symlink, req->backup_logs, req->skip_hidden,
 				  req->external_dir_num, FIO_LOCAL_HOST);
 
 	/* send information about files to the main process */
@@ -2904,20 +2862,6 @@ fio_list_dir_impl(int out, char* buf)
 	parray_free(file_files);
 	hdr.cop = FIO_SEND_FILE_EOF;
 	IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
-}
-
-/* Wrapper for directory listing */
-void
-fio_list_dir(parray *files, const char *root, bool exclude,
-				  bool follow_symlink, bool add_root, bool backup_logs,
-				  bool skip_hidden, int external_dir_num)
-{
-	if (fio_is_remote(FIO_DB_HOST))
-		fio_list_dir_internal(files, root, exclude, follow_symlink, add_root,
-							  backup_logs, skip_hidden, external_dir_num);
-	else
-		dir_list_file(files, root, exclude, follow_symlink, add_root,
-					  backup_logs, skip_hidden, external_dir_num, FIO_LOCAL_HOST);
 }
 
 PageState *
@@ -3303,6 +3247,9 @@ fio_communicate(int in, int out)
 		  case FIO_LIST_DIR:
 			fio_list_dir_impl(out, buf);
 			break;
+          case FIO_REMOVE_DIR:
+            fio_remove_dir_impl(out, buf);
+            break;
 		  case FIO_SEND_PAGES:
 			/* buf contain fio_send_request header and bitmap. */
 			fio_send_pages_impl(out, buf);
@@ -3590,6 +3537,55 @@ pioLocalDrive_pioIsRemote(VSelf)
     return false;
 }
 
+static void
+pioLocalDrive_pioListDir(VSelf, parray *files, const char *root, bool handle_tablespaces,
+                         bool follow_symlink, bool backup_logs, bool skip_hidden,
+                         int external_dir_num) {
+    FOBJ_FUNC_ARP();
+    dir_list_file(files, root, handle_tablespaces, follow_symlink, backup_logs,
+                        skip_hidden, external_dir_num, FIO_LOCAL_HOST);
+}
+
+static void
+pioLocalDrive_pioRemoveDir(VSelf, const char *root, bool root_as_well) {
+    FOBJ_FUNC_ARP();
+    Self(pioLocalDrive);
+	char full_path[MAXPGPATH];
+    /* list files to be deleted */
+    parray* files = parray_new();
+	$(pioListDir, self, .files = files, .root = root, .handle_tablespaces = false,
+			.symlink_and_hidden = false, .backup_logs = false, .skip_hidden = false, .external_dir_num = 0);
+
+
+	// adding the root directory because it must be deleted too
+	if(root_as_well)
+		parray_append(files, pgFileNew(root, "", false, 0, FIO_LOCAL_HOST));
+
+    /* delete leaf node first */
+    parray_qsort(files, pgFileCompareRelPathWithExternalDesc);
+    size_t num_files = parray_num(files);
+    for (int i = 0; i < num_files; i++)
+    {
+        pgFile	   *file = (pgFile *) parray_get(files, i);
+
+        join_path_components(full_path, root, file->rel_path);
+
+        if (interrupted)
+            elog(ERROR, "interrupted during the directory deletion: %s", full_path);
+
+        if (progress)
+            elog(INFO, "Progress: (%d/%zd). Delete file \"%s\"",
+                 i + 1, num_files, full_path);
+
+        err_i err = $(pioRemove, self, full_path, false);
+        if($haserr(err))
+            elog(ERROR, "Cannot remove file or directory \"%s\": %s", full_path, $errmsg(err));
+    }
+
+    parray_walk(files, pgFileFree);
+    parray_free(files);
+}
+
 /* LOCAL FILE */
 static void
 pioLocalFile_fobjDispose(VSelf)
@@ -3855,6 +3851,102 @@ static bool
 pioRemoteDrive_pioIsRemote(VSelf)
 {
     return true;
+}
+
+static void
+pioRemoteDrive_pioListDir(VSelf, parray *files, const char *root, bool handle_tablespaces,
+                          bool follow_symlink, bool backup_logs, bool skip_hidden,
+                          int external_dir_num) {
+    FOBJ_FUNC_ARP();
+    fio_header hdr;
+    fio_list_dir_request req;
+    char *buf = pgut_malloc(CHUNK_SIZE);
+
+    /* Send to the agent message with parameters for directory listing */
+    snprintf(req.path, MAXPGPATH, "%s", root);
+    req.handle_tablespaces = handle_tablespaces;
+    req.follow_symlink = follow_symlink;
+    req.backup_logs = backup_logs;
+	req.skip_hidden = skip_hidden;
+    req.external_dir_num = external_dir_num;
+
+    hdr.cop = FIO_LIST_DIR;
+    hdr.size = sizeof(req);
+
+    IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
+    IO_CHECK(fio_write_all(fio_stdout, &req, hdr.size), hdr.size);
+
+    for (;;) {
+        /* receive data */
+        IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
+
+        if (hdr.cop == FIO_SEND_FILE_EOF) {
+            /* the work is done */
+            break;
+        } else if (hdr.cop == FIO_SEND_FILE) {
+            pgFile *file = NULL;
+            fio_pgFile  fio_file;
+
+            /* receive rel_path */
+            IO_CHECK(fio_read_all(fio_stdin, buf, hdr.size), hdr.size);
+            file = pgFileInit(buf);
+
+            /* receive metainformation */
+            IO_CHECK(fio_read_all(fio_stdin, &fio_file, sizeof(fio_file)), sizeof(fio_file));
+
+            file->mode = fio_file.mode;
+            file->size = fio_file.size;
+            file->mtime = fio_file.mtime;
+            file->is_datafile = fio_file.is_datafile;
+            file->tblspcOid = fio_file.tblspcOid;
+            file->dbOid = fio_file.dbOid;
+            file->relOid = fio_file.relOid;
+            file->forkName = fio_file.forkName;
+            file->segno = fio_file.segno;
+            file->external_dir_num = fio_file.external_dir_num;
+
+            if (fio_file.linked_len > 0) {
+                IO_CHECK(fio_read_all(fio_stdin, buf, fio_file.linked_len), fio_file.linked_len);
+
+                file->linked = pgut_malloc(fio_file.linked_len);
+                snprintf(file->linked, fio_file.linked_len, "%s", buf);
+            }
+
+//			elog(INFO, "Received file: %s, mode: %u, size: %lu, mtime: %lu",
+//				file->rel_path, file->mode, file->size, file->mtime);
+
+            parray_append(files, file);
+        } else {
+            /* TODO: fio_disconnect may get assert fail when running after this */
+            elog(ERROR, "Remote agent returned message of unexpected type: %i", hdr.cop);
+        }
+    }
+
+    pg_free(buf);
+}
+
+static void
+pioRemoteDrive_pioRemoveDir(VSelf, const char *root, bool root_as_well) {
+    FOBJ_FUNC_ARP();
+    fio_header hdr;
+    fio_remove_dir_request req;
+
+    /* Send to the agent message with parameters for directory listing */
+    snprintf(req.path, MAXPGPATH, "%s", root);
+	req.root_as_well = root_as_well;
+
+    hdr.cop = FIO_REMOVE_DIR;
+    hdr.size = sizeof(req);
+
+    IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
+    IO_CHECK(fio_write_all(fio_stdout, &req, hdr.size), hdr.size);
+
+    /* get the response */
+    IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
+    Assert(hdr.cop == FIO_REMOVE_DIR);
+
+    if (hdr.arg != 0)
+        elog(ERROR, "couldn't remove remote dir");
 }
 
 /* REMOTE FILE */

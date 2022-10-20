@@ -16,6 +16,9 @@
  */
 typedef struct parray parray;
 
+typedef bool (*criterion_fn)(void *value, void *args);
+typedef void (*cleanup_fn)(void *ref);
+
 extern parray *parray_new(void);
 extern void parray_expand(parray *array, size_t newnum);
 extern void parray_free(parray *array);
@@ -32,6 +35,7 @@ extern void *parray_bsearch(parray *array, const void *key, int(*compare)(const 
 extern int parray_bsearch_index(parray *array, const void *key, int(*compare)(const void *, const void *));
 extern void parray_walk(parray *array, void (*action)(void *));
 extern bool parray_contains(parray *array, void *elem);
+extern void parray_remove_if(parray *array, criterion_fn criterion, void *args, cleanup_fn clean);
 
 #endif /* PARRAY_H */
 

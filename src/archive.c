@@ -646,7 +646,7 @@ setup_push_filelist(const char *archive_status_dir, const char *first_file,
 
 	/* get list of files from archive_status */
 	status_files = parray_new();
-	dir_list_file(status_files, archive_status_dir, false, false, false, false, true, 0, FIO_DB_HOST);
+	db_list_dir(status_files, archive_status_dir, false, false, 0);
 	parray_qsort(status_files, pgFileCompareName);
 
 	for (i = 0; i < parray_num(status_files); i++)

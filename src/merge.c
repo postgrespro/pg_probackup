@@ -1127,33 +1127,6 @@ done:
 	return NULL;
 }
 
-/* Recursively delete a directory and its contents */
-static void
-remove_dir_with_files(const char *path)
-{
-	parray	   *files = parray_new();
-	int			i;
-	char 		full_path[MAXPGPATH];
-
-	dir_list_file(files, path, false, false, true, false, false, 0, FIO_LOCAL_HOST);
-	parray_qsort(files, pgFileCompareRelPathWithExternalDesc);
-	for (i = 0; i < parray_num(files); i++)
-	{
-		pgFile	   *file = (pgFile *) parray_get(files, i);
-
-		join_path_components(full_path, path, file->rel_path);
-
-		if (fio_remove(FIO_LOCAL_HOST, full_path, true) == 0)
-			elog(LOG, "Deleted \"%s\"", full_path);
-		else
-			elog(ERROR, "Cannot delete file or directory \"%s\": %s", full_path, strerror(errno));
-	}
-
-	/* cleanup */
-	parray_walk(files, pgFileFree);
-	parray_free(files);
-}
-
 /* Get index of external directory */
 static int
 get_external_index(const char *key, const parray *list)
@@ -1187,7 +1160,8 @@ reorder_external_dirs(pgBackup *to_backup, parray *to_external,
 		{
 			char old_path[MAXPGPATH];
 			makeExternalDirPathByNum(old_path, externaldir_template, i + 1);
-			remove_dir_with_files(old_path);
+            pioDrive_i drive = pioDriveForLocation(FIO_LOCAL_HOST);
+            $i(pioRemoveDir, drive, .root = old_path, .root_as_well = true);
 		}
 		else if (from_num != i + 1)
 		{

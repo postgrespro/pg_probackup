@@ -731,11 +731,7 @@ do_retention_wal(InstanceState *instanceState, bool dry_run)
 void
 delete_backup_files(pgBackup *backup)
 {
-	size_t		i;
 	char		timestamp[100];
-	parray		*files;
-	size_t		num_files;
-	char		full_path[MAXPGPATH];
 
 	/*
 	 * If the backup was deleted already, there is nothing to do.
@@ -761,32 +757,8 @@ delete_backup_files(pgBackup *backup)
 	 */
 	write_backup_status(backup, BACKUP_STATUS_DELETING, false);
 
-	/* list files to be deleted */
-	files = parray_new();
-	dir_list_file(files, backup->root_dir, false, false, true, false, false, 0, FIO_BACKUP_HOST);
-
-	/* delete leaf node first */
-	parray_qsort(files, pgFileCompareRelPathWithExternalDesc);
-	num_files = parray_num(files);
-	for (i = 0; i < num_files; i++)
-	{
-		pgFile	   *file = (pgFile *) parray_get(files, i);
-
-		join_path_components(full_path, backup->root_dir, file->rel_path);
-
-		if (interrupted)
-			elog(ERROR, "interrupted during delete backup");
-
-		if (progress)
-			elog(INFO, "Progress: (%zd/%zd). Delete file \"%s\"",
-				 i + 1, num_files, full_path);
-
-		if (fio_remove(FIO_BACKUP_HOST, full_path, false) != 0)
-			elog(ERROR, "Cannot remove file or directory \"%s\": %s", full_path, strerror(errno));
-	}
-
-	parray_walk(files, pgFileFree);
-	parray_free(files);
+    pioDrive_i drive = pioDriveForLocation(FIO_BACKUP_HOST);
+    $i(pioRemoveDir, drive, .root = backup->root_dir, .root_as_well = true);
 	backup->status = BACKUP_STATUS_DELETED;
 
 	return;
