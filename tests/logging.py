@@ -3,9 +3,6 @@ import os
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 import datetime
 
-module_name = 'logging'
-
-
 class LogTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
@@ -16,13 +13,12 @@ class LogTest(ProbackupTest, unittest.TestCase):
         """
         self._check_gdb_flag_or_skip_test()
 
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
@@ -43,17 +39,13 @@ class LogTest(ProbackupTest, unittest.TestCase):
         gdb.run_until_break()
         gdb.continue_execution_until_exit()
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     def test_log_filename_strftime(self):
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
@@ -76,17 +68,13 @@ class LogTest(ProbackupTest, unittest.TestCase):
 
         self.assertTrue(os.path.isfile(path))
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     def test_truncate_rotation_file(self):
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
@@ -151,17 +139,13 @@ class LogTest(ProbackupTest, unittest.TestCase):
 
         self.assertTrue(os.path.isfile(rotation_file_path))
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     def test_unlink_rotation_file(self):
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
@@ -223,17 +207,13 @@ class LogTest(ProbackupTest, unittest.TestCase):
             os.stat(log_file_path).st_size,
             log_file_size)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     def test_garbage_in_rotation_file(self):
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
@@ -261,9 +241,6 @@ class LogTest(ProbackupTest, unittest.TestCase):
         # mangle .rotation file
         with open(rotation_file_path, "w+b", 0) as f:
             f.write(b"blah")
-            f.flush()
-            f.close
-
         output = self.backup_node(
             backup_dir, 'node', node,
             options=[
@@ -302,24 +279,20 @@ class LogTest(ProbackupTest, unittest.TestCase):
             os.stat(log_file_path).st_size,
             log_file_size)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     def test_issue_274(self):
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
         node.slow_start()
 
         replica = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'replica'))
+            base_dir=os.path.join(self.module_name, self.fname, 'replica'))
         replica.cleanup()
 
         self.backup_node(backup_dir, 'node', node, options=['--stream'])
@@ -370,6 +343,3 @@ class LogTest(ProbackupTest, unittest.TestCase):
             log_content = f.read()
 
         self.assertIn('INFO: command:', log_content)
-
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)

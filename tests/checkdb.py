@@ -9,9 +9,6 @@ import sys
 import time
 
 
-module_name = 'checkdb'
-
-
 class CheckdbTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
@@ -19,10 +16,9 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
         """"""
         self._check_gdb_flag_or_skip_test()
 
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir="{0}/{1}/node".format(self.module_name, self.fname),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -214,15 +210,13 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         gdb.kill()
         node.stop()
-        self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def test_basic_checkdb_amcheck_only_sanity(self):
         """"""
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir="{0}/{1}/node".format(self.module_name, self.fname),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -353,18 +347,16 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         node.stop()
-        self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def test_checkdb_block_validation_sanity(self):
         """make node, corrupt some pages, check that checkdb failed"""
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -450,14 +442,12 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         node.stop()
-        self.del_test_dir(module_name, fname)
 
     def test_checkdb_checkunique(self):
         """Test checkunique parameter of amcheck.bt_index_check function"""
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
         node.slow_start()
 
@@ -541,17 +531,15 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         node.stop()
-        self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def test_checkdb_sigint_handling(self):
         """"""
         self._check_gdb_flag_or_skip_test()
 
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -596,15 +584,13 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         gdb.kill()
         node.stop()
-        self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def test_checkdb_with_least_privileges(self):
         """"""
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
@@ -852,4 +838,3 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         node.stop()
-        self.del_test_dir(module_name, fname)

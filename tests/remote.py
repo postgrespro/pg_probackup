@@ -5,21 +5,17 @@ from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 from .helpers.cfs_helpers import find_by_name
 
 
-module_name = 'remote'
-
-
 class RemoteTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_remote_sanity(self):
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
@@ -45,6 +41,3 @@ class RemoteTest(ProbackupTest, unittest.TestCase):
         #         e.message,
         #         "\n Unexpected Error Message: {0}\n CMD: {1}".format(
         #             repr(e.message), self.cmd))
-
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)

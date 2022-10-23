@@ -2,17 +2,14 @@ import os
 import unittest
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 
-module_name = 'CVE-2018-1058'
-
 class CVE_2018_1058(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     def test_basic_default_search_path(self):
         """"""
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True)
 
         self.init_pb(backup_dir)
@@ -31,16 +28,12 @@ class CVE_2018_1058(ProbackupTest, unittest.TestCase):
 
         self.backup_node(backup_dir, 'node', node, backup_type='full', options=['--stream'])
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_basic_backup_modified_search_path(self):
         """"""
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True)
         self.set_auto_conf(node, options={'search_path': 'public,pg_catalog'})
 
@@ -77,15 +70,11 @@ class CVE_2018_1058(ProbackupTest, unittest.TestCase):
             self.assertFalse(
                 'pg_probackup vulnerable!' in log_content)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_basic_checkdb_modified_search_path(self):
         """"""
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
         self.set_auto_conf(node, options={'search_path': 'public,pg_catalog'})
         node.slow_start()
@@ -138,6 +127,3 @@ class CVE_2018_1058(ProbackupTest, unittest.TestCase):
                 e.message,
                 "\n Unexpected Error Message: {0}\n CMD: {1}".format(
                     repr(e.message), self.cmd))
-
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)

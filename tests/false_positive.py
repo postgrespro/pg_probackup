@@ -1,11 +1,10 @@
 import unittest
 import os
+from asyncio import sleep
+
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 from datetime import datetime, timedelta
 import subprocess
-
-
-module_name = 'false_positive'
 
 
 class FalsePositive(ProbackupTest, unittest.TestCase):
@@ -16,13 +15,12 @@ class FalsePositive(ProbackupTest, unittest.TestCase):
         """
         Loose segment located between backups. ExpectedFailure. This is BUG
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -47,19 +45,15 @@ class FalsePositive(ProbackupTest, unittest.TestCase):
                 backup_dir, 'node'))
         ########
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     @unittest.expectedFailure
     # Need to force validation of ancestor-chain
     def test_incremental_backup_corrupt_full_1(self):
         """page-level backup with corrupted full backup"""
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -104,9 +98,6 @@ class FalsePositive(ProbackupTest, unittest.TestCase):
         self.assertEqual(
             self.show_pb(backup_dir, 'node')[0]['Status'], "ERROR")
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     @unittest.expectedFailure
     def test_pg_10_waldir(self):
@@ -116,18 +107,18 @@ class FalsePositive(ProbackupTest, unittest.TestCase):
         if self.pg_config_version < self.version_to_num('10.0'):
             return unittest.skip('You need PostgreSQL >= 10 for this test')
 
-        fname = self.id().split('.')[3]
         wal_dir = os.path.join(
-            os.path.join(self.tmp_path, module_name, fname), 'wal_dir')
+            os.path.join(self.tmp_path, self.module_name, self.fname), 'wal_dir')
+        import shutil
         shutil.rmtree(wal_dir, ignore_errors=True)
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=[
                 '--data-checksums',
                 '--waldir={0}'.format(wal_dir)])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
@@ -140,7 +131,7 @@ class FalsePositive(ProbackupTest, unittest.TestCase):
 
         # restore backup
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
         node_restored.cleanup()
 
         self.restore_node(
@@ -154,9 +145,6 @@ class FalsePositive(ProbackupTest, unittest.TestCase):
             os.path.islink(os.path.join(node_restored.data_dir, 'pg_wal')),
             'pg_wal should be symlink')
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     @unittest.expectedFailure
     # @unittest.skip("skip")
     def test_recovery_target_time_backup_victim(self):
@@ -165,10 +153,9 @@ class FalsePositive(ProbackupTest, unittest.TestCase):
         probackup chooses valid backup
         https://github.com/postgrespro/pg_probackup/issues/104
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -216,9 +203,6 @@ class FalsePositive(ProbackupTest, unittest.TestCase):
             backup_dir, 'node',
             options=['--recovery-target-time={0}'.format(target_time)])
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     @unittest.expectedFailure
     # @unittest.skip("skip")
     def test_recovery_target_lsn_backup_victim(self):
@@ -227,10 +211,9 @@ class FalsePositive(ProbackupTest, unittest.TestCase):
         probackup chooses valid backup
         https://github.com/postgrespro/pg_probackup/issues/104
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -280,9 +263,6 @@ class FalsePositive(ProbackupTest, unittest.TestCase):
             backup_dir, 'node',
             options=['--recovery-target-lsn={0}'.format(target_lsn)])
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     @unittest.expectedFailure
     def test_streaming_timeout(self):
@@ -291,10 +271,9 @@ class FalsePositive(ProbackupTest, unittest.TestCase):
         message because our WAL streaming engine is "borrowed"
         from pg_receivexlog
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -331,20 +310,16 @@ class FalsePositive(ProbackupTest, unittest.TestCase):
             'ERROR: Problem in receivexlog',
             log_content)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     @unittest.expectedFailure
     def test_validate_all_empty_catalog(self):
         """
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
 
         try:
@@ -360,6 +335,3 @@ class FalsePositive(ProbackupTest, unittest.TestCase):
                 e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
-
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)

@@ -12,20 +12,16 @@ import json
 from testgres import QueryException
 
 
-module_name = 'incr_restore'
-
-
 class IncrRestoreTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     def test_basic_incr_restore(self):
         """incremental restore in CHECKSUM mode"""
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -76,18 +72,14 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         pgdata_restored = self.pgdata_content(node.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_basic_incr_restore_into_missing_directory(self):
         """"""
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -124,19 +116,15 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         pgdata_restored = self.pgdata_content(node.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_checksum_corruption_detection(self):
         """
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -181,20 +169,16 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         pgdata_restored = self.pgdata_content(node.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_incr_restore_with_tablespace(self):
         """
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
@@ -224,19 +208,15 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         pgdata_restored = self.pgdata_content(node.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_incr_restore_with_tablespace_1(self):
         """recovery to target timeline"""
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'],
             set_replication=True)
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
@@ -282,22 +262,18 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         pgdata_restored = self.pgdata_content(node.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_incr_restore_with_tablespace_2(self):
         """
         If "--tablespace-mapping" option is used with incremental restore,
         then new directory must be empty.
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'],
             set_replication=True)
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
@@ -305,7 +281,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         self.backup_node(backup_dir, 'node', node, options=['--stream'])
 
         node_1 = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_1'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_1'))
 
         # fill node1 with data
         out = self.restore_node(
@@ -355,20 +331,16 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         pgdata_restored = self.pgdata_content(node_1.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_incr_restore_with_tablespace_3(self):
         """
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
@@ -396,21 +368,17 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         pgdata_restored = self.pgdata_content(node.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_incr_restore_with_tablespace_4(self):
         """
         Check that system ID mismatch is detected,
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
@@ -427,7 +395,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
 
         # recreate node
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
         node.slow_start()
@@ -469,9 +437,6 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         pgdata_restored = self.pgdata_content(node.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.expectedFailure
     @unittest.skip("skip")
     def test_incr_restore_with_tablespace_5(self):
@@ -481,13 +446,12 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         with some old content, that belongs to an instance
         with different system id.
         """
-        fname = self.id().split('.')[3]
         node1 = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node1'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node1'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node1)
         node1.slow_start()
@@ -503,7 +467,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
 
         # recreate node
         node2 = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node2'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node2'),
             set_replication=True,
             initdb_params=['--data-checksums'])
         node2.slow_start()
@@ -530,21 +494,17 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         pgdata_restored = self.pgdata_content(node1.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_incr_restore_with_tablespace_6(self):
         """
         Empty pgdata, not empty tablespace
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
@@ -591,22 +551,18 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         pgdata_restored = self.pgdata_content(node.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_incr_restore_with_tablespace_7(self):
         """
         Restore backup without tablespace into
         PGDATA with tablespace.
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
@@ -647,19 +603,15 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         pgdata_restored = self.pgdata_content(node.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_basic_incr_restore_sanity(self):
         """recovery to target timeline"""
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'],
             set_replication=True)
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
@@ -690,7 +642,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
                     repr(e.message), self.cmd))
 
         node_1 = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_1'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_1'))
 
         try:
             self.restore_node(
@@ -714,9 +666,6 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_incr_checksum_restore(self):
         """
@@ -725,13 +674,12 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
 
         X - is instance, we want to return it to C state.
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'],
             pg_options={'wal_log_hints': 'on'})
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -758,7 +706,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         node.stop(['-m', 'immediate', '-D', node.data_dir])
 
         node_1 = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_1'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_1'))
         node_1.cleanup()
 
         self.restore_node(
@@ -803,9 +751,6 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
 
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
 
     # @unittest.skip("skip")
     def test_incr_lsn_restore(self):
@@ -815,13 +760,12 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
 
         X - is instance, we want to return it to C state.
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'],
             pg_options={'wal_log_hints': 'on'})
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -848,7 +792,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         node.stop(['-m', 'immediate', '-D', node.data_dir])
 
         node_1 = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_1'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_1'))
         node_1.cleanup()
 
         self.restore_node(
@@ -892,9 +836,6 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
 
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_incr_lsn_sanity(self):
         """
@@ -904,13 +845,12 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         X - is instance, we want to return it to state B.
         fail is expected behaviour in case of lsn restore.
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'],
             pg_options={'wal_log_hints': 'on'})
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -920,7 +860,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         node.pgbench_init(scale=10)
 
         node_1 = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_1'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_1'))
         node_1.cleanup()
 
         self.restore_node(
@@ -961,9 +901,6 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
         # @unittest.skip("skip")
     def test_incr_checksum_sanity(self):
         """
@@ -972,12 +909,11 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
 
         X - is instance, we want to return it to state B.
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -987,7 +923,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         node.pgbench_init(scale=20)
 
         node_1 = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_1'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_1'))
         node_1.cleanup()
 
         self.restore_node(
@@ -1019,22 +955,17 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
 
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
-
         # @unittest.skip("skip")
     def test_incr_checksum_corruption_detection(self):
         """
         check that corrupted page got detected and replaced
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
 #            initdb_params=['--data-checksums'],
             pg_options={'wal_log_hints': 'on'})
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -1078,21 +1009,17 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
 
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
         # @unittest.skip("skip")
     def test_incr_lsn_corruption_detection(self):
         """
         check that corrupted page got detected and replaced
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'],
             pg_options={'wal_log_hints': 'on'})
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -1136,20 +1063,16 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
 
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_incr_restore_multiple_external(self):
         """check that cmdline has priority over config"""
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -1207,20 +1130,16 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
             node.base_dir, exclude_dirs=['logs'])
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_incr_lsn_restore_multiple_external(self):
         """check that cmdline has priority over config"""
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -1278,22 +1197,18 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
             node.base_dir, exclude_dirs=['logs'])
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_incr_lsn_restore_backward(self):
         """
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={'wal_log_hints': 'on', 'hot_standby': 'on'})
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -1386,23 +1301,19 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         pgdata_restored = self.pgdata_content(node.data_dir)
         self.compare_pgdata(delta_pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_incr_checksum_restore_backward(self):
         """
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
                 'hot_standby': 'on'})
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -1479,21 +1390,20 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         self.compare_pgdata(delta_pgdata, pgdata_restored)
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname)
+        self.del_test_dir(self.module_name, self.fname)
 
     # @unittest.skip("skip")
     def test_make_replica_via_incr_checksum_restore(self):
         """
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         master = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'master'),
+            base_dir=os.path.join(self.module_name, self.fname, 'master'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
         if self.get_version(master) < self.version_to_num('9.6.0'):
-            self.del_test_dir(module_name, fname)
+            self.del_test_dir(self.module_name, self.fname)
             return unittest.skip(
                 'Skipped because backup from replica is not supported in PG 9.5')
 
@@ -1503,7 +1413,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         master.slow_start()
 
         replica = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'replica'))
+            base_dir=os.path.join(self.module_name, self.fname, 'replica'))
         replica.cleanup()
 
         master.pgbench_init(scale=20)
@@ -1551,22 +1461,18 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         pgbench = new_master.pgbench(options=['-T', '10', '-c', '1'])
         pgbench.wait()
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_make_replica_via_incr_lsn_restore(self):
         """
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         master = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'master'),
+            base_dir=os.path.join(self.module_name, self.fname, 'master'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
         if self.get_version(master) < self.version_to_num('9.6.0'):
-            self.del_test_dir(module_name, fname)
+            self.del_test_dir(self.module_name, self.fname)
             return unittest.skip(
                 'Skipped because backup from replica is not supported in PG 9.5')
 
@@ -1576,7 +1482,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         master.slow_start()
 
         replica = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'replica'))
+            base_dir=os.path.join(self.module_name, self.fname, 'replica'))
         replica.cleanup()
 
         master.pgbench_init(scale=20)
@@ -1624,20 +1530,16 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         pgbench = new_master.pgbench(options=['-T', '10', '-c', '1'])
         pgbench.wait()
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_incr_checksum_long_xact(self):
         """
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True)
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -1694,9 +1596,6 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
                 'select count(*) from t1').decode('utf-8').rstrip(),
             '1')
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     # This test will pass with Enterprise
@@ -1705,12 +1604,11 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
     def test_incr_lsn_long_xact_1(self):
         """
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True)
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -1774,24 +1672,20 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_incr_lsn_long_xact_2(self):
         """
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
                 'full_page_writes': 'off',
                 'wal_log_hints': 'off'})
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -1861,21 +1755,17 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
                 'select count(*) from t1').decode('utf-8').rstrip(),
             '1')
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_incr_restore_zero_size_file_checksum(self):
         """
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
@@ -1933,22 +1823,18 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
 
         pgdata_restored = self.pgdata_content(node.data_dir)
         self.compare_pgdata(pgdata3, pgdata_restored)
-
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_incr_restore_zero_size_file_lsn(self):
         """
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
@@ -2013,15 +1899,11 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         pgdata_restored = self.pgdata_content(node.data_dir)
         self.compare_pgdata(pgdata3, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     def test_incremental_partial_restore_exclude_checksum(self):
         """"""
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
@@ -2060,11 +1942,11 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
 
         # restore FULL backup into second node2
         node1 = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node1'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node1'))
         node1.cleanup()
 
         node2 = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node2'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node2'))
         node2.cleanup()
 
         # restore some data into node2
@@ -2118,15 +2000,11 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
 
         self.assertNotIn('PANIC', output)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     def test_incremental_partial_restore_exclude_lsn(self):
         """"""
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
@@ -2167,11 +2045,11 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
 
         # restore FULL backup into second node2
         node1 = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node1'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node1'))
         node1.cleanup()
 
         node2 = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node2'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node2'))
         node2.cleanup()
 
         # restore some data into node2
@@ -2228,15 +2106,11 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
 
         self.assertNotIn('PANIC', output)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     def test_incremental_partial_restore_exclude_tablespace_checksum(self):
         """"""
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
@@ -2282,13 +2156,13 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
 
         # node1
         node1 = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node1'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node1'))
         node1.cleanup()
         node1_tablespace = self.get_tblspace_path(node1, 'somedata')
 
         # node2
         node2 = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node2'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node2'))
         node2.cleanup()
         node2_tablespace = self.get_tblspace_path(node2, 'somedata')
 
@@ -2372,17 +2246,13 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
 
         self.assertNotIn('PANIC', output)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     def test_incremental_pg_filenode_map(self):
         """
         https://github.com/postgrespro/pg_probackup/issues/320
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
@@ -2391,7 +2261,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         node.slow_start()
 
         node1 = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node1'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node1'),
             initdb_params=['--data-checksums'])
         node1.cleanup()
 
@@ -2431,8 +2301,5 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         node1.safe_psql(
             'postgres',
             'select 1')
-
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
 
 # check that MinRecPoint and BackupStartLsn are correctly used in case of --incrementa-lsn

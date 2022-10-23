@@ -6,8 +6,6 @@ from .helpers.cfs_helpers import find_by_name
 import shutil
 
 
-module_name = 'external'
-
 # TODO: add some ptrack tests
 class ExternalTest(ProbackupTest, unittest.TestCase):
 
@@ -19,15 +17,14 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         with external directory, restore backup, check that
         external directory was successfully copied
         """
-        fname = self.id().split('.')[3]
-        core_dir = os.path.join(self.tmp_path, module_name, fname)
+        core_dir = os.path.join(self.tmp_path, self.module_name, self.fname)
         shutil.rmtree(core_dir, ignore_errors=True)
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'],
             set_replication=True)
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         external_dir = self.get_tblspace_path(node, 'somedirectory')
 
         # create directory in external_directory
@@ -91,9 +88,6 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
 
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_external_none(self):
@@ -103,13 +97,12 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         restore delta backup, check that
         external directory was not copied
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'],
             set_replication=True)
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         external_dir = self.get_tblspace_path(node, 'somedirectory')
 
         # create directory in external_directory
@@ -153,9 +146,6 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
             node.base_dir, exclude_dirs=['logs'])
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_external_dirs_overlapping(self):
@@ -164,13 +154,12 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         take backup with two external directories pointing to
         the same directory, backup should fail
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'],
             set_replication=True)
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         external_dir1 = self.get_tblspace_path(node, 'external_dir1')
         external_dir2 = self.get_tblspace_path(node, 'external_dir2')
 
@@ -207,9 +196,6 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_external_dir_mapping(self):
         """
@@ -218,13 +204,12 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         check that restore with external-dir mapping will end with
         success
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -247,7 +232,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
             data_dir=external_dir2, options=["-j", "4"])
 
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
         node_restored.cleanup()
 
         external_dir1_new = self.get_tblspace_path(node_restored, 'external_dir1')
@@ -300,20 +285,16 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
             node_restored.base_dir, exclude_dirs=['logs'])
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_backup_multiple_external(self):
         """check that cmdline has priority over config"""
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
@@ -361,9 +342,6 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
             node.base_dir, exclude_dirs=['logs'])
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.expectedFailure
     # @unittest.skip("skip")
     def test_external_backward_compatibility(self):
@@ -376,10 +354,9 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         if not self.probackup_old_path:
             self.skipTest("You must specify PGPROBACKUPBIN_OLD"
                           " for run this test")
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -447,7 +424,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
 
         # RESTORE chain with new binary
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
 
         node_restored.cleanup()
 
@@ -466,9 +443,6 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
 
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.expectedFailure
     # @unittest.skip("skip")
     def test_external_backward_compatibility_merge_1(self):
@@ -480,10 +454,9 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         if not self.probackup_old_path:
             self.skipTest("You must specify PGPROBACKUPBIN_OLD"
                           " for run this test")
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -542,7 +515,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
 
         # Restore merged backup
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
 
         node_restored.cleanup()
 
@@ -561,9 +534,6 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
 
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.expectedFailure
     # @unittest.skip("skip")
     def test_external_backward_compatibility_merge_2(self):
@@ -575,10 +545,9 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         if not self.probackup_old_path:
             self.skipTest("You must specify PGPROBACKUPBIN_OLD"
                           " for run this test")
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -666,7 +635,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
 
         # Restore merged backup
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
 
         node_restored.cleanup()
 
@@ -689,9 +658,6 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
 
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.expectedFailure
     # @unittest.skip("skip")
     def test_external_merge(self):
@@ -699,10 +665,9 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         if not self.probackup_old_path:
             self.skipTest("You must specify PGPROBACKUPBIN_OLD"
                           " for run this test")
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -779,17 +744,13 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
 
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.expectedFailure
     # @unittest.skip("skip")
     def test_external_merge_skip_external_dirs(self):
         """"""
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -877,17 +838,13 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
 
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.expectedFailure
     # @unittest.skip("skip")
     def test_external_merge_1(self):
         """"""
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -957,17 +914,13 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
 
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.expectedFailure
     # @unittest.skip("skip")
     def test_external_merge_3(self):
         """"""
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -1050,17 +1003,13 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
 
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.expectedFailure
     # @unittest.skip("skip")
     def test_external_merge_2(self):
         """"""
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -1144,17 +1093,13 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
 
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.expectedFailure
     # @unittest.skip("skip")
     def test_restore_external_changed_data(self):
         """"""
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -1242,17 +1187,13 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
 
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.expectedFailure
     # @unittest.skip("skip")
     def test_restore_external_changed_data_1(self):
         """"""
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -1349,17 +1290,13 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
 
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.expectedFailure
     # @unittest.skip("skip")
     def test_merge_external_changed_data(self):
         """"""
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -1452,19 +1389,15 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
 
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.expectedFailure
     # @unittest.skip("skip")
     def test_restore_skip_external(self):
         """
         Check that --skip-external-dirs works correctly
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -1523,9 +1456,6 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
 
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.expectedFailure
     # @unittest.skip("skip")
     def test_external_dir_is_symlink(self):
@@ -1537,12 +1467,11 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         if os.name == 'nt':
             return unittest.skip('Skipped for Windows')
 
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
-        core_dir = os.path.join(self.tmp_path, module_name, fname)
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
+        core_dir = os.path.join(self.tmp_path, self.module_name, self.fname)
         shutil.rmtree(core_dir, ignore_errors=True)
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -1557,7 +1486,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node', node, options=["-j", "4", "--stream"])
 
         # fill some directory with data
-        core_dir = os.path.join(self.tmp_path, module_name, fname)
+        core_dir = os.path.join(self.tmp_path, self.module_name, self.fname)
         symlinked_dir = os.path.join(core_dir, 'symlinked')
 
         self.restore_node(
@@ -1581,7 +1510,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
             node.base_dir, exclude_dirs=['logs'])
 
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
 
         # RESTORE
         node_restored.cleanup()
@@ -1606,9 +1535,6 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
                 backup_dir, 'node',
                 backup_id=backup_id)['external-dirs'])
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.expectedFailure
     # @unittest.skip("skip")
     def test_external_dir_contain_symlink_on_dir(self):
@@ -1620,12 +1546,11 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         if os.name == 'nt':
             return unittest.skip('Skipped for Windows')
 
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
-        core_dir = os.path.join(self.tmp_path, module_name, fname)
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
+        core_dir = os.path.join(self.tmp_path, self.module_name, self.fname)
         shutil.rmtree(core_dir, ignore_errors=True)
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -1641,7 +1566,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node', node, options=["-j", "4", "--stream"])
 
         # fill some directory with data
-        core_dir = os.path.join(self.tmp_path, module_name, fname)
+        core_dir = os.path.join(self.tmp_path, self.module_name, self.fname)
         symlinked_dir = os.path.join(core_dir, 'symlinked')
 
         self.restore_node(
@@ -1666,7 +1591,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
             node.base_dir, exclude_dirs=['logs'])
 
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
 
         # RESTORE
         node_restored.cleanup()
@@ -1691,9 +1616,6 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
                 backup_dir, 'node',
                 backup_id=backup_id)['external-dirs'])
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.expectedFailure
     # @unittest.skip("skip")
     def test_external_dir_contain_symlink_on_file(self):
@@ -1705,12 +1627,11 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         if os.name == 'nt':
             return unittest.skip('Skipped for Windows')
 
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
-        core_dir = os.path.join(self.tmp_path, module_name, fname)
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
+        core_dir = os.path.join(self.tmp_path, self.module_name, self.fname)
         shutil.rmtree(core_dir, ignore_errors=True)
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -1726,7 +1647,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node', node, options=["-j", "4", "--stream"])
 
         # fill some directory with data
-        core_dir = os.path.join(self.tmp_path, module_name, fname)
+        core_dir = os.path.join(self.tmp_path, self.module_name, self.fname)
         symlinked_dir = os.path.join(core_dir, 'symlinked')
 
         self.restore_node(
@@ -1753,7 +1674,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
             node.base_dir, exclude_dirs=['logs'])
 
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
 
         # RESTORE
         node_restored.cleanup()
@@ -1778,9 +1699,6 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
                 backup_dir, 'node',
                 backup_id=backup_id)['external-dirs'])
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.expectedFailure
     # @unittest.skip("skip")
     def test_external_dir_is_tablespace(self):
@@ -1788,12 +1706,11 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         Check that backup fails with error
         if external directory points to tablespace
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
-        core_dir = os.path.join(self.tmp_path, module_name, fname)
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
+        core_dir = os.path.join(self.tmp_path, self.module_name, self.fname)
         shutil.rmtree(core_dir, ignore_errors=True)
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -1828,21 +1745,17 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     def test_restore_external_dir_not_empty(self):
         """
         Check that backup fails with error
         if external directory point to not empty tablespace and
         if remapped directory also isn`t empty
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
-        core_dir = os.path.join(self.tmp_path, module_name, fname)
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
+        core_dir = os.path.join(self.tmp_path, self.module_name, self.fname)
         shutil.rmtree(core_dir, ignore_errors=True)
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -1908,9 +1821,6 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     def test_restore_external_dir_is_missing(self):
         """
         take FULL backup with not empty external directory
@@ -1918,12 +1828,11 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         take DELTA backup with external directory, which
         should fail
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
-        core_dir = os.path.join(self.tmp_path, module_name, fname)
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
+        core_dir = os.path.join(self.tmp_path, self.module_name, self.fname)
         shutil.rmtree(core_dir, ignore_errors=True)
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -1989,9 +1898,6 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         pgdata_restored = self.pgdata_content(
             node.base_dir, exclude_dirs=['logs'])
         self.compare_pgdata(pgdata, pgdata_restored)
-
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
 
     def test_merge_external_dir_is_missing(self):
         """
@@ -2003,12 +1909,11 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         merge it into FULL, restore and check
         data correctness
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
-        core_dir = os.path.join(self.tmp_path, module_name, fname)
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
+        core_dir = os.path.join(self.tmp_path, self.module_name, self.fname)
         shutil.rmtree(core_dir, ignore_errors=True)
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -2078,9 +1983,6 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
             node.base_dir, exclude_dirs=['logs'])
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     def test_restore_external_dir_is_empty(self):
         """
         take FULL backup with not empty external directory
@@ -2089,12 +1991,11 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         restore DELRA backup, check that restored
         external directory is empty
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
-        core_dir = os.path.join(self.tmp_path, module_name, fname)
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
+        core_dir = os.path.join(self.tmp_path, self.module_name, self.fname)
         shutil.rmtree(core_dir, ignore_errors=True)
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -2142,9 +2043,6 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
             node.base_dir, exclude_dirs=['logs'])
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     def test_merge_external_dir_is_empty(self):
         """
         take FULL backup with not empty external directory
@@ -2153,12 +2051,11 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         merge backups and restore FULL, check that restored
         external directory is empty
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
-        core_dir = os.path.join(self.tmp_path, module_name, fname)
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
+        core_dir = os.path.join(self.tmp_path, self.module_name, self.fname)
         shutil.rmtree(core_dir, ignore_errors=True)
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -2209,9 +2106,6 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
             node.base_dir, exclude_dirs=['logs'])
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     def test_restore_external_dir_string_order(self):
         """
         take FULL backup with not empty external directory
@@ -2220,12 +2114,11 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         restore DELRA backup, check that restored
         external directory is empty
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
-        core_dir = os.path.join(self.tmp_path, module_name, fname)
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
+        core_dir = os.path.join(self.tmp_path, self.module_name, self.fname)
         shutil.rmtree(core_dir, ignore_errors=True)
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -2289,9 +2182,6 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
 
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     def test_merge_external_dir_string_order(self):
         """
         take FULL backup with not empty external directory
@@ -2300,12 +2190,11 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         restore DELRA backup, check that restored
         external directory is empty
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
-        core_dir = os.path.join(self.tmp_path, module_name, fname)
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
+        core_dir = os.path.join(self.tmp_path, self.module_name, self.fname)
         shutil.rmtree(core_dir, ignore_errors=True)
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -2372,9 +2261,6 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
 
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_smart_restore_externals(self):
         """
@@ -2383,13 +2269,12 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         make sure that files from externals are not copied during restore
         https://github.com/postgrespro/pg_probackup/issues/63
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -2451,9 +2336,6 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         for file in filelist_diff:
             self.assertNotIn(file, logfile_content)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_external_validation(self):
         """
@@ -2462,13 +2344,12 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         corrupt external file in backup,
         run validate which should fail
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
@@ -2522,6 +2403,3 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
             'CORRUPT',
             self.show_pb(backup_dir, 'node', full_id)['status'],
             'Backup STATUS should be "CORRUPT"')
-
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
