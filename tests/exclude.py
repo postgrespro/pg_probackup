@@ -3,19 +3,15 @@ import unittest
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 
 
-module_name = 'exclude'
-
-
 class ExcludeTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     def test_exclude_temp_files(self):
         """
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -53,9 +49,6 @@ class ExcludeTest(ProbackupTest, unittest.TestCase):
 
         # TODO check temporary tablespaces
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_exclude_temp_tables(self):
@@ -63,10 +56,9 @@ class ExcludeTest(ProbackupTest, unittest.TestCase):
         make node without archiving, create temp table, take full backup,
         check that temp table not present in backup catalogue
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -139,9 +131,6 @@ class ExcludeTest(ProbackupTest, unittest.TestCase):
                         "Found temp table file in backup catalogue.\n "
                         "Filepath: {0}".format(file))
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_exclude_unlogged_tables_1(self):
         """
@@ -149,10 +138,9 @@ class ExcludeTest(ProbackupTest, unittest.TestCase):
         alter table to unlogged, take delta backup, restore delta backup,
         check that PGDATA`s are physically the same
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -186,7 +174,7 @@ class ExcludeTest(ProbackupTest, unittest.TestCase):
         pgdata = self.pgdata_content(node.data_dir)
 
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
 
         node_restored.cleanup()
 
@@ -197,9 +185,6 @@ class ExcludeTest(ProbackupTest, unittest.TestCase):
         pgdata_restored = self.pgdata_content(node_restored.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_exclude_unlogged_tables_2(self):
         """
@@ -208,10 +193,9 @@ class ExcludeTest(ProbackupTest, unittest.TestCase):
         2. restore FULL, DELTA, PAGE to empty db,
             ensure unlogged table exist and is epmty
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -279,19 +263,14 @@ class ExcludeTest(ProbackupTest, unittest.TestCase):
                     'select count(*) from test')[0][0],
                 0)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
-
     # @unittest.skip("skip")
     def test_exclude_log_dir(self):
         """
         check that by default 'log' and 'pg_log' directories are not backed up
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -321,18 +300,14 @@ class ExcludeTest(ProbackupTest, unittest.TestCase):
         self.assertTrue(os.path.exists(path))
         self.assertFalse(os.path.exists(log_file))
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_exclude_log_dir_1(self):
         """
         check that "--backup-pg-log" works correctly
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -361,6 +336,3 @@ class ExcludeTest(ProbackupTest, unittest.TestCase):
         log_file = os.path.join(path, 'postgresql.log')
         self.assertTrue(os.path.exists(path))
         self.assertTrue(os.path.exists(log_file))
-
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)

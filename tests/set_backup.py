@@ -5,8 +5,6 @@ from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 from sys import exit
 from datetime import datetime, timedelta
 
-module_name = 'set_backup'
-
 
 class SetBackupTest(ProbackupTest, unittest.TestCase):
 
@@ -14,10 +12,9 @@ class SetBackupTest(ProbackupTest, unittest.TestCase):
     # @unittest.skip("skip")
     def test_set_backup_sanity(self):
         """general sanity for set-backup command"""
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -120,19 +117,15 @@ class SetBackupTest(ProbackupTest, unittest.TestCase):
         # parse string to datetime object
         #new_expire_time = datetime.strptime(new_expire_time, '%Y-%m-%d %H:%M:%S%z')
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_retention_redundancy_pinning(self):
         """"""
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -174,18 +167,14 @@ class SetBackupTest(ProbackupTest, unittest.TestCase):
             '{1} is guarded by retention'.format(full_id, page_id),
             log)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_retention_window_pinning(self):
         """purge all backups using window-based retention policy"""
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -237,9 +226,6 @@ class SetBackupTest(ProbackupTest, unittest.TestCase):
             '{1} is guarded by retention'.format(backup_id_1, page1),
             out)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_wal_retention_and_pinning(self):
         """
@@ -251,13 +237,12 @@ class SetBackupTest(ProbackupTest, unittest.TestCase):
         B1   B2---P---B3--->
 
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -317,9 +302,6 @@ class SetBackupTest(ProbackupTest, unittest.TestCase):
                 '000000010000000000000004')
             self.assertEqual(timeline['status'], 'OK')
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_wal_retention_and_pinning_1(self):
         """
@@ -331,12 +313,11 @@ class SetBackupTest(ProbackupTest, unittest.TestCase):
         P---B1--->
 
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -383,19 +364,15 @@ class SetBackupTest(ProbackupTest, unittest.TestCase):
 
         self.validate_pb(backup_dir)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_add_note_newlines(self):
         """"""
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
@@ -418,19 +395,15 @@ class SetBackupTest(ProbackupTest, unittest.TestCase):
         backup_meta = self.show_pb(backup_dir, 'node', backup_id)
         self.assertNotIn('note', backup_meta)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_add_big_note(self):
         """"""
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
@@ -472,19 +445,16 @@ class SetBackupTest(ProbackupTest, unittest.TestCase):
         backup_meta = self.show_pb(backup_dir, 'node', backup_id)
         self.assertEqual(backup_meta['note'], note)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def test_add_big_note_1(self):
         """"""
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
@@ -504,6 +474,3 @@ class SetBackupTest(ProbackupTest, unittest.TestCase):
 
         print(backup_meta)
         self.assertEqual(backup_meta['note'], note)
-
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)

@@ -5,19 +5,16 @@ from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 from sys import exit
 from shutil import copyfile
 
-module_name = 'config'
-
 
 class ConfigTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.expectedFailure
     # @unittest.skip("skip")
     def test_remove_instance_config(self):
-        """remove pg_probackup.conf"""
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        """remove pg_probackup.conself.f"""
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -57,10 +54,9 @@ class ConfigTest(ProbackupTest, unittest.TestCase):
     # @unittest.skip("skip")
     def test_corrupt_backup_content(self):
         """corrupt backup_content.control"""
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 

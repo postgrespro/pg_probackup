@@ -5,8 +5,6 @@ from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 from sys import exit
 import shutil
 
-module_name = 'compatibility'
-
 
 def check_manual_tests_enabled():
     return 'PGPROBACKUP_MANUAL' in os.environ and os.environ['PGPROBACKUP_MANUAL'] == 'ON'
@@ -52,7 +50,7 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         pgprobackup_ssh_agent_path = os.environ['PGPROBACKUP_SSH_AGENT_PATH']
 
         src_pg = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'src'),
+            base_dir=os.path.join(self.module_name, self.fname, 'src'),
             set_replication=True,
             )
         src_pg.slow_start()
@@ -61,7 +59,7 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
             "CREATE TABLE ultimate_question AS SELECT 42 AS answer")
 
         # do full catchup
-        dst_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'dst'))
+        dst_pg = self.make_empty_node(os.path.join(self.module_name, self.fname, 'dst'))
         self.catchup_node(
             backup_mode='FULL',
             source_pgdata=src_pg.data_dir,
@@ -89,16 +87,15 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
             )
 
         # Clean after yourself
-        self.del_test_dir(module_name, self.fname)
+        self.del_test_dir(self.module_name, self.fname)
 
     # @unittest.expectedFailure
     # @unittest.skip("skip")
     def test_backward_compatibility_page(self):
         """Description in jira issue PGPRO-434"""
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -126,7 +123,7 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
 
         # RESTORE old FULL with new binary
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
 
         node_restored.cleanup()
 
@@ -223,17 +220,13 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         pgdata_restored = self.pgdata_content(node_restored.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.expectedFailure
     # @unittest.skip("skip")
     def test_backward_compatibility_delta(self):
         """Description in jira issue PGPRO-434"""
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -261,7 +254,7 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
 
         # RESTORE old FULL with new binary
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
 
         node_restored.cleanup()
 
@@ -357,9 +350,6 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         pgdata_restored = self.pgdata_content(node_restored.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.expectedFailure
     # @unittest.skip("skip")
     def test_backward_compatibility_ptrack(self):
@@ -368,10 +358,9 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         if not self.ptrack:
             return unittest.skip('Skipped because ptrack support is disabled')
 
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             ptrack_enable=True,
             initdb_params=['--data-checksums'])
@@ -404,7 +393,7 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
 
         # RESTORE old FULL with new binary
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
 
         node_restored.cleanup()
 
@@ -471,17 +460,13 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
             pgdata_restored = self.pgdata_content(node_restored.data_dir)
             self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.expectedFailure
     # @unittest.skip("skip")
     def test_backward_compatibility_compression(self):
         """Description in jira issue PGPRO-434"""
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -504,7 +489,7 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
 
         # restore OLD FULL with new binary
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
 
         node_restored.cleanup()
 
@@ -630,9 +615,6 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
             pgdata_restored = self.pgdata_content(node_restored.data_dir)
             self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.expectedFailure
     # @unittest.skip("skip")
     def test_backward_compatibility_merge(self):
@@ -640,10 +622,9 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         Create node, take FULL and PAGE backups with old binary,
         merge them with new binary
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -674,7 +655,7 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
 
         # restore OLD FULL with new binary
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
 
         node_restored.cleanup()
 
@@ -685,9 +666,6 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
             pgdata_restored = self.pgdata_content(node_restored.data_dir)
             self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.expectedFailure
     # @unittest.skip("skip")
     def test_backward_compatibility_merge_1(self):
@@ -696,10 +674,9 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         merge them with new binary.
         old binary version =< 2.2.7
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -749,16 +726,13 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
 
         # restore merged backup
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
         node_restored.cleanup()
 
         self.restore_node(backup_dir, 'node', node_restored)
 
         pgdata_restored = self.pgdata_content(node_restored.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
-
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
 
     # @unittest.expectedFailure
     # @unittest.skip("skip")
@@ -768,10 +742,9 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         merge them with new binary.
         old binary version =< 2.2.7
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -788,7 +761,7 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
             'VACUUM pgbench_accounts')
 
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
 
         # FULL backup with OLD binary
         self.backup_node(backup_dir, 'node', node, old_binary=True)
@@ -879,9 +852,6 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         pgdata_restored = self.pgdata_content(node_restored.data_dir)
         self.compare_pgdata(pgdata4, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.expectedFailure
     # @unittest.skip("skip")
     def test_backward_compatibility_merge_3(self):
@@ -890,10 +860,9 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         merge them with new binary.
         old binary version =< 2.2.7
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -910,7 +879,7 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
             'VACUUM pgbench_accounts')
 
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
 
         # FULL backup with OLD binary
         self.backup_node(
@@ -1002,9 +971,6 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         pgdata_restored = self.pgdata_content(node_restored.data_dir)
         self.compare_pgdata(pgdata4, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.expectedFailure
     # @unittest.skip("skip")
     def test_backward_compatibility_merge_4(self):
@@ -1016,10 +982,9 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
             self.assertTrue(
                 False, 'You need pg_probackup old_binary =< 2.4.0 for this test')
 
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -1036,7 +1001,7 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
             'VACUUM pgbench_accounts')
 
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
 
         # FULL backup with OLD binary
         self.backup_node(
@@ -1079,9 +1044,6 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.expectedFailure
     # @unittest.skip("skip")
     def test_backward_compatibility_merge_5(self):
@@ -1098,10 +1060,9 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
             self.version_to_num(self.old_probackup_version),
             self.version_to_num(self.probackup_version))
 
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -1151,16 +1112,13 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
 
         # restore merged backup
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
         node_restored.cleanup()
 
         self.restore_node(backup_dir, 'node', node_restored)
 
         pgdata_restored = self.pgdata_content(node_restored.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
-
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def test_page_vacuum_truncate(self):
@@ -1173,10 +1131,9 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         and check data correctness
         old binary should be 2.2.x version
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -1224,7 +1181,7 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         pgdata3 = self.pgdata_content(node.data_dir)
 
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
         node_restored.cleanup()
 
         self.restore_node(
@@ -1263,9 +1220,6 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         node_restored.slow_start()
         node_restored.cleanup()
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_page_vacuum_truncate_compression(self):
         """
@@ -1277,10 +1231,9 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         and check data correctness
         old binary should be 2.2.x version
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -1330,7 +1283,7 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         pgdata = self.pgdata_content(node.data_dir)
 
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
         node_restored.cleanup()
 
         self.restore_node(backup_dir, 'node', node_restored)
@@ -1341,9 +1294,6 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
 
         self.set_auto_conf(node_restored, {'port': node_restored.port})
         node_restored.slow_start()
-
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def test_page_vacuum_truncate_compressed_1(self):
@@ -1356,10 +1306,9 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         and check data correctness
         old binary should be 2.2.x version
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -1411,7 +1360,7 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         pgdata3 = self.pgdata_content(node.data_dir)
 
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
         node_restored.cleanup()
 
         self.restore_node(
@@ -1450,9 +1399,6 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         node_restored.slow_start()
         node_restored.cleanup()
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_hidden_files(self):
         """
@@ -1461,10 +1407,9 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         with old binary, then try to delete backup
         with new binary
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -1479,21 +1424,17 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
 
         self.delete_pb(backup_dir, 'node', backup_id)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
-        # @unittest.skip("skip")
+    # @unittest.skip("skip")
     def test_compatibility_tablespace(self):
         """
         https://github.com/postgrespro/pg_probackup/issues/348
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node, old_binary=True)
@@ -1519,7 +1460,7 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         tblspace_new_path = self.get_tblspace_path(node, 'tblspace_new')
 
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
         node_restored.cleanup()
 
         try:
@@ -1560,6 +1501,3 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         if self.paranoia:
             pgdata_restored = self.pgdata_content(node_restored.data_dir)
             self.compare_pgdata(pgdata, pgdata_restored)
-
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)

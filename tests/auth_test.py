@@ -30,13 +30,12 @@ class SimpleAuthTest(ProbackupTest, unittest.TestCase):
             run a backups without EXECUTE rights on
             certain functions
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -146,7 +145,6 @@ class SimpleAuthTest(ProbackupTest, unittest.TestCase):
                 "postgres",
                 "GRANT EXECUTE ON FUNCTION pg_backup_stop() TO backup")
 
-
         self.backup_node(
                 backup_dir, 'node', node, options=['-U', 'backup'])
 
@@ -176,14 +174,12 @@ class SimpleAuthTest(ProbackupTest, unittest.TestCase):
 #            backup_dir, 'node', node,
 #            backup_type='ptrack', options=['-U', 'backup'])
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
 
 class AuthTest(unittest.TestCase):
     pb = None
     node = None
 
+    # TODO move to object scope, replace module_name
     @classmethod
     def setUpClass(cls):
 
@@ -240,6 +236,7 @@ class AuthTest(unittest.TestCase):
 
         cls.pgpass_file = os.path.join(os.path.expanduser('~'), '.pgpass')
 
+    # TODO move to object scope, replace module_name
     @classmethod
     def tearDownClass(cls):
         cls.node.cleanup()

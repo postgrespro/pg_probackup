@@ -10,14 +10,10 @@ from time import sleep
 from threading import Thread
 
 
-module_name = 'ptrack'
-
-
 class PtrackTest(ProbackupTest, unittest.TestCase):
     def setUp(self):
         if self.pg_config_version < self.version_to_num('11.0'):
             return unittest.skip('You need PostgreSQL >= 11 for this test')
-        self.fname = self.id().split('.')[3]
 
     # @unittest.skip("skip")
     def test_drop_rel_during_backup_ptrack(self):
@@ -26,9 +22,9 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         """
         self._check_gdb_flag_or_skip_test()
 
-        backup_dir = os.path.join(self.tmp_path, module_name, self.fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             ptrack_enable=self.ptrack,
             initdb_params=['--data-checksums'])
@@ -85,18 +81,15 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         pgdata_restored = self.pgdata_content(node.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, self.fname)
-
     # @unittest.skip("skip")
     def test_ptrack_without_full(self):
         """ptrack backup without validated full backup"""
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'],
             ptrack_enable=True)
 
-        backup_dir = os.path.join(self.tmp_path, module_name, self.fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -125,18 +118,15 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             self.show_pb(backup_dir, 'node')[0]['status'],
             "ERROR")
 
-        # Clean after yourself
-        self.del_test_dir(module_name, self.fname)
-
     # @unittest.skip("skip")
     def test_ptrack_threads(self):
         """ptrack multi thread backup mode"""
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'],
             ptrack_enable=True)
 
-        backup_dir = os.path.join(self.tmp_path, module_name, self.fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -156,9 +146,6 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             backup_type="ptrack", options=["-j", "4"])
         self.assertEqual(self.show_pb(backup_dir, 'node')[0]['status'], "OK")
 
-        # Clean after yourself
-        self.del_test_dir(module_name, self.fname)
-
     # @unittest.skip("skip")
     def test_ptrack_stop_pg(self):
         """
@@ -166,9 +153,9 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         restart node, check that ptrack backup
         can be taken
         """
-        backup_dir = os.path.join(self.tmp_path, module_name, self.fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             ptrack_enable=True,
             initdb_params=['--data-checksums'])
@@ -193,18 +180,15 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node', node,
             backup_type='ptrack', options=['--stream'])
 
-        # Clean after yourself
-        self.del_test_dir(module_name, self.fname)
-
         # @unittest.skip("skip")
     def test_ptrack_multi_timeline_backup(self):
         """
         t2            /------P2
         t1 ------F---*-----P1
         """
-        backup_dir = os.path.join(self.tmp_path, module_name, self.fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             ptrack_enable=True,
             initdb_params=['--data-checksums'])
@@ -269,9 +253,6 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         self.assertEqual('0', balance)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, self.fname)
-
         # @unittest.skip("skip")
     def test_ptrack_multi_timeline_backup_1(self):
         """
@@ -282,9 +263,9 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         t2              /------P2
         t1 ---F--------*
         """
-        backup_dir = os.path.join(self.tmp_path, module_name, self.fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             ptrack_enable=True,
             initdb_params=['--data-checksums'])
@@ -343,17 +324,14 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         self.assertEqual('0', balance)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, self.fname)
-
     # @unittest.skip("skip")
     def test_ptrack_eat_my_data(self):
         """
         PGPRO-4051
         """
-        backup_dir = os.path.join(self.tmp_path, module_name, self.fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             ptrack_enable=True,
             initdb_params=['--data-checksums'])
@@ -372,7 +350,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         self.backup_node(backup_dir, 'node', node)
 
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'node_restored'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
 
         pgbench = node.pgbench(options=['-T', '300', '-c', '1', '--no-vacuum'])
 
@@ -422,16 +400,13 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
                 'SELECT * FROM pgbench_accounts'),
             'Data loss')
 
-        # Clean after yourself
-        self.del_test_dir(module_name, self.fname)
-
     # @unittest.skip("skip")
     def test_ptrack_simple(self):
         """make node, make full and ptrack stream backups,"
         " restore them and check data correctness"""
-        backup_dir = os.path.join(self.tmp_path, module_name, self.fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             ptrack_enable=True,
             initdb_params=['--data-checksums'])
@@ -469,7 +444,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         result = node.safe_psql("postgres", "SELECT * FROM t_heap")
 
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'node_restored'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
         node_restored.cleanup()
 
         self.restore_node(
@@ -491,15 +466,12 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             result,
             node_restored.safe_psql("postgres", "SELECT * FROM t_heap"))
 
-        # Clean after yourself
-        self.del_test_dir(module_name, self.fname)
-
     # @unittest.skip("skip")
     def test_ptrack_unprivileged(self):
         """"""
-        backup_dir = os.path.join(self.tmp_path, module_name, self.fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             ptrack_enable=True,
             initdb_params=['--data-checksums'])
@@ -690,9 +662,9 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
     # @unittest.expectedFailure
     def test_ptrack_enable(self):
         """make ptrack without full backup, should result in error"""
-        backup_dir = os.path.join(self.tmp_path, module_name, self.fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True, initdb_params=['--data-checksums'],
             pg_options={
                 'checkpoint_timeout': '30s',
@@ -728,9 +700,6 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
                 ' CMD: {1}'.format(repr(e.message), self.cmd)
             )
 
-        # Clean after yourself
-        self.del_test_dir(module_name, self.fname)
-
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_ptrack_disable(self):
@@ -739,9 +708,9 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         enable ptrack, restart postgresql, take ptrack backup
         which should fail
         """
-        backup_dir = os.path.join(self.tmp_path, module_name, self.fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             ptrack_enable=True,
             initdb_params=['--data-checksums'],
@@ -793,15 +762,12 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
                 )
             )
 
-        # Clean after yourself
-        self.del_test_dir(module_name, self.fname)
-
     # @unittest.skip("skip")
     def test_ptrack_uncommitted_xact(self):
         """make ptrack backup while there is uncommitted open transaction"""
-        backup_dir = os.path.join(self.tmp_path, module_name, self.fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             ptrack_enable=True,
             initdb_params=['--data-checksums'],
@@ -831,7 +797,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             pgdata = self.pgdata_content(node.data_dir)
 
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'node_restored'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
         node_restored.cleanup()
 
         self.restore_node(
@@ -851,18 +817,15 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         if self.paranoia:
             self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, self.fname)
-
     # @unittest.skip("skip")
     def test_ptrack_vacuum_full(self):
         """make node, make full and ptrack stream backups,
           restore them and check data correctness"""
         self._check_gdb_flag_or_skip_test()
 
-        backup_dir = os.path.join(self.tmp_path, module_name, self.fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             ptrack_enable=True,
             initdb_params=['--data-checksums'])
@@ -915,7 +878,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         process.join()
 
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'node_restored'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
         node_restored.cleanup()
 
         old_tablespace = self.get_tblspace_path(node, 'somedata')
@@ -938,18 +901,15 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         node_restored.slow_start()
 
-        # Clean after yourself
-        self.del_test_dir(module_name, self.fname)
-
     # @unittest.skip("skip")
     def test_ptrack_vacuum_truncate(self):
         """make node, create table, take full backup,
            delete last 3 pages, vacuum relation,
            take ptrack backup, take second ptrack backup,
            restore last ptrack backup and check data correctness"""
-        backup_dir = os.path.join(self.tmp_path, module_name, self.fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             ptrack_enable=True,
             initdb_params=['--data-checksums'])
@@ -996,7 +956,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             pgdata = self.pgdata_content(node.data_dir)
 
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'node_restored'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
         node_restored.cleanup()
 
         old_tablespace = self.get_tblspace_path(node, 'somedata')
@@ -1021,9 +981,6 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         node_restored.slow_start()
 
-        # Clean after yourself
-        self.del_test_dir(module_name, self.fname)
-
     # @unittest.skip("skip")
     def test_ptrack_get_block(self):
         """
@@ -1032,9 +989,9 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         """
         self._check_gdb_flag_or_skip_test()
 
-        backup_dir = os.path.join(self.tmp_path, module_name, self.fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             ptrack_enable=True,
             initdb_params=['--data-checksums'])
@@ -1090,16 +1047,13 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             result,
             node.safe_psql("postgres", "SELECT * FROM t_heap"))
 
-        # Clean after yourself
-        self.del_test_dir(module_name, self.fname)
-
     # @unittest.skip("skip")
     def test_ptrack_stream(self):
         """make node, make full and ptrack stream backups,
          restore them and check data correctness"""
-        backup_dir = os.path.join(self.tmp_path, module_name, self.fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             ptrack_enable=True,
             initdb_params=['--data-checksums'],
@@ -1178,16 +1132,13 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         ptrack_result_new = node.safe_psql("postgres", "SELECT * FROM t_heap")
         self.assertEqual(ptrack_result, ptrack_result_new)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, self.fname)
-
     # @unittest.skip("skip")
     def test_ptrack_archive(self):
         """make archive node, make full and ptrack backups,
             check data correctness in restored instance"""
-        backup_dir = os.path.join(self.tmp_path, module_name, self.fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             ptrack_enable=True,
             initdb_params=['--data-checksums'],
@@ -1288,9 +1239,6 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         node.cleanup()
 
-        # Clean after yourself
-        self.del_test_dir(module_name, self.fname)
-
     @unittest.skip("skip")
     def test_ptrack_pgpro417(self):
         """
@@ -1298,9 +1246,9 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         delete ptrack backup. Try to take ptrack backup,
         which should fail. Actual only for PTRACK 1.x
         """
-        backup_dir = os.path.join(self.tmp_path, module_name, self.fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             ptrack_enable=True,
             initdb_params=['--data-checksums'],
@@ -1366,9 +1314,6 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
-        # Clean after yourself
-        self.del_test_dir(module_name, self.fname)
-
     @unittest.skip("skip")
     def test_page_pgpro417(self):
         """
@@ -1376,9 +1321,9 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         delete page backup. Try to take ptrack backup, which should fail.
         Actual only for PTRACK 1.x
         """
-        backup_dir = os.path.join(self.tmp_path, module_name, self.fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             ptrack_enable=True,
             initdb_params=['--data-checksums'],
@@ -1432,9 +1377,6 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
-        # Clean after yourself
-        self.del_test_dir(module_name, self.fname)
-
     @unittest.skip("skip")
     def test_full_pgpro417(self):
         """
@@ -1442,9 +1384,9 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         Try to take ptrack backup, which should fail.
         Relevant only for PTRACK 1.x
         """
-        backup_dir = os.path.join(self.tmp_path, module_name, self.fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             ptrack_enable=True,
             initdb_params=['--data-checksums'],
@@ -1504,18 +1446,15 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
-        # Clean after yourself
-        self.del_test_dir(module_name, self.fname)
-
     # @unittest.skip("skip")
     def test_create_db(self):
         """
         Make node, take full backup, create database db1, take ptrack backup,
         restore database and check it presense
         """
-        backup_dir = os.path.join(self.tmp_path, module_name, self.fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             ptrack_enable=True,
             initdb_params=['--data-checksums'],
@@ -1558,7 +1497,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         # RESTORE
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'node_restored'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
 
         node_restored.cleanup()
         self.restore_node(
@@ -1619,9 +1558,6 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
-        # Clean after yourself
-        self.del_test_dir(module_name, self.fname)
-
     # @unittest.skip("skip")
     def test_create_db_on_replica(self):
         """
@@ -1630,9 +1566,9 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         create database db1, take ptrack backup from replica,
         restore database and check it presense
         """
-        backup_dir = os.path.join(self.tmp_path, module_name, self.fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             ptrack_enable=True,
             initdb_params=['--data-checksums'],
@@ -1654,7 +1590,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             "md5(i::text)::tsvector as tsvector from generate_series(0,100) i")
 
         replica = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'replica'))
+            base_dir=os.path.join(self.module_name, self.fname, 'replica'))
         replica.cleanup()
 
         self.backup_node(
@@ -1707,7 +1643,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         # RESTORE
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'node_restored'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
         node_restored.cleanup()
 
         self.restore_node(
@@ -1720,16 +1656,13 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
                 node_restored.data_dir)
             self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, self.fname)
-
     # @unittest.skip("skip")
     def test_alter_table_set_tablespace_ptrack(self):
         """Make node, create tablespace with table, take full backup,
          alter tablespace location, take ptrack backup, restore database."""
-        backup_dir = os.path.join(self.tmp_path, module_name, self.fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             ptrack_enable=True,
             initdb_params=['--data-checksums'],
@@ -1776,7 +1709,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         # RESTORE
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'node_restored'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
         node_restored.cleanup()
 
         self.restore_node(
@@ -1810,17 +1743,14 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 #
 #        self.assertEqual(result, result_new, 'lost some data after restore')
 
-        # Clean after yourself
-        self.del_test_dir(module_name, self.fname)
-
     # @unittest.skip("skip")
     def test_alter_database_set_tablespace_ptrack(self):
         """Make node, create tablespace with database,"
         " take full backup, alter tablespace location,"
         " take ptrack backup, restore database."""
-        backup_dir = os.path.join(self.tmp_path, module_name, self.fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             ptrack_enable=True,
             initdb_params=['--data-checksums'],
@@ -1857,7 +1787,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         # RESTORE
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'node_restored'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
         node_restored.cleanup()
         self.restore_node(
             backup_dir, 'node',
@@ -1878,18 +1808,15 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         node_restored.port = node.port
         node_restored.slow_start()
 
-        # Clean after yourself
-        self.del_test_dir(module_name, self.fname)
-
     # @unittest.skip("skip")
     def test_drop_tablespace(self):
         """
         Make node, create table, alter table tablespace, take ptrack backup,
         move table from tablespace, take ptrack backup
         """
-        backup_dir = os.path.join(self.tmp_path, module_name, self.fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             ptrack_enable=True,
             initdb_params=['--data-checksums'],
@@ -1972,18 +1899,15 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         if self.paranoia:
             self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, self.fname)
-
     # @unittest.skip("skip")
     def test_ptrack_alter_tablespace(self):
         """
         Make node, create table, alter table tablespace, take ptrack backup,
         move table from tablespace, take ptrack backup
         """
-        backup_dir = os.path.join(self.tmp_path, module_name, self.fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             ptrack_enable=True,
             initdb_params=['--data-checksums'],
@@ -2029,7 +1953,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         # Restore ptrack backup
         restored_node = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'restored_node'))
+            base_dir=os.path.join(self.module_name, self.fname, 'restored_node'))
         restored_node.cleanup()
         tblspc_path_new = self.get_tblspace_path(
             restored_node, 'somedata_restored')
@@ -2087,18 +2011,15 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             "postgres", "select * from t_heap")
         self.assertEqual(result, result_new)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, self.fname)
-
     # @unittest.skip("skip")
     def test_ptrack_multiple_segments(self):
         """
         Make node, create table, alter table tablespace,
         take ptrack backup, move table from tablespace, take ptrack backup
         """
-        backup_dir = os.path.join(self.tmp_path, module_name, self.fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             ptrack_enable=True,
             initdb_params=['--data-checksums'],
@@ -2163,7 +2084,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         # RESTORE NODE
         restored_node = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'restored_node'))
+            base_dir=os.path.join(self.module_name, self.fname, 'restored_node'))
         restored_node.cleanup()
         tblspc_path = self.get_tblspace_path(node, 'somedata')
         tblspc_path_new = self.get_tblspace_path(
@@ -2196,9 +2117,6 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         if self.paranoia:
             self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, self.fname)
-
     @unittest.skip("skip")
     def test_atexit_fail(self):
         """
@@ -2206,14 +2124,14 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         Relevant only for PTRACK 1.x
         """
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             ptrack_enable=True,
             initdb_params=['--data-checksums'],
             pg_options={
                 'max_connections': '15'})
 
-        backup_dir = os.path.join(self.tmp_path, module_name, self.fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
@@ -2248,9 +2166,6 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
                 "select * from pg_is_in_backup()").rstrip(),
             "f")
 
-        # Clean after yourself
-        self.del_test_dir(module_name, self.fname)
-
     @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_ptrack_clean(self):
@@ -2259,12 +2174,12 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         Relevant only for PTRACK 1.x
         """
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             ptrack_enable=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, self.fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
@@ -2356,9 +2271,6 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             # check that ptrack bits are cleaned
             self.check_ptrack_clean(idx_ptrack[i], idx_ptrack[i]['size'])
 
-        # Clean after yourself
-        self.del_test_dir(module_name, self.fname)
-
     @unittest.skip("skip")
     def test_ptrack_clean_replica(self):
         """
@@ -2367,14 +2279,14 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         Relevant only for PTRACK 1.x
         """
         master = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'master'),
+            base_dir=os.path.join(self.module_name, self.fname, 'master'),
             set_replication=True,
             ptrack_enable=True,
             initdb_params=['--data-checksums'],
             pg_options={
                 'archive_timeout': '30s'})
 
-        backup_dir = os.path.join(self.tmp_path, module_name, self.fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'master', master)
         master.slow_start()
@@ -2382,7 +2294,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         self.backup_node(backup_dir, 'master', master, options=['--stream'])
 
         replica = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'replica'))
+            base_dir=os.path.join(self.module_name, self.fname, 'replica'))
         replica.cleanup()
 
         self.restore_node(backup_dir, 'master', replica)
@@ -2494,18 +2406,16 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             # check that ptrack bits are cleaned
             self.check_ptrack_clean(idx_ptrack[i], idx_ptrack[i]['size'])
 
-        # Clean after yourself
-        self.del_test_dir(module_name, self.fname)
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_ptrack_cluster_on_btree(self):
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             ptrack_enable=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, self.fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
@@ -2557,18 +2467,15 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         if node.major_version < 11:
             self.check_ptrack_map_sanity(node, idx_ptrack)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, self.fname)
-
     # @unittest.skip("skip")
     def test_ptrack_cluster_on_gist(self):
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             ptrack_enable=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, self.fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
@@ -2628,18 +2535,15 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         pgdata_restored = self.pgdata_content(node.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, self.fname)
-
     # @unittest.skip("skip")
     def test_ptrack_cluster_on_btree_replica(self):
         master = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'master'),
+            base_dir=os.path.join(self.module_name, self.fname, 'master'),
             set_replication=True,
             ptrack_enable=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, self.fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'master', master)
         master.slow_start()
@@ -2652,7 +2556,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         self.backup_node(backup_dir, 'master', master, options=['--stream'])
 
         replica = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'replica'))
+            base_dir=os.path.join(self.module_name, self.fname, 'replica'))
         replica.cleanup()
 
         self.restore_node(backup_dir, 'master', replica)
@@ -2716,7 +2620,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         pgdata = self.pgdata_content(replica.data_dir)
 
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'node'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node'))
         node.cleanup()
 
         self.restore_node(backup_dir, 'replica', node)
@@ -2724,17 +2628,14 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         pgdata_restored = self.pgdata_content(replica.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, self.fname)
-
     # @unittest.skip("skip")
     def test_ptrack_cluster_on_gist_replica(self):
         master = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'master'),
+            base_dir=os.path.join(self.module_name, self.fname, 'master'),
             set_replication=True,
             ptrack_enable=True)
 
-        backup_dir = os.path.join(self.tmp_path, module_name, self.fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'master', master)
         master.slow_start()
@@ -2747,7 +2648,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         self.backup_node(backup_dir, 'master', master, options=['--stream'])
 
         replica = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'replica'))
+            base_dir=os.path.join(self.module_name, self.fname, 'replica'))
         replica.cleanup()
 
         self.restore_node(backup_dir, 'master', replica)
@@ -2817,7 +2718,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             pgdata = self.pgdata_content(replica.data_dir)
 
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'node'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node'))
         node.cleanup()
 
         self.restore_node(backup_dir, 'replica', node)
@@ -2826,20 +2727,17 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             pgdata_restored = self.pgdata_content(replica.data_dir)
             self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, self.fname)
-
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_ptrack_empty(self):
         """Take backups of every available types and check that PTRACK is clean"""
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             ptrack_enable=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, self.fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
@@ -2877,7 +2775,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         node.safe_psql('postgres', 'checkpoint')
 
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'node_restored'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
         node_restored.cleanup()
 
         tblspace1 = self.get_tblspace_path(node, 'somedata')
@@ -2902,9 +2800,6 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             pgdata_restored = self.pgdata_content(node_restored.data_dir)
             self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, self.fname)
-
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_ptrack_empty_replica(self):
@@ -2913,12 +2808,12 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         and check that PTRACK on replica is clean
         """
         master = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'master'),
+            base_dir=os.path.join(self.module_name, self.fname, 'master'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             ptrack_enable=True)
 
-        backup_dir = os.path.join(self.tmp_path, module_name, self.fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'master', master)
         master.slow_start()
@@ -2931,7 +2826,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         self.backup_node(backup_dir, 'master', master, options=['--stream'])
 
         replica = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'replica'))
+            base_dir=os.path.join(self.module_name, self.fname, 'replica'))
         replica.cleanup()
 
         self.restore_node(backup_dir, 'master', replica)
@@ -2987,7 +2882,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             pgdata = self.pgdata_content(replica.data_dir)
 
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'node_restored'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
         node_restored.cleanup()
 
         self.restore_node(
@@ -2998,19 +2893,16 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             pgdata_restored = self.pgdata_content(node_restored.data_dir)
             self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, self.fname)
-
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_ptrack_truncate(self):
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             ptrack_enable=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, self.fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
@@ -3079,13 +2971,10 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         pgdata_restored = self.pgdata_content(node.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, self.fname)
-
     # @unittest.skip("skip")
     def test_basic_ptrack_truncate_replica(self):
         master = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'master'),
+            base_dir=os.path.join(self.module_name, self.fname, 'master'),
             set_replication=True,
             ptrack_enable=True,
             initdb_params=['--data-checksums'],
@@ -3094,7 +2983,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
                 'archive_timeout': '10s',
                 'checkpoint_timeout': '5min'})
 
-        backup_dir = os.path.join(self.tmp_path, module_name, self.fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'master', master)
         master.slow_start()
@@ -3107,7 +2996,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         self.backup_node(backup_dir, 'master', master, options=['--stream'])
 
         replica = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'replica'))
+            base_dir=os.path.join(self.module_name, self.fname, 'replica'))
         replica.cleanup()
 
         self.restore_node(backup_dir, 'master', replica)
@@ -3189,7 +3078,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         pgdata = self.pgdata_content(replica.data_dir)
 
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'node'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node'))
         node.cleanup()
 
         self.restore_node(backup_dir, 'replica', node, data_dir=node.data_dir)
@@ -3208,18 +3097,18 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             'select 1')
 
         # Clean after yourself
-        self.del_test_dir(module_name, self.fname)
+        self.del_test_dir(self.module_name, self.fname)
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_ptrack_vacuum(self):
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             ptrack_enable=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, self.fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
@@ -3295,20 +3184,17 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         pgdata_restored = self.pgdata_content(node.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored, comparision_exclusion)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, self.fname)
-
     # @unittest.skip("skip")
     def test_ptrack_vacuum_replica(self):
         master = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'master'),
+            base_dir=os.path.join(self.module_name, self.fname, 'master'),
             set_replication=True,
             ptrack_enable=True,
             initdb_params=['--data-checksums'],
             pg_options={
                 'checkpoint_timeout': '30'})
 
-        backup_dir = os.path.join(self.tmp_path, module_name, self.fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'master', master)
         master.slow_start()
@@ -3321,7 +3207,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         self.backup_node(backup_dir, 'master', master, options=['--stream'])
 
         replica = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'replica'))
+            base_dir=os.path.join(self.module_name, self.fname, 'replica'))
         replica.cleanup()
 
         self.restore_node(backup_dir, 'master', replica)
@@ -3394,7 +3280,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         pgdata = self.pgdata_content(replica.data_dir)
 
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'node'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node'))
         node.cleanup()
     
         self.restore_node(backup_dir, 'replica', node, data_dir=node.data_dir)
@@ -3402,19 +3288,16 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         pgdata_restored = self.pgdata_content(node.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, self.fname)
-
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_ptrack_vacuum_bits_frozen(self):
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             ptrack_enable=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, self.fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
@@ -3481,18 +3364,15 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         pgdata_restored = self.pgdata_content(node.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored, comparision_exclusion)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, self.fname)
-
     # @unittest.skip("skip")
     def test_ptrack_vacuum_bits_frozen_replica(self):
         master = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'master'),
+            base_dir=os.path.join(self.module_name, self.fname, 'master'),
             set_replication=True,
             ptrack_enable=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, self.fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'master', master)
         master.slow_start()
@@ -3505,7 +3385,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         self.backup_node(backup_dir, 'master', master, options=['--stream'])
 
         replica = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'replica'))
+            base_dir=os.path.join(self.module_name, self.fname, 'replica'))
         replica.cleanup()
 
         self.restore_node(backup_dir, 'master', replica)
@@ -3579,19 +3459,16 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         pgdata_restored = self.pgdata_content(replica.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, self.fname)
-
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_ptrack_vacuum_bits_visibility(self):
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             ptrack_enable=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, self.fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
@@ -3658,19 +3535,16 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         pgdata_restored = self.pgdata_content(node.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored, comparision_exclusion)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, self.fname)
-
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_ptrack_vacuum_full_2(self):
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             ptrack_enable=True,
             pg_options={ 'wal_log_hints': 'on' })
 
-        backup_dir = os.path.join(self.tmp_path, module_name, self.fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
@@ -3736,19 +3610,16 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         pgdata_restored = self.pgdata_content(node.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, self.fname)
-
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_ptrack_vacuum_full_replica(self):
         master = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'master'),
+            base_dir=os.path.join(self.module_name, self.fname, 'master'),
             set_replication=True,
             ptrack_enable=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, self.fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'master', master)
         master.slow_start()
@@ -3760,7 +3631,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         self.backup_node(backup_dir, 'master', master, options=['--stream'])
         replica = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'replica'))
+            base_dir=os.path.join(self.module_name, self.fname, 'replica'))
         replica.cleanup()
 
         self.restore_node(backup_dir, 'master', replica)
@@ -3837,19 +3708,16 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         pgdata_restored = self.pgdata_content(replica.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, self.fname)
-
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_ptrack_vacuum_truncate_2(self):
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             ptrack_enable=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, self.fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
@@ -3905,7 +3773,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         pgdata = self.pgdata_content(node.data_dir)
 
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'node_restored'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
         node_restored.cleanup()
 
         self.restore_node(backup_dir, 'node', node_restored)
@@ -3913,19 +3781,16 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         pgdata_restored = self.pgdata_content(node_restored.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, self.fname)
-
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_ptrack_vacuum_truncate_replica(self):
         master = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'master'),
+            base_dir=os.path.join(self.module_name, self.fname, 'master'),
             set_replication=True,
             ptrack_enable=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, self.fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'master', master)
         master.slow_start()
@@ -3938,7 +3803,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         self.backup_node(backup_dir, 'master', master, options=['--stream'])
 
         replica = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'replica'))
+            base_dir=os.path.join(self.module_name, self.fname, 'replica'))
         replica.cleanup()
 
         self.restore_node(backup_dir, 'master', replica)
@@ -4010,16 +3875,13 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         pgdata = self.pgdata_content(replica.data_dir)
 
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'node_restored'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
         node_restored.cleanup()
 
         self.restore_node(backup_dir, 'replica', node_restored)
 
         pgdata_restored = self.pgdata_content(node_restored.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
-
-        # Clean after yourself
-        self.del_test_dir(module_name, self.fname)
 
     @unittest.skip("skip")
     def test_ptrack_recovery(self):
@@ -4028,12 +3890,12 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         Actual only for PTRACK 1.x
         """
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             ptrack_enable=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, self.fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
@@ -4079,14 +3941,11 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             # check that ptrack has correct bits after recovery
             self.check_ptrack_recovery(idx_ptrack[i])
 
-        # Clean after yourself
-        self.del_test_dir(module_name, self.fname)
-
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_ptrack_recovery_1(self):
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             ptrack_enable=True,
             initdb_params=['--data-checksums'],
@@ -4094,7 +3953,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
                 'shared_buffers': '512MB',
                 'max_wal_size': '3GB'})
 
-        backup_dir = os.path.join(self.tmp_path, module_name, self.fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
@@ -4155,7 +4014,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         pgdata = self.pgdata_content(node.data_dir)
 
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'node_restored'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
         node_restored.cleanup()
 
         self.restore_node(
@@ -4164,19 +4023,16 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         pgdata_restored = self.pgdata_content(node_restored.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, self.fname)
-
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_ptrack_zero_changes(self):
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             ptrack_enable=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, self.fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
@@ -4208,14 +4064,11 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         pgdata_restored = self.pgdata_content(node.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, self.fname)
-
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_ptrack_pg_resetxlog(self):
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             ptrack_enable=True,
             initdb_params=['--data-checksums'],
@@ -4223,7 +4076,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
                 'shared_buffers': '512MB',
                 'max_wal_size': '3GB'})
 
-        backup_dir = os.path.join(self.tmp_path, module_name, self.fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
@@ -4331,19 +4184,16 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 #        pgdata_restored = self.pgdata_content(node_restored.data_dir)
 #        self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, self.fname)
-
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_corrupt_ptrack_map(self):
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             ptrack_enable=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, self.fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
@@ -4495,9 +4345,6 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         pgdata_restored = self.pgdata_content(node.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, self.fname)
-
     # @unittest.skip("skip")
     def test_horizon_lsn_ptrack(self):
         """
@@ -4511,9 +4358,9 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             self.version_to_num('2.4.15'),
             'You need pg_probackup old_binary =< 2.4.15 for this test')
 
-        backup_dir = os.path.join(self.tmp_path, module_name, self.fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, self.fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             ptrack_enable=True,
             initdb_params=['--data-checksums'])
@@ -4560,6 +4407,3 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         # make sure that backup size is exactly the same
         self.assertEqual(delta_bytes, ptrack_bytes)
-
-        # Clean after yourself
-        self.del_test_dir(module_name, self.fname)

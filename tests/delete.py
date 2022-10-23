@@ -2,10 +2,6 @@ import unittest
 import os
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 import subprocess
-from sys import exit
-
-
-module_name = 'delete'
 
 
 class DeleteTest(ProbackupTest, unittest.TestCase):
@@ -14,12 +10,11 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
     # @unittest.expectedFailure
     def test_delete_full_backups(self):
         """delete full backups"""
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -51,19 +46,15 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(show_backups[0]['id'], id_1)
         self.assertEqual(show_backups[1]['id'], id_3)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_del_instance_archive(self):
         """delete full backups"""
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -83,19 +74,15 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
         # Delete instance
         self.del_instance(backup_dir, 'node')
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_delete_archive_mix_compress_and_non_compressed_segments(self):
         """delete full backups"""
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir="{0}/{1}/node".format(self.module_name, self.fname),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(
@@ -142,18 +129,14 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
                 '--retention-redundancy=3',
                 '--delete-expired'])
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_delete_increment_page(self):
         """delete increment and all after him"""
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -182,22 +165,18 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(show_backups[1]['backup-mode'], "FULL")
         self.assertEqual(show_backups[1]['status'], "OK")
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_delete_increment_ptrack(self):
         """delete increment and all after him"""
         if not self.ptrack:
             return unittest.skip('Skipped because ptrack support is disabled')
 
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             ptrack_enable=self.ptrack,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -230,9 +209,6 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(show_backups[1]['backup-mode'], "FULL")
         self.assertEqual(show_backups[1]['status'], "OK")
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_delete_orphaned_wal_segments(self):
         """
@@ -240,12 +216,11 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
         delete second backup without --wal option,
         then delete orphaned wals via --wal option
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -302,9 +277,6 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
         wals = [f for f in os.listdir(wals_dir) if os.path.isfile(os.path.join(wals_dir, f))]
         self.assertEqual (0, len(wals), "Number of wals should be equal to 0")
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_delete_wal_between_multiple_timelines(self):
         """
@@ -315,12 +287,11 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
         [A1, B1) are deleted and backups B1 and A2 keep
         their WAL
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -332,7 +303,7 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
         node.pgbench_init(scale=3)
 
         node2 = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node2'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node2'))
         node2.cleanup()
 
         self.restore_node(backup_dir, 'node', node2)
@@ -356,22 +327,18 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
 
         self.validate_pb(backup_dir)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_delete_backup_with_empty_control_file(self):
         """
         take backup, truncate its control file,
         try to delete it via 'delete' command
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'],
             set_replication=True)
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
@@ -397,18 +364,14 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
 
         self.delete_pb(backup_dir, 'node', backup_id=backup_id)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_delete_interleaved_incremental_chains(self):
         """complicated case of interleaved backup chains"""
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -521,9 +484,6 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
         print(self.show_pb(
             backup_dir, 'node', as_json=False, as_text=True))
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_delete_multiple_descendants(self):
         """
@@ -536,12 +496,11 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
         FULLb           |
                       FULLa  should be deleted
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -693,9 +652,6 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
 
         self.assertEqual(len(self.show_pb(backup_dir, 'node')), 4)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_delete_multiple_descendants_dry_run(self):
         """
@@ -706,12 +662,11 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
               |
             FULLa
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -798,17 +753,13 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
 
         self.validate_pb(backup_dir, 'node')
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     def test_delete_error_backups(self):
         """delete increment and all after him"""
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -869,6 +820,3 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(show_backups[1]['status'], "OK")
         self.assertEqual(show_backups[2]['status'], "OK")
         self.assertEqual(show_backups[3]['status'], "OK")
-
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
