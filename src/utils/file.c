@@ -2933,13 +2933,13 @@ fio_send_file_local(const char *from_fullpath, FILE* out, bool cut_zero_tail,
 
 	if (st.write_size < st.read_size)
 	{
-		/*
-		 * We still need to calc crc for zero tail.
-		 */
-		fio_send_file_crc(&st, NULL, 0);
-
 		if (!cut_zero_tail)
 		{
+			/*
+			 * We still need to calc crc for zero tail.
+			 */
+			fio_send_file_crc(&st, NULL, 0);
+
 			/*
 			 * Let's write single zero byte to the end of file to restore
 			 * logical size.
