@@ -2649,9 +2649,9 @@ find_zero_tail(char *buf, size_t len)
 		return 0;
 
 	/* fast check for last bytes */
-	i = (len-1) & ~(PAGE_ZEROSEARCH_FINE_GRANULARITY-1);
-	l = len - i;
-	if (memcmp(buf + i, zerobuf, i) != 0)
+	l = Min(len, PAGE_ZEROSEARCH_FINE_GRANULARITY);
+	i = len - l;
+	if (memcmp(buf + i, zerobuf, l) != 0)
 		return len;
 
 	/* coarse search for zero tail */
