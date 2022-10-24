@@ -2911,6 +2911,17 @@ fio_send_file_local(const char *from_fullpath, FILE* out, bool cut_zero_tail,
 		if (read_len > 0)
 		{
 			non_zero_len = find_zero_tail(buf, read_len);
+			/*
+			 * It is dirty trick to silence warnings in CFS GC process:
+			 * backup at least cfs header size bytes.
+			 */
+			if (st.read_size + non_zero_len < PAGE_ZEROSEARCH_FINE_GRANULARITY &&
+				st.read_size + read_len > 0)
+			{
+				non_zero_len = Min(PAGE_ZEROSEARCH_FINE_GRANULARITY,
+								   st.read_size + read_len);
+				non_zero_len -= st.read_size;
+			}
 			if (non_zero_len > 0)
 			{
 				fio_send_file_crc(&st, buf, non_zero_len);
