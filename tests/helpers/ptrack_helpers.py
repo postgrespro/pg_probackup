@@ -204,6 +204,11 @@ class ProbackupTest(object):
 
     def __init__(self, *args, **kwargs):
         super(ProbackupTest, self).__init__(*args, **kwargs)
+
+        if isinstance(self, unittest.TestCase):
+            self.module_name = self.id().split('.')[1]
+            self.fname = self.id().split('.')[3]
+
         if '-v' in argv or '--verbose' in argv:
             self.verbose = True
         else:
@@ -366,6 +371,13 @@ class ProbackupTest(object):
                     self.ptrack = True
 
         os.environ["PGAPPNAME"] = "pg_probackup"
+
+    def tearDown(self):
+        if isinstance(self, unittest.TestCase):
+            module_name = self.id().split('.')[1]
+            fname = self.id().split('.')[3]
+            if is_test_result_ok(self):
+                self.del_test_dir(module_name, fname)
 
     @property
     def pg_config_version(self):
