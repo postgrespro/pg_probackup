@@ -105,8 +105,7 @@ class CfsRestoreNoencEmptyTablespaceTest(CfsRestoreBase):
         tblspace = self.node.safe_psql(
             "postgres",
             "SELECT * FROM pg_tablespace WHERE spcname='{0}'".format(tblspace_name)
-        )
-        tblspace = str(tblspace)
+        ).decode("UTF-8")
         self.assertTrue(
             tblspace_name in tblspace and "compression=true" in tblspace,
             "ERROR: The tablespace not restored or it restored without compressions"
