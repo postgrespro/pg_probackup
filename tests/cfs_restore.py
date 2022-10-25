@@ -13,10 +13,7 @@ import unittest
 import shutil
 
 from .helpers.cfs_helpers import find_by_name
-from .helpers.ptrack_helpers import ProbackupTest, ProbackupException, is_test_result_ok
-
-
-module_name = 'cfs_restore'
+from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 
 tblspace_name = 'cfs_tblspace'
 tblspace_name_new = 'cfs_tblspace_new'
@@ -24,11 +21,10 @@ tblspace_name_new = 'cfs_tblspace_new'
 
 class CfsRestoreBase(ProbackupTest, unittest.TestCase):
     def setUp(self):
-        self.fname = self.id().split('.')[3]
-        self.backup_dir = os.path.join(self.tmp_path, module_name, self.fname, 'backup')
+        self.backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
 
         self.node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, self.fname),
+            base_dir="{0}/{1}/node".format(self.module_name, self.fname),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -59,13 +55,6 @@ class CfsRestoreBase(ProbackupTest, unittest.TestCase):
 
     def add_data_in_cluster(self):
         pass
-
-    @unittest.skipUnless(ProbackupTest.enterprise, 'skip')
-    def tearDown(self):
-        module_name = self.id().split('.')[1]
-        fname = self.id().split('.')[3]
-        if is_test_result_ok(self):
-            self.del_test_dir(module_name, fname)
 
 
 class CfsRestoreNoencEmptyTablespaceTest(CfsRestoreBase):
@@ -214,7 +203,7 @@ class CfsRestoreNoencTest(CfsRestoreBase):
         self.node.cleanup()
         shutil.rmtree(self.get_tblspace_path(self.node, tblspace_name))
 
-        node_new = self.make_simple_node(base_dir="{0}/{1}/node_new_location".format(module_name, self.fname))
+        node_new = self.make_simple_node(base_dir="{0}/{1}/node_new_location".format(self.module_name, self.fname))
         node_new.cleanup()
 
         try:
@@ -257,7 +246,7 @@ class CfsRestoreNoencTest(CfsRestoreBase):
         self.node.cleanup()
         shutil.rmtree(self.get_tblspace_path(self.node, tblspace_name))
 
-        node_new = self.make_simple_node(base_dir="{0}/{1}/node_new_location".format(module_name, self.fname))
+        node_new = self.make_simple_node(base_dir="{0}/{1}/node_new_location".format(self.module_name, self.fname))
         node_new.cleanup()
 
         try:
