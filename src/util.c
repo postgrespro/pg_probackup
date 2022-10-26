@@ -349,22 +349,6 @@ get_pgcontrol_checksum(const char *pgdata_path)
 	return ControlFile.crc;
 }
 
-DBState
-get_system_dbstate(const char *pgdata_path, fio_location location)
-{
-	ControlFileData ControlFile;
-	char	   *buffer;
-	size_t		size;
-
-	buffer = slurpFile(pgdata_path, XLOG_CONTROL_FILE, &size, false, location);
-	if (buffer == NULL)
-		return 0;
-	digestControlFile(&ControlFile, buffer, size);
-	pg_free(buffer);
-
-	return ControlFile.state;
-}
-
 void
 get_redo(const char *pgdata_path, fio_location pgdata_location, RedoParams *redo)
 {

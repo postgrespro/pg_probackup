@@ -53,7 +53,7 @@ ConfigOption instance_options[] =
 	/* Instance options */
 	{
 		's', 'D', "pgdata",
-		&instance_config.pgdata, SOURCE_CMD, 0,
+		&instance_config.pgdata, SOURCE_CMD, SOURCE_DEFAULT,
 		OPTION_INSTANCE_GROUP, 0, option_get_value
 	},
 	{
@@ -70,49 +70,49 @@ ConfigOption instance_options[] =
 #endif
 	{
 		's', 'E', "external-dirs",
-		&instance_config.external_dir_str, SOURCE_CMD, 0,
+		&instance_config.external_dir_str, SOURCE_CMD, SOURCE_DEFAULT,
 		OPTION_INSTANCE_GROUP, 0, option_get_value
 	},
 	/* Connection options */
 	{
 		's', 'd', "pgdatabase",
-		&instance_config.conn_opt.pgdatabase, SOURCE_CMD, 0,
+		&instance_config.conn_opt.pgdatabase, SOURCE_CMD, SOURCE_DEFAULT,
 		OPTION_CONN_GROUP, 0, option_get_value
 	},
 	{
 		's', 'h', "pghost",
-		&instance_config.conn_opt.pghost, SOURCE_CMD, 0,
+		&instance_config.conn_opt.pghost, SOURCE_CMD, SOURCE_DEFAULT,
 		OPTION_CONN_GROUP, 0, option_get_value
 	},
 	{
 		's', 'p', "pgport",
-		&instance_config.conn_opt.pgport, SOURCE_CMD, 0,
+		&instance_config.conn_opt.pgport, SOURCE_CMD, SOURCE_DEFAULT,
 		OPTION_CONN_GROUP, 0, option_get_value
 	},
 	{
 		's', 'U', "pguser",
-		&instance_config.conn_opt.pguser, SOURCE_CMD, 0,
+		&instance_config.conn_opt.pguser, SOURCE_CMD, SOURCE_DEFAULT,
 		OPTION_CONN_GROUP, 0, option_get_value
 	},
 	/* Replica options */
 	{
 		's', 202, "master-db",
-		&instance_config.master_conn_opt.pgdatabase, SOURCE_CMD, 0,
+		&instance_config.master_conn_opt.pgdatabase, SOURCE_CMD, SOURCE_DEFAULT,
 		OPTION_REPLICA_GROUP, 0, option_get_value
 	},
 	{
 		's', 203, "master-host",
-		&instance_config.master_conn_opt.pghost, SOURCE_CMD, 0,
+		&instance_config.master_conn_opt.pghost, SOURCE_CMD, SOURCE_DEFAULT,
 		OPTION_REPLICA_GROUP, 0, option_get_value
 	},
 	{
 		's', 204, "master-port",
-		&instance_config.master_conn_opt.pgport, SOURCE_CMD, 0,
+		&instance_config.master_conn_opt.pgport, SOURCE_CMD, SOURCE_DEFAULT,
 		OPTION_REPLICA_GROUP, 0, option_get_value
 	},
 	{
 		's', 205, "master-user",
-		&instance_config.master_conn_opt.pguser, SOURCE_CMD, 0,
+		&instance_config.master_conn_opt.pguser, SOURCE_CMD, SOURCE_DEFAULT,
 		OPTION_REPLICA_GROUP, 0, option_get_value
 	},
 	{
@@ -128,17 +128,17 @@ ConfigOption instance_options[] =
 	},
 	{
 		's', 208, "archive-host",
-		&instance_config.archive.host, SOURCE_CMD, 0,
+		&instance_config.archive.host, SOURCE_CMD, SOURCE_DEFAULT,
 		OPTION_ARCHIVE_GROUP, 0, option_get_value
 	},
 	{
 		's', 209, "archive-port",
-		&instance_config.archive.port, SOURCE_CMD, 0,
+		&instance_config.archive.port, SOURCE_CMD, SOURCE_DEFAULT,
 		OPTION_ARCHIVE_GROUP, 0, option_get_value
 	},
 	{
 		's', 210, "archive-user",
-		&instance_config.archive.user, SOURCE_CMD, 0,
+		&instance_config.archive.user, SOURCE_CMD, SOURCE_DEFAULT,
 		OPTION_ARCHIVE_GROUP, 0, option_get_value
 	},
 	{
@@ -149,37 +149,37 @@ ConfigOption instance_options[] =
 	/* Logging options */
 	{
 		'f', 212, "log-level-console",
-		assign_log_level_console, SOURCE_CMD, 0,
+		assign_log_level_console, SOURCE_CMD, SOURCE_DEFAULT,
 		OPTION_LOG_GROUP, 0, get_log_level_console
 	},
 	{
 		'f', 213, "log-level-file",
-		assign_log_level_file, SOURCE_CMD, 0,
+		assign_log_level_file, SOURCE_CMD, SOURCE_DEFAULT,
 		OPTION_LOG_GROUP, 0, get_log_level_file
 	},
 	{
 		'f', 214, "log-format-console",
-		assign_log_format_console, SOURCE_CMD_STRICT, 0,
+		assign_log_format_console, SOURCE_CMD_STRICT, SOURCE_DEFAULT,
 		OPTION_LOG_GROUP, 0, get_log_format_console
 	},
 	{
 		'f', 215, "log-format-file",
-		assign_log_format_file, SOURCE_CMD, 0,
+		assign_log_format_file, SOURCE_CMD, SOURCE_DEFAULT,
 		OPTION_LOG_GROUP, 0, get_log_format_file
 	},
 	{
 		's', 216, "log-filename",
-		&instance_config.logger.log_filename, SOURCE_CMD, 0,
+		&instance_config.logger.log_filename, SOURCE_CMD, SOURCE_DEFAULT,
 		OPTION_LOG_GROUP, 0, option_get_value
 	},
 	{
 		's', 217, "error-log-filename",
-		&instance_config.logger.error_log_filename, SOURCE_CMD, 0,
+		&instance_config.logger.error_log_filename, SOURCE_CMD, SOURCE_DEFAULT,
 		OPTION_LOG_GROUP, 0, option_get_value
 	},
 	{
 		's', 218, "log-directory",
-		&instance_config.logger.log_directory, SOURCE_CMD, 0,
+		&instance_config.logger.log_directory, SOURCE_CMD, SOURCE_DEFAULT,
 		OPTION_LOG_GROUP, 0, option_get_value
 	},
 	{
@@ -195,64 +195,64 @@ ConfigOption instance_options[] =
 	/* Retention options */
 	{
 		'u', 221, "retention-redundancy",
-		&instance_config.retention_redundancy, SOURCE_CMD, 0,
+		&instance_config.retention_redundancy, SOURCE_CMD, SOURCE_DEFAULT,
 		OPTION_RETENTION_GROUP, 0, option_get_value
 	},
 	{
 		'u', 222, "retention-window",
-		&instance_config.retention_window, SOURCE_CMD, 0,
+		&instance_config.retention_window, SOURCE_CMD, SOURCE_DEFAULT,
 		OPTION_RETENTION_GROUP, 0, option_get_value
 	},
 	{
 		'u', 223, "wal-depth",
-		&instance_config.wal_depth, SOURCE_CMD, 0,
+		&instance_config.wal_depth, SOURCE_CMD, SOURCE_DEFAULT,
 		OPTION_RETENTION_GROUP, 0, option_get_value
 	},
 	/* Compression options */
 	{
 		'f', 224, "compress-algorithm",
-		assign_compress_alg, SOURCE_CMD, 0,
+		assign_compress_alg, SOURCE_CMD, SOURCE_DEFAULT,
 		OPTION_COMPRESS_GROUP, 0, get_compress_alg
 	},
 	{
 		'u', 225, "compress-level",
-		&instance_config.compress_level, SOURCE_CMD, 0,
+		&instance_config.compress_level, SOURCE_CMD, SOURCE_DEFAULT,
 		OPTION_COMPRESS_GROUP, 0, option_get_value
 	},
 	/* Remote backup options */
 	{
 		's', 226, "remote-proto",
-		&instance_config.remote.proto, SOURCE_CMD, 0,
+		&instance_config.remote.proto, SOURCE_CMD, SOURCE_DEFAULT,
 		OPTION_REMOTE_GROUP, 0, option_get_value
 	},
 	{
 		's', 227, "remote-host",
-		&instance_config.remote.host, SOURCE_CMD, 0,
+		&instance_config.remote.host, SOURCE_CMD, SOURCE_DEFAULT,
 		OPTION_REMOTE_GROUP, 0, option_get_value
 	},
 	{
 		's', 228, "remote-port",
-		&instance_config.remote.port, SOURCE_CMD, 0,
+		&instance_config.remote.port, SOURCE_CMD, SOURCE_DEFAULT,
 		OPTION_REMOTE_GROUP, 0, option_get_value
 	},
 	{
 		's', 229, "remote-path",
-		&instance_config.remote.path, SOURCE_CMD, 0,
+		&instance_config.remote.path, SOURCE_CMD, SOURCE_DEFAULT,
 		OPTION_REMOTE_GROUP, 0, option_get_value
 	},
 	{
 		's', 230, "remote-user",
-		&instance_config.remote.user, SOURCE_CMD, 0,
+		&instance_config.remote.user, SOURCE_CMD, SOURCE_DEFAULT,
 		OPTION_REMOTE_GROUP, 0, option_get_value
 	},
 	{
 		's', 231, "ssh-options",
-		&instance_config.remote.ssh_options, SOURCE_CMD, 0,
+		&instance_config.remote.ssh_options, SOURCE_CMD, SOURCE_DEFAULT,
 		OPTION_REMOTE_GROUP, 0, option_get_value
 	},
 	{
 		's', 232, "ssh-config",
-		&instance_config.remote.ssh_config, SOURCE_CMD, 0,
+		&instance_config.remote.ssh_config, SOURCE_CMD, SOURCE_DEFAULT,
 		OPTION_REMOTE_GROUP, 0, option_get_value
 	},
 	{ 0 }
@@ -412,7 +412,7 @@ readInstanceConfigFile(InstanceState *instanceState)
 		/* Instance options */
 		{
 			's', 'D', "pgdata",
-			&instance->pgdata, SOURCE_CMD, 0,
+			&instance->pgdata, SOURCE_CMD, SOURCE_DEFAULT,
 			OPTION_INSTANCE_GROUP, 0, option_get_value
 		},
 		{
@@ -429,49 +429,49 @@ readInstanceConfigFile(InstanceState *instanceState)
 	#endif
 		{
 			's', 'E', "external-dirs",
-			&instance->external_dir_str, SOURCE_CMD, 0,
+			&instance->external_dir_str, SOURCE_CMD, SOURCE_DEFAULT,
 			OPTION_INSTANCE_GROUP, 0, option_get_value
 		},
 		/* Connection options */
 		{
 			's', 'd', "pgdatabase",
-			&instance->conn_opt.pgdatabase, SOURCE_CMD, 0,
+			&instance->conn_opt.pgdatabase, SOURCE_CMD, SOURCE_DEFAULT,
 			OPTION_CONN_GROUP, 0, option_get_value
 		},
 		{
 			's', 'h', "pghost",
-			&instance->conn_opt.pghost, SOURCE_CMD, 0,
+			&instance->conn_opt.pghost, SOURCE_CMD, SOURCE_DEFAULT,
 			OPTION_CONN_GROUP, 0, option_get_value
 		},
 		{
 			's', 'p', "pgport",
-			&instance->conn_opt.pgport, SOURCE_CMD, 0,
+			&instance->conn_opt.pgport, SOURCE_CMD, SOURCE_DEFAULT,
 			OPTION_CONN_GROUP, 0, option_get_value
 		},
 		{
 			's', 'U', "pguser",
-			&instance->conn_opt.pguser, SOURCE_CMD, 0,
+			&instance->conn_opt.pguser, SOURCE_CMD, SOURCE_DEFAULT,
 			OPTION_CONN_GROUP, 0, option_get_value
 		},
 		/* Replica options */
 		{
 			's', 202, "master-db",
-			&instance->master_conn_opt.pgdatabase, SOURCE_CMD, 0,
+			&instance->master_conn_opt.pgdatabase, SOURCE_CMD, SOURCE_DEFAULT,
 			OPTION_REPLICA_GROUP, 0, option_get_value
 		},
 		{
 			's', 203, "master-host",
-			&instance->master_conn_opt.pghost, SOURCE_CMD, 0,
+			&instance->master_conn_opt.pghost, SOURCE_CMD, SOURCE_DEFAULT,
 			OPTION_REPLICA_GROUP, 0, option_get_value
 		},
 		{
 			's', 204, "master-port",
-			&instance->master_conn_opt.pgport, SOURCE_CMD, 0,
+			&instance->master_conn_opt.pgport, SOURCE_CMD, SOURCE_DEFAULT,
 			OPTION_REPLICA_GROUP, 0, option_get_value
 		},
 		{
 			's', 205, "master-user",
-			&instance->master_conn_opt.pguser, SOURCE_CMD, 0,
+			&instance->master_conn_opt.pguser, SOURCE_CMD, SOURCE_DEFAULT,
 			OPTION_REPLICA_GROUP, 0, option_get_value
 		},
 		{
@@ -487,66 +487,66 @@ readInstanceConfigFile(InstanceState *instanceState)
 		},
 		{
 			's', 208, "archive-host",
-			&instance_config.archive.host, SOURCE_CMD, 0,
+			&instance_config.archive.host, SOURCE_CMD, SOURCE_DEFAULT,
 			OPTION_ARCHIVE_GROUP, 0, option_get_value
 		},
 		{
 			's', 209, "archive-port",
-			&instance_config.archive.port, SOURCE_CMD, 0,
+			&instance_config.archive.port, SOURCE_CMD, SOURCE_DEFAULT,
 			OPTION_ARCHIVE_GROUP, 0, option_get_value
 		},
 		{
 			's', 210, "archive-user",
-			&instance_config.archive.user, SOURCE_CMD, 0,
+			&instance_config.archive.user, SOURCE_CMD, SOURCE_DEFAULT,
 			OPTION_ARCHIVE_GROUP, 0, option_get_value
 		},
 		{
 			's', 211, "restore-command",
-			&instance->restore_command, SOURCE_CMD, 0,
+			&instance->restore_command, SOURCE_CMD, SOURCE_DEFAULT,
 			OPTION_ARCHIVE_GROUP, 0, option_get_value
 		},
 
 		/* Instance options */
 		{
 			's', 'D', "pgdata",
-			&instance->pgdata, SOURCE_CMD, 0,
+			&instance->pgdata, SOURCE_CMD, SOURCE_DEFAULT,
 			OPTION_INSTANCE_GROUP, 0, option_get_value
 		},
 
 		/* Logging options */
 		{
 			's', 212, "log-level-console",
-			&log_level_console, SOURCE_CMD, 0,
+			&log_level_console, SOURCE_CMD, SOURCE_DEFAULT,
 			OPTION_LOG_GROUP, 0, option_get_value
 		},
 		{
 			's', 213, "log-level-file",
-			&log_level_file, SOURCE_CMD, 0,
+			&log_level_file, SOURCE_CMD, SOURCE_DEFAULT,
 			OPTION_LOG_GROUP, 0, option_get_value
 		},
 		{
 			's', 214, "log-format-console",
-			&log_format_console, SOURCE_CMD_STRICT, 0,
+			&log_format_console, SOURCE_CMD_STRICT, SOURCE_DEFAULT,
 			OPTION_LOG_GROUP, 0, option_get_value
 		},
 		{
 			's', 215, "log-format-file",
-			&log_format_file, SOURCE_CMD, 0,
+			&log_format_file, SOURCE_CMD, SOURCE_DEFAULT,
 			OPTION_LOG_GROUP, 0, option_get_value
 		},
 		{
 			's', 216, "log-filename",
-			&instance->logger.log_filename, SOURCE_CMD, 0,
+			&instance->logger.log_filename, SOURCE_CMD, SOURCE_DEFAULT,
 			OPTION_LOG_GROUP, 0, option_get_value
 		},
 		{
 			's', 217, "error-log-filename",
-			&instance->logger.error_log_filename, SOURCE_CMD, 0,
+			&instance->logger.error_log_filename, SOURCE_CMD, SOURCE_DEFAULT,
 			OPTION_LOG_GROUP, 0, option_get_value
 		},
 		{
 			's', 218, "log-directory",
-			&instance->logger.log_directory, SOURCE_CMD, 0,
+			&instance->logger.log_directory, SOURCE_CMD, SOURCE_DEFAULT,
 			OPTION_LOG_GROUP, 0, option_get_value
 		},
 		{
@@ -562,64 +562,64 @@ readInstanceConfigFile(InstanceState *instanceState)
 		/* Retention options */
 		{
 			'u', 221, "retention-redundancy",
-			&instance->retention_redundancy, SOURCE_CMD, 0,
+			&instance->retention_redundancy, SOURCE_CMD, SOURCE_DEFAULT,
 			OPTION_RETENTION_GROUP, 0, option_get_value
 		},
 		{
 			'u', 222, "retention-window",
-			&instance->retention_window, SOURCE_CMD, 0,
+			&instance->retention_window, SOURCE_CMD, SOURCE_DEFAULT,
 			OPTION_RETENTION_GROUP, 0, option_get_value
 		},
 		{
 			'u', 223, "wal-depth",
-			&instance->wal_depth, SOURCE_CMD, 0,
+			&instance->wal_depth, SOURCE_CMD, SOURCE_DEFAULT,
 			OPTION_RETENTION_GROUP, 0, option_get_value
 		},
 		/* Compression options */
 		{
 			's', 224, "compress-algorithm",
-			&compress_alg, SOURCE_CMD, 0,
+			&compress_alg, SOURCE_CMD, SOURCE_DEFAULT,
 			OPTION_LOG_GROUP, 0, option_get_value
 		},
 		{
 			'u', 225, "compress-level",
-			&instance->compress_level, SOURCE_CMD, 0,
+			&instance->compress_level, SOURCE_CMD, SOURCE_DEFAULT,
 			OPTION_COMPRESS_GROUP, 0, option_get_value
 		},
 		/* Remote backup options */
 		{
 			's', 226, "remote-proto",
-			&instance->remote.proto, SOURCE_CMD, 0,
+			&instance->remote.proto, SOURCE_CMD, SOURCE_DEFAULT,
 			OPTION_REMOTE_GROUP, 0, option_get_value
 		},
 		{
 			's', 227, "remote-host",
-			&instance->remote.host, SOURCE_CMD, 0,
+			&instance->remote.host, SOURCE_CMD, SOURCE_DEFAULT,
 			OPTION_REMOTE_GROUP, 0, option_get_value
 		},
 		{
 			's', 228, "remote-port",
-			&instance->remote.port, SOURCE_CMD, 0,
+			&instance->remote.port, SOURCE_CMD, SOURCE_DEFAULT,
 			OPTION_REMOTE_GROUP, 0, option_get_value
 		},
 		{
 			's', 229, "remote-path",
-			&instance->remote.path, SOURCE_CMD, 0,
+			&instance->remote.path, SOURCE_CMD, SOURCE_DEFAULT,
 			OPTION_REMOTE_GROUP, 0, option_get_value
 		},
 		{
 			's', 230, "remote-user",
-			&instance->remote.user, SOURCE_CMD, 0,
+			&instance->remote.user, SOURCE_CMD, SOURCE_DEFAULT,
 			OPTION_REMOTE_GROUP, 0, option_get_value
 		},
 		{
 			's', 231, "ssh-options",
-			&instance->remote.ssh_options, SOURCE_CMD, 0,
+			&instance->remote.ssh_options, SOURCE_CMD, SOURCE_DEFAULT,
 			OPTION_REMOTE_GROUP, 0, option_get_value
 		},
 		{
 			's', 232, "ssh-config",
-			&instance->remote.ssh_config, SOURCE_CMD, 0,
+			&instance->remote.ssh_config, SOURCE_CMD, SOURCE_DEFAULT,
 			OPTION_REMOTE_GROUP, 0, option_get_value
 		},
 		{ 0 }

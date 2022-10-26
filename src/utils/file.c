@@ -305,7 +305,7 @@ fio_open_stream(char const* path, fio_location location)
 			IO_CHECK(fio_read_all(fio_stdin, fio_stdin_buffer, hdr.size), hdr.size);
 #ifdef WIN32
 			f = tmpfile();
-			IO_CHECK(fwrite(f, 1, hdr.size, fio_stdin_buffer), hdr.size);
+			IO_CHECK(fwrite(fio_stdin_buffer, 1, hdr.size, f), hdr.size);
 			SYS_CHECK(fseek(f, 0, SEEK_SET));
 #else
 			f = fmemopen(fio_stdin_buffer, hdr.size, "r");
