@@ -91,7 +91,7 @@ extern fio_location MyLocation;
 extern void    fio_redirect(int in, int out, int err);
 extern void    fio_communicate(int in, int out);
 
-extern int     fio_get_agent_version(void);
+extern void    fio_get_agent_version(int* protocol, char* payload_buf, size_t payload_buf_size);
 extern FILE*   fio_fopen(char const* name, char const* mode, fio_location location);
 extern size_t  fio_fwrite(FILE* f, void const* buf, size_t size);
 extern ssize_t fio_fwrite_async_compressed(FILE* f, void const* buf, size_t size, int compress_alg);

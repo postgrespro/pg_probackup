@@ -348,8 +348,8 @@ typedef enum ShowFormat
 #define PROGRAM_VERSION	"2.5.8"
 
 /* update when remote agent API or behaviour changes */
-#define AGENT_PROTOCOL_VERSION 20501
-#define AGENT_PROTOCOL_VERSION_STR "2.5.1"
+#define AGENT_PROTOCOL_VERSION 20509
+#define AGENT_PROTOCOL_VERSION_STR "2.5.9"
 
 /* update only when changing storage format */
 #define STORAGE_FORMAT_VERSION "2.4.4"
@@ -887,6 +887,11 @@ extern parray *read_timeline_history(const char *arclog_path, TimeLineID targetT
 extern bool tliIsPartOfHistory(const parray *timelines, TimeLineID tli);
 extern DestDirIncrCompatibility check_incremental_compatibility(const char *pgdata, uint64 system_identifier,
 																IncrRestoreMode incremental_mode);
+
+/* in remote.c */
+extern void check_remote_agent_compatibility(int agent_version,
+											 char *compatibility_str, size_t compatibility_str_max_size);
+extern size_t prepare_compatibility_str(char* compatibility_buf, size_t compatibility_buf_size);
 
 /* in merge.c */
 extern void do_merge(InstanceState *instanceState, time_t backup_id, bool no_validate, bool no_sync);

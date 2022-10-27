@@ -269,8 +269,8 @@ fio_write_all(int fd, void const* buf, size_t size)
 }
 
 /* Get version of remote agent */
-int
-fio_get_agent_version(void)
+void
+fio_get_agent_version(int* protocol, char* payload_buf, size_t payload_buf_size)
 {
 	fio_header hdr;
 	hdr.cop = FIO_AGENT_VERSION;
@@ -278,8 +278,13 @@ fio_get_agent_version(void)
 
 	IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
 	IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
+	if (hdr.size > payload_buf_size)
+	{
+		elog(ERROR, "Corrupted remote compatibility protocol: insufficient payload_buf_size=%zu", payload_buf_size);
+	}
 
-	return hdr.arg;
+	*protocol = hdr.arg;
+	IO_CHECK(fio_read_all(fio_stdin, payload_buf, hdr.size), hdr.size);
 }
 
 /* Open input stream. Remote file is fetched to the in-memory buffer and then accessed through Linux fmemopen */
@@ -3322,9 +3327,16 @@ fio_communicate(int in, int out)
 				IO_CHECK(fio_write_all(out, buf, hdr.size),  hdr.size);
 			break;
 		  case FIO_AGENT_VERSION:
-			hdr.arg = AGENT_PROTOCOL_VERSION;
-			IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
-			break;
+			{
+				size_t payload_size = prepare_compatibility_str(buf, buf_size);
+
+				hdr.arg = AGENT_PROTOCOL_VERSION;
+				hdr.size = payload_size;
+
+				IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
+				IO_CHECK(fio_write_all(out, buf, payload_size), payload_size);
+				break;
+			}
 		  case FIO_STAT: /* Get information about file with specified path */
 			hdr.size = sizeof(st);
 			rc = hdr.arg ? stat(buf, &st) : lstat(buf, &st);
