@@ -229,7 +229,7 @@ bool launch_agent(void)
 			return false;
 	} else {
 #endif
-		elog(LOG, "Start SSH client process, pid %d", child_pid);
+		elog(LOG, "Start SSH client process, pid %d, cmd \"%s\"", child_pid, cmd);
 		SYS_CHECK(close(infd[1]));  /* These are being used by the child */
 		SYS_CHECK(close(outfd[0]));
 		SYS_CHECK(close(errfd[1]));
