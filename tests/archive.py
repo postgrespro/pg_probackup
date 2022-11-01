@@ -333,7 +333,12 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         os.environ["PGAPPNAME"] = "pg_probackup"
 
         postgres_gdb = self.gdb_attach(pid)
-        postgres_gdb.set_breakpoint('do_pg_stop_backup')
+
+        if self.get_version(node) < 150000:
+            postgres_gdb.set_breakpoint('do_pg_stop_backup')
+        else:
+            postgres_gdb.set_breakpoint('do_pg_backup_stop')
+
         postgres_gdb.continue_execution_until_running()
 
         gdb.continue_execution_until_exit()
