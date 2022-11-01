@@ -1447,11 +1447,12 @@ backup_non_data_file_internal(const char *from_fullpath,
 			elog(ERROR, "Cannot access remote file \"%s\"", from_fullpath);
 	}
 
-	pg_free(errmsg); /* ????? */
-
 	file->uncompressed_size = file->read_size;
 
 cleanup:
+	if (errmsg != NULL)
+		pg_free(errmsg);
+
 	/* finish CRC calculation and store into pgFile */
 	FIN_FILE_CRC32(true, file->crc);
 

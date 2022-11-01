@@ -171,6 +171,8 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
             "ERROR: File pg_compression not found in {0}".format(
                 os.path.join(self.backup_dir, 'node', backup_id))
         )
+
+        # check cfm size
         cfms = find_by_extensions(
             [os.path.join(self.backup_dir, 'backups', 'node', backup_id)],
             ['.cfm'])

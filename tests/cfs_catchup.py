@@ -56,6 +56,16 @@ class CfsCatchupNoEncTest(ProbackupTest, unittest.TestCase):
             self.pgdata_content(dst_pg.data_dir)
         )
 
+        # check cfm size
+        cfms = find_by_extensions([os.path.join(dst_pg.data_dir)], ['.cfm'])
+        self.assertTrue(cfms, "ERROR: .cfm files not found in backup dir")
+        for cfm in cfms:
+            size = os.stat(cfm).st_size
+            self.assertLessEqual(size, 4096,
+                                 "ERROR: {0} is not truncated (has size {1} > 4096)".format(
+                                     cfm, size
+                                 ))
+
         # make changes in master tablespace
         src_pg.safe_psql(
             "postgres",
@@ -88,6 +98,16 @@ class CfsCatchupNoEncTest(ProbackupTest, unittest.TestCase):
                 '-T', '{0}={1}'.format(tblspace1_old_path, tblspace1_new_path)
             ]
         )
+
+        # check cfm size again
+        cfms = find_by_extensions([os.path.join(dst_pg.data_dir)], ['.cfm'])
+        self.assertTrue(cfms, "ERROR: .cfm files not found in backup dir")
+        for cfm in cfms:
+            size = os.stat(cfm).st_size
+            self.assertLessEqual(size, 4096,
+                                 "ERROR: {0} is not truncated (has size {1} > 4096)".format(
+                                     cfm, size
+                                 ))
 
         # run&recover catchup'ed instance
         dst_options = {}
