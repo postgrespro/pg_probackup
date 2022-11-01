@@ -202,6 +202,8 @@ class ProbackupTest(object):
     enterprise = is_enterprise()
     enable_nls = is_nls_enabled()
 
+    nodes_to_cleanup = []
+
     def __init__(self, *args, **kwargs):
         super(ProbackupTest, self).__init__(*args, **kwargs)
 
@@ -379,6 +381,11 @@ class ProbackupTest(object):
             if is_test_result_ok(self):
                 self.del_test_dir(module_name, fname)
 
+        for node in self.nodes_to_cleanup:
+            node.cleanup()
+
+        self.nodes_to_cleanup.clear()
+
     @property
     def pg_config_version(self):
         return self.version_to_num(
@@ -475,6 +482,9 @@ class ProbackupTest(object):
         if node.major_version >= 13:
             self.set_auto_conf(
                 node, {}, 'postgresql.conf', ['wal_keep_segments'])
+
+        self.nodes_to_cleanup.append(node)
+
         return node
     
     def simple_bootstrap(self, node, role) -> None:
