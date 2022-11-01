@@ -321,7 +321,8 @@ size_t prepare_compatibility_str(char* compatibility_buf, size_t compatibility_b
 	size_t result_size = 0;
 	*compatibility_buf = '\0';
 
-	for (int i = 0; i < (sizeof compatibility_params / sizeof(compatibility_param)); i++)
+	int i;
+	for (i = 0; i < (sizeof compatibility_params / sizeof(compatibility_param)); i++)
 	{
 		if (compatibility_params[i].strval != NULL)
 			result_size += snprintf(compatibility_buf + result_size, compatibility_buf_size - result_size,
