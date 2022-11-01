@@ -319,9 +319,9 @@ size_t prepare_compatibility_str(char* compatibility_buf, size_t compatibility_b
 	};
 
 	size_t result_size = 0;
+	int i;
 	*compatibility_buf = '\0';
 
-	int i;
 	for (i = 0; i < (sizeof compatibility_params / sizeof(compatibility_param)); i++)
 	{
 		if (compatibility_params[i].strval != NULL)
