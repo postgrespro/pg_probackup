@@ -946,10 +946,21 @@ check_server_version(PGconn *conn, PGNodeInfo *nodeInfo)
 	 */
 #ifdef PGPRO_VERSION
 	if (!res)
+	{
 		/* It seems we connected to PostgreSQL (not Postgres Pro) */
-		elog(ERROR, "%s was built with Postgres Pro %s %s, "
-					"but connection is made with PostgreSQL %s",
-			 PROGRAM_NAME, PG_MAJORVERSION, PGPRO_EDITION, nodeInfo->server_version_str);
+		if(strcmp(PGPRO_EDITION, "1C") != 0)
+		{
+			elog(ERROR, "%s was built with Postgres Pro %s %s, "
+						"but connection is made with PostgreSQL %s",
+				 PROGRAM_NAME, PG_MAJORVERSION, PGPRO_EDITION, nodeInfo->server_version_str);
+		}
+		/* We have PostgresPro for 1C and connect to PostgreSQL or PostgresPro for 1C
+		 * Check the major version
+		*/
+		if (strcmp(nodeInfo->server_version_str, PG_MAJORVERSION) != 0)
+			elog(ERROR, "%s was built with PostgrePro %s %s, but connection is made with %s",
+				 PROGRAM_NAME, PG_MAJORVERSION, PGPRO_EDITION, nodeInfo->server_version_str);
+	}
 	else
 	{
 		if (strcmp(nodeInfo->server_version_str, PG_MAJORVERSION) != 0 &&
