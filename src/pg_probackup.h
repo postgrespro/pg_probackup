@@ -43,6 +43,10 @@
 
 #include "pg_probackup_state.h"
 
+#ifdef PGPRO_S3
+#include "../s3/s3.h"
+#endif
+
 #if defined(WIN32) && !(defined(_UCRT) && defined(__MINGW64__))
 #error Windows port requires compilation in MinGW64 UCRT environment
 #endif
@@ -800,6 +804,11 @@ extern pgBackup current;
 /* argv of the process */
 extern char** commands_args;
 
+#ifdef PBCKP_S3
+/* S3 options */
+extern S3_protocol s3_protocol;
+#endif
+
 /* in backup.c */
 extern int do_backup(InstanceState *instanceState, pgSetBackupParams *set_backup_params,
 					 bool no_validate, bool no_sync, bool backup_logs, time_t start_time);
@@ -809,6 +818,15 @@ extern BackupMode parse_backup_mode(const char *value);
 extern const char *deparse_backup_mode(BackupMode mode);
 extern void process_block_change(ForkNumber forknum, RelFileNode rnode,
 								 BlockNumber blkno);
+
+#ifdef PBCKP_S3
+/* in s3.c */
+extern int do_S3_backup(InstanceState *instanceState,
+								 pgSetBackupParams *set_backup_params,time_t start_time);
+extern int do_S3_show(InstanceState *instanceState);
+extern int do_S3_restore(InstanceState *instanceState, time_t target_backup_id);
+extern int do_S3_write_config(InstanceConfig *instance);
+#endif
 
 /* in catchup.c */
 extern int do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, bool sync_dest_files,
@@ -1248,6 +1266,7 @@ extern parray *backup_files_list;
 
 extern void pg_start_backup(const char *label, bool smooth, pgBackup *backup,
 							PGNodeInfo *nodeInfo, PGconn *conn);
+extern void pg_stop_backup(InstanceState *instanceState, pgBackup *backup, PGconn *pg_startbackup_conn, PGNodeInfo *nodeInfo);
 extern void pg_silent_client_messages(PGconn *conn);
 extern void pg_create_restore_point(PGconn *conn, time_t backup_start_time);
 extern void pg_stop_backup_send(PGconn *conn, int server_version, bool is_started_on_replica, char **query_text);

@@ -88,7 +88,8 @@ typedef enum
 	FIO_LOCAL_HOST,  /* data is locate at local host */
 	FIO_DB_HOST,     /* data is located at Postgres server host */
 	FIO_BACKUP_HOST, /* data is located at backup host */
-	FIO_REMOTE_HOST  /* date is located at remote host */
+	FIO_REMOTE_HOST,  /* date is located at remote host */
+	FIO_CLOUD_HOST  /* date is located at cloud (S3) */
 } fio_location;
 
 extern fio_location MyLocation;
