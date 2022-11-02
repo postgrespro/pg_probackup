@@ -262,137 +262,6 @@ delete_file:
 	}
 }
 
-/*
- * Read the local file to compute its CRC.
- * We cannot make decision about file decompression because
- * user may ask to backup already compressed files and we should be
- * obvious about it.
- */
-pg_crc32
-pgFileGetCRC(const char *file_path, bool use_crc32c, bool missing_ok)
-{
-	FILE	   *fp;
-	pg_crc32	crc = 0;
-	char	   *buf;
-	size_t		len = 0;
-
-	INIT_FILE_CRC32(use_crc32c, crc);
-
-	/* open file in binary read mode */
-	fp = fopen(file_path, PG_BINARY_R);
-	if (fp == NULL)
-	{
-		if (errno == ENOENT)
-		{
-			if (missing_ok)
-			{
-				FIN_FILE_CRC32(use_crc32c, crc);
-				return crc;
-			}
-		}
-
-		elog(ERROR, "Cannot open file \"%s\": %s",
-			file_path, strerror(errno));
-	}
-
-	/* disable stdio buffering */
-	setvbuf(fp, NULL, _IONBF, BUFSIZ);
-	buf = pgut_malloc(STDIO_BUFSIZE);
-
-	/* calc CRC of file */
-	for (;;)
-	{
-		if (interrupted)
-			elog(ERROR, "interrupted during CRC calculation");
-
-		len = fread(buf, 1, STDIO_BUFSIZE, fp);
-
-		if (ferror(fp))
-			elog(ERROR, "Cannot read \"%s\": %s", file_path, strerror(errno));
-
-		/* update CRC */
-		COMP_FILE_CRC32(use_crc32c, crc, buf, len);
-
-		if (feof(fp))
-			break;
-	}
-
-	FIN_FILE_CRC32(use_crc32c, crc);
-	fclose(fp);
-	pg_free(buf);
-
-	return crc;
-}
-
-/*
- * Read the local file to compute its CRC.
- * We cannot make decision about file decompression because
- * user may ask to backup already compressed files and we should be
- * obvious about it.
- */
-pg_crc32
-pgFileGetCRCgz(const char *file_path, bool use_crc32c, bool missing_ok)
-{
-	gzFile    fp;
-	pg_crc32  crc = 0;
-	int       len = 0;
-	int       err;
-	char	 *buf;
-
-	INIT_FILE_CRC32(use_crc32c, crc);
-
-	/* open file in binary read mode */
-	fp = gzopen(file_path, PG_BINARY_R);
-	if (fp == NULL)
-	{
-		if (errno == ENOENT)
-		{
-			if (missing_ok)
-			{
-				FIN_FILE_CRC32(use_crc32c, crc);
-				return crc;
-			}
-		}
-
-		elog(ERROR, "Cannot open file \"%s\": %s",
-			file_path, strerror(errno));
-	}
-
-	buf = pgut_malloc(STDIO_BUFSIZE);
-
-	/* calc CRC of file */
-	for (;;)
-	{
-		if (interrupted)
-			elog(ERROR, "interrupted during CRC calculation");
-
-		len = gzread(fp, buf, STDIO_BUFSIZE);
-
-		if (len <= 0)
-		{
-			/* we either run into eof or error */
-			if (gzeof(fp))
-				break;
-			else
-			{
-				const char *err_str = NULL;
-
-                err_str = gzerror(fp, &err);
-                elog(ERROR, "Cannot read from compressed file %s", err_str);
-			}
-		}
-
-		/* update CRC */
-		COMP_FILE_CRC32(use_crc32c, crc, buf, len);
-	}
-
-	FIN_FILE_CRC32(use_crc32c, crc);
-	gzclose(fp);
-	pg_free(buf);
-
-	return crc;
-}
-
 void
 pgFileFree(void *file)
 {
@@ -1812,7 +1681,7 @@ write_database_map(pgBackup *backup, parray *database_map, parray *backup_files_
 								 FIO_BACKUP_HOST);
 	file->crc = pgFileGetCRC(database_map_path, true, false);
 	file->write_size = file->size;
-	file->uncompressed_size = file->read_size;
+	file->uncompressed_size = file->size;
 
 	parray_append(backup_files_list, file);
 }

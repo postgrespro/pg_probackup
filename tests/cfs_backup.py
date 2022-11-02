@@ -171,12 +171,18 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
             "ERROR: File pg_compression not found in {0}".format(
                 os.path.join(self.backup_dir, 'node', backup_id))
         )
-        self.assertTrue(
-            find_by_extensions(
-                [os.path.join(self.backup_dir, 'backups', 'node', backup_id)],
-                ['.cfm']),
-            "ERROR: .cfm files not found in backup dir"
-        )
+
+        # check cfm size
+        cfms = find_by_extensions(
+            [os.path.join(self.backup_dir, 'backups', 'node', backup_id)],
+            ['.cfm'])
+        self.assertTrue(cfms, "ERROR: .cfm files not found in backup dir")
+        for cfm in cfms:
+            size = os.stat(cfm).st_size
+            self.assertLessEqual(size, 4096,
+                            "ERROR: {0} is not truncated (has size {1} > 4096)".format(
+                                cfm, size
+                            ))
 
     # @unittest.expectedFailure
     # @unittest.skip("skip")

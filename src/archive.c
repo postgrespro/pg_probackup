@@ -1375,11 +1375,11 @@ get_wal_file(const char *filename, const char *from_fullpath,
 #ifdef HAVE_LIBZ
 		/* If requested file is regular WAL segment, then try to open it with '.gz' suffix... */
 		if (IsXLogFileName(filename))
-			rc = fio_send_file_gz(from_fullpath_gz, to_fullpath, out, &errmsg);
+			rc = fio_send_file_gz(from_fullpath_gz, out, &errmsg);
 		if (rc == FILE_MISSING)
 #endif
 			/* ... failing that, use uncompressed */
-			rc = fio_send_file(from_fullpath, to_fullpath, out, NULL, &errmsg);
+			rc = fio_send_file(from_fullpath, out, false, NULL, &errmsg);
 
 		/* When not in prefetch mode, try to use partial file */
 		if (rc == FILE_MISSING && !prefetch_mode && IsXLogFileName(filename))
@@ -1389,13 +1389,13 @@ get_wal_file(const char *filename, const char *from_fullpath,
 #ifdef HAVE_LIBZ
 			/* '.gz.partial' goes first ... */
 			snprintf(from_partial, sizeof(from_partial), "%s.gz.partial", from_fullpath);
-			rc = fio_send_file_gz(from_partial, to_fullpath, out, &errmsg);
+			rc = fio_send_file_gz(from_partial, out, &errmsg);
 			if (rc == FILE_MISSING)
 #endif
 			{
 				/* ... failing that, use '.partial' */
 				snprintf(from_partial, sizeof(from_partial), "%s.partial", from_fullpath);
-				rc = fio_send_file(from_partial, to_fullpath, out, NULL, &errmsg);
+				rc = fio_send_file(from_partial, out, false, NULL, &errmsg);
 			}
 
 			if (rc == SEND_OK)

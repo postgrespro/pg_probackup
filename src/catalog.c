@@ -1069,6 +1069,7 @@ get_backup_filelist(pgBackup *backup, bool strict)
 		char		linked[MAXPGPATH];
 		char		compress_alg_string[MAXPGPATH];
 		int64		write_size,
+					uncompressed_size,
 					mode,		/* bit length of mode_t depends on platforms */
 					is_datafile,
 					is_cfs,
@@ -1131,6 +1132,11 @@ get_backup_filelist(pgBackup *backup, bool strict)
 
 		if (get_control_value_int64(buf, "hdr_size", &hdr_size, false))
 			file->hdr_size = (int) hdr_size;
+
+		if (get_control_value_int64(buf, "full_size", &uncompressed_size, false))
+			file->uncompressed_size = uncompressed_size;
+		else
+			file->uncompressed_size = write_size;
 
 		if (file->external_dir_num == 0)
 			set_forkname(file);
@@ -2560,6 +2566,11 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 					deparse_compress_alg(file->compress_alg),
 					file->external_dir_num,
 					file->dbOid);
+
+		if (file->uncompressed_size != 0 &&
+				file->uncompressed_size != file->write_size)
+			len += sprintf(line+len, ",\"full_size\":\"" INT64_FORMAT "\"",
+						   file->uncompressed_size);
 
 		if (file->is_datafile)
 			len += sprintf(line+len, ",\"segno\":\"%d\"", file->segno);
