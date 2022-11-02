@@ -688,20 +688,6 @@ dir_check_file(pgFile *file, bool backup_logs)
 
 			if (file->forkName == ptrack) /* Compatibility with left-overs from ptrack1 */
 				return CHECK_FALSE;
-			else if (file->forkName != none)
-				return CHECK_TRUE;
-
-			/* Set is_datafile flag */
-			{
-				char suffix[MAXFNAMELEN];
-
-				/* check if file is datafile */
-				sscanf_res = sscanf(file->name, "%u.%d.%s", &(file->relOid),
-									&(file->segno), suffix);
-				Assert(sscanf_res > 0); /* since first char is digit */
-				if (sscanf_res == 1 || sscanf_res == 2)
-					file->is_datafile = true;
-			}
 		}
 	}
 
@@ -1927,34 +1913,74 @@ pfilearray_clear_locks(parray *file_list)
 	}
 }
 
+static inline bool
+is_forkname(char *name, size_t *pos, const char *forkname)
+{
+	size_t fnlen = strlen(forkname);
+	if (strncmp(name + *pos, forkname, fnlen) != 0)
+		return false;
+	*pos += fnlen;
+	return true;
+}
+
+#define OIDCHARS 10
+
 /* Set forkName if possible */
-void
+bool
 set_forkname(pgFile *file)
 {
-	int name_len = strlen(file->name);
+	size_t i = 0;
+	uint64_t oid = 0; /* use 64bit to not check for overflow in a loop */
 
-	/* Auxiliary fork of the relfile */
-	if (name_len > 3 && strcmp(file->name + name_len - 3, "_vm") == 0)
+	/* pretend it is not relation file */
+	file->relOid = 0;
+	file->forkName = none;
+	file->is_datafile = false;
+
+	for (i = 0; isdigit(file->name[i]); i++)
+	{
+		if (i == 0 && file->name[i] == '0')
+			return false;
+		oid = oid * 10 + file->name[i] - '0';
+	}
+	if (i == 0 || i > OIDCHARS || oid > UINT32_MAX)
+		return false;
+
+	/* usual fork name */
+	/* /^\d+_(vm|fsm|init|ptrack)$/ */
+	if (is_forkname(file->name, &i, "_vm"))
 		file->forkName = vm;
-
-	else if (name_len > 4 && strcmp(file->name + name_len - 4, "_fsm") == 0)
+	else if (is_forkname(file->name, &i, "_fsm"))
 		file->forkName = fsm;
-
-	else if (name_len > 4 && strcmp(file->name + name_len - 4, ".cfm") == 0)
-		file->forkName = cfm;
-
-	else if (name_len > 5 && strcmp(file->name + name_len - 5, "_init") == 0)
+	else if (is_forkname(file->name, &i, "_init"))
 		file->forkName = init;
-
-	else if (name_len > 7 && strcmp(file->name + name_len - 7, "_ptrack") == 0)
+	else if (is_forkname(file->name, &i, "_ptrack"))
 		file->forkName = ptrack;
 
-	// extract relOid for certain forks
+	/* segment number */
+	/* /^\d+(_(vm|fsm|init|ptrack))?\.\d+$/ */
+	if (file->name[i] == '.' && isdigit(file->name[i+1]))
+	{
+		for (i++; isdigit(file->name[i]); i++)
+			;
+	}
 
-	if ((file->forkName == vm ||
-		 file->forkName == fsm ||
-		 file->forkName == init ||
-		 file->forkName == cfm) &&
-		(sscanf(file->name, "%u*", &(file->relOid)) != 1))
-		file->relOid = 0;
+	/* CFS "fork name" */
+	if (file->forkName == none &&
+		is_forkname(file->name, &i, ".cfm"))
+	{
+		/* /^\d+(\.\d+)?.cfm$/ */
+		file->forkName = cfm;
+	}
+
+	/* If there are excess characters, it is not relation file */
+	if (file->name[i] != 0)
+	{
+		file->forkName = none;
+		return false;
+	}
+
+	file->relOid = oid;
+	file->is_datafile = file->forkName == none;
+	return true;
 }

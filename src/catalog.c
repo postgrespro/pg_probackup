@@ -1139,7 +1139,18 @@ get_backup_filelist(pgBackup *backup, bool strict)
 			file->hdr_size = (int) hdr_size;
 
 		if (file->external_dir_num == 0)
+		{
+			bool is_datafile = file->is_datafile;
 			set_forkname(file);
+			if (is_datafile != file->is_datafile)
+			{
+				elog(WARNING, "File '%s' was stored as datafile, but looks like it is not",
+					 file->rel_path);
+				/* Lets fail in tests */
+				Assert(file->is_datafile == file->is_datafile);
+				file->is_datafile = is_datafile;
+			}
+		}
 
 		parray_append(files, file);
 	}
