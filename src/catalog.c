@@ -1137,6 +1137,8 @@ get_backup_filelist(pgBackup *backup, bool strict)
 			file->uncompressed_size = uncompressed_size;
 		else
 			file->uncompressed_size = write_size;
+		if (!file->is_datafile || file->is_cfs)
+			file->size = file->uncompressed_size;
 
 		if (file->external_dir_num == 0 && S_ISREG(file->mode))
 		{
