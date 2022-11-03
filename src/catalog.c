@@ -1138,14 +1138,18 @@ get_backup_filelist(pgBackup *backup, bool strict)
 		else
 			file->uncompressed_size = write_size;
 
-		if (file->external_dir_num == 0)
+		if (file->external_dir_num == 0 && S_ISREG(file->mode))
 		{
 			bool is_datafile = file->is_datafile;
 			set_forkname(file);
 			if (is_datafile != file->is_datafile)
 			{
-				elog(WARNING, "File '%s' was stored as datafile, but looks like it is not",
-					 file->rel_path);
+				if (is_datafile)
+					elog(WARNING, "File '%s' was stored as datafile, but looks like it is not",
+						 file->rel_path);
+				else
+					elog(WARNING, "File '%s' was stored as non-datafile, but looks like it is",
+						 file->rel_path);
 				/* Lets fail in tests */
 				Assert(file->is_datafile == file->is_datafile);
 				file->is_datafile = is_datafile;
