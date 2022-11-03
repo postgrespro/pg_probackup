@@ -1082,7 +1082,7 @@ extern void fio_pgFileDelete(pgFile *file, const char *full_path);
 extern void pgFileFree(void *file);
 
 extern pg_crc32 pgFileGetCRC(const char *file_path, bool use_crc32c, bool missing_ok);
-extern pg_crc32 pgFileGetCRCTruncated(const char *file_path, bool use_crc32c);
+extern pg_crc32 pgFileGetCRCTruncated(const char *file_path, bool use_crc32c, bool missing_ok);
 extern pg_crc32 pgFileGetCRCgz(const char *file_path, bool use_crc32c, bool missing_ok);
 
 extern int pgFileMapComparePath(const void *f1, const void *f2);

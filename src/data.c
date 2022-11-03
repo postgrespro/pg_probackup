@@ -806,7 +806,10 @@ backup_non_data_file(pgFile *file, pgFile *prev_file,
 		 * file could be deleted under our feets.
 		 * But then backup_non_data_file_internal will handle it safely
 		 */
-		file->crc = fio_get_crc32(from_fullpath, FIO_DB_HOST, false, true);
+		if (file->forkName != cfm)
+			file->crc = fio_get_crc32(from_fullpath, FIO_DB_HOST, false, true);
+		else
+			file->crc = fio_get_crc32_truncated(from_fullpath, FIO_DB_HOST, true);
 
 		/* ...and checksum is the same... */
 		if (EQ_TRADITIONAL_CRC32(file->crc, prev_file->crc))
@@ -1334,7 +1337,7 @@ restore_non_data_file(parray *parent_chain, pgBackup *dest_backup,
 		pg_crc32 file_crc;
 		if (tmp_file->forkName == cfm &&
 			    tmp_file->uncompressed_size > tmp_file->write_size)
-			file_crc = fio_get_crc32_truncated(to_fullpath, FIO_DB_HOST);
+			file_crc = fio_get_crc32_truncated(to_fullpath, FIO_DB_HOST, false);
 		else
 			file_crc = fio_get_crc32(to_fullpath, FIO_DB_HOST, false, false);
 
