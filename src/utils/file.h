@@ -60,6 +60,7 @@ typedef enum
 	FIO_DISCONNECT,
 	FIO_DISCONNECTED,
 	FIO_LIST_DIR,
+    FIO_REMOVE_DIR,
 	FIO_CHECK_POSTMASTER,
 	FIO_GET_ASYNC_ERROR,
 	FIO_WRITE_ASYNC,
@@ -182,8 +183,9 @@ extern bool    fio_is_same_file(fio_location location, const char* filename1, co
 extern ssize_t fio_readlink(fio_location location, const char *path, char *value, size_t valsiz);
 extern pid_t   fio_check_postmaster(fio_location location, const char *pgdata);
 
-extern void fio_list_dir(parray *files, const char *root, bool exclude, bool follow_symlink,
-						 bool add_root, bool backup_logs, bool skip_hidden, int external_dir_num);
+extern void db_list_dir(parray *files, const char *root, bool handle_tablespaces,
+			bool backup_logs, int external_dir_num);
+extern void backup_list_dir(parray *files, const char *root);
 
 struct PageState; /* defined in pg_probackup.h */
 extern struct PageState *fio_get_checksum_map(fio_location location, const char *fullpath, uint32 checksum_version,
@@ -252,6 +254,10 @@ typedef struct stat stat_t;
 #define mth__pioGetCRC32 	pg_crc32, (path_t, path), (bool, compressed), \
 									  (err_i *, err)
 #define mth__pioIsRemote 	bool
+#define mth__pioListDir     void, (parray *, files), (const char *, root), \
+                                (bool, handle_tablespaces), (bool, symlink_and_hidden), \
+                                (bool, backup_logs), (bool, skip_hidden),  (int, external_dir_num)
+#define mth__pioRemoveDir   void, (const char *, root), (bool, root_as_well)
 
 fobj_method(pioOpen);
 fobj_method(pioStat);
@@ -260,9 +266,11 @@ fobj_method(pioRename);
 fobj_method(pioExists);
 fobj_method(pioIsRemote);
 fobj_method(pioGetCRC32);
+fobj_method(pioListDir);
+fobj_method(pioRemoveDir);
 
 #define iface__pioDrive 	mth(pioOpen, pioStat, pioRemove, pioRename), \
-					        mth(pioExists, pioGetCRC32, pioIsRemote)
+					        mth(pioExists, pioGetCRC32, pioIsRemote, pioListDir, pioRemoveDir)
 fobj_iface(pioDrive);
 
 #define kls__pioLocalDrive	iface__pioDrive, iface(pioDrive)

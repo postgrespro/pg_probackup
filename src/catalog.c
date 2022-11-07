@@ -1548,8 +1548,7 @@ catalog_get_timelines(InstanceState *instanceState, InstanceConfig *instance)
 	char end_segno_str[MAXFNAMELEN];
 
 	/* read all xlog files that belong to this archive */
-	dir_list_file(xlog_files_list, instanceState->instance_wal_subdir_path,
-				  false, true, false, false, true, 0, FIO_BACKUP_HOST);
+	backup_list_dir(xlog_files_list, instanceState->instance_wal_subdir_path);
 	parray_qsort(xlog_files_list, pgFileCompareName);
 
 	timelineinfos = parray_new();

@@ -647,9 +647,9 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 	if (current.backup_mode != BACKUP_MODE_FULL)
 	{
 		dest_filelist = parray_new();
-		dir_list_file(dest_filelist, dest_pgdata,
-			true, true, false, backup_logs, true, 0, FIO_LOCAL_HOST);
+		db_list_dir(dest_filelist, dest_pgdata, true, backup_logs, 0);
 		filter_filelist(dest_filelist, dest_pgdata, exclude_absolute_paths_list, exclude_relative_paths_list, "Destination");
+        exclude_files(dest_filelist, backup_logs);
 
 		// fill dest_redo.lsn and dest_redo.tli
 		get_redo(FIO_LOCAL_HOST, dest_pgdata, &dest_redo);
@@ -714,12 +714,8 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 	source_filelist = parray_new();
 
 	/* list files with the logical path. omit $PGDATA */
-	if (fio_is_remote(FIO_DB_HOST))
-		fio_list_dir(source_filelist, source_pgdata,
-					 true, true, false, backup_logs, true, 0);
-	else
-		dir_list_file(source_filelist, source_pgdata,
-					  true, true, false, backup_logs, true, 0, FIO_LOCAL_HOST);
+    db_list_dir(source_filelist, source_pgdata, true, backup_logs, 0);
+    exclude_files(source_filelist, backup_logs);
 
 	//REVIEW FIXME. Let's fix that before release.
 	// TODO what if wal is not a dir (symlink to a dir)?

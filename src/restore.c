@@ -858,7 +858,7 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 		elog(INFO, "Extracting the content of destination directory for incremental restore");
 
 		time(&start_time);
-		fio_list_dir(pgdata_files, pgdata_path, false, true, false, false, true, 0);
+		db_list_dir(pgdata_files, pgdata_path, false, false, 0);
 
 		/*
 		 * TODO:
@@ -878,8 +878,7 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 				char *external_path = parray_get(external_dirs, i);
 				parray	*external_files = parray_new();
 
-				fio_list_dir(external_files, external_path,
-							 false, true, false, false, true, i+1);
+				db_list_dir(external_files, external_path, false, false, i+1);
 
 				parray_concat(pgdata_files, external_files);
 				parray_free(external_files);

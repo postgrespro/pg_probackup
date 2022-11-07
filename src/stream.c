@@ -269,7 +269,6 @@ StreamLog(void *arg)
 #else /* PG_VERSION_NUM >= 100000 && PG_VERSION_NUM < 150000 */
 		ctl.walmethod = CreateWalDirectoryMethod(
 			stream_arg->basedir,
-//			(instance_config.compress_alg == NONE_COMPRESS) ? 0 : instance_config.compress_level,
 			0,
 			false);
 #endif /* PG_VERSION_NUM >= 150000 */
