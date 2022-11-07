@@ -130,10 +130,10 @@ build/test_suse: build/test_suse_15.1 build/test_suse_15.2
 	@echo Suse: done
 
 build/test_suse_15.1: build/test_suse_15.1_9.6 build/test_suse_15.1_10 build/test_suse_15.1_11 build/test_suse_15.1_12 build/test_suse_15.1_13
-	@echo Rhel 15.1: done
+	@echo Suse 15.1: done
 
 build/test_suse_15.2: build/test_suse_15.2_9.6 build/test_suse_15.2_10 build/test_suse_15.2_11 build/test_suse_15.2_12 build/test_suse_15.2_13 build/test_suse_15.2_14
-	@echo Rhel 15.1: done
+	@echo Suse 15.2: done
 
 define test_suse
 	docker rm -f $1_$2_probackup_$(PKG_NAME_SUFFIX)$(PBK_VERSION) >> /dev/null 2>&1 ; \

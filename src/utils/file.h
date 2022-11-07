@@ -99,7 +99,6 @@ extern bool    fio_is_remote_simple(fio_location location);
 
 extern void    fio_communicate(int in, int out);
 extern void    fio_disconnect(void);
-extern int     fio_get_agent_version(void);
 
 #define FIO_FDMAX 64
 #define FIO_PIPE_MARKER 0x40000000
@@ -113,6 +112,7 @@ extern void    fio_error(int rc, int size, const char* file, int line);
 #define SYS_CHECK(cmd) do if ((cmd) < 0) { fprintf(stderr, "%s:%d: (%s) %s\n", __FILE__, __LINE__, #cmd, strerror(errno)); exit(EXIT_FAILURE); } while (0)
 #define IO_CHECK(cmd, size) do { int _rc = (cmd); if (_rc != (size)) fio_error(_rc, size, __FILE__, __LINE__); } while (0)
 
+extern void    fio_get_agent_version(int* protocol, char* payload_buf, size_t payload_buf_size);
 
 /* fd-style functions */
 extern int     fio_open(fio_location location, const char* name, int mode);

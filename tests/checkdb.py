@@ -39,6 +39,15 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
             "postgres",
             "create index on t_heap(id)")
 
+        node.safe_psql(
+            "postgres",
+            "create table idxpart (a int) "
+            "partition by range (a)")
+
+        node.safe_psql(
+            "postgres",
+            "create index on idxpart(a)")
+
         try:
             node.safe_psql(
                 "postgres",
@@ -667,19 +676,13 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
                 'GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_system() TO backup; '
                 'GRANT EXECUTE ON FUNCTION pg_catalog.string_to_array(text, text) TO backup; '
                 'GRANT EXECUTE ON FUNCTION pg_catalog.array_position(anyarray, anyelement) TO backup;'
-                'GRANT EXECUTE ON FUNCTION bt_index_check(regclass) TO backup; '
-                'GRANT EXECUTE ON FUNCTION bt_index_check(regclass, bool) TO backup;'
+                'GRANT EXECUTE ON FUNCTION bt_index_check(regclass) TO backup;'
             )
             if ProbackupTest.enterprise:
                 # amcheck-1.1
                 node.safe_psql(
                     'backupdb',
                     'GRANT EXECUTE ON FUNCTION bt_index_check(regclass, bool) TO backup')
-            else:
-                # amcheck-1.0
-                node.safe_psql(
-                    'backupdb',
-                    'GRANT EXECUTE ON FUNCTION bt_index_check(regclass) TO backup')
         # >= 11 < 14
         elif self.get_version(node) > 110000 and self.get_version(node) < 140000:
             node.safe_psql(

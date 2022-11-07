@@ -22,6 +22,7 @@
 #include <pwd.h>
 #endif
 #include <time.h>
+#include <pwd.h>
 
 #define MAXPG_LSNCOMPONENT	8
 

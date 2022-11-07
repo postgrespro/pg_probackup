@@ -720,6 +720,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
                 '--stream'],
             gdb=True)
 
+        # Attention! this breakpoint is set to a probackup internal function, not a postgres core one
         gdb.set_breakpoint('pg_stop_backup')
         gdb.run_until_break()
         gdb.remove_all_breakpoints()
@@ -751,7 +752,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             log_content)
 
         self.assertIn(
-            'LOG: stop_lsn: 0/4000000',
+            'INFO: stop_lsn: 0/4000000',
             log_content)
 
         self.assertTrue(self.show_pb(backup_dir, 'replica')[0]['status'] == 'DONE')

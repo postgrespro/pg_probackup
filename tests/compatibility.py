@@ -8,7 +8,88 @@ import shutil
 module_name = 'compatibility'
 
 
+def check_manual_tests_enabled():
+    return 'PGPROBACKUP_MANUAL' in os.environ and os.environ['PGPROBACKUP_MANUAL'] == 'ON'
+
+
+def check_ssh_agent_path_exists():
+    return 'PGPROBACKUP_SSH_AGENT_PATH' in os.environ
+
+
 class CompatibilityTest(ProbackupTest, unittest.TestCase):
+
+    def setUp(self):
+        self.fname = self.id().split('.')[3]
+
+    # @unittest.expectedFailure
+    @unittest.skipUnless(check_manual_tests_enabled(), 'skip manual test')
+    @unittest.skipUnless(check_ssh_agent_path_exists(), 'skip no ssh agent path exist')
+    # @unittest.skip("skip")
+    def test_catchup_with_different_remote_major_pg(self):
+        """
+        Decription in jira issue PBCKP-236
+        This test exposures ticket error using pg_probackup builds for both PGPROEE11 and PGPROEE9_6
+
+        Prerequisites:
+        - pg_probackup git tag for PBCKP 2.5.1
+        - master pg_probackup build should be made for PGPROEE11
+        - agent pg_probackup build should be made for PGPROEE9_6
+
+        Calling probackup PGPROEE9_6 pg_probackup agent from PGPROEE11 pg_probackup master for DELTA backup causes
+        the PBCKP-236 problem
+
+        Please give env variables PROBACKUP_MANUAL=ON;PGPROBACKUP_SSH_AGENT_PATH=<pg_probackup_ssh_agent_path>
+        for the test
+
+        Please make path for agent's pgprobackup_ssh_agent_path = '/home/avaness/postgres/postgres.build.ee.9.6/bin/'
+        without pg_probackup executable
+        """
+
+        self.verbose = True
+        self.remote = True
+        # please use your own local path like
+        # pgprobackup_ssh_agent_path = '/home/avaness/postgres/postgres.build.clean/bin/'
+        pgprobackup_ssh_agent_path = os.environ['PGPROBACKUP_SSH_AGENT_PATH']
+
+        src_pg = self.make_simple_node(
+            base_dir=os.path.join(module_name, self.fname, 'src'),
+            set_replication=True,
+            )
+        src_pg.slow_start()
+        src_pg.safe_psql(
+            "postgres",
+            "CREATE TABLE ultimate_question AS SELECT 42 AS answer")
+
+        # do full catchup
+        dst_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'dst'))
+        self.catchup_node(
+            backup_mode='FULL',
+            source_pgdata=src_pg.data_dir,
+            destination_node=dst_pg,
+            options=['-d', 'postgres', '-p', str(src_pg.port), '--stream']
+            )
+
+        dst_options = {'port': str(dst_pg.port)}
+        self.set_auto_conf(dst_pg, dst_options)
+        dst_pg.slow_start()
+        dst_pg.stop()
+
+        src_pg.safe_psql(
+            "postgres",
+            "CREATE TABLE ultimate_question2 AS SELECT 42 AS answer")
+
+        # do delta catchup with remote pg_probackup agent with another postgres major version
+        # this DELTA backup should fail without PBCKP-236 patch.
+        self.catchup_node(
+            backup_mode='DELTA',
+            source_pgdata=src_pg.data_dir,
+            destination_node=dst_pg,
+            # here's substitution of --remoge-path pg_probackup agent compiled with another postgres version
+            options=['-d', 'postgres', '-p', str(src_pg.port), '--stream', '--remote-path=' + pgprobackup_ssh_agent_path]
+            )
+
+        # Clean after yourself
+        self.del_test_dir(module_name, self.fname)
 
     # @unittest.expectedFailure
     # @unittest.skip("skip")

@@ -47,6 +47,12 @@
 #error Windows port requires compilation in MinGW64 UCRT environment
 #endif
 
+#if PG_VERSION_NUM >= 150000
+// _() is explicitly undefined in libpq-int.h
+// https://github.com/postgres/postgres/commit/28ec316787674dd74d00b296724a009b6edc2fb0
+#define _(s) gettext(s)
+#endif
+
 /* Wrap the code that we're going to delete after refactoring in this define*/
 #define REFACTORE_ME
 
@@ -838,6 +844,11 @@ extern bool tliIsPartOfHistory(const parray *timelines, TimeLineID tli);
 extern DestDirIncrCompatibility check_incremental_compatibility(const char *pgdata, uint64 system_identifier,
 																IncrRestoreMode incremental_mode);
 
+/* in remote.c */
+extern void check_remote_agent_compatibility(int agent_version,
+											 char *compatibility_str, size_t compatibility_str_max_size);
+extern size_t prepare_compatibility_str(char* compatibility_buf, size_t compatibility_buf_size);
+
 /* in merge.c */
 extern void do_merge(InstanceState *instanceState, time_t backup_id, bool no_validate, bool no_sync);
 extern void merge_backups(pgBackup *backup, pgBackup *next_backup);
@@ -1124,7 +1135,6 @@ extern uint64 get_system_identifier(fio_location location, const char *pgdata_pa
 extern uint64 get_remote_system_identifier(PGconn *conn);
 extern uint32 get_data_checksum_version(bool safe);
 extern pg_crc32c get_pgcontrol_checksum(const char *pgdata_path);
-extern DBState get_system_dbstate(fio_location location, const char *pgdata_path);
 extern uint32 get_xlog_seg_size(const char *pgdata_path);
 extern void get_redo(fio_location location, const char *pgdata_path, RedoParams *redo);
 extern void set_min_recovery_point(pgFile *file, const char *backup_path,

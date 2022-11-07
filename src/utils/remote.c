@@ -225,7 +225,7 @@ bool launch_agent(void)
 			return false;
 	} else {
 #endif
-		elog(LOG, "Start SSH client process, pid %d", child_pid);
+		elog(LOG, "Start SSH client process, pid %d, cmd \"%s\"", child_pid, cmd);
 		SYS_CHECK(close(infd[1]));  /* These are being used by the child */
 		SYS_CHECK(close(outfd[0]));
 		SYS_CHECK(close(errfd[1]));
@@ -234,10 +234,114 @@ bool launch_agent(void)
 		fio_redirect(infd[0], outfd[1], errfd[0]); /* write to stdout */
 	}
 
-	/* Make sure that remote agent has the same version
-	 * TODO: we must also check PG version and fork edition
-	 */
-	agent_version = fio_get_agent_version();
+
+	/* Make sure that remote agent has the same version, fork and other features to be binary compatible */
+	{
+		char payload_buf[1024];
+		fio_get_agent_version(&agent_version, payload_buf, sizeof payload_buf);
+		check_remote_agent_compatibility(agent_version, payload_buf, sizeof payload_buf);
+	}
+
+	return true;
+}
+
+#ifdef PGPRO_EDITION
+/* PGPRO 10-13 checks to be "(certified)", with exceptional case PGPRO_11 conforming to "(standard certified)" */
+static bool check_certified()
+{
+	return strstr(PGPRO_VERSION_STR, "(certified)") ||
+		   strstr(PGPRO_VERSION_STR, "(standard certified)");
+}
+#endif
+
+static char* extract_pg_edition_str()
+{
+	static char *vanilla = "vanilla";
+#ifdef PGPRO_EDITION
+	static char *_1C = "1C";
+	static char *std = "standard";
+	static char *ent = "enterprise";
+	static char *std_cert = "standard-certified";
+	static char *ent_cert = "enterprise-certified";
+
+	if (strcmp(PGPRO_EDITION, _1C) == 0)
+		return vanilla;
+
+	if (PG_VERSION_NUM < 100000)
+		return PGPRO_EDITION;
+
+	/* these "certified" checks are applicable to PGPRO from 10 up to 12 versions.
+	 * 13+ certified versions are compatible to non-certified ones */
+	if (PG_VERSION_NUM < 130000 && check_certified())
+	{
+		if (strcmp(PGPRO_EDITION, std) == 0)
+			return std_cert;
+		else if (strcmp(PGPRO_EDITION, ent) == 0)
+			return ent_cert;
+		else
+			Assert("Bad #define PGPRO_EDITION value" == 0);
+	}
+
+	return PGPRO_EDITION;
+#else
+	return vanilla;
+#endif
+}
+
+#define COMPATIBILITY_VAL_STR(macro) { #macro, macro, 0 }
+#define COMPATIBILITY_VAL_INT(macro) { #macro, NULL, macro }
+
+#define COMPATIBILITY_VAL_SEPARATOR "="
+#define COMPATIBILITY_LINE_SEPARATOR "\n"
+
+/*
+ * Compose compatibility string to be sent by pg_probackup agent
+ * through ssh and to be verified by pg_probackup peer.
+ * Compatibility string contains postgres essential vars as strings
+ * in format "var_name" + COMPATIBILITY_VAL_SEPARATOR + "var_value" + COMPATIBILITY_LINE_SEPARATOR
+ */
+size_t prepare_compatibility_str(char* compatibility_buf, size_t compatibility_buf_size)
+{
+	typedef struct compatibility_param_tag {
+		const char* name;
+		const char* strval;
+		int intval;
+	} compatibility_param;
+
+	compatibility_param compatibility_params[] = {
+		COMPATIBILITY_VAL_STR(PG_MAJORVERSION),
+		{ "edition", extract_pg_edition_str(), 0 },
+		COMPATIBILITY_VAL_INT(SIZEOF_VOID_P),
+	};
+
+	size_t result_size = 0;
+	int i;
+	*compatibility_buf = '\0';
+
+	for (i = 0; i < (sizeof compatibility_params / sizeof(compatibility_param)); i++)
+	{
+		if (compatibility_params[i].strval != NULL)
+			result_size += snprintf(compatibility_buf + result_size, compatibility_buf_size - result_size,
+									"%s" COMPATIBILITY_VAL_SEPARATOR "%s" COMPATIBILITY_LINE_SEPARATOR,
+									compatibility_params[i].name,
+									compatibility_params[i].strval);
+		else
+			result_size += snprintf(compatibility_buf + result_size, compatibility_buf_size - result_size,
+									"%s" COMPATIBILITY_VAL_SEPARATOR "%d" COMPATIBILITY_LINE_SEPARATOR,
+									compatibility_params[i].name,
+									compatibility_params[i].intval);
+		Assert(result_size < compatibility_buf_size);
+	}
+	return result_size + 1;
+}
+
+/*
+ * Check incoming remote agent's compatibility params for equality to local ones.
+ */
+void check_remote_agent_compatibility(int agent_version, char *compatibility_str, size_t compatibility_str_max_size)
+{
+	elog(LOG, "Agent version=%d\n", agent_version);
+
 	if (agent_version != AGENT_PROTOCOL_VERSION)
 	{
 		char agent_version_str[1024];
@@ -251,5 +355,21 @@ bool launch_agent(void)
 			agent_version_str, AGENT_PROTOCOL_VERSION_STR);
 	}
 
-	return true;
+	/* checking compatibility params */
+	if (strnlen(compatibility_str, compatibility_str_max_size) == compatibility_str_max_size)
+	{
+		elog(ERROR, "Corrupted remote compatibility protocol: compatibility string has no terminating \\0");
+	}
+
+	elog(LOG, "Agent compatibility params:\n%s", compatibility_str);
+
+	{
+		char buf[1024];
+
+		prepare_compatibility_str(buf, sizeof buf);
+		if(strcmp(compatibility_str, buf))
+		{
+			elog(ERROR, "Incompatible remote agent params, expected:\n%s, actual:\n:%s", buf, compatibility_str);
+		}
+	}
 }

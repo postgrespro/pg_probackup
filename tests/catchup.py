@@ -1361,6 +1361,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         dst_options = {}
         dst_options['port'] = str(dst_pg.port)
         self.set_auto_conf(dst_pg, dst_options)
+        dst_pg._assign_master(src_pg)
         dst_pg.slow_start(replica = True)
         dst_pg.stop()
 
@@ -1389,6 +1390,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         # check: run verification query
         src_pg.safe_psql("postgres", "INSERT INTO ultimate_question VALUES(42)")
         src_query_result = src_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
+        dst_pg.catchup() # wait for replication
         dst_query_result = dst_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
         self.assertEqual(src_query_result, dst_query_result, 'Different answer from copy')
 
@@ -1418,6 +1420,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         # check: run verification query
         src_pg.safe_psql("postgres", "INSERT INTO ultimate_question VALUES(2*42)")
         src_query_result = src_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
+        dst_pg.catchup() # wait for replication
         dst_query_result = dst_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
         self.assertEqual(src_query_result, dst_query_result, 'Different answer from copy')
 
@@ -1446,6 +1449,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         # check: run verification query
         src_pg.safe_psql("postgres", "INSERT INTO ultimate_question VALUES(3*42)")
         src_query_result = src_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
+        dst_pg.catchup() # wait for replication
         dst_query_result = dst_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
         self.assertEqual(src_query_result, dst_query_result, 'Different answer from copy')
 
