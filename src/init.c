@@ -31,6 +31,16 @@ do_init(CatalogState *catalogState)
 		elog(ERROR, "cannot open backup catalog directory \"%s\": %s",
 			catalogState->catalog_path, strerror(errno_tmp));
 	}
+	else if (results == 1)
+	{
+		/* Check whether we have all(rw) rights for directory */
+		if (access(catalogState->catalog_path, 6) == -1) /* == R_OK | W_OK */
+		{
+			int errno_tmp = errno;
+			elog(ERROR, "cannot access backup catalog directory \"%s\": %s",
+				catalogState->catalog_path, strerror(errno_tmp));
+		}
+	}
 
 	/* create backup catalog root directory */
 	dir_create_dir(catalogState->catalog_path, DIR_PERMISSION, false);

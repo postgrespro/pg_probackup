@@ -1,8 +1,12 @@
 import os
+import stat # for chmod
 import unittest
 from .helpers.ptrack_helpers import dir_files, ProbackupTest, ProbackupException
 import shutil
 
+if os.name == 'nt':
+    import win32security
+    import ntsecuritycon as con
 
 module_name = 'init'
 
@@ -77,6 +81,40 @@ class InitTest(ProbackupTest, unittest.TestCase):
         try:
             self.show_pb(backup_dir, 'node')
             self.assertEqual(1, 0, 'Expecting Error due to initialization in non-empty directory. Output: {0} \n CMD: {1}'.format(
+                repr(self.output), self.cmd))
+        except ProbackupException as e:
+            self.assertIn(
+                "ERROR: Instance 'node' does not exist in this backup catalog",
+                e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+        
+    # @unittest.skip("skip")
+    def test_no_rights_for_directory(self):
+        """Failure with backup catalog existed and empty but user has no writing permissions"""
+        fname = self.id().split(".")[3]
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        node = self.make_simple_node(base_dir=os.path.join(module_name, fname, 'node'))
+        os.mkdir(backup_dir)
+        # changing directory rights
+        if os.name == 'nt': # windows block
+            user, domain, type = win32security.LookupAccountName("", os.getlogin())
+            sd = win32securityGetFileSecurity(backup_dir, win32security.DACL_SECURIRY_INFORMATION)
+            dacl = sd.GetSecurityDescriptorDacl()
+
+            dacl.AddAccessDeniedAce(win32security.ACL_REVISION, con.FILE_WRITE_DATA, user) # deny writing permission
+            sd.SetSecurityDescriptorDacl(1, dacl, 0)
+            win32security.SetFileSecurity(backup_dir, win32security.DACL_SECURIRY_INFORMATION, sd)
+        else:
+            os.chmod(backup_dir, stat.S_IREAD) # set read-only flag for current user
+            assert os.access(backup_dir, os.R_OK) and not os.access(backup_dir, os.W_OK)
+
+        self.init_pb(backup_dir)
+        try:
+            self.show_pb(backup_dir, 'node')
+            self.assertEqual(1, 0, 'Expecting Error due to initialization in empty directory with no rithts for writing. Output: {0} \n CMD: {1}'.format(
                 repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertIn(
