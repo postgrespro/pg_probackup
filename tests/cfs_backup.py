@@ -171,12 +171,18 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
             "ERROR: File pg_compression not found in {0}".format(
                 os.path.join(self.backup_dir, 'node', backup_id))
         )
-        self.assertTrue(
-            find_by_extensions(
-                [os.path.join(self.backup_dir, 'backups', 'node', backup_id)],
-                ['.cfm']),
-            "ERROR: .cfm files not found in backup dir"
-        )
+
+        # check cfm size
+        cfms = find_by_extensions(
+            [os.path.join(self.backup_dir, 'backups', 'node', backup_id)],
+            ['.cfm'])
+        self.assertTrue(cfms, "ERROR: .cfm files not found in backup dir")
+        for cfm in cfms:
+            size = os.stat(cfm).st_size
+            self.assertLessEqual(size, 4096,
+                            "ERROR: {0} is not truncated (has size {1} > 4096)".format(
+                                cfm, size
+                            ))
 
     # @unittest.expectedFailure
     # @unittest.skip("skip")
@@ -411,6 +417,69 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
                 [os.path.join(self.backup_dir, 'backups', 'node', backup_id)],
                 ['.cfm']),
             "ERROR: .cfm files not found in backup dir"
+        )
+
+    @unittest.skipUnless(ProbackupTest.enterprise, 'skip')
+    def test_page_doesnt_store_unchanged_cfm(self):
+        """
+        Case: Test page backup doesn't store cfm file if table were not modified
+        """
+
+        self.node.safe_psql(
+            "postgres",
+            "CREATE TABLE {0} TABLESPACE {1} "
+            "AS SELECT i AS id, MD5(i::text) AS text, "
+            "MD5(repeat(i::text,10))::tsvector AS tsvector "
+            "FROM generate_series(0,256) i".format('t1', tblspace_name)
+        )
+
+        try:
+            backup_id_full = self.backup_node(
+                self.backup_dir, 'node', self.node, backup_type='full')
+        except ProbackupException as e:
+            self.fail(
+                "ERROR: Full backup failed.\n {0} \n {1}".format(
+                    repr(self.cmd),
+                    repr(e.message)
+                )
+            )
+
+        self.assertTrue(
+            find_by_extensions(
+                [os.path.join(self.backup_dir, 'backups', 'node', backup_id_full)],
+                ['.cfm']),
+            "ERROR: .cfm files not found in backup dir"
+        )
+
+        try:
+            backup_id = self.backup_node(
+                self.backup_dir, 'node', self.node, backup_type='page')
+        except ProbackupException as e:
+            self.fail(
+                "ERROR: Incremental backup failed.\n {0} \n {1}".format(
+                    repr(self.cmd),
+                    repr(e.message)
+                )
+            )
+
+        show_backup = self.show_pb(self.backup_dir, 'node', backup_id)
+        self.assertEqual(
+            "OK",
+            show_backup["status"],
+            "ERROR: Incremental backup status is not valid. \n "
+            "Current backup status={0}".format(show_backup["status"])
+        )
+        self.assertTrue(
+            find_by_name(
+                [self.get_tblspace_path(self.node, tblspace_name)],
+                ['pg_compression']),
+            "ERROR: File pg_compression not found"
+        )
+        self.assertFalse(
+            find_by_extensions(
+                [os.path.join(self.backup_dir, 'backups', 'node', backup_id)],
+                ['.cfm']),
+            "ERROR: .cfm files is found in backup dir"
         )
 
     # @unittest.expectedFailure

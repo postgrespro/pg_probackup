@@ -64,8 +64,9 @@ typedef enum
 	FIO_GET_ASYNC_ERROR,
 	FIO_WRITE_ASYNC,
 	FIO_READLINK,
-    FIO_SYNC_FILE,
-    FIO_SEND_FILE_CONTENT,
+	FIO_SYNC_FILE,
+	FIO_SEND_FILE_CONTENT,
+	FIO_PAGE_ZERO
 } fio_operations;
 
 typedef struct
@@ -166,6 +167,9 @@ extern int     fio_sync(fio_location location, const char* path);
 extern pg_crc32
 fio_get_crc32(fio_location location, const char *file_path,
 			  bool decompress, bool missing_ok);
+extern pg_crc32
+fio_get_crc32_truncated(fio_location location, const char *file_path,
+			  bool missing_ok);
 
 extern int     fio_rename(fio_location location, const char* old_path, const char* new_path);
 extern int     fio_symlink(fio_location location, const char* target, const char* link_path, bool overwrite);
@@ -187,6 +191,13 @@ extern struct PageState *fio_get_checksum_map(fio_location location, const char 
 struct datapagemap; /* defined in datapagemap.h */
 extern struct datapagemap *fio_get_lsn_map(fio_location location, const char *fullpath, uint32 checksum_version,
 									  int n_blocks, XLogRecPtr horizonLsn, BlockNumber segmentno);
+
+extern pg_crc32 pgFileGetCRC32C(const char *file_path, bool missing_ok);
+extern pg_crc32 pgFileGetCRC32CTruncated(const char *file_path, bool missing_ok);
+#if PG_VERSION_NUM < 120000
+extern pg_crc32 pgFileGetCRC32(const char *file_path, bool missing_ok);
+#endif
+extern pg_crc32 pgFileGetCRC32Cgz(const char *file_path, bool missing_ok);
 
 
 // OBJECTS

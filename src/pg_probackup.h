@@ -1033,12 +1033,6 @@ extern pgFile *pgFileNew(const char *path, const char *rel_path,
 extern pgFile *pgFileInit(const char *rel_path);
 extern void pgFileFree(void *file);
 
-extern pg_crc32 pgFileGetCRC32C(const char *file_path, bool missing_ok);
-#if PG_VERSION_NUM < 120000
-extern pg_crc32 pgFileGetCRC32(const char *file_path, bool missing_ok);
-#endif
-extern pg_crc32 pgFileGetCRC32Cgz(const char *file_path, bool missing_ok);
-
 extern int pgFileMapComparePath(const void *f1, const void *f2);
 extern int pgFileCompareName(const void *f1, const void *f2);
 extern int pgFileCompareNameWithString(const void *f1, const void *f2);
@@ -1052,7 +1046,7 @@ extern int pgCompareString(const void *str1, const void *str2);
 extern int pgPrefixCompareString(const void *str1, const void *str2);
 extern int pgCompareOid(const void *f1, const void *f2);
 extern void pfilearray_clear_locks(parray *file_list);
-extern void set_forkname(pgFile *file);
+extern bool set_forkname(pgFile *file);
 
 /* in data.c */
 extern bool check_data_file(ConnectionArgs *arguments, pgFile *file,
@@ -1196,8 +1190,11 @@ extern int fio_send_pages(const char *to_fullpath, const char *from_fullpath, pg
 extern int fio_copy_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
 	                      XLogRecPtr horizonLsn, int calg, int clevel, uint32 checksum_version,
 	                      bool use_pagemap, BlockNumber *err_blknum, char **errormsg);
-extern int fio_send_file(const char *from_fullpath, const char *to_fullpath, FILE* out,
+/* return codes for fio_send_pages */
+extern int fio_send_file(const char *from_fullpath, FILE* out, bool cut_zero_tail,
 														pgFile *file, char **errormsg);
+extern int fio_send_file_local(const char *from_fullpath, FILE* out, bool cut_zero_tail,
+						 pgFile *file, char **errormsg);
 
 extern bool pgut_rmtree(const char *path, bool rmtopdir, bool strict);
 
