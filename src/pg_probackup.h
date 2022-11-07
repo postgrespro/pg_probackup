@@ -43,7 +43,7 @@
 
 #include "pg_probackup_state.h"
 
-#ifdef PGPRO_S3
+#ifdef PBCKP_S3
 #include "../s3/s3.h"
 #endif
 
