@@ -2253,7 +2253,6 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                 datname='backupdb', options=['--stream', '-U', 'backup'])
 
         if self.get_version(node) < 90600:
-            self.del_test_dir(self.module_name, self.fname)
             return
 
         # Restore as replica

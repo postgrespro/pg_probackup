@@ -45,10 +45,8 @@ class CheckSystemID(ProbackupTest, unittest.TestCase):
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
-        # Clean after yourself
         # Return this file to avoid Postger fail
         os.rename(os.path.join(node.base_dir, 'data', 'global', 'pg_control_copy'), file)
-        self.del_test_dir(self.module_name, self.fname)
 
     def test_pgpro560_systemid_mismatch(self):
         """

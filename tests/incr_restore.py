@@ -1389,9 +1389,6 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         pgdata_restored = self.pgdata_content(node.data_dir)
         self.compare_pgdata(delta_pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(self.module_name, self.fname)
-
     # @unittest.skip("skip")
     def test_make_replica_via_incr_checksum_restore(self):
         """
@@ -1403,7 +1400,6 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
             initdb_params=['--data-checksums'])
 
         if self.get_version(master) < self.version_to_num('9.6.0'):
-            self.del_test_dir(self.module_name, self.fname)
             return unittest.skip(
                 'Skipped because backup from replica is not supported in PG 9.5')
 
@@ -1472,7 +1468,6 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
             initdb_params=['--data-checksums'])
 
         if self.get_version(master) < self.version_to_num('9.6.0'):
-            self.del_test_dir(self.module_name, self.fname)
             return unittest.skip(
                 'Skipped because backup from replica is not supported in PG 9.5')
 

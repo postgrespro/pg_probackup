@@ -78,7 +78,6 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             )
 
         if self.get_version(node) < self.version_to_num('9.6.0'):
-            self.del_test_dir(self.module_name, self.fname)
             return unittest.skip(
                 'Skipped because pg_control_checkpoint() is not supported in PG 9.5')
 
@@ -681,7 +680,6 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
                 'max_wal_size': '32MB'})
 
         if self.get_version(master) < self.version_to_num('9.6.0'):
-            self.del_test_dir(self.module_name, self.fname)
             return unittest.skip(
                 'Skipped because backup from replica is not supported in PG 9.5')
 
@@ -808,7 +806,6 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             )
 
         if self.get_version(master) < self.version_to_num('9.6.0'):
-            self.del_test_dir(self.module_name, self.fname)
             return unittest.skip(
                 'Skipped because backup from replica is not supported in PG 9.5')
 
@@ -899,7 +896,6 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
                 'archive_timeout': '10s'})
 
         if self.get_version(master) < self.version_to_num('9.6.0'):
-            self.del_test_dir(self.module_name, self.fname)
             return unittest.skip(
                 'Skipped because backup from replica is not supported in PG 9.5')
 
@@ -1221,7 +1217,6 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
                 'checkpoint_timeout': '30s'})
 
         if self.get_version(master) < self.version_to_num('9.6.0'):
-            self.del_test_dir(self.module_name, self.fname)
             return unittest.skip(
                 'Skipped because backup from replica is not supported in PG 9.5')
 
@@ -2083,7 +2078,6 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             initdb_params=['--data-checksums'])
 
         if self.get_version(node) < self.version_to_num('9.6.0'):
-            self.del_test_dir(self.module_name, self.fname)
             return unittest.skip(
                 'Skipped because backup from replica is not supported in PG 9.5')
 
@@ -2284,7 +2278,6 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             initdb_params=['--data-checksums'])
 
         if self.get_version(node) < self.version_to_num('9.6.0'):
-            self.del_test_dir(self.module_name, self.fname)
             return unittest.skip(
                 'Skipped because backup from replica is not supported in PG 9.5')
 

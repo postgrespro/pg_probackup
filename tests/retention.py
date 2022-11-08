@@ -1538,7 +1538,6 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
             initdb_params=['--data-checksums'])
 
         if self.get_version(node) < 90600:
-            self.del_test_dir(self.module_name, self.fname)
             return unittest.skip('Skipped because ptrack support is disabled')
 
         backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
@@ -1584,7 +1583,6 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
             initdb_params=['--data-checksums'])
 
         if self.get_version(node) < 90600:
-            self.del_test_dir(self.module_name, self.fname)
             return unittest.skip('Skipped because ptrack support is disabled')
 
         backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')

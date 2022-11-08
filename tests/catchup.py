@@ -53,7 +53,6 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         # Cleanup
         dst_pg.stop()
         #self.assertEqual(1, 0, 'Stop test')
-        self.del_test_dir(self.module_name, self.fname)
 
     def test_full_catchup_with_tablespace(self):
         """
@@ -1533,7 +1532,6 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
 
         # Cleanup
         src_pg.stop()
-        self.del_test_dir(self.module_name, self.fname)
 
     def test_dry_run_catchup_delta(self):
         """

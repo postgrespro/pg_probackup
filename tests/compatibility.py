@@ -86,9 +86,6 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
             options=['-d', 'postgres', '-p', str(src_pg.port), '--stream', '--remote-path=' + pgprobackup_ssh_agent_path]
             )
 
-        # Clean after yourself
-        self.del_test_dir(self.module_name, self.fname)
-
     # @unittest.expectedFailure
     # @unittest.skip("skip")
     def test_backward_compatibility_page(self):

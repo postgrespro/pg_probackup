@@ -3096,9 +3096,6 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             'postgres',
             'select 1')
 
-        # Clean after yourself
-        self.del_test_dir(self.module_name, self.fname)
-
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_ptrack_vacuum(self):

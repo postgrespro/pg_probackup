@@ -334,7 +334,6 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             initdb_params=['--data-checksums'])
 
         if self.get_version(node) < self.version_to_num('10.0'):
-            self.del_test_dir(self.module_name, self.fname)
             return
 
         backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
@@ -401,7 +400,6 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             initdb_params=['--data-checksums'])
 
         if self.get_version(node) < self.version_to_num('10.0'):
-            self.del_test_dir(self.module_name, self.fname)
             return
 
         backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')

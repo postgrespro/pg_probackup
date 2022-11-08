@@ -26,7 +26,6 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             initdb_params=['--data-checksums'])
 
         if self.get_version(node1) < self.version_to_num('9.6.0'):
-            self.del_test_dir(self.module_name, self.fname)
             return unittest.skip(
                 'Skipped because backup from replica is not supported in PG 9.5')
 
@@ -229,7 +228,6 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
                 'max_wal_size': '32MB'})
 
         if self.get_version(master) < self.version_to_num('9.6.0'):
-            self.del_test_dir(self.module_name, self.fname)
             return unittest.skip(
                 'Skipped because backup from replica is not supported in PG 9.5')
 
@@ -367,7 +365,6 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
                 'archive_timeout': '10s'})
 
         if self.get_version(master) < self.version_to_num('9.6.0'):
-            self.del_test_dir(self.module_name, self.fname)
             return unittest.skip(
                 'Skipped because backup from replica is not supported in PG 9.5')
 
@@ -421,7 +418,6 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             pg_options={'archive_timeout': '10s'})
 
         if self.get_version(master) < self.version_to_num('9.6.0'):
-            self.del_test_dir(self.module_name, self.fname)
             return unittest.skip(
                 'Skipped because backup from replica is not supported in PG 9.5')
 
@@ -530,7 +526,6 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
                 'max_wal_size': '32MB'})
 
         if self.get_version(master) < self.version_to_num('9.6.0'):
-            self.del_test_dir(self.module_name, self.fname)
             return unittest.skip(
                 'Skipped because backup from replica is not supported in PG 9.5')
 
@@ -617,7 +612,6 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
                 'wal_level': 'replica'})
 
         if self.get_version(master) < self.version_to_num('9.6.0'):
-            self.del_test_dir(self.module_name, self.fname)
             return unittest.skip(
                 'Skipped because backup from replica is not supported in PG 9.5')
 
@@ -700,7 +694,6 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
                 'wal_level': 'replica'})
 
         if self.get_version(master) < self.version_to_num('9.6.0'):
-            self.del_test_dir(self.module_name, self.fname)
             return unittest.skip(
                 'Skipped because backup from replica is not supported in PG 9.5')
 
@@ -799,7 +792,6 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
                 'wal_level': 'replica'})
 
         if self.get_version(master) < self.version_to_num('9.6.0'):
-            self.del_test_dir(self.module_name, self.fname)
             return unittest.skip(
                 'Skipped because backup from replica is not supported in PG 9.5')
 
@@ -879,7 +871,6 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
                 'wal_level': 'replica'})
 
         if self.get_version(master) < self.version_to_num('9.6.0'):
-            self.del_test_dir(self.module_name, self.fname)
             return unittest.skip(
                 'Skipped because backup from replica is not supported in PG 9.5')
 
@@ -964,7 +955,6 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
                 'shared_buffers': '128MB'})
 
         if self.get_version(master) < self.version_to_num('9.6.0'):
-            self.del_test_dir(self.module_name, self.fname)
             return unittest.skip(
                 'Skipped because backup from replica is not supported in PG 9.5')
 
@@ -1064,7 +1054,6 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
                 'shared_buffers': '128MB'})
 
         if self.get_version(master) < self.version_to_num('9.6.0'):
-            self.del_test_dir(self.module_name, self.fname)
             return unittest.skip(
                 'Skipped because backup from replica is not supported in PG 9.5')
 
@@ -1138,7 +1127,6 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
                 'wal_level': 'replica'})
 
         if self.get_version(master) < self.version_to_num('9.6.0'):
-            self.del_test_dir(self.module_name, self.fname)
             return unittest.skip(
                 'Skipped because backup from replica is not supported in PG 9.5')
 
@@ -1257,7 +1245,6 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
                 'archive_timeout': '30s'})
 
         if self.get_version(node1) < self.version_to_num('9.6.0'):
-            self.del_test_dir(self.module_name, self.fname)
             return unittest.skip(
                 'Skipped because backup from replica is not supported in PG 9.5')
 
@@ -1378,7 +1365,6 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
                 'archive_timeout': '30s'})
 
         if self.get_version(node1) < self.version_to_num('9.6.0'):
-            self.del_test_dir(self.module_name, self.fname)
             return unittest.skip(
                 'Skipped because backup from replica is not supported in PG 9.5')
 
@@ -1496,7 +1482,6 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             initdb_params=['--data-checksums'])
 
         if self.get_version(master) < self.version_to_num('9.6.0'):
-            self.del_test_dir(self.module_name, self.fname)
             return unittest.skip(
                 'Skipped because backup from replica is not supported in PG 9.5')
 

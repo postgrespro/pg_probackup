@@ -754,9 +754,6 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
         self.assertEqual(result1, result2)
 
-        # Clean after yourself
-        self.del_test_dir(self.module_name, self.fname)
-
     def test_merge_ptrack_truncate(self):
         """
         make node, create table, take full backup,
@@ -1400,8 +1397,6 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
         self.assertEqual(
             'MERGING', self.show_pb(backup_dir, 'node')[1]['status'])
-
-        self.del_test_dir(self.module_name, self.fname)
 
     # @unittest.skip("skip")
     def test_crash_after_opening_backup_control_2(self):
@@ -2656,8 +2651,6 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
         self.assertEqual(
             'MERGING', self.show_pb(backup_dir, 'node')[1]['status'])
-
-        self.del_test_dir(self.module_name, self.fname)
 
     # @unittest.skip("skip")
     def test_merge_remote_mode(self):
