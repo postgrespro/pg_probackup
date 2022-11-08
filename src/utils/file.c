@@ -3924,13 +3924,18 @@ fio_communicate(int in, int out)
 }
 
 // CLASSES
+
 typedef struct pioLocalDrive
 {
 } pioLocalDrive;
+#define kls__pioLocalDrive	iface__pioDrive, iface(pioDrive)
+fobj_klass(pioLocalDrive);
 
 typedef struct pioRemoteDrive
 {
 } pioRemoteDrive;
+#define kls__pioRemoteDrive	iface__pioDrive, iface(pioDrive)
+fobj_klass(pioRemoteDrive);
 
 typedef struct pioFile
 {
@@ -3938,12 +3943,16 @@ typedef struct pioFile
     int		flags;
     bool	closed;
 } pioFile;
+#define kls__pioFile	mth(fobjDispose)
+fobj_klass(pioFile);
 
 typedef struct pioLocalFile
 {
     pioFile	p;
     int		fd;
 } pioLocalFile;
+#define kls__pioLocalFile	iface__pioFile, iface(pioFile)
+fobj_klass(pioLocalFile);
 
 typedef struct pioRemoteFile
 {
@@ -3957,6 +3966,9 @@ typedef struct pioRemoteFile
     void*   asyncChunk;
     ft_bytes_t  chunkRest;
 } pioRemoteFile;
+#define kls__pioRemoteFile	iface__pioFile, iface(pioFile), \
+                            mth(pioSetAsync, pioAsyncRead, pioAsyncWrite, pioAsyncError)
+fobj_klass(pioRemoteFile);
 
 typedef struct pioReadFilter {
     pioRead_i	wrapped;
@@ -3967,6 +3979,8 @@ typedef struct pioReadFilter {
     bool        eof;
     bool        finished;
 } pioReadFilter;
+#define kls__pioReadFilter	mth(pioRead, pioClose)
+fobj_klass(pioReadFilter);
 
 typedef struct pioWriteFilter {
     pioWriteFlush_i	wrapped;
@@ -3975,6 +3989,9 @@ typedef struct pioWriteFilter {
     size_t			capa;
     bool			finished;
 } pioWriteFilter;
+#define kls__pioWriteFilter iface__pioWriteFlush, iface(pioWriteFlush), \
+                            mth(pioClose)
+fobj_klass(pioWriteFilter);
 
 #ifdef HAVE_LIBZ
 typedef struct pioGZCompress {
@@ -4008,8 +4025,6 @@ pioDriveForLocation(fio_location loc)
 }
 
 /* Base physical file type */
-#define kls__pioFile	mth(fobjDispose)
-fobj_klass(pioFile);
 
 static void
 pioFile_fobjDispose(VSelf)

@@ -270,20 +270,11 @@ fobj_method(pioListDir);
 fobj_method(pioRemoveDir);
 
 #define iface__pioDrive 	mth(pioOpen, pioStat, pioRemove, pioRename), \
-					        mth(pioExists, pioGetCRC32, pioIsRemote, pioListDir, pioRemoveDir)
+					        mth(pioExists, pioGetCRC32, pioIsRemote),                \
+							mth(pioListDir, pioRemoveDir)
 fobj_iface(pioDrive);
 
-#define kls__pioLocalDrive	iface__pioDrive, iface(pioDrive)
-#define kls__pioRemoteDrive	iface__pioDrive, iface(pioDrive)
-fobj_klass(pioLocalDrive);
-fobj_klass(pioRemoteDrive);
-
 extern pioDrive_i pioDriveForLocation(fio_location location);
-
-#define pioFile__common_methods mth(pioRead, pioWrite, pioFlush, pioTruncate, pioClose)
-
-#define kls__pioLocalFile	iface__pioFile, iface(pioFile)
-fobj_klass(pioLocalFile);
 
 #define mth__pioSetAsync    err_i, (bool, async)
 #define mth__pioSetAsync__optional()  (async, true)
@@ -294,10 +285,6 @@ fobj_method(pioSetAsync);
 fobj_method(pioAsyncRead);
 fobj_method(pioAsyncWrite);
 fobj_method(pioAsyncError);
-
-#define kls__pioRemoteFile	iface__pioFile, iface(pioFile), \
-                            mth(pioSetAsync, pioAsyncRead, pioAsyncWrite, pioAsyncError)
-fobj_klass(pioRemoteFile);
 
 // Filter
 typedef struct pioTransformResult {
@@ -314,12 +301,6 @@ fobj_method(pioFinish);
 
 #define iface__pioFilter	mth(pioTransform, pioFinish)
 fobj_iface(pioFilter);
-
-#define kls__pioReadFilter	mth(pioRead, pioClose)
-#define kls__pioWriteFilter iface__pioWriteFlush, iface(pioWriteFlush), \
-                            mth(pioClose)
-fobj_klass(pioReadFilter);
-fobj_klass(pioWriteFilter);
 
 extern pioWriteFlush_i pioWrapWriteFilter(pioWriteFlush_i fl,
                                           pioFilter_i flt,
