@@ -205,6 +205,8 @@ class ProbackupTest(object):
     def __init__(self, *args, **kwargs):
         super(ProbackupTest, self).__init__(*args, **kwargs)
 
+        self.nodes_to_cleanup = []
+
         if isinstance(self, unittest.TestCase):
             self.module_name = self.id().split('.')[1]
             self.fname = self.id().split('.')[3]
@@ -373,11 +375,23 @@ class ProbackupTest(object):
         os.environ["PGAPPNAME"] = "pg_probackup"
 
     def tearDown(self):
-        if isinstance(self, unittest.TestCase):
-            module_name = self.id().split('.')[1]
-            fname = self.id().split('.')[3]
-            if is_test_result_ok(self):
+        if is_test_result_ok(self):
+            for node in self.nodes_to_cleanup:
+                node.cleanup()
+            # we do clear refs to nodes to gather them by gc inside self.del_test_dir()
+            self.nodes_to_cleanup.clear()
+
+            if isinstance(self, unittest.TestCase):
+                module_name = self.id().split('.')[1]
+                fname = self.id().split('.')[3]
                 self.del_test_dir(module_name, fname)
+        else:
+            for node in self.nodes_to_cleanup:
+                # TODO VERIFY do we want to remain failed test's db data for further investigations?
+                # TODO VERIFY or just to leave logs only without node/data?
+                # node._try_shutdown(max_attempts=1)
+                node.cleanup()
+            self.nodes_to_cleanup.clear()
 
     @property
     def pg_config_version(self):
@@ -475,6 +489,9 @@ class ProbackupTest(object):
         if node.major_version >= 13:
             self.set_auto_conf(
                 node, {}, 'postgresql.conf', ['wal_keep_segments'])
+
+        self.nodes_to_cleanup.append(node)
+
         return node
     
     def simple_bootstrap(self, node, role) -> None:
@@ -1689,6 +1706,15 @@ class ProbackupTest(object):
         return testgres.get_bin_path(binary)
 
     def clean_all(self):
+        # pre gc.collect() all dropped nodes
+        for o in gc.get_referrers(testgres.PostgresNode):
+            if o.__class__ is testgres.PostgresNode:
+                # removing node from slow_start enclosure
+                # after this the node is collectable by gc
+                o.slow_start = None
+        gc.collect()
+
+        # only when there are unhandled nodes left we do the cleanup for them
         for o in gc.get_referrers(testgres.PostgresNode):
             if o.__class__ is testgres.PostgresNode:
                 o.cleanup()
