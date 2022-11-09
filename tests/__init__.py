@@ -27,7 +27,7 @@ def load_tests(loader, tests, pattern):
         if os.environ['PG_PROBACKUP_LONG'] == 'ON':
             suite.addTests(loader.loadTestsFromModule(time_consuming))
 
-#    suite.addTests(loader.loadTestsFromModule(auth_test))
+    suite.addTests(loader.loadTestsFromModule(auth_test))
     suite.addTests(loader.loadTestsFromModule(archive))
     suite.addTests(loader.loadTestsFromModule(backup))
     suite.addTests(loader.loadTestsFromModule(catchup))
