@@ -287,19 +287,19 @@ fobj_method(pioAsyncWrite);
 fobj_method(pioAsyncError);
 
 // Filter
-typedef struct pioTransformResult {
+typedef struct pioFltTransformResult {
     size_t	consumed;
     size_t	produced;
-} pioTransformResult;
+} pioFltTransformResult;
 
-#define mth__pioTransform	pioTransformResult, (ft_bytes_t, in), \
+#define mth__pioFltTransform	pioFltTransformResult, (ft_bytes_t, in), \
 												(ft_bytes_t, out), \
 												(err_i*, err)
-fobj_method(pioTransform);
-#define mth__pioFinish		size_t, (ft_bytes_t, out), (err_i*, err)
-fobj_method(pioFinish);
+fobj_method(pioFltTransform);
+#define mth__pioFltFinish		size_t, (ft_bytes_t, out), (err_i*, err)
+fobj_method(pioFltFinish);
 
-#define iface__pioFilter	mth(pioTransform, pioFinish)
+#define iface__pioFilter	mth(pioFltTransform, pioFltFinish)
 fobj_iface(pioFilter);
 
 extern pioWriteFlush_i pioWrapWriteFilter(pioWriteFlush_i fl,

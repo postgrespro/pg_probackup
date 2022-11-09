@@ -4976,7 +4976,7 @@ pioReadFilter_pioRead(VSelf, ft_bytes_t wbuf, err_i *err)
 {
     Self(pioReadFilter);
     fobj_reset_err(err);
-    pioTransformResult tr;
+    pioFltTransformResult tr;
     size_t      wlen = wbuf.len;
     ft_bytes_t	rbuf;
     size_t 		r;
@@ -4990,7 +4990,7 @@ pioReadFilter_pioRead(VSelf, ft_bytes_t wbuf, err_i *err)
         rbuf = ft_bytes(self->buffer, self->len);
         while (rbuf.len > 0)
         {
-            tr = $i(pioTransform, self->filter, rbuf, wbuf, err);
+            tr = $i(pioFltTransform, self->filter, rbuf, wbuf, err);
             if ($haserr(*err))
                 return wlen - wbuf.len;
             ft_bytes_consume(&rbuf, tr.consumed);
@@ -5022,7 +5022,7 @@ pioReadFilter_pioRead(VSelf, ft_bytes_t wbuf, err_i *err)
 
     while (wbuf.len > 0 && self->eof)
     {
-        r = $i(pioFinish, self->filter, wbuf, err);
+        r = $i(pioFltFinish, self->filter, wbuf, err);
         if ($haserr(*err))
             return (ssize_t)(wlen - wbuf.len);
         ft_bytes_consume(&wbuf, r);
@@ -5046,7 +5046,7 @@ pioReadFilter_pioClose(VSelf, bool sync)
 
     if (!self->finished)
     {
-        r = $i(pioFinish, self->filter, ft_bytes(NULL, 0), &err);
+        r = $i(pioFltFinish, self->filter, ft_bytes(NULL, 0), &err);
         ft_assert(r == 0);
     }
     if ($ifdef(errcl =, pioClose, self->wrapped.self, sync))
@@ -5092,7 +5092,7 @@ pioWriteFilter_pioWrite(VSelf, ft_bytes_t rbuf, err_i *err)
 {
     Self(pioWriteFilter);
     fobj_reset_err(err);
-    pioTransformResult tr;
+    pioFltTransformResult tr;
     size_t      rlen = rbuf.len;
     ft_bytes_t	wbuf;
     size_t 		r;
@@ -5102,7 +5102,7 @@ pioWriteFilter_pioWrite(VSelf, ft_bytes_t rbuf, err_i *err)
         wbuf = ft_bytes(self->buffer, self->capa);
         while (wbuf.len > 0)
         {
-            tr = $i(pioTransform, self->filter, rbuf, wbuf, err);
+            tr = $i(pioFltTransform, self->filter, rbuf, wbuf, err);
             if ($haserr(*err))
                 return rlen - rbuf.len;
             ft_bytes_consume(&rbuf, tr.consumed);
@@ -5146,7 +5146,7 @@ pioWriteFilter_pioFlush(VSelf)
         wbuf = ft_bytes(self->buffer, self->capa);
         while (wbuf.len > 0)
         {
-            r = $i(pioFinish, self->filter, wbuf, &err);
+            r = $i(pioFltFinish, self->filter, wbuf, &err);
             if ($haserr(err))
                 return err;
             ft_bytes_consume(&wbuf, r);
@@ -5181,7 +5181,7 @@ pioWriteFilter_pioClose(VSelf, bool sync)
 
     if (!self->finished)
     {
-        r = $i(pioFinish, self->filter, ft_bytes(NULL, 0), &err);
+        r = $i(pioFltFinish, self->filter, ft_bytes(NULL, 0), &err);
         ft_assert(r == 0);
     }
     if ($ifdef(errcl =, pioClose, self->wrapped.self, sync))
@@ -5249,11 +5249,11 @@ pioGZDecompressFilter(bool ignoreTruncate)
     return bind_pioFilter(gz);
 }
 
-static pioTransformResult
-pioGZCompress_pioTransform(VSelf, ft_bytes_t rbuf, ft_bytes_t wbuf, err_i *err)
+static pioFltTransformResult
+pioGZCompress_pioFltTransform(VSelf, ft_bytes_t rbuf, ft_bytes_t wbuf, err_i *err)
 {
     Self(pioGZCompress);
-    pioTransformResult  tr = {0, 0};
+    pioFltTransformResult  tr = {0, 0};
     size_t  rlen = rbuf.len;
     size_t	wlen = wbuf.len;
     ssize_t rc;
@@ -5285,7 +5285,7 @@ pioGZCompress_pioTransform(VSelf, ft_bytes_t rbuf, ft_bytes_t wbuf, err_i *err)
 }
 
 static size_t
-pioGZCompress_pioFinish(VSelf, ft_bytes_t wbuf, err_i *err)
+pioGZCompress_pioFltFinish(VSelf, ft_bytes_t wbuf, err_i *err)
 {
     Self(pioGZCompress);
     size_t	wlen = wbuf.len;
@@ -5338,11 +5338,11 @@ pioGZCompress_fobjRepr(VSelf)
     return $S("pioGZCompress");
 }
 
-static pioTransformResult
-pioGZDecompress_pioTransform(VSelf, ft_bytes_t rbuf, ft_bytes_t wbuf, err_i* err)
+static pioFltTransformResult
+pioGZDecompress_pioFltTransform(VSelf, ft_bytes_t rbuf, ft_bytes_t wbuf, err_i* err)
 {
     Self(pioGZDecompress);
-    pioTransformResult  tr = {0, 0};
+    pioFltTransformResult  tr = {0, 0};
     size_t  rlen = rbuf.len;
     size_t	wlen = wbuf.len;
     int rc;
@@ -5387,7 +5387,7 @@ pioGZDecompress_pioTransform(VSelf, ft_bytes_t rbuf, ft_bytes_t wbuf, err_i* err
 }
 
 static size_t
-pioGZDecompress_pioFinish(VSelf, ft_bytes_t wbuf, err_i *err)
+pioGZDecompress_pioFltFinish(VSelf, ft_bytes_t wbuf, err_i *err)
 {
     Self(pioGZDecompress);
     size_t	wlen = wbuf.len;
