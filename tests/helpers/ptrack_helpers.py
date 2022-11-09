@@ -378,20 +378,15 @@ class ProbackupTest(object):
         if is_test_result_ok(self):
             for node in self.nodes_to_cleanup:
                 node.cleanup()
-            # we do clear refs to nodes to gather them by gc inside self.del_test_dir()
-            self.nodes_to_cleanup.clear()
+            self.del_test_dir(self.module_name, self.fname)
 
-            if isinstance(self, unittest.TestCase):
-                module_name = self.id().split('.')[1]
-                fname = self.id().split('.')[3]
-                self.del_test_dir(module_name, fname)
         else:
             for node in self.nodes_to_cleanup:
-                # TODO VERIFY do we want to remain failed test's db data for further investigations?
-                # TODO VERIFY or just to leave logs only without node/data?
-                # node._try_shutdown(max_attempts=1)
-                node.cleanup()
-            self.nodes_to_cleanup.clear()
+                # TODO make decorator with proper stop() vs cleanup()
+                node._try_shutdown(max_attempts=1)
+                # node.cleanup()
+
+        self.nodes_to_cleanup.clear()
 
     @property
     def pg_config_version(self):
@@ -1705,24 +1700,8 @@ class ProbackupTest(object):
     def get_bin_path(self, binary):
         return testgres.get_bin_path(binary)
 
-    def clean_all(self):
-        # pre gc.collect() all dropped nodes
-        for o in gc.get_referrers(testgres.PostgresNode):
-            if o.__class__ is testgres.PostgresNode:
-                # removing node from slow_start enclosure
-                # after this the node is collectable by gc
-                o.slow_start = None
-        gc.collect()
-
-        # only when there are unhandled nodes left we do the cleanup for them
-        for o in gc.get_referrers(testgres.PostgresNode):
-            if o.__class__ is testgres.PostgresNode:
-                o.cleanup()
-
     def del_test_dir(self, module_name, fname):
         """ Del testdir and optimistically try to del module dir"""
-
-        self.clean_all()
 
         shutil.rmtree(
             os.path.join(
