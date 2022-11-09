@@ -4270,7 +4270,7 @@ pioLocalFile_pioWrite(VSelf, ft_bytes_t buf, err_i *err)
 }
 
 static err_i
-pioLocalFile_pioFlush(VSelf)
+pioLocalFile_pioWriteFinish(VSelf)
 {
     Self(pioLocalFile);
     ft_assert(self->fd >= 0, "Closed file abused \"%s\"", self->p.path);
@@ -4816,7 +4816,7 @@ pioRemoteFile_pioWrite(VSelf, ft_bytes_t buf, err_i *err)
 }
 
 static err_i
-pioRemoteFile_pioFlush(VSelf)
+pioRemoteFile_pioWriteFinish(VSelf)
 {
     Self(pioRemoteFile);
 
@@ -5134,7 +5134,7 @@ pioWriteFilter_pioWrite(VSelf, ft_bytes_t rbuf, err_i *err)
 }
 
 static err_i
-pioWriteFilter_pioFlush(VSelf)
+pioWriteFilter_pioWriteFinish(VSelf)
 {
     Self(pioWriteFilter);
     err_i err = $noerr();
@@ -5503,8 +5503,8 @@ pioCopyWithFilters(pioWriteFlush_i dest, pioRead_i src,
         }
     }
 
-    /* pioFlush will check for async error if destination was remote */
-    err = $i(pioFlush, dest);
+    /* pioWriteFinish will check for async error if destination was remote */
+    err = $i(pioWriteFinish, dest);
     if ($haserr(err))
         $ireturn($err(SysErr, "Cannot flush file {path}: {cause}",
                      path($irepr(dest)), cause(err.self)));

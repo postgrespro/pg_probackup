@@ -224,16 +224,16 @@ fobj_error_cstr_key(gzErrStr);
 #define mth__pioRead  		size_t, (ft_bytes_t, buf), (err_i *, err)
 #define mth__pioWrite  		size_t, (ft_bytes_t, buf), (err_i *, err)
 #define mth__pioTruncate 	err_i, (size_t, sz)
-#define mth__pioFlush		err_i
+#define mth__pioWriteFinish		err_i
 fobj_method(pioClose);
 fobj_method(pioRead);
 fobj_method(pioWrite);
 fobj_method(pioTruncate);
-fobj_method(pioFlush);
+fobj_method(pioWriteFinish);
 
-#define iface__pioFile				mth(pioWrite, pioFlush, pioRead, pioTruncate, pioClose)
-#define iface__pioWriteFlush		mth(pioWrite, pioFlush)
-#define iface__pioWriteCloser		mth(pioWrite, pioFlush, pioClose)
+#define iface__pioFile				mth(pioWrite, pioWriteFinish, pioRead, pioTruncate, pioClose)
+#define iface__pioWriteFlush		mth(pioWrite, pioWriteFinish)
+#define iface__pioWriteCloser		mth(pioWrite, pioWriteFinish, pioClose)
 #define iface__pioReadCloser  		mth(pioRead, pioClose)
 fobj_iface(pioFile);
 fobj_iface(pioWriteFlush);
