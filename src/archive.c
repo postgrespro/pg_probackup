@@ -359,9 +359,9 @@ push_file(WALSegno *xlogfile, const char *archive_status_dir,
 }
 
 static void
-remove_temp_wal_file(pioDrive_i *backup_drive, char *partpath)
+remove_temp_wal_file(pioDrive_i backup_drive, char *partpath)
 {
-	err_i   remerr = $i(pioRemove, *backup_drive, partpath, false);
+	err_i   remerr = $i(pioRemove, backup_drive, partpath, false);
 	if ($haserr(remerr))
 		elog(WARNING, "Temp WAL: %s", $errmsg(remerr));
 }
@@ -527,7 +527,7 @@ push_file_internal(const char *wal_file_name, const char *pg_xlog_dir,
                       "checksum, skip pushing: \"%s\"", from_fullpath);
             $i(pioClose, in);
             $i(pioClose, out);
-            remove_temp_wal_file(&backup_drive, to_fullpath_part);
+            remove_temp_wal_file(backup_drive, to_fullpath_part);
             return 1;
         }
         else if (overwrite)
@@ -540,7 +540,7 @@ push_file_internal(const char *wal_file_name, const char *pg_xlog_dir,
         {
             $i(pioClose, in);
             $i(pioClose, out);
-            remove_temp_wal_file(&backup_drive, to_fullpath_part);
+            remove_temp_wal_file(backup_drive, to_fullpath_part);
 
             elog(ERROR, "WAL file already exists in archive with "
                         "different checksum: \"%s\"", to_fullpath);
@@ -575,14 +575,14 @@ push_file_internal(const char *wal_file_name, const char *pg_xlog_dir,
     if ($haserr(err))
     {
         $i(pioClose, out);
-        remove_temp_wal_file(&backup_drive, to_fullpath_part);
+        remove_temp_wal_file(backup_drive, to_fullpath_part);
         elog(ERROR, "Copy WAL: %s", $errmsg(err));
     }
 
     err = $i(pioClose, out, .sync = !no_sync);
     if ($haserr(err))
     {
-        remove_temp_wal_file(&backup_drive, to_fullpath_part);
+        remove_temp_wal_file(backup_drive, to_fullpath_part);
         elog(ERROR, "Temp WAL: %s", $errmsg(err));
     }
 
@@ -590,7 +590,7 @@ push_file_internal(const char *wal_file_name, const char *pg_xlog_dir,
     err = $i(pioRename, backup_drive, to_fullpath_part, to_fullpath);
     if ($haserr(err))
     {
-        remove_temp_wal_file(&backup_drive, to_fullpath_part);
+        remove_temp_wal_file(backup_drive, to_fullpath_part);
         elog(ERROR, "%s", $errmsg(err));
     }
 
