@@ -298,12 +298,17 @@ int
 grab_excl_lock_file(const char *root_dir, const char *backup_id, bool strict)
 {
 	char		lock_file[MAXPGPATH];
-	int			fd = 0;
+	FILE	   *fp = NULL;
 	char		buffer[256];
 	int			ntries = LOCK_TIMEOUT;
 	int			empty_tries = LOCK_STALE_TIMEOUT;
-	int			len;
-	int			encoded_pid;
+	size_t		len;
+	pid_t		encoded_pid;
+	int			save_errno = 0;
+	enum {
+		GELF_FAILED_WRITE = 1,
+		GELF_FAILED_CLOSE = 2,
+	} failed_action = 0;
 
 	join_path_components(lock_file, root_dir, BACKUP_LOCK_FILE);
 
@@ -314,19 +319,17 @@ grab_excl_lock_file(const char *root_dir, const char *backup_id, bool strict)
 	 */
 	do
 	{
-		FILE *fp_out = NULL;
-
 		if (interrupted)
 			elog(ERROR, "Interrupted while locking backup %s", backup_id);
 
 		/*
-		 * Try to create the lock file --- O_EXCL makes this atomic.
+		 * Try to create the lock file --- "wx" makes this atomic.
 		 *
 		 * Think not to make the file protection weaker than 0600.  See
 		 * comments below.
 		 */
-		fd = fio_open(FIO_BACKUP_HOST, lock_file, O_RDWR | O_CREAT | O_EXCL);
-		if (fd >= 0)
+		fp = fopen(lock_file, "wx");
+		if (fp != NULL)
 			break;				/* Success; exit the retry loop */
 
 		/* read-only fs is a special case */
@@ -342,7 +345,6 @@ grab_excl_lock_file(const char *root_dir, const char *backup_id, bool strict)
 		 * If file already exists or we have some permission problem (???),
 		 * then retry;
 		 */
-//		if ((errno != EEXIST && errno != EACCES))
 		if (errno != EEXIST)
 			elog(ERROR, "Could not create lock file \"%s\": %s",
 				 lock_file, strerror(errno));
@@ -352,18 +354,19 @@ grab_excl_lock_file(const char *root_dir, const char *backup_id, bool strict)
 		 * here: file might have been deleted since we tried to create it.
 		 */
 
-		fp_out = fopen(lock_file, "r");
-		if (fp_out == NULL)
+		fp = fopen(lock_file, "r");
+		if (fp == NULL)
 		{
 			if (errno == ENOENT)
 				continue; 	/* race condition; try again */
 			elog(ERROR, "Cannot open lock file \"%s\": %s", lock_file, strerror(errno));
 		}
 
-		len = fread(buffer, 1, sizeof(buffer) - 1, fp_out);
-		if (ferror(fp_out))
+		len = fread(buffer, 1, sizeof(buffer) - 1, fp);
+		if (ferror(fp))
 			elog(ERROR, "Cannot read from lock file: \"%s\"", lock_file);
-		fclose(fp_out);
+		fclose(fp);
+		fp = NULL;
 
 		/*
 		 * There are several possible reasons for lock file
@@ -400,7 +403,7 @@ grab_excl_lock_file(const char *root_dir, const char *backup_id, bool strict)
 			continue;
 		}
 
-		encoded_pid = atoi(buffer);
+		encoded_pid = (pid_t)atoll(buffer);
 
 		if (encoded_pid <= 0)
 		{
@@ -450,7 +453,7 @@ grab_lock:
 		 * it.  Need a loop because of possible race condition against other
 		 * would-be creators.
 		 */
-		if (fio_remove(FIO_BACKUP_HOST, lock_file, false) < 0)
+		if (remove(lock_file) < 0)
 		{
 			if (errno == ENOENT)
 				continue; /* race condition, again */
@@ -461,21 +464,32 @@ grab_lock:
 	} while (ntries--);
 
 	/* Failed to acquire exclusive lock in time */
-	if (fd <= 0)
+	if (fp == NULL)
 		return LOCK_FAIL_TIMEOUT;
 
 	/*
 	 * Successfully created the file, now fill it.
 	 */
-	snprintf(buffer, sizeof(buffer), "%lld\n", (long long)my_pid);
-
 	errno = 0;
-	if (fio_write(fd, buffer, strlen(buffer)) != strlen(buffer))
-	{
-		int save_errno = errno;
+	fprintf(fp, "%lld\n", (long long)my_pid);
+	fflush(fp);
 
-		fio_close(fd);
-		if (fio_remove(FIO_BACKUP_HOST, lock_file, false) != 0)
+	if (ferror(fp))
+	{
+		failed_action = GELF_FAILED_WRITE;
+		save_errno = errno;
+		clearerr(fp);
+	}
+
+	if (fclose(fp) && save_errno == 0)
+	{
+		failed_action = GELF_FAILED_CLOSE;
+		save_errno = errno;
+	}
+
+	if (save_errno)
+	{
+		if (remove(lock_file) != 0)
 			elog(WARNING, "Cannot remove lock file \"%s\": %s", lock_file, strerror(errno));
 
 		/* In lax mode if we failed to grab lock because of 'out of space error',
@@ -484,40 +498,10 @@ grab_lock:
 		 */
 		if (!strict && save_errno == ENOSPC)
 			return LOCK_FAIL_ENOSPC;
-		else
+		else if (failed_action == GELF_FAILED_WRITE)
 			elog(ERROR, "Could not write lock file \"%s\": %s",
 				 lock_file, strerror(save_errno));
-	}
-
-	if (fio_flush(fd) != 0)
-	{
-		int save_errno = errno;
-
-		fio_close(fd);
-		if (fio_remove(FIO_BACKUP_HOST, lock_file, false) != 0)
-			elog(WARNING, "Cannot remove lock file \"%s\": %s", lock_file, strerror(errno));
-
-		/* In lax mode if we failed to grab lock because of 'out of space error',
-		 * then treat backup as locked.
-		 * Only delete command should be run in lax mode.
-		 */
-		if (!strict && save_errno == ENOSPC)
-			return LOCK_FAIL_ENOSPC;
-		else
-			elog(ERROR, "Could not flush lock file \"%s\": %s",
-					lock_file, strerror(save_errno));
-	}
-
-	if (fio_close(fd) != 0)
-	{
-		int save_errno = errno;
-
-		if (fio_remove(FIO_BACKUP_HOST, lock_file, false) != 0)
-			elog(WARNING, "Cannot remove lock file \"%s\": %s", lock_file, strerror(errno));
-
-		if (!strict && save_errno == ENOSPC)
-			return LOCK_FAIL_ENOSPC;
-		else
+		else if (failed_action == GELF_FAILED_CLOSE)
 			elog(ERROR, "Could not close lock file \"%s\": %s",
 				 lock_file, strerror(save_errno));
 	}
