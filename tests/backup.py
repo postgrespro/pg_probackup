@@ -13,6 +13,38 @@ module_name = 'backup'
 
 class BackupTest(ProbackupTest, unittest.TestCase):
 
+    def test_basic_full_backup(self):
+        """
+        Just test full backup with at least two segments
+        """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'],
+            # we need to write a lot. Lets speedup a bit.
+            pg_options={"fsync": "off", "synchronous_commit": "off"})
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # Fill with data
+        # Have to use scale=100 to create second segment.
+        node.pgbench_init(scale=100, no_vacuum=True)
+
+        # FULL
+        backup_id = self.backup_node(backup_dir, 'node', node)
+
+        out = self.validate_pb(backup_dir, 'node', backup_id)
+        self.assertIn(
+            "INFO: Backup {0} is valid".format(backup_id),
+            out)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     # PGPRO-707
