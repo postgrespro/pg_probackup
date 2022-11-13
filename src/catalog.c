@@ -28,7 +28,7 @@ static bool backup_lock_exit_hook_registered = false;
 static parray *locks = NULL;
 
 static int grab_excl_lock_file(const char *backup_dir, const char *backup_id, bool strict);
-static int grab_shared_lock_file(pgBackup *backup);
+static int grab_shared_lock_file(const char *backup_dir);
 static int wait_shared_owners(pgBackup *backup);
 
 
@@ -231,7 +231,7 @@ lock_backup(pgBackup *backup, bool strict, bool exclusive)
 	if (exclusive)
 		rc = wait_shared_owners(backup);
 	else
-		rc = grab_shared_lock_file(backup);
+		rc = grab_shared_lock_file(backup->root_dir);
 
 	if (rc != 0)
 	{
@@ -600,26 +600,21 @@ wait_shared_owners(pgBackup *backup)
     return 0;
 }
 
+#define FT_SLICE		pid
+#define FT_SLICE_TYPE	pid_t
+#include <ft_array.inc.h>
+
 /*
- * Lock backup in shared mode
- * 0 - successs
- * 1 - fail
+ * returns array of pids stored in shared lock file and still alive.
+ * It excludes our own pid, so no need to exclude it explicitely.
  */
-int
-grab_shared_lock_file(pgBackup *backup)
+static ft_arr_pid_t
+read_shared_lock_file(const char *lock_file)
 {
 	FILE *fp_in = NULL;
-	FILE *fp_out = NULL;
 	char  buf_in[256];
 	pid_t encoded_pid;
-	char  lock_file[MAXPGPATH];
-
-	char  buffer[8192]; /*TODO: should be enough, but maybe malloc+realloc is better ? */
-	char  lock_file_tmp[MAXPGPATH];
-	int   buffer_len = 0;
-
-	join_path_components(lock_file, backup->root_dir, BACKUP_RO_LOCK_FILE);
-	snprintf(lock_file_tmp, MAXPGPATH, "%s%s", lock_file, "tmp");
+	ft_arr_pid_t pids = ft_arr_init();
 
 	/* open already existing lock files */
 	fp_in = fopen(lock_file, "r");
@@ -629,7 +624,7 @@ grab_shared_lock_file(pgBackup *backup)
 	/* read PIDs of owners */
 	while (fp_in && fgets(buf_in, sizeof(buf_in), fp_in))
 	{
-		encoded_pid = atoi(buf_in);
+		encoded_pid = (pid_t)atoll(buf_in);
 		if (encoded_pid <= 0)
 		{
 			elog(WARNING, "Bogus data in lock file \"%s\": \"%s\"", lock_file, buf_in);
@@ -645,11 +640,11 @@ grab_shared_lock_file(pgBackup *backup)
 			 * Somebody is still using this backup in shared mode,
 			 * copy this pid into a new file.
 			 */
-			buffer_len += snprintf(buffer+buffer_len, 4096, "%llu\n", (long long)encoded_pid);
+			ft_arr_pid_push(&pids, encoded_pid);
 		}
 		else if (errno != ESRCH)
 			elog(ERROR, "Failed to send signal 0 to a process %lld: %s",
-					(long long)encoded_pid, strerror(errno));
+				 (long long)encoded_pid, strerror(errno));
 	}
 
 	if (fp_in)
@@ -659,31 +654,69 @@ grab_shared_lock_file(pgBackup *backup)
 		fclose(fp_in);
 	}
 
+	return pids;
+}
+
+static void
+write_shared_lock_file(const char *lock_file, ft_arr_pid_t pids)
+{
+	FILE   *fp_out = NULL;
+	char	lock_file_tmp[MAXPGPATH];
+	ssize_t	i;
+
+	snprintf(lock_file_tmp, MAXPGPATH, "%s%s", lock_file, "tmp");
+
 	fp_out = fopen(lock_file_tmp, "w");
 	if (fp_out == NULL)
 	{
 		if (errno == EROFS)
-			return 0;
+			return;
 
 		elog(ERROR, "Cannot open temp lock file \"%s\": %s", lock_file_tmp, strerror(errno));
 	}
 
-	/* add my own pid */
-	buffer_len += snprintf(buffer+buffer_len, sizeof(buffer), "%llu\n", (long long)my_pid);
-
 	/* write out the collected PIDs to temp lock file */
-	fwrite(buffer, 1, buffer_len, fp_out);
+	for (i = 0; i < pids.len; i++)
+		fprintf(fp_out, "%lld\n", (long long)ft_arr_pid_at(&pids, i));
+	fflush(fp_out);
 
 	if (ferror(fp_out))
+	{
+		fclose(fp_out);
+		remove(lock_file_tmp);
 		elog(ERROR, "Cannot write to lock file: \"%s\"", lock_file_tmp);
+	}
 
 	if (fclose(fp_out) != 0)
+	{
+		remove(lock_file_tmp);
 		elog(ERROR, "Cannot close temp lock file \"%s\": %s", lock_file_tmp, strerror(errno));
+	}
 
 	if (rename(lock_file_tmp, lock_file) < 0)
 		elog(ERROR, "Cannot rename file \"%s\" to \"%s\": %s",
-			lock_file_tmp, lock_file, strerror(errno));
+			 lock_file_tmp, lock_file, strerror(errno));
+}
 
+/*
+ * Lock backup in shared mode
+ * 0 - successs
+ * 1 - fail
+ */
+int
+grab_shared_lock_file(const char *backup_dir)
+{
+	char  lock_file[MAXPGPATH];
+	ft_arr_pid_t	pids;
+
+	join_path_components(lock_file, backup_dir, BACKUP_RO_LOCK_FILE);
+
+	pids = read_shared_lock_file(lock_file);
+	/* add my own pid */
+	ft_arr_pid_push(&pids, my_pid);
+
+	write_shared_lock_file(lock_file, pids);
+	ft_arr_pid_free(&pids);
 	return 0;
 }
 
@@ -723,87 +756,23 @@ release_excl_lock_file(const char *backup_dir)
 void
 release_shared_lock_file(const char *backup_dir)
 {
-	FILE *fp_in = NULL;
-	FILE *fp_out = NULL;
-	char  buf_in[256];
-	pid_t encoded_pid;
 	char  lock_file[MAXPGPATH];
-
-	char  buffer[8192]; /*TODO: should be enough, but maybe malloc+realloc is better ? */
-	char  lock_file_tmp[MAXPGPATH];
-	int   buffer_len = 0;
+	ft_arr_pid_t	pids;
 
 	join_path_components(lock_file, backup_dir, BACKUP_RO_LOCK_FILE);
-	snprintf(lock_file_tmp, MAXPGPATH, "%s%s", lock_file, "tmp");
 
-	/* open lock file */
-	fp_in = fopen(lock_file, "r");
-	if (fp_in == NULL)
+	pids = read_shared_lock_file(lock_file);
+	/* read_shared_lock_file already had deleted my own pid */
+	if (pids.len == 0)
 	{
-		if (errno == ENOENT)
-			return;
-		else
-			elog(ERROR, "Cannot open lock file \"%s\": %s", lock_file, strerror(errno));
-	}
-
-	/* read PIDs of owners */
-	while (fgets(buf_in, sizeof(buf_in), fp_in))
-	{
-		encoded_pid = atoi(buf_in);
-
-		if (encoded_pid <= 0)
-		{
-			elog(WARNING, "Bogus data in lock file \"%s\": \"%s\"", lock_file, buf_in);
-			continue;
-		}
-
-		/* remove my pid */
-		if (encoded_pid == my_pid)
-			continue;
-
-		if (kill(encoded_pid, 0) == 0)
-		{
-			/*
-			 * Somebody is still using this backup in shared mode,
-			 * copy this pid into a new file.
-			 */
-			buffer_len += snprintf(buffer+buffer_len, 4096, "%llu\n", (long long)encoded_pid);
-		}
-		else if (errno != ESRCH)
-			elog(ERROR, "Failed to send signal 0 to a process %lld: %s",
-					(long long)encoded_pid, strerror(errno));
-    }
-
-	if (ferror(fp_in))
-		elog(ERROR, "Cannot read from lock file: \"%s\"", lock_file);
-	fclose(fp_in);
-
-	/* if there is no active pid left, then there is nothing to do */
-	if (buffer_len == 0)
-	{
-		if (fio_remove(FIO_BACKUP_HOST, lock_file, false) != 0)
+		ft_arr_pid_free(&pids);
+		if (remove(lock_file) != 0)
 			elog(ERROR, "Cannot remove shared lock file \"%s\": %s", lock_file, strerror(errno));
 		return;
 	}
 
-	fp_out = fopen(lock_file_tmp, "w");
-	if (fp_out == NULL)
-		elog(ERROR, "Cannot open temp lock file \"%s\": %s", lock_file_tmp, strerror(errno));
-
-	/* write out the collected PIDs to temp lock file */
-	fwrite(buffer, 1, buffer_len, fp_out);
-
-	if (ferror(fp_out))
-		elog(ERROR, "Cannot write to lock file: \"%s\"", lock_file_tmp);
-
-	if (fclose(fp_out) != 0)
-		elog(ERROR, "Cannot close temp lock file \"%s\": %s", lock_file_tmp, strerror(errno));
-
-	if (rename(lock_file_tmp, lock_file) < 0)
-		elog(ERROR, "Cannot rename file \"%s\" to \"%s\": %s",
-			lock_file_tmp, lock_file, strerror(errno));
-
-	return;
+	write_shared_lock_file(lock_file, pids);
+	ft_arr_pid_free(&pids);
 }
 
 /*
