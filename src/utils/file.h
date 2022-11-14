@@ -152,8 +152,6 @@ extern int     fio_close_stream(FILE* f);
 extern gzFile  fio_gzopen(fio_location location, const char* path, const char* mode, int level);
 extern int     fio_gzclose(gzFile file);
 extern int     fio_gzread(gzFile f, void *buf, unsigned size);
-extern int     fio_gzwrite(gzFile f, void const* buf, unsigned size);
-extern int     fio_gzeof(gzFile f);
 extern z_off_t fio_gzseek(gzFile f, z_off_t offset, int whence);
 extern const char* fio_gzerror(gzFile file, int *errnum);
 #endif
