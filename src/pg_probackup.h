@@ -274,7 +274,7 @@ typedef struct pgFile
 	Oid		relOid;			/* relOid extracted from path, if applicable */
 	ForkName   forkName;	/* forkName extracted from path, if applicable */
 	int		segno;			/* Segment number for ptrack */
-	int		n_blocks;		/* number of blocks in the data file in data directory */
+	int64		n_blocks;		/* number of blocks in the data file in data directory */
 	bool	is_cfs;			/* Flag to distinguish files compressed by CFS*/
 	int		external_dir_num;	/* Number of external directory. 0 if not external */
 	bool	exists_in_prev;		/* Mark files, both data and regular, that exists in previous backup */
@@ -532,6 +532,7 @@ struct pgBackup
 
 	/* map used for access to page headers */
 	HeaderMap       hdr_map;
+	bool 			large_file;     /* file's size is greate 2G*/
 };
 
 /* Recovery target for restore and validate subcommands */
@@ -685,12 +686,21 @@ typedef struct BackupPageHeader
 	int32		compressed_size;
 } BackupPageHeader;
 
-/* 4MB for 1GB file */
-typedef struct BackupPageHeader2
+/* 4MB for 1GB file ,for version 1*/
+typedef struct BackupPageHeader2_v1
 {
 	XLogRecPtr  lsn;
 	int32	    block;			 /* block number */
 	int32       pos;             /* position in backup file */
+	uint16      checksum;
+} BackupPageHeader2_v1;
+
+/* 4MB for 2GB file ,for last version*/
+typedef struct BackupPageHeader2_v2
+{
+	XLogRecPtr  lsn;
+	int64	    block;			 /* block number */
+	int64       pos;             /* position in backup file */
 	uint16      checksum;
 } BackupPageHeader2;
 
@@ -1125,7 +1135,7 @@ extern size_t restore_data_file(parray *parent_chain, pgFile *dest_file, FILE *o
 								const char *to_fullpath, bool use_bitmap, PageState *checksum_map,
 								XLogRecPtr shift_lsn, datapagemap_t *lsn_map, bool use_headers);
 extern size_t restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_version,
-										 const char *from_fullpath, const char *to_fullpath, int nblocks,
+										 const char *from_fullpath, const char *to_fullpath, int64 nblocks,
 										 datapagemap_t *map, PageState *checksum_map, int checksum_version,
 										 datapagemap_t *lsn_map, BackupPageHeader2 *headers);
 extern size_t restore_non_data_file(parray *parent_chain, pgBackup *dest_backup,
@@ -1137,13 +1147,13 @@ extern bool create_empty_file(fio_location from_location, const char *to_root,
 							  fio_location to_location, pgFile *file);
 
 extern PageState *get_checksum_map(const char *fullpath, uint32 checksum_version,
-								int n_blocks, XLogRecPtr dest_stop_lsn, BlockNumber segmentno);
+								int64 n_blocks, XLogRecPtr dest_stop_lsn, BlockNumber segmentno);
 extern datapagemap_t *get_lsn_map(const char *fullpath, uint32 checksum_version,
-								  int n_blocks, XLogRecPtr shift_lsn, BlockNumber segmentno);
+								  int64 n_blocks, XLogRecPtr shift_lsn, BlockNumber segmentno);
 extern bool validate_file_pages(pgFile *file, const char *fullpath, XLogRecPtr stop_lsn,
-							    uint32 checksum_version, uint32 backup_version, HeaderMap *hdr_map);
+							uint32 checksum_version, uint32 backup_version, HeaderMap *hdr_map, bool large_file);
 
-extern BackupPageHeader2* get_data_file_headers(HeaderMap *hdr_map, pgFile *file, uint32 backup_version, bool strict);
+extern BackupPageHeader2* get_data_file_headers(HeaderMap *hdr_map, pgFile *file, uint32 backup_version, bool strict,bool large_file);
 extern void write_page_headers(BackupPageHeader2 *headers, pgFile *file, HeaderMap *hdr_map, bool is_merge);
 extern void init_header_map(pgBackup *backup);
 extern void cleanup_header_map(HeaderMap *hdr_map);
@@ -1259,7 +1269,7 @@ extern bool pgut_rmtree(const char *path, bool rmtopdir, bool strict);
 extern void pgut_setenv(const char *key, const char *val);
 extern void pgut_unsetenv(const char *key);
 
-extern PageState *fio_get_checksum_map(const char *fullpath, uint32 checksum_version, int n_blocks,
+extern PageState *fio_get_checksum_map(const char *fullpath, uint32 checksum_version, int64 n_blocks,
 									XLogRecPtr dest_stop_lsn, BlockNumber segmentno, fio_location location);
 
 extern datapagemap_t *fio_get_lsn_map(const char *fullpath, uint32 checksum_version,

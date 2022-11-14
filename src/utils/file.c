@@ -2177,7 +2177,7 @@ fio_copy_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
 
 			COMP_FILE_CRC32(true, file->crc, buf, hdr.size);
 
-			if (fio_fseek(out, blknum * BLCKSZ) < 0)
+			if (fio_fseek(out, ((int64)blknum) * BLCKSZ) < 0)
 			{
 				elog(ERROR, "Cannot seek block %u of \"%s\": %s",
 					blknum, to_fullpath, strerror(errno));
@@ -2219,7 +2219,7 @@ fio_send_pages_impl(int out, char* buf)
 {
 	FILE        *in = NULL;
 	BlockNumber  blknum = 0;
-	int          current_pos = 0;
+	int64          current_pos = 0;
 	BlockNumber  n_blocks_read = 0;
 	PageState    page_st;
 	char         read_buffer[BLCKSZ+1];
@@ -2235,7 +2235,7 @@ fio_send_pages_impl(int out, char* buf)
 	datapagemap_iterator_t *iter = NULL;
 	/* page headers */
 	int32       hdr_num = -1;
-	int32       cur_pos_out = 0;
+	int64       cur_pos_out = 0;
 	BackupPageHeader2 *headers = NULL;
 
 	/* open source file */
@@ -2306,11 +2306,11 @@ fio_send_pages_impl(int out, char* buf)
 			 * Optimize stdio buffer usage, fseek only when current position
 			 * does not match the position of requested block.
 			 */
-			if (current_pos != blknum*BLCKSZ)
+			if (current_pos != ((int64)blknum)*BLCKSZ)
 			{
-				current_pos = blknum*BLCKSZ;
+				current_pos = ((int64)blknum)*BLCKSZ;
 				if (fseek(in, current_pos, SEEK_SET) != 0)
-					elog(ERROR, "fseek to position %u is failed on remote file '%s': %s",
+					elog(ERROR, "fseek to position " INT64_FORMAT " is failed on remote file '%s': %s",
 							current_pos, from_fullpath, strerror(errno));
 			}
 
@@ -3492,7 +3492,7 @@ fio_list_dir(parray *files, const char *root, bool exclude,
 }
 
 PageState *
-fio_get_checksum_map(const char *fullpath, uint32 checksum_version, int n_blocks,
+fio_get_checksum_map(const char *fullpath, uint32 checksum_version, int64 n_blocks,
 					 XLogRecPtr dest_stop_lsn, BlockNumber segmentno, fio_location location)
 {
 	if (fio_is_remote(location))

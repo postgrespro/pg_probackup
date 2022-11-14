@@ -39,6 +39,7 @@ typedef struct
 	 * 0 means there is no error, 1 - there is an error.
 	 */
 	int			ret;
+	bool 		large_file;
 } validate_files_arg;
 
 /*
@@ -152,6 +153,7 @@ pgBackupValidate(pgBackup *backup, pgRestoreParams *params)
 		arg->backup_version = parse_program_version(backup->program_version);
 		arg->external_prefix = external_prefix;
 		arg->hdr_map = &(backup->hdr_map);
+		arg->large_file = backup->large_file;
 //		arg->dbOid_exclude_list = dbOid_exclude_list;
 		/* By default there are some error */
 		threads_args[i].ret = 1;
@@ -362,7 +364,7 @@ pgBackupValidateFiles(void *arg)
 			if (!validate_file_pages(file, file_fullpath, arguments->stop_lsn,
 								  arguments->checksum_version,
 								  arguments->backup_version,
-								  arguments->hdr_map))
+								  arguments->hdr_map,arguments->large_file))
 				arguments->corrupted = true;
 		}
 	}
