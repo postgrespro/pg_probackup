@@ -997,7 +997,7 @@ main(int argc, char *argv[])
 			err = do_add_instance(instanceState, &instance_config);
 #ifdef PBCKP_S3
 			if (err == 0 && s3_protocol != S3_INVALID_PROTOCOL)
-				err = do_S3_write_config(&instance_config);
+				err = do_S3_write_config(instanceState);
 #endif
 			return err;
 		}

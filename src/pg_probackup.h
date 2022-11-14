@@ -825,7 +825,7 @@ extern int do_S3_backup(InstanceState *instanceState,
 								 pgSetBackupParams *set_backup_params,time_t start_time);
 extern int do_S3_show(InstanceState *instanceState);
 extern int do_S3_restore(InstanceState *instanceState, time_t target_backup_id);
-extern int do_S3_write_config(InstanceConfig *instance);
+extern int do_S3_write_config(InstanceState *instanceState);
 #endif
 
 /* in catchup.c */
