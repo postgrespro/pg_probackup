@@ -56,7 +56,8 @@ typedef enum
 	FIO_CHECK_POSTMASTER,
 	FIO_GET_ASYNC_ERROR,
 	FIO_WRITE_ASYNC,
-	FIO_READLINK
+	FIO_READLINK,
+	FIO_PAGE_ZERO
 } fio_operations;
 
 typedef enum
@@ -122,6 +123,8 @@ extern void    fio_disconnect(void);
 extern int     fio_sync(char const* path, fio_location location);
 extern pg_crc32 fio_get_crc32(const char *file_path, fio_location location,
 							  bool decompress, bool missing_ok);
+extern pg_crc32 fio_get_crc32_truncated(const char *file_path, fio_location location,
+										bool missing_ok);
 
 extern int     fio_rename(char const* old_path, char const* new_path, fio_location location);
 extern int     fio_symlink(char const* target, char const* link_path, bool overwrite, fio_location location);

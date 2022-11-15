@@ -799,13 +799,17 @@ backup_non_data_file(pgFile *file, pgFile *prev_file,
 	 * and its mtime is less than parent backup start time ... */
 	if ((pg_strcasecmp(file->name, RELMAPPER_FILENAME) != 0) &&
 		(prev_file && file->exists_in_prev &&
+		 file->size == prev_file->size &&
 		 file->mtime <= parent_backup_time))
 	{
 		/*
 		 * file could be deleted under our feets.
 		 * But then backup_non_data_file_internal will handle it safely
 		 */
-		file->crc = fio_get_crc32(from_fullpath, FIO_DB_HOST, false, true);
+		if (file->forkName != cfm)
+			file->crc = fio_get_crc32(from_fullpath, FIO_DB_HOST, false, true);
+		else
+			file->crc = fio_get_crc32_truncated(from_fullpath, FIO_DB_HOST, true);
 
 		/* ...and checksum is the same... */
 		if (EQ_TRADITIONAL_CRC32(file->crc, prev_file->crc))
@@ -1330,7 +1334,12 @@ restore_non_data_file(parray *parent_chain, pgBackup *dest_backup,
 	if (already_exists)
 	{
 		/* compare checksums of already existing file and backup file */
-		pg_crc32 file_crc = fio_get_crc32(to_fullpath, FIO_DB_HOST, false, false);
+		pg_crc32 file_crc;
+		if (tmp_file->forkName == cfm &&
+			    tmp_file->uncompressed_size > tmp_file->write_size)
+			file_crc = fio_get_crc32_truncated(to_fullpath, FIO_DB_HOST, false);
+		else
+			file_crc = fio_get_crc32(to_fullpath, FIO_DB_HOST, false, false);
 
 		if (file_crc == tmp_file->crc)
 		{
@@ -1387,10 +1396,12 @@ backup_non_data_file_internal(const char *from_fullpath,
 							const char *to_fullpath, pgFile *file,
 							bool missing_ok)
 {
-	FILE	*in = NULL;
 	FILE	*out = NULL;
-	ssize_t  read_len = 0;
-	char	*buf = NULL;
+	char	*errmsg = NULL;
+	int 	rc;
+	bool	cut_zero_tail;
+
+	cut_zero_tail = file->forkName == cfm;
 
 	INIT_FILE_CRC32(true, file->crc);
 
@@ -1412,107 +1423,44 @@ backup_non_data_file_internal(const char *from_fullpath,
 
 	/* backup remote file  */
 	if (fio_is_remote(FIO_DB_HOST))
-	{
-		char *errmsg = NULL;
-		int rc = fio_send_file(from_fullpath, to_fullpath, out, file, &errmsg);
-
-		/* handle errors */
-		if (rc == FILE_MISSING)
-		{
-			/* maybe deleted, it's not error in case of backup */
-			if (missing_ok)
-			{
-				elog(LOG, "File \"%s\" is not found", from_fullpath);
-				file->write_size = FILE_NOT_FOUND;
-				goto cleanup;
-			}
-			else
-				elog(ERROR, "File \"%s\" is not found", from_fullpath);
-		}
-		else if (rc == WRITE_FAILED)
-			elog(ERROR, "Cannot write to \"%s\": %s", to_fullpath, strerror(errno));
-		else if (rc != SEND_OK)
-		{
-			if (errmsg)
-				elog(ERROR, "%s", errmsg);
-			else
-				elog(ERROR, "Cannot access remote file \"%s\"", from_fullpath);
-		}
-
-		pg_free(errmsg);
-	}
-	/* backup local file */
+		rc = fio_send_file(from_fullpath, out, cut_zero_tail, file, &errmsg);
 	else
+		rc = fio_send_file_local(from_fullpath, out, cut_zero_tail, file, &errmsg);
+
+	/* handle errors */
+	if (rc == FILE_MISSING)
 	{
-		/* open source file for read */
-		in = fopen(from_fullpath, PG_BINARY_R);
-		if (in == NULL)
+		/* maybe deleted, it's not error in case of backup */
+		if (missing_ok)
 		{
-			/* maybe deleted, it's not error in case of backup */
-			if (errno == ENOENT)
-			{
-				if (missing_ok)
-				{
-					elog(LOG, "File \"%s\" is not found", from_fullpath);
-					file->write_size = FILE_NOT_FOUND;
-					goto cleanup;
-				}
-				else
-					elog(ERROR, "File \"%s\" is not found", from_fullpath);
-			}
-
-			elog(ERROR, "Cannot open file \"%s\": %s", from_fullpath,
-				 strerror(errno));
+			elog(LOG, "File \"%s\" is not found", from_fullpath);
+			file->write_size = FILE_NOT_FOUND;
+			goto cleanup;
 		}
-
-		/* disable stdio buffering for local input/output files to avoid triple buffering */
-		setvbuf(in, NULL, _IONBF, BUFSIZ);
-		setvbuf(out, NULL, _IONBF, BUFSIZ);
-
-		/* allocate 64kB buffer */
-		buf = pgut_malloc(CHUNK_SIZE);
-
-		/* copy content and calc CRC */
-		for (;;)
-		{
-			read_len = fread(buf, 1, CHUNK_SIZE, in);
-
-			if (ferror(in))
-				elog(ERROR, "Cannot read from file \"%s\": %s",
-					 from_fullpath, strerror(errno));
-
-			if (read_len > 0)
-			{
-				if (fwrite(buf, 1, read_len, out) != read_len)
-					elog(ERROR, "Cannot write to file \"%s\": %s", to_fullpath,
-						 strerror(errno));
-
-				/* update CRC */
-				COMP_FILE_CRC32(true, file->crc, buf, read_len);
-				file->read_size += read_len;
-			}
-
-			if (feof(in))
-				break;
-		}
+		else
+			elog(ERROR, "File \"%s\" is not found", from_fullpath);
+	}
+	else if (rc == WRITE_FAILED)
+		elog(ERROR, "Cannot write to \"%s\": %s", to_fullpath, strerror(errno));
+	else if (rc != SEND_OK)
+	{
+		if (errmsg)
+			elog(ERROR, "%s", errmsg);
+		else
+			elog(ERROR, "Cannot access remote file \"%s\"", from_fullpath);
 	}
 
-	file->write_size = (int64) file->read_size;
-
-	if (file->write_size > 0)
-		file->uncompressed_size = file->write_size;
+	file->uncompressed_size = file->read_size;
 
 cleanup:
+	if (errmsg != NULL)
+		pg_free(errmsg);
+
 	/* finish CRC calculation and store into pgFile */
 	FIN_FILE_CRC32(true, file->crc);
 
-	if (in && fclose(in))
-		elog(ERROR, "Cannot close the file \"%s\": %s", from_fullpath, strerror(errno));
-
 	if (out && fclose(out))
 		elog(ERROR, "Cannot close the file \"%s\": %s", to_fullpath, strerror(errno));
-
-	pg_free(buf);
 }
 
 /*

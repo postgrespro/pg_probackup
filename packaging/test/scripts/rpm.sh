@@ -77,6 +77,12 @@ if [ ${DISTRIB} == 'centos' ] && [ ${DISTRIB_VERSION} == '8' ]; then
     dnf -qy module disable postgresql
 fi
 
+# PGDG doesn't support install of PG-9.6 from repo package anymore
+if [ ${PG_VERSION} == '9.6' ] && [ ${DISTRIB_VERSION} == '7' ]; then
+    # ugly hack: use repo settings from PG10
+    sed -i 's/10/9.6/' /etc/yum.repos.d/pgdg-redhat-all.repo
+fi
+
 yum install -y postgresql${PG_TOG}-server.x86_64
 export PGDATA=/var/lib/pgsql/${PG_VERSION}/data
 
