@@ -174,29 +174,6 @@ def _slow_start(self, replica=False):
         sleep(0.5)
 
 
-def _is_test_result_ok(test_case):
-    # sources of solution:
-    # 1. python versions 2.7 - 3.10, verified on 3.10, 3.7, 2.7, taken from:
-    # https://tousu.in/qa/?qa=555402/unit-testing-getting-pythons-unittest-results-in-a-teardown-method&show=555403#a555403
-    #
-    # 2. python versions 3.11+ mixin, verified on 3.11, taken from: https://stackoverflow.com/a/39606065
-
-    if hasattr(test_case, '_outcome'):  # Python 3.4+
-        if hasattr(test_case._outcome, 'errors'):
-            # Python 3.4 - 3.10  (These two methods have no side effects)
-            result = test_case.defaultTestResult()  # These two methods have no side effects
-            test_case._feedErrorsToResult(result, test_case._outcome.errors)
-        else:
-            # Python 3.11+
-            result = test_case._outcome.result
-    else:  # Python 2.7, 3.0-3.3
-        result = getattr(test_case, '_outcomeForDoCleanups', test_case._resultForDoCleanups)
-
-    ok = all(test != test_case for test, text in result.errors + result.failures)
-
-    return ok
-
-
 class PostgresNodeExtended(testgres.PostgresNode):
 
     def __init__(self, base_dir=None, *args, **kwargs):
@@ -396,8 +373,33 @@ class ProbackupTest(object):
 
         os.environ["PGAPPNAME"] = "pg_probackup"
 
+    def __is_test_result_ok(test_case):
+        # sources of solution:
+        # 1. python versions 2.7 - 3.10, verified on 3.10, 3.7, 2.7, taken from:
+        # https://tousu.in/qa/?qa=555402/unit-testing-getting-pythons-unittest-results-in-a-teardown-method&show=555403#a555403
+        #
+        # 2. python versions 3.11+ mixin, verified on 3.11, taken from: https://stackoverflow.com/a/39606065
+
+        if not isinstance(test_case, unittest.TestCase):
+            raise AssertionError("test_case is not instance of unittest.TestCase")
+
+        if hasattr(test_case, '_outcome'):  # Python 3.4+
+            if hasattr(test_case._outcome, 'errors'):
+                # Python 3.4 - 3.10  (These two methods have no side effects)
+                result = test_case.defaultTestResult()  # These two methods have no side effects
+                test_case._feedErrorsToResult(result, test_case._outcome.errors)
+            else:
+                # Python 3.11+
+                result = test_case._outcome.result
+        else:  # Python 2.7, 3.0-3.3
+            result = getattr(test_case, '_outcomeForDoCleanups', test_case._resultForDoCleanups)
+
+        ok = all(test != test_case for test, text in result.errors + result.failures)
+
+        return ok
+
     def tearDown(self):
-        if _is_test_result_ok(self):
+        if self.__is_test_result_ok():
             for node in self.nodes_to_cleanup:
                 node.cleanup()
             self.del_test_dir(self.module_name, self.fname)
