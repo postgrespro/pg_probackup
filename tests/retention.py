@@ -1603,7 +1603,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         if self.get_version(node) < 90600:
             self.del_test_dir(module_name, fname)
-            return unittest.skip('Skipped because ptrack support is disabled')
+            self.skipTest('Skipped because ptrack support is disabled')
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)
@@ -1653,7 +1653,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         if self.get_version(node) < 90600:
             self.del_test_dir(module_name, fname)
-            return unittest.skip('Skipped because ptrack support is disabled')
+            self.skipTest('Skipped because ptrack support is disabled')
 
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
         self.init_pb(backup_dir)

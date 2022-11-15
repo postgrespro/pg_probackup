@@ -16,7 +16,7 @@ module_name = 'ptrack'
 class PtrackTest(ProbackupTest, unittest.TestCase):
     def setUp(self):
         if self.pg_config_version < self.version_to_num('11.0'):
-            return unittest.skip('You need PostgreSQL >= 11 for this test')
+            self.skipTest('You need PostgreSQL >= 11 for this test')
         self.fname = self.id().split('.')[3]
 
     # @unittest.skip("skip")

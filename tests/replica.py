@@ -30,7 +30,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
         if self.get_version(node1) < self.version_to_num('9.6.0'):
             self.del_test_dir(module_name, fname)
-            return unittest.skip(
+            self.skipTest(
                 'Skipped because backup from replica is not supported in PG 9.5')
 
         self.init_pb(backup_dir)
@@ -103,10 +103,10 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         take full stream backup from replica
         """
         if not self.ptrack:
-            return unittest.skip('Skipped because ptrack support is disabled')
+            self.skipTest('Skipped because ptrack support is disabled')
 
         if self.pg_config_version > self.version_to_num('9.6.0'):
-            return unittest.skip(
+            self.skipTest(
                 'Skipped because backup from replica is not supported in PG 9.5')
 
         fname = self.id().split('.')[3]
@@ -241,7 +241,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
         if self.get_version(master) < self.version_to_num('9.6.0'):
             self.del_test_dir(module_name, fname)
-            return unittest.skip(
+            self.skipTest(
                 'Skipped because backup from replica is not supported in PG 9.5')
 
         self.init_pb(backup_dir)
@@ -383,7 +383,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
         if self.get_version(master) < self.version_to_num('9.6.0'):
             self.del_test_dir(module_name, fname)
-            return unittest.skip(
+            self.skipTest(
                 'Skipped because backup from replica is not supported in PG 9.5')
 
         self.init_pb(backup_dir)
@@ -441,7 +441,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
         if self.get_version(master) < self.version_to_num('9.6.0'):
             self.del_test_dir(module_name, fname)
-            return unittest.skip(
+            self.skipTest(
                 'Skipped because backup from replica is not supported in PG 9.5')
 
         self.init_pb(backup_dir)
@@ -554,7 +554,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
         if self.get_version(master) < self.version_to_num('9.6.0'):
             self.del_test_dir(module_name, fname)
-            return unittest.skip(
+            self.skipTest(
                 'Skipped because backup from replica is not supported in PG 9.5')
 
         self.init_pb(backup_dir)
@@ -645,7 +645,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
         if self.get_version(master) < self.version_to_num('9.6.0'):
             self.del_test_dir(module_name, fname)
-            return unittest.skip(
+            self.skipTest(
                 'Skipped because backup from replica is not supported in PG 9.5')
 
         self.init_pb(backup_dir)
@@ -730,7 +730,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
         if self.get_version(master) < self.version_to_num('9.6.0'):
             self.del_test_dir(module_name, fname)
-            return unittest.skip(
+            self.skipTest(
                 'Skipped because backup from replica is not supported in PG 9.5')
 
         self.init_pb(backup_dir)
@@ -833,7 +833,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
         if self.get_version(master) < self.version_to_num('9.6.0'):
             self.del_test_dir(module_name, fname)
-            return unittest.skip(
+            self.skipTest(
                 'Skipped because backup from replica is not supported in PG 9.5')
 
         self.init_pb(backup_dir)
@@ -917,7 +917,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
         if self.get_version(master) < self.version_to_num('9.6.0'):
             self.del_test_dir(module_name, fname)
-            return unittest.skip(
+            self.skipTest(
                 'Skipped because backup from replica is not supported in PG 9.5')
 
         self.init_pb(backup_dir)
@@ -1006,7 +1006,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
         if self.get_version(master) < self.version_to_num('9.6.0'):
             self.del_test_dir(module_name, fname)
-            return unittest.skip(
+            self.skipTest(
                 'Skipped because backup from replica is not supported in PG 9.5')
 
         self.init_pb(backup_dir)
@@ -1108,7 +1108,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
         if self.get_version(master) < self.version_to_num('9.6.0'):
             self.del_test_dir(module_name, fname)
-            return unittest.skip(
+            self.skipTest(
                 'Skipped because backup from replica is not supported in PG 9.5')
 
         self.init_pb(backup_dir)
@@ -1186,7 +1186,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
         if self.get_version(master) < self.version_to_num('9.6.0'):
             self.del_test_dir(module_name, fname)
-            return unittest.skip(
+            self.skipTest(
                 'Skipped because backup from replica is not supported in PG 9.5')
 
         self.init_pb(backup_dir)
@@ -1313,7 +1313,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
         if self.get_version(node1) < self.version_to_num('9.6.0'):
             self.del_test_dir(module_name, fname)
-            return unittest.skip(
+            self.skipTest(
                 'Skipped because backup from replica is not supported in PG 9.5')
 
         self.init_pb(backup_dir)
@@ -1438,7 +1438,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
         if self.get_version(node1) < self.version_to_num('9.6.0'):
             self.del_test_dir(module_name, fname)
-            return unittest.skip(
+            self.skipTest(
                 'Skipped because backup from replica is not supported in PG 9.5')
 
         self.init_pb(backup_dir)
@@ -1560,7 +1560,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
         if self.get_version(master) < self.version_to_num('9.6.0'):
             self.del_test_dir(module_name, fname)
-            return unittest.skip(
+            self.skipTest(
                 'Skipped because backup from replica is not supported in PG 9.5')
 
         self.init_pb(backup_dir)

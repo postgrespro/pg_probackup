@@ -1428,7 +1428,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
             pg_options={'max_wal_size': '40MB'})
 
         if self.get_version(node) < self.version_to_num('10.0'):
-            return unittest.skip('You need PostgreSQL >= 10 for this test')
+            self.skipTest('You need PostgreSQL >= 10 for this test')
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -1500,7 +1500,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
     def test_pg_11_adjusted_wal_segment_size(self):
         """"""
         if self.pg_config_version < self.version_to_num('11.0'):
-            return unittest.skip('You need PostgreSQL >= 11 for this test')
+            self.skipTest('You need PostgreSQL >= 11 for this test')
 
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
@@ -1743,7 +1743,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
     def test_basic_missing_file_permissions(self):
         """"""
         if os.name == 'nt':
-            return unittest.skip('Skipped because it is POSIX only test')
+            self.skipTest('Skipped because it is POSIX only test')
 
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
@@ -1790,7 +1790,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
     def test_basic_missing_dir_permissions(self):
         """"""
         if os.name == 'nt':
-            return unittest.skip('Skipped because it is POSIX only test')
+            self.skipTest('Skipped because it is POSIX only test')
 
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
