@@ -461,6 +461,8 @@ merge_chain(InstanceState *instanceState,
 	/* in-place merge flags */
 	bool		compression_match = false;
 	bool		program_version_match = false;
+	err_i		err = $noerr();
+
 	/* It's redundant to check block checksumms during merge */
 	skip_block_validation = true;
 
@@ -641,7 +643,6 @@ merge_chain(InstanceState *instanceState,
 		{
 			char		dirpath[MAXPGPATH];
 			char		new_container[MAXPGPATH];
-			err_i		err;
 
 			makeExternalDirPathByNum(new_container, full_external_prefix,
 									 file->external_dir_num);

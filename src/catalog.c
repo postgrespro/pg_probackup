@@ -1461,7 +1461,7 @@ pgBackupInitDir(pgBackup *backup, const char *backup_instance_path)
 	int	i;
 	char	temp[MAXPGPATH];
 	parray *subdirs;
-	err_i	err;
+	err_i	err = $noerr();
 
 	/* Try to create backup directory at first */
 	err = create_backup_dir(backup, backup_instance_path);
@@ -1500,7 +1500,6 @@ pgBackupInitDir(pgBackup *backup, const char *backup_instance_path)
 	/* create directories for actual backup files */
 	for (i = 0; i < parray_num(subdirs); i++)
 	{
-		err_i err;
 		join_path_components(temp, backup->root_dir, parray_get(subdirs, i));
 		err = $i(pioMakeDir, backup->backup_location, .path = temp,
 				 .mode = DIR_PERMISSION, .strict = false);

@@ -852,6 +852,8 @@ create_data_directories(parray *dest_files, const char *data_dir, const char *ba
 	parray		*links = NULL;
 	mode_t		pg_tablespace_mode = DIR_PERMISSION;
 	char		to_path[MAXPGPATH];
+	err_i		err = $noerr();
+
 
 	if (waldir_path && !dir_is_empty(waldir_path, location))
 	{
@@ -933,15 +935,11 @@ create_data_directories(parray *dest_files, const char *data_dir, const char *ba
 				waldir_path, to_path);
 
 			/* create tablespace directory from waldir_path*/
+			err = $i(pioMakeDir, drive, .path = waldir_path,
+					 .mode = pg_tablespace_mode, .strict = false);
+			if ($haserr(err))
 			{
-				err_i err;
-
-				err = $i(pioMakeDir, drive, .path = waldir_path,
-						 .mode = pg_tablespace_mode, .strict = false);
-				if ($haserr(err))
-				{
-					elog(WARNING, "%s", $errmsg(err));
-				}
+				elog(WARNING, "%s", $errmsg(err));
 			}
 
 			/* create link to linked_path */
@@ -984,15 +982,11 @@ create_data_directories(parray *dest_files, const char *data_dir, const char *ba
 							 linked_path, to_path);
 
 					/* create tablespace directory */
+					err = $i(pioMakeDir, drive, .path = linked_path,
+							 .mode = pg_tablespace_mode, .strict = false);
+					if ($haserr(err))
 					{
-						err_i err;
-
-						err = $i(pioMakeDir, drive, .path = linked_path,
-								 .mode = pg_tablespace_mode, .strict = false);
-						if ($haserr(err))
-						{
-							elog(WARNING, "%s", $errmsg(err));
-						}
+						elog(WARNING, "%s", $errmsg(err));
 					}
 
 					/* create link to linked_path */
@@ -1011,15 +1005,11 @@ create_data_directories(parray *dest_files, const char *data_dir, const char *ba
 		join_path_components(to_path, data_dir, dir->rel_path);
 
 		// TODO check exit code
+		err = $i(pioMakeDir, drive, .path = to_path, .mode = dir->mode,
+				 .strict = false);
+		if ($haserr(err))
 		{
-			err_i err;
-
-			err = $i(pioMakeDir, drive, .path = to_path, .mode = dir->mode,
-					 .strict = false);
-			if ($haserr(err))
-			{
-				elog(WARNING, "%s", $errmsg(err));
-			}
+			elog(WARNING, "%s", $errmsg(err));
 		}
 	}
 

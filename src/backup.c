@@ -111,6 +111,8 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 	time_t		start_time, end_time;
 	char		pretty_time[20];
 	char		pretty_bytes[20];
+	err_i		err = $noerr();
+
 
 	elog(INFO, "Database backup start");
 	if(current.external_dir_str)
@@ -250,7 +252,6 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 	if (current.stream)
 	{
 		char stream_xlog_path[MAXPGPATH];
-		err_i err;
 
 		join_path_components(stream_xlog_path, current.database_dir, PG_XLOG_DIR);
 		err = $i(pioMakeDir, current.backup_location, .path = stream_xlog_path,
@@ -406,15 +407,11 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 				join_path_components(dirpath, current.database_dir, file->rel_path);
 
 			elog(LOG, "Create directory '%s'", dirpath);
+			err = $i(pioMakeDir, current.backup_location, .path = dirpath,
+					 .mode = DIR_PERMISSION, .strict = false);
+			if ($haserr(err))
 			{
-				err_i err;
-
-				err = $i(pioMakeDir, current.backup_location, .path = dirpath,
-						 .mode = DIR_PERMISSION, .strict = false);
-				if ($haserr(err))
-				{
-					elog(WARNING, "%s", $errmsg(err));
-				}
+				elog(WARNING, "%s", $errmsg(err));
 			}
 		}
 

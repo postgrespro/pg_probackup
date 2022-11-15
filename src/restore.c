@@ -720,6 +720,7 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 	size_t		total_bytes = 0;
 	char		pretty_time[20];
 	time_t		start_time, end_time;
+	err_i		err = $noerr();
 
 	/* Preparations for actual restoring */
 	time2iso(timestamp, lengthof(timestamp), dest_backup->start_time, false);
@@ -818,7 +819,6 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 		for (i = 0; i < parray_num(external_dirs); i++)
 		{
 			char	*dirpath = parray_get(external_dirs, i);
-			err_i	err;
 
 			err = $i(pioMakeDir, dest_backup->database_location,
 					 .path = dirpath, .mode = DIR_PERMISSION, .strict = false);
@@ -844,7 +844,6 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 		{
 			char	   *external_path;
 			char		dirpath[MAXPGPATH];
-			err_i		err;
 
 			if (parray_num(external_dirs) < file->external_dir_num - 1)
 				elog(ERROR, "Inconsistent external directory backup metadata");

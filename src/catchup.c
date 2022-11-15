@@ -633,6 +633,8 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 	ssize_t		transfered_datafiles_bytes = 0;
 	ssize_t		transfered_walfiles_bytes = 0;
 	char		pretty_source_bytes[20];
+	err_i		err = $noerr();
+
 
 	source_conn = catchup_init_state(&source_node_info, source_pgdata, dest_pgdata);
 	catchup_preflight_checks(&source_node_info, source_conn, source_pgdata, dest_pgdata);
@@ -705,8 +707,6 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 	join_path_components(dest_xlog_path, dest_pgdata, PG_XLOG_DIR);
 	if (!dry_run)
 	{
-		err_i err;
-
 		err = $i(pioMakeDir, local_location, .path = dest_xlog_path,
 				 .mode = DIR_PERMISSION, .strict = false);
 		if($haserr(err))
@@ -829,8 +829,6 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 			elog(LOG, "Create directory '%s'", dirpath);
 			if (!dry_run)
 			{
-				err_i err;
-
 				err = $i(pioMakeDir, local_location, .path = dirpath,
 						 .mode = DIR_PERMISSION, .strict = false);
 				if ($haserr(err))
@@ -870,8 +868,6 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 
 			if (!dry_run)
 			{
-				err_i err;
-
 				/* create tablespace directory */
 				err = $i(pioMakeDir, local_location, .path = linked_path,
 						 .mode = file->mode, .strict = false);
