@@ -526,7 +526,7 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
             if (ProbackupTest.enterprise and
                     (self.get_version(node) >= 111300 and self.get_version(node) < 120000
                     or self.get_version(node) >= 120800 and self.get_version(node) < 130000
-                    or self.get_version(node) >= 130400)):
+                    or self.get_version(node) >= 130400 and self.get_version(node) < 150000)):
                 # we should die here because exception is what we expect to happen
                 self.assertEqual(
                     1, 0,
