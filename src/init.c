@@ -38,7 +38,8 @@ do_init(CatalogState *catalogState)
 			 .mode = DIR_PERMISSION, .strict = false);
 	if ($haserr(err))
 	{
-		elog(WARNING, "%s", $errmsg(err));
+		elog(ERROR, "Can not create backup catalog root directory: %s",
+			 $errmsg(err));
 	}
 
 	/* create backup catalog data directory */
@@ -46,7 +47,8 @@ do_init(CatalogState *catalogState)
 			 .mode = DIR_PERMISSION, .strict = false);
 	if ($haserr(err))
 	{
-		elog(WARNING, "%s", $errmsg(err));
+		elog(ERROR, "Can not create backup catalog data directory: %s",
+			 $errmsg(err));
 	}
 
 	/* create backup catalog wal directory */
@@ -54,7 +56,8 @@ do_init(CatalogState *catalogState)
 			 .mode = DIR_PERMISSION, .strict = false);
 	if ($haserr(err))
 	{
-		elog(WARNING, "%s", $errmsg(err));
+		elog(ERROR, "Can not create backup catalog WAL directory: %s",
+			 $errmsg(err));
 	}
 
 	elog(INFO, "Backup catalog '%s' successfully inited", catalogState->catalog_path);
@@ -108,13 +111,14 @@ do_add_instance(InstanceState *instanceState, InstanceConfig *instance)
 			 .mode = DIR_PERMISSION, .strict = false);
 	if ($haserr(err))
 	{
-		elog(WARNING, "%s", $errmsg(err));
+		elog(ERROR, "Can not create instance backup directory: %s",
+			 $errmsg(err));
 	}
 	err = $i(pioMakeDir, backup_location, .path = instanceState->instance_wal_subdir_path,
 			 .mode = DIR_PERMISSION, .strict = false);
 	if ($haserr(err))
 	{
-		elog(WARNING, "%s", $errmsg(err));
+		elog(ERROR, "Can not create instance WAL directory: %s", $errmsg(err));
 	}
 
 	/*

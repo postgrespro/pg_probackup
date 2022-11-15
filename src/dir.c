@@ -939,7 +939,8 @@ create_data_directories(parray *dest_files, const char *data_dir, const char *ba
 					 .mode = pg_tablespace_mode, .strict = false);
 			if ($haserr(err))
 			{
-				elog(WARNING, "%s", $errmsg(err));
+				elog(ERROR, "Can not create tablespace directory: %s",
+					 $errmsg(err));
 			}
 
 			/* create link to linked_path */
@@ -986,7 +987,8 @@ create_data_directories(parray *dest_files, const char *data_dir, const char *ba
 							 .mode = pg_tablespace_mode, .strict = false);
 					if ($haserr(err))
 					{
-						elog(WARNING, "%s", $errmsg(err));
+						elog(ERROR, "Can not create tablespace directory: %s",
+							 $errmsg(err));
 					}
 
 					/* create link to linked_path */
@@ -1004,12 +1006,12 @@ create_data_directories(parray *dest_files, const char *data_dir, const char *ba
 
 		join_path_components(to_path, data_dir, dir->rel_path);
 
-		// TODO check exit code
 		err = $i(pioMakeDir, drive, .path = to_path, .mode = dir->mode,
 				 .strict = false);
 		if ($haserr(err))
 		{
-			elog(WARNING, "%s", $errmsg(err));
+			elog(ERROR, "Can not create tablespace directory: %s",
+				 $errmsg(err));
 		}
 	}
 

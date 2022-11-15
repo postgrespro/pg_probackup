@@ -651,7 +651,8 @@ merge_chain(InstanceState *instanceState,
 					 .mode = DIR_PERMISSION, .strict = false);
 			if ($haserr(err))
 			{
-				elog(WARNING, "%s", $errmsg(err));
+				elog(ERROR, "Can not create backup external directory: %s",
+					 $errmsg(err));
 			}
 		}
 

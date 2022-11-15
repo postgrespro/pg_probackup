@@ -824,7 +824,8 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 					 .path = dirpath, .mode = DIR_PERMISSION, .strict = false);
 			if ($haserr(err))
 			{
-				elog(WARNING, "%s", $errmsg(err));
+				elog(ERROR, "Can not restore external directory: %s",
+					 $errmsg(err));
 			}
 		}
 	}
@@ -856,7 +857,8 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 					 .mode = file->mode, .strict = false);
 			if ($haserr(err))
 			{
-				elog(WARNING, "%s", $errmsg(err));
+				elog(ERROR, "Can not create backup external directory: %s",
+					 $errmsg(err));
 			}
 		}
 	}

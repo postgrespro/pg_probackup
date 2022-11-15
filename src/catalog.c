@@ -1505,7 +1505,7 @@ pgBackupInitDir(pgBackup *backup, const char *backup_instance_path)
 				 .mode = DIR_PERMISSION, .strict = false);
 		if ($haserr(err))
 		{
-			elog(WARNING, "%s", $errmsg(err));
+			elog(ERROR, "Can not create backup directory: %s", $errmsg(err));
 		}
 	}
 
@@ -1534,8 +1534,9 @@ create_backup_dir(pgBackup *backup, const char *backup_instance_path)
 	{
 		backup->root_dir = pgut_strdup(path);
 	} else {
-		elog(WARNING, "%s", $errmsg(err));
+		elog(ERROR, "Can not create backup directory: %s", $errmsg(err));
 	}
+
 	return err;
 }
 

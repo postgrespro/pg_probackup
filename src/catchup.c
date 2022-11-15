@@ -711,7 +711,7 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 				 .mode = DIR_PERMISSION, .strict = false);
 		if($haserr(err))
 		{
-			elog(WARNING, "%s", $errmsg(err));
+			elog(ERROR, "Can not create WAL directory: %s", $errmsg(err));
 		}
 		start_WAL_streaming(source_conn, dest_xlog_path, &instance_config.conn_opt,
 							current.start_lsn, current.tli, false);
@@ -833,7 +833,7 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 						 .mode = DIR_PERMISSION, .strict = false);
 				if ($haserr(err))
 				{
-					elog(WARNING, "%s", $errmsg(err));
+					elog(ERROR, "Can not create directory: %s", $errmsg(err));
 				}
 			}
 		}

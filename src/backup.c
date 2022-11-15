@@ -258,7 +258,7 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 				 .mode = DIR_PERMISSION, .strict = false);
 		if ($haserr(err))
 		{
-			elog(WARNING, "%s", $errmsg(err));
+			elog(ERROR, "Can not create WAL directory: %s", $errmsg(err));
 		}
 
 		start_WAL_streaming(backup_conn, stream_xlog_path, &instance_config.conn_opt,
@@ -411,7 +411,8 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 					 .mode = DIR_PERMISSION, .strict = false);
 			if ($haserr(err))
 			{
-				elog(WARNING, "%s", $errmsg(err));
+				elog(ERROR, "Can not create instance backup directory: %s",
+					 $errmsg(err));
 			}
 		}
 
