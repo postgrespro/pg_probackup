@@ -2789,13 +2789,12 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         PAGE1_1
         FULL1
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
             base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, self.module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)

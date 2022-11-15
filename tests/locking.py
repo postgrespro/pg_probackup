@@ -579,7 +579,7 @@ class LockingTest(ProbackupTest, unittest.TestCase):
         self._check_gdb_flag_or_skip_test()
 
         node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.name, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
         backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')

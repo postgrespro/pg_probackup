@@ -4172,7 +4172,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 #        pgdata = self.pgdata_content(node.data_dir)
 #
 #        node_restored = self.make_simple_node(
-#            base_dir=os.path.join(module_name, self.fname, 'node_restored'))
+#            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
 #        node_restored.cleanup()
 #
 #        self.restore_node(
