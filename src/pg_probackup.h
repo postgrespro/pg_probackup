@@ -488,6 +488,9 @@ struct pgBackup
 
 	/* map used for access to page headers */
 	HeaderMap       hdr_map;
+
+	pioDrive_i		database_location; /* Where to backup from/restore to */
+	pioDrive_i		backup_location; /* Where to save to/read from */
 };
 
 /* Recovery target for restore and validate subcommands */

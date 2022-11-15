@@ -641,11 +641,17 @@ merge_chain(InstanceState *instanceState,
 		{
 			char		dirpath[MAXPGPATH];
 			char		new_container[MAXPGPATH];
+			err_i		err;
 
 			makeExternalDirPathByNum(new_container, full_external_prefix,
 									 file->external_dir_num);
 			join_path_components(dirpath, new_container, file->rel_path);
-			fio_mkdir(FIO_BACKUP_HOST, dirpath, DIR_PERMISSION, false);
+			err = $i(pioMakeDir, dest_backup->backup_location, .path = dirpath,
+					 .mode = DIR_PERMISSION, .strict = false);
+			if ($haserr(err))
+			{
+				elog(WARNING, "%s", $errmsg(err));
+			}
 		}
 
 		pg_atomic_init_flag(&file->lock);

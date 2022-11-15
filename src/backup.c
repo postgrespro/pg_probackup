@@ -250,9 +250,15 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 	if (current.stream)
 	{
 		char stream_xlog_path[MAXPGPATH];
+		err_i err;
 
 		join_path_components(stream_xlog_path, current.database_dir, PG_XLOG_DIR);
-		fio_mkdir(FIO_BACKUP_HOST, stream_xlog_path, DIR_PERMISSION, false);
+		err = $i(pioMakeDir, current.backup_location, .path = stream_xlog_path,
+				 .mode = DIR_PERMISSION, .strict = false);
+		if ($haserr(err))
+		{
+			elog(WARNING, "%s", $errmsg(err));
+		}
 
 		start_WAL_streaming(backup_conn, stream_xlog_path, &instance_config.conn_opt,
 							current.start_lsn, current.tli, true);
@@ -400,7 +406,16 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 				join_path_components(dirpath, current.database_dir, file->rel_path);
 
 			elog(LOG, "Create directory '%s'", dirpath);
-			fio_mkdir(FIO_BACKUP_HOST, dirpath, DIR_PERMISSION, false);
+			{
+				err_i err;
+
+				err = $i(pioMakeDir, current.backup_location, .path = dirpath,
+						 .mode = DIR_PERMISSION, .strict = false);
+				if ($haserr(err))
+				{
+					elog(WARNING, "%s", $errmsg(err));
+				}
+			}
 		}
 
 	}

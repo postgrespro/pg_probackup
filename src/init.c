@@ -18,7 +18,9 @@
 int
 do_init(CatalogState *catalogState)
 {
+	pioDrive_i	backup_location = pioDriveForLocation(FIO_BACKUP_HOST);
 	int			results;
+	err_i		err;
 
 	results = pg_check_dir(catalogState->catalog_path);
 
@@ -32,13 +34,28 @@ do_init(CatalogState *catalogState)
 	}
 
 	/* create backup catalog root directory */
-	fio_mkdir(FIO_BACKUP_HOST, catalogState->catalog_path, DIR_PERMISSION, false);
+	err = $i(pioMakeDir, backup_location, .path = catalogState->catalog_path,
+			 .mode = DIR_PERMISSION, .strict = false);
+	if ($haserr(err))
+	{
+		elog(WARNING, "%s", $errmsg(err));
+	}
 
 	/* create backup catalog data directory */
-	fio_mkdir(FIO_BACKUP_HOST, catalogState->backup_subdir_path, DIR_PERMISSION, false);
+	err = $i(pioMakeDir, backup_location, .path = catalogState->backup_subdir_path,
+			 .mode = DIR_PERMISSION, .strict = false);
+	if ($haserr(err))
+	{
+		elog(WARNING, "%s", $errmsg(err));
+	}
 
 	/* create backup catalog wal directory */
-	fio_mkdir(FIO_BACKUP_HOST, catalogState->wal_subdir_path, DIR_PERMISSION, false);
+	err = $i(pioMakeDir, backup_location, .path = catalogState->wal_subdir_path,
+			 .mode = DIR_PERMISSION, .strict = false);
+	if ($haserr(err))
+	{
+		elog(WARNING, "%s", $errmsg(err));
+	}
 
 	elog(INFO, "Backup catalog '%s' successfully inited", catalogState->catalog_path);
 	return 0;
@@ -47,8 +64,10 @@ do_init(CatalogState *catalogState)
 int
 do_add_instance(InstanceState *instanceState, InstanceConfig *instance)
 {
+	pioDrive_i	backup_location = pioDriveForLocation(FIO_BACKUP_HOST);
 	struct stat st;
 	CatalogState *catalogState = instanceState->catalog_state;
+	err_i		err;
 
 	/* PGDATA is always required */
 	if (instance->pgdata == NULL)
@@ -85,8 +104,18 @@ do_add_instance(InstanceState *instanceState, InstanceConfig *instance)
 				instanceState->instance_name, instanceState->instance_wal_subdir_path);
 
 	/* Create directory for data files of this specific instance */
-	fio_mkdir(FIO_BACKUP_HOST, instanceState->instance_backup_subdir_path, DIR_PERMISSION, false);
-	fio_mkdir(FIO_BACKUP_HOST, instanceState->instance_wal_subdir_path, DIR_PERMISSION, false);
+	err = $i(pioMakeDir, backup_location, .path = instanceState->instance_backup_subdir_path,
+			 .mode = DIR_PERMISSION, .strict = false);
+	if ($haserr(err))
+	{
+		elog(WARNING, "%s", $errmsg(err));
+	}
+	err = $i(pioMakeDir, backup_location, .path = instanceState->instance_wal_subdir_path,
+			 .mode = DIR_PERMISSION, .strict = false);
+	if ($haserr(err))
+	{
+		elog(WARNING, "%s", $errmsg(err));
+	}
 
 	/*
 	 * Write initial configuration file.

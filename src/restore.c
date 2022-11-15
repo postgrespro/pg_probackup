@@ -816,8 +816,17 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 			elog(LOG, "Restore external directories");
 
 		for (i = 0; i < parray_num(external_dirs); i++)
-			fio_mkdir(FIO_DB_HOST, parray_get(external_dirs, i),
-					  DIR_PERMISSION, false);
+		{
+			char	*dirpath = parray_get(external_dirs, i);
+			err_i	err;
+
+			err = $i(pioMakeDir, dest_backup->database_location,
+					 .path = dirpath, .mode = DIR_PERMISSION, .strict = false);
+			if ($haserr(err))
+			{
+				elog(WARNING, "%s", $errmsg(err));
+			}
+		}
 	}
 
 	/*
@@ -835,6 +844,7 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 		{
 			char	   *external_path;
 			char		dirpath[MAXPGPATH];
+			err_i		err;
 
 			if (parray_num(external_dirs) < file->external_dir_num - 1)
 				elog(ERROR, "Inconsistent external directory backup metadata");
@@ -843,7 +853,12 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 			join_path_components(dirpath, external_path, file->rel_path);
 
 			elog(LOG, "Create external directory \"%s\"", dirpath);
-			fio_mkdir(FIO_DB_HOST, dirpath, file->mode, false);
+			err = $i(pioMakeDir, dest_backup->database_location, .path = dirpath,
+					 .mode = file->mode, .strict = false);
+			if ($haserr(err))
+			{
+				elog(WARNING, "%s", $errmsg(err));
+			}
 		}
 	}
 

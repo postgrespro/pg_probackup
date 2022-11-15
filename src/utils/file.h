@@ -175,7 +175,6 @@ fio_get_crc32_truncated(fio_location location, const char *file_path,
 extern int     fio_rename(fio_location location, const char* old_path, const char* new_path);
 extern int     fio_symlink(fio_location location, const char* target, const char* link_path, bool overwrite);
 extern int     fio_remove(fio_location location, const char* path, bool missing_ok);
-extern int     fio_mkdir(fio_location location, const char* path, int mode, bool strict);
 extern int     fio_chmod(fio_location location, const char* path, int mode);
 extern int     fio_access(fio_location location, const char* path, int mode);
 extern int     fio_stat(fio_location location, const char* path, struct stat* st, bool follow_symlinks);
@@ -254,6 +253,7 @@ typedef struct stat stat_t;
 #define mth__pioGetCRC32 	pg_crc32, (path_t, path), (bool, compressed), \
 									  (err_i *, err)
 #define mth__pioIsRemote 	bool
+#define mth__pioMakeDir	err_i, (path_t, path), (mode_t, mode), (bool, strict)
 #define mth__pioListDir     void, (parray *, files), (const char *, root), \
                                 (bool, handle_tablespaces), (bool, symlink_and_hidden), \
                                 (bool, backup_logs), (bool, skip_hidden),  (int, external_dir_num)
@@ -266,12 +266,13 @@ fobj_method(pioRename);
 fobj_method(pioExists);
 fobj_method(pioIsRemote);
 fobj_method(pioGetCRC32);
+fobj_method(pioMakeDir);
 fobj_method(pioListDir);
 fobj_method(pioRemoveDir);
 
 #define iface__pioDrive 	mth(pioOpen, pioStat, pioRemove, pioRename), \
 					        mth(pioExists, pioGetCRC32, pioIsRemote),                \
-							mth(pioListDir, pioRemoveDir)
+							mth(pioMakeDir, pioListDir, pioRemoveDir)
 fobj_iface(pioDrive);
 
 extern pioDrive_i pioDriveForLocation(fio_location location);

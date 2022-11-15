@@ -613,6 +613,7 @@ int
 do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, bool sync_dest_files,
 	parray *exclude_absolute_paths_list, parray *exclude_relative_paths_list)
 {
+	pioDrive_i local_location = pioDriveForLocation(FIO_LOCAL_HOST);
 	PGconn		*source_conn = NULL;
 	PGNodeInfo	source_node_info;
 	bool		backup_logs = false;
@@ -704,7 +705,14 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 	join_path_components(dest_xlog_path, dest_pgdata, PG_XLOG_DIR);
 	if (!dry_run)
 	{
-		fio_mkdir(FIO_LOCAL_HOST, dest_xlog_path, DIR_PERMISSION, false);
+		err_i err;
+
+		err = $i(pioMakeDir, local_location, .path = dest_xlog_path,
+				 .mode = DIR_PERMISSION, .strict = false);
+		if($haserr(err))
+		{
+			elog(WARNING, "%s", $errmsg(err));
+		}
 		start_WAL_streaming(source_conn, dest_xlog_path, &instance_config.conn_opt,
 							current.start_lsn, current.tli, false);
 	}
@@ -820,7 +828,16 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 
 			elog(LOG, "Create directory '%s'", dirpath);
 			if (!dry_run)
-				fio_mkdir(FIO_LOCAL_HOST, dirpath, DIR_PERMISSION, false);
+			{
+				err_i err;
+
+				err = $i(pioMakeDir, local_location, .path = dirpath,
+						 .mode = DIR_PERMISSION, .strict = false);
+				if ($haserr(err))
+				{
+					elog(WARNING, "%s", $errmsg(err));
+				}
+			}
 		}
 		else
 		{
@@ -853,10 +870,16 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 
 			if (!dry_run)
 			{
+				err_i err;
+
 				/* create tablespace directory */
-				if (fio_mkdir(FIO_LOCAL_HOST, linked_path, file->mode, false) != 0)
-					elog(ERROR, "Could not create tablespace directory \"%s\": %s",
-						 linked_path, strerror(errno));
+				err = $i(pioMakeDir, local_location, .path = linked_path,
+						 .mode = file->mode, .strict = false);
+				if ($haserr(err))
+				{
+					elog(ERROR, "Could not create tablespace directory \"%s\": \"%s\"",
+						 linked_path, $errmsg(err));
+				}
 
 				/* create link to linked_path */
 				if (fio_symlink(FIO_LOCAL_HOST, linked_path, to_path, true) < 0)
