@@ -114,7 +114,7 @@ class FalsePositive(ProbackupTest, unittest.TestCase):
         test group access for PG >= 11
         """
         if self.pg_config_version < self.version_to_num('10.0'):
-            return unittest.skip('You need PostgreSQL >= 10 for this test')
+            self.skipTest('You need PostgreSQL >= 10 for this test')
 
         fname = self.id().split('.')[3]
         wal_dir = os.path.join(

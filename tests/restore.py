@@ -500,7 +500,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
     def test_restore_full_ptrack_archive(self):
         """recovery to latest from archive full+ptrack backups"""
         if not self.ptrack:
-            return unittest.skip('Skipped because ptrack support is disabled')
+            self.skipTest('Skipped because ptrack support is disabled')
 
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
@@ -554,7 +554,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
     def test_restore_ptrack(self):
         """recovery to latest from archive full+ptrack+ptrack backups"""
         if not self.ptrack:
-            return unittest.skip('Skipped because ptrack support is disabled')
+            self.skipTest('Skipped because ptrack support is disabled')
 
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
@@ -615,7 +615,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
     def test_restore_full_ptrack_stream(self):
         """recovery in stream mode to latest from full + ptrack backups"""
         if not self.ptrack:
-            return unittest.skip('Skipped because ptrack support is disabled')
+            self.skipTest('Skipped because ptrack support is disabled')
 
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
@@ -673,7 +673,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         with loads when ptrack backup do
         """
         if not self.ptrack:
-            return unittest.skip('Skipped because ptrack support is disabled')
+            self.skipTest('Skipped because ptrack support is disabled')
 
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
@@ -742,7 +742,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         with loads when full backup do
         """
         if not self.ptrack:
-            return unittest.skip('Skipped because ptrack support is disabled')
+            self.skipTest('Skipped because ptrack support is disabled')
 
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
@@ -2345,7 +2345,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         test group access for PG >= 11
         """
         if self.pg_config_version < self.version_to_num('11.0'):
-            return unittest.skip('You need PostgreSQL >= 11 for this test')
+            self.skipTest('You need PostgreSQL >= 11 for this test')
 
         fname = self.id().split('.')[3]
         node = self.make_simple_node(
@@ -3680,7 +3680,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             self.skipTest("You must specify PGPROBACKUPBIN_OLD"
                           " for run this test")
         if self.pg_config_version < self.version_to_num('12.0'):
-           return unittest.skip('You need PostgreSQL >= 12 for this test')
+           self.skipTest('You need PostgreSQL >= 12 for this test')
 
         if self.version_to_num(self.old_probackup_version) >= self.version_to_num('2.4.5'):
             self.assertTrue(False, 'You need pg_probackup < 2.4.5 for this test')
@@ -3752,7 +3752,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         """
 
         if self.pg_config_version < self.version_to_num('12.0'):
-           return unittest.skip('You need PostgreSQL >= 12 for this test')
+           self.skipTest('You need PostgreSQL >= 12 for this test')
 
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
@@ -3797,7 +3797,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         """
 
         if self.pg_config_version < self.version_to_num('12.0'):
-           return unittest.skip('You need PostgreSQL >= 12 for this test')
+           self.skipTest('You need PostgreSQL >= 12 for this test')
 
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
