@@ -190,7 +190,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         Test ptrack catchup
         """
         if not self.ptrack:
-            return unittest.skip('Skipped because ptrack support is disabled')
+            self.skipTest('Skipped because ptrack support is disabled')
 
         # preparation 1: source
         src_pg = self.make_simple_node(
@@ -336,7 +336,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         Test that we correctly follow timeline change with ptrack catchup
         """
         if not self.ptrack:
-            return unittest.skip('Skipped because ptrack support is disabled')
+            self.skipTest('Skipped because ptrack support is disabled')
 
         # preparation 1: source
         src_pg = self.make_simple_node(
@@ -475,7 +475,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         Test that dropped table in source will be dropped in ptrack catchup'ed instance too
         """
         if not self.ptrack:
-            return unittest.skip('Skipped because ptrack support is disabled')
+            self.skipTest('Skipped because ptrack support is disabled')
 
         # preparation 1: source
         src_pg = self.make_simple_node(
@@ -590,7 +590,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         Test that truncated table in source will be truncated in ptrack catchup'ed instance too
         """
         if not self.ptrack:
-            return unittest.skip('Skipped because ptrack support is disabled')
+            self.skipTest('Skipped because ptrack support is disabled')
 
         # preparation 1: source
         src_pg = self.make_simple_node(
@@ -655,7 +655,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         Test that we detect absence of needed --tablespace-mapping option
         """
         if self.remote:
-            return unittest.skip('Skipped because this test tests local catchup error handling')
+            self.skipTest('Skipped because this test tests local catchup error handling')
 
         src_pg = self.make_simple_node(base_dir = os.path.join(module_name, self.fname, 'src'))
         src_pg.slow_start()
@@ -1035,7 +1035,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         Test that we correctly recover uncleanly shutdowned destination
         """
         if not self.ptrack:
-            return unittest.skip('Skipped because ptrack support is disabled')
+            self.skipTest('Skipped because ptrack support is disabled')
 
         # preparation 1: source
         src_pg = self.make_simple_node(
@@ -1506,7 +1506,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         Test dry-run option for catchup in incremental ptrack mode
         """
         if not self.ptrack:
-            return unittest.skip('Skipped because ptrack support is disabled')
+            self.skipTest('Skipped because ptrack support is disabled')
 
          # preparation 1: source
         src_pg = self.make_simple_node(

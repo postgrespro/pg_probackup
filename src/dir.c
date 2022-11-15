@@ -1742,6 +1742,8 @@ is_forkname(char *name, size_t *pos, const char *forkname)
 }
 
 #define OIDCHARS 10
+#define MAXSEGNO (((uint64_t)1<<32)/RELSEG_SIZE-1)
+#define SEGNOCHARS 5 /* when BLCKSZ == (1<<15) */
 
 /* Set forkName if possible */
 bool
@@ -1749,6 +1751,7 @@ set_forkname(pgFile *file)
 {
 	size_t i = 0;
 	uint64_t oid = 0; /* use 64bit to not check for overflow in a loop */
+	uint64_t segno = 0;
 
 	/* pretend it is not relation file */
 	file->relOid = 0;
@@ -1779,8 +1782,15 @@ set_forkname(pgFile *file)
 	/* /^\d+(_(vm|fsm|init|ptrack))?\.\d+$/ */
 	if (file->name[i] == '.' && isdigit(file->name[i+1]))
 	{
+		size_t start = i+1;
 		for (i++; isdigit(file->name[i]); i++)
-			;
+		{
+			if (i == start && file->name[i] == '0')
+				return false;
+			segno = segno * 10 + file->name[i] - '0';
+		}
+		if (i - start > SEGNOCHARS || segno > MAXSEGNO)
+			return false;
 	}
 
 	/* CFS "fork name" */
@@ -1799,6 +1809,7 @@ set_forkname(pgFile *file)
 	}
 
 	file->relOid = oid;
+	file->segno = segno;
 	file->is_datafile = file->forkName == none;
 	return true;
 }

@@ -98,7 +98,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         take full stream backup from replica
         """
         if not self.ptrack:
-            return unittest.skip('Skipped because ptrack support is disabled')
+            self.skipTest('Skipped because ptrack support is disabled')
 
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')

@@ -13,6 +13,38 @@ module_name = 'backup'
 
 class BackupTest(ProbackupTest, unittest.TestCase):
 
+    def test_basic_full_backup(self):
+        """
+        Just test full backup with at least two segments
+        """
+        fname = self.id().split('.')[3]
+        node = self.make_simple_node(
+            base_dir=os.path.join(module_name, fname, 'node'),
+            initdb_params=['--data-checksums'],
+            # we need to write a lot. Lets speedup a bit.
+            pg_options={"fsync": "off", "synchronous_commit": "off"})
+
+        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # Fill with data
+        # Have to use scale=100 to create second segment.
+        node.pgbench_init(scale=100, no_vacuum=True)
+
+        # FULL
+        backup_id = self.backup_node(backup_dir, 'node', node)
+
+        out = self.validate_pb(backup_dir, 'node', backup_id)
+        self.assertIn(
+            "INFO: Backup {0} is valid".format(backup_id),
+            out)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
+
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     # PGPRO-707
@@ -1497,7 +1529,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
     def test_pg_11_adjusted_wal_segment_size(self):
         """"""
         if self.pg_config_version < self.version_to_num('11.0'):
-            return unittest.skip('You need PostgreSQL >= 11 for this test')
+            self.skipTest('You need PostgreSQL >= 11 for this test')
 
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
@@ -1740,7 +1772,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
     def test_basic_missing_file_permissions(self):
         """"""
         if os.name == 'nt':
-            return unittest.skip('Skipped because it is POSIX only test')
+            self.skipTest('Skipped because it is POSIX only test')
 
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
@@ -1787,7 +1819,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
     def test_basic_missing_dir_permissions(self):
         """"""
         if os.name == 'nt':
-            return unittest.skip('Skipped because it is POSIX only test')
+            self.skipTest('Skipped because it is POSIX only test')
 
         fname = self.id().split('.')[3]
         backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
