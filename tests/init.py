@@ -8,7 +8,7 @@ from .helpers.ptrack_helpers import dir_files, ProbackupTest, ProbackupException
 
 module_name = 'init'
 
-DIR_PERMISSION = 0o700
+DIR_PERMISSION = 0o700 if os.name != 'nt' else 0o777
 
 CATALOG_DIRS = ['backups', 'wal']
 
@@ -175,13 +175,12 @@ class InitTest(ProbackupTest, unittest.TestCase):
         os.makedirs(no_access_dir)
         os.chmod(no_access_dir, stat.S_IREAD)
 
-        try:
+        expected = 'ERROR: cannot open backup catalog directory "{0}": Permission denied'.format(backup_dir)
+        with self.assertRaisesRegex(ProbackupException, expected):
             self.init_pb(backup_dir, cleanup=False)
-        except ProbackupException as e:
-            self.assertEqual(f'ERROR: cannot open backup catalog directory "{backup_dir}": Permission denied\n',
-                             e.message)
-        finally:
-            self.del_test_dir(module_name, fname)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
 
     def test_init_backup_catalog_no_write(self):
         """ Test pg_probackup init -B backup_dir to a dir with no write access. """
@@ -193,13 +192,12 @@ class InitTest(ProbackupTest, unittest.TestCase):
         os.makedirs(no_access_dir)
         os.chmod(no_access_dir, stat.S_IREAD|stat.S_IEXEC)
 
-        try:
+        expected = 'ERROR: Can not create backup catalog root directory: Cannot make dir "{0}": Permission denied'.format(backup_dir)
+        with self.assertRaisesRegex(ProbackupException, expected):
             self.init_pb(backup_dir, cleanup=False)
-        except ProbackupException as e:
-            self.assertEqual(f'ERROR: Can not create backup catalog root directory: Cannot make dir "{backup_dir}": Permission denied\n',
-                             e.message)
-        finally:
-            self.del_test_dir(module_name, fname)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
 
     def test_init_backup_catalog_no_create(self):
         """ Test pg_probackup init -B backup_dir to a dir when backup dir exists but not writeable. """
@@ -211,14 +209,13 @@ class InitTest(ProbackupTest, unittest.TestCase):
         os.makedirs(backup_dir)
         os.chmod(backup_dir, stat.S_IREAD|stat.S_IEXEC)
 
-        try:
+        backups_dir = os.path.join(backup_dir, 'backups')
+        expected = 'ERROR: Can not create backup catalog data directory: Cannot make dir "{0}": Permission denied'.format(backups_dir)
+        with self.assertRaisesRegex(ProbackupException, expected):
             self.init_pb(backup_dir, cleanup=False)
-        except ProbackupException as e:
-            backups_dir = os.path.join(backup_dir, 'backups')
-            self.assertEqual(f'ERROR: Can not create backup catalog data directory: Cannot make dir "{backups_dir}": Permission denied\n',
-                             e.message)
-        finally:
-            self.del_test_dir(module_name, fname)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
 
     def test_init_backup_catalog_exists_not_empty(self):
         """ Test pg_probackup init -B backup_dir which exists and not empty. """
@@ -228,14 +225,11 @@ class InitTest(ProbackupTest, unittest.TestCase):
                                    'parent')
         backup_dir = os.path.join(parent_dir, 'backup')
         os.makedirs(backup_dir)
-        with open(os.path.join(backup_dir, 'somefile.txt'), 'w') as fout:
-            fout.write("42\n")
+        with open(os.path.join(backup_dir, 'somefile.txt'), 'wb'):
+            pass
 
-        try:
+        with self.assertRaisesRegex(ProbackupException, "ERROR: backup catalog already exist and it's not empty"):
             self.init_pb(backup_dir, cleanup=False)
-            self.fail("This should have failed due to non empty catalog dir.")
-        except ProbackupException as e:
-            self.assertEqual("ERROR: backup catalog already exist and it's not empty\n",
-                             e.message)
-        finally:
-            self.del_test_dir(module_name, fname)
+
+        # Clean after yourself
+        self.del_test_dir(module_name, fname)
