@@ -869,9 +869,10 @@ class ProbackupTest(object):
         except subprocess.CalledProcessError as e:
             raise ProbackupException(e.output.decode('utf-8'), command)
 
-    def init_pb(self, backup_dir, options=[], old_binary=False):
+    def init_pb(self, backup_dir, options=[], old_binary=False, cleanup=True):
 
-        shutil.rmtree(backup_dir, ignore_errors=True)
+        if cleanup:
+            shutil.rmtree(backup_dir, ignore_errors=True)
 
         # don`t forget to kill old_binary after remote ssh release
         if self.remote and not old_binary:

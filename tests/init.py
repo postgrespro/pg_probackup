@@ -1,14 +1,18 @@
 import os
+import stat
 import unittest
-from .helpers.ptrack_helpers import dir_files, ProbackupTest, ProbackupException
 import shutil
+
+from .helpers.ptrack_helpers import dir_files, ProbackupTest, ProbackupException
 
 
 module_name = 'init'
 
+DIR_PERMISSION = 0o700
+
+CATALOG_DIRS = ['backups', 'wal']
 
 class InitTest(ProbackupTest, unittest.TestCase):
-
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_success(self):
@@ -19,8 +23,13 @@ class InitTest(ProbackupTest, unittest.TestCase):
         self.init_pb(backup_dir)
         self.assertEqual(
             dir_files(backup_dir),
-            ['backups', 'wal']
+            CATALOG_DIRS
         )
+
+        for subdir in CATALOG_DIRS:
+            dirname = os.path.join(backup_dir, subdir)
+            self.assertEqual(DIR_PERMISSION, stat.S_IMODE(os.stat(dirname).st_mode))
+
         self.add_instance(backup_dir, 'node', node)
         self.assertIn(
             "INFO: Instance 'node' successfully deleted",
@@ -155,3 +164,78 @@ class InitTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
+
+    def test_init_backup_catalog_no_access(self):
+        """ Test pg_probackup init -B backup_dir to a dir with no read access. """
+        fname = self.id().split('.')[3]
+
+        no_access_dir = os.path.join(self.tmp_path, module_name, fname,
+                                   'noaccess')
+        backup_dir = os.path.join(no_access_dir, 'backup')
+        os.makedirs(no_access_dir)
+        os.chmod(no_access_dir, stat.S_IREAD)
+
+        try:
+            self.init_pb(backup_dir, cleanup=False)
+        except ProbackupException as e:
+            self.assertEqual(f'ERROR: cannot open backup catalog directory "{backup_dir}": Permission denied\n',
+                             e.message)
+        finally:
+            self.del_test_dir(module_name, fname)
+
+    def test_init_backup_catalog_no_write(self):
+        """ Test pg_probackup init -B backup_dir to a dir with no write access. """
+        fname = self.id().split('.')[3]
+
+        no_access_dir = os.path.join(self.tmp_path, module_name, fname,
+                                   'noaccess')
+        backup_dir = os.path.join(no_access_dir, 'backup')
+        os.makedirs(no_access_dir)
+        os.chmod(no_access_dir, stat.S_IREAD|stat.S_IEXEC)
+
+        try:
+            self.init_pb(backup_dir, cleanup=False)
+        except ProbackupException as e:
+            self.assertEqual(f'ERROR: Can not create backup catalog root directory: Cannot make dir "{backup_dir}": Permission denied\n',
+                             e.message)
+        finally:
+            self.del_test_dir(module_name, fname)
+
+    def test_init_backup_catalog_no_create(self):
+        """ Test pg_probackup init -B backup_dir to a dir when backup dir exists but not writeable. """
+        fname = self.id().split('.')[3]
+
+        parent_dir = os.path.join(self.tmp_path, module_name, fname,
+                                   'parent')
+        backup_dir = os.path.join(parent_dir, 'backup')
+        os.makedirs(backup_dir)
+        os.chmod(backup_dir, stat.S_IREAD|stat.S_IEXEC)
+
+        try:
+            self.init_pb(backup_dir, cleanup=False)
+        except ProbackupException as e:
+            backups_dir = os.path.join(backup_dir, 'backups')
+            self.assertEqual(f'ERROR: Can not create backup catalog data directory: Cannot make dir "{backups_dir}": Permission denied\n',
+                             e.message)
+        finally:
+            self.del_test_dir(module_name, fname)
+
+    def test_init_backup_catalog_exists_not_empty(self):
+        """ Test pg_probackup init -B backup_dir which exists and not empty. """
+        fname = self.id().split('.')[3]
+
+        parent_dir = os.path.join(self.tmp_path, module_name, fname,
+                                   'parent')
+        backup_dir = os.path.join(parent_dir, 'backup')
+        os.makedirs(backup_dir)
+        with open(os.path.join(backup_dir, 'somefile.txt'), 'w') as fout:
+            fout.write("42\n")
+
+        try:
+            self.init_pb(backup_dir, cleanup=False)
+            self.fail("This should have failed due to non empty catalog dir.")
+        except ProbackupException as e:
+            self.assertEqual("ERROR: backup catalog already exist and it's not empty\n",
+                             e.message)
+        finally:
+            self.del_test_dir(module_name, fname)
