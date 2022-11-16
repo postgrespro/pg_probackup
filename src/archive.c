@@ -390,7 +390,7 @@ push_file_internal(const char *wal_file_name, const char *pg_xlog_dir,
 /* partial handling */
     pio_stat_t st;
     int partial_try_count = 0;
-    ssize_t partial_file_size = 0;
+    int64_t partial_file_size = 0;
     bool partial_is_stale = true;
     size_t len;
     err_i err = $noerr();

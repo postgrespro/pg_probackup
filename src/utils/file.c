@@ -53,7 +53,7 @@ typedef struct
 {
 	pio_file_kind_e kind;
 	mode_t  mode;
-	size_t  size;
+	int64_t size;
 	time_t  mtime;
 	bool    is_datafile;
 	Oid     tblspcOid;
@@ -1914,6 +1914,7 @@ fio_send_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
 	}
 
 	req.arg.nblocks = file->size/BLCKSZ;
+	Assert((int64_t)req.arg.nblocks * BLCKSZ == file->size);
 	req.arg.segmentno = file->segno * RELSEG_SIZE;
 	req.arg.horizonLsn = horizonLsn;
 	req.arg.checksumVersion = checksum_version;

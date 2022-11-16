@@ -439,7 +439,7 @@ catchup_thread_runner(void *arg)
 
 		if (file->write_size == BYTES_INVALID)
 		{
-			elog(LOG, "Skipping the unchanged file: \"%s\", read %zu bytes", from_fullpath, file->read_size);
+			elog(LOG, "Skipping the unchanged file: \"%s\", read %lld bytes", from_fullpath, (long long)file->read_size);
 			continue;
 		}
 
@@ -630,8 +630,8 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 
 	/* for fancy reporting */
 	time_t		start_time, end_time;
-	ssize_t		transfered_datafiles_bytes = 0;
-	ssize_t		transfered_walfiles_bytes = 0;
+	int64_t		transfered_datafiles_bytes = 0;
+	int64_t		transfered_walfiles_bytes = 0;
 	char		pretty_source_bytes[20];
 	err_i		err = $noerr();
 

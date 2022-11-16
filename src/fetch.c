@@ -54,7 +54,7 @@ slurpFile(fio_location location, const char *datadir, const char *path, size_t *
 			ft_logerr(FT_FATAL, $errmsg(err), "slurpFile");
 	}
 
-	if (statbuf.pst_size > SIZE_MAX)
+	if (statbuf.pst_size > SSIZE_MAX)
 		ft_log(FT_FATAL, "file \"%s\" is too large: %lld",
 			   fullpath, (long long)statbuf.pst_size);
 

@@ -105,7 +105,7 @@ typedef enum pio_file_kind {
 } pio_file_kind_e;
 
 typedef struct pio_stat {
-	uint64_t		pst_size;
+	int64_t			pst_size;
 	int64_t	 		pst_mtime;
 	uint32_t 		pst_mode;
 	pio_file_kind_e pst_kind;

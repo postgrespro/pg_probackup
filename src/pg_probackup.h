@@ -214,14 +214,14 @@ typedef struct pgFile
 
 	pio_file_kind_e	kind;	/* kind of file */
 	uint32_t	mode;		/* protection (permission) */
-	uint64_t	size;		/* size of the file */
+	int64_t	size;		/* size of the file */
 
-	uint64_t	read_size;		/* size of the portion read (if only some pages are
+	int64_t	read_size;		/* size of the portion read (if only some pages are
 							   backed up, it's different from size) */
 	int64_t	write_size;		/* size of the backed-up file. BYTES_INVALID means
 							   that the file existed but was not backed up
 							   because not modified since last backup. */
-	uint64_t	uncompressed_size;	/* size of the backed-up file before compression
+	int64_t	uncompressed_size;	/* size of the backed-up file before compression
 								 * and adding block headers.
 								 */
 	time_t  mtime;			/* file st_mtime attribute, can be used only
@@ -593,7 +593,7 @@ struct timelineInfo {
 	XLogSegNo end_segno;	/* last present segment in this timeline */
 	size_t	n_xlog_files;	/* number of segments (only really existing)
 							 * does not include lost segments */
-	size_t	size;			/* space on disk taken by regular WAL files */
+	int64_t	size;			/* space on disk taken by regular WAL files */
 	parray *backups;		/* array of pgBackup sturctures with info
 							 * about backups belonging to this timeline */
 	parray *xlog_filelist;	/* array of ordinary WAL segments, '.partial'
@@ -1055,7 +1055,7 @@ extern bool check_data_file(ConnectionArgs *arguments, pgFile *file,
 
 extern void catchup_data_file(pgFile *file, const char *from_fullpath, const char *to_fullpath,
 								 XLogRecPtr sync_lsn, BackupMode backup_mode,
-								 uint32 checksum_version, size_t prev_size);
+								 uint32 checksum_version, int64_t prev_size);
 extern void backup_data_file(pgFile *file, const char *from_fullpath, const char *to_fullpath,
 							 XLogRecPtr prev_backup_start_lsn, BackupMode backup_mode,
 							 CompressAlg calg, int clevel, uint32 checksum_version,
