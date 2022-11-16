@@ -177,7 +177,7 @@ class InitTest(ProbackupTest, unittest.TestCase):
 
         expected = 'ERROR: cannot open backup catalog directory "{0}": Permission denied'.format(backup_dir)
         with self.assertRaisesRegex(ProbackupException, expected):
-            self.init_pb(backup_dir, cleanup=False)
+            self.init_pb(backup_dir)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
@@ -194,7 +194,7 @@ class InitTest(ProbackupTest, unittest.TestCase):
 
         expected = 'ERROR: Can not create backup catalog root directory: Cannot make dir "{0}": Permission denied'.format(backup_dir)
         with self.assertRaisesRegex(ProbackupException, expected):
-            self.init_pb(backup_dir, cleanup=False)
+            self.init_pb(backup_dir)
 
         # Clean after yourself
         self.del_test_dir(module_name, fname)
