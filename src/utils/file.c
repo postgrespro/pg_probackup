@@ -1531,39 +1531,8 @@ dir_create_dir(const char *dir, mode_t mode, bool strict)
 }
 
 /*
- * Create directory
+ * Executed by remote agent.
  */
-int
-fio_mkdir(fio_location location, const char* path, int mode, bool strict)
-{
-	if (fio_is_remote(location))
-	{
-		fio_header hdr = {
-			.cop = FIO_MKDIR,
-			.handle = strict ? 1 : 0, /* ugly "hack" to pass more params*/
-			.size = strlen(path) + 1,
-			.arg = mode,
-		};
-
-		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
-		IO_CHECK(fio_write_all(fio_stdout, path, hdr.size), hdr.size);
-
-		IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
-		Assert(hdr.cop == FIO_MKDIR);
-
-		if (hdr.arg != 0)
-		{
-			errno = hdr.arg;
-			return -1;
-		}
-		return 0;
-	}
-	else
-	{
-		return dir_create_dir(path, mode, strict);
-	}
-}
-
 static void
 fio_mkdir_impl(const char* path, int mode, bool strict, int out)
 {
@@ -4031,6 +4000,14 @@ pioLocalDrive_pioIsRemote(VSelf)
     return false;
 }
 
+static err_i
+pioLocalDrive_pioMakeDir(VSelf, path_t path, mode_t mode, bool strict)
+{
+	int rc = dir_create_dir(path, mode, strict);
+	if (rc == 0) return $noerr();
+	return $syserr(errno, "Cannot make dir {path:q}", path(path));
+}
+
 static void
 pioLocalDrive_pioListDir(VSelf, parray *files, const char *root, bool handle_tablespaces,
                          bool follow_symlink, bool backup_logs, bool skip_hidden,
@@ -4345,6 +4322,29 @@ static bool
 pioRemoteDrive_pioIsRemote(VSelf)
 {
     return true;
+}
+
+static err_i
+pioRemoteDrive_pioMakeDir(VSelf, path_t path, mode_t mode, bool strict)
+{
+	fio_header hdr = {
+		.cop = FIO_MKDIR,
+		.handle = strict ? 1 : 0, /* ugly "hack" to pass more params*/
+		.size = strlen(path) + 1,
+		.arg = mode,
+	};
+
+	IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
+	IO_CHECK(fio_write_all(fio_stdout, path, hdr.size), hdr.size);
+
+	IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
+	Assert(hdr.cop == FIO_MKDIR);
+
+	if (hdr.arg == 0)
+	{
+		return $noerr();
+	}
+	return $syserr(hdr.arg, "Cannot make dir {path:q}", path(path));
 }
 
 static void

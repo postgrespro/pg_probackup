@@ -847,10 +847,13 @@ create_data_directories(parray *dest_files, const char *data_dir, const char *ba
 						bool extract_tablespaces, bool incremental, fio_location location, 
 						const char* waldir_path)
 {
+	pioDrive_i drive = pioDriveForLocation(location);
 	int			i;
 	parray		*links = NULL;
 	mode_t		pg_tablespace_mode = DIR_PERMISSION;
 	char		to_path[MAXPGPATH];
+	err_i		err = $noerr();
+
 
 	if (waldir_path && !dir_is_empty(waldir_path, location))
 	{
@@ -932,7 +935,13 @@ create_data_directories(parray *dest_files, const char *data_dir, const char *ba
 				waldir_path, to_path);
 
 			/* create tablespace directory from waldir_path*/
-			fio_mkdir(location, waldir_path, pg_tablespace_mode, false);
+			err = $i(pioMakeDir, drive, .path = waldir_path,
+					 .mode = pg_tablespace_mode, .strict = false);
+			if ($haserr(err))
+			{
+				elog(ERROR, "Can not create tablespace directory: %s",
+					 $errmsg(err));
+			}
 
 			/* create link to linked_path */
 			if (fio_symlink(location, waldir_path, to_path, incremental) < 0)
@@ -974,7 +983,13 @@ create_data_directories(parray *dest_files, const char *data_dir, const char *ba
 							 linked_path, to_path);
 
 					/* create tablespace directory */
-					fio_mkdir(location, linked_path, pg_tablespace_mode, false);
+					err = $i(pioMakeDir, drive, .path = linked_path,
+							 .mode = pg_tablespace_mode, .strict = false);
+					if ($haserr(err))
+					{
+						elog(ERROR, "Can not create tablespace directory: %s",
+							 $errmsg(err));
+					}
 
 					/* create link to linked_path */
 					if (fio_symlink(location, linked_path, to_path, incremental) < 0)
@@ -991,8 +1006,13 @@ create_data_directories(parray *dest_files, const char *data_dir, const char *ba
 
 		join_path_components(to_path, data_dir, dir->rel_path);
 
-		// TODO check exit code
-		fio_mkdir(location, to_path, dir->mode, false);
+		err = $i(pioMakeDir, drive, .path = to_path, .mode = dir->mode,
+				 .strict = false);
+		if ($haserr(err))
+		{
+			elog(ERROR, "Can not create tablespace directory: %s",
+				 $errmsg(err));
+		}
 	}
 
 	if (extract_tablespaces)

@@ -22,7 +22,7 @@ static pgBackup* get_closest_backup(timelineInfo *tlinfo);
 static pgBackup* get_oldest_backup(timelineInfo *tlinfo);
 static const char *backupModes[] = {"", "PAGE", "PTRACK", "DELTA", "FULL"};
 static pgBackup *readBackupControlFile(const char *path);
-static int create_backup_dir(pgBackup *backup, const char *backup_instance_path);
+static err_i create_backup_dir(pgBackup *backup, const char *backup_instance_path);
 
 static bool backup_lock_exit_hook_registered = false;
 static parray *locks = NULL;
@@ -1461,9 +1461,11 @@ pgBackupInitDir(pgBackup *backup, const char *backup_instance_path)
 	int	i;
 	char	temp[MAXPGPATH];
 	parray *subdirs;
+	err_i	err = $noerr();
 
 	/* Try to create backup directory at first */
-	if (create_backup_dir(backup, backup_instance_path) != 0)
+	err = create_backup_dir(backup, backup_instance_path);
+	if ($haserr(err))
 	{
 		/* Clear backup_id as indication of error */
 		backup->backup_id = INVALID_BACKUP_ID;
@@ -1499,7 +1501,12 @@ pgBackupInitDir(pgBackup *backup, const char *backup_instance_path)
 	for (i = 0; i < parray_num(subdirs); i++)
 	{
 		join_path_components(temp, backup->root_dir, parray_get(subdirs, i));
-		fio_mkdir(FIO_BACKUP_HOST, temp, DIR_PERMISSION, false);
+		err = $i(pioMakeDir, backup->backup_location, .path = temp,
+				 .mode = DIR_PERMISSION, .strict = false);
+		if ($haserr(err))
+		{
+			elog(ERROR, "Can not create backup directory: %s", $errmsg(err));
+		}
 	}
 
 	free_dir_list(subdirs);
@@ -1512,22 +1519,25 @@ pgBackupInitDir(pgBackup *backup, const char *backup_instance_path)
  *  0 - ok
  * -1 - error (warning message already emitted)
  */
-int
+static err_i
 create_backup_dir(pgBackup *backup, const char *backup_instance_path)
 {
-	int    rc;
 	char   path[MAXPGPATH];
+	err_i  err;
 
 	join_path_components(path, backup_instance_path, base36enc(backup->backup_id));
 
 	/* TODO: add wrapper for remote mode */
-	rc = fio_mkdir(FIO_BACKUP_HOST, path, DIR_PERMISSION, true);
-
-	if (rc == 0)
+	err = $i(pioMakeDir, backup->backup_location, .path = path,
+			 .mode = DIR_PERMISSION, .strict = true);
+	if (!$haserr(err))
+	{
 		backup->root_dir = pgut_strdup(path);
-	else
-		elog(WARNING, "Cannot create directory \"%s\": %s", path, strerror(errno));
-	return rc;
+	} else {
+		elog(ERROR, "Can not create backup directory: %s", $errmsg(err));
+	}
+
+	return err;
 }
 
 /*
@@ -2969,6 +2979,9 @@ pgBackupInit(pgBackup *backup)
 	backup->files = NULL;
 	backup->note = NULL;
 	backup->content_crc = 0;
+
+	backup->backup_location = pioDriveForLocation(FIO_BACKUP_HOST);
+	backup->database_location = pioDriveForLocation(FIO_DB_HOST);
 }
 
 /* free pgBackup object */
@@ -2976,6 +2989,10 @@ void
 pgBackupFree(void *backup)
 {
 	pgBackup *b = (pgBackup *) backup;
+
+	/* Both point to global static vars */
+	b->backup_location.self = NULL;
+	b->database_location.self = NULL;
 
 	pg_free(b->primary_conninfo);
 	pg_free(b->external_dir_str);

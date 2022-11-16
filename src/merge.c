@@ -461,6 +461,8 @@ merge_chain(InstanceState *instanceState,
 	/* in-place merge flags */
 	bool		compression_match = false;
 	bool		program_version_match = false;
+	err_i		err = $noerr();
+
 	/* It's redundant to check block checksumms during merge */
 	skip_block_validation = true;
 
@@ -645,7 +647,13 @@ merge_chain(InstanceState *instanceState,
 			makeExternalDirPathByNum(new_container, full_external_prefix,
 									 file->external_dir_num);
 			join_path_components(dirpath, new_container, file->rel_path);
-			fio_mkdir(FIO_BACKUP_HOST, dirpath, DIR_PERMISSION, false);
+			err = $i(pioMakeDir, dest_backup->backup_location, .path = dirpath,
+					 .mode = DIR_PERMISSION, .strict = false);
+			if ($haserr(err))
+			{
+				elog(ERROR, "Can not create backup external directory: %s",
+					 $errmsg(err));
+			}
 		}
 
 		pg_atomic_init_flag(&file->lock);
