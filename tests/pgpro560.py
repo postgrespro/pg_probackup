@@ -6,9 +6,6 @@ import subprocess
 from time import sleep
 
 
-module_name = 'pgpro560'
-
-
 class CheckSystemID(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
@@ -20,13 +17,12 @@ class CheckSystemID(ProbackupTest, unittest.TestCase):
         make backup
         check that backup failed
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
@@ -49,10 +45,8 @@ class CheckSystemID(ProbackupTest, unittest.TestCase):
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
-        # Clean after yourself
         # Return this file to avoid Postger fail
         os.rename(os.path.join(node.base_dir, 'data', 'global', 'pg_control_copy'), file)
-        self.del_test_dir(module_name, fname)
 
     def test_pgpro560_systemid_mismatch(self):
         """
@@ -61,21 +55,20 @@ class CheckSystemID(ProbackupTest, unittest.TestCase):
         feed to backup PGDATA from node1 and PGPORT from node2
         check that backup failed
         """
-        fname = self.id().split('.')[3]
         node1 = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node1'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node1'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
         node1.slow_start()
         node2 = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node2'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node2'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
         node2.slow_start()
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node1', node1)
 
@@ -112,6 +105,3 @@ class CheckSystemID(ProbackupTest, unittest.TestCase):
                 'but connected instance system id is' in e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
-
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)

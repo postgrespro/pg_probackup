@@ -4,18 +4,14 @@ from .helpers.ptrack_helpers import dir_files, ProbackupTest, ProbackupException
 import shutil
 
 
-module_name = 'init'
-
-
 class InitTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_success(self):
         """Success normal init"""
-        fname = self.id().split(".")[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
-        node = self.make_simple_node(base_dir=os.path.join(module_name, fname, 'node'))
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
+        node = self.make_simple_node(base_dir=os.path.join(self.module_name, self.fname, 'node'))
         self.init_pb(backup_dir)
         self.assertEqual(
             dir_files(backup_dir),
@@ -64,15 +60,11 @@ class InitTest(ProbackupTest, unittest.TestCase):
                 e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(e.message, self.cmd))
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_already_exist(self):
         """Failure with backup catalog already existed"""
-        fname = self.id().split(".")[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
-        node = self.make_simple_node(base_dir=os.path.join(module_name, fname, 'node'))
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
+        node = self.make_simple_node(base_dir=os.path.join(self.module_name, self.fname, 'node'))
         self.init_pb(backup_dir)
         try:
             self.show_pb(backup_dir, 'node')
@@ -84,15 +76,11 @@ class InitTest(ProbackupTest, unittest.TestCase):
                 e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_abs_path(self):
         """failure with backup catalog should be given as absolute path"""
-        fname = self.id().split(".")[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
-        node = self.make_simple_node(base_dir=os.path.join(module_name, fname, 'node'))
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
+        node = self.make_simple_node(base_dir=os.path.join(self.module_name, self.fname, 'node'))
         try:
             self.run_pb(["init", "-B", os.path.relpath("%s/backup" % node.base_dir, self.dir_path)])
             self.assertEqual(1, 0, 'Expecting Error due to initialization with non-absolute path in --backup-path. Output: {0} \n CMD: {1}'.format(
@@ -103,18 +91,14 @@ class InitTest(ProbackupTest, unittest.TestCase):
                 e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_add_instance_idempotence(self):
         """
         https://github.com/postgrespro/pg_probackup/issues/219
         """
-        fname = self.id().split(".")[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
-        node = self.make_simple_node(base_dir=os.path.join(module_name, fname, 'node'))
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
+        node = self.make_simple_node(base_dir=os.path.join(self.module_name, self.fname, 'node'))
         self.init_pb(backup_dir)
 
         self.add_instance(backup_dir, 'node', node)
@@ -152,6 +136,3 @@ class InitTest(ProbackupTest, unittest.TestCase):
                 e.message,
                 "\n Unexpected Error Message: {0}\n CMD: {1}".format(
                     repr(e.message), self.cmd))
-
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)

@@ -7,9 +7,6 @@ import subprocess
 import gzip
 import shutil
 
-module_name = 'page'
-
-
 class PageTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
@@ -20,17 +17,16 @@ class PageTest(ProbackupTest, unittest.TestCase):
         take page backup, take second page backup,
         restore last page backup and check data correctness
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
                 'checkpoint_timeout': '300s'})
 
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -98,9 +94,6 @@ class PageTest(ProbackupTest, unittest.TestCase):
 
         self.assertEqual(result1, result2)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_page_vacuum_truncate_1(self):
         """
@@ -109,10 +102,9 @@ class PageTest(ProbackupTest, unittest.TestCase):
         take page backup, insert some data,
         take second page backup and check data correctness
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -159,7 +151,7 @@ class PageTest(ProbackupTest, unittest.TestCase):
         pgdata = self.pgdata_content(node.data_dir)
 
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
         node_restored.cleanup()
 
         self.restore_node(backup_dir, 'node', node_restored)
@@ -171,9 +163,6 @@ class PageTest(ProbackupTest, unittest.TestCase):
         self.set_auto_conf(node_restored, {'port': node_restored.port})
         node_restored.slow_start()
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_page_stream(self):
         """
@@ -181,10 +170,9 @@ class PageTest(ProbackupTest, unittest.TestCase):
         restore them and check data correctness
         """
         self.maxDiff = None
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -258,9 +246,6 @@ class PageTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(page_result, page_result_new)
         node.cleanup()
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_page_archive(self):
         """
@@ -268,10 +253,9 @@ class PageTest(ProbackupTest, unittest.TestCase):
         restore them and check data correctness
         """
         self.maxDiff = None
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -352,19 +336,15 @@ class PageTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(page_result, page_result_new)
         node.cleanup()
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_page_multiple_segments(self):
         """
         Make node, create table with multiple segments,
         write some data to it, check page and data correctness
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -399,7 +379,7 @@ class PageTest(ProbackupTest, unittest.TestCase):
 
         # RESTORE NODE
         restored_node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'restored_node'))
+            base_dir=os.path.join(self.module_name, self.fname, 'restored_node'))
         restored_node.cleanup()
         tblspc_path = self.get_tblspace_path(node, 'somedata')
         tblspc_path_new = self.get_tblspace_path(
@@ -427,9 +407,6 @@ class PageTest(ProbackupTest, unittest.TestCase):
         if self.paranoia:
             self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_page_delete(self):
         """
@@ -437,10 +414,9 @@ class PageTest(ProbackupTest, unittest.TestCase):
         delete everything from table, vacuum table, take page backup,
         restore page backup, compare .
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True, initdb_params=['--data-checksums'],
             pg_options={
                 'checkpoint_timeout': '30s',
@@ -477,7 +453,7 @@ class PageTest(ProbackupTest, unittest.TestCase):
 
         # RESTORE
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
         node_restored.cleanup()
 
         self.restore_node(
@@ -499,9 +475,6 @@ class PageTest(ProbackupTest, unittest.TestCase):
         self.set_auto_conf(node_restored, {'port': node_restored.port})
         node_restored.slow_start()
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_page_delete_1(self):
         """
@@ -509,10 +482,9 @@ class PageTest(ProbackupTest, unittest.TestCase):
         delete everything from table, vacuum table, take page backup,
         restore page backup, compare .
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -554,7 +526,7 @@ class PageTest(ProbackupTest, unittest.TestCase):
 
         # RESTORE
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored')
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored')
         )
         node_restored.cleanup()
 
@@ -577,26 +549,22 @@ class PageTest(ProbackupTest, unittest.TestCase):
         self.set_auto_conf(node_restored, {'port': node_restored.port})
         node_restored.slow_start()
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     def test_parallel_pagemap(self):
         """
         Test for parallel WAL segments reading, during which pagemap is built
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
 
         # Initialize instance and backup directory
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'],
             pg_options={
                 "hot_standby": "on"
             }
         )
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'),
         )
 
         self.init_pb(backup_dir)
@@ -652,18 +620,16 @@ class PageTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         node.cleanup()
         node_restored.cleanup()
-        self.del_test_dir(module_name, fname)
 
     def test_parallel_pagemap_1(self):
         """
         Test for parallel WAL segments reading, during which pagemap is built
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
 
         # Initialize instance and backup directory
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'],
             pg_options={}
         )
@@ -704,7 +670,6 @@ class PageTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         node.cleanup()
-        self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def test_page_backup_with_lost_wal_segment(self):
@@ -715,12 +680,11 @@ class PageTest(ProbackupTest, unittest.TestCase):
         run page backup, expecting error because of missing wal segment
         make sure that backup status is 'ERROR'
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -785,9 +749,6 @@ class PageTest(ProbackupTest, unittest.TestCase):
             self.show_pb(backup_dir, 'node')[2]['status'],
             'Backup {0} should have STATUS "ERROR"')
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_page_backup_with_corrupted_wal_segment(self):
         """
@@ -797,12 +758,11 @@ class PageTest(ProbackupTest, unittest.TestCase):
         run page backup, expecting error because of missing wal segment
         make sure that backup status is 'ERROR'
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -896,9 +856,6 @@ class PageTest(ProbackupTest, unittest.TestCase):
             self.show_pb(backup_dir, 'node')[2]['status'],
             'Backup {0} should have STATUS "ERROR"')
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_page_backup_with_alien_wal_segment(self):
         """
@@ -910,18 +867,17 @@ class PageTest(ProbackupTest, unittest.TestCase):
         expecting error because of alien wal segment
         make sure that backup status is 'ERROR'
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
         alien_node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'alien_node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'alien_node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -1017,20 +973,16 @@ class PageTest(ProbackupTest, unittest.TestCase):
             self.show_pb(backup_dir, 'node')[2]['status'],
             'Backup {0} should have STATUS "ERROR"')
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_multithread_page_backup_with_toast(self):
         """
         make node, create toast, do multithread PAGE backup
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -1050,9 +1002,6 @@ class PageTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node', node,
             backup_type='page', options=["-j", "4"])
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_page_create_db(self):
         """
@@ -1060,10 +1009,9 @@ class PageTest(ProbackupTest, unittest.TestCase):
         restore database and check it presense
         """
         self.maxDiff = None
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -1101,7 +1049,7 @@ class PageTest(ProbackupTest, unittest.TestCase):
 
         # RESTORE
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
 
         node_restored.cleanup()
         self.restore_node(
@@ -1162,9 +1110,6 @@ class PageTest(ProbackupTest, unittest.TestCase):
                     repr(e.message), self.cmd)
             )
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_multi_timeline_page(self):
@@ -1179,10 +1124,9 @@ class PageTest(ProbackupTest, unittest.TestCase):
 
         P must have F as parent
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -1251,7 +1195,7 @@ class PageTest(ProbackupTest, unittest.TestCase):
             "postgres", "select * from pgbench_accounts")
 
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
         node_restored.cleanup()
 
         self.restore_node(backup_dir, 'node', node_restored)
@@ -1303,9 +1247,6 @@ class PageTest(ProbackupTest, unittest.TestCase):
             backup_list[4]['id'])
         self.assertEqual(backup_list[5]['current-tli'], 7)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_multitimeline_page_1(self):
@@ -1317,10 +1258,9 @@ class PageTest(ProbackupTest, unittest.TestCase):
 
         P must have F as parent
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={'wal_log_hints': 'on'})
@@ -1373,7 +1313,7 @@ class PageTest(ProbackupTest, unittest.TestCase):
         pgdata = self.pgdata_content(node.data_dir)
 
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
         node_restored.cleanup()
 
         self.restore_node(backup_dir, 'node', node_restored)
@@ -1384,22 +1324,18 @@ class PageTest(ProbackupTest, unittest.TestCase):
 
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_page_pg_resetxlog(self):
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
                 'shared_buffers': '512MB',
                 'max_wal_size': '3GB'})
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -1478,7 +1414,7 @@ class PageTest(ProbackupTest, unittest.TestCase):
 #        pgdata = self.pgdata_content(node.data_dir)
 #
 #        node_restored = self.make_simple_node(
-#            base_dir=os.path.join(module_name, fname, 'node_restored'))
+#            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
 #        node_restored.cleanup()
 #
 #        self.restore_node(
@@ -1486,6 +1422,3 @@ class PageTest(ProbackupTest, unittest.TestCase):
 #
 #        pgdata_restored = self.pgdata_content(node_restored.data_dir)
 #        self.compare_pgdata(pgdata, pgdata_restored)
-
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)

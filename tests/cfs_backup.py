@@ -6,7 +6,6 @@ import shutil
 from .helpers.cfs_helpers import find_by_extensions, find_by_name, find_by_pattern, corrupt_file
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 
-module_name = 'cfs_backup'
 tblspace_name = 'cfs_tblspace'
 
 
@@ -14,11 +13,10 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
     # --- Begin --- #
     @unittest.skipUnless(ProbackupTest.enterprise, 'skip')
     def setUp(self):
-        self.fname = self.id().split('.')[3]
         self.backup_dir = os.path.join(
-            self.tmp_path, module_name, self.fname, 'backup')
+            self.tmp_path, self.module_name, self.fname, 'backup')
         self.node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, self.fname),
+            base_dir="{0}/{1}/node".format(self.module_name, self.fname),
             set_replication=True,
             ptrack_enable=True,
             initdb_params=['--data-checksums'],
@@ -1228,10 +1226,6 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
         )
 
 #    # --- End ---#
-#    @unittest.skipUnless(ProbackupTest.enterprise, 'skip')
-#    def tearDown(self):
-#        self.node.cleanup()
-#        self.del_test_dir(module_name, self.fname)
 
 
 #class CfsBackupEncTest(CfsBackupNoEncTest):

@@ -6,21 +6,17 @@ from time import sleep
 from distutils.dir_util import copy_tree
 
 
-module_name = 'retention'
-
-
 class RetentionTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_retention_redundancy_1(self):
         """purge backups using redundancy-based retention policy"""
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -71,18 +67,14 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
                 self.assertTrue(wal_name >= min_wal)
                 self.assertTrue(wal_name <= max_wal)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_retention_window_2(self):
         """purge backups using window-based retention policy"""
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -124,18 +116,14 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         self.delete_expired(backup_dir, 'node', options=['--expired'])
         self.assertEqual(len(self.show_pb(backup_dir, 'node')), 2)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_retention_window_3(self):
         """purge all backups using window-based retention policy"""
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -171,18 +159,14 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         # count wal files in ARCHIVE
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_retention_window_4(self):
         """purge all backups using window-based retention policy"""
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -232,18 +216,14 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         n_wals = len(os.listdir(wals_dir))
         self.assertTrue(n_wals == 0)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_window_expire_interleaved_incremental_chains(self):
         """complicated case of interleaved backup chains"""
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -356,18 +336,14 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         print(self.show_pb(
             backup_dir, 'node', as_json=False, as_text=True))
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_redundancy_expire_interleaved_incremental_chains(self):
         """complicated case of interleaved backup chains"""
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -466,18 +442,14 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         print(self.show_pb(
             backup_dir, 'node', as_json=False, as_text=True))
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_window_merge_interleaved_incremental_chains(self):
         """complicated case of interleaved backup chains"""
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -603,9 +575,6 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         self.assertEqual(len(self.show_pb(backup_dir, 'node')), 2)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_window_merge_interleaved_incremental_chains_1(self):
         """
@@ -616,12 +585,11 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
             FULLb
             FULLa
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -745,9 +713,6 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         pgdata_restored_b3 = self.pgdata_content(node.data_dir)
         self.compare_pgdata(pgdata_b3, pgdata_restored_b3)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_basic_window_merge_multiple_descendants(self):
         """
@@ -761,12 +726,11 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         FULLb           |
                       FULLa
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -1005,9 +969,6 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
             self.show_pb(backup_dir, 'node')[0]['backup-mode'],
             'FULL')
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_basic_window_merge_multiple_descendants_1(self):
         """
@@ -1021,12 +982,11 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         FULLb           |
                       FULLa
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -1271,9 +1231,6 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
                 '--retention-window=1',
                 '--delete-expired', '--log-level-console=log'])
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_window_chains(self):
         """
@@ -1286,12 +1243,11 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         PAGE
         FULL
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -1357,9 +1313,6 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         pgdata_restored = self.pgdata_content(node.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_window_chains_1(self):
         """
@@ -1372,12 +1325,11 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         PAGE
         FULL
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -1451,9 +1403,6 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
             "Purging finished",
             output)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     @unittest.skip("skip")
     def test_window_error_backups(self):
         """
@@ -1466,12 +1415,11 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         FULL
         -------redundancy
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -1488,9 +1436,6 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         # Change FULLb backup status to ERROR
         # self.change_backup_status(backup_dir, 'node', backup_id_b, 'ERROR')
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_window_error_backups_1(self):
         """
@@ -1501,12 +1446,11 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         """
         self._check_gdb_flag_or_skip_test()
 
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -1538,9 +1482,6 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         self.assertEqual(len(self.show_pb(backup_dir, 'node')), 4)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_window_error_backups_2(self):
         """
@@ -1551,12 +1492,11 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         """
         self._check_gdb_flag_or_skip_test()
 
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -1584,19 +1524,15 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         self.assertEqual(len(self.show_pb(backup_dir, 'node')), 3)
 
-        # Clean after yourself
-        # self.del_test_dir(module_name, fname)
-
     def test_retention_redundancy_overlapping_chains(self):
         """"""
         self._check_gdb_flag_or_skip_test()
 
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -1629,20 +1565,16 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(len(self.show_pb(backup_dir, 'node')), 2)
 
         self.validate_pb(backup_dir, 'node')
-
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
 
     def test_retention_redundancy_overlapping_chains_1(self):
         """"""
         self._check_gdb_flag_or_skip_test()
 
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -1676,19 +1608,15 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         self.validate_pb(backup_dir, 'node')
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     def test_wal_purge_victim(self):
         """
         https://github.com/postgrespro/pg_probackup/issues/103
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -1733,9 +1661,6 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
                 "WARNING: Backup {0} has missing parent 0".format(page_id),
                 e.message)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_failed_merge_redundancy_retention(self):
         """
@@ -1743,11 +1668,10 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         """
         self._check_gdb_flag_or_skip_test()
 
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
             base_dir=os.path.join(
-                module_name, fname, 'node'),
+                self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -1831,9 +1755,6 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         self.assertEqual(len(self.show_pb(backup_dir, 'node')), 10)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     def test_wal_depth_1(self):
         """
                         |-------------B5----------> WAL timeline3
@@ -1842,10 +1763,9 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         wal-depth=2
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -1888,7 +1808,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         # Timeline 2
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
 
         node_restored.cleanup()
 
@@ -1947,8 +1867,6 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         self.validate_pb(backup_dir, 'node')
 
-        self.del_test_dir(module_name, fname)
-
     def test_wal_purge(self):
         """
          -------------------------------------> tli5
@@ -1969,10 +1887,9 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         wal-depth=2
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -2009,7 +1926,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         # TLI 2
         node_tli2 = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_tli2'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_tli2'))
         node_tli2.cleanup()
 
         output = self.restore_node(
@@ -2043,7 +1960,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         # TLI3
         node_tli3 = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_tli3'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_tli3'))
         node_tli3.cleanup()
 
         # Note, that successful validation here is a happy coincidence 
@@ -2064,7 +1981,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         # TLI4
         node_tli4 = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_tli4'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_tli4'))
         node_tli4.cleanup()
 
         self.restore_node(
@@ -2086,7 +2003,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         # TLI5
         node_tli5 = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_tli5'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_tli5'))
         node_tli5.cleanup()
 
         self.restore_node(
@@ -2169,8 +2086,6 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         self.validate_pb(backup_dir, 'node')
 
-        self.del_test_dir(module_name, fname)
-
     def test_wal_depth_2(self):
         """
          -------------------------------------> tli5
@@ -2192,10 +2107,9 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         wal-depth=2
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -2230,7 +2144,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         # TLI 2
         node_tli2 = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_tli2'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_tli2'))
         node_tli2.cleanup()
 
         output = self.restore_node(
@@ -2264,7 +2178,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         # TLI3
         node_tli3 = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_tli3'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_tli3'))
         node_tli3.cleanup()
 
         # Note, that successful validation here is a happy coincidence 
@@ -2285,7 +2199,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         # TLI4
         node_tli4 = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_tli4'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_tli4'))
         node_tli4.cleanup()
 
         self.restore_node(
@@ -2307,7 +2221,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         # TLI5
         node_tli5 = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_tli5'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_tli5'))
         node_tli5.cleanup()
 
         self.restore_node(
@@ -2426,8 +2340,6 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         self.validate_pb(backup_dir, 'node')
 
-        self.del_test_dir(module_name, fname)
-
     def test_basic_wal_depth(self):
         """
         B1---B1----B3-----B4----B5------> tli1
@@ -2437,10 +2349,9 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         wal-depth=1
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -2529,18 +2440,15 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         self.validate_pb(backup_dir, 'node')
 
-        self.del_test_dir(module_name, fname)
-
     def test_concurrent_running_full_backup(self):
         """
         https://github.com/postgrespro/pg_probackup/issues/328
         """
         self._check_gdb_flag_or_skip_test()
 
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -2608,5 +2516,3 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(
             len(self.show_pb(backup_dir, 'node')),
             6)
-
-        self.del_test_dir(module_name, fname)

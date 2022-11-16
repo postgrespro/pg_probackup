@@ -4,11 +4,7 @@ import signal
 import unittest
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 
-module_name = 'catchup'
-
 class CatchupTest(ProbackupTest, unittest.TestCase):
-    def setUp(self):
-        self.fname = self.id().split('.')[3]
 
 #########################################
 # Basic tests
@@ -19,7 +15,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         """
         # preparation
         src_pg = self.make_simple_node(
-            base_dir = os.path.join(module_name, self.fname, 'src'),
+            base_dir = os.path.join(self.module_name, self.fname, 'src'),
             set_replication = True
             )
         src_pg.slow_start()
@@ -29,7 +25,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         src_query_result = src_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
 
         # do full catchup
-        dst_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'dst'))
+        dst_pg = self.make_empty_node(os.path.join(self.module_name, self.fname, 'dst'))
         self.catchup_node(
             backup_mode = 'FULL',
             source_pgdata = src_pg.data_dir,
@@ -57,7 +53,6 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         # Cleanup
         dst_pg.stop()
         #self.assertEqual(1, 0, 'Stop test')
-        self.del_test_dir(module_name, self.fname)
 
     def test_full_catchup_with_tablespace(self):
         """
@@ -65,7 +60,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         """
         # preparation
         src_pg = self.make_simple_node(
-            base_dir = os.path.join(module_name, self.fname, 'src'),
+            base_dir = os.path.join(self.module_name, self.fname, 'src'),
             set_replication = True
             )
         src_pg.slow_start()
@@ -77,7 +72,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         src_query_result = src_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
 
         # do full catchup with tablespace mapping
-        dst_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'dst'))
+        dst_pg = self.make_empty_node(os.path.join(self.module_name, self.fname, 'dst'))
         tblspace1_new_path = self.get_tblspace_path(dst_pg, 'tblspace1_new')
         self.catchup_node(
             backup_mode = 'FULL',
@@ -115,7 +110,6 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
 
         # Cleanup
         dst_pg.stop()
-        self.del_test_dir(module_name, self.fname)
 
     def test_basic_delta_catchup(self):
         """
@@ -123,7 +117,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         """
         # preparation 1: source
         src_pg = self.make_simple_node(
-            base_dir = os.path.join(module_name, self.fname, 'src'),
+            base_dir = os.path.join(self.module_name, self.fname, 'src'),
             set_replication = True,
             pg_options = { 'wal_log_hints': 'on' }
             )
@@ -133,7 +127,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             "CREATE TABLE ultimate_question(answer int)")
 
         # preparation 2: make clean shutdowned lagging behind replica
-        dst_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'dst'))
+        dst_pg = self.make_empty_node(os.path.join(self.module_name, self.fname, 'dst'))
         self.catchup_node(
             backup_mode = 'FULL',
             source_pgdata = src_pg.data_dir,
@@ -183,7 +177,6 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         # Cleanup
         dst_pg.stop()
         #self.assertEqual(1, 0, 'Stop test')
-        self.del_test_dir(module_name, self.fname)
 
     def test_basic_ptrack_catchup(self):
         """
@@ -194,7 +187,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
 
         # preparation 1: source
         src_pg = self.make_simple_node(
-            base_dir = os.path.join(module_name, self.fname, 'src'),
+            base_dir = os.path.join(self.module_name, self.fname, 'src'),
             set_replication = True,
             ptrack_enable = True,
             initdb_params = ['--data-checksums']
@@ -206,7 +199,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             "CREATE TABLE ultimate_question(answer int)")
 
         # preparation 2: make clean shutdowned lagging behind replica
-        dst_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'dst'))
+        dst_pg = self.make_empty_node(os.path.join(self.module_name, self.fname, 'dst'))
         self.catchup_node(
             backup_mode = 'FULL',
             source_pgdata = src_pg.data_dir,
@@ -256,7 +249,6 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         # Cleanup
         dst_pg.stop()
         #self.assertEqual(1, 0, 'Stop test')
-        self.del_test_dir(module_name, self.fname)
 
     def test_tli_delta_catchup(self):
         """
@@ -264,14 +256,14 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         """
         # preparation 1: source
         src_pg = self.make_simple_node(
-            base_dir = os.path.join(module_name, self.fname, 'src'),
+            base_dir = os.path.join(self.module_name, self.fname, 'src'),
             set_replication = True,
             pg_options = { 'wal_log_hints': 'on' }
             )
         src_pg.slow_start()
 
         # preparation 2: destination
-        dst_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'dst'))
+        dst_pg = self.make_empty_node(os.path.join(self.module_name, self.fname, 'dst'))
         self.catchup_node(
             backup_mode = 'FULL',
             source_pgdata = src_pg.data_dir,
@@ -329,7 +321,6 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
 
         # Cleanup
         src_pg.stop()
-        self.del_test_dir(module_name, self.fname)
 
     def test_tli_ptrack_catchup(self):
         """
@@ -340,7 +331,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
 
         # preparation 1: source
         src_pg = self.make_simple_node(
-            base_dir = os.path.join(module_name, self.fname, 'src'),
+            base_dir = os.path.join(self.module_name, self.fname, 'src'),
             set_replication = True,
             ptrack_enable = True,
             initdb_params = ['--data-checksums']
@@ -349,7 +340,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         src_pg.safe_psql("postgres", "CREATE EXTENSION ptrack")
 
         # preparation 2: destination
-        dst_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'dst'))
+        dst_pg = self.make_empty_node(os.path.join(self.module_name, self.fname, 'dst'))
         self.catchup_node(
             backup_mode = 'FULL',
             source_pgdata = src_pg.data_dir,
@@ -412,7 +403,6 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
 
         # Cleanup
         src_pg.stop()
-        self.del_test_dir(module_name, self.fname)
 
 #########################################
 # Test various corner conditions
@@ -423,7 +413,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         """
         # preparation 1: source
         src_pg = self.make_simple_node(
-            base_dir = os.path.join(module_name, self.fname, 'src'),
+            base_dir = os.path.join(self.module_name, self.fname, 'src'),
             set_replication = True,
             pg_options = { 'wal_log_hints': 'on' }
             )
@@ -433,7 +423,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             "CREATE TABLE ultimate_question AS SELECT 42 AS answer")
 
         # preparation 2: make clean shutdowned lagging behind replica
-        dst_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'dst'))
+        dst_pg = self.make_empty_node(os.path.join(self.module_name, self.fname, 'dst'))
         self.catchup_node(
             backup_mode = 'FULL',
             source_pgdata = src_pg.data_dir,
@@ -468,7 +458,6 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
 
         # Cleanup
         src_pg.stop()
-        self.del_test_dir(module_name, self.fname)
 
     def test_table_drop_with_ptrack(self):
         """
@@ -479,7 +468,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
 
         # preparation 1: source
         src_pg = self.make_simple_node(
-            base_dir = os.path.join(module_name, self.fname, 'src'),
+            base_dir = os.path.join(self.module_name, self.fname, 'src'),
             set_replication = True,
             ptrack_enable = True,
             initdb_params = ['--data-checksums']
@@ -491,7 +480,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             "CREATE TABLE ultimate_question AS SELECT 42 AS answer")
 
         # preparation 2: make clean shutdowned lagging behind replica
-        dst_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'dst'))
+        dst_pg = self.make_empty_node(os.path.join(self.module_name, self.fname, 'dst'))
         self.catchup_node(
             backup_mode = 'FULL',
             source_pgdata = src_pg.data_dir,
@@ -526,7 +515,6 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
 
         # Cleanup
         src_pg.stop()
-        self.del_test_dir(module_name, self.fname)
 
     def test_tablefile_truncation_with_delta(self):
         """
@@ -534,7 +522,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         """
         # preparation 1: source
         src_pg = self.make_simple_node(
-            base_dir = os.path.join(module_name, self.fname, 'src'),
+            base_dir = os.path.join(self.module_name, self.fname, 'src'),
             set_replication = True,
             pg_options = { 'wal_log_hints': 'on' }
             )
@@ -549,7 +537,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         src_pg.safe_psql("postgres", "VACUUM t_heap")
 
         # preparation 2: make clean shutdowned lagging behind replica
-        dst_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'dst'))
+        dst_pg = self.make_empty_node(os.path.join(self.module_name, self.fname, 'dst'))
         self.catchup_node(
             backup_mode = 'FULL',
             source_pgdata = src_pg.data_dir,
@@ -583,7 +571,6 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
 
         # Cleanup
         src_pg.stop()
-        self.del_test_dir(module_name, self.fname)
 
     def test_tablefile_truncation_with_ptrack(self):
         """
@@ -594,7 +581,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
 
         # preparation 1: source
         src_pg = self.make_simple_node(
-            base_dir = os.path.join(module_name, self.fname, 'src'),
+            base_dir = os.path.join(self.module_name, self.fname, 'src'),
             set_replication = True,
             ptrack_enable = True,
             initdb_params = ['--data-checksums']
@@ -611,7 +598,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         src_pg.safe_psql("postgres", "VACUUM t_heap")
 
         # preparation 2: make clean shutdowned lagging behind replica
-        dst_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'dst'))
+        dst_pg = self.make_empty_node(os.path.join(self.module_name, self.fname, 'dst'))
         self.catchup_node(
             backup_mode = 'FULL',
             source_pgdata = src_pg.data_dir,
@@ -645,7 +632,6 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
 
         # Cleanup
         src_pg.stop()
-        self.del_test_dir(module_name, self.fname)
 
 #########################################
 # Test reaction on user errors
@@ -657,7 +643,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         if self.remote:
             self.skipTest('Skipped because this test tests local catchup error handling')
 
-        src_pg = self.make_simple_node(base_dir = os.path.join(module_name, self.fname, 'src'))
+        src_pg = self.make_simple_node(base_dir = os.path.join(self.module_name, self.fname, 'src'))
         src_pg.slow_start()
 
         tblspace_path = self.get_tblspace_path(src_pg, 'tblspace')
@@ -669,7 +655,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             "postgres",
             "CREATE TABLE ultimate_question TABLESPACE tblspace AS SELECT 42 AS answer")
 
-        dst_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'dst'))
+        dst_pg = self.make_empty_node(os.path.join(self.module_name, self.fname, 'dst'))
         try:
             self.catchup_node(
                 backup_mode = 'FULL',
@@ -691,7 +677,6 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
 
         # Cleanup
         src_pg.stop()
-        self.del_test_dir(module_name, self.fname)
 
     def test_running_dest_postmaster(self):
         """
@@ -699,14 +684,14 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         """
         # preparation 1: source
         src_pg = self.make_simple_node(
-            base_dir = os.path.join(module_name, self.fname, 'src'),
+            base_dir = os.path.join(self.module_name, self.fname, 'src'),
             set_replication = True,
             pg_options = { 'wal_log_hints': 'on' }
             )
         src_pg.slow_start()
 
         # preparation 2: destination
-        dst_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'dst'))
+        dst_pg = self.make_empty_node(os.path.join(self.module_name, self.fname, 'dst'))
         self.catchup_node(
             backup_mode = 'FULL',
             source_pgdata = src_pg.data_dir,
@@ -738,7 +723,6 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
 
         # Cleanup
         src_pg.stop()
-        self.del_test_dir(module_name, self.fname)
 
     def test_same_db_id(self):
         """
@@ -747,12 +731,12 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         # preparation:
         #   source
         src_pg = self.make_simple_node(
-            base_dir = os.path.join(module_name, self.fname, 'src'),
+            base_dir = os.path.join(self.module_name, self.fname, 'src'),
             set_replication = True
             )
         src_pg.slow_start()
         #   destination
-        dst_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'dst'))
+        dst_pg = self.make_empty_node(os.path.join(self.module_name, self.fname, 'dst'))
         self.catchup_node(
             backup_mode = 'FULL',
             source_pgdata = src_pg.data_dir,
@@ -765,9 +749,9 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         dst_pg.slow_start()
         dst_pg.stop()
         #   fake destination
-        fake_dst_pg = self.make_simple_node(base_dir = os.path.join(module_name, self.fname, 'fake_dst'))
+        fake_dst_pg = self.make_simple_node(base_dir = os.path.join(self.module_name, self.fname, 'fake_dst'))
         #   fake source
-        fake_src_pg = self.make_simple_node(base_dir = os.path.join(module_name, self.fname, 'fake_src'))
+        fake_src_pg = self.make_simple_node(base_dir = os.path.join(self.module_name, self.fname, 'fake_src'))
 
         # try delta catchup (src (with correct src conn), fake_dst)
         try:
@@ -803,7 +787,6 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
 
         # Cleanup
         src_pg.stop()
-        self.del_test_dir(module_name, self.fname)
 
     def test_tli_destination_mismatch(self):
         """
@@ -811,14 +794,14 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         """
         # preparation 1: source
         src_pg = self.make_simple_node(
-            base_dir = os.path.join(module_name, self.fname, 'src'),
+            base_dir = os.path.join(self.module_name, self.fname, 'src'),
             set_replication = True,
             pg_options = { 'wal_log_hints': 'on' }
             )
         src_pg.slow_start()
 
         # preparation 2: destination
-        dst_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'dst'))
+        dst_pg = self.make_empty_node(os.path.join(self.module_name, self.fname, 'dst'))
         self.catchup_node(
             backup_mode = 'FULL',
             source_pgdata = src_pg.data_dir,
@@ -860,7 +843,6 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
 
         # Cleanup
         src_pg.stop()
-        self.del_test_dir(module_name, self.fname)
 
     def test_tli_source_mismatch(self):
         """
@@ -868,14 +850,14 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         """
         # preparation 1: source
         src_pg = self.make_simple_node(
-            base_dir = os.path.join(module_name, self.fname, 'src'),
+            base_dir = os.path.join(self.module_name, self.fname, 'src'),
             set_replication = True,
             pg_options = { 'wal_log_hints': 'on' }
             )
         src_pg.slow_start()
 
         # preparation 2: fake source (promouted copy)
-        fake_src_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'fake_src'))
+        fake_src_pg = self.make_empty_node(os.path.join(self.module_name, self.fname, 'fake_src'))
         self.catchup_node(
             backup_mode = 'FULL',
             source_pgdata = src_pg.data_dir,
@@ -899,7 +881,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         fake_src_pg.safe_psql("postgres", "CREATE TABLE ultimate_question AS SELECT 'trash' AS garbage")
 
         # preparation 3: destination
-        dst_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'dst'))
+        dst_pg = self.make_empty_node(os.path.join(self.module_name, self.fname, 'dst'))
         self.catchup_node(
             backup_mode = 'FULL',
             source_pgdata = src_pg.data_dir,
@@ -940,7 +922,6 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         # Cleanup
         src_pg.stop()
         fake_src_pg.stop()
-        self.del_test_dir(module_name, self.fname)
 
 #########################################
 # Test unclean destination
@@ -951,7 +932,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         """
         # preparation 1: source
         src_pg = self.make_simple_node(
-            base_dir = os.path.join(module_name, self.fname, 'src'),
+            base_dir = os.path.join(self.module_name, self.fname, 'src'),
             set_replication = True,
             pg_options = { 'wal_log_hints': 'on' }
             )
@@ -961,7 +942,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             "CREATE TABLE ultimate_question(answer int)")
 
         # preparation 2: destination
-        dst_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'dst'))
+        dst_pg = self.make_empty_node(os.path.join(self.module_name, self.fname, 'dst'))
         self.catchup_node(
             backup_mode = 'FULL',
             source_pgdata = src_pg.data_dir,
@@ -1028,7 +1009,6 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
 
         # Cleanup
         dst_pg.stop()
-        self.del_test_dir(module_name, self.fname)
 
     def test_unclean_ptrack_catchup(self):
         """
@@ -1039,7 +1019,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
 
         # preparation 1: source
         src_pg = self.make_simple_node(
-            base_dir = os.path.join(module_name, self.fname, 'src'),
+            base_dir = os.path.join(self.module_name, self.fname, 'src'),
             set_replication = True,
             ptrack_enable = True,
             pg_options = { 'wal_log_hints': 'on' }
@@ -1051,7 +1031,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             "CREATE TABLE ultimate_question(answer int)")
 
         # preparation 2: destination
-        dst_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'dst'))
+        dst_pg = self.make_empty_node(os.path.join(self.module_name, self.fname, 'dst'))
         self.catchup_node(
             backup_mode = 'FULL',
             source_pgdata = src_pg.data_dir,
@@ -1118,7 +1098,6 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
 
         # Cleanup
         dst_pg.stop()
-        self.del_test_dir(module_name, self.fname)
 
 #########################################
 # Test replication slot logic
@@ -1139,13 +1118,13 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         """
         # preparation
         src_pg = self.make_simple_node(
-            base_dir = os.path.join(module_name, self.fname, 'src'),
+            base_dir = os.path.join(self.module_name, self.fname, 'src'),
             set_replication = True
             )
         src_pg.slow_start()
 
         # 1a. --slot option
-        dst_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'dst_1a'))
+        dst_pg = self.make_empty_node(os.path.join(self.module_name, self.fname, 'dst_1a'))
         try:
             self.catchup_node(
                 backup_mode = 'FULL',
@@ -1165,7 +1144,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
 
 	# 1b. --slot option
-        dst_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'dst_1b'))
+        dst_pg = self.make_empty_node(os.path.join(self.module_name, self.fname, 'dst_1b'))
         src_pg.safe_psql("postgres", "SELECT pg_catalog.pg_create_physical_replication_slot('existentslot_1b')")
         self.catchup_node(
             backup_mode = 'FULL',
@@ -1178,7 +1157,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             )
 
         # 2a. --slot --perm-slot
-        dst_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'dst_2a'))
+        dst_pg = self.make_empty_node(os.path.join(self.module_name, self.fname, 'dst_2a'))
         self.catchup_node(
             backup_mode = 'FULL',
             source_pgdata = src_pg.data_dir,
@@ -1191,7 +1170,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             )
 
         # 2b. and 4. --slot --perm-slot
-        dst_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'dst_2b'))
+        dst_pg = self.make_empty_node(os.path.join(self.module_name, self.fname, 'dst_2b'))
         src_pg.safe_psql("postgres", "SELECT pg_catalog.pg_create_physical_replication_slot('existentslot_2b')")
         try:
             self.catchup_node(
@@ -1213,7 +1192,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
 
         # 3. --perm-slot --slot
-        dst_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'dst_3'))
+        dst_pg = self.make_empty_node(os.path.join(self.module_name, self.fname, 'dst_3'))
         self.catchup_node(
             backup_mode = 'FULL',
             source_pgdata = src_pg.data_dir,
@@ -1232,7 +1211,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(slot_name, 'pg_probackup_perm_slot', 'Slot name mismatch')
 
         # 5. --perm-slot --temp-slot
-        dst_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'dst_5'))
+        dst_pg = self.make_empty_node(os.path.join(self.module_name, self.fname, 'dst_5'))
         try:
             self.catchup_node(
                 backup_mode = 'FULL',
@@ -1253,7 +1232,6 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
 
         #self.assertEqual(1, 0, 'Stop test')
-        self.del_test_dir(module_name, self.fname)
 
 #########################################
 # --exclude-path
@@ -1264,7 +1242,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         """
         # preparation
         src_pg = self.make_simple_node(
-            base_dir = os.path.join(module_name, self.fname, 'src'),
+            base_dir = os.path.join(self.module_name, self.fname, 'src'),
             set_replication = True
             )
         src_pg.slow_start()
@@ -1281,7 +1259,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             f.flush()
             f.close
 
-        dst_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'dst'))
+        dst_pg = self.make_empty_node(os.path.join(self.module_name, self.fname, 'dst'))
         self.catchup_node(
             backup_mode = 'FULL',
             source_pgdata = src_pg.data_dir,
@@ -1332,7 +1310,6 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
 
         #self.assertEqual(1, 0, 'Stop test')
         src_pg.stop()
-        self.del_test_dir(module_name, self.fname)
 
     def test_config_exclusion(self):
         """
@@ -1340,7 +1317,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         """
         # preparation 1: source
         src_pg = self.make_simple_node(
-            base_dir = os.path.join(module_name, self.fname, 'src'),
+            base_dir = os.path.join(self.module_name, self.fname, 'src'),
             set_replication = True,
             pg_options = { 'wal_log_hints': 'on' }
             )
@@ -1350,7 +1327,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             "CREATE TABLE ultimate_question(answer int)")
 
         # preparation 2: make lagging behind replica
-        dst_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'dst'))
+        dst_pg = self.make_empty_node(os.path.join(self.module_name, self.fname, 'dst'))
         self.catchup_node(
             backup_mode = 'FULL',
             source_pgdata = src_pg.data_dir,
@@ -1457,7 +1434,6 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         src_pg.stop()
         dst_pg.stop()
         #self.assertEqual(1, 0, 'Stop test')
-        self.del_test_dir(module_name, self.fname)
 
 #########################################
 # --dry-run
@@ -1468,13 +1444,13 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         """
         # preparation 1: source
         src_pg = self.make_simple_node(
-            base_dir = os.path.join(module_name, self.fname, 'src'),
+            base_dir = os.path.join(self.module_name, self.fname, 'src'),
             set_replication = True
             )
         src_pg.slow_start()
 
         # preparation 2: make clean shutdowned lagging behind replica
-        dst_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'dst'))
+        dst_pg = self.make_empty_node(os.path.join(self.module_name, self.fname, 'dst'))
 
         src_pg.pgbench_init(scale = 10)
         pgbench = src_pg.pgbench(options=['-T', '10', '--no-vacuum'])
@@ -1499,7 +1475,6 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
 
         # Cleanup
         src_pg.stop()
-        self.del_test_dir(module_name, self.fname)
 
     def test_dry_run_catchup_ptrack(self):
         """
@@ -1510,7 +1485,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
 
          # preparation 1: source
         src_pg = self.make_simple_node(
-            base_dir = os.path.join(module_name, self.fname, 'src'),
+            base_dir = os.path.join(self.module_name, self.fname, 'src'),
             set_replication = True,
             ptrack_enable = True,
             initdb_params = ['--data-checksums']
@@ -1523,7 +1498,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         pgbench.wait()
 
         # preparation 2: make clean shutdowned lagging behind replica
-        dst_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'dst'))
+        dst_pg = self.make_empty_node(os.path.join(self.module_name, self.fname, 'dst'))
         self.catchup_node(
             backup_mode = 'FULL',
             source_pgdata = src_pg.data_dir,
@@ -1556,7 +1531,6 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
 
         # Cleanup
         src_pg.stop()
-        self.del_test_dir(module_name, self.fname)
 
     def test_dry_run_catchup_delta(self):
         """
@@ -1565,7 +1539,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
 
         # preparation 1: source
         src_pg = self.make_simple_node(
-            base_dir = os.path.join(module_name, self.fname, 'src'),
+            base_dir = os.path.join(self.module_name, self.fname, 'src'),
             set_replication = True,
             initdb_params = ['--data-checksums'],
             pg_options = { 'wal_log_hints': 'on' }
@@ -1577,7 +1551,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         pgbench.wait()
 
          # preparation 2: make clean shutdowned lagging behind replica
-        dst_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'dst'))
+        dst_pg = self.make_empty_node(os.path.join(self.module_name, self.fname, 'dst'))
         self.catchup_node(
             backup_mode = 'FULL',
             source_pgdata = src_pg.data_dir,
@@ -1610,5 +1584,3 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
 
         # Cleanup
         src_pg.stop()
-        self.del_test_dir(module_name, self.fname)
-

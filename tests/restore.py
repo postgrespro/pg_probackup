@@ -13,21 +13,17 @@ from testgres import QueryException, StartNodeException
 from stat import S_ISDIR
 
 
-module_name = 'restore'
-
-
 class RestoreTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_restore_full_to_latest(self):
         """recovery to latest from full backup"""
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -67,18 +63,14 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         after = node.execute("postgres", "SELECT * FROM pgbench_branches")
         self.assertEqual(before, after)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_restore_full_page_to_latest(self):
         """recovery to latest from full + page backups"""
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -113,18 +105,14 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         after = node.execute("postgres", "SELECT * FROM pgbench_branches")
         self.assertEqual(before, after)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_restore_to_specific_timeline(self):
         """recovery to target timeline"""
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -179,19 +167,15 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         after = node.execute("postgres", "SELECT * FROM pgbench_branches")
         self.assertEqual(before, after)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_restore_to_time(self):
         """recovery to target time"""
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'],
             pg_options={'TimeZone': 'GMT'})
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -229,18 +213,14 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         after = node.execute("postgres", "SELECT * FROM pgbench_branches")
         self.assertEqual(before, after)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_restore_to_xid_inclusive(self):
         """recovery to target xid"""
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -289,18 +269,14 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(
             len(node.execute("postgres", "SELECT * FROM tbl0005")), 1)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_restore_to_xid_not_inclusive(self):
         """recovery with target inclusive false"""
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -350,18 +326,14 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(
             len(node.execute("postgres", "SELECT * FROM tbl0005")), 0)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_restore_to_lsn_inclusive(self):
         """recovery to target lsn"""
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -417,18 +389,14 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(
             len(node.execute("postgres", "SELECT * FROM tbl0005")), 2)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_restore_to_lsn_not_inclusive(self):
         """recovery to target lsn"""
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -485,22 +453,18 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(
             len(node.execute("postgres", "SELECT * FROM tbl0005")), 1)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_restore_full_ptrack_archive(self):
         """recovery to latest from archive full+ptrack backups"""
         if not self.ptrack:
             self.skipTest('Skipped because ptrack support is disabled')
 
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'],
             ptrack_enable=True)
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -539,22 +503,18 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         after = node.execute("postgres", "SELECT * FROM pgbench_branches")
         self.assertEqual(before, after)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_restore_ptrack(self):
         """recovery to latest from archive full+ptrack+ptrack backups"""
         if not self.ptrack:
             self.skipTest('Skipped because ptrack support is disabled')
 
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'],
             ptrack_enable=True)
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -600,23 +560,19 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         after = node.execute("postgres", "SELECT * FROM pgbench_branches")
         self.assertEqual(before, after)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_restore_full_ptrack_stream(self):
         """recovery in stream mode to latest from full + ptrack backups"""
         if not self.ptrack:
             self.skipTest('Skipped because ptrack support is disabled')
 
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             ptrack_enable=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -655,9 +611,6 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         after = node.execute("postgres", "SELECT * FROM pgbench_branches")
         self.assertEqual(before, after)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_restore_full_ptrack_under_load(self):
         """
@@ -667,14 +620,13 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         if not self.ptrack:
             self.skipTest('Skipped because ptrack support is disabled')
 
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             ptrack_enable=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -724,9 +676,6 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             "postgres", "SELECT sum(delta) FROM pgbench_history")
         self.assertEqual(bbalance, delta)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_restore_full_under_load_ptrack(self):
         """
@@ -736,14 +685,13 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         if not self.ptrack:
             self.skipTest('Skipped because ptrack support is disabled')
 
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             ptrack_enable=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -795,18 +743,14 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             "postgres", "SELECT sum(delta) FROM pgbench_history")
         self.assertEqual(bbalance, delta)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_restore_with_tablespace_mapping_1(self):
         """recovery using tablespace-mapping option"""
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -932,18 +876,14 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         result = node.execute("postgres", "SELECT id FROM test OFFSET 1")
         self.assertEqual(result[0][0], 2)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_restore_with_tablespace_mapping_2(self):
         """recovery using tablespace-mapping option and page backup"""
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -1009,18 +949,14 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         count = node.execute("postgres", "SELECT count(*) FROM tbl1")
         self.assertEqual(count[0][0], 4)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_restore_with_missing_or_corrupted_tablespace_map(self):
         """restore backup with missing or corrupted tablespace_map"""
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -1043,7 +979,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         pgdata = self.pgdata_content(node.data_dir)
 
         node2 = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node2'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node2'))
         node2.cleanup()
 
         olddir = self.get_tblspace_path(node, 'tblspace')
@@ -1139,22 +1075,18 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         pgdata_restored = self.pgdata_content(node2.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_archive_node_backup_stream_restore_to_recovery_time(self):
         """
         make node with archiving, make stream backup,
         make PITR to Recovery Time
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -1187,9 +1119,6 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         result = node.psql("postgres", 'select * from t_heap')
         self.assertTrue('does not exist' in result[2].decode("utf-8"))
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_archive_node_backup_stream_restore_to_recovery_time(self):
@@ -1197,13 +1126,12 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         make node with archiving, make stream backup,
         make PITR to Recovery Time
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -1234,9 +1162,6 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         result = node.psql("postgres", 'select * from t_heap')
         self.assertTrue('does not exist' in result[2].decode("utf-8"))
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_archive_node_backup_stream_pitr(self):
@@ -1245,13 +1170,12 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         create table t_heap, make pitr to Recovery Time,
         check that t_heap do not exists
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -1282,9 +1206,6 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         result = node.psql("postgres", 'select * from t_heap')
         self.assertEqual(True, 'does not exist' in result[2].decode("utf-8"))
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_archive_node_backup_archive_pitr_2(self):
@@ -1293,12 +1214,11 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         create table t_heap, make pitr to Recovery Time,
         check that t_heap do not exists
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -1312,7 +1232,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         node.stop()
 
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
         node_restored.cleanup()
 
         recovery_time = self.show_pb(
@@ -1340,9 +1260,6 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         result = node_restored.psql("postgres", 'select * from t_heap')
         self.assertTrue('does not exist' in result[2].decode("utf-8"))
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_archive_restore_to_restore_point(self):
@@ -1351,12 +1268,11 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         create table t_heap, make pitr to Recovery Time,
         check that t_heap do not exists
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -1393,18 +1309,14 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         self.assertEqual(result, result_new)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_zags_block_corrupt(self):
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -1455,7 +1367,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
                 "insert into tbl select i from generate_series(0,100) as i")
 
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'),
             initdb_params=['--data-checksums'])
 
         node_restored.cleanup()
@@ -1472,14 +1384,13 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
     @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_zags_block_corrupt_1(self):
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'],
             pg_options={
                 'full_page_writes': 'on'}
             )
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -1530,7 +1441,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.switch_wal_segment(node)
 
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'),
             initdb_params=['--data-checksums'])
 
         pgdata = self.pgdata_content(node.data_dir)
@@ -1580,13 +1491,12 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         ERROR delta backups, take valid delta backup,
         restore must be successfull
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -1662,19 +1572,15 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         self.restore_node(backup_dir, 'node', node)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_restore_chain_with_corrupted_backup(self):
         """more complex test_restore_chain()"""
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -1842,9 +1748,6 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         node.cleanup()
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # Skipped, because backups from the future are invalid.
     # This cause a "ERROR: Can't assign backup_id, there is already a backup in future"
     # now (PBCKP-259). We can conduct such a test again when we
@@ -1852,13 +1755,12 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
     @unittest.skip("skip")
     def test_restore_backup_from_future(self):
         """more complex test_restore_chain()"""
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -1901,22 +1803,18 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         pgdata_restored = self.pgdata_content(node.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_restore_target_immediate_stream(self):
         """
         correct handling of immediate recovery target
         for STREAM backups
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
@@ -1958,22 +1856,18 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             os.path.isfile(recovery_conf),
             "File {0} do not exists".format(recovery_conf))
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_restore_target_immediate_archive(self):
         """
         correct handling of immediate recovery target
         for ARCHIVE backups
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -2018,22 +1912,18 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         with open(recovery_conf, 'r') as f:
             self.assertIn("recovery_target = 'immediate'", f.read())
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_restore_target_latest_archive(self):
         """
         make sure that recovery_target 'latest'
         is default recovery target
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -2084,22 +1974,18 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         self.assertEqual(content_1, content_2)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_restore_target_new_options(self):
         """
         check that new --recovery-target-*
         options are working correctly
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -2260,9 +2146,6 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         node.slow_start()
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_smart_restore(self):
         """
@@ -2272,13 +2155,12 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         copied during restore
         https://github.com/postgrespro/pg_probackup/issues/63
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -2324,9 +2206,6 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         for file in filelist_diff:
             self.assertNotIn(file, logfile_content)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_pg_11_group_access(self):
         """
@@ -2335,15 +2214,14 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         if self.pg_config_version < self.version_to_num('11.0'):
             self.skipTest('You need PostgreSQL >= 11 for this test')
 
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=[
                 '--data-checksums',
                 '--allow-group-access'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
@@ -2355,7 +2233,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         # restore backup
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
         node_restored.cleanup()
 
         self.restore_node(
@@ -2365,18 +2243,14 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         pgdata_restored = self.pgdata_content(node_restored.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_restore_concurrent_drop_table(self):
         """"""
         self._check_gdb_flag_or_skip_test()
 
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -2422,16 +2296,12 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         pgdata_restored = self.pgdata_content(node.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_lost_non_data_file(self):
         """"""
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -2469,15 +2339,11 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     def test_partial_restore_exclude(self):
         """"""
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
@@ -2508,7 +2374,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         # restore FULL backup
         node_restored_1 = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored_1'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored_1'))
         node_restored_1.cleanup()
 
         try:
@@ -2545,7 +2411,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         pgdata_restored_1 = self.pgdata_content(node_restored_1.data_dir)
 
         node_restored_2 = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored_2'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored_2'))
         node_restored_2.cleanup()
 
         self.restore_node(
@@ -2584,15 +2450,11 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         self.assertNotIn('PANIC', output)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     def test_partial_restore_exclude_tablespace(self):
         """"""
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
@@ -2639,7 +2501,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         # restore FULL backup
         node_restored_1 = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored_1'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored_1'))
         node_restored_1.cleanup()
 
         node1_tablespace = self.get_tblspace_path(node_restored_1, 'somedata')
@@ -2665,7 +2527,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         pgdata_restored_1 = self.pgdata_content(node_restored_1.data_dir)
 
         node_restored_2 = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored_2'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored_2'))
         node_restored_2.cleanup()
         node2_tablespace = self.get_tblspace_path(node_restored_2, 'somedata')
 
@@ -2707,16 +2569,12 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         self.assertNotIn('PANIC', output)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     def test_partial_restore_include(self):
         """
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
@@ -2747,7 +2605,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         # restore FULL backup
         node_restored_1 = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored_1'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored_1'))
         node_restored_1.cleanup()
 
         try:
@@ -2786,7 +2644,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         pgdata_restored_1 = self.pgdata_content(node_restored_1.data_dir)
 
         node_restored_2 = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored_2'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored_2'))
         node_restored_2.cleanup()
 
         self.restore_node(
@@ -2833,9 +2691,6 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         self.assertNotIn('PANIC', output)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     def test_partial_restore_backward_compatibility_1(self):
         """
         old binary should be of version < 2.2.0
@@ -2843,10 +2698,9 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         if not self.probackup_old_path:
             self.skipTest("You must specify PGPROBACKUPBIN_OLD"
                           " for run this test")
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -2869,7 +2723,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         pgdata = self.pgdata_content(node.data_dir)
 
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
         node_restored.cleanup()
 
         try:
@@ -2929,7 +2783,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         # get new node
         node_restored_1 = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored_1'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored_1'))
         node_restored_1.cleanup()
 
         self.restore_node(
@@ -2949,10 +2803,9 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         if not self.probackup_old_path:
             self.skipTest("You must specify PGPROBACKUPBIN_OLD"
                           " for run this test")
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -2975,7 +2828,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         pgdata = self.pgdata_content(node.data_dir)
 
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
         node_restored.cleanup()
 
         try:
@@ -3035,7 +2888,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         # get new node
         node_restored_1 = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored_1'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored_1'))
         node_restored_1.cleanup()
 
         # merge
@@ -3053,10 +2906,9 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
     def test_empty_and_mangled_database_map(self):
         """
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -3084,7 +2936,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             f.close()
 
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
         node_restored.cleanup()
 
         try:
@@ -3166,10 +3018,9 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
     def test_missing_database_map(self):
         """
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             ptrack_enable=self.ptrack,
             initdb_params=['--data-checksums'])
@@ -3290,7 +3141,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         pgdata = self.pgdata_content(node.data_dir)
 
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
         node_restored.cleanup()
 
         # backup has missing database_map and that is legal
@@ -3334,9 +3185,6 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         pgdata_restored = self.pgdata_content(node_restored.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_stream_restore_command_option(self):
         """
@@ -3351,14 +3199,13 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         as replica, check that PostgreSQL recovery uses
         restore_command to obtain WAL from archive.
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={'max_wal_size': '32MB'})
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -3415,20 +3262,16 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         self.assertEqual('2', timeline_id)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_restore_primary_conninfo(self):
         """
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
@@ -3441,7 +3284,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         #primary_conninfo = 'host=192.168.1.50 port=5432 user=foo password=foopass'
 
         replica = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'replica'))
+            base_dir=os.path.join(self.module_name, self.fname, 'replica'))
         replica.cleanup()
         str_conninfo='host=192.168.1.50 port=5432 user=foo password=foopass'
 
@@ -3468,20 +3311,16 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         self.assertIn(str_conninfo, recovery_conf_content)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_restore_primary_slot_info(self):
         """
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
@@ -3492,7 +3331,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         node.pgbench_init(scale=1)
 
         replica = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'replica'))
+            base_dir=os.path.join(self.module_name, self.fname, 'replica'))
         replica.cleanup()
 
         node.safe_psql(
@@ -3513,17 +3352,13 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         replica.slow_start(replica=True)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     def test_issue_249(self):
         """
         https://github.com/postgrespro/pg_probackup/issues/249
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
@@ -3558,7 +3393,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         # restore FULL backup
         node_restored_1 = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored_1'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored_1'))
         node_restored_1.cleanup()
 
         self.restore_node(
@@ -3582,9 +3417,6 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         except QueryException as e:
             self.assertIn('FATAL', e.message)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     def test_pg_12_probackup_recovery_conf_compatibility(self):
         """
         https://github.com/postgrespro/pg_probackup/issues/249
@@ -3600,10 +3432,9 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         if self.version_to_num(self.old_probackup_version) >= self.version_to_num('2.4.5'):
             self.assertTrue(False, 'You need pg_probackup < 2.4.5 for this test')
 
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
@@ -3656,9 +3487,6 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         node.slow_start()
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     def test_drop_postgresql_auto_conf(self):
         """
         https://github.com/postgrespro/pg_probackup/issues/249
@@ -3669,10 +3497,9 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         if self.pg_config_version < self.version_to_num('12.0'):
            self.skipTest('You need PostgreSQL >= 12 for this test')
 
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
@@ -3701,9 +3528,6 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         self.assertTrue(os.path.exists(auto_path))
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     def test_truncate_postgresql_auto_conf(self):
         """
         https://github.com/postgrespro/pg_probackup/issues/249
@@ -3714,10 +3538,9 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         if self.pg_config_version < self.version_to_num('12.0'):
            self.skipTest('You need PostgreSQL >= 12 for this test')
 
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
@@ -3746,18 +3569,14 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         self.assertTrue(os.path.exists(auto_path))
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_concurrent_restore(self):
         """"""
         self._check_gdb_flag_or_skip_test()
 
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -3784,7 +3603,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         pgdata1 = self.pgdata_content(node.data_dir)
 
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
 
         node.cleanup()
         node_restored.cleanup()
@@ -3807,19 +3626,15 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.compare_pgdata(pgdata1, pgdata2)
         self.compare_pgdata(pgdata2, pgdata3)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # skip this test until https://github.com/postgrespro/pg_probackup/pull/399
     @unittest.skip("skip")
     def test_restore_issue_313(self):
         """
         Check that partially restored PostgreSQL instance cannot be started
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -3840,7 +3655,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
                 count += 1
 
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
         node_restored.cleanup()
         self.restore_node(backup_dir, 'node', node_restored)
 
@@ -3871,18 +3686,14 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_restore_with_waldir(self):
         """recovery using tablespace-mapping option and page backup"""
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -3926,6 +3737,3 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             wal_path=os.path.join(node.data_dir, "pg_xlog")
 
         self.assertEqual(os.path.islink(wal_path), True)
-
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)

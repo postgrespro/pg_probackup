@@ -5,9 +5,6 @@ from datetime import datetime, timedelta
 import subprocess
 
 
-module_name = 'compression'
-
-
 class CompressionTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
@@ -18,10 +15,9 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
         check data correctness in restored instance
         """
         self.maxDiff = None
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -116,19 +112,15 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
         delta_result_new = node.execute("postgres", "SELECT * FROM t_heap")
         self.assertEqual(delta_result, delta_result_new)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     def test_compression_archive_zlib(self):
         """
         make archive node, make full and page backups,
         check data correctness in restored instance
         """
         self.maxDiff = None
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -219,19 +211,15 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(delta_result, delta_result_new)
         node.cleanup()
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     def test_compression_stream_pglz(self):
         """
         make archive node, make full and page stream backups,
         check data correctness in restored instance
         """
         self.maxDiff = None
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -324,19 +312,15 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(delta_result, delta_result_new)
         node.cleanup()
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     def test_compression_archive_pglz(self):
         """
         make archive node, make full and page backups,
         check data correctness in restored instance
         """
         self.maxDiff = None
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -429,19 +413,15 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(delta_result, delta_result_new)
         node.cleanup()
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     def test_compression_wrong_algorithm(self):
         """
         make archive node, make full and page backups,
         check data correctness in restored instance
         """
         self.maxDiff = None
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -467,9 +447,6 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_incompressible_pages(self):
         """
@@ -477,10 +454,9 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
         take backup with compression, make sure that page was not compressed,
         restore backup and check data correctness
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -517,6 +493,3 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
             self.compare_pgdata(pgdata, pgdata_restored)
 
         node.slow_start()
-
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)

@@ -1,6 +1,7 @@
 # you need os for unittest to work
 import os
 import gc
+import unittest
 from sys import exit, argv, version_info
 import subprocess
 import shutil
@@ -138,39 +139,57 @@ class ProbackupException(Exception):
     def __str__(self):
         return '\n ERROR: {0}\n CMD: {1}'.format(repr(self.message), self.cmd)
 
+class PostgresNodeExtended(testgres.PostgresNode):
 
-def slow_start(self, replica=False):
+    def __init__(self, base_dir=None, *args, **kwargs):
+        super(PostgresNodeExtended, self).__init__(name='test', base_dir=base_dir, *args, **kwargs)
+        self.is_started = False
 
-    # wait for https://github.com/postgrespro/testgres/pull/50
-#    self.start()
-#    self.poll_query_until(
-#       "postgres",
-#       "SELECT not pg_is_in_recovery()",
-#       suppress={testgres.NodeConnection})
-    if replica:
-        query = 'SELECT pg_is_in_recovery()'
-    else:
-        query = 'SELECT not pg_is_in_recovery()'
+    def slow_start(self, replica=False):
 
-    self.start()
-    while True:
-        try:
-            output = self.safe_psql('template1', query).decode("utf-8").rstrip()
+        # wait for https://github.com/postgrespro/testgres/pull/50
+        #    self.start()
+        #    self.poll_query_until(
+        #       "postgres",
+        #       "SELECT not pg_is_in_recovery()",
+        #       suppress={testgres.NodeConnection})
+        if replica:
+            query = 'SELECT pg_is_in_recovery()'
+        else:
+            query = 'SELECT not pg_is_in_recovery()'
 
-            if output == 't':
-                break
+        self.start()
+        while True:
+            try:
+                output = self.safe_psql('template1', query).decode("utf-8").rstrip()
 
-        except testgres.QueryException as e:
-            if 'database system is starting up' in e.message:
-                pass
-            elif 'FATAL:  the database system is not accepting connections' in e.message:
-                pass
-            elif replica and 'Hot standby mode is disabled' in e.message:
-                raise e
-            else:
-                raise e
+                if output == 't':
+                    break
 
-        sleep(0.5)
+            except testgres.QueryException as e:
+                if 'database system is starting up' in e.message:
+                    pass
+                elif 'FATAL:  the database system is not accepting connections' in e.message:
+                    pass
+                elif replica and 'Hot standby mode is disabled' in e.message:
+                    raise e
+                else:
+                    raise e
+
+            sleep(0.5)
+
+    def start(self, *args, **kwargs):
+        if not self.is_started:
+            super(PostgresNodeExtended, self).start(*args, **kwargs)
+            self.is_started = True
+        return self
+
+    def stop(self, *args, **kwargs):
+        if self.is_started:
+            result = super(PostgresNodeExtended, self).stop(*args, **kwargs)
+            self.is_started = False
+            return result
+
 
 class ProbackupTest(object):
     # Class attributes
@@ -179,6 +198,13 @@ class ProbackupTest(object):
 
     def __init__(self, *args, **kwargs):
         super(ProbackupTest, self).__init__(*args, **kwargs)
+
+        self.nodes_to_cleanup = []
+
+        if isinstance(self, unittest.TestCase):
+            self.module_name = self.id().split('.')[1]
+            self.fname = self.id().split('.')[3]
+
         if '-v' in argv or '--verbose' in argv:
             self.verbose = True
         else:
@@ -339,6 +365,45 @@ class ProbackupTest(object):
 
         os.environ["PGAPPNAME"] = "pg_probackup"
 
+    def is_test_result_ok(test_case):
+        # sources of solution:
+        # 1. python versions 2.7 - 3.10, verified on 3.10, 3.7, 2.7, taken from:
+        # https://tousu.in/qa/?qa=555402/unit-testing-getting-pythons-unittest-results-in-a-teardown-method&show=555403#a555403
+        #
+        # 2. python versions 3.11+ mixin, verified on 3.11, taken from: https://stackoverflow.com/a/39606065
+
+        if not isinstance(test_case, unittest.TestCase):
+            raise AssertionError("test_case is not instance of unittest.TestCase")
+
+        if hasattr(test_case, '_outcome'):  # Python 3.4+
+            if hasattr(test_case._outcome, 'errors'):
+                # Python 3.4 - 3.10  (These two methods have no side effects)
+                result = test_case.defaultTestResult()  # These two methods have no side effects
+                test_case._feedErrorsToResult(result, test_case._outcome.errors)
+            else:
+                # Python 3.11+
+                result = test_case._outcome.result
+        else:  # Python 2.7, 3.0-3.3
+            result = getattr(test_case, '_outcomeForDoCleanups', test_case._resultForDoCleanups)
+
+        ok = all(test != test_case for test, text in result.errors + result.failures)
+
+        return ok
+
+    def tearDown(self):
+        if self.is_test_result_ok():
+            for node in self.nodes_to_cleanup:
+                node.cleanup()
+            self.del_test_dir(self.module_name, self.fname)
+
+        else:
+            for node in self.nodes_to_cleanup:
+                # TODO make decorator with proper stop() vs cleanup()
+                node._try_shutdown(max_attempts=1)
+                # node.cleanup()
+
+        self.nodes_to_cleanup.clear()
+
     @property
     def pg_config_version(self):
         return self.version_to_num(
@@ -369,10 +434,10 @@ class ProbackupTest(object):
         shutil.rmtree(real_base_dir, ignore_errors=True)
         os.makedirs(real_base_dir)
 
-        node = testgres.get_new_node('test', base_dir=real_base_dir)
-        # bound method slow_start() to 'node' class instance
-        node.slow_start = slow_start.__get__(node)
+        node = PostgresNodeExtended(base_dir=real_base_dir)
         node.should_rm_dirs = True
+        self.nodes_to_cleanup.append(node)
+
         return node
 
     def make_simple_node(
@@ -435,6 +500,7 @@ class ProbackupTest(object):
         if node.major_version >= 13:
             self.set_auto_conf(
                 node, {}, 'postgresql.conf', ['wal_keep_segments'])
+
         return node
     
     def simple_bootstrap(self, node, role) -> None:
@@ -1598,15 +1664,8 @@ class ProbackupTest(object):
     def get_bin_path(self, binary):
         return testgres.get_bin_path(binary)
 
-    def clean_all(self):
-        for o in gc.get_referrers(testgres.PostgresNode):
-            if o.__class__ is testgres.PostgresNode:
-                o.cleanup()
-
     def del_test_dir(self, module_name, fname):
         """ Del testdir and optimistically try to del module dir"""
-
-        self.clean_all()
 
         shutil.rmtree(
             os.path.join(

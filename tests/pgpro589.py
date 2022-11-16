@@ -5,9 +5,6 @@ from datetime import datetime, timedelta
 import subprocess
 
 
-module_name = 'pgpro589'
-
-
 class ArchiveCheck(ProbackupTest, unittest.TestCase):
 
     def test_pgpro589(self):
@@ -17,12 +14,11 @@ class ArchiveCheck(ProbackupTest, unittest.TestCase):
         check that backup status equal to ERROR
         check that no files where copied to backup catalogue
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -74,6 +70,3 @@ class ArchiveCheck(ProbackupTest, unittest.TestCase):
             "\n Start LSN was not found in archive but datafiles where "
             "copied to backup catalogue.\n For example: {0}\n "
             "It is not optimal".format(file))
-
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)

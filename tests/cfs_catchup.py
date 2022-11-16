@@ -6,13 +6,8 @@ import shutil
 from .helpers.cfs_helpers import find_by_extensions, find_by_name, find_by_pattern, corrupt_file
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 
-module_name = 'cfs_catchup'
-tblspace_name = 'cfs_tblspace'
-
 
 class CfsCatchupNoEncTest(ProbackupTest, unittest.TestCase):
-    def setUp(self):
-        self.fname = self.id().split('.')[3]
 
     @unittest.skipUnless(ProbackupTest.enterprise, 'skip')
     def test_full_catchup_with_tablespace(self):
@@ -21,7 +16,7 @@ class CfsCatchupNoEncTest(ProbackupTest, unittest.TestCase):
         """
         # preparation
         src_pg = self.make_simple_node(
-            base_dir = os.path.join(module_name, self.fname, 'src'),
+            base_dir = os.path.join(self.module_name, self.fname, 'src'),
             set_replication = True
         )
         src_pg.slow_start()
@@ -36,7 +31,7 @@ class CfsCatchupNoEncTest(ProbackupTest, unittest.TestCase):
             "CHECKPOINT")
 
         # do full catchup with tablespace mapping
-        dst_pg = self.make_empty_node(os.path.join(module_name, self.fname, 'dst'))
+        dst_pg = self.make_empty_node(os.path.join(self.module_name, self.fname, 'dst'))
         tblspace1_new_path = self.get_tblspace_path(dst_pg, 'tblspace1_new')
         self.catchup_node(
             backup_mode = 'FULL',
@@ -120,8 +115,3 @@ class CfsCatchupNoEncTest(ProbackupTest, unittest.TestCase):
         src_query_result = src_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
         dst_query_result = dst_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
         self.assertEqual(src_query_result, dst_query_result, 'Different answer from copy')
-
-        # Cleanup
-        src_pg.stop()
-        dst_pg.stop()
-        self.del_test_dir(module_name, self.fname)

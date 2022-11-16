@@ -3,19 +3,15 @@ import unittest
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 
 
-module_name = 'show'
-
-
 class ShowTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_show_1(self):
         """Status DONE and OK"""
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
@@ -31,17 +27,13 @@ class ShowTest(ProbackupTest, unittest.TestCase):
         )
         self.assertIn("OK", self.show_pb(backup_dir, 'node', as_text=True))
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_show_json(self):
         """Status DONE and OK"""
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
@@ -58,16 +50,12 @@ class ShowTest(ProbackupTest, unittest.TestCase):
         self.backup_node(backup_dir, 'node', node)
         self.assertIn("OK", self.show_pb(backup_dir, 'node', as_text=True))
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_corrupt_2(self):
         """Status CORRUPT"""
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
@@ -102,16 +90,12 @@ class ShowTest(ProbackupTest, unittest.TestCase):
             )
         self.assertIn("CORRUPT", self.show_pb(backup_dir, as_text=True))
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_no_control_file(self):
         """backup.control doesn't exist"""
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
@@ -137,16 +121,12 @@ class ShowTest(ProbackupTest, unittest.TestCase):
             'doesn\'t exist',
             output)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_empty_control_file(self):
         """backup.control is empty"""
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
@@ -173,17 +153,13 @@ class ShowTest(ProbackupTest, unittest.TestCase):
             'is empty',
             output)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_corrupt_control_file(self):
         """backup.control contains invalid option"""
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
@@ -205,9 +181,6 @@ class ShowTest(ProbackupTest, unittest.TestCase):
             'WARNING: Invalid option "statuss" in file',
             self.show_pb(backup_dir, 'node', as_json=False, as_text=True))
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_corrupt_correctness(self):
@@ -215,10 +188,9 @@ class ShowTest(ProbackupTest, unittest.TestCase):
         if not self.remote:
             self.skipTest("You must enable PGPROBACKUP_SSH_REMOTE"
                           " for run this test")
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
@@ -299,9 +271,6 @@ class ShowTest(ProbackupTest, unittest.TestCase):
             output_local['uncompressed-bytes'],
             output_remote['uncompressed-bytes'])
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_corrupt_correctness_1(self):
@@ -309,10 +278,9 @@ class ShowTest(ProbackupTest, unittest.TestCase):
         if not self.remote:
             self.skipTest("You must enable PGPROBACKUP_SSH_REMOTE"
                           " for run this test")
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
@@ -397,9 +365,6 @@ class ShowTest(ProbackupTest, unittest.TestCase):
             output_local['uncompressed-bytes'],
             output_remote['uncompressed-bytes'])
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_corrupt_correctness_2(self):
@@ -407,10 +372,9 @@ class ShowTest(ProbackupTest, unittest.TestCase):
         if not self.remote:
             self.skipTest("You must enable PGPROBACKUP_SSH_REMOTE"
                           " for run this test")
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
@@ -512,17 +476,13 @@ class ShowTest(ProbackupTest, unittest.TestCase):
             output_local['uncompressed-bytes'],
             output_remote['uncompressed-bytes'])
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_color_with_no_terminal(self):
         """backup.control contains invalid option"""
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'],
             pg_options={'autovacuum': 'off'})
 
@@ -547,6 +507,3 @@ class ShowTest(ProbackupTest, unittest.TestCase):
                 '[0m', e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
-
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)

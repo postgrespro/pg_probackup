@@ -4,9 +4,6 @@ from time import sleep
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 
 
-module_name = 'locking'
-
-
 class LockingTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
@@ -19,12 +16,11 @@ class LockingTest(ProbackupTest, unittest.TestCase):
         """
         self._check_gdb_flag_or_skip_test()
 
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -64,7 +60,6 @@ class LockingTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         gdb.kill()
-        self.del_test_dir(module_name, fname)
 
     def test_locking_running_validate_2(self):
         """
@@ -76,12 +71,11 @@ class LockingTest(ProbackupTest, unittest.TestCase):
         """
         self._check_gdb_flag_or_skip_test()
 
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -135,7 +129,6 @@ class LockingTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         gdb.kill()
-        self.del_test_dir(module_name, fname)
 
     def test_locking_running_validate_2_specific_id(self):
         """
@@ -148,12 +141,11 @@ class LockingTest(ProbackupTest, unittest.TestCase):
         """
         self._check_gdb_flag_or_skip_test()
 
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -236,7 +228,6 @@ class LockingTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         gdb.kill()
-        self.del_test_dir(module_name, fname)
 
     def test_locking_running_3(self):
         """
@@ -248,12 +239,11 @@ class LockingTest(ProbackupTest, unittest.TestCase):
         """
         self._check_gdb_flag_or_skip_test()
 
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -308,7 +298,6 @@ class LockingTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         gdb.kill()
-        self.del_test_dir(module_name, fname)
 
     def test_locking_restore_locked(self):
         """
@@ -320,12 +309,11 @@ class LockingTest(ProbackupTest, unittest.TestCase):
         """
         self._check_gdb_flag_or_skip_test()
 
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -352,7 +340,6 @@ class LockingTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         gdb.kill()
-        self.del_test_dir(module_name, fname)
 
     def test_concurrent_delete_and_restore(self):
         """
@@ -364,12 +351,11 @@ class LockingTest(ProbackupTest, unittest.TestCase):
         """
         self._check_gdb_flag_or_skip_test()
 
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -411,7 +397,6 @@ class LockingTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         gdb.kill()
-        self.del_test_dir(module_name, fname)
 
     def test_locking_concurrent_validate_and_backup(self):
         """
@@ -421,12 +406,11 @@ class LockingTest(ProbackupTest, unittest.TestCase):
         """
         self._check_gdb_flag_or_skip_test()
 
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -449,7 +433,6 @@ class LockingTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         gdb.kill()
-        self.del_test_dir(module_name, fname)
 
     def test_locking_concurren_restore_and_delete(self):
         """
@@ -459,12 +442,11 @@ class LockingTest(ProbackupTest, unittest.TestCase):
         """
         self._check_gdb_flag_or_skip_test()
 
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -495,17 +477,15 @@ class LockingTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         gdb.kill()
-        self.del_test_dir(module_name, fname)
 
     def test_backup_directory_name(self):
         """
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -549,18 +529,16 @@ class LockingTest(ProbackupTest, unittest.TestCase):
             self.show_pb(backup_dir, 'node', page_id_2))
 
         # Clean after yourself
-        self.del_test_dir(module_name, fname)
 
     def test_empty_lock_file(self):
         """
         https://github.com/postgrespro/pg_probackup/issues/308
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -594,21 +572,17 @@ class LockingTest(ProbackupTest, unittest.TestCase):
 #        p1.wait()
 #        p2.wait()
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     def test_shared_lock(self):
         """
         Make sure that shared lock leaves no files with pids
         """
         self._check_gdb_flag_or_skip_test()
 
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -653,5 +627,3 @@ class LockingTest(ProbackupTest, unittest.TestCase):
             os.path.exists(lockfile_shr),
             "File should not exist: {0}".format(lockfile_shr))
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)

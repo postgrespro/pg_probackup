@@ -27,7 +27,7 @@ def load_tests(loader, tests, pattern):
         if os.environ['PG_PROBACKUP_LONG'] == 'ON':
             suite.addTests(loader.loadTestsFromModule(time_consuming))
 
-#    suite.addTests(loader.loadTestsFromModule(auth_test))
+    suite.addTests(loader.loadTestsFromModule(auth_test))
     suite.addTests(loader.loadTestsFromModule(archive))
     suite.addTests(loader.loadTestsFromModule(backup))
     suite.addTests(loader.loadTestsFromModule(catchup))
@@ -35,9 +35,9 @@ def load_tests(loader, tests, pattern):
         suite.addTests(loader.loadTestsFromModule(compatibility))
     suite.addTests(loader.loadTestsFromModule(checkdb))
     suite.addTests(loader.loadTestsFromModule(config))
-#    suite.addTests(loader.loadTestsFromModule(cfs_backup))
-#    suite.addTests(loader.loadTestsFromModule(cfs_restore))
-#    suite.addTests(loader.loadTestsFromModule(cfs_validate_backup))
+    suite.addTests(loader.loadTestsFromModule(cfs_backup))
+    suite.addTests(loader.loadTestsFromModule(cfs_restore))
+    suite.addTests(loader.loadTestsFromModule(cfs_validate_backup))
     suite.addTests(loader.loadTestsFromModule(compression))
     suite.addTests(loader.loadTestsFromModule(delete))
     suite.addTests(loader.loadTestsFromModule(delta))
