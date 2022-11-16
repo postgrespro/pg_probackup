@@ -227,5 +227,5 @@ class OptionTest(ProbackupTest, unittest.TestCase):
                     help_out.read().decode("utf-8")
                 )
         else:
-            return unittest.skip(
+            self.skipTest(
                 'You need configure PostgreSQL with --enabled-nls option for this test')

@@ -762,7 +762,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         restore last page backup and check data correctness
         """
         if not self.ptrack:
-            return unittest.skip('Skipped because ptrack support is disabled')
+            self.skipTest('Skipped because ptrack support is disabled')
 
         backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(

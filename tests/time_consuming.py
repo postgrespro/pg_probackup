@@ -15,9 +15,9 @@ class TimeConsumingTests(ProbackupTest, unittest.TestCase):
         """
         # init node
         if self.pg_config_version < self.version_to_num('11.0'):
-            return unittest.skip('You need PostgreSQL >= 11 for this test')
+            self.skipTest('You need PostgreSQL >= 11 for this test')
         if not self.ptrack:
-            return unittest.skip('Skipped because ptrack support is disabled')
+            self.skipTest('Skipped because ptrack support is disabled')
 
         node = self.make_simple_node(
             base_dir=os.path.join(self.module_name, self.fname, 'node'),

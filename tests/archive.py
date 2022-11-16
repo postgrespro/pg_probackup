@@ -78,7 +78,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             )
 
         if self.get_version(node) < self.version_to_num('9.6.0'):
-            return unittest.skip(
+            self.skipTest(
                 'Skipped because pg_control_checkpoint() is not supported in PG 9.5')
 
         self.init_pb(backup_dir)
@@ -680,7 +680,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
                 'max_wal_size': '32MB'})
 
         if self.get_version(master) < self.version_to_num('9.6.0'):
-            return unittest.skip(
+            self.skipTest(
                 'Skipped because backup from replica is not supported in PG 9.5')
 
         self.init_pb(backup_dir)
@@ -806,7 +806,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             )
 
         if self.get_version(master) < self.version_to_num('9.6.0'):
-            return unittest.skip(
+            self.skipTest(
                 'Skipped because backup from replica is not supported in PG 9.5')
 
         replica = self.make_simple_node(
@@ -884,7 +884,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             make sure that archiving on both node is working.
         """
         if self.pg_config_version < self.version_to_num('9.6.0'):
-            return unittest.skip('You need PostgreSQL >= 9.6 for this test')
+            self.skipTest('You need PostgreSQL >= 9.6 for this test')
 
         backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         master = self.make_simple_node(
@@ -896,7 +896,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
                 'archive_timeout': '10s'})
 
         if self.get_version(master) < self.version_to_num('9.6.0'):
-            return unittest.skip(
+            self.skipTest(
                 'Skipped because backup from replica is not supported in PG 9.5')
 
         replica = self.make_simple_node(
@@ -984,7 +984,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         """
 
         if self.pg_config_version < self.version_to_num('11.0'):
-            return unittest.skip('You need PostgreSQL >= 11 for this test')
+            self.skipTest('You need PostgreSQL >= 11 for this test')
 
         backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         master = self.make_simple_node(
@@ -1138,7 +1138,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
         if self.get_version(node) < self.version_to_num('10.0'):
-            return unittest.skip('You need PostgreSQL >= 10 for this test')
+            self.skipTest('You need PostgreSQL >= 10 for this test')
         else:
             pg_receivexlog_path = self.get_bin_path('pg_receivewal')
 
@@ -1217,7 +1217,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
                 'checkpoint_timeout': '30s'})
 
         if self.get_version(master) < self.version_to_num('9.6.0'):
-            return unittest.skip(
+            self.skipTest(
                 'Skipped because backup from replica is not supported in PG 9.5')
 
         self.init_pb(backup_dir)
@@ -1857,7 +1857,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         check that archive-push works correct with symlinked waldir
         """
         if self.pg_config_version < self.version_to_num('10.0'):
-            return unittest.skip(
+            self.skipTest(
                 'Skipped because waldir outside pgdata is supported since PG 10')
 
         backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
@@ -2078,7 +2078,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             initdb_params=['--data-checksums'])
 
         if self.get_version(node) < self.version_to_num('9.6.0'):
-            return unittest.skip(
+            self.skipTest(
                 'Skipped because backup from replica is not supported in PG 9.5')
 
         self.init_pb(backup_dir)
@@ -2278,7 +2278,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             initdb_params=['--data-checksums'])
 
         if self.get_version(node) < self.version_to_num('9.6.0'):
-            return unittest.skip(
+            self.skipTest(
                 'Skipped because backup from replica is not supported in PG 9.5')
 
         self.init_pb(backup_dir)

@@ -1465,7 +1465,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         but restored as directory
         """
         if os.name == 'nt':
-            return unittest.skip('Skipped for Windows')
+            self.skipTest('Skipped for Windows')
 
         backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         core_dir = os.path.join(self.tmp_path, self.module_name, self.fname)
@@ -1544,7 +1544,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         but restored as directory
         """
         if os.name == 'nt':
-            return unittest.skip('Skipped for Windows')
+            self.skipTest('Skipped for Windows')
 
         backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         core_dir = os.path.join(self.tmp_path, self.module_name, self.fname)
@@ -1625,7 +1625,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         but restored as directory
         """
         if os.name == 'nt':
-            return unittest.skip('Skipped for Windows')
+            self.skipTest('Skipped for Windows')
 
         backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         core_dir = os.path.join(self.tmp_path, self.module_name, self.fname)

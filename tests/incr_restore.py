@@ -1400,7 +1400,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
             initdb_params=['--data-checksums'])
 
         if self.get_version(master) < self.version_to_num('9.6.0'):
-            return unittest.skip(
+            self.skipTest(
                 'Skipped because backup from replica is not supported in PG 9.5')
 
         self.init_pb(backup_dir)
@@ -1468,7 +1468,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
             initdb_params=['--data-checksums'])
 
         if self.get_version(master) < self.version_to_num('9.6.0'):
-            return unittest.skip(
+            self.skipTest(
                 'Skipped because backup from replica is not supported in PG 9.5')
 
         self.init_pb(backup_dir)
