@@ -139,41 +139,6 @@ class ProbackupException(Exception):
     def __str__(self):
         return '\n ERROR: {0}\n CMD: {1}'.format(repr(self.message), self.cmd)
 
-
-def _slow_start(self, replica=False):
-
-    # wait for https://github.com/postgrespro/testgres/pull/50
-#    self.start()
-#    self.poll_query_until(
-#       "postgres",
-#       "SELECT not pg_is_in_recovery()",
-#       suppress={testgres.NodeConnection})
-    if replica:
-        query = 'SELECT pg_is_in_recovery()'
-    else:
-        query = 'SELECT not pg_is_in_recovery()'
-
-    self.start()
-    while True:
-        try:
-            output = self.safe_psql('template1', query).decode("utf-8").rstrip()
-
-            if output == 't':
-                break
-
-        except testgres.QueryException as e:
-            if 'database system is starting up' in e.message:
-                pass
-            elif 'FATAL:  the database system is not accepting connections' in e.message:
-                pass
-            elif replica and 'Hot standby mode is disabled' in e.message:
-                raise e
-            else:
-                raise e
-
-        sleep(0.5)
-
-
 class PostgresNodeExtended(testgres.PostgresNode):
 
     def __init__(self, base_dir=None, *args, **kwargs):
@@ -181,7 +146,37 @@ class PostgresNodeExtended(testgres.PostgresNode):
         self.is_started = False
 
     def slow_start(self, replica=False):
-        _slow_start(self, replica=replica)
+
+        # wait for https://github.com/postgrespro/testgres/pull/50
+        #    self.start()
+        #    self.poll_query_until(
+        #       "postgres",
+        #       "SELECT not pg_is_in_recovery()",
+        #       suppress={testgres.NodeConnection})
+        if replica:
+            query = 'SELECT pg_is_in_recovery()'
+        else:
+            query = 'SELECT not pg_is_in_recovery()'
+
+        self.start()
+        while True:
+            try:
+                output = self.safe_psql('template1', query).decode("utf-8").rstrip()
+
+                if output == 't':
+                    break
+
+            except testgres.QueryException as e:
+                if 'database system is starting up' in e.message:
+                    pass
+                elif 'FATAL:  the database system is not accepting connections' in e.message:
+                    pass
+                elif replica and 'Hot standby mode is disabled' in e.message:
+                    raise e
+                else:
+                    raise e
+
+            sleep(0.5)
 
     def start(self, *args, **kwargs):
         if not self.is_started:
@@ -370,7 +365,7 @@ class ProbackupTest(object):
 
         os.environ["PGAPPNAME"] = "pg_probackup"
 
-    def __is_test_result_ok(test_case):
+    def is_test_result_ok(test_case):
         # sources of solution:
         # 1. python versions 2.7 - 3.10, verified on 3.10, 3.7, 2.7, taken from:
         # https://tousu.in/qa/?qa=555402/unit-testing-getting-pythons-unittest-results-in-a-teardown-method&show=555403#a555403
@@ -396,7 +391,7 @@ class ProbackupTest(object):
         return ok
 
     def tearDown(self):
-        if self.__is_test_result_ok():
+        if self.is_test_result_ok():
             for node in self.nodes_to_cleanup:
                 node.cleanup()
             self.del_test_dir(self.module_name, self.fname)
