@@ -7,6 +7,10 @@
 #include "file.h"
 #include "storage/checksum.h"
 
+#ifdef PBCKP_S3
+#include "../s3/s3.h"
+#endif
+
 #define PRINTF_BUF_SIZE  1024
 
 static __thread unsigned long fio_fdset = 0;
@@ -3882,6 +3886,13 @@ static pioDrive_i remoteDrive;
 pioDrive_i
 pioDriveForLocation(fio_location loc)
 {
+    if (loc == FIO_CLOUD_HOST)
+#ifdef PBCKP_S3
+		return cloudDrive;
+#else
+		elog(ERROR, "NO CLOUD DRIVE YET");
+#endif
+
     if (fio_is_remote(loc))
         return remoteDrive;
     else
@@ -5426,4 +5437,7 @@ init_pio_objects(void)
 
     localDrive = bindref_pioDrive($alloc(pioLocalDrive));
     remoteDrive = bindref_pioDrive($alloc(pioRemoteDrive));
+#ifdef PBCKP_S3
+    create_pioCloudeDrive();
+#endif
 }

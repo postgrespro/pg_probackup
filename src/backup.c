@@ -46,7 +46,6 @@ static void do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 
 static void pg_switch_wal(PGconn *conn);
 
-static void pg_stop_backup(InstanceState *instanceState, pgBackup *backup, PGconn *pg_startbackup_conn, PGNodeInfo *nodeInfo);
 
 static void check_external_for_tablespaces(parray *external_list,
 										   PGconn *backup_conn);
@@ -1851,7 +1850,7 @@ pg_stop_backup_write_file_helper(const char *path, const char *filename, const c
 /*
  * Notify end of backup to PostgreSQL server.
  */
-static void
+void
 pg_stop_backup(InstanceState *instanceState, pgBackup *backup, PGconn *pg_startbackup_conn,
 				PGNodeInfo *nodeInfo)
 {
