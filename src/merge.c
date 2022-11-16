@@ -639,7 +639,7 @@ merge_chain(InstanceState *instanceState,
 		pgFile	   *file = (pgFile *) parray_get(dest_backup->files, i);
 
 		/* if the entry was an external directory, create it in the backup */
-		if (file->external_dir_num && S_ISDIR(file->mode))
+		if (file->external_dir_num && file->kind == PIO_KIND_DIRECTORY)
 		{
 			char		dirpath[MAXPGPATH];
 			char		new_container[MAXPGPATH];
@@ -955,6 +955,7 @@ merge_files(void *arg)
 			continue;
 
 		tmp_file = pgFileInit(dest_file->rel_path);
+		tmp_file->kind = dest_file->kind;
 		tmp_file->mode = dest_file->mode;
 		tmp_file->is_datafile = dest_file->is_datafile;
 		tmp_file->is_cfs = dest_file->is_cfs;
@@ -962,7 +963,7 @@ merge_files(void *arg)
 		tmp_file->dbOid = dest_file->dbOid;
 
 		/* Directories were created before */
-		if (S_ISDIR(dest_file->mode))
+		if (dest_file->kind == PIO_KIND_DIRECTORY)
 			goto done;
 
 		elog(progress ? INFO : LOG, "Progress: (%d/%zu). Merging file \"%s\"",

@@ -211,18 +211,21 @@ typedef enum ForkName
 typedef struct pgFile
 {
 	char   *name;			/* file or directory name */
-	mode_t	mode;			/* protection (file type and permission) */
-	size_t	size;			/* size of the file */
-	time_t  mtime;			/* file st_mtime attribute, can be used only
-								during backup */
-	size_t	read_size;		/* size of the portion read (if only some pages are
+
+	pio_file_kind_e	kind;	/* kind of file */
+	uint32_t	mode;		/* protection (permission) */
+	uint64_t	size;		/* size of the file */
+
+	uint64_t	read_size;		/* size of the portion read (if only some pages are
 							   backed up, it's different from size) */
-	int64	write_size;		/* size of the backed-up file. BYTES_INVALID means
+	int64_t	write_size;		/* size of the backed-up file. BYTES_INVALID means
 							   that the file existed but was not backed up
 							   because not modified since last backup. */
-	size_t	uncompressed_size;	/* size of the backed-up file before compression
+	uint64_t	uncompressed_size;	/* size of the backed-up file before compression
 								 * and adding block headers.
 								 */
+	time_t  mtime;			/* file st_mtime attribute, can be used only
+								during backup */
 							/* we need int64 here to store '-1' value */
 	pg_crc32 crc;			/* CRC value of the file, regular file only */
 	char   *rel_path;		/* relative path of the file */
@@ -1022,7 +1025,6 @@ extern bool backup_contains_external(const char *dir, parray *dirs_list);
 extern bool dir_is_empty(const char *path, fio_location location);
 
 extern bool fileExists(const char *path, fio_location location);
-extern size_t pgFileSize(const char *path);
 
 extern pgFile *pgFileNew(const char *path, const char *rel_path,
 						 bool follow_symlink, int external_dir_num,

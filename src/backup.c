@@ -392,7 +392,7 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 		pgFile	   *file = (pgFile *) parray_get(backup_files_list, i);
 
 		/* if the entry was a directory, create it in the backup */
-		if (S_ISDIR(file->mode))
+		if (file->kind == PIO_KIND_DIRECTORY)
 		{
 			char		dirpath[MAXPGPATH];
 
@@ -569,7 +569,7 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 			pgFile *file = (pgFile *) parray_get(backup_files_list, i);
 
 			/* TODO: sync directory ? */
-			if (S_ISDIR(file->mode))
+			if (file->kind == PIO_KIND_DIRECTORY)
 				continue;
 
 			if (file->write_size <= 0)
@@ -1837,7 +1837,7 @@ pg_stop_backup_write_file_helper(const char *path, const char *filename, const c
 		file = pgFileNew(full_filename, filename, true, 0,
 						 FIO_BACKUP_HOST);
 
-		if (S_ISREG(file->mode))
+		if (file->kind == PIO_KIND_REGULAR)
 		{
 			file->crc = pgFileGetCRC32C(full_filename, false);
 
@@ -1991,7 +1991,7 @@ backup_files(void *arg)
 		pgFile	*prev_file = NULL;
 
 		/* We have already copied all directories */
-		if (S_ISDIR(file->mode))
+		if (file->kind == PIO_KIND_DIRECTORY)
 			continue;
 
 		if (arguments->thread_num == 1)
@@ -2046,9 +2046,9 @@ backup_files(void *arg)
 		}
 
 		/* Encountered some strange beast */
-		if (!S_ISREG(file->mode))
-			elog(WARNING, "Unexpected type %d of file \"%s\", skipping",
-							file->mode, from_fullpath);
+		if (file->kind != PIO_KIND_REGULAR)
+			elog(WARNING, "Unexpected type %s of file \"%s\", skipping",
+				 pio_file_kind2str(file->kind, from_fullpath), from_fullpath);
 
 		/* Check that file exist in previous backup */
 		if (current.backup_mode != BACKUP_MODE_FULL)
@@ -2121,7 +2121,7 @@ parse_filelist_filenames(parray *files, const char *root)
 		pgFile	   *file = (pgFile *) parray_get(files, i);
 		int 		sscanf_result;
 
-		if (S_ISREG(file->mode) &&
+		if (file->kind == PIO_KIND_REGULAR &&
 			path_is_prefix_of_path(PG_TBLSPC_DIR, file->rel_path))
 		{
 			/*
@@ -2148,7 +2148,7 @@ parse_filelist_filenames(parray *files, const char *root)
 			}
 		}
 
-		if (S_ISREG(file->mode) && file->tblspcOid != 0 &&
+		if (file->kind == PIO_KIND_REGULAR && file->tblspcOid != 0 &&
 			file->name && file->name[0])
 		{
 			if (file->forkName == init)
@@ -2218,7 +2218,7 @@ set_cfs_datafiles(parray *files, const char *root, char *relative, size_t i)
 
 		if (strstr(prev_file->rel_path, cfs_tblspc_path) != NULL)
 		{
-			if (S_ISREG(prev_file->mode) && prev_file->is_datafile)
+			if (prev_file->kind == PIO_KIND_REGULAR && prev_file->is_datafile)
 			{
 				elog(LOG, "Setting 'is_cfs' on file %s, name %s",
 					prev_file->rel_path, prev_file->name);
@@ -2375,7 +2375,7 @@ calculate_datasize_of_filelist(parray *filelist)
 		if (file->external_dir_num != 0 || file->excluded)
 			continue;
 
-		if (S_ISDIR(file->mode))
+		if (file->kind == PIO_KIND_DIRECTORY)
 		{
 			// TODO is a dir always 4K?
 			bytes += 4096;

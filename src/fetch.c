@@ -28,9 +28,10 @@ slurpFile(fio_location location, const char *datadir, const char *path, size_t *
 {
 	int		 fd;
 	char	   *buffer;
-	struct stat statbuf;
+	pio_stat_t	statbuf;
 	char		fullpath[MAXPGPATH];
-	int		 len;
+	size_t		 len;
+	err_i 	err;
 
 	join_path_components(fullpath, datadir, path);
 
@@ -43,16 +44,21 @@ slurpFile(fio_location location, const char *datadir, const char *path, size_t *
 					fullpath, strerror(errno));
 	}
 
-	if (fio_stat(location, fullpath, &statbuf, true) < 0)
+	statbuf = $i(pioStat, pioDriveForLocation(location), .path = fullpath,
+				 .follow_symlink = true, .err = &err);
+	if ($haserr(err))
 	{
 		if (safe)
 			return NULL;
 		else
-			elog(ERROR, "Could not stat file \"%s\": %s",
-				fullpath, strerror(errno));
+			ft_logerr(FT_FATAL, $errmsg(err), "slurpFile");
 	}
 
-	len = statbuf.st_size;
+	if (statbuf.pst_size > SIZE_MAX)
+		ft_log(FT_FATAL, "file \"%s\" is too large: %lld",
+			   fullpath, (long long)statbuf.pst_size);
+
+	len = statbuf.pst_size;
 	buffer = pg_malloc(len + 1);
 
 	if (fio_read(fd, buffer, len) != len)

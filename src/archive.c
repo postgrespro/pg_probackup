@@ -388,7 +388,7 @@ push_file_internal(const char *wal_file_name, const char *pg_xlog_dir,
     char to_fullpath[MAXPGPATH];
     char to_fullpath_part[MAXPGPATH];
 /* partial handling */
-    struct stat st;
+    pio_stat_t st;
     int partial_try_count = 0;
     ssize_t partial_file_size = 0;
     bool partial_is_stale = true;
@@ -466,11 +466,11 @@ push_file_internal(const char *wal_file_name, const char *pg_xlog_dir,
             elog(LOG,
                  "Temp WAL file already exists, waiting on it %u seconds: \"%s\"",
                  archive_timeout, to_fullpath_part);
-            partial_file_size = st.st_size;
+            partial_file_size = st.pst_size;
         }
 
         /* file size is changing */
-        if (st.st_size != partial_file_size)
+        if (st.pst_size != partial_file_size)
             partial_is_stale = false;
 
         sleep(1);

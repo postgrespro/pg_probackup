@@ -291,6 +291,7 @@ main(int argc, char *argv[])
 {
 	char	   *command = NULL;
 	ProbackupSubcmd backup_subcmd = NO_CMD;
+	err_i 		err;
 
 	ft_init_log(elog_ft_log);
 	fobj_init();
@@ -536,13 +537,17 @@ main(int argc, char *argv[])
 		if (backup_subcmd != INIT_CMD && backup_subcmd != ADD_INSTANCE_CMD &&
 			backup_subcmd != ARCHIVE_GET_CMD)
 		{
-			struct stat st;
+			pio_stat_t st;
 
-			if (fio_stat(FIO_BACKUP_HOST, instanceState->instance_backup_subdir_path,
-						 &st, true) != 0)
+			st = $i(pioStat, pioDriveForLocation(FIO_BACKUP_HOST),
+					.path = instanceState->instance_backup_subdir_path,
+					.follow_symlink = true,
+					.err = &err);
+
+			if ($haserr(err))
 			{
-				elog(WARNING, "Failed to access directory \"%s\": %s",
-					instanceState->instance_backup_subdir_path, strerror(errno));
+				ft_logerr(FT_WARNING, $errmsg(err), "Failed to access directory \"%s\"",
+					instanceState->instance_backup_subdir_path);
 
 				// TODO: redundant message, should we get rid of it?
 				elog(ERROR, "Instance '%s' does not exist in this backup catalog",
@@ -551,7 +556,7 @@ main(int argc, char *argv[])
 			else
 			{
 				/* Ensure that backup_path is a path to a directory */
-				if (!S_ISDIR(st.st_mode))
+				if (st.pst_kind != PIO_KIND_DIRECTORY)
 					elog(ERROR, "-B, --backup-path must be a path to directory");
 			}
 		}
@@ -896,7 +901,8 @@ main(int argc, char *argv[])
 			 */
 			char	*stripped_wal_file_path = pgut_str_strip_trailing_filename(wal_file_path, wal_file_name);
 			join_path_components(archive_push_xlog_dir, instance_config.pgdata, XLOGDIR);
-			if (fio_is_same_file(FIO_DB_HOST, stripped_wal_file_path, archive_push_xlog_dir, true))
+			if ($i(pioFilesAreSame, pioDriveForLocation(FIO_DB_HOST),
+				   .file1 = stripped_wal_file_path, .file2 = archive_push_xlog_dir))
 			{
 				/* 2nd case */
 				system_id = get_system_identifier(FIO_DB_HOST, instance_config.pgdata, false);

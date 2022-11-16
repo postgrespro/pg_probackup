@@ -837,11 +837,11 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 	{
 		pgFile	   *file = (pgFile *) parray_get(dest_files, i);
 
-		if (S_ISDIR(file->mode))
+		if (file->kind == PIO_KIND_DIRECTORY)
 			total_bytes += 4096;
 
 		if (!params->skip_external_dirs &&
-			file->external_dir_num && S_ISDIR(file->mode))
+			file->external_dir_num && file->kind == PIO_KIND_DIRECTORY)
 		{
 			char	   *external_path;
 			char		dirpath[MAXPGPATH];
@@ -926,7 +926,7 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 				redundant = true;
 
 			/* do not delete the useful internal directories */
-			if (S_ISDIR(file->mode) && !redundant)
+			if (file->kind == PIO_KIND_DIRECTORY && !redundant)
 				continue;
 
 			/* if file does not exists in destination list, then we can safely unlink it */
@@ -1056,7 +1056,7 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 			char		to_fullpath[MAXPGPATH];
 			pgFile	   *dest_file = (pgFile *) parray_get(dest_files, i);
 
-			if (S_ISDIR(dest_file->mode))
+			if (dest_file->kind == PIO_KIND_DIRECTORY)
 				continue;
 
 			/* skip external files if ordered to do so */
@@ -1137,7 +1137,7 @@ restore_files(void *arg)
 		pgFile	*dest_file = (pgFile *) parray_get(arguments->dest_files, i);
 
 		/* Directories were created before */
-		if (S_ISDIR(dest_file->mode))
+		if (dest_file->kind == PIO_KIND_DIRECTORY)
 			continue;
 
 		if (!pg_atomic_test_set_flag(&dest_file->lock))
@@ -1543,13 +1543,14 @@ update_recovery_options(InstanceState *instanceState, pgBackup *backup,
 	char		path[MAXPGPATH];
 	FILE	   *fp = NULL;
 	FILE	   *fp_tmp = NULL;
-	struct stat st;
+	pio_stat_t	st;
 	char		current_time_str[100];
 	/* postgresql.auto.conf parsing */
 	char		line[16384] = "\0";
 	char	   *buf = NULL;
 	int		    buf_len = 0;
 	int		    buf_len_max = 16384;
+	err_i 		err;
 
 	elog(LOG, "update recovery settings in postgresql.auto.conf");
 
@@ -1557,17 +1558,16 @@ update_recovery_options(InstanceState *instanceState, pgBackup *backup,
 
 	join_path_components(postgres_auto_path, instance_config.pgdata, "postgresql.auto.conf");
 
-	if (fio_stat(FIO_DB_HOST, postgres_auto_path, &st, false) < 0)
+	st = $i(pioStat, pioDriveForLocation(FIO_DB_HOST),
+			.path = postgres_auto_path, .follow_symlink = false, .err = &err);
+	/* file not found is not an error case */
+	if ($haserr(err) && getErrno(err) != ENOENT)
 	{
-		/* file not found is not an error case */
-		if (errno != ENOENT)
-			elog(ERROR, "cannot stat file \"%s\": %s", postgres_auto_path,
-				 strerror(errno));
-		st.st_size = 0;
+		ft_logerr(FT_FATAL, $errmsg(err), "");
 	}
 
 	/* Kludge for 0-sized postgresql.auto.conf file. TODO: make something more intelligent */
-	if (st.st_size > 0)
+	if (st.pst_size > 0)
 	{
 		fp = fio_open_stream(FIO_DB_HOST, postgres_auto_path);
 		if (fp == NULL)

@@ -67,7 +67,8 @@ typedef enum
 	FIO_READLINK,
 	FIO_SYNC_FILE,
 	FIO_SEND_FILE_CONTENT,
-	FIO_PAGE_ZERO
+	FIO_PAGE_ZERO,
+	FIO_FILES_ARE_SAME,
 } fio_operations;
 
 typedef struct
@@ -91,6 +92,24 @@ typedef enum
 	FIO_BACKUP_HOST, /* data is located at backup host */
 	FIO_REMOTE_HOST  /* date is located at remote host */
 } fio_location;
+
+typedef enum pio_file_kind {
+	PIO_KIND_UNKNOWN = 0,
+	PIO_KIND_REGULAR = 1,
+	PIO_KIND_DIRECTORY = 2,
+	PIO_KIND_SYMLINK = 3,
+	PIO_KIND_FIFO = 4,
+	PIO_KIND_SOCK = 5,
+	PIO_KIND_CHARDEV = 6,
+	PIO_KIND_BLOCKDEV = 7,
+} pio_file_kind_e;
+
+typedef struct pio_stat {
+	uint64_t		pst_size;
+	int64_t	 		pst_mtime;
+	uint32_t 		pst_mode;
+	pio_file_kind_e pst_kind;
+} pio_stat_t;
 
 extern fio_location MyLocation;
 
@@ -125,7 +144,6 @@ extern int     fio_check_error_fd_gz(gzFile f, char **errmsg);
 extern ssize_t fio_read(int fd, void* buf, size_t size);
 extern int     fio_flush(int fd);
 extern int     fio_seek(int fd, off_t offs);
-extern int     fio_fstat(int fd, struct stat* st);
 extern int     fio_truncate(int fd, off_t size);
 extern int     fio_close(int fd);
 
@@ -142,7 +160,6 @@ extern int     fio_fflush(FILE* f);
 extern int     fio_fseek(FILE* f, off_t offs);
 extern int     fio_ftruncate(FILE* f, off_t size);
 extern int     fio_fclose(FILE* f);
-extern int     fio_ffstat(FILE* f, struct stat* st);
 
 extern FILE*   fio_open_stream(fio_location location, const char* name);
 extern int     fio_close_stream(FILE* f);
@@ -175,8 +192,6 @@ extern int     fio_symlink(fio_location location, const char* target, const char
 extern int     fio_remove(fio_location location, const char* path, bool missing_ok);
 extern int     fio_chmod(fio_location location, const char* path, int mode);
 extern int     fio_access(fio_location location, const char* path, int mode);
-extern int     fio_stat(fio_location location, const char* path, struct stat* st, bool follow_symlinks);
-extern bool    fio_is_same_file(fio_location location, const char* filename1, const char* filename2, bool follow_symlink);
 extern ssize_t fio_readlink(fio_location location, const char *path, char *value, size_t valsiz);
 extern pid_t   fio_check_postmaster(fio_location location, const char *pgdata);
 
@@ -198,6 +213,10 @@ extern pg_crc32 pgFileGetCRC32(const char *file_path, bool missing_ok);
 #endif
 extern pg_crc32 pgFileGetCRC32Cgz(const char *file_path, bool missing_ok);
 
+extern pio_file_kind_e pio_statmode2file_kind(mode_t mode, const char* path);
+extern pio_file_kind_e pio_str2file_kind(const char* str, const char* path);
+extern const char*	   pio_file_kind2str(pio_file_kind_e kind, const char* path);
+extern mode_t		   pio_limit_mode(mode_t mode);
 
 // OBJECTS
 
@@ -237,19 +256,19 @@ fobj_iface(pioWriteFlush);
 fobj_iface(pioWriteCloser);
 fobj_iface(pioReadCloser);
 
-typedef struct stat stat_t;
-
 // Drive
 #define mth__pioOpen 		pioFile_i, (path_t, path), (int, flags), \
 									   (int, permissions), (err_i *, err)
 #define mth__pioOpen__optional() (permissions, FILE_PERMISSION)
-#define mth__pioStat 		stat_t, (path_t, path), (bool, follow_symlink), \
+#define mth__pioStat 		pio_stat_t, (path_t, path), (bool, follow_symlink), \
 										 (err_i *, err)
 #define mth__pioRemove 		err_i, (path_t, path), (bool, missing_ok)
 #define mth__pioRename 		err_i, (path_t, old_path), (path_t, new_path)
 #define mth__pioExists 		bool, (path_t, path), (err_i *, err)
 #define mth__pioGetCRC32 	pg_crc32, (path_t, path), (bool, compressed), \
 									  (err_i *, err)
+/* Compare, that filename1 and filename2 is the same file */
+#define mth__pioFilesAreSame bool, (path_t, file1), (path_t, file2)
 #define mth__pioIsRemote 	bool
 #define mth__pioMakeDir	err_i, (path_t, path), (mode_t, mode), (bool, strict)
 #define mth__pioListDir     void, (parray *, files), (const char *, root), \
@@ -265,12 +284,14 @@ fobj_method(pioExists);
 fobj_method(pioIsRemote);
 fobj_method(pioGetCRC32);
 fobj_method(pioMakeDir);
+fobj_method(pioFilesAreSame);
 fobj_method(pioListDir);
 fobj_method(pioRemoveDir);
 
 #define iface__pioDrive 	mth(pioOpen, pioStat, pioRemove, pioRename), \
 					        mth(pioExists, pioGetCRC32, pioIsRemote),                \
-							mth(pioMakeDir, pioListDir, pioRemoveDir)
+							mth(pioMakeDir, pioListDir, pioRemoveDir),  \
+							mth(pioFilesAreSame)
 fobj_iface(pioDrive);
 
 extern pioDrive_i pioDriveForLocation(fio_location location);

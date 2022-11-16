@@ -145,23 +145,26 @@ pgFile *
 pgFileNew(const char *path, const char *rel_path, bool follow_symlink,
 		  int external_dir_num, fio_location location)
 {
-	struct stat		st;
+	FOBJ_FUNC_ARP();
+	pio_stat_t		st;
 	pgFile		   *file;
+	err_i 			err;
 
 	/* stat the file */
-	if (fio_stat(location, path, &st, follow_symlink) < 0)
-	{
+	st = $i(pioStat, pioDriveForLocation(location), .path = path,
+			.follow_symlink = follow_symlink, .err = &err);
+	if ($haserr(err)) {
 		/* file not found is not an error case */
-		if (errno == ENOENT)
+		if (getErrno(err) == ENOENT)
 			return NULL;
-		elog(ERROR, "cannot stat file \"%s\": %s", path,
-			strerror(errno));
+		ft_logerr(FT_FATAL, $errmsg(err), "pgFileNew");
 	}
 
 	file = pgFileInit(rel_path);
-	file->size = st.st_size;
-	file->mode = st.st_mode;
-	file->mtime = st.st_mtime;
+	file->size = st.pst_size;
+	file->kind = st.pst_kind;
+	file->mode = st.pst_mode;
+	file->mtime = st.pst_mtime;
 	file->external_dir_num = external_dir_num;
 
 	return file;
@@ -393,7 +396,7 @@ dir_list_file(parray *files, const char *root, bool handle_tablespaces, bool fol
 			return;
 	}
 
-	if (!S_ISDIR(file->mode))
+	if (file->kind != PIO_KIND_DIRECTORY)
 	{
 		if (external_dir_num > 0)
 			elog(ERROR, " --external-dirs option \"%s\": directory or symbolic link expected",
@@ -435,7 +438,7 @@ dir_check_file(pgFile *file, bool backup_logs)
 	in_tablespace = path_is_prefix_of_path(PG_TBLSPC_DIR, file->rel_path);
 
 	/* Check if we need to exclude file by name */
-	if (S_ISREG(file->mode))
+	if (file->kind == PIO_KIND_REGULAR)
 	{
 		for (i = 0; pgdata_exclude_files[i]; i++)
 			if (strcmp(file->rel_path, pgdata_exclude_files[i]) == 0)
@@ -449,7 +452,7 @@ dir_check_file(pgFile *file, bool backup_logs)
 	 * If the directory name is in the exclude list, do not list the
 	 * contents.
 	 */
-	else if (S_ISDIR(file->mode) && !in_tablespace && file->external_dir_num == 0)
+	else if (file->kind == PIO_KIND_DIRECTORY && !in_tablespace && file->external_dir_num == 0)
 	{
 		/*
 		 * If the item in the exclude list starts with '/', compare to
@@ -478,14 +481,14 @@ dir_check_file(pgFile *file, bool backup_logs)
 	}
 
 	/* Do not backup ptrack_init files */
-	if (S_ISREG(file->mode) && strcmp(file->name, "ptrack_init") == 0)
+	if (file->kind == PIO_KIND_REGULAR && strcmp(file->name, "ptrack_init") == 0)
 		return CHECK_FALSE;
 
 	/*
 	 * Check files located inside database directories including directory
 	 * 'global'
 	 */
-	if (S_ISREG(file->mode) && file->tblspcOid != 0 &&
+	if (file->kind == PIO_KIND_REGULAR && file->tblspcOid != 0 &&
 		file->name && file->name[0])
 	{
 		if (strcmp(file->name, "pg_internal.init") == 0)
@@ -607,7 +610,7 @@ dir_list_file_internal(parray *files, pgFile *parent, const char *parent_dir,
 	struct dirent *dent;
 	bool in_tablespace = false;
 
-	if (!S_ISDIR(parent->mode))
+	if (parent->kind != PIO_KIND_DIRECTORY)
 		elog(ERROR, "\"%s\" is not a directory", parent_dir);
 
 	in_tablespace = path_is_prefix_of_path(PG_TBLSPC_DIR, parent->rel_path);
@@ -641,7 +644,7 @@ dir_list_file_internal(parray *files, pgFile *parent, const char *parent_dir,
 			continue;
 
 		/* Skip entries point current dir or parent dir */
-		if (S_ISDIR(file->mode) &&
+		if (file->kind == PIO_KIND_DIRECTORY &&
 			(strcmp(dent->d_name, ".") == 0 || strcmp(dent->d_name, "..") == 0))
 		{
 			pgFileFree(file);
@@ -659,7 +662,7 @@ dir_list_file_internal(parray *files, pgFile *parent, const char *parent_dir,
 		 * Add only files, directories and links. Skip sockets and other
 		 * unexpected file formats.
 		 */
-		if (!S_ISDIR(file->mode) && !S_ISREG(file->mode))
+		if (file->kind != PIO_KIND_DIRECTORY && file->kind != PIO_KIND_REGULAR)
 		{
 			elog(WARNING, "Skip '%s': unexpected file format", child);
 			pgFileFree(file);
@@ -671,7 +674,7 @@ dir_list_file_internal(parray *files, pgFile *parent, const char *parent_dir,
 			 * Do not copy tablespaces twice. It may happen if the tablespace is located
 			 * inside the PGDATA.
 			 */
-			if (S_ISDIR(file->mode) &&
+			if (file->kind == PIO_KIND_DIRECTORY &&
 				strcmp(file->name, TABLESPACE_VERSION_DIRECTORY) == 0)
 			{
 				Oid			tblspcOid;
@@ -718,7 +721,7 @@ dir_list_file_internal(parray *files, pgFile *parent, const char *parent_dir,
 		 * If the entry is a directory call dir_list_file_internal()
 		 * recursively.
 		 */
-		if (S_ISDIR(file->mode))
+		if (file->kind == PIO_KIND_DIRECTORY)
 			dir_list_file_internal(files, file, child, handle_tablespaces, follow_symlink,
 								   backup_logs, skip_hidden, external_dir_num, location);
 	}
@@ -886,7 +889,7 @@ create_data_directories(parray *dest_files, const char *data_dir, const char *ba
 		{
 			pgFile	   *file = (pgFile *) parray_get(dest_files, i);
 
-			if (!S_ISDIR(file->mode))
+			if (file->kind != PIO_KIND_DIRECTORY)
 				continue;
 
 			/* skip external directory content */
@@ -919,7 +922,7 @@ create_data_directories(parray *dest_files, const char *data_dir, const char *ba
 		char parent_dir[MAXPGPATH];
 		pgFile	   *dir = (pgFile *) parray_get(dest_files, i);
 
-		if (!S_ISDIR(dir->mode))
+		if (dir->kind != PIO_KIND_DIRECTORY)
 			continue;
 
 		/* skip external directory content */
@@ -1523,14 +1526,13 @@ dir_is_empty(const char *path, fio_location location)
 bool
 fileExists(const char *path, fio_location location)
 {
-	struct stat buf;
+	FOBJ_FUNC_ARP();
+	err_i	err;
+	bool	exists;
 
-	if (fio_stat(location, path, &buf, true) == -1 && errno == ENOENT)
-		return false;
-	else if (!S_ISREG(buf.st_mode))
-		return false;
-	else
-		return true;
+	exists = $i(pioExists, pioDriveForLocation(location), path, &err);
+
+	return exists;
 }
 
 /*
