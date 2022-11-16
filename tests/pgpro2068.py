@@ -9,9 +9,6 @@ import signal
 from testgres import ProcessType
 
 
-module_name = '2068'
-
-
 class BugTest(ProbackupTest, unittest.TestCase):
 
     def test_minrecpoint_on_replica(self):
@@ -20,9 +17,8 @@ class BugTest(ProbackupTest, unittest.TestCase):
         """
         self._check_gdb_flag_or_skip_test()
 
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -33,7 +29,7 @@ class BugTest(ProbackupTest, unittest.TestCase):
                 'bgwriter_lru_multiplier': '4.0',
                 'max_wal_size': '256MB'})
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -45,7 +41,7 @@ class BugTest(ProbackupTest, unittest.TestCase):
 
         # start replica
         replica = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'replica'))
+            base_dir=os.path.join(self.module_name, self.fname, 'replica'))
         replica.cleanup()
 
         self.restore_node(backup_dir, 'node', replica, options=['-R'])
@@ -168,6 +164,3 @@ $$ LANGUAGE plpython3u;
         # do basebackup
 
         # do pg_probackup, expect error
-
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)

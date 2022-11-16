@@ -9,8 +9,6 @@ from testgres import ProcessType
 from time import sleep
 
 
-module_name = 'replica'
-
 class ReplicaTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
@@ -21,10 +19,9 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         over the course of several switchovers
         https://www.postgresql.org/message-id/54b059d4-2b48-13a4-6f43-95a087c92367%40postgrespro.ru
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node1 = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node1'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node1'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -36,7 +33,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         # take full backup and restore it
         self.backup_node(backup_dir, 'node1', node1, options=['--stream'])
         node2 = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node2'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node2'))
         node2.cleanup()
 
         # create replica
@@ -87,9 +84,6 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         # https://github.com/postgrespro/pg_probackup/issues/251
         self.validate_pb(backup_dir)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_replica_stream_ptrack_backup(self):
@@ -98,12 +92,11 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         take full stream backup from replica
         """
         if not self.ptrack:
-            return unittest.skip('Skipped because ptrack support is disabled')
+            self.skipTest('Skipped because ptrack support is disabled')
 
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         master = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'master'),
+            base_dir=os.path.join(self.module_name, self.fname, 'master'),
             set_replication=True,
             ptrack_enable=True,
             initdb_params=['--data-checksums'])
@@ -129,7 +122,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         # take full backup and restore it
         self.backup_node(backup_dir, 'master', master, options=['--stream'])
         replica = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'replica'))
+            base_dir=os.path.join(self.module_name, self.fname, 'replica'))
         replica.cleanup()
         self.restore_node(backup_dir, 'master', replica)
         self.set_replica(master, replica)
@@ -159,7 +152,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
         # RESTORE FULL BACKUP TAKEN FROM PREVIOUS STEP
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node'))
         node.cleanup()
         self.restore_node(backup_dir, 'replica', data_dir=node.data_dir)
 
@@ -202,19 +195,15 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         after = node.safe_psql("postgres", "SELECT * FROM t_heap")
         self.assertEqual(before, after)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_replica_archive_page_backup(self):
         """
         make archive master, take full and page archive backups from master,
         set replica, make archive backup from replica
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         master = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'master'),
+            base_dir=os.path.join(self.module_name, self.fname, 'master'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -228,7 +217,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         master.slow_start()
 
         replica = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'replica'))
+            base_dir=os.path.join(self.module_name, self.fname, 'replica'))
         replica.cleanup()
 
         self.backup_node(backup_dir, 'master', master)
@@ -279,7 +268,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
         # RESTORE FULL BACKUP TAKEN FROM replica
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node'))
         node.cleanup()
         self.restore_node(backup_dir, 'replica', data_dir=node.data_dir)
 
@@ -333,19 +322,15 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         self.backup_node(
             backup_dir, 'node', node, options=['--stream'])
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_basic_make_replica_via_restore(self):
         """
         make archive master, take full and page archive backups from master,
         set replica, make archive backup from replica
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         master = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'master'),
+            base_dir=os.path.join(self.module_name, self.fname, 'master'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -357,7 +342,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         master.slow_start()
 
         replica = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'replica'))
+            base_dir=os.path.join(self.module_name, self.fname, 'replica'))
         replica.cleanup()
 
         self.backup_node(backup_dir, 'master', master)
@@ -386,9 +371,6 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'replica', replica,
             options=['--archive-timeout=30s', '--stream'])
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_take_backup_from_delayed_replica(self):
         """
@@ -396,10 +378,9 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         restore full backup as delayed replica, launch pgbench,
         take FULL, PAGE and DELTA backups from replica
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         master = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'master'),
+            base_dir=os.path.join(self.module_name, self.fname, 'master'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={'archive_timeout': '10s'})
@@ -410,7 +391,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         master.slow_start()
 
         replica = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'replica'))
+            base_dir=os.path.join(self.module_name, self.fname, 'replica'))
         replica.cleanup()
 
         self.backup_node(backup_dir, 'master', master)
@@ -490,9 +471,6 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
         pgbench.wait()
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_replica_promote(self):
         """
@@ -501,10 +479,9 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         """
         self._check_gdb_flag_or_skip_test()
 
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         master = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'master'),
+            base_dir=os.path.join(self.module_name, self.fname, 'master'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -518,7 +495,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         master.slow_start()
 
         replica = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'replica'))
+            base_dir=os.path.join(self.module_name, self.fname, 'replica'))
         replica.cleanup()
 
         self.backup_node(backup_dir, 'master', master)
@@ -579,19 +556,15 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             'setting its status to ERROR'.format(backup_id),
             log_content)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_replica_stop_lsn_null_offset(self):
         """
         """
         self._check_gdb_flag_or_skip_test()
 
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         master = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'master'),
+            base_dir=os.path.join(self.module_name, self.fname, 'master'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -611,7 +584,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
         # Create replica
         replica = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'replica'))
+            base_dir=os.path.join(self.module_name, self.fname, 'replica'))
         replica.cleanup()
         self.restore_node(backup_dir, 'node', replica)
 
@@ -660,7 +633,6 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         gdb_checkpointer.kill()
-        self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def test_replica_stop_lsn_null_offset_next_record(self):
@@ -668,10 +640,9 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         """
         self._check_gdb_flag_or_skip_test()
 
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         master = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'master'),
+            base_dir=os.path.join(self.module_name, self.fname, 'master'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -690,7 +661,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
         # Create replica
         replica = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'replica'))
+            base_dir=os.path.join(self.module_name, self.fname, 'replica'))
         replica.cleanup()
         self.restore_node(backup_dir, 'master', replica)
 
@@ -757,19 +728,15 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
         self.assertTrue(self.show_pb(backup_dir, 'replica')[0]['status'] == 'DONE')
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_archive_replica_null_offset(self):
         """
         """
         self._check_gdb_flag_or_skip_test()
 
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         master = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'master'),
+            base_dir=os.path.join(self.module_name, self.fname, 'master'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -785,7 +752,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
         # Create replica
         replica = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'replica'))
+            base_dir=os.path.join(self.module_name, self.fname, 'replica'))
         replica.cleanup()
         self.restore_node(backup_dir, 'node', replica)
 
@@ -838,17 +805,13 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
         print(output)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_archive_replica_not_null_offset(self):
         """
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         master = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'master'),
+            base_dir=os.path.join(self.module_name, self.fname, 'master'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -864,7 +827,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
         # Create replica
         replica = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'replica'))
+            base_dir=os.path.join(self.module_name, self.fname, 'replica'))
         replica.cleanup()
         self.restore_node(backup_dir, 'node', replica)
 
@@ -917,9 +880,6 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
                 "\n Unexpected Error Message: {0}\n CMD: {1}".format(
                     repr(e.message), self.cmd))
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_replica_toast(self):
         """
@@ -928,10 +888,9 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         """
         self._check_gdb_flag_or_skip_test()
 
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         master = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'master'),
+            base_dir=os.path.join(self.module_name, self.fname, 'master'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -952,7 +911,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
         # Create replica
         replica = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'replica'))
+            base_dir=os.path.join(self.module_name, self.fname, 'replica'))
         replica.cleanup()
         self.restore_node(backup_dir, 'master', replica)
 
@@ -1018,17 +977,15 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         gdb_checkpointer.kill()
-        self.del_test_dir(module_name, fname)
 
     # @unittest.skip("skip")
     def test_start_stop_lsn_in_the_same_segno(self):
         """
         """
 
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         master = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'master'),
+            base_dir=os.path.join(self.module_name, self.fname, 'master'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -1047,7 +1004,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
         # Create replica
         replica = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'replica'))
+            base_dir=os.path.join(self.module_name, self.fname, 'replica'))
         replica.cleanup()
         self.restore_node(backup_dir, 'master', replica)
 
@@ -1092,17 +1049,13 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
                 '--stream'],
             return_id=False)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     @unittest.skip("skip")
     def test_replica_promote_1(self):
         """
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         master = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'master'),
+            base_dir=os.path.join(self.module_name, self.fname, 'master'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -1119,7 +1072,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
         # Create replica
         replica = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'replica'))
+            base_dir=os.path.join(self.module_name, self.fname, 'replica'))
         replica.cleanup()
         self.restore_node(backup_dir, 'master', replica)
 
@@ -1162,17 +1115,13 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             os.path.exists(wal_file_partial),
             "File {0} disappeared".format(wal_file_partial))
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_replica_promote_2(self):
         """
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         master = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'master'),
+            base_dir=os.path.join(self.module_name, self.fname, 'master'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -1187,7 +1136,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
         # Create replica
         replica = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'replica'))
+            base_dir=os.path.join(self.module_name, self.fname, 'replica'))
         replica.cleanup()
         self.restore_node(backup_dir, 'master', replica)
 
@@ -1211,9 +1160,6 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'master', replica, data_dir=replica.data_dir,
             backup_type='page')
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_replica_promote_archive_delta(self):
         """
@@ -1221,10 +1167,9 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         t2               /------->
         t1 --F---D1--D2--
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node1 = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node1'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node1'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -1243,7 +1188,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
         # Create replica
         node2 = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node2'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node2'))
         node2.cleanup()
         self.restore_node(backup_dir, 'node', node2, node2.data_dir)
 
@@ -1331,9 +1276,6 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         pgdata_restored = self.pgdata_content(node1.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_replica_promote_archive_page(self):
         """
@@ -1341,10 +1283,9 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         t2               /------->
         t1 --F---P1--P2--
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node1 = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node1'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node1'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
@@ -1363,7 +1304,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
         # Create replica
         node2 = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node2'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node2'))
         node2.cleanup()
         self.restore_node(backup_dir, 'node', node2, node2.data_dir)
 
@@ -1454,17 +1395,13 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         pgdata_restored = self.pgdata_content(node1.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_parent_choosing(self):
         """
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         master = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'master'),
+            base_dir=os.path.join(self.module_name, self.fname, 'master'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -1477,7 +1414,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
         # Create replica
         replica = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'replica'))
+            base_dir=os.path.join(self.module_name, self.fname, 'replica'))
         replica.cleanup()
         self.restore_node(backup_dir, 'master', replica)
 
@@ -1519,17 +1456,13 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'replica', replica,
             backup_type='delta', options=['--stream'])
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_instance_from_the_past(self):
         """
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -1566,17 +1499,13 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
                 "\n Unexpected Error Message: {0}\n CMD: {1}".format(
                     repr(e.message), self.cmd))
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_replica_via_basebackup(self):
         """
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={'hot_standby': 'on'})
@@ -1622,7 +1551,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         node.slow_start()
 
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
         node_restored.cleanup()
 
         pg_basebackup_path = self.get_bin_path('pg_basebackup')
@@ -1635,9 +1564,6 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
         self.set_auto_conf(node_restored, {'port': node_restored.port})
         node_restored.slow_start(replica=True)
-
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
 
 # TODO:
 # null offset STOP LSN and latest record in previous segment is conrecord (manual only)

@@ -9,21 +9,17 @@ from datetime import datetime, timedelta
 import time
 import subprocess
 
-module_name = "merge"
-
-
 class MergeTest(ProbackupTest, unittest.TestCase):
 
     def test_basic_merge_full_page(self):
         """
         Test MERGE command, it merges FULL backup with target PAGE backups
         """
-        fname = self.id().split(".")[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, "backup")
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, "backup")
 
         # Initialize instance and backup directory
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=["--data-checksums"])
 
         self.init_pb(backup_dir)
@@ -100,19 +96,15 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         count2 = node.execute("postgres", "select count(*) from test")
         self.assertEqual(count1, count2)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     def test_merge_compressed_backups(self):
         """
         Test MERGE command with compressed backups
         """
-        fname = self.id().split(".")[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, "backup")
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, "backup")
 
         # Initialize instance and backup directory
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=["--data-checksums"])
 
         self.init_pb(backup_dir)
@@ -163,18 +155,16 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         node.cleanup()
-        self.del_test_dir(module_name, fname)
 
     def test_merge_compressed_backups_1(self):
         """
         Test MERGE command with compressed backups
         """
-        fname = self.id().split(".")[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, "backup")
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, "backup")
 
         # Initialize instance and backup directory
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True, initdb_params=["--data-checksums"])
 
         self.init_pb(backup_dir)
@@ -234,18 +224,16 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         node.cleanup()
-        self.del_test_dir(module_name, fname)
 
     def test_merge_compressed_and_uncompressed_backups(self):
         """
         Test MERGE command with compressed and uncompressed backups
         """
-        fname = self.id().split(".")[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, "backup")
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, "backup")
 
         # Initialize instance and backup directory
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True, initdb_params=["--data-checksums"],
         )
 
@@ -306,18 +294,16 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         node.cleanup()
-        self.del_test_dir(module_name, fname)
 
     def test_merge_compressed_and_uncompressed_backups_1(self):
         """
         Test MERGE command with compressed and uncompressed backups
         """
-        fname = self.id().split(".")[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, "backup")
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, "backup")
 
         # Initialize instance and backup directory
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True, initdb_params=["--data-checksums"],
         )
 
@@ -380,18 +366,16 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
         # Clean after yourself
         node.cleanup()
-        self.del_test_dir(module_name, fname)
 
     def test_merge_compressed_and_uncompressed_backups_2(self):
         """
         Test MERGE command with compressed and uncompressed backups
         """
-        fname = self.id().split(".")[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, "backup")
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, "backup")
 
         # Initialize instance and backup directory
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True, initdb_params=["--data-checksums"],
         )
 
@@ -450,11 +434,6 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         pgdata_restored = self.pgdata_content(node.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        node.cleanup()
-        self.del_test_dir(module_name, fname)
-
-
     # @unittest.skip("skip")
     def test_merge_tablespaces(self):
         """
@@ -463,10 +442,9 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         tablespace, take page backup, merge it and restore
 
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True, initdb_params=['--data-checksums'],
         )
 
@@ -538,10 +516,9 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         drop first tablespace and take delta backup,
         merge it and restore
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True, initdb_params=['--data-checksums'],
         )
 
@@ -607,9 +584,6 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         pgdata_restored = self.pgdata_content(node.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     def test_merge_page_truncate(self):
         """
         make node, create table, take full backup,
@@ -617,17 +591,16 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         take page backup, merge full and page,
         restore last page backup and check data correctness
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
                 'checkpoint_timeout': '300s'})
 
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -696,9 +669,6 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
         self.assertEqual(result1, result2)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     def test_merge_delta_truncate(self):
         """
         make node, create table, take full backup,
@@ -706,17 +676,16 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         take page backup, merge full and page,
         restore last page backup and check data correctness
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
                 'checkpoint_timeout': '300s'})
 
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -785,9 +754,6 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
         self.assertEqual(result1, result2)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     def test_merge_ptrack_truncate(self):
         """
         make node, create table, take full backup,
@@ -796,12 +762,11 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         restore last page backup and check data correctness
         """
         if not self.ptrack:
-            return unittest.skip('Skipped because ptrack support is disabled')
+            self.skipTest('Skipped because ptrack support is disabled')
 
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             ptrack_enable=True)
@@ -850,7 +815,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         self.validate_pb(backup_dir)
 
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
         node_restored.cleanup()
 
         old_tablespace = self.get_tblspace_path(node, 'somedata')
@@ -881,9 +846,6 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
         self.assertEqual(result1, result2)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_merge_delta_delete(self):
         """
@@ -891,10 +853,9 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         alter tablespace location, take delta backup, merge full and delta,
         restore database.
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True, initdb_params=['--data-checksums'],
             pg_options={
                 'checkpoint_timeout': '30s',
@@ -943,7 +904,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
         # RESTORE
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored')
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored')
         )
         node_restored.cleanup()
 
@@ -967,9 +928,6 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         self.set_auto_conf(node_restored, {'port': node_restored.port})
         node_restored.slow_start()
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_continue_failed_merge(self):
         """
@@ -977,11 +935,10 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         """
         self._check_gdb_flag_or_skip_test()
 
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
             base_dir=os.path.join(
-                module_name, fname, 'node'),
+                self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -1045,9 +1002,6 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         node.cleanup()
         self.restore_node(backup_dir, 'node', node)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_continue_failed_merge_with_corrupted_delta_backup(self):
         """
@@ -1055,10 +1009,9 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         """
         self._check_gdb_flag_or_skip_test()
 
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True, initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
@@ -1145,19 +1098,15 @@ class MergeTest(ProbackupTest, unittest.TestCase):
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     def test_continue_failed_merge_2(self):
         """
         Check that failed MERGE on delete can be continued
         """
         self._check_gdb_flag_or_skip_test()
 
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True, initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
@@ -1217,8 +1166,6 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
         # Try to continue failed MERGE
         self.merge_backup(backup_dir, "node", backup_id)
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
 
     def test_continue_failed_merge_3(self):
         """
@@ -1227,10 +1174,9 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         """
         self._check_gdb_flag_or_skip_test()
 
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True, initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
@@ -1315,17 +1261,13 @@ class MergeTest(ProbackupTest, unittest.TestCase):
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     def test_merge_different_compression_algo(self):
         """
         Check that backups with different compression algorithms can be merged
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -1368,17 +1310,14 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
         self.merge_backup(backup_dir, "node", backup_id)
 
-        self.del_test_dir(module_name, fname)
-
     def test_merge_different_wal_modes(self):
         """
         Check that backups with different wal modes can be merged
         correctly
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -1410,8 +1349,6 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(
             'STREAM', self.show_pb(backup_dir, 'node', backup_id)['wal'])
 
-        self.del_test_dir(module_name, fname)
-
     def test_crash_after_opening_backup_control_1(self):
         """
         check that crashing after opening backup.control
@@ -1419,10 +1356,9 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         """
         self._check_gdb_flag_or_skip_test()
 
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -1462,8 +1398,6 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(
             'MERGING', self.show_pb(backup_dir, 'node')[1]['status'])
 
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_crash_after_opening_backup_control_2(self):
         """
@@ -1473,10 +1407,9 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         """
         self._check_gdb_flag_or_skip_test()
 
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -1555,8 +1488,6 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_losing_file_after_failed_merge(self):
         """
@@ -1566,10 +1497,9 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         """
         self._check_gdb_flag_or_skip_test()
 
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -1648,17 +1578,14 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         pgdata_restored = self.pgdata_content(node.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        self.del_test_dir(module_name, fname)
-
     def test_failed_merge_after_delete(self):
         """
         """
         self._check_gdb_flag_or_skip_test()
 
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -1731,17 +1658,14 @@ class MergeTest(ProbackupTest, unittest.TestCase):
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
-        self.del_test_dir(module_name, fname)
-
     def test_failed_merge_after_delete_1(self):
         """
         """
         self._check_gdb_flag_or_skip_test()
 
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -1809,17 +1733,14 @@ class MergeTest(ProbackupTest, unittest.TestCase):
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
-        self.del_test_dir(module_name, fname)
-
     def test_failed_merge_after_delete_2(self):
         """
         """
         self._check_gdb_flag_or_skip_test()
 
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -1875,17 +1796,14 @@ class MergeTest(ProbackupTest, unittest.TestCase):
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
-        self.del_test_dir(module_name, fname)
-
     def test_failed_merge_after_delete_3(self):
         """
         """
         self._check_gdb_flag_or_skip_test()
 
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -1965,8 +1883,6 @@ class MergeTest(ProbackupTest, unittest.TestCase):
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
-        self.del_test_dir(module_name, fname)
-
     # Skipped, because backups from the future are invalid.
     # This cause a "ERROR: Can't assign backup_id, there is already a backup in future"
     # now (PBCKP-259). We can conduct such a test again when we
@@ -1977,13 +1893,12 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         take FULL backup, table PAGE backup from future,
         try to merge page with FULL
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -2023,7 +1938,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
             'SELECT * from pgbench_accounts')
 
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
         node_restored.cleanup()
 
         self.restore_node(
@@ -2054,9 +1969,6 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_merge_multiple_descendants(self):
         """
@@ -2069,12 +1981,11 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         FULLb           |
                       FULLa
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -2243,9 +2154,6 @@ class MergeTest(ProbackupTest, unittest.TestCase):
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_smart_merge(self):
         """
@@ -2255,13 +2163,12 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         copied during restore
         https://github.com/postgrespro/pg_probackup/issues/63
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -2303,18 +2210,14 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         with open(logfile, 'r') as f:
                 logfile_content = f.read()
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     def test_idempotent_merge(self):
         """
         """
         self._check_gdb_flag_or_skip_test()
 
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -2380,18 +2283,15 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(
             page_id_2, self.show_pb(backup_dir, 'node')[0]['id'])
 
-        self.del_test_dir(module_name, fname)
-
     def test_merge_correct_inheritance(self):
         """
         Make sure that backup metainformation fields
         'note' and 'expire-time' are correctly inherited
         during merge
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -2434,18 +2334,15 @@ class MergeTest(ProbackupTest, unittest.TestCase):
             page_meta['expire-time'],
             self.show_pb(backup_dir, 'node', page_id)['expire-time'])
 
-        self.del_test_dir(module_name, fname)
-
     def test_merge_correct_inheritance_1(self):
         """
         Make sure that backup metainformation fields
         'note' and 'expire-time' are correctly inherited
         during merge
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -2483,8 +2380,6 @@ class MergeTest(ProbackupTest, unittest.TestCase):
             'expire-time',
             self.show_pb(backup_dir, 'node', page_id))
 
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_multi_timeline_merge(self):
@@ -2499,10 +2394,9 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
         P must have F as parent
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -2570,7 +2464,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
             "postgres", "select * from pgbench_accounts")
 
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
         node_restored.cleanup()
 
         self.restore_node(backup_dir, 'node', node_restored)
@@ -2600,9 +2494,6 @@ class MergeTest(ProbackupTest, unittest.TestCase):
                 '--amcheck',
                 '-d', 'postgres', '-p', str(node_restored.port)])
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_merge_page_header_map_retry(self):
@@ -2612,10 +2503,9 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         """
         self._check_gdb_flag_or_skip_test()
 
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -2651,19 +2541,15 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         pgdata_restored = self.pgdata_content(node.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_missing_data_file(self):
         """
         """
         self._check_gdb_flag_or_skip_test()
 
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -2712,18 +2598,15 @@ class MergeTest(ProbackupTest, unittest.TestCase):
             'ERROR: Cannot open backup file "{0}": No such file or directory'.format(file_to_remove),
             logfile_content)
 
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_missing_non_data_file(self):
         """
         """
         self._check_gdb_flag_or_skip_test()
 
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -2771,18 +2654,15 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(
             'MERGING', self.show_pb(backup_dir, 'node')[1]['status'])
 
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_merge_remote_mode(self):
         """
         """
         self._check_gdb_flag_or_skip_test()
 
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -2829,16 +2709,13 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(
             'OK', self.show_pb(backup_dir, 'node')[0]['status'])
 
-        self.del_test_dir(module_name, fname)
-
     def test_merge_pg_filenode_map(self):
         """
         https://github.com/postgrespro/pg_probackup/issues/320
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
@@ -2847,7 +2724,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         node.slow_start()
 
         node1 = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node1'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node1'),
             initdb_params=['--data-checksums'])
         node1.cleanup()
 
@@ -2879,9 +2756,6 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         node.safe_psql(
             'postgres',
             'select 1')
-
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
 
 # 1. Need new test with corrupted FULL backup
 # 2. different compression levels

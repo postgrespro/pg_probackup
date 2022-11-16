@@ -7,6 +7,10 @@
 #include "file.h"
 #include "storage/checksum.h"
 
+#ifdef PBCKP_S3
+#include "../s3/s3.h"
+#endif
+
 #define PRINTF_BUF_SIZE  1024
 
 static __thread unsigned long fio_fdset = 0;
@@ -1590,7 +1594,6 @@ typedef struct fioGZFile
 	z_stream strm;
 	int      fd;
 	int      errnum;
-	bool     compress;
 	bool     eof;
 	Bytef    buf[ZLIB_BUFFER_SIZE];
 } fioGZFile;
@@ -1626,48 +1629,30 @@ gzFile
 fio_gzopen(fio_location location, const char* path, const char* mode, int level)
 {
 	int rc;
+
+	if (strchr(mode, 'w') != NULL) /* compress */
+	{
+		Assert(false);
+		elog(ERROR, "fio_gzopen(\"wb\") is not implemented");
+	}
+
 	if (fio_is_remote(location))
 	{
 		fioGZFile* gz = (fioGZFile*) pgut_malloc(sizeof(fioGZFile));
 		memset(&gz->strm, 0, sizeof(gz->strm));
 		gz->eof = 0;
 		gz->errnum = Z_OK;
-		/* check if file opened for writing */
-		if (strcmp(mode, PG_BINARY_W) == 0) /* compress */
+		gz->strm.next_in = gz->buf;
+		gz->strm.avail_in = ZLIB_BUFFER_SIZE;
+		rc = inflateInit2(&gz->strm, 15 + 16);
+		gz->strm.avail_in = 0;
+		if (rc == Z_OK)
 		{
-			gz->strm.next_out = gz->buf;
-			gz->strm.avail_out = ZLIB_BUFFER_SIZE;
-			rc = deflateInit2(&gz->strm,
-							  level,
-							  Z_DEFLATED,
-							  MAX_WBITS + 16, DEF_MEM_LEVEL,
-							  Z_DEFAULT_STRATEGY);
-			if (rc == Z_OK)
+			gz->fd = fio_open(location, path, O_RDONLY | PG_BINARY);
+			if (gz->fd < 0)
 			{
-				gz->compress = 1;
-				gz->fd = fio_open(location, path, O_WRONLY | O_CREAT | O_EXCL | PG_BINARY);
-				if (gz->fd < 0)
-				{
-					free(gz);
-					return NULL;
-				}
-			}
-		}
-		else
-		{
-			gz->strm.next_in = gz->buf;
-			gz->strm.avail_in = ZLIB_BUFFER_SIZE;
-			rc = inflateInit2(&gz->strm, 15 + 16);
-			gz->strm.avail_in = 0;
-			if (rc == Z_OK)
-			{
-				gz->compress = 0;
-				gz->fd = fio_open(location, path, O_RDONLY | PG_BINARY);
-				if (gz->fd < 0)
-				{
-					free(gz);
-					return NULL;
-				}
+				free(gz);
+				return NULL;
 			}
 		}
 		if (rc != Z_OK)
@@ -1680,16 +1665,7 @@ fio_gzopen(fio_location location, const char* path, const char* mode, int level)
 	else
 	{
 		gzFile file;
-		/* check if file opened for writing */
-		if (strcmp(mode, PG_BINARY_W) == 0)
-		{
-			int fd = open(path, O_WRONLY | O_CREAT | O_EXCL | PG_BINARY, FILE_PERMISSION);
-			if (fd < 0)
-				return NULL;
-			file = gzdopen(fd, mode);
-		}
-		else
-			file = gzopen(path, mode);
+		file = gzopen(path, mode);
 		if (file != NULL && level != Z_DEFAULT_COMPRESSION)
 		{
 			if (gzsetparams(file, level, Z_DEFAULT_STRATEGY) != Z_OK)
@@ -1766,76 +1742,13 @@ fio_gzread(gzFile f, void *buf, unsigned size)
 }
 
 int
-fio_gzwrite(gzFile f, void const* buf, unsigned size)
-{
-	if ((size_t)f & FIO_GZ_REMOTE_MARKER)
-	{
-		int rc;
-		fioGZFile* gz = (fioGZFile*)((size_t)f - FIO_GZ_REMOTE_MARKER);
-
-		gz->strm.next_in = (Bytef *)buf;
-		gz->strm.avail_in = size;
-
-		do
-		{
-			if (gz->strm.avail_out == ZLIB_BUFFER_SIZE) /* Compress buffer is empty */
-			{
-				gz->strm.next_out = gz->buf; /* Reset pointer to the  beginning of buffer */
-
-				if (gz->strm.avail_in != 0) /* Has something in input buffer */
-				{
-					rc = deflate(&gz->strm, Z_NO_FLUSH);
-					Assert(rc == Z_OK);
-					gz->strm.next_out = gz->buf; /* Reset pointer to the  beginning of buffer */
-				}
-				else
-				{
-					break;
-				}
-			}
-			rc = fio_write_async(gz->fd, gz->strm.next_out, ZLIB_BUFFER_SIZE - gz->strm.avail_out);
-			if (rc >= 0)
-			{
-				gz->strm.next_out += rc;
-				gz->strm.avail_out += rc;
-			}
-			else
-			{
-				return rc;
-			}
-		} while (gz->strm.avail_out != ZLIB_BUFFER_SIZE || gz->strm.avail_in != 0);
-
-		return size;
-	}
-	else
-	{
-		return gzwrite(f, buf, size);
-	}
-}
-
-int
 fio_gzclose(gzFile f)
 {
 	if ((size_t)f & FIO_GZ_REMOTE_MARKER)
 	{
 		fioGZFile* gz = (fioGZFile*)((size_t)f - FIO_GZ_REMOTE_MARKER);
 		int rc;
-		if (gz->compress)
-		{
-			gz->strm.next_out = gz->buf;
-			rc = deflate(&gz->strm, Z_FINISH);
-			Assert(rc == Z_STREAM_END && gz->strm.avail_out != ZLIB_BUFFER_SIZE);
-			deflateEnd(&gz->strm);
-			rc = fio_write(gz->fd, gz->buf, ZLIB_BUFFER_SIZE - gz->strm.avail_out);
-			if (rc != ZLIB_BUFFER_SIZE - gz->strm.avail_out)
-			{
-				return -1;
-			}
-		}
-		else
-		{
-			inflateEnd(&gz->strm);
-		}
+		inflateEnd(&gz->strm);
 		rc = fio_close(gz->fd);
 		free(gz);
 		return rc;
@@ -1843,20 +1756,6 @@ fio_gzclose(gzFile f)
 	else
 	{
 		return gzclose(f);
-	}
-}
-
-int
-fio_gzeof(gzFile f)
-{
-	if ((size_t)f & FIO_GZ_REMOTE_MARKER)
-	{
-		fioGZFile* gz = (fioGZFile*)((size_t)f - FIO_GZ_REMOTE_MARKER);
-		return gz->eof;
-	}
-	else
-	{
-		return gzeof(f);
 	}
 }
 
@@ -3987,6 +3886,13 @@ static pioDrive_i remoteDrive;
 pioDrive_i
 pioDriveForLocation(fio_location loc)
 {
+    if (loc == FIO_CLOUD_HOST)
+#ifdef PBCKP_S3
+		return cloudDrive;
+#else
+		elog(ERROR, "NO CLOUD DRIVE YET");
+#endif
+
     if (fio_is_remote(loc))
         return remoteDrive;
     else
@@ -5531,4 +5437,7 @@ init_pio_objects(void)
 
     localDrive = bindref_pioDrive($alloc(pioLocalDrive));
     remoteDrive = bindref_pioDrive($alloc(pioRemoteDrive));
+#ifdef PBCKP_S3
+    create_pioCloudeDrive();
+#endif
 }

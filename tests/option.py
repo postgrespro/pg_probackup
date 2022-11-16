@@ -4,9 +4,6 @@ from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 import locale
 
 
-module_name = 'option'
-
-
 class OptionTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
@@ -41,14 +38,12 @@ class OptionTest(ProbackupTest, unittest.TestCase):
                 e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
 
-
     # @unittest.skip("skip")
     def test_options_4(self):
         """check options test"""
-        fname = self.id().split(".")[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node'))
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -112,16 +107,12 @@ class OptionTest(ProbackupTest, unittest.TestCase):
                 e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_options_5(self):
         """check options test"""
-        fname = self.id().split(".")[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node'))
 
         output = self.init_pb(backup_dir)
         self.assertIn(
@@ -225,9 +216,6 @@ class OptionTest(ProbackupTest, unittest.TestCase):
                 e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_help_6(self):
         """help options"""
@@ -239,5 +227,5 @@ class OptionTest(ProbackupTest, unittest.TestCase):
                     help_out.read().decode("utf-8")
                 )
         else:
-            return unittest.skip(
+            self.skipTest(
                 'You need configure PostgreSQL with --enabled-nls option for this test')

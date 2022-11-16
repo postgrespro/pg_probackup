@@ -76,6 +76,19 @@ include $(top_builddir)/src/Makefile.global
 include $(top_srcdir)/contrib/contrib-global.mk
 endif
 
+ifndef S3_DIR
+  ifneq ("$(wildcard $(abspath $(top_pbk_srcdir))/../s3)", "")
+    S3_DIR = $(abspath $(CURDIR))/../s3
+  endif
+endif
+
+ifdef S3_DIR
+  LDFLAGS += -lcurl
+  CFLAGS += $(shell pkg-config --cflags libxml-2.0) -DPBCKP_S3=1
+  LDFLAGS += $(shell pkg-config --libs libxml-2.0)
+  OBJS += $(S3_DIR)/s3.o
+endif
+
 #
 PG_CPPFLAGS = -I$(libpq_srcdir) ${PTHREAD_CFLAGS} -I$(top_pbk_srcdir)src -I$(BORROW_DIR)
 PG_CPPFLAGS += -I$(top_pbk_srcdir)src/fu_util -Wno-declaration-after-statement
@@ -87,6 +100,9 @@ PG_LIBS_INTERNAL = $(libpq_pgport) ${PTHREAD_CFLAGS}
 
 # additional dependencies on borrowed files
 src/backup.o src/catchup.o src/pg_probackup.o: $(BORROW_DIR)/streamutil.h
+ifdef S3_DIR
+  src/backup.o src/catchup.o src/pg_probackup.o: $(S3_DIR)/s3.o
+endif
 src/stream.o $(BORROW_DIR)/receivelog.o $(BORROW_DIR)/streamutil.o $(BORROW_DIR)/walmethods.o: $(BORROW_DIR)/receivelog.h
 $(BORROW_DIR)/receivelog.h: $(BORROW_DIR)/walmethods.h
 

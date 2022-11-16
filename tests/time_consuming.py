@@ -4,7 +4,6 @@ from .helpers.ptrack_helpers import ProbackupTest
 import subprocess
 from time import sleep
 
-module_name = 'time_consuming'
 
 class TimeConsumingTests(ProbackupTest, unittest.TestCase):
     def test_pbckp150(self):
@@ -16,13 +15,12 @@ class TimeConsumingTests(ProbackupTest, unittest.TestCase):
         """
         # init node
         if self.pg_config_version < self.version_to_num('11.0'):
-            return unittest.skip('You need PostgreSQL >= 11 for this test')
+            self.skipTest('You need PostgreSQL >= 11 for this test')
         if not self.ptrack:
-            return unittest.skip('Skipped because ptrack support is disabled')
+            self.skipTest('Skipped because ptrack support is disabled')
 
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             ptrack_enable=self.ptrack,
             initdb_params=['--data-checksums'],
@@ -39,7 +37,7 @@ class TimeConsumingTests(ProbackupTest, unittest.TestCase):
             self.set_auto_conf(node, {'wal_keep_segments': '1000'})
 
         # init probackup and add an instance
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
 
@@ -77,6 +75,3 @@ class TimeConsumingTests(ProbackupTest, unittest.TestCase):
         backups = self.show_pb(backup_dir, 'node')
         for b in backups:
             self.assertEqual("OK", b['status'])
-
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)

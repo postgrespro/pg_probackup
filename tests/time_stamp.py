@@ -5,22 +5,19 @@ import subprocess
 from time import sleep
 
 
-module_name = 'time_stamp'
-
 class TimeStamp(ProbackupTest, unittest.TestCase):
 
     def test_start_time_format(self):
         """Test backup ID changing after start-time editing in backup.control.
         We should convert local time in UTC format"""
         # Create simple node
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir="{0}/{1}/node".format(self.module_name, self.fname),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -58,19 +55,16 @@ class TimeStamp(ProbackupTest, unittest.TestCase):
         self.assertNotIn("backup ID in control file", output)
 
         node.stop()
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
 
     def test_server_date_style(self):
         """Issue #112"""
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir="{0}/{1}/node".format(self.module_name, self.fname),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={"datestyle": "GERMAN, DMY"})
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         node.start()
@@ -78,18 +72,14 @@ class TimeStamp(ProbackupTest, unittest.TestCase):
         self.backup_node(
             backup_dir, 'node', node, options=['--stream', '-j 2'])
         
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     def test_handling_of_TZ_env_variable(self):
         """Issue #284"""
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(module_name, fname),
+            base_dir="{0}/{1}/node".format(self.module_name, self.fname),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         node.start()
@@ -104,17 +94,13 @@ class TimeStamp(ProbackupTest, unittest.TestCase):
 
         self.assertNotIn("backup ID in control file", output)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_dst_timezone_handling(self):
         """for manual testing"""
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
@@ -180,16 +166,12 @@ class TimeStamp(ProbackupTest, unittest.TestCase):
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE).communicate()
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     @unittest.skip("skip")
     def test_dst_timezone_handling_backward_compatibilty(self):
         """for manual testing"""
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
@@ -252,6 +234,3 @@ class TimeStamp(ProbackupTest, unittest.TestCase):
             ['sudo', 'timedatectl', 'set-timezone', 'US/Moscow'],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE).communicate()
-
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)

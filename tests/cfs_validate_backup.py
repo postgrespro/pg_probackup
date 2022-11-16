@@ -5,7 +5,6 @@ import random
 from .helpers.cfs_helpers import find_by_extensions, find_by_name, find_by_pattern, corrupt_file
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 
-module_name = 'cfs_validate_backup'
 tblspace_name = 'cfs_tblspace'
 
 

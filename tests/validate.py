@@ -9,9 +9,6 @@ import time
 import hashlib
 
 
-module_name = 'validate'
-
-
 class ValidateTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
@@ -20,12 +17,11 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         """
         make node with nullified heap block
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -71,9 +67,6 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         pgdata_restored = self.pgdata_content(node.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_validate_wal_unreal_values(self):
@@ -81,12 +74,11 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         make node with archiving, make archive backup
         validate to both real and unreal values
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -213,9 +205,6 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_basic_validate_corrupted_intermediate_backup(self):
         """
@@ -224,12 +213,11 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         run validate on PAGE1, expect PAGE1 to gain status CORRUPT
         and PAGE2 gain status ORPHAN
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -298,9 +286,6 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             self.show_pb(backup_dir, 'node', backup_id_3)['status'],
             'Backup STATUS should be "ORPHAN"')
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_validate_corrupted_intermediate_backups(self):
         """
@@ -309,12 +294,11 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         expect FULL and PAGE1 to gain status CORRUPT and
         PAGE2 gain status ORPHAN
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -419,9 +403,6 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             self.show_pb(backup_dir, 'node', backup_id_3)['status'],
             'Backup STATUS should be "ORPHAN"')
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_validate_specific_error_intermediate_backups(self):
         """
@@ -431,12 +412,11 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         purpose of this test is to be sure that not only
         CORRUPT backup descendants can be orphanized
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -507,9 +487,6 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             self.show_pb(backup_dir, 'node', backup_id_3)['status'],
             'Backup STATUS should be "ORPHAN"')
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_validate_error_intermediate_backups(self):
         """
@@ -519,12 +496,11 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         purpose of this test is to be sure that not only
         CORRUPT backup descendants can be orphanized
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -591,9 +567,6 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             self.show_pb(backup_dir, 'node', backup_id_3)['status'],
             'Backup STATUS should be "ORPHAN"')
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_validate_corrupted_intermediate_backups_1(self):
         """
@@ -602,12 +575,11 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         expect PAGE1 to gain status CORRUPT, PAGE2, PAGE3, PAGE4 and PAGE5
         to gain status ORPHAN
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -788,9 +760,6 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             'OK', self.show_pb(backup_dir, 'node', backup_id_8)['status'],
             'Backup STATUS should be "OK"')
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_validate_specific_target_corrupted_intermediate_backups(self):
         """
@@ -799,12 +768,11 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         expect PAGE1 to gain status CORRUPT, PAGE2, PAGE3, PAGE4 and PAGE5 to
         gain status ORPHAN
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -980,9 +948,6 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.assertEqual('ORPHAN', self.show_pb(backup_dir, 'node', backup_id_7)['status'], 'Backup STATUS should be "ORPHAN"')
         self.assertEqual('OK', self.show_pb(backup_dir, 'node', backup_id_8)['status'], 'Backup STATUS should be "OK"')
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_validate_instance_with_several_corrupt_backups(self):
         """
@@ -991,12 +956,11 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         expect FULL1 to gain status CORRUPT, PAGE1_1 to gain status ORPHAN
         FULL2 to gain status CORRUPT, PAGE2_1 to gain status ORPHAN
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -1081,9 +1045,6 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             'OK', self.show_pb(backup_dir, 'node', backup_id_6)['status'],
             'Backup STATUS should be "OK"')
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_validate_instance_with_several_corrupt_backups_interrupt(self):
         """
@@ -1091,12 +1052,11 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         """
         self._check_gdb_flag_or_skip_test()
 
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -1180,9 +1140,6 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             self.assertNotIn(
                 'Interrupted while locking backup', log_content)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_validate_instance_with_corrupted_page(self):
         """
@@ -1190,12 +1147,11 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         corrupt file in PAGE1 backup and run validate on instance,
         expect PAGE1 to gain status CORRUPT, PAGE2 to gain status ORPHAN
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -1327,20 +1283,16 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             'OK', self.show_pb(backup_dir, 'node', backup_id_5)['status'],
             'Backup STATUS should be "OK"')
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_validate_instance_with_corrupted_full_and_try_restore(self):
         """make archive node, take FULL, PAGE1, PAGE2, FULL2, PAGE3 backups,
         corrupt file in FULL backup and run validate on instance,
         expect FULL to gain status CORRUPT, PAGE1 and PAGE2 to gain status ORPHAN,
         try to restore backup with --no-validation option"""
-        fname = self.id().split('.')[3]
-        node = self.make_simple_node(base_dir=os.path.join(module_name, fname, 'node'),
+        node = self.make_simple_node(base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -1423,19 +1375,15 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_validate_instance_with_corrupted_full(self):
         """make archive node, take FULL, PAGE1, PAGE2, FULL2, PAGE3 backups,
         corrupt file in FULL backup and run validate on instance,
         expect FULL to gain status CORRUPT, PAGE1 and PAGE2 to gain status ORPHAN"""
-        fname = self.id().split('.')[3]
-        node = self.make_simple_node(base_dir=os.path.join(module_name, fname, 'node'),
+        node = self.make_simple_node(base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -1517,18 +1465,14 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.assertEqual('OK', self.show_pb(backup_dir, 'node', backup_id_4)['status'], 'Backup STATUS should be "OK"')
         self.assertEqual('OK', self.show_pb(backup_dir, 'node', backup_id_5)['status'], 'Backup STATUS should be "OK"')
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_validate_corrupt_wal_1(self):
         """make archive node, take FULL1, PAGE1,PAGE2,FULL2,PAGE3,PAGE4 backups, corrupt all wal files, run validate, expect errors"""
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -1579,17 +1523,13 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             self.show_pb(backup_dir, 'node', backup_id_2)['status'],
             'Backup STATUS should be "CORRUPT"')
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_validate_corrupt_wal_2(self):
         """make archive node, make full backup, corrupt all wal files, run validate to real xid, expect errors"""
-        fname = self.id().split('.')[3]
-        node = self.make_simple_node(base_dir=os.path.join(module_name, fname, 'node'),
+        node = self.make_simple_node(base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -1645,9 +1585,6 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             self.show_pb(backup_dir, 'node', backup_id)['status'],
             'Backup STATUS should be "CORRUPT"')
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_validate_wal_lost_segment_1(self):
         """make archive node, make archive full backup,
@@ -1655,12 +1592,11 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         run validate, expecting error because of missing wal segment
         make sure that backup status is 'CORRUPT'
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -1722,21 +1658,17 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_validate_corrupt_wal_between_backups(self):
         """
         make archive node, make full backup, corrupt all wal files,
         run validate to real xid, expect errors
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -1810,22 +1742,18 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             self.show_pb(backup_dir, 'node')[1]['status'],
             'Backup STATUS should be "OK"')
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_pgpro702_688(self):
         """
         make node without archiving, make stream backup,
         get Recovery Time, validate to Recovery Time
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         node.slow_start()
@@ -1851,22 +1779,18 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_pgpro688(self):
         """
         make node with archiving, make backup, get Recovery Time,
         validate to Recovery Time. Waiting PGPRO-688. RESOLVED
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -1880,9 +1804,6 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node', options=["--time={0}".format(recovery_time),
                                          "-j", "4"])
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     def test_pgpro561(self):
@@ -1890,13 +1811,12 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         make node with archiving, make stream backup,
         restore it to node1, check that archiving is not successful on node1
         """
-        fname = self.id().split('.')[3]
         node1 = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node1'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node1'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node1', node1)
         self.set_archiving(backup_dir, 'node1', node1)
@@ -1906,7 +1826,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node1', node1, options=["--stream"])
 
         node2 = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node2'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node2'))
         node2.cleanup()
 
         node1.psql(
@@ -1988,9 +1908,6 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             self.assertFalse(
                 'pg_probackup archive-push completed successfully' in log_content)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_validate_corrupted_full(self):
         """
@@ -2001,15 +1918,14 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         remove corruption and run valudate again, check that
         second full backup and his page backups are OK
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
                 'checkpoint_timeout': '30'})
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -2109,9 +2025,6 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             self.show_pb(backup_dir, 'node')[6]['status'] == 'ERROR')
         self.assertTrue(self.show_pb(backup_dir, 'node')[7]['status'] == 'OK')
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_validate_corrupted_full_1(self):
         """
@@ -2125,13 +2038,12 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         second page should be CORRUPT
         third page should be ORPHAN
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -2211,9 +2123,6 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.assertTrue(self.show_pb(backup_dir, 'node')[5]['status'] == 'CORRUPT')
         self.assertTrue(self.show_pb(backup_dir, 'node')[6]['status'] == 'ORPHAN')
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_validate_corrupted_full_2(self):
         """
@@ -2236,13 +2145,12 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         remove corruption from PAGE2_2 and run validate on PAGE2_4
         """
 
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -2573,9 +2481,6 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.assertTrue(self.show_pb(backup_dir, 'node')[1]['status'] == 'OK')
         self.assertTrue(self.show_pb(backup_dir, 'node')[0]['status'] == 'OK')
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_validate_corrupted_full_missing(self):
         """
@@ -2588,13 +2493,12 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         second full backup and his firts page backups are OK,
         third page should be ORPHAN
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -2806,18 +2710,14 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.assertTrue(self.show_pb(backup_dir, 'node')[1]['status'] == 'OK')
         self.assertTrue(self.show_pb(backup_dir, 'node')[0]['status'] == 'OK')
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     def test_file_size_corruption_no_validate(self):
 
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             # initdb_params=['--data-checksums'],
         )
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -2868,9 +2768,6 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
                 "ERROR: Backup files restoring failed" in e.message,
                 repr(e.message))
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_validate_specific_backup_with_missing_backup(self):
         """
@@ -2887,13 +2784,12 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         PAGE1_1
         FULL1
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -3011,9 +2907,6 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.assertTrue(self.show_pb(backup_dir, 'node')[1]['status'] == 'OK')
         self.assertTrue(self.show_pb(backup_dir, 'node')[0]['status'] == 'OK')
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_validate_specific_backup_with_missing_backup_1(self):
         """
@@ -3030,13 +2923,12 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         PAGE1_1
         FULL1
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -3132,9 +3024,6 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.assertTrue(self.show_pb(backup_dir, 'node')[1]['status'] == 'OK')
         self.assertTrue(self.show_pb(backup_dir, 'node')[0]['status'] == 'OK')
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_validate_with_missing_backup_1(self):
         """
@@ -3151,13 +3040,12 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         PAGE1_1
         FULL1
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -3321,9 +3209,6 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.assertTrue(self.show_pb(backup_dir, 'node')[1]['status'] == 'OK')
         self.assertTrue(self.show_pb(backup_dir, 'node')[0]['status'] == 'OK')
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_validate_with_missing_backup_2(self):
         """
@@ -3340,13 +3225,12 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         PAGE1_1
         FULL1
         """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -3481,19 +3365,15 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.assertTrue(self.show_pb(backup_dir, 'node')[1]['status'] == 'OK')
         self.assertTrue(self.show_pb(backup_dir, 'node')[0]['status'] == 'OK')
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_corrupt_pg_control_via_resetxlog(self):
         """ PGPRO-2096 """
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -3547,18 +3427,14 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_validation_after_backup(self):
         """"""
         self._check_gdb_flag_or_skip_test()
 
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -3587,19 +3463,15 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             self.show_pb(backup_dir, 'node', backup_id)['status'],
             'Backup STATUS should be "ERROR"')
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.expectedFailure
     # @unittest.skip("skip")
     def test_validate_corrupt_tablespace_map(self):
         """
         Check that corruption in tablespace_map is detected
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -3642,9 +3514,6 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     #TODO fix the test
     @unittest.expectedFailure
     # @unittest.skip("skip")
@@ -3652,10 +3521,9 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         """
         Check validation to specific LSN
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -3674,7 +3542,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             "from generate_series(0,10000) i")
 
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node_restored'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
         node_restored.cleanup()
 
         self.restore_node(backup_dir, 'node', node_restored)
@@ -3700,17 +3568,13 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
                     '--recovery-target-timeline=2',
                     '--recovery-target-lsn={0}'.format(target_lsn)])
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     @unittest.skip("skip")
     def test_partial_validate_empty_and_mangled_database_map(self):
         """
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -3774,16 +3638,12 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     @unittest.skip("skip")
     def test_partial_validate_exclude(self):
         """"""
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
@@ -3846,17 +3706,13 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.assertIn(
             "VERBOSE: Skip file validation due to partial restore", output)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     @unittest.skip("skip")
     def test_partial_validate_include(self):
         """
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
         self.init_pb(backup_dir)
@@ -3908,18 +3764,14 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         self.assertNotIn(
             "VERBOSE: Skip file validation due to partial restore", output)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.skip("skip")
     def test_not_validate_diffenent_pg_version(self):
         """Do not validate backup, if binary is compiled with different PG version"""
-        fname = self.id().split('.')[3]
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             initdb_params=['--data-checksums'])
 
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
@@ -3962,19 +3814,15 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
                 "\n Unexpected Error Message: {0}\n CMD: {1}".format(
                     repr(e.message), self.cmd))
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.expectedFailure
     # @unittest.skip("skip")
     def test_validate_corrupt_page_header_map(self):
         """
         Check that corruption in page_header_map is detected
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -4036,19 +3884,15 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
 
             self.assertIn("WARNING: Some backups are not valid", e.message)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.expectedFailure
     # @unittest.skip("skip")
     def test_validate_truncated_page_header_map(self):
         """
         Check that corruption in page_header_map is detected
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -4099,19 +3943,15 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             self.assertIn("INFO: Backup {0} data files are valid".format(ok_2), e.message)
             self.assertIn("WARNING: Some backups are not valid", e.message)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.expectedFailure
     # @unittest.skip("skip")
     def test_validate_missing_page_header_map(self):
         """
         Check that corruption in page_header_map is detected
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -4159,19 +3999,15 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             self.assertIn("INFO: Backup {0} data files are valid".format(ok_2), e.message)
             self.assertIn("WARNING: Some backups are not valid", e.message)
 
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
-
     # @unittest.expectedFailure
     # @unittest.skip("skip")
     def test_no_validate_tablespace_map(self):
         """
         Check that --no-validate is propagated to tablespace_map
         """
-        fname = self.id().split('.')[3]
-        backup_dir = os.path.join(self.tmp_path, module_name, fname, 'backup')
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(module_name, fname, 'node'),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -4223,9 +4059,6 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             os.readlink(tablespace_link),
             tblspace_new,
             "Symlink '{0}' do not points to '{1}'".format(tablespace_link, tblspace_new))
-
-        # Clean after yourself
-        self.del_test_dir(module_name, fname)
 
 # validate empty backup list
 # page from future during validate
