@@ -378,7 +378,7 @@ catchup_thread_runner(void *arg)
 		pgFile	*dest_file = NULL;
 
 		/* We have already copied all directories */
-		if (S_ISDIR(file->mode))
+		if (file->kind == PIO_KIND_DIRECTORY)
 			continue;
 
 		if (file->excluded)
@@ -400,9 +400,9 @@ catchup_thread_runner(void *arg)
 		join_path_components(to_fullpath, arguments->to_root, file->rel_path);
 
 		/* Encountered some strange beast */
-		if (!S_ISREG(file->mode))
-			elog(WARNING, "Unexpected type %d of file \"%s\", skipping",
-							file->mode, from_fullpath);
+		if (file->kind != PIO_KIND_REGULAR)
+			elog(WARNING, "Unexpected kind %s of file \"%s\", skipping",
+				 pio_file_kind2str(file->kind, from_fullpath), from_fullpath);
 
 		/* Check that file exist in dest pgdata */
 		if (arguments->backup_mode != BACKUP_MODE_FULL)
@@ -439,7 +439,7 @@ catchup_thread_runner(void *arg)
 
 		if (file->write_size == BYTES_INVALID)
 		{
-			elog(LOG, "Skipping the unchanged file: \"%s\", read %zu bytes", from_fullpath, file->read_size);
+			elog(LOG, "Skipping the unchanged file: \"%s\", read %lld bytes", from_fullpath, (long long)file->read_size);
 			continue;
 		}
 
@@ -546,7 +546,7 @@ catchup_sync_destination_files(const char* pgdata_path, fio_location location, p
 		 * - but PG itself is not relying on fs, its durable_sync
 		 *   includes directory sync
 		 */
-		if (S_ISDIR(file->mode) || file->excluded)
+		if (file->kind == PIO_KIND_DIRECTORY || file->excluded)
 			continue;
 
 		Assert(file->external_dir_num == 0);
@@ -630,8 +630,8 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 
 	/* for fancy reporting */
 	time_t		start_time, end_time;
-	ssize_t		transfered_datafiles_bytes = 0;
-	ssize_t		transfered_walfiles_bytes = 0;
+	int64_t		transfered_datafiles_bytes = 0;
+	int64_t		transfered_walfiles_bytes = 0;
 	char		pretty_source_bytes[20];
 	err_i		err = $noerr();
 
@@ -807,7 +807,7 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 		pgFile	   *file = (pgFile *) parray_get(source_filelist, i);
 		char parent_dir[MAXPGPATH];
 
-		if (!S_ISDIR(file->mode) || file->excluded)
+		if (file->kind != PIO_KIND_DIRECTORY || file->excluded)
 			continue;
 
 		/*

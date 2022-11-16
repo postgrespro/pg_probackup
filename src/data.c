@@ -507,7 +507,8 @@ backup_data_file(pgFile *file, const char *from_fullpath, const char *to_fullpat
 	 * NOTE This is a normal situation, if the file size has changed
 	 * since the moment we computed it.
 	 */
-	file->n_blocks = file->size/BLCKSZ;
+	file->n_blocks = (typeof(file->n_blocks))(file->size/BLCKSZ);
+	Assert((int64_t)file->n_blocks * BLCKSZ == file->size);
 
 	/*
 	 * Skip unchanged file only if it exists in previous backup.
@@ -611,12 +612,15 @@ backup_data_file(pgFile *file, const char *from_fullpath, const char *to_fullpat
 			elog(ERROR, "Cannot read file \"%s\"", from_fullpath);
 	}
 
-	file->read_size = rc * BLCKSZ;
+	file->read_size = (int64_t)rc * BLCKSZ;
 
 	/* refresh n_blocks for FULL and DELTA */
 	if (backup_mode == BACKUP_MODE_FULL ||
 	    backup_mode == BACKUP_MODE_DIFF_DELTA)
-		file->n_blocks = file->read_size / BLCKSZ;
+	{
+		file->n_blocks = (typeof(file->n_blocks))(file->read_size / BLCKSZ);
+		Assert((int64_t)file->n_blocks * BLCKSZ == file->read_size);
+	}
 
 	/* Determine that file didn`t changed in case of incremental backup */
 	if (backup_mode != BACKUP_MODE_FULL &&
@@ -650,7 +654,7 @@ cleanup:
 void
 catchup_data_file(pgFile *file, const char *from_fullpath, const char *to_fullpath,
 				  XLogRecPtr sync_lsn, BackupMode backup_mode,
-				  uint32 checksum_version, size_t prev_size)
+				  uint32 checksum_version, int64_t prev_size)
 {
 	int         rc;
 	bool        use_pagemap;
@@ -760,7 +764,7 @@ catchup_data_file(pgFile *file, const char *from_fullpath, const char *to_fullpa
 			elog(ERROR, "Cannot read file \"%s\"", from_fullpath);
 	}
 
-	file->read_size = rc * BLCKSZ;
+	file->read_size = (int64_t)rc * BLCKSZ;
 
 	/* Determine that file didn`t changed in case of incremental catchup */
 	if (backup_mode != BACKUP_MODE_FULL &&
@@ -1595,7 +1599,8 @@ check_data_file(ConnectionArgs *arguments, pgFile *file,
 	 * NOTE This is a normal situation, if the file size has changed
 	 * since the moment we computed it.
 	 */
-	nblocks = file->size/BLCKSZ;
+	nblocks = (typeof(nblocks))(file->size/BLCKSZ);
+	Assert((int64_t)nblocks * BLCKSZ == file->size);
 
 	for (blknum = 0; blknum < nblocks; blknum++)
 	{
@@ -2275,7 +2280,7 @@ copy_pages(const char *to_fullpath, const char *from_fullpath,
 		elog(ERROR, "Cannot seek to end of file position in destination file \"%s\": %s",
 			 to_fullpath, strerror(errno));
 	{
-		long pos = ftell(out);
+		int64_t pos = ftell(out);
 
 		if (pos < 0)
 			elog(ERROR, "Cannot get position in destination file \"%s\": %s",

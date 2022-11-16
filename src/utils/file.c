@@ -55,8 +55,9 @@ typedef struct {
 
 typedef struct
 {
+	pio_file_kind_e kind;
 	mode_t  mode;
-	size_t  size;
+	int64_t size;
 	time_t  mtime;
 	bool    is_datafile;
 	Oid     tblspcOid;
@@ -260,6 +261,110 @@ fio_get_agent_version(int* protocol, char* payload_buf, size_t payload_buf_size)
 
 	*protocol = hdr.arg;
 	IO_CHECK(fio_read_all(fio_stdin, payload_buf, hdr.size), hdr.size);
+}
+
+pio_file_kind_e
+pio_statmode2file_kind(mode_t mode, const char* path)
+{
+	pio_file_kind_e	kind;
+	if (S_ISREG(mode))
+		kind = PIO_KIND_REGULAR;
+	else if (S_ISDIR(mode))
+		kind = PIO_KIND_DIRECTORY;
+#ifdef S_ISLNK
+	else if (S_ISLNK(mode))
+		kind = PIO_KIND_SYMLINK;
+#endif
+#ifdef S_ISFIFO
+	else if (S_ISFIFO(mode))
+		kind = PIO_KIND_FIFO;
+#endif
+#ifdef S_ISSOCK
+	else if (S_ISFIFO(mode))
+		kind = PIO_KIND_SOCK;
+#endif
+#ifdef S_ISCHR
+	else if (S_ISCHR(mode))
+		kind = PIO_KIND_CHARDEV;
+#endif
+#ifdef S_ISBLK
+	else if (S_ISBLK(mode))
+		kind = PIO_KIND_BLOCKDEV;
+#endif
+	else
+		elog(ERROR, "Unsupported file mode kind \"%x\" for file '%s'",
+			 mode, path);
+	return kind;
+}
+
+pio_file_kind_e
+pio_str2file_kind(const char* str, const char* path)
+{
+	pio_file_kind_e	kind;
+	if (strncmp(str, "reg", 3) == 0)
+		kind = PIO_KIND_REGULAR;
+	else if (strncmp(str, "dir", 3) == 0)
+		kind = PIO_KIND_DIRECTORY;
+	else if (strncmp(str, "sym", 3) == 0)
+		kind = PIO_KIND_SYMLINK;
+	else if (strncmp(str, "fifo", 4) == 0)
+		kind = PIO_KIND_FIFO;
+	else if (strncmp(str, "sock", 4) == 0)
+		kind = PIO_KIND_SOCK;
+	else if (strncmp(str, "chdev", 5) == 0)
+		kind = PIO_KIND_CHARDEV;
+	else if (strncmp(str, "bldev", 5) == 0)
+		kind = PIO_KIND_BLOCKDEV;
+	else
+		elog(ERROR, "Unknown file kind \"%s\" for file '%s'",
+			 str, path);
+	return kind;
+}
+
+const char*
+pio_file_kind2str(pio_file_kind_e kind, const char *path)
+{
+	switch (kind)
+	{
+		case PIO_KIND_REGULAR:
+			return "reg";
+		case PIO_KIND_DIRECTORY:
+			return "dir";
+		case PIO_KIND_SYMLINK:
+			return "sym";
+		case PIO_KIND_FIFO:
+			return "fifo";
+		case PIO_KIND_SOCK:
+			return "sock";
+		case PIO_KIND_CHARDEV:
+			return "chdev";
+		case PIO_KIND_BLOCKDEV:
+			return "bldev";
+		default:
+			elog(ERROR, "Unknown file kind \"%d\" for file '%s'",
+				 kind, path);
+	}
+	return NULL;
+}
+
+#ifndef S_ISGID
+#define S_ISGID 0
+#endif
+#ifndef S_ISUID
+#define S_ISUID 0
+#endif
+#ifndef S_ISVTX
+#define S_ISVTX 0
+#endif
+
+mode_t
+pio_limit_mode(mode_t mode)
+{
+	if (S_ISDIR(mode))
+		mode &= 0x1ff | S_ISGID | S_ISUID | S_ISVTX;
+	else
+		mode &= 0x1ff;
+	return mode;
 }
 
 /* Open input stream. Remote file is fetched to the in-memory buffer and then accessed through Linux fmemopen */
@@ -1098,66 +1203,6 @@ fio_read(int fd, void* buf, size_t size)
 	}
 }
 
-/* Get information about file */
-int
-fio_stat(fio_location location, const char* path, struct stat* st, bool follow_symlink)
-{
-	if (fio_is_remote(location))
-	{
-		fio_header hdr = {
-			.cop = FIO_STAT,
-			.handle = -1,
-			.size = strlen(path) + 1,
-			.arg = follow_symlink,
-		};
-
-		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
-		IO_CHECK(fio_write_all(fio_stdout, path, hdr.size), hdr.size);
-
-		IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
-		Assert(hdr.cop == FIO_STAT);
-		IO_CHECK(fio_read_all(fio_stdin, st, sizeof(*st)), sizeof(*st));
-
-		if (hdr.arg != 0)
-		{
-			errno = hdr.arg;
-			return -1;
-		}
-		return 0;
-	}
-	else
-	{
-		return follow_symlink ? stat(path, st) : lstat(path,  st);
-	}
-}
-
-/*
- * Compare, that filename1 and filename2 is the same file
- * in windows compare only filenames
- */
-bool
-fio_is_same_file(fio_location location, const char* filename1, const char* filename2, bool follow_symlink)
-{
-#ifndef WIN32
-	struct stat	stat1, stat2;
-
-	if (fio_stat(location, filename1, &stat1, follow_symlink) < 0)
-		elog(ERROR, "Can't stat file \"%s\": %s", filename1, strerror(errno));
-
-	if (fio_stat(location, filename2, &stat2, follow_symlink) < 0)
-		elog(ERROR, "Can't stat file \"%s\": %s", filename2, strerror(errno));
-
-	return stat1.st_ino == stat2.st_ino && stat1.st_dev == stat2.st_dev;
-#else
-	char	*abs_name1 = make_absolute_path(filename1);
-	char	*abs_name2 = make_absolute_path(filename2);
-	bool	result = strcmp(abs_name1, abs_name2) == 0;
-	free(abs_name2);
-	free(abs_name1);
-	return result;
-#endif
-}
-
 /*
  * Read value of a symbolic link
  * this is a wrapper about readlink() syscall
@@ -1873,6 +1918,7 @@ fio_send_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
 	}
 
 	req.arg.nblocks = file->size/BLCKSZ;
+	Assert((int64_t)req.arg.nblocks * BLCKSZ == file->size);
 	req.arg.segmentno = file->segno * RELSEG_SIZE;
 	req.arg.horizonLsn = horizonLsn;
 	req.arg.checksumVersion = checksum_version;
@@ -3267,6 +3313,7 @@ fio_list_dir_impl(int out, char* buf)
 		fio_pgFile  fio_file;
 		pgFile	   *file = (pgFile *) parray_get(file_files, i);
 
+		fio_file.kind = file->kind;
 		fio_file.mode = file->mode;
 		fio_file.size = file->size;
 		fio_file.mtime = file->mtime;
@@ -3556,10 +3603,16 @@ fio_communicate(int in, int out)
 	size_t buf_size = 128*1024;
 	char* buf = (char*)pgut_malloc(buf_size);
 	fio_header hdr;
-	struct stat st;
+	pioDrive_i drive;
+	pio_stat_t st;
 	int rc;
 	int tmp_fd;
 	pg_crc32 crc;
+	err_i err = $noerr();
+
+	FOBJ_FUNC_ARP();
+
+	drive = pioDriveForLocation(FIO_LOCAL_HOST);
 
 #ifdef WIN32
 	SYS_CHECK(setmode(in, _O_BINARY));
@@ -3568,6 +3621,7 @@ fio_communicate(int in, int out)
 
 	/* Main loop until end of processing all master commands */
 	while ((rc = fio_read_all(in, &hdr, sizeof hdr)) == sizeof(hdr)) {
+		FOBJ_LOOP_ARP();
 		if (hdr.size != 0) {
 			if (hdr.size > buf_size) {
 				/* Extend buffer on demand */
@@ -3660,10 +3714,16 @@ fio_communicate(int in, int out)
 			}
 		  case FIO_STAT: /* Get information about file with specified path */
 			hdr.size = sizeof(st);
-			rc = hdr.arg ? stat(buf, &st) : lstat(buf, &st);
-			hdr.arg = rc < 0 ? errno : 0;
+			st = $i(pioStat, drive, buf, .follow_symlink = hdr.arg != 0,
+					 .err = &err);
+			hdr.arg = $haserr(err) ? getErrno(err) : 0;
 			IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 			IO_CHECK(fio_write_all(out, &st, sizeof(st)), sizeof(st));
+			break;
+		  case FIO_FILES_ARE_SAME:
+			hdr.arg = (int)$i(pioFilesAreSame, drive, buf, buf+strlen(buf)+1);
+			hdr.size = 0;
+			IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 			break;
 		  case FIO_ACCESS: /* Check presence of file with specified name */
 			hdr.size = 0;
@@ -3914,7 +3974,7 @@ pioFile_fobjDispose(VSelf)
 static bool
 common_pioExists(fobj_t self, path_t path, err_i *err)
 {
-    struct stat buf;
+    pio_stat_t buf;
     fobj_reset_err(err);
 
     /* follow symlink ? */
@@ -3924,7 +3984,7 @@ common_pioExists(fobj_t self, path_t path, err_i *err)
         *err = $noerr();
         return false;
     }
-    if ($noerr(*err) && !S_ISREG(buf.st_mode))
+    if ($noerr(*err) && buf.pst_kind != PIO_KIND_REGULAR)
         *err = $err(SysErr, "File {path:q} is not regular", path(path));
     if ($haserr(*err)) {
         *err = $syserr(getErrno(*err), "Could not check file existance: {cause:$M}",
@@ -3958,17 +4018,52 @@ pioLocalDrive_pioOpen(VSelf, path_t path, int flags,
     return bind_pioFile(file);
 }
 
-static struct stat
+static pio_stat_t
 pioLocalDrive_pioStat(VSelf, path_t path, bool follow_symlink, err_i *err)
 {
     struct stat	st = {0};
+    pio_stat_t pst = {0};
     int	r;
     fobj_reset_err(err);
 
     r = follow_symlink ? stat(path, &st) : lstat(path, &st);
     if (r < 0)
         *err = $syserr(errno, "Cannot stat file {path:q}", path(path));
-    return st;
+	else
+	{
+		pst.pst_kind = pio_statmode2file_kind(st.st_mode, path);
+		pst.pst_mode = pio_limit_mode(st.st_mode);
+		pst.pst_size = st.st_size;
+		pst.pst_mtime = st.st_mtime;
+	}
+    return pst;
+}
+
+/*
+ * Compare, that filename1 and filename2 is the same file
+ * in windows compare only filenames
+ */
+static bool
+pioLocalDrive_pioFilesAreSame(VSelf, path_t file1, path_t file2)
+{
+#ifndef WIN32
+	struct stat	stat1, stat2;
+
+	if (stat(file1, &stat1) < 0)
+		elog(ERROR, "Can't stat file \"%s\": %s", file1, strerror(errno));
+
+	if (stat(file2, &stat2) < 0)
+		elog(ERROR, "Can't stat file \"%s\": %s", file1, strerror(errno));
+
+	return stat1.st_ino == stat2.st_ino && stat1.st_dev == stat2.st_dev;
+#else
+	char	*abs_name1 = make_absolute_path(file1);
+	char	*abs_name2 = make_absolute_path(file2);
+	bool	result = strcmp(abs_name1, abs_name2) == 0;
+	free(abs_name2);
+	free(abs_name1);
+	return result;
+#endif
 }
 
 #define pioLocalDrive_pioExists common_pioExists
@@ -4224,10 +4319,10 @@ pioRemoteDrive_pioOpen(VSelf, path_t path,
     return bind_pioFile(file);
 }
 
-static struct stat
+static pio_stat_t
 pioRemoteDrive_pioStat(VSelf, path_t path, bool follow_symlink, err_i *err)
 {
-    struct stat	st = {0};
+    pio_stat_t	st = {0};
     fio_header hdr = {
             .cop = FIO_STAT,
             .handle = -1,
@@ -4249,6 +4344,32 @@ pioRemoteDrive_pioStat(VSelf, path_t path, bool follow_symlink, err_i *err)
 					   path(path));
     }
     return st;
+}
+
+static bool
+pioRemoteDrive_pioFilesAreSame(VSelf, path_t file1, path_t file2)
+{
+	fio_header hdr = {
+			.cop = FIO_FILES_ARE_SAME,
+			.handle = -1,
+			.arg = 0,
+	};
+	char _buf[512];
+	ft_strbuf_t buf = ft_strbuf_init_stack(_buf, sizeof(_buf));
+	ft_strbuf_catc(&buf, file1);
+	ft_strbuf_cat1(&buf, '\x00');
+	ft_strbuf_catc(&buf, file2);
+	hdr.size = buf.len + 1;
+
+	IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
+	IO_CHECK(fio_write_all(fio_stdout, buf.ptr, buf.len+1), buf.len+1);
+
+	IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
+	ft_dbg_assert(hdr.cop == FIO_FILES_ARE_SAME);
+
+	ft_strbuf_free(&buf);
+
+	return hdr.arg == 1;
 }
 
 #define pioRemoteDrive_pioExists common_pioExists
@@ -4399,6 +4520,7 @@ pioRemoteDrive_pioListDir(VSelf, parray *files, const char *root, bool handle_ta
             /* receive metainformation */
             IO_CHECK(fio_read_all(fio_stdin, &fio_file, sizeof(fio_file)), sizeof(fio_file));
 
+            file->kind = fio_file.kind;
             file->mode = fio_file.mode;
             file->size = fio_file.size;
             file->mtime = fio_file.mtime;

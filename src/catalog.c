@@ -847,12 +847,22 @@ pgBackupGetBackupMode(pgBackup *backup, bool show_color)
 static bool
 IsDir(const char *dirpath, const char *entry, fio_location location)
 {
+	FOBJ_FUNC_ARP();
 	char		path[MAXPGPATH];
-	struct stat	st;
+	pio_stat_t	st;
+	err_i 		err;
 
 	join_path_components(path, dirpath, entry);
 
-	return fio_stat(location, path, &st, false) == 0 && S_ISDIR(st.st_mode);
+	st = $i(pioStat, pioDriveForLocation(location),
+			.path = path, .follow_symlink = false, .err = &err);
+	if ($haserr(err))
+	{
+		ft_logerr(FT_WARNING, $errmsg(err), "IsDir");
+		return false;
+	}
+
+	return st.pst_kind == PIO_KIND_DIRECTORY;
 }
 
 /*
@@ -1074,6 +1084,7 @@ get_backup_filelist(pgBackup *backup, bool strict)
 		char		path[MAXPGPATH];
 		char		linked[MAXPGPATH];
 		char		compress_alg_string[MAXPGPATH];
+		char 		kind[16];
 		int64		write_size,
 					uncompressed_size,
 					mode,		/* bit length of mode_t depends on platforms */
@@ -1115,6 +1126,11 @@ get_backup_filelist(pgBackup *backup, bool strict)
 		/*
 		 * Optional fields
 		 */
+		if (get_control_value_str(buf, "kind", kind, sizeof(kind), false))
+			file->kind = pio_str2file_kind(kind, path);
+		else /* fallback to mode for old backups */
+			file->kind = pio_statmode2file_kind(file->mode, path);
+
 		if (get_control_value_str(buf, "linked", linked, sizeof(linked), false) && linked[0])
 		{
 			file->linked = pgut_strdup(linked);
@@ -1146,7 +1162,7 @@ get_backup_filelist(pgBackup *backup, bool strict)
 		if (!file->is_datafile || file->is_cfs)
 			file->size = file->uncompressed_size;
 
-		if (file->external_dir_num == 0 && S_ISREG(file->mode))
+		if (file->external_dir_num == 0 && file->kind == PIO_KIND_REGULAR)
 		{
 			bool is_datafile = file->is_datafile;
 			set_forkname(file);
@@ -2564,14 +2580,14 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 		if (file->write_size == FILE_NOT_FOUND)
 			continue;
 
-		if (S_ISDIR(file->mode))
+		if (file->kind == PIO_KIND_DIRECTORY)
 		{
 			backup_size_on_disk += 4096;
 			uncompressed_size_on_disk += 4096;
 		}
 
 		/* Count the amount of the data actually copied */
-		if (S_ISREG(file->mode) && file->write_size > 0)
+		if (file->kind == PIO_KIND_REGULAR && file->write_size > 0)
 		{
 			/*
 			 * Size of WAL files in 'pg_wal' is counted separately
@@ -2587,11 +2603,13 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 		}
 
 		len = sprintf(line, "{\"path\":\"%s\", \"size\":\"" INT64_FORMAT "\", "
-					 "\"mode\":\"%u\", \"is_datafile\":\"%u\", "
+					 "\"kind\":\"%s\", \"mode\":\"%u\", \"is_datafile\":\"%u\", "
 					 "\"is_cfs\":\"%u\", \"crc\":\"%u\", "
 					 "\"compress_alg\":\"%s\", \"external_dir_num\":\"%d\", "
 					 "\"dbOid\":\"%u\"",
-					file->rel_path, file->write_size, file->mode,
+					file->rel_path, file->write_size,
+					pio_file_kind2str(file->kind, file->rel_path),
+					file->mode,
 					file->is_datafile ? 1 : 0,
 					file->is_cfs ? 1 : 0,
 					file->crc,

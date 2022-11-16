@@ -794,8 +794,8 @@ delete_walfiles_in_tli(InstanceState *instanceState, XLogRecPtr keep_lsn, timeli
 	char 		first_to_del_str[MAXFNAMELEN];
 	char 		oldest_to_keep_str[MAXFNAMELEN];
 	int			i;
-	size_t		wal_size_logical = 0;
-	size_t		wal_size_actual = 0;
+	int64_t		wal_size_logical = 0;
+	int64_t		wal_size_actual = 0;
 	char		wal_pretty_size[20];
 	bool		purge_all = false;
 
@@ -837,7 +837,7 @@ delete_walfiles_in_tli(InstanceState *instanceState, XLogRecPtr keep_lsn, timeli
 	/* sanity */
 	if (OldestToKeepSegNo > FirstToDeleteSegNo)
 	{
-		wal_size_logical = (OldestToKeepSegNo - FirstToDeleteSegNo) * xlog_seg_size;
+		wal_size_logical = (int64_t)(OldestToKeepSegNo - FirstToDeleteSegNo) * xlog_seg_size;
 
 		/* In case of 'purge all' scenario OldestToKeepSegNo will be deleted too */
 		if (purge_all)

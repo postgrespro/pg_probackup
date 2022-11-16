@@ -55,6 +55,7 @@ pgBackupValidate(pgBackup *backup, pgRestoreParams *params)
 	pthread_t  *threads;
 	validate_files_arg *threads_args;
 	int			i;
+	err_i 		err;
 //	parray		*dbOid_exclude_list = NULL;
 
 	/* Check backup program version */
@@ -199,14 +200,16 @@ pgBackupValidate(pgBackup *backup, pgRestoreParams *params)
 		 (parse_program_version(backup->program_version) == 20201)))
 	{
 		char path[MAXPGPATH];
-		struct stat st;
+		pio_stat_t st;
 
 		join_path_components(path, backup->root_dir, DATABASE_FILE_LIST);
 
-		if (fio_stat(FIO_BACKUP_HOST, path, &st, true) < 0)
-			elog(ERROR, "Cannot stat file \"%s\": %s", path, strerror(errno));
+		st = $i(pioStat, pioDriveForLocation(FIO_BACKUP_HOST),
+				.path = path, .follow_symlink = true, .err = &err);
+		if ($haserr(err))
+			ft_logerr(FT_FATAL, $errmsg(err), "");
 
-		if (st.st_size >= (BLCKSZ*500))
+		if (st.pst_size >= (BLCKSZ*500))
 		{
 			elog(WARNING, "Backup %s is a victim of metadata corruption. "
 							"Additional information can be found here: "
@@ -242,7 +245,7 @@ pgBackupValidateFiles(void *arg)
 			elog(ERROR, "Interrupted during validate");
 
 		/* Validate only regular files */
-		if (!S_ISREG(file->mode))
+		if (file->kind != PIO_KIND_REGULAR)
 			continue;
 
 		/*

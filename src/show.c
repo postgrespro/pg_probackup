@@ -1089,7 +1089,7 @@ show_archive_json(const char *instance_name, uint32 xlog_seg_size,
 		appendPQExpBuffer(buf, "%zu", tlinfo->n_xlog_files);
 
 		json_add_key(buf, "size", json_level);
-		appendPQExpBuffer(buf, "%zu", tlinfo->size);
+		appendPQExpBuffer(buf, "%lld", (long long)tlinfo->size);
 
 		json_add_key(buf, "zratio", json_level);
 

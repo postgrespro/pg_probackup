@@ -147,7 +147,7 @@ check_files(void *arg)
 			elog(ERROR, "interrupted during checkdb");
 
 		/* No need to check directories */
-		if (S_ISDIR(file->mode))
+		if (file->kind == PIO_KIND_DIRECTORY)
 			continue;
 
 		if (!pg_atomic_test_set_flag(&file->lock))
@@ -161,7 +161,7 @@ check_files(void *arg)
 			elog(INFO, "Progress: (%d/%d). Process file \"%s\"",
 				 i + 1, n_files_list, from_fullpath);
 
-		if (S_ISREG(file->mode))
+		if (file->kind == PIO_KIND_REGULAR)
 		{
 			/* check only uncompressed by cfs datafiles */
 			if (file->is_datafile && !file->is_cfs)

@@ -403,9 +403,9 @@ copy_pgcontrol_file(fio_location from_location, const char *from_fullpath,
 	digestControlFile(&ControlFile, buffer, size);
 
 	file->crc = ControlFile.crc;
-	file->read_size = size;
-	file->write_size = size;
-	file->uncompressed_size = size;
+	file->read_size = (int64_t)size;
+	file->write_size = (int64_t)size;
+	file->uncompressed_size = (int64_t)size;
 
 	writeControlFile(to_location, to_fullpath, &ControlFile);
 
