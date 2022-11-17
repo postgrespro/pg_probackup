@@ -1141,11 +1141,10 @@ extern XLogRecPtr get_next_record_lsn(const char *archivedir, XLogSegNo	segno, T
 
 /* in util.c */
 extern TimeLineID get_current_timeline(PGconn *conn);
-extern TimeLineID get_current_timeline_from_control(fio_location location, const char *pgdata_path, bool safe);
+extern TimeLineID get_current_timeline_from_control(fio_location location, const char *pgdata_path);
 extern XLogRecPtr get_checkpoint_location(PGconn *conn);
 extern uint64 get_system_identifier(fio_location location, const char *pgdata_path, bool safe);
 extern uint64 get_remote_system_identifier(PGconn *conn);
-extern uint32 get_data_checksum_version(bool safe);
 extern pg_crc32c get_pgcontrol_checksum(const char *pgdata_path);
 extern uint32 get_xlog_seg_size(const char *pgdata_path);
 extern void get_redo(fio_location location, const char *pgdata_path, RedoParams *redo);

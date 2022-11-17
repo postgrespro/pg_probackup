@@ -97,24 +97,6 @@ checkControlFile(ControlFileData *ControlFile)
 }
 
 /*
- * Verify control file contents in the buffer src, and copy it to *ControlFile.
- */
-static void
-digestControlFile(ControlFileData *ControlFile, char *src, size_t size)
-{
-	int			ControlFileSize = PG_CONTROL_FILE_SIZE;
-
-	if (size != ControlFileSize)
-		elog(ERROR, "unexpected control file size %d, expected %d",
-			 (int) size, ControlFileSize);
-
-	memcpy(ControlFile, src, sizeof(ControlFileData));
-
-	/* Additional checks on control file */
-	checkControlFile(ControlFile);
-}
-
-/*
  * Write ControlFile to pg_control
  */
 static void
@@ -164,7 +146,7 @@ get_current_timeline(PGconn *conn)
 	if (PQresultStatus(res) == PGRES_TUPLES_OK)
 		val = PQgetvalue(res, 0, 0);
 	else
-		return get_current_timeline_from_control(FIO_DB_HOST, instance_config.pgdata, false);
+		return get_current_timeline_from_control(FIO_DB_HOST, instance_config.pgdata);
 
 	if (!parse_uint32(val, &tli, 0))
 	{
@@ -172,28 +154,62 @@ get_current_timeline(PGconn *conn)
 		elog(WARNING, "Invalid value of timeline_id %s", val);
 
 		/* TODO 3.0 remove it and just error out */
-		return get_current_timeline_from_control(FIO_DB_HOST, instance_config.pgdata, false);
+		return get_current_timeline_from_control(FIO_DB_HOST, instance_config.pgdata);
 	}
 
 	return tli;
 }
 
+static err_i
+get_control_file(fio_location location, path_t pgdata_path, path_t file,
+				 ControlFileData *control, bool safe)
+{
+	pioDrive_i	drive;
+	char		fullpath[MAXPGPATH];
+	ft_bytes_t	bytes;
+	err_i		err;
+
+	fobj_reset_err(&err);
+
+	join_path_components(fullpath, pgdata_path, file);
+
+	drive = pioDriveForLocation(location);
+	bytes = $i(pioReadFile, drive, .path = fullpath, .err = &err);
+	if ($haserr(err) && safe)
+	{
+		ft_logerr(FT_WARNING, $errmsg(err), "Could not get control file");
+		memset(control, 0, sizeof(ControlFileData));
+		return $noerr();
+	}
+	if ($haserr(err))
+		return $err(RT, "Could not get control file: {cause}",
+					cause(err.self));
+
+	if (bytes.len != PG_CONTROL_FILE_SIZE)
+		return $err(RT, "unexpected control file size: {size}, expected {wantedSz}",
+					size(bytes.len), wantedSz(PG_CONTROL_FILE_SIZE));
+
+	memcpy(control, bytes.ptr, sizeof(ControlFileData));
+	ft_bytes_free(&bytes);
+
+	/* Additional checks on control file */
+	checkControlFile(control);
+
+	return $noerr();
+}
+
 /* Get timeline from pg_control file */
 TimeLineID
-get_current_timeline_from_control(fio_location location, const char *pgdata_path, bool safe)
+get_current_timeline_from_control(fio_location location, const char *pgdata_path)
 {
+	FOBJ_FUNC_ARP();
 	ControlFileData ControlFile;
-	char       *buffer;
-	size_t      size;
+	err_i			err;
 
-	/* First fetch file... */
-	buffer = slurpFile(location, pgdata_path, XLOG_CONTROL_FILE,
-					   &size, safe);
-	if (safe && buffer == NULL)
-		return 0;
-
-	digestControlFile(&ControlFile, buffer, size);
-	pg_free(buffer);
+	err = get_control_file(location, pgdata_path, XLOG_CONTROL_FILE,
+						   &ControlFile, false);
+	if ($haserr(err))
+		ft_logerr(FT_FATAL, $errmsg(err), "Getting current timeline");
 
 	return ControlFile.checkPointCopy.ThisTimeLineID;
 }
@@ -223,16 +239,14 @@ get_checkpoint_location(PGconn *conn)
 uint64
 get_system_identifier(fio_location location, const char *pgdata_path, bool safe)
 {
+	FOBJ_FUNC_ARP();
 	ControlFileData ControlFile;
-	char	   *buffer;
-	size_t		size;
+	err_i			err;
 
-	/* First fetch file... */
-	buffer = slurpFile(location, pgdata_path, XLOG_CONTROL_FILE, &size, safe);
-	if (safe && buffer == NULL)
-		return 0;
-	digestControlFile(&ControlFile, buffer, size);
-	pg_free(buffer);
+	err = get_control_file(location, pgdata_path, XLOG_CONTROL_FILE,
+						   &ControlFile, safe);
+	if ($haserr(err))
+		ft_logerr(FT_FATAL, $errmsg(err), "Getting system identifier");
 
 	return ControlFile.system_identifier;
 }
@@ -262,14 +276,14 @@ uint32
 get_xlog_seg_size(const char *pgdata_path)
 {
 #if PG_VERSION_NUM >= 110000
+	FOBJ_FUNC_ARP();
 	ControlFileData ControlFile;
-	char	   *buffer;
-	size_t		size;
+	err_i			err;
 
-	/* First fetch file... */
-	buffer = slurpFile(FIO_DB_HOST, pgdata_path, XLOG_CONTROL_FILE, &size, false);
-	digestControlFile(&ControlFile, buffer, size);
-	pg_free(buffer);
+	err = get_control_file(FIO_DB_HOST, pgdata_path, XLOG_CONTROL_FILE,
+						   &ControlFile, false);
+	if ($haserr(err))
+		ft_logerr(FT_FATAL, $errmsg(err), "Trying to fetch segment size");
 
 	return ControlFile.xlog_seg_size;
 #else
@@ -277,36 +291,17 @@ get_xlog_seg_size(const char *pgdata_path)
 #endif
 }
 
-uint32
-get_data_checksum_version(bool safe)
-{
-	ControlFileData ControlFile;
-	char	   *buffer;
-	size_t		size;
-
-	/* First fetch file... */
-	buffer = slurpFile(FIO_DB_HOST, instance_config.pgdata, XLOG_CONTROL_FILE,
-					   &size, safe);
-	if (buffer == NULL)
-		return 0;
-	digestControlFile(&ControlFile, buffer, size);
-	pg_free(buffer);
-
-	return ControlFile.data_checksum_version;
-}
-
 pg_crc32c
 get_pgcontrol_checksum(const char *pgdata_path)
 {
+	FOBJ_FUNC_ARP();
 	ControlFileData ControlFile;
-	char	   *buffer;
-	size_t		size;
+	err_i			err;
 
-	/* First fetch file... */
-	buffer = slurpFile(FIO_BACKUP_HOST, pgdata_path, XLOG_CONTROL_FILE, &size, false);
-	elog(WARNING, "checking %s", pgdata_path);
-	digestControlFile(&ControlFile, buffer, size);
-	pg_free(buffer);
+	err = get_control_file(FIO_BACKUP_HOST, pgdata_path, XLOG_CONTROL_FILE,
+						   &ControlFile, false);
+	if ($haserr(err))
+		ft_logerr(FT_FATAL, $errmsg(err), "Getting pgcontrol checksum");
 
 	return ControlFile.crc;
 }
@@ -314,15 +309,14 @@ get_pgcontrol_checksum(const char *pgdata_path)
 void
 get_redo(fio_location location, const char *pgdata_path, RedoParams *redo)
 {
+	FOBJ_FUNC_ARP();
 	ControlFileData ControlFile;
-	char	   *buffer;
-	size_t		size;
+	err_i			err;
 
-	/* First fetch file... */
-	buffer = slurpFile(location, pgdata_path, XLOG_CONTROL_FILE, &size, false);
-
-	digestControlFile(&ControlFile, buffer, size);
-	pg_free(buffer);
+	err = get_control_file(location, pgdata_path, XLOG_CONTROL_FILE,
+						   &ControlFile, false);
+	if ($haserr(err))
+		ft_logerr(FT_FATAL, $errmsg(err), "Fetching redo lsn");
 
 	redo->lsn = ControlFile.checkPointCopy.redo;
 	redo->tli = ControlFile.checkPointCopy.ThisTimeLineID;
@@ -352,14 +346,15 @@ void
 set_min_recovery_point(pgFile *file, const char *backup_path,
 					   XLogRecPtr stop_backup_lsn)
 {
+	FOBJ_FUNC_ARP();
 	ControlFileData ControlFile;
-	char       *buffer;
-	size_t      size;
-	char		fullpath[MAXPGPATH];
+	char			fullpath[MAXPGPATH];
+	err_i			err;
 
-	/* First fetch file content */
-	buffer = slurpFile(FIO_DB_HOST, instance_config.pgdata, XLOG_CONTROL_FILE, &size, false);
-	digestControlFile(&ControlFile, buffer, size);
+	err = get_control_file(FIO_DB_HOST, instance_config.pgdata, XLOG_CONTROL_FILE,
+						   &ControlFile, false);
+	if ($haserr(err))
+		ft_logerr(FT_FATAL, $errmsg(err), "Set min recovery point");
 
 	elog(LOG, "Current minRecPoint %X/%X",
 		(uint32) (ControlFile.minRecoveryPoint  >> 32),
@@ -383,8 +378,6 @@ set_min_recovery_point(pgFile *file, const char *backup_path,
 
 	/* Update pg_control checksum in backup_list */
 	file->crc = ControlFile.crc;
-
-	pg_free(buffer);
 }
 
 /*
@@ -394,22 +387,21 @@ void
 copy_pgcontrol_file(fio_location from_location, const char *from_fullpath,
 					fio_location to_location, const char *to_fullpath, pgFile *file)
 {
+	FOBJ_FUNC_ARP();
 	ControlFileData ControlFile;
-	char	   *buffer;
-	size_t		size;
+	err_i			err;
 
-	buffer = slurpFile(from_location, from_fullpath, "", &size, false);
-
-	digestControlFile(&ControlFile, buffer, size);
+	err = get_control_file(from_location, from_fullpath, "",
+						   &ControlFile, false);
+	if ($haserr(err))
+		ft_logerr(FT_FATAL, $errmsg(err), "Fetching control file");
 
 	file->crc = ControlFile.crc;
-	file->read_size = (int64_t)size;
-	file->write_size = (int64_t)size;
-	file->uncompressed_size = (int64_t)size;
+	file->read_size = PG_CONTROL_FILE_SIZE;
+	file->write_size = PG_CONTROL_FILE_SIZE;
+	file->uncompressed_size = PG_CONTROL_FILE_SIZE;
 
 	writeControlFile(to_location, to_fullpath, &ControlFile);
-
-	pg_free(buffer);
 }
 
 /*
