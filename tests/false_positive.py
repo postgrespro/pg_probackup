@@ -1,6 +1,6 @@
 import unittest
 import os
-from asyncio import sleep
+from time import sleep
 
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 from datetime import datetime, timedelta
