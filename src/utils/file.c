@@ -5529,6 +5529,7 @@ pioCopyWithFilters(pioWriteFlush_i dest, pioRead_i src,
                          path($irepr(dest)),
                          wantedSz(read_len), writtenSz(write_len)));
         }
+		*copied += write_len;
     }
 
     /* pioWriteFinish will check for async error if destination was remote */
