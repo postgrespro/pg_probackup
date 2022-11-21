@@ -1,6 +1,5 @@
 # you need os for unittest to work
 import os
-import gc
 import unittest
 from sys import exit, argv, version_info
 import subprocess
@@ -111,6 +110,10 @@ def is_nls_enabled():
     return b'enable-nls' in p.communicate()[0]
 
 
+def is_gdb_enabled():
+    return 'PGPROBACKUP_GDB' in os.environ and os.environ['PGPROBACKUP_GDB'] == 'ON'
+
+
 def base36enc(number):
     """Converts an integer to a base36 string."""
     alphabet = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'
@@ -138,6 +141,7 @@ class ProbackupException(Exception):
 
     def __str__(self):
         return '\n ERROR: {0}\n CMD: {1}'.format(repr(self.message), self.cmd)
+
 
 class PostgresNodeExtended(testgres.PostgresNode):
 
@@ -195,6 +199,7 @@ class ProbackupTest(object):
     # Class attributes
     enterprise = is_enterprise()
     enable_nls = is_nls_enabled()
+    gdb = is_gdb_enabled()
 
     def __init__(self, *args, **kwargs):
         super(ProbackupTest, self).__init__(*args, **kwargs)
@@ -234,9 +239,6 @@ class ProbackupTest(object):
 
         self.test_env['LC_MESSAGES'] = 'C'
         self.test_env['LC_TIME'] = 'C'
-
-        self.gdb = 'PGPROBACKUP_GDB' in self.test_env and \
-              self.test_env['PGPROBACKUP_GDB'] == 'ON'
 
         self.paranoia = 'PG_PROBACKUP_PARANOIA' in self.test_env and \
             self.test_env['PG_PROBACKUP_PARANOIA'] == 'ON'
@@ -1972,7 +1974,10 @@ class ProbackupTest(object):
         self.assertFalse(fail, error_message)
 
     def gdb_attach(self, pid):
-        return GDBobj([str(pid)], self, attach=True)
+        if type(pid) is str:  # python 2.7 compatibility
+            return GDBobj([pid.strip()], self, attach=True)
+        else:  # python 3
+            return GDBobj([pid.decode("UTF-8").strip()], self, attach=True)
 
     def _check_gdb_flag_or_skip_test(self):
         if not self.gdb:
