@@ -314,6 +314,15 @@ ft_inline ft_bytes_t ft_bytes(void* ptr, size_t len) {
 	return (ft_bytes_t){.ptr = (char*)ptr, .len = len};
 }
 
+ft_inline ft_bytes_t ft_bytes_alloc(size_t sz) {
+	return ft_bytes(ft_malloc(sz), sz);
+}
+
+ft_inline void ft_bytes_free(ft_bytes_t* bytes) {
+	ft_free(bytes->ptr);
+	*bytes = ft_bytes(NULL, 0);
+}
+
 ft_inline void ft_bytes_consume(ft_bytes_t *bytes, size_t cut);
 ft_inline void ft_bytes_move(ft_bytes_t *dest, ft_bytes_t *src);
 
