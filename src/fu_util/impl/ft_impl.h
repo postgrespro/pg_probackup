@@ -175,6 +175,15 @@ ft_inline size_t ft_mul_size(size_t a, size_t b) {
     return r;
 }
 
+/* division 64->32 bit */
+ft_inline int32_t ft_div_i64u32_to_i32(int64_t a, uint32_t b) {
+	int64_t r;
+	ft_assert(a >= 0);
+	r = a / b;
+	ft_assert(r <= INT32_MAX);
+	return (int32_t)r;
+}
+
 extern ft_gcc_malloc(ft_realloc, 1) void* ft_realloc(void* ptr, size_t new_sz);
 extern ft_gcc_malloc(ft_realloc, 1) void* ft_calloc(size_t sz);
 

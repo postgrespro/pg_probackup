@@ -1913,8 +1913,7 @@ fio_send_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
 		req.arg.bitmapsize = 0;
 	}
 
-	req.arg.nblocks = file->size/BLCKSZ;
-	Assert((int64_t)req.arg.nblocks * BLCKSZ == file->size);
+	req.arg.nblocks = ft_div_i64u32_to_i32(file->size, BLCKSZ);
 	req.arg.segmentno = file->segno * RELSEG_SIZE;
 	req.arg.horizonLsn = horizonLsn;
 	req.arg.checksumVersion = checksum_version;

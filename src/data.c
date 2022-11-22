@@ -507,8 +507,7 @@ backup_data_file(pgFile *file, const char *from_fullpath, const char *to_fullpat
 	 * NOTE This is a normal situation, if the file size has changed
 	 * since the moment we computed it.
 	 */
-	file->n_blocks = (typeof(file->n_blocks))(file->size/BLCKSZ);
-	Assert((int64_t)file->n_blocks * BLCKSZ == file->size);
+	file->n_blocks = ft_div_i64u32_to_i32(file->size, BLCKSZ);
 
 	/*
 	 * Skip unchanged file only if it exists in previous backup.
@@ -618,8 +617,7 @@ backup_data_file(pgFile *file, const char *from_fullpath, const char *to_fullpat
 	if (backup_mode == BACKUP_MODE_FULL ||
 	    backup_mode == BACKUP_MODE_DIFF_DELTA)
 	{
-		file->n_blocks = (typeof(file->n_blocks))(file->read_size / BLCKSZ);
-		Assert((int64_t)file->n_blocks * BLCKSZ == file->read_size);
+		file->n_blocks = ft_div_i64u32_to_i32(file->read_size, BLCKSZ);
 	}
 
 	/* Determine that file didn`t changed in case of incremental backup */
@@ -666,7 +664,7 @@ catchup_data_file(pgFile *file, const char *from_fullpath, const char *to_fullpa
 	 * NOTE This is a normal situation, if the file size has changed
 	 * since the moment we computed it.
 	 */
-	file->n_blocks = file->size/BLCKSZ;
+	file->n_blocks = ft_div_i64u32_to_i32(file->size, BLCKSZ);
 
 	/*
 	 * Skip unchanged file only if it exists in destination directory.
@@ -1599,8 +1597,7 @@ check_data_file(ConnectionArgs *arguments, pgFile *file,
 	 * NOTE This is a normal situation, if the file size has changed
 	 * since the moment we computed it.
 	 */
-	nblocks = (typeof(nblocks))(file->size/BLCKSZ);
-	Assert((int64_t)nblocks * BLCKSZ == file->size);
+	nblocks = ft_div_i64u32_to_i32(file->size, BLCKSZ);
 
 	for (blknum = 0; blknum < nblocks; blknum++)
 	{

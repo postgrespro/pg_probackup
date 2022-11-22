@@ -174,6 +174,9 @@ extern void ft_set_allocators(void *(*_realloc)(void *, size_t),
 ft_inline size_t ft_add_size(size_t a, size_t b);
 ft_inline size_t ft_mul_size(size_t a, size_t b);
 
+/* division 64->32 bit */
+ft_inline int32_t ft_div_i64u32_to_i32(int64_t a, uint32_t b);
+
 #define ft_new(type)        ft_calloc(sizeof(type))
 #define ft_newar(type, cnt) ft_calloc(ft_mul_size(sizeof(type), (cnt)))
 
