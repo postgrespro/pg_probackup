@@ -127,7 +127,7 @@ class SimpleAuthTest(ProbackupTest, unittest.TestCase):
             node.safe_psql(
                 "postgres",
                 "GRANT EXECUTE ON FUNCTION pg_stop_backup(boolean) TO backup")
-        elif self.get_vestion(node) < self.version_to_num('15.0'):
+        elif self.get_version(node) < self.version_to_num('15.0'):
             node.safe_psql(
                 "postgres",
                 "GRANT EXECUTE ON FUNCTION "

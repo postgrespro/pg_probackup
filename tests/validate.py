@@ -3,8 +3,6 @@ import unittest
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 from datetime import datetime, timedelta
 from pathlib import Path
-import subprocess
-from sys import exit
 import time
 import hashlib
 
@@ -47,7 +45,6 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             f.seek(8192)
             f.write(b"\x00"*8192)
             f.flush()
-            f.close
 
         self.backup_node(
             backup_dir, 'node', node, options=['--log-level-file=verbose'])
@@ -267,7 +264,6 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             f.seek(42)
             f.write(b"blah")
             f.flush()
-            f.close
 
         # Simple validate
         try:
@@ -360,7 +356,6 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             f.seek(84)
             f.write(b"blah")
             f.flush()
-            f.close
 
         # Corrupt some file in PAGE1 backup
         file_page1 = os.path.join(
@@ -370,7 +365,6 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             f.seek(42)
             f.write(b"blah")
             f.flush()
-            f.close
 
         # Validate PAGE1
         try:
@@ -686,7 +680,6 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             f.seek(84)
             f.write(b"blah")
             f.flush()
-            f.close
 
         file_page4 = os.path.join(
             backup_dir, 'backups', 'node', backup_id_6, 'database', file_page_5)
@@ -694,7 +687,6 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             f.seek(42)
             f.write(b"blah")
             f.flush()
-            f.close
 
         # Validate PAGE3
         try:
@@ -891,7 +883,6 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             f.seek(84)
             f.write(b"blah")
             f.flush()
-            f.close
 
         file_page4 = os.path.join(
             backup_dir, 'backups', 'node',
@@ -900,7 +891,6 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             f.seek(42)
             f.write(b"blah")
             f.flush()
-            f.close
 
         # Validate PAGE3
         try:
@@ -1244,7 +1234,6 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             f.seek(84)
             f.write(b"blah")
             f.flush()
-            f.close
 
         # Validate Instance
         try:
@@ -1392,7 +1381,6 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             f.seek(84)
             f.write(b"blah")
             f.flush()
-            f.close
 
         # Validate Instance
         try:
@@ -1493,7 +1481,6 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             f.seek(84)
             f.write(b"blah")
             f.flush()
-            f.close
 
         # Validate Instance
         try:
@@ -1551,7 +1538,6 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
                 f.seek(42)
                 f.write(b"blablablaadssaaaaaaaaaaaaaaa")
                 f.flush()
-                f.close
 
         # Simple validate
         try:
@@ -1616,7 +1602,6 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
                 f.seek(128)
                 f.write(b"blablablaadssaaaaaaaaaaaaaaa")
                 f.flush()
-                f.close
 
         # Validate to xid
         try:
@@ -1781,7 +1766,6 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             f.seek(9000)
             f.write(b"b")
             f.flush()
-            f.close
 
         # Validate to xid
         try:
@@ -2860,7 +2844,6 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
                     "database", heap_path), "rb+", 0) as f:
             f.truncate(int(heap_size) - 4096)
             f.flush()
-            f.close
 
         node.cleanup()
 
@@ -3635,7 +3618,6 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             f.seek(84)
             f.write(b"blah")
             f.flush()
-            f.close
 
         try:
             self.validate_pb(backup_dir, 'node', backup_id=backup_id)
@@ -3948,14 +3930,14 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         fake_new_pg_version = pg_version + 1
 
         with open(control_file, 'r') as f:
-            data = f.read();
+            data = f.read()
 
         data = data.replace(
             "server-version = {0}".format(str(pg_version)),
             "server-version = {0}".format(str(fake_new_pg_version)))
 
         with open(control_file, 'w') as f:
-            f.write(data);
+            f.write(data)
 
         try:
             self.validate_pb(backup_dir)
@@ -4007,7 +3989,6 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             f.seek(42)
             f.write(b"blah")
             f.flush()
-            f.close
 
         try:
             self.validate_pb(backup_dir, 'node', backup_id=backup_id)
@@ -4080,7 +4061,6 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         with open(page_header_map, "rb+", 0) as f:
             f.truncate(121)
             f.flush()
-            f.close
 
         try:
             self.validate_pb(backup_dir, 'node', backup_id=backup_id)
@@ -4213,7 +4193,6 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         # overwrite tablespace_map file
         with open(tablespace_map, "w") as f:
             f.write("{0} {1}".format(oid, tblspace_new))
-            f.close
 
         node.cleanup()
 
