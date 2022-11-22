@@ -4176,6 +4176,14 @@ pioLocalFile_fobjDispose(VSelf)
 	}
 }
 
+static const char *
+pioLocalFile_pioGetPath(VSelf)
+{
+	Self(pioLocalFile);
+
+	return self->p.path;
+}
+
 static err_i
 pioLocalFile_pioClose(VSelf, bool sync)
 {
@@ -4220,6 +4228,25 @@ pioLocalFile_pioRead(VSelf, ft_bytes_t buf, err_i *err)
     return r;
 }
 
+static ssize_t
+pioLocalFile_pioPRead(VSelf, ft_bytes_t buf, off_t offs, err_i *err)
+{
+	Self(pioLocalFile);
+	fobj_reset_err(err);
+
+	ft_assert(self->fd >= 0, "Closed file abused \"%s\"", self->p.path);
+
+	ssize_t rc = pread(self->fd, buf.ptr, buf.len, offs);
+
+	if (rc == -1)
+	{
+        *err = $syserr(errno, "Cannot pread from {path:q}",
+					   path(self->p.path));
+	}
+
+	return rc;
+}
+
 static size_t
 pioLocalFile_pioWrite(VSelf, ft_bytes_t buf, err_i *err)
 {
@@ -4245,6 +4272,23 @@ pioLocalFile_pioWrite(VSelf, ft_bytes_t buf, err_i *err)
                     path(self->p.path), writtenSz(r), wantedSz(buf.len));
     }
     return r;
+}
+
+static off_t
+pioLocalFile_pioSeek(VSelf, off_t offs, err_i *err)
+{
+	Self(pioLocalFile);
+	fobj_reset_err(err);
+
+	ft_assert(self->fd >= 0, "Closed file abused \"%s\"", self->p.path);
+
+	off_t pos = lseek(self->fd, offs, SEEK_SET);
+
+	if (pos == (off_t)-1)
+	{
+		*err = $syserr(errno, "Can not seek to {offs} in file {path:q}", offs(offs), path(self->p.path));
+	}
+	return pos;
 }
 
 static err_i
@@ -4578,6 +4622,14 @@ pioRemoteDrive_pioRemoveDir(VSelf, const char *root, bool root_as_well) {
 
 /* REMOTE FILE */
 
+static const char *
+pioRemoteFile_pioGetPath(VSelf)
+{
+	Self(pioRemoteFile);
+
+	return self->p.path;
+}
+
 static err_i
 pioRemoteFile_pioSync(VSelf)
 {
@@ -4804,6 +4856,32 @@ pioRemoteFile_pioRead(VSelf, ft_bytes_t buf, err_i *err)
     return hdr.size;
 }
 
+static ssize_t
+pioRemoteFile_pioPRead(VSelf, ft_bytes_t buf, off_t offs, err_i *err)
+{
+    Self(pioRemoteFile);
+    fobj_reset_err(err);
+	fio_header hdr;
+
+    ft_assert(self->handle >= 0, "Remote closed file abused \"%s\"", self->p.path);
+
+	hdr.cop = FIO_PREAD;
+	hdr.handle = self->handle & ~FIO_PIPE_MARKER;
+	hdr.size = 0;
+	hdr.arg = offs;
+
+	IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
+
+	IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
+	Assert(hdr.cop == FIO_SEND);
+	if (hdr.size != 0)
+		IO_CHECK(fio_read_all(fio_stdin, buf.ptr, hdr.size), hdr.size);
+
+	/* TODO: error handling */
+
+	return hdr.arg;
+}
+
 static size_t
 pioRemoteFile_pioWrite(VSelf, ft_bytes_t buf, err_i *err)
 {
@@ -4841,6 +4919,26 @@ pioRemoteFile_pioWrite(VSelf, ft_bytes_t buf, err_i *err)
     }
 
     return buf.len;
+}
+
+static off_t
+pioRemoteFile_pioSeek(VSelf, off_t offs, err_i *err)
+{
+	Self(pioRemoteFile);
+	fio_header hdr;
+
+	fobj_reset_err(err);
+
+	ft_assert(self->handle >= 0, "Remote closed file abused \"%s\"", self->p.path);
+
+	hdr.cop = FIO_SEEK;
+	hdr.handle = self->handle & ~FIO_PIPE_MARKER;
+	hdr.size = 0;
+	hdr.arg = offs;
+
+	IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
+
+	return 0;
 }
 
 static err_i

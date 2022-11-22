@@ -1067,9 +1067,7 @@ extern bool set_forkname(pgFile *file);
 extern void exclude_files(parray *files, bool backup_logs);
 
 /* in data.c */
-extern bool check_data_file(ConnectionArgs *arguments, pgFile *file,
-							const char *from_fullpath, uint32 checksum_version);
-
+extern bool check_data_file(pgFile *file, const char *from_fullpath, uint32 checksum_version);
 
 extern void catchup_data_file(pgFile *file, const char *from_fullpath, const char *to_fullpath,
 								 XLogRecPtr sync_lsn, BackupMode backup_mode,
@@ -1190,15 +1188,6 @@ extern parray * pg_ptrack_get_pagemapset(PGconn *backup_conn, const char *ptrack
 
 /* open local file to writing */
 extern FILE* open_local_file_rw(const char *to_fullpath, char **out_buf, uint32 buf_size);
-
-extern int send_pages(const char *to_fullpath, const char *from_fullpath,
-					  pgFile *file, XLogRecPtr prev_backup_start_lsn, CompressAlg calg, int clevel,
-					  uint32 checksum_version, bool use_pagemap, BackupPageHeader2 **headers,
-					  BackupMode backup_mode);
-extern int copy_pages(const char *to_fullpath, const char *from_fullpath,
-					  pgFile *file, XLogRecPtr prev_backup_start_lsn,
-					  uint32 checksum_version, bool use_pagemap,
-					  BackupMode backup_mode);
 
 /* FIO */
 extern int fio_send_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,

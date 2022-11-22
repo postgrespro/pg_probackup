@@ -228,6 +228,7 @@ typedef const char* path_t;
 fobj_error_cstr_key(remotemsg);
 fobj_error_int_key(writtenSz);
 fobj_error_int_key(wantedSz);
+fobj_error_int_key(offs);//FIXME: what needs to be here?
 
 #ifdef HAVE_LIBZ
 fobj_error_kind(GZ);
@@ -236,19 +237,27 @@ fobj_error_cstr_key(gzErrStr);
 #endif
 
 // File
+#define mth__pioGetPath		const char *
 #define mth__pioClose  		err_i, (bool, sync)
 #define mth__pioClose__optional() (sync, false)
 #define mth__pioRead  		size_t, (ft_bytes_t, buf), (err_i *, err)
+#define mth__pioPRead		ssize_t, (ft_bytes_t, buf), (off_t, offs), (err_i *, err)
 #define mth__pioWrite  		size_t, (ft_bytes_t, buf), (err_i *, err)
 #define mth__pioTruncate 	err_i, (size_t, sz)
 #define mth__pioWriteFinish		err_i
+#define mth__pioSeek		off_t, (off_t, offs), (err_i *, err)
+
+fobj_method(pioGetPath);
 fobj_method(pioClose);
 fobj_method(pioRead);
+fobj_method(pioPRead);
 fobj_method(pioWrite);
 fobj_method(pioTruncate);
 fobj_method(pioWriteFinish);
+fobj_method(pioSeek);
 
-#define iface__pioFile				mth(pioWrite, pioWriteFinish, pioRead, pioTruncate, pioClose)
+#define iface__pioFile				mth(pioGetPath, pioWrite, pioWriteFinish, \
+										pioRead, pioPRead, pioTruncate, pioClose, pioSeek)
 #define iface__pioWriteFlush		mth(pioWrite, pioWriteFinish)
 #define iface__pioWriteCloser		mth(pioWrite, pioWriteFinish, pioClose)
 #define iface__pioReadCloser  		mth(pioRead, pioClose)
