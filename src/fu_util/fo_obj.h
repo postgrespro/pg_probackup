@@ -598,7 +598,7 @@ fobj_klass(fobjErr);
  */
 extern err_i fobj_err_combine(err_i first, err_i second);
 
-#define fobj_reset_err(err) do { ft_dbg_assert(err); *err = (err_i){NULL}; } while(0)
+#define fobj_reset_err(err) do { ft_dbg_assert(err != NULL); *err = (err_i){NULL}; } while(0)
 
 #include "./impl/fo_impl2.h"
 

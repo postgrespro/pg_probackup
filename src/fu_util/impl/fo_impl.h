@@ -543,8 +543,8 @@ extern void fobj__validate_args(fobj_method_handle_t meth, fobj_t self,
 #endif
 #define fobj__idel(iface)      fobj_del((void*)&(iface)->self)
 
-#define fobj__isave(iface)       ((__typeof(iface)){.self = $save((iface).self)})
-#define fobj__iresult(iface)     ((__typeof(iface)){.self = $result((iface).self)})
+#define fobj__isave(iface)       ({__typeof(iface) t=(iface); $save(t.self); t;})
+#define fobj__iresult(iface)     ({__typeof(iface) t=(iface); $result(t.self); t;})
 #define fobj__ireturn(iface)     return $iresult(iface)
 
 /* Autorelease pool handling */
