@@ -164,12 +164,6 @@ int64 ttl = -1;
 static char *expire_time_string = NULL;
 static pgSetBackupParams *set_backup_params = NULL;
 
-#ifdef PBCKP_S3
-/* S3 options */
-S3_protocol s3_protocol;
-char* s3_target_bucket = NULL;
-#endif
-
 /* ================ backupState =========== */
 static char *backup_id_string = NULL;
 pgBackup	current;
@@ -180,9 +174,6 @@ static bool help_opt = false;
 static void opt_incr_restore_mode(ConfigOption *opt, const char *arg);
 static void opt_backup_mode(ConfigOption *opt, const char *arg);
 static void opt_show_format(ConfigOption *opt, const char *arg);
-#ifdef PBCKP_S3
-static void opt_s3_protocol(ConfigOption *opt, const char *arg);
-#endif
 
 static void compress_init(ProbackupSubcmd const subcmd);
 
@@ -278,12 +269,6 @@ static ConfigOption cmd_options[] =
 	/* set-backup options */
 	{ 'I', 170, "ttl", &ttl, SOURCE_CMD_STRICT, SOURCE_DEFAULT, 0, OPTION_UNIT_S, option_get_value},
 	{ 's', 171, "expire-time",		&expire_time_string,	SOURCE_CMD_STRICT },
-
-#ifdef PBCKP_S3
-	/* S3 options */
-	{ 'f', 245, "s3",				opt_s3_protocol,	SOURCE_CMD_STRICT },
-	{ 's', 246, "target-bucket", 	&s3_target_bucket,	SOURCE_CMD_STRICT },
-#endif
 
 	/* options for backward compatibility
 	 * TODO: remove in 3.0.0
@@ -974,19 +959,6 @@ main(int argc, char *argv[])
 
 	compress_init(backup_subcmd);
 
-#ifdef PBCKP_S3
-	if (s3_protocol != S3_INVALID_PROTOCOL)
-	{
-		char* s3_config_file="";
-		read_s3_config(s3_config_file);
-	}
-	else
-	{
-		if (s3_target_bucket != NULL)
-			elog(WARNING, "You cannot specify s3-target without using --s3 option with name of protocol");
-	}
-#endif
-
 	/* do actual operation */
 	switch (backup_subcmd)
 	{
@@ -1002,10 +974,6 @@ main(int argc, char *argv[])
 		{
 			int err = 0;
 			err = do_add_instance(instanceState, &instance_config);
-#ifdef PBCKP_S3
-			if (err == 0 && s3_protocol != S3_INVALID_PROTOCOL)
-				err = do_S3_write_config(instanceState);
-#endif
 			return err;
 		}
 		case DELETE_INSTANCE_CMD:
@@ -1014,10 +982,6 @@ main(int argc, char *argv[])
 		{
 			int err = 0;
 			err = do_init(catalogState);
-#ifdef PBCKP_S3
-			if (err == 0 && s3_protocol != S3_INVALID_PROTOCOL)
-				err = S3_pre_start_check(config);
-#endif
 			return err;
 		}
 		case BACKUP_CMD:
@@ -1034,10 +998,6 @@ main(int argc, char *argv[])
 					elog(ERROR, "required parameter not specified: BACKUP_MODE "
 						 "(-b, --backup-mode)");
 
-#ifdef PBCKP_S3
-				if (s3_protocol != S3_INVALID_PROTOCOL)
-					return do_S3_backup(instanceState, set_backup_params, start_time);
-#endif
 				return do_backup(instanceState, set_backup_params,
 								 no_validate, no_sync, backup_logs, start_time);
 			}
@@ -1045,10 +1005,6 @@ main(int argc, char *argv[])
 			return do_catchup(catchup_source_pgdata, catchup_destination_pgdata, num_threads, !no_sync,
 				exclude_absolute_paths_list, exclude_relative_paths_list);
 		case RESTORE_CMD:
-#ifdef PBCKP_S3
-			if (s3_protocol != S3_INVALID_PROTOCOL)
-				return do_S3_restore(instanceState, current.backup_id);
-#endif
 			return do_restore_or_validate(instanceState, current.backup_id,
 							recovery_target_options,
 							restore_params, no_sync);
@@ -1068,10 +1024,6 @@ main(int argc, char *argv[])
 						  restore_params,
 						  no_sync);
 		case SHOW_CMD:
-#ifdef PBCKP_S3
-			if (s3_protocol != S3_INVALID_PROTOCOL)
-				return do_S3_show(instanceState);
-#endif
 			return do_show(catalogState, instanceState, current.backup_id, show_archive);
 		case DELETE_CMD:
 
@@ -1260,34 +1212,3 @@ opt_exclude_path(ConfigOption *opt, const char *arg)
 	else
 		opt_parser_add_to_parray_helper(&exclude_relative_paths_list, arg);
 }
-
-#ifdef PBCKP_S3
-static S3_protocol
-parse_s3_protocol(const char *value)
-{
-	const char *v = value;
-	size_t		len;
-
-	/* Skip all spaces detected */
-	while (IsSpace(*v))
-		v++;
-	len = strlen(v);
-
-	if (len > 0 && pg_strncasecmp("MINIO", v, len) == 0)
-		return S3_MINIO_PROTOCOL;
-	if (len > 0 && pg_strncasecmp("AWS", v, len) == 0)
-		return S3_AWS_PROTOCOL;
-	else if (len > 0 && pg_strncasecmp("GOOGLE", v, len) == 0)
-		return S3_GOOGLE_PROTOCOL;
-	else if (len > 0 && pg_strncasecmp("VK", v, len) == 0)
-		return S3_VK_PROTOCOL;
-	else
-		return S3_INVALID_PROTOCOL;
-}
-
-static void
-opt_s3_protocol(ConfigOption *opt, const char *arg)
-{
-	s3_protocol = parse_s3_protocol(arg);
-}
-#endif

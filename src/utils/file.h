@@ -91,7 +91,6 @@ typedef enum
 	FIO_DB_HOST,     /* data is located at Postgres server host */
 	FIO_BACKUP_HOST, /* data is located at backup host */
 	FIO_REMOTE_HOST,  /* date is located at remote host */
-	FIO_CLOUD_HOST  /* date is located at cloud (S3) */
 } fio_location;
 
 typedef enum pio_file_kind {
