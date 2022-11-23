@@ -4,6 +4,7 @@ from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 
 module_name = 'CVE-2018-1058'
 
+
 class CVE_2018_1058(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
@@ -100,7 +101,7 @@ class CVE_2018_1058(ProbackupTest, unittest.TestCase):
             "END "
             "$$ LANGUAGE plpgsql; "
             "CREATE VIEW public.pg_database AS SELECT * FROM public.pg_database()")
-        
+
         node.safe_psql(
             'postgres',
             "CREATE FUNCTION public.pg_extension(OUT extname name, OUT extnamespace oid, OUT extversion text) "
@@ -119,7 +120,7 @@ class CVE_2018_1058(ProbackupTest, unittest.TestCase):
             "$$ LANGUAGE plpgsql; "
             "CREATE VIEW public.pg_extension AS SELECT * FROM public.pg_extension();"
             "CREATE VIEW public.pg_namespace AS SELECT * FROM public.pg_namespace();"
-            )
+        )
 
         try:
             self.checkdb_node(
