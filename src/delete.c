@@ -71,7 +71,7 @@ do_delete(InstanceState *instanceState, time_t backup_id)
 			parray_append(delete_list, backup);
 
 			elog(LOG, "Backup %s %s be deleted",
-				base36enc(backup->start_time), dry_run? "can":"will");
+				backup_id_of(backup), dry_run? "can":"will");
 
 			size_to_delete += backup->data_bytes;
 			if (backup->stream)
@@ -84,7 +84,7 @@ do_delete(InstanceState *instanceState, time_t backup_id)
 	{
 		pretty_size(size_to_delete, size_to_delete_pretty, lengthof(size_to_delete_pretty));
 		elog(INFO, "Resident data size to free by delete of backup %s : %s",
-			base36enc(target_backup->start_time), size_to_delete_pretty);
+			backup_id_of(target_backup), size_to_delete_pretty);
 	}
 
 	if (!dry_run)
@@ -321,12 +321,12 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 				time2iso(expire_timestamp, lengthof(expire_timestamp), backup->expire_time, false);
 
 				elog(LOG, "Backup %s is pinned until '%s', retain",
-					base36enc(backup->start_time), expire_timestamp);
+					backup_id_of(backup), expire_timestamp);
 				continue;
 			}
 
 			/* Add backup to purge_list */
-			elog(VERBOSE, "Mark backup %s for purge.", base36enc(backup->start_time));
+			elog(VERBOSE, "Mark backup %s for purge.", backup_id_of(backup));
 			parray_append(to_purge_list, backup);
 			continue;
 		}
@@ -406,7 +406,7 @@ do_retention_internal(parray *backup_list, parray *to_keep_list, parray *to_purg
 
 		/* TODO: add ancestor(chain full backup) ID */
 		elog(INFO, "Backup %s, mode: %s, status: %s. Redundancy: %i/%i, Time Window: %ud/%ud. %s",
-				base36enc(backup->start_time),
+				backup_id_of(backup),
 				pgBackupGetBackupMode(backup, false),
 				status2str(backup->status),
 				cur_full_backup_num,
@@ -451,7 +451,6 @@ do_retention_merge(InstanceState *instanceState, parray *backup_list,
 	/* Merging happens here */
 	for (i = 0; i < parray_num(to_keep_list); i++)
 	{
-		char		*keep_backup_id = NULL;
 		pgBackup	*full_backup = NULL;
 		parray	    *merge_list = NULL;
 
@@ -461,7 +460,7 @@ do_retention_merge(InstanceState *instanceState, parray *backup_list,
 		if (!keep_backup)
 			continue;
 
-		elog(INFO, "Consider backup %s for merge", base36enc(keep_backup->start_time));
+		elog(INFO, "Consider backup %s for merge", backup_id_of(keep_backup));
 
 		/* Got valid incremental backup, find its FULL ancestor */
 		full_backup = find_parent_full_backup(keep_backup);
@@ -469,7 +468,7 @@ do_retention_merge(InstanceState *instanceState, parray *backup_list,
 		/* Failed to find parent */
 		if (!full_backup)
 		{
-			elog(WARNING, "Failed to find FULL parent for %s", base36enc(keep_backup->start_time));
+			elog(WARNING, "Failed to find FULL parent for %s", backup_id_of(keep_backup));
 			continue;
 		}
 
@@ -479,7 +478,7 @@ do_retention_merge(InstanceState *instanceState, parray *backup_list,
 							pgBackupCompareIdDesc))
 		{
 			elog(WARNING, "Skip backup %s for merging, "
-				"because his FULL parent is not marked for purge", base36enc(keep_backup->start_time));
+				"because his FULL parent is not marked for purge", backup_id_of(keep_backup));
 			continue;
 		}
 
@@ -488,10 +487,9 @@ do_retention_merge(InstanceState *instanceState, parray *backup_list,
 		 * backups from purge_list.
 		 */
 
-		keep_backup_id = base36enc_dup(keep_backup->start_time);
 		elog(INFO, "Merge incremental chain between full backup %s and backup %s",
-					base36enc(full_backup->start_time), keep_backup_id);
-		pg_free(keep_backup_id);
+					backup_id_of(full_backup),
+					backup_id_of(keep_backup));
 
 		merge_list = parray_new();
 
@@ -533,7 +531,7 @@ do_retention_merge(InstanceState *instanceState, parray *backup_list,
 //		if (is_prolific(backup_list, full_backup))
 //		{
 //			elog(WARNING, "Backup %s has multiple valid descendants. "
-//					"Automatic merge is not possible.", base36enc(full_backup->start_time));
+//					"Automatic merge is not possible.", backup_id_of(full_backup));
 //		}
 
 		/* Merge list example:
@@ -559,7 +557,7 @@ do_retention_merge(InstanceState *instanceState, parray *backup_list,
 		if (!no_validate)
 			pgBackupValidate(full_backup, NULL);
 		if (full_backup->status == BACKUP_STATUS_CORRUPT)
-			elog(ERROR, "Merging of backup %s failed", base36enc(full_backup->start_time));
+			elog(ERROR, "Merging of backup %s failed", backup_id_of(full_backup));
 
 		/* Cleanup */
 		parray_free(merge_list);
@@ -591,7 +589,7 @@ do_retention_purge(parray *to_keep_list, parray *to_purge_list)
 		pgBackup   *delete_backup = (pgBackup *) parray_get(to_purge_list, j);
 
 		elog(LOG, "Consider backup %s for purge",
-						base36enc(delete_backup->start_time));
+						backup_id_of(delete_backup));
 
 		/* Evaluate marked for delete backup against every backup in keep list.
 		 * If marked for delete backup is recognized as parent of one of those,
@@ -599,8 +597,6 @@ do_retention_purge(parray *to_keep_list, parray *to_purge_list)
 		 */
 		for (i = 0; i < parray_num(to_keep_list); i++)
 		{
-			char		*keeped_backup_id;
-
 			pgBackup   *keep_backup = (pgBackup *) parray_get(to_keep_list, i);
 
 			/* item could have been nullified in merge */
@@ -611,10 +607,9 @@ do_retention_purge(parray *to_keep_list, parray *to_purge_list)
 			if (keep_backup->backup_mode == BACKUP_MODE_FULL)
 				continue;
 
-			keeped_backup_id = base36enc_dup(keep_backup->start_time);
-
 			elog(LOG, "Check if backup %s is parent of backup %s",
-						base36enc(delete_backup->start_time), keeped_backup_id);
+						backup_id_of(delete_backup),
+						backup_id_of(keep_backup));
 
 			if (is_parent(delete_backup->start_time, keep_backup, true))
 			{
@@ -622,13 +617,12 @@ do_retention_purge(parray *to_keep_list, parray *to_purge_list)
 				/* We must not delete this backup, evict it from purge list */
 				elog(LOG, "Retain backup %s because his "
 					"descendant %s is guarded by retention",
-						base36enc(delete_backup->start_time), keeped_backup_id);
+						backup_id_of(delete_backup),
+						backup_id_of(keep_backup));
 
 				purge = false;
-				pg_free(keeped_backup_id);
 				break;
 			}
-			pg_free(keeped_backup_id);
 		}
 
 		/* Retain backup */
@@ -640,7 +634,7 @@ do_retention_purge(parray *to_keep_list, parray *to_purge_list)
 		{
 			/* If the backup still is used, do not interrupt and go to the next */
 			elog(WARNING, "Cannot lock backup %s directory, skip purging",
-				 base36enc(delete_backup->start_time));
+				 backup_id_of(delete_backup));
 			continue;
 		}
 
@@ -739,7 +733,7 @@ delete_backup_files(pgBackup *backup)
 	if (backup->status == BACKUP_STATUS_DELETED)
 	{
 		elog(WARNING, "Backup %s already deleted",
-			 base36enc(backup->start_time));
+			 backup_id_of(backup));
 		return;
 	}
 
@@ -749,7 +743,7 @@ delete_backup_files(pgBackup *backup)
 		time2iso(timestamp, lengthof(timestamp), backup->start_time, false);
 
 	elog(INFO, "Delete: %s %s",
-		 base36enc(backup->start_time), timestamp);
+		 backup_id_of(backup), timestamp);
 
 	/*
 	 * Update STATUS to BACKUP_STATUS_DELETING in preparation for the case which
@@ -1053,7 +1047,7 @@ do_delete_status(InstanceState *instanceState, InstanceConfig *instance_config, 
 		backup = (pgBackup *)parray_get(delete_list, i);
 
 		elog(INFO, "Backup %s with status %s %s be deleted",
-			base36enc(backup->start_time), status2str(backup->status), dry_run ? "can" : "will");
+			backup_id_of(backup), status2str(backup->status), dry_run ? "can" : "will");
 
 		size_to_delete += backup->data_bytes;
 		if (backup->stream)
