@@ -274,7 +274,7 @@ lock_backup(pgBackup *backup, bool strict, bool exclusive)
 
 	/* save lock metadata for later unlocking */
 	lock = pgut_malloc(sizeof(LockInfo));
-	snprintf(lock->backup_id, 10, "%s", base36enc(backup->backup_id));
+	snprintf(lock->backup_id, 10, "%s", backup_id_of(backup));
 	snprintf(lock->backup_dir, MAXPGPATH, "%s", backup->root_dir);
 	lock->exclusive = exclusive;
 
@@ -982,6 +982,9 @@ catalog_get_backup_list(InstanceState *instanceState, time_t requested_backup_id
 			backup = pgut_new0(pgBackup);
 			pgBackupInit(backup);
 			backup->start_time = base36dec(data_ent->d_name);
+			/* XXX BACKUP_ID change it when backup_id wouldn't match start_time */
+			Assert(backup->backup_id == 0 || backup->backup_id == backup->start_time);
+			backup->backup_id = backup->start_time;
 		}
 		else if (strcmp(backup_id_of(backup), data_ent->d_name) != 0)
 		{
@@ -999,7 +1002,6 @@ catalog_get_backup_list(InstanceState *instanceState, time_t requested_backup_id
 		init_header_map(backup);
 
 		/* TODO: save encoded backup id */
-		backup->backup_id = backup->start_time;
 		if (requested_backup_id != INVALID_BACKUP_ID
 			&& requested_backup_id != backup->start_time)
 		{
@@ -1477,7 +1479,7 @@ pgBackupInitDir(pgBackup *backup, const char *backup_instance_path)
 	if ($haserr(err))
 	{
 		/* Clear backup_id as indication of error */
-		backup->backup_id = INVALID_BACKUP_ID;
+		reset_backup_id(backup);
 		return;
 	}
 
@@ -1534,7 +1536,7 @@ create_backup_dir(pgBackup *backup, const char *backup_instance_path)
 	char   path[MAXPGPATH];
 	err_i  err;
 
-	join_path_components(path, backup_instance_path, base36enc(backup->backup_id));
+	join_path_components(path, backup_instance_path, backup_id_of(backup));
 
 	/* TODO: add wrapper for remote mode */
 	err = $i(pioMakeDir, backup->backup_location, .path = path,
@@ -2282,7 +2284,7 @@ pin_backup(pgBackup	*target_backup, pgSetBackupParams *set_backup_params)
 	/* sanity, backup must have positive recovery-time */
 	if (target_backup->recovery_time <= 0)
 		elog(ERROR, "Failed to set 'expire-time' for backup %s: invalid 'recovery-time'",
-						base36enc(target_backup->backup_id));
+						backup_id_of(target_backup));
 
 	/* Pin comes from ttl */
 	if (set_backup_params->ttl > 0)
@@ -2747,6 +2749,9 @@ readBackupControlFile(const char *path)
 		pgBackupFree(backup);
 		return NULL;
 	}
+	/* XXX BACKUP_ID change it when backup_id wouldn't match start_time */
+	Assert(backup->backup_id == 0 || backup->backup_id == backup->start_time);
+	backup->backup_id = backup->start_time;
 
 	if (backup_mode)
 	{

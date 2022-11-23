@@ -746,7 +746,7 @@ validate_tablespace_map(pgBackup *backup, bool no_validate)
 	if (!fileExists(map_path, FIO_BACKUP_HOST))
 		elog(ERROR, "Tablespace map is missing: \"%s\", "
 					"probably backup %s is corrupt, validate it",
-			map_path, base36enc(backup->backup_id));
+			map_path, backup_id_of(backup));
 
 	/* check tablespace map checksumms */
 	if (!no_validate)
@@ -765,7 +765,7 @@ validate_tablespace_map(pgBackup *backup, bool no_validate)
 		if ((*tablespace_map)->crc != crc)
 			elog(ERROR, "Invalid CRC of tablespace map file \"%s\" : %X. Expected %X, "
 						"probably backup %s is corrupt, validate it",
-					map_path, crc, (*tablespace_map)->crc, base36enc(backup->backup_id));
+					map_path, crc, (*tablespace_map)->crc, backup_id_of(backup));
 	}
 
 	pgFileFree(dummy);
