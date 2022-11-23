@@ -20,6 +20,7 @@ tblspace_name_new = 'cfs_tblspace_new'
 
 
 class CfsRestoreBase(ProbackupTest, unittest.TestCase):
+    @unittest.skipUnless(ProbackupTest.enterprise, 'skip')
     def setUp(self):
         self.backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
 
@@ -60,6 +61,7 @@ class CfsRestoreBase(ProbackupTest, unittest.TestCase):
 class CfsRestoreNoencEmptyTablespaceTest(CfsRestoreBase):
     # @unittest.expectedFailure
     # @unittest.skip("skip")
+    @unittest.skipUnless(ProbackupTest.enterprise, 'skip')
     def test_restore_empty_tablespace_from_fullbackup(self):
         """
         Case: Restore empty tablespace from valid full backup.
@@ -118,6 +120,7 @@ class CfsRestoreNoencTest(CfsRestoreBase):
     # --- Restore from full backup ---#
     # @unittest.expectedFailure
     # @unittest.skip("skip")
+    @unittest.skipUnless(ProbackupTest.enterprise, 'skip')
     def test_restore_from_fullbackup_to_old_location(self):
         """
         Case: Restore instance from valid full backup to old location.
@@ -157,6 +160,7 @@ class CfsRestoreNoencTest(CfsRestoreBase):
 
     # @unittest.expectedFailure
     # @unittest.skip("skip")
+    @unittest.skipUnless(ProbackupTest.enterprise, 'skip')
     def test_restore_from_fullbackup_to_old_location_3_jobs(self):
         """
         Case: Restore instance from valid full backup to old location.
@@ -195,6 +199,7 @@ class CfsRestoreNoencTest(CfsRestoreBase):
 
     # @unittest.expectedFailure
     # @unittest.skip("skip")
+    @unittest.skipUnless(ProbackupTest.enterprise, 'skip')
     def test_restore_from_fullbackup_to_new_location(self):
         """
         Case: Restore instance from valid full backup to new location.
@@ -238,6 +243,7 @@ class CfsRestoreNoencTest(CfsRestoreBase):
 
     # @unittest.expectedFailure
     # @unittest.skip("skip")
+    @unittest.skipUnless(ProbackupTest.enterprise, 'skip')
     def test_restore_from_fullbackup_to_new_location_5_jobs(self):
         """
         Case: Restore instance from valid full backup to new location.
@@ -281,6 +287,7 @@ class CfsRestoreNoencTest(CfsRestoreBase):
 
     # @unittest.expectedFailure
     # @unittest.skip("skip")
+    @unittest.skipUnless(ProbackupTest.enterprise, 'skip')
     def test_restore_from_fullbackup_to_old_location_tablespace_new_location(self):
         self.node.stop()
         self.node.cleanup()
@@ -327,6 +334,7 @@ class CfsRestoreNoencTest(CfsRestoreBase):
 
     # @unittest.expectedFailure
     # @unittest.skip("skip")
+    @unittest.skipUnless(ProbackupTest.enterprise, 'skip')
     def test_restore_from_fullbackup_to_old_location_tablespace_new_location_3_jobs(self):
         self.node.stop()
         self.node.cleanup()
