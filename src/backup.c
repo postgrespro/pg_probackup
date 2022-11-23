@@ -604,7 +604,7 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 				"It may indicate that we are trying to backup PostgreSQL instance from the past.",
 				(uint32) (current.stop_lsn >> 32), (uint32) (current.stop_lsn),
 				(uint32) (prev_backup->stop_lsn >> 32), (uint32) (prev_backup->stop_lsn),
-				base36enc(prev_backup->stop_lsn));
+				base36enc(prev_backup->start_time));
 
 	/* clean external directories list */
 	if (external_dirs)
