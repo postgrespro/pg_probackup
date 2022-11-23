@@ -881,13 +881,13 @@ do_backup(InstanceState *instanceState, pgSetBackupParams *set_backup_params,
 		pretty_size(current.data_bytes + current.wal_bytes, pretty_bytes, lengthof(pretty_bytes));
 	else
 		pretty_size(current.data_bytes, pretty_bytes, lengthof(pretty_bytes));
-	elog(INFO, "Backup %s resident size: %s", base36enc(current.start_time), pretty_bytes);
+	elog(INFO, "Backup %s resident size: %s", backup_id_of(&current), pretty_bytes);
 
 	if (current.status == BACKUP_STATUS_OK ||
 		current.status == BACKUP_STATUS_DONE)
-		elog(INFO, "Backup %s completed", base36enc(current.start_time));
+		elog(INFO, "Backup %s completed", backup_id_of(&current));
 	else
-		elog(ERROR, "Backup %s failed", base36enc(current.start_time));
+		elog(ERROR, "Backup %s failed", backup_id_of(&current));
 
 	/*
 	 * After successful backup completion remove backups
@@ -1955,7 +1955,7 @@ backup_cleanup(bool fatal, void *userdata)
 	if (current.status == BACKUP_STATUS_RUNNING && current.end_time == 0)
 	{
 		elog(WARNING, "Backup %s is running, setting its status to ERROR",
-			 base36enc(current.start_time));
+			 backup_id_of(&current));
 		current.end_time = time(NULL);
 		current.status = BACKUP_STATUS_ERROR;
 		write_backup(&current, true);
