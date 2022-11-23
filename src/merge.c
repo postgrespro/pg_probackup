@@ -223,11 +223,9 @@ do_merge(InstanceState *instanceState, time_t backup_id, bool no_validate, bool 
 			}
 			if (!dest_backup)
 			{
-				char *tmp_backup_id = base36enc_dup(full_backup->start_time);
 				elog(ERROR, "Full backup %s has unfinished merge with missing backup %s",
-								tmp_backup_id,
+								base36enc(full_backup->start_time),
 								base36enc(full_backup->merge_dest_backup));
-				pg_free(tmp_backup_id);
 			}
 		}
 		else if (full_backup->status == BACKUP_STATUS_MERGED)
@@ -253,11 +251,9 @@ do_merge(InstanceState *instanceState, time_t backup_id, bool no_validate, bool 
 			}
 			if (!dest_backup)
 			{
-				char *tmp_backup_id = base36enc_dup(full_backup->start_time);
 				elog(WARNING, "Full backup %s has unfinished merge with missing backup %s",
-								tmp_backup_id,
+								base36enc(full_backup->start_time),
 								base36enc(full_backup->merge_dest_backup));
-				pg_free(tmp_backup_id);
 			}
 		}
 		else
@@ -344,10 +340,9 @@ do_merge(InstanceState *instanceState, time_t backup_id, bool no_validate, bool 
 				full_backup->status == BACKUP_STATUS_MERGED) &&
 				dest_backup->start_time != full_backup->merge_dest_backup)
 			{
-				char *tmp_backup_id = base36enc_dup(full_backup->start_time);
 				elog(ERROR, "Full backup %s has unfinished merge with backup %s",
-					tmp_backup_id, base36enc(full_backup->merge_dest_backup));
-				pg_free(tmp_backup_id);
+					base36enc(full_backup->start_time),
+					base36enc(full_backup->merge_dest_backup));
 			}
 
 		}
@@ -441,7 +436,6 @@ merge_chain(InstanceState *instanceState,
 			bool no_validate, bool no_sync)
 {
 	int			i;
-	char 		*dest_backup_id;
 	char		full_external_prefix[MAXPGPATH];
 	char		full_database_dir[MAXPGPATH];
 	parray		*full_externals = NULL,
@@ -487,17 +481,11 @@ merge_chain(InstanceState *instanceState,
 	if (full_backup->merge_dest_backup != INVALID_BACKUP_ID &&
 		full_backup->merge_dest_backup != dest_backup->start_time)
 	{
-		char *merge_dest_backup_current = base36enc_dup(dest_backup->start_time);
-		char *merge_dest_backup = base36enc_dup(full_backup->merge_dest_backup);
-
 		elog(ERROR, "Cannot run merge for %s, because full backup %s has "
 					"unfinished merge with backup %s",
-			merge_dest_backup_current,
+			base36enc(dest_backup->start_time),
 			base36enc(full_backup->start_time),
-			merge_dest_backup);
-
-		pg_free(merge_dest_backup_current);
-		pg_free(merge_dest_backup);
+			base36enc(full_backup->merge_dest_backup));
 	}
 
 	/*
@@ -880,9 +868,9 @@ merge_rename:
 	/*
 	 * Merging finished, now we can safely update ID of the FULL backup
 	 */
-	dest_backup_id = base36enc_dup(full_backup->merge_dest_backup);
 	elog(INFO, "Rename merged full backup %s to %s",
-				base36enc(full_backup->start_time), dest_backup_id);
+				base36enc(full_backup->start_time),
+				base36enc(full_backup->merge_dest_backup));
 
 	full_backup->status = BACKUP_STATUS_OK;
 	full_backup->start_time = full_backup->merge_dest_backup;
@@ -891,7 +879,6 @@ merge_rename:
 	/* Critical section end */
 
 	/* Cleanup */
-	pg_free(dest_backup_id);
 	if (threads)
 	{
 		pfree(threads_args);

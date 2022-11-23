@@ -76,11 +76,11 @@ static void
 set_orphan_status(parray *backups, pgBackup *parent_backup)
 {
 	/* chain is intact, but at least one parent is invalid */
-	char	*parent_backup_id;
+	const char	*parent_backup_id;
 	int		j;
 
 	/* parent_backup_id is a human-readable backup ID  */
-	parent_backup_id = base36enc_dup(parent_backup->start_time);
+	parent_backup_id = base36enc(parent_backup->start_time);
 
 	for (j = 0; j < parray_num(backups); j++)
 	{
@@ -108,7 +108,6 @@ set_orphan_status(parray *backups, pgBackup *parent_backup)
 			}
 		}
 	}
-	pg_free(parent_backup_id);
 }
 
 /*
@@ -348,11 +347,11 @@ do_restore_or_validate(InstanceState *instanceState, time_t target_backup_id, pg
 			/* chain is broken, determine missing backup ID
 			 * and orphinize all his descendants
 			 */
-			char	   *missing_backup_id;
+			const char *missing_backup_id;
 			time_t		missing_backup_start_time;
 
 			missing_backup_start_time = tmp_backup->parent_backup;
-			missing_backup_id = base36enc_dup(tmp_backup->parent_backup);
+			missing_backup_id = base36enc(tmp_backup->parent_backup);
 
 			for (j = 0; j < parray_num(backups); j++)
 			{
@@ -363,22 +362,22 @@ do_restore_or_validate(InstanceState *instanceState, time_t target_backup_id, pg
 				 */
 				if (is_parent(missing_backup_start_time, backup, false))
 				{
+					const char	*backup_id = base36enc(backup->start_time);
 					if (backup->status == BACKUP_STATUS_OK ||
 						backup->status == BACKUP_STATUS_DONE)
 					{
 						write_backup_status(backup, BACKUP_STATUS_ORPHAN, true);
 
 						elog(WARNING, "Backup %s is orphaned because his parent %s is missing",
-								base36enc(backup->start_time), missing_backup_id);
+								backup_id, missing_backup_id);
 					}
 					else
 					{
 						elog(WARNING, "Backup %s has missing parent %s",
-								base36enc(backup->start_time), missing_backup_id);
+								backup_id, missing_backup_id);
 					}
 				}
 			}
-			pg_free(missing_backup_id);
 			/* No point in doing futher */
 			elog(ERROR, "%s of backup %s failed.", action, base36enc(dest_backup->start_time));
 		}

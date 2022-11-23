@@ -735,7 +735,7 @@ do_backup(InstanceState *instanceState, pgSetBackupParams *set_backup_params,
 			/* don't care about freeing base36enc_dup memory, we exit anyway */
 			elog(ERROR, "Can't assign backup_id from requested start_time (%s), "
 						"this time must be later that backup %s",
-				base36enc_dup(start_time), base36enc_dup(latest_backup_id));
+				base36enc(start_time), base36enc(latest_backup_id));
 
 		current.backup_id = start_time;
 		pgBackupInitDir(&current, instanceState->instance_backup_subdir_path);

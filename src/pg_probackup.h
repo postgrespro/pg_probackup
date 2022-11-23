@@ -1192,8 +1192,10 @@ extern void time2iso(char *buf, size_t len, time_t time, bool utc);
 extern const char *status2str(BackupStatus status);
 const char *status2str_color(BackupStatus status);
 extern BackupStatus str2status(const char *status);
-extern const char *base36enc(long unsigned int value);
-extern char *base36enc_dup(long unsigned int value);
+#define base36bufsize 14
+extern const char *base36enc_to(long unsigned int value, char buf[ARG_SIZE_HINT base36bufsize]);
+/* Abuse C99 Compound Literal's lifetime */
+#define base36enc(value) (base36enc_to((value), (char[base36bufsize]){0}))
 extern long unsigned int base36dec(const char *text);
 extern uint32 parse_server_version(const char *server_version_str);
 extern uint32 parse_program_version(const char *program_version);

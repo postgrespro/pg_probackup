@@ -451,7 +451,6 @@ do_retention_merge(InstanceState *instanceState, parray *backup_list,
 	/* Merging happens here */
 	for (i = 0; i < parray_num(to_keep_list); i++)
 	{
-		char		*keep_backup_id = NULL;
 		pgBackup	*full_backup = NULL;
 		parray	    *merge_list = NULL;
 
@@ -488,10 +487,9 @@ do_retention_merge(InstanceState *instanceState, parray *backup_list,
 		 * backups from purge_list.
 		 */
 
-		keep_backup_id = base36enc_dup(keep_backup->start_time);
 		elog(INFO, "Merge incremental chain between full backup %s and backup %s",
-					base36enc(full_backup->start_time), keep_backup_id);
-		pg_free(keep_backup_id);
+					base36enc(full_backup->start_time),
+					base36enc(keep_backup->start_time));
 
 		merge_list = parray_new();
 
@@ -599,8 +597,6 @@ do_retention_purge(parray *to_keep_list, parray *to_purge_list)
 		 */
 		for (i = 0; i < parray_num(to_keep_list); i++)
 		{
-			char		*keeped_backup_id;
-
 			pgBackup   *keep_backup = (pgBackup *) parray_get(to_keep_list, i);
 
 			/* item could have been nullified in merge */
@@ -611,10 +607,9 @@ do_retention_purge(parray *to_keep_list, parray *to_purge_list)
 			if (keep_backup->backup_mode == BACKUP_MODE_FULL)
 				continue;
 
-			keeped_backup_id = base36enc_dup(keep_backup->start_time);
-
 			elog(LOG, "Check if backup %s is parent of backup %s",
-						base36enc(delete_backup->start_time), keeped_backup_id);
+						base36enc(delete_backup->start_time),
+						base36enc(keep_backup->start_time));
 
 			if (is_parent(delete_backup->start_time, keep_backup, true))
 			{
@@ -622,13 +617,12 @@ do_retention_purge(parray *to_keep_list, parray *to_purge_list)
 				/* We must not delete this backup, evict it from purge list */
 				elog(LOG, "Retain backup %s because his "
 					"descendant %s is guarded by retention",
-						base36enc(delete_backup->start_time), keeped_backup_id);
+						base36enc(delete_backup->start_time),
+						base36enc(keep_backup->start_time));
 
 				purge = false;
-				pg_free(keeped_backup_id);
 				break;
 			}
-			pg_free(keeped_backup_id);
 		}
 
 		/* Retain backup */

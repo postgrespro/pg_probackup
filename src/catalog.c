@@ -1219,7 +1219,6 @@ catalog_get_last_data_backup(parray *backup_list, TimeLineID tli, time_t current
 	int			i;
 	pgBackup   *full_backup = NULL;
 	pgBackup   *tmp_backup = NULL;
-	char 	   *invalid_backup_id;
 
 	/* backup_list is sorted in order of descending ID */
 	for (i = 0; i < parray_num(backup_list); i++)
@@ -1255,20 +1254,14 @@ catalog_get_last_data_backup(parray *backup_list, TimeLineID tli, time_t current
 			{
 				/* broken chain */
 				case ChainIsBroken:
-					invalid_backup_id = base36enc_dup(tmp_backup->parent_backup);
-
 					elog(WARNING, "Backup %s has missing parent: %s. Cannot be a parent",
-						base36enc(backup->start_time), invalid_backup_id);
-					pg_free(invalid_backup_id);
+						base36enc(backup->start_time), base36enc(tmp_backup->parent_backup));
 					continue;
 
 				/* chain is intact, but at least one parent is invalid */
 				case ChainIsInvalid:
-					invalid_backup_id = base36enc_dup(tmp_backup->start_time);
-
 					elog(WARNING, "Backup %s has invalid parent: %s. Cannot be a parent",
-						base36enc(backup->start_time), invalid_backup_id);
-					pg_free(invalid_backup_id);
+						base36enc(backup->start_time), base36enc(tmp_backup->start_time));
 					continue;
 
 				/* chain is ok */

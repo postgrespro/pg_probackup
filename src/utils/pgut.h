@@ -108,4 +108,10 @@ extern int sleep(unsigned int seconds);
 extern int usleep(unsigned int usec);
 #endif
 
+#ifdef _MSC_VER
+#define ARG_SIZE_HINT
+#else
+#define ARG_SIZE_HINT static
+#endif
+
 #endif   /* PGUT_H */

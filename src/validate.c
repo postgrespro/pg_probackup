@@ -503,10 +503,12 @@ do_validate_instance(InstanceState *instanceState)
 			/* chain is broken */
 			if (result == ChainIsBroken)
 			{
-				char	   *parent_backup_id;
+				const char *parent_backup_id;
+				const char *current_backup_id;
 				/* determine missing backup ID */
 
-				parent_backup_id = base36enc_dup(tmp_backup->parent_backup);
+				parent_backup_id = base36enc(tmp_backup->parent_backup);
+				current_backup_id = base36enc(current_backup->parent_backup);
 				corrupted_backup_found = true;
 
 				/* orphanize current_backup */
@@ -515,15 +517,13 @@ do_validate_instance(InstanceState *instanceState)
 				{
 					write_backup_status(current_backup, BACKUP_STATUS_ORPHAN, true);
 					elog(WARNING, "Backup %s is orphaned because his parent %s is missing",
-							base36enc(current_backup->start_time),
-							parent_backup_id);
+							current_backup_id, parent_backup_id);
 				}
 				else
 				{
 					elog(WARNING, "Backup %s has missing parent %s",
-						base36enc(current_backup->start_time), parent_backup_id);
+						current_backup_id, parent_backup_id);
 				}
-				pg_free(parent_backup_id);
 				continue;
 			}
 			/* chain is whole, but at least one parent is invalid */
@@ -532,23 +532,23 @@ do_validate_instance(InstanceState *instanceState)
 				/* Oldest corrupt backup has a chance for revalidation */
 				if (current_backup->start_time != tmp_backup->start_time)
 				{
-					char	   *backup_id = base36enc_dup(tmp_backup->start_time);
+					const char	   *tmp_backup_id = base36enc(tmp_backup->start_time);
+					const char	   *cur_backup_id = base36enc(current_backup->start_time);
 					/* orphanize current_backup */
 					if (current_backup->status == BACKUP_STATUS_OK ||
 						current_backup->status == BACKUP_STATUS_DONE)
 					{
 						write_backup_status(current_backup, BACKUP_STATUS_ORPHAN, true);
 						elog(WARNING, "Backup %s is orphaned because his parent %s has status: %s",
-								base36enc(current_backup->start_time), backup_id,
+								cur_backup_id, tmp_backup_id,
 								status2str(tmp_backup->status));
 					}
 					else
 					{
 						elog(WARNING, "Backup %s has parent %s with status: %s",
-								base36enc(current_backup->start_time), backup_id,
+								cur_backup_id, tmp_backup_id,
 								status2str(tmp_backup->status));
 					}
-					pg_free(backup_id);
 					continue;
 				}
 				base_full_backup = find_parent_full_backup(current_backup);
@@ -589,7 +589,7 @@ do_validate_instance(InstanceState *instanceState)
 		 */
 		if (current_backup->status != BACKUP_STATUS_OK)
 		{
-			char	   *current_backup_id;
+			const char *current_backup_id;
 			/* This is ridiculous but legal.
 			 * PAGE_b2 <- OK
 			 * PAGE_a2 <- OK
@@ -599,7 +599,7 @@ do_validate_instance(InstanceState *instanceState)
 			 */
 
 			corrupted_backup_found = true;
-			current_backup_id = base36enc_dup(current_backup->start_time);
+			current_backup_id = base36enc(current_backup->start_time);
 
 			for (j = i - 1; j >= 0; j--)
 			{
@@ -619,7 +619,6 @@ do_validate_instance(InstanceState *instanceState)
 					}
 				}
 			}
-			free(current_backup_id);
 		}
 
 		/* For every OK backup we try to revalidate all his ORPHAN descendants. */
