@@ -887,6 +887,7 @@ extern parray *get_dbOid_exclude_list(pgBackup *backup, parray *datname_list,
 										PartialRestoreType partial_restore_type);
 
 extern const char* backup_id_of(pgBackup *backup);
+extern void reset_backup_id(pgBackup *backup);
 
 extern parray *get_backup_filelist(pgBackup *backup, bool strict);
 extern parray *read_timeline_history(const char *arclog_path, TimeLineID targetTLI, bool strict);

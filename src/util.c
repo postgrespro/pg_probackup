@@ -565,9 +565,19 @@ datapagemap_print_debug(datapagemap_t *map)
 const char*
 backup_id_of(pgBackup *backup)
 {
+	/* Change this Assert when backup_id will not be bound to start_time */
+	Assert(backup->backup_id == backup->start_time || backup->start_time == 0);
+
 	if (backup->backup_id_encoded[0] == '\x00')
 	{
-		base36enc_to(backup->start_time, backup->backup_id_encoded);
+		base36enc_to(backup->backup_id, backup->backup_id_encoded);
 	}
 	return backup->backup_id_encoded;
+}
+
+void
+reset_backup_id(pgBackup *backup)
+{
+	backup->backup_id = INVALID_BACKUP_ID;
+	memset(backup->backup_id_encoded, 0, sizeof(backup->backup_id_encoded));
 }

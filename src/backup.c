@@ -768,6 +768,7 @@ do_backup(InstanceState *instanceState, pgSetBackupParams *set_backup_params,
 
 	/* Update backup status and other metainfo. */
 	current.status = BACKUP_STATUS_RUNNING;
+	/* XXX BACKUP_ID change it when backup_id wouldn't match start_time */
 	current.start_time = current.backup_id;
 
 	strlcpy(current.program_version, PROGRAM_VERSION,
@@ -778,13 +779,13 @@ do_backup(InstanceState *instanceState, pgSetBackupParams *set_backup_params,
 
 	elog(INFO, "Backup start, pg_probackup version: %s, instance: %s, backup ID: %s, backup mode: %s, "
 			"wal mode: %s, remote: %s, compress-algorithm: %s, compress-level: %i",
-			PROGRAM_VERSION, instanceState->instance_name, base36enc(current.backup_id), pgBackupGetBackupMode(&current, false),
+			PROGRAM_VERSION, instanceState->instance_name, backup_id_of(&current), pgBackupGetBackupMode(&current, false),
 			current.stream ? "STREAM" : "ARCHIVE", IsSshProtocol()  ? "true" : "false",
 			deparse_compress_alg(current.compress_alg), current.compress_level);
 
 	if (!lock_backup(&current, true, true))
 		elog(ERROR, "Cannot lock backup %s directory",
-			 base36enc(current.backup_id));
+			 backup_id_of(&current));
 	write_backup(&current, true);
 
 	/* set the error processing function for the backup process */
@@ -799,7 +800,7 @@ do_backup(InstanceState *instanceState, pgSetBackupParams *set_backup_params,
 	backup_conn = pgdata_basic_setup(instance_config.conn_opt, &nodeInfo);
 
 	if (current.from_replica)
-		elog(INFO, "Backup %s is going to be taken from standby", base36enc(current.backup_id));
+		elog(INFO, "Backup %s is going to be taken from standby", backup_id_of(&current));
 
 	/* TODO, print PostgreSQL full version */
 	//elog(INFO, "PostgreSQL version: %s", nodeInfo.server_version_str);

@@ -874,6 +874,8 @@ merge_rename:
 
 	full_backup->status = BACKUP_STATUS_OK;
 	full_backup->start_time = full_backup->merge_dest_backup;
+	/* XXX BACKUP_ID change it when backup_id wouldn't match start_time */
+	full_backup->backup_id = full_backup->start_time;
 	full_backup->merge_dest_backup = INVALID_BACKUP_ID;
 	write_backup(full_backup, true);
 	/* Critical section end */

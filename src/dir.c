@@ -1115,7 +1115,7 @@ check_tablespace_mapping(pgBackup *backup, bool incremental, bool force, bool pg
 		 */
 		if (tablespace_dirs.head != NULL)
 			elog(ERROR, "Backup %s has no tablespaceses, nothing to remap "
-					"via \"--tablespace-mapping\" option", base36enc(backup->backup_id));
+					"via \"--tablespace-mapping\" option", backup_id_of(backup));
 		return NoTblspc;
 	}
 
