@@ -937,6 +937,8 @@ merge_rename:
 static void *
 merge_files(void *arg)
 {
+	FOBJ_FUNC_ARP();
+
 	int		i;
 	merge_files_arg *arguments = (merge_files_arg *) arg;
 	size_t n_files = parray_num(arguments->dest_backup->files);

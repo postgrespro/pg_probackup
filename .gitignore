@@ -19,6 +19,11 @@
 # Dependencies
 .deps
 
+# Profiling and coverage files
+*.gcno
+*.gcda
+gmon.out
+
 # Binaries
 /pg_probackup
 
