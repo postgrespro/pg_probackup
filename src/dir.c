@@ -1101,7 +1101,7 @@ check_tablespace_mapping(pgBackup *backup, bool incremental, bool force, bool pg
 	bool        tblspaces_are_empty = true;
 
 	elog(LOG, "Checking tablespace directories of backup %s",
-			base36enc(backup->start_time));
+			backup_id_of(backup));
 
 	/* validate tablespace map,
 	 * if there are no tablespaces, then there is nothing left to do
@@ -1250,7 +1250,7 @@ check_external_dir_mapping(pgBackup *backup, bool incremental)
 	int		i;
 
 	elog(LOG, "check external directories of backup %s",
-			base36enc(backup->start_time));
+			backup_id_of(backup));
 
 	if (!backup->external_dir_str)
 	{

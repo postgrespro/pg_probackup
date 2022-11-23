@@ -35,8 +35,7 @@ const char *
 base36enc_to(long unsigned int value, char buf[ARG_SIZE_HINT base36bufsize])
 {
 	const char	base36[36] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-	/* log(2**64) / log(36) = 12.38 => max 13 char + '\0' */
-	char	buffer[14];
+	char	buffer[base36bufsize];
 	char   *p;
 
 	p = &buffer[sizeof(buffer)-1];
@@ -561,4 +560,14 @@ datapagemap_print_debug(datapagemap_t *map)
 		elog(VERBOSE, "  block %u", blocknum);
 
 	pg_free(iter);
+}
+
+const char*
+backup_id_of(pgBackup *backup)
+{
+	if (backup->backup_id_encoded[0] == '\x00')
+	{
+		base36enc_to(backup->start_time, backup->backup_id_encoded);
+	}
+	return backup->backup_id_encoded;
 }

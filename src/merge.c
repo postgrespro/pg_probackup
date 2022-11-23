@@ -105,7 +105,7 @@ do_merge(InstanceState *instanceState, time_t backup_id, bool no_validate, bool 
 				backup->status != BACKUP_STATUS_MERGED &&
 				backup->status != BACKUP_STATUS_DELETING)
 				elog(ERROR, "Backup %s has status: %s",
-						base36enc(backup->start_time), status2str(backup->status));
+						backup_id_of(backup), status2str(backup->status));
 
 			dest_backup = backup;
 			break;
@@ -154,12 +154,12 @@ do_merge(InstanceState *instanceState, time_t backup_id, bool no_validate, bool 
 		full_backup = dest_backup;
 		dest_backup = NULL;
 		elog(INFO, "Merge target backup %s is full backup",
-						base36enc(full_backup->start_time));
+						backup_id_of(full_backup));
 
 		/* sanity */
 		if (full_backup->status == BACKUP_STATUS_DELETING)
 			elog(ERROR, "Backup %s has status: %s",
-							base36enc(full_backup->start_time),
+							backup_id_of(full_backup),
 							status2str(full_backup->status));
 
 		/* Case #1 */
@@ -194,7 +194,7 @@ do_merge(InstanceState *instanceState, time_t backup_id, bool no_validate, bool 
 			if (dest_backup == NULL)
 				elog(ERROR, "Failed to find merge candidate, "
 							"backup %s has no valid children",
-					base36enc(full_backup->start_time));
+					backup_id_of(full_backup));
 
 		}
 		/* Case #2 */
@@ -224,7 +224,7 @@ do_merge(InstanceState *instanceState, time_t backup_id, bool no_validate, bool 
 			if (!dest_backup)
 			{
 				elog(ERROR, "Full backup %s has unfinished merge with missing backup %s",
-								base36enc(full_backup->start_time),
+								backup_id_of(full_backup),
 								base36enc(full_backup->merge_dest_backup));
 			}
 		}
@@ -252,13 +252,13 @@ do_merge(InstanceState *instanceState, time_t backup_id, bool no_validate, bool 
 			if (!dest_backup)
 			{
 				elog(WARNING, "Full backup %s has unfinished merge with missing backup %s",
-								base36enc(full_backup->start_time),
+								backup_id_of(full_backup),
 								base36enc(full_backup->merge_dest_backup));
 			}
 		}
 		else
 			elog(ERROR, "Backup %s has status: %s",
-					base36enc(full_backup->start_time),
+					backup_id_of(full_backup),
 					status2str(full_backup->status));
 	}
 	else
@@ -296,7 +296,7 @@ do_merge(InstanceState *instanceState, time_t backup_id, bool no_validate, bool 
 		if (dest_backup->status == BACKUP_STATUS_MERGING ||
 			dest_backup->status == BACKUP_STATUS_DELETING)
 			elog(WARNING, "Rerun unfinished merge for backup %s",
-							base36enc(dest_backup->start_time));
+							backup_id_of(dest_backup));
 
 		/* First we should try to find parent FULL backup */
 		full_backup = find_parent_full_backup(dest_backup);
@@ -310,7 +310,7 @@ do_merge(InstanceState *instanceState, time_t backup_id, bool no_validate, bool 
 			 */
 			if (dest_backup->status != BACKUP_STATUS_MERGING)
 				elog(ERROR, "Failed to find parent full backup for %s",
-					base36enc(dest_backup->start_time));
+					backup_id_of(dest_backup));
 
 			/* Find FULL backup that has unfinished merge with dest backup */
 			for (i = 0; i < parray_num(backups); i++)
@@ -327,7 +327,7 @@ do_merge(InstanceState *instanceState, time_t backup_id, bool no_validate, bool 
 			if (!full_backup)
 				elog(ERROR, "Failed to find full backup that has unfinished merge"
 							"with backup %s, cannot rerun merge",
-										base36enc(dest_backup->start_time));
+										backup_id_of(dest_backup));
 
 			if (full_backup->status == BACKUP_STATUS_MERGED)
 				elog(WARNING, "Incremental chain is broken, try to recover unfinished merge");
@@ -341,7 +341,7 @@ do_merge(InstanceState *instanceState, time_t backup_id, bool no_validate, bool 
 				dest_backup->start_time != full_backup->merge_dest_backup)
 			{
 				elog(ERROR, "Full backup %s has unfinished merge with backup %s",
-					base36enc(full_backup->start_time),
+					backup_id_of(full_backup),
 					base36enc(full_backup->merge_dest_backup));
 			}
 
@@ -357,7 +357,7 @@ do_merge(InstanceState *instanceState, time_t backup_id, bool no_validate, bool 
 	 * having status MERGED */
 	if (dest_backup == NULL && full_backup->status != BACKUP_STATUS_MERGED)
 		elog(ERROR, "Cannot run merge for full backup %s",
-					base36enc(full_backup->start_time));
+					backup_id_of(full_backup));
 
 	/* sanity */
 	if (full_backup->status != BACKUP_STATUS_OK &&
@@ -366,7 +366,7 @@ do_merge(InstanceState *instanceState, time_t backup_id, bool no_validate, bool 
 		full_backup->status != BACKUP_STATUS_MERGED &&
 		full_backup->status != BACKUP_STATUS_MERGING)
 		elog(ERROR, "Backup %s has status: %s",
-				base36enc(full_backup->start_time), status2str(full_backup->status));
+				backup_id_of(full_backup), status2str(full_backup->status));
 
 	/* Form merge list */
 	dest_backup_tmp = dest_backup;
@@ -384,7 +384,7 @@ do_merge(InstanceState *instanceState, time_t backup_id, bool no_validate, bool 
 			dest_backup_tmp->status != BACKUP_STATUS_MERGED &&
 			dest_backup_tmp->status != BACKUP_STATUS_DELETING)
 			elog(ERROR, "Backup %s has status: %s",
-					base36enc(dest_backup_tmp->start_time),
+					backup_id_of(dest_backup_tmp),
 					status2str(dest_backup_tmp->status));
 
 		if (dest_backup_tmp->backup_mode == BACKUP_MODE_FULL)
@@ -472,10 +472,10 @@ merge_chain(InstanceState *instanceState,
 		full_backup->status == BACKUP_STATUS_MERGED)
 	{
 		is_retry = true;
-		elog(INFO, "Retry failed merge of backup %s with parent chain", base36enc(dest_backup->start_time));
+		elog(INFO, "Retry failed merge of backup %s with parent chain", backup_id_of(dest_backup));
 	}
 	else
-		elog(INFO, "Merging backup %s with parent chain", base36enc(dest_backup->start_time));
+		elog(INFO, "Merging backup %s with parent chain", backup_id_of(dest_backup));
 
 	/* sanity */
 	if (full_backup->merge_dest_backup != INVALID_BACKUP_ID &&
@@ -483,8 +483,8 @@ merge_chain(InstanceState *instanceState,
 	{
 		elog(ERROR, "Cannot run merge for %s, because full backup %s has "
 					"unfinished merge with backup %s",
-			base36enc(dest_backup->start_time),
-			base36enc(full_backup->start_time),
+			backup_id_of(dest_backup),
+			backup_id_of(full_backup),
 			base36enc(full_backup->merge_dest_backup));
 	}
 
@@ -506,7 +506,7 @@ merge_chain(InstanceState *instanceState,
 			elog(ERROR, "Backup %s has been produced by pg_probackup version %s, "
 						"but current program version is %s. Forward compatibility "
 						"is not supported.",
-				base36enc(backup->start_time),
+				backup_id_of(backup),
 				backup->program_version,
 				PROGRAM_VERSION);
 		}
@@ -549,7 +549,7 @@ merge_chain(InstanceState *instanceState,
 	if (!no_validate)
 	{
 		elog(INFO, "Validate parent chain for backup %s",
-						base36enc(dest_backup->start_time));
+						backup_id_of(dest_backup));
 
 		for (i = parray_num(parent_chain) - 1; i >= 0; i--)
 		{
@@ -566,7 +566,7 @@ merge_chain(InstanceState *instanceState,
 
 			if (backup->status != BACKUP_STATUS_OK)
 				elog(ERROR, "Backup %s has status %s, merge is aborted",
-					base36enc(backup->start_time), status2str(backup->status));
+					backup_id_of(backup), status2str(backup->status));
 		}
 	}
 
@@ -869,7 +869,7 @@ merge_rename:
 	 * Merging finished, now we can safely update ID of the FULL backup
 	 */
 	elog(INFO, "Rename merged full backup %s to %s",
-				base36enc(full_backup->start_time),
+				backup_id_of(full_backup),
 				base36enc(full_backup->merge_dest_backup));
 
 	full_backup->status = BACKUP_STATUS_OK;
@@ -1333,7 +1333,7 @@ merge_non_data_file(parray *parent_chain, pgBackup *full_backup,
 		if (!from_file)
 		{
 			elog(ERROR, "Failed to locate non-data file \"%s\" in backup %s",
-				dest_file->rel_path, base36enc(from_backup->start_time));
+				dest_file->rel_path, backup_id_of(from_backup));
 			continue;
 		}
 
@@ -1429,7 +1429,7 @@ is_forward_compatible(parray *parent_chain)
 		elog(WARNING, "In-place merge is disabled because of storage format incompatibility. "
 					"Backup %s storage format version: %s, "
 					"current storage format version: %s",
-					base36enc(oldest_ver_backup->start_time),
+					backup_id_of(oldest_ver_backup),
 					oldest_ver_backup->program_version,
 					STORAGE_FORMAT_VERSION);
 		return false;

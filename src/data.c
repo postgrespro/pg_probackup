@@ -1294,7 +1294,7 @@ restore_non_data_file(parray *parent_chain, pgBackup *dest_backup,
 			if (!tmp_file)
 			{
 				elog(ERROR, "Failed to locate non-data file \"%s\" in backup %s",
-					dest_file->rel_path, base36enc(tmp_backup->start_time));
+					dest_file->rel_path, backup_id_of(tmp_backup));
 				continue;
 			}
 
@@ -1327,7 +1327,7 @@ restore_non_data_file(parray *parent_chain, pgBackup *dest_backup,
 	if (tmp_file->write_size <= 0)
 		elog(ERROR, "Full copy of non-data file has invalid size: %li. "
 				"Metadata corruption in backup %s in file: \"%s\"",
-				tmp_file->write_size, base36enc(tmp_backup->start_time),
+				tmp_file->write_size, backup_id_of(tmp_backup),
 				to_fullpath);
 
 	/* incremental restore */

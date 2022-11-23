@@ -63,18 +63,18 @@ pgBackupValidate(pgBackup *backup, pgRestoreParams *params)
 		elog(ERROR, "pg_probackup binary version is %s, but backup %s version is %s. "
 			"pg_probackup do not guarantee to be forward compatible. "
 			"Please upgrade pg_probackup binary.",
-				PROGRAM_VERSION, base36enc(backup->start_time), backup->program_version);
+				PROGRAM_VERSION, backup_id_of(backup), backup->program_version);
 
 	/* Check backup server version */
 	if (strcmp(backup->server_version, PG_MAJORVERSION) != 0)
         elog(ERROR, "Backup %s has server version %s, but current pg_probackup binary "
 					"compiled with server version %s",
-                base36enc(backup->start_time), backup->server_version, PG_MAJORVERSION);
+                backup_id_of(backup), backup->server_version, PG_MAJORVERSION);
 
 	if (backup->status == BACKUP_STATUS_RUNNING)
 	{
 		elog(WARNING, "Backup %s has status %s, change it to ERROR and skip validation",
-			 base36enc(backup->start_time), status2str(backup->status));
+			 backup_id_of(backup), status2str(backup->status));
 		write_backup_status(backup, BACKUP_STATUS_ERROR, true);
 		corrupted_backup_found = true;
 		return;
@@ -88,7 +88,7 @@ pgBackupValidate(pgBackup *backup, pgRestoreParams *params)
 		backup->status != BACKUP_STATUS_CORRUPT)
 	{
 		elog(WARNING, "Backup %s has status %s. Skip validation.",
-					base36enc(backup->start_time), status2str(backup->status));
+					backup_id_of(backup), status2str(backup->status));
 		corrupted_backup_found = true;
 		return;
 	}
@@ -98,28 +98,28 @@ pgBackupValidate(pgBackup *backup, pgRestoreParams *params)
 		backup->status == BACKUP_STATUS_MERGING)
 	{
 		elog(WARNING, "Full backup %s has status %s, skip validation",
-			base36enc(backup->start_time), status2str(backup->status));
+			backup_id_of(backup), status2str(backup->status));
 		return;
 	}
 
 	if (backup->status == BACKUP_STATUS_OK || backup->status == BACKUP_STATUS_DONE ||
 		backup->status == BACKUP_STATUS_MERGING)
-		elog(INFO, "Validating backup %s", base36enc(backup->start_time));
+		elog(INFO, "Validating backup %s", backup_id_of(backup));
 	else
-		elog(INFO, "Revalidating backup %s", base36enc(backup->start_time));
+		elog(INFO, "Revalidating backup %s", backup_id_of(backup));
 
 	if (backup->backup_mode != BACKUP_MODE_FULL &&
 		backup->backup_mode != BACKUP_MODE_DIFF_PAGE &&
 		backup->backup_mode != BACKUP_MODE_DIFF_PTRACK &&
 		backup->backup_mode != BACKUP_MODE_DIFF_DELTA)
-		elog(WARNING, "Invalid backup_mode of backup %s", base36enc(backup->start_time));
+		elog(WARNING, "Invalid backup_mode of backup %s", backup_id_of(backup));
 
 	join_path_components(external_prefix, backup->root_dir, EXTERNAL_DIR);
 	files = get_backup_filelist(backup, false);
 
 	if (!files)
 	{
-		elog(WARNING, "Backup %s file list is corrupted", base36enc(backup->start_time));
+		elog(WARNING, "Backup %s file list is corrupted", backup_id_of(backup));
 		backup->status = BACKUP_STATUS_CORRUPT;
 		write_backup_status(backup, BACKUP_STATUS_CORRUPT, true);
 		return;
@@ -189,9 +189,9 @@ pgBackupValidate(pgBackup *backup, pgRestoreParams *params)
 						BACKUP_STATUS_OK, true);
 
 	if (corrupted)
-		elog(WARNING, "Backup %s data files are corrupted", base36enc(backup->start_time));
+		elog(WARNING, "Backup %s data files are corrupted", backup_id_of(backup));
 	else
-		elog(INFO, "Backup %s data files are valid", base36enc(backup->start_time));
+		elog(INFO, "Backup %s data files are valid", backup_id_of(backup));
 
 	/* Issue #132 kludge */
 	if (!corrupted &&
@@ -208,7 +208,7 @@ pgBackupValidate(pgBackup *backup, pgRestoreParams *params)
 			elog(WARNING, "Backup %s is a victim of metadata corruption. "
 							"Additional information can be found here: "
 							"https://github.com/postgrespro/pg_probackup/issues/132",
-							base36enc(backup->start_time));
+							backup_id_of(backup));
 			backup->status = BACKUP_STATUS_CORRUPT;
 			write_backup_status(backup, BACKUP_STATUS_CORRUPT, true);
 		}
@@ -532,21 +532,21 @@ do_validate_instance(InstanceState *instanceState)
 				/* Oldest corrupt backup has a chance for revalidation */
 				if (current_backup->start_time != tmp_backup->start_time)
 				{
-					const char	   *tmp_backup_id = base36enc(tmp_backup->start_time);
-					const char	   *cur_backup_id = base36enc(current_backup->start_time);
 					/* orphanize current_backup */
 					if (current_backup->status == BACKUP_STATUS_OK ||
 						current_backup->status == BACKUP_STATUS_DONE)
 					{
 						write_backup_status(current_backup, BACKUP_STATUS_ORPHAN, true);
 						elog(WARNING, "Backup %s is orphaned because his parent %s has status: %s",
-								cur_backup_id, tmp_backup_id,
+								backup_id_of(current_backup),
+								backup_id_of(tmp_backup),
 								status2str(tmp_backup->status));
 					}
 					else
 					{
 						elog(WARNING, "Backup %s has parent %s with status: %s",
-								cur_backup_id, tmp_backup_id,
+								backup_id_of(current_backup),
+								backup_id_of(tmp_backup),
 								status2str(tmp_backup->status));
 					}
 					continue;
@@ -556,7 +556,7 @@ do_validate_instance(InstanceState *instanceState)
 				/* sanity */
 				if (!base_full_backup)
 					elog(ERROR, "Parent full backup for the given backup %s was not found",
-							base36enc(current_backup->start_time));
+							backup_id_of(current_backup));
 			}
 			/* chain is whole, all parents are valid at first glance,
 			 * current backup validation can proceed
@@ -571,7 +571,7 @@ do_validate_instance(InstanceState *instanceState)
 		if (!lock_backup(current_backup, true, false))
 		{
 			elog(WARNING, "Cannot lock backup %s directory, skip validation",
-				 base36enc(current_backup->start_time));
+				 backup_id_of(current_backup));
 			skipped_due_to_lock = true;
 			continue;
 		}
@@ -589,7 +589,6 @@ do_validate_instance(InstanceState *instanceState)
 		 */
 		if (current_backup->status != BACKUP_STATUS_OK)
 		{
-			const char *current_backup_id;
 			/* This is ridiculous but legal.
 			 * PAGE_b2 <- OK
 			 * PAGE_a2 <- OK
@@ -599,7 +598,6 @@ do_validate_instance(InstanceState *instanceState)
 			 */
 
 			corrupted_backup_found = true;
-			current_backup_id = base36enc(current_backup->start_time);
 
 			for (j = i - 1; j >= 0; j--)
 			{
@@ -613,8 +611,8 @@ do_validate_instance(InstanceState *instanceState)
 						write_backup_status(backup, BACKUP_STATUS_ORPHAN, true);
 
 						elog(WARNING, "Backup %s is orphaned because his parent %s has status: %s",
-							 base36enc(backup->start_time),
-							 current_backup_id,
+							 backup_id_of(backup),
+							 backup_id_of(current_backup),
 							 status2str(current_backup->status));
 					}
 				}
@@ -665,7 +663,7 @@ do_validate_instance(InstanceState *instanceState)
 							if (!lock_backup(backup, true, false))
 							{
 								elog(WARNING, "Cannot lock backup %s directory, skip validation",
-									 base36enc(backup->start_time));
+									 backup_id_of(backup));
 								skipped_due_to_lock = true;
 								continue;
 							}

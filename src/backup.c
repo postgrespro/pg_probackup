@@ -190,9 +190,9 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 			elog(ERROR, "pg_probackup binary version is %s, but backup %s version is %s. "
 						"pg_probackup do not guarantee to be forward compatible. "
 						"Please upgrade pg_probackup binary.",
-						PROGRAM_VERSION, base36enc(prev_backup->start_time), prev_backup->program_version);
+						PROGRAM_VERSION, backup_id_of(prev_backup), prev_backup->program_version);
 
-		elog(INFO, "Parent backup: %s", base36enc(prev_backup->start_time));
+		elog(INFO, "Parent backup: %s", backup_id_of(prev_backup));
 
 		/* Files of previous backup needed by DELTA backup */
 		prev_backup_filelist = get_backup_filelist(prev_backup, true);
@@ -233,7 +233,7 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 				"It may indicate that we are trying to backup PostgreSQL instance from the past.",
 				(uint32) (current.start_lsn >> 32), (uint32) (current.start_lsn),
 				(uint32) (prev_backup->start_lsn >> 32), (uint32) (prev_backup->start_lsn),
-				base36enc(prev_backup->start_time));
+				backup_id_of(prev_backup));
 
 	/* Update running backup meta with START LSN */
 	write_backup(&current, true);
@@ -604,7 +604,7 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 				"It may indicate that we are trying to backup PostgreSQL instance from the past.",
 				(uint32) (current.stop_lsn >> 32), (uint32) (current.stop_lsn),
 				(uint32) (prev_backup->stop_lsn >> 32), (uint32) (prev_backup->stop_lsn),
-				base36enc(prev_backup->start_time));
+				backup_id_of(prev_backup));
 
 	/* clean external directories list */
 	if (external_dirs)
