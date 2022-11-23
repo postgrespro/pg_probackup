@@ -69,6 +69,7 @@ typedef enum
 	FIO_SEND_FILE_CONTENT,
 	FIO_PAGE_ZERO,
 	FIO_FILES_ARE_SAME,
+	FIO_READ_FILE_AT_ONCE,
 } fio_operations;
 
 typedef struct
@@ -227,6 +228,8 @@ typedef const char* path_t;
 fobj_error_cstr_key(remotemsg);
 fobj_error_int_key(writtenSz);
 fobj_error_int_key(wantedSz);
+fobj_error_int_key(size);
+fobj_error_cstr_key(kind);
 
 #ifdef HAVE_LIBZ
 fobj_error_kind(GZ);
@@ -275,6 +278,9 @@ fobj_iface(pioReadCloser);
                                 (bool, handle_tablespaces), (bool, symlink_and_hidden), \
                                 (bool, backup_logs), (bool, skip_hidden),  (int, external_dir_num)
 #define mth__pioRemoveDir   void, (const char *, root), (bool, root_as_well)
+#define mth__pioReadFile	ft_bytes_t, (path_t, path), (bool, binary), \
+							(err_i *, err)
+#define mth__pioReadFile__optional() (binary, true)
 
 fobj_method(pioOpen);
 fobj_method(pioStat);
@@ -287,11 +293,12 @@ fobj_method(pioMakeDir);
 fobj_method(pioFilesAreSame);
 fobj_method(pioListDir);
 fobj_method(pioRemoveDir);
+fobj_method(pioReadFile);
 
 #define iface__pioDrive 	mth(pioOpen, pioStat, pioRemove, pioRename), \
 					        mth(pioExists, pioGetCRC32, pioIsRemote),                \
 							mth(pioMakeDir, pioListDir, pioRemoveDir),  \
-							mth(pioFilesAreSame)
+							mth(pioFilesAreSame), mth(pioReadFile)
 fobj_iface(pioDrive);
 
 extern pioDrive_i pioDriveForLocation(fio_location location);
@@ -340,4 +347,6 @@ extern err_i    pioCopyWithFilters(pioWriteFlush_i dest, pioRead_i src,
         pioFilter_i _fltrs_[] = {__VA_ARGS__}; \
         pioCopyWithFilters((dest), (src), _fltrs_, ft_arrsz(_fltrs_), NULL); \
 })
+
+extern size_t	pioReadFull(pioRead_i src, ft_bytes_t bytes, err_i* err);
 #endif

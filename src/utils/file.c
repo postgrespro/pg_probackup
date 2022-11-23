@@ -3600,6 +3600,7 @@ fio_communicate(int in, int out)
 	fio_header hdr;
 	pioDrive_i drive;
 	pio_stat_t st;
+	ft_bytes_t bytes;
 	int rc;
 	int tmp_fd;
 	pg_crc32 crc;
@@ -3719,6 +3720,27 @@ fio_communicate(int in, int out)
 			hdr.arg = (int)$i(pioFilesAreSame, drive, buf, buf+strlen(buf)+1);
 			hdr.size = 0;
 			IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
+			break;
+		  case FIO_READ_FILE_AT_ONCE:
+			bytes = $i(pioReadFile, drive, .path = buf,
+					  .binary = hdr.arg != 0, .err = &err);
+			if ($haserr(err))
+			{
+				const char *msg = $errmsg(err);
+				hdr.arg = getErrno(err);
+				hdr.size = strlen(msg) + 1;
+				IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
+				IO_CHECK(fio_write_all(out, msg, hdr.size), hdr.size);
+			}
+			else
+			{
+				hdr.arg = 0;
+				hdr.size = bytes.len;
+				IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
+				if (bytes.len > 0)
+					IO_CHECK(fio_write_all(out, bytes.ptr, bytes.len), bytes.len);
+			}
+			ft_bytes_free(&bytes);
 			break;
 		  case FIO_ACCESS: /* Check presence of file with specified name */
 			hdr.size = 0;
@@ -4151,6 +4173,89 @@ pioLocalDrive_pioRemoveDir(VSelf, const char *root, bool root_as_well) {
     parray_free(files);
 }
 
+static ft_bytes_t
+pioLocalDrive_pioReadFile(VSelf, path_t path, bool binary, err_i* err)
+{
+	FOBJ_FUNC_ARP();
+	Self(pioLocalDrive);
+	pioFile_i	fl;
+	pio_stat_t	st;
+	ft_bytes_t	res = ft_bytes(NULL, 0);
+	size_t		amount;
+
+	fobj_reset_err(err);
+
+	st = $(pioStat, self, .path = path, .follow_symlink = true, .err = err);
+	if ($haserr(*err))
+	{
+		$iresult(*err);
+		return res;
+	}
+	if (st.pst_kind != PIO_KIND_REGULAR)
+	{
+		*err = $err(RT, "File {path:q} is not regular: {kind}", path(path),
+					kind(pio_file_kind2str(st.pst_kind, path)));
+		$iresult(*err);
+		return res;
+	}
+
+	/* forbid too large file because of remote protocol */
+	if (st.pst_size >= INT32_MAX)
+	{
+		*err = $err(RT, "File {path:q} is too large: {size}", path(path),
+					size(st.pst_size), errNo(ENOMEM));
+		$iresult(*err);
+		return res;
+	}
+	if (binary)
+		res = ft_bytes_alloc(st.pst_size);
+	else
+	{
+		res = ft_bytes_alloc(st.pst_size + 1);
+		res.len -= 1;
+	}
+
+	/*
+	 * rely on "local file is read whole at once always".
+	 * Is it true?
+	 */
+	fl = $(pioOpen, self, .path = path, .flags = O_RDONLY | (binary ? PG_BINARY : 0),
+		   .err = err);
+	if ($haserr(*err))
+	{
+		$iresult(*err);
+		return res;
+	}
+
+	amount = pioReadFull($reduce(pioRead, fl), res, err);
+	if ($haserr(*err))
+	{
+		ft_bytes_free(&res);
+		$iresult(*err);
+		return res;
+	}
+
+	if (amount != st.pst_size)
+	{
+		ft_bytes_free(&res);
+		*err = $err(RT, "File {path:q} is truncated while reading",
+					path(path), errNo(EBUSY));
+		$iresult(*err);
+		return res;
+	}
+
+	if (binary)
+		res.len = amount;
+	else
+	{
+		res.len = amount + 1;
+		res.ptr[amount] = 0;
+	}
+
+	$i(pioClose, fl);
+	return res;
+}
+
 /* LOCAL FILE */
 static void
 pioLocalFile_fobjDispose(VSelf)
@@ -4562,6 +4667,43 @@ pioRemoteDrive_pioRemoveDir(VSelf, const char *root, bool root_as_well) {
 
     if (hdr.arg != 0)
         elog(ERROR, "couldn't remove remote dir");
+}
+
+static ft_bytes_t
+pioRemoteDrive_pioReadFile(VSelf, path_t path, bool binary, err_i* err)
+{
+	FOBJ_FUNC_ARP();
+	Self(pioLocalDrive);
+	ft_bytes_t res;
+
+	fobj_reset_err(err);
+
+	fio_header hdr = {
+			.cop = FIO_READ_FILE_AT_ONCE,
+			.handle = -1,
+			.size = strlen(path)+1,
+			.arg = binary,
+	};
+
+	IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
+	IO_CHECK(fio_write_all(fio_stdout, path, hdr.size), hdr.size);
+
+	/* get the response */
+	IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
+	Assert(hdr.cop == FIO_READ_FILE_AT_ONCE);
+
+	res = ft_bytes_alloc(hdr.size);
+	IO_CHECK(fio_read_all(fio_stdin, res.ptr, hdr.size), hdr.size);
+
+	if (hdr.arg != 0)
+	{
+		*err = $syserr((int)hdr.arg, "Could not read remote file {path:q}: {causeStr}",
+					   path(path), causeStr(res.ptr));
+		$iresult(*err);
+		ft_bytes_free(&res);
+	}
+
+	return res;
 }
 
 /* REMOTE FILE */
@@ -5526,6 +5668,25 @@ pioCopyWithFilters(pioWriteFlush_i dest, pioRead_i src,
         $ireturn($err(SysErr, "Cannot flush file {path}: {cause}",
                      path($irepr(dest)), cause(err.self)));
     return $noerr();
+}
+
+size_t
+pioReadFull(pioRead_i src, ft_bytes_t bytes, err_i* err)
+{
+	ft_bytes_t	b;
+	size_t		r;
+	fobj_reset_err(err);
+
+	b = bytes;
+	while (b.len)
+	{
+		r = $i(pioRead, src, b, err);
+		Assert(r <= b.len);
+		ft_bytes_consume(&b, r);
+		if ($haserr(*err))
+			break;
+	}
+	return bytes.len - b.len;
 }
 
 fobj_klass_handle(pioFile);
