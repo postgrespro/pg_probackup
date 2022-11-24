@@ -522,7 +522,7 @@ do_validate_instance(InstanceState *instanceState)
 				/* determine missing backup ID */
 
 				parent_backup_id = base36enc(tmp_backup->parent_backup);
-				current_backup_id = base36enc(current_backup->parent_backup);
+				current_backup_id = backup_id_of(current_backup);
 				corrupted_backup_found = true;
 
 				/* orphanize current_backup */
