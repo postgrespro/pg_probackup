@@ -479,6 +479,17 @@ extern fobjBool*        fobj_bool(bool f);
 #define kls__fobjBool   mth(fobjRepr, fobjFormat)
 fobj_klass(fobjBool);
 
+/*
+ * Allocate temporary blob.
+ * It could be anything, and it will be automatically released.
+ */
+static inline void* fobj_alloc_temp(size_t buf_size);
+/* get object pointer for temporary blob */
+static inline fobj_t fobj_temp2obj(void* temp);
+#define fobj_temp_save(ptr)		$save(fobj_temp2obj(ptr))
+#define fobj_temp_result(ptr)   $result(fobj_temp2obj(ptr))
+#define fobj_temp_return(ptr)   $return(fobj_temp2obj(ptr))
+
 /**********************************
  * kv
  */

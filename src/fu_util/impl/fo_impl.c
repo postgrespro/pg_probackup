@@ -1341,6 +1341,7 @@ fobj_klass_handle(fobjInt);
 fobj_klass_handle(fobjUInt);
 fobj_klass_handle(fobjFloat);
 fobj_klass_handle(fobjBool);
+fobj_klass_handle(fobjTempBuffer);
 
 void
 fobj_init(void) {

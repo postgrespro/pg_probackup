@@ -234,4 +234,31 @@ fobj_errsrc(err_i err) {
 #define fobj__transform_fokv(...) \
     fm_eval_tuples_comma(fobj__transform_fokv_do, __VA_ARGS__)
 
+/**********************************
+ * Temp Buffer - "anything" you want to be automatically cleared
+ */
+typedef struct fobjTempBuffer {
+	char buf[1];
+} fobjTempBuffer;
+#define kls__fobjTempBuffer varsized(buf)
+fobj_klass(fobjTempBuffer);
+
+
+static inline void*
+fobj_alloc_temp(size_t buf_size)
+{
+	return fobj_alloc_sized(fobjTempBuffer, buf_size)->buf;
+}
+
+static inline fobj_t
+fobj_temp2obj(void* temp)
+{
+	/*
+	 * It looks dumb for the moment.
+	 * But in future object header will not be hidden, therefore
+	 * it will be meaningful.
+	 */
+	return (fobj_t)((char*)temp - offsetof(fobjTempBuffer, buf));
+}
+
 #endif // FOBJ_OBJ_PRIV2_H

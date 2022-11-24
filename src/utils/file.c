@@ -5634,7 +5634,7 @@ pioCopyWithFilters(pioWriteFlush_i dest, pioRead_i src,
     for (i = nfilters - 1; i >= 0; i--)
         dest = pioWrapWriteFilter(dest, filters[i], OUT_BUF_SIZE);
 
-    buf = ft_malloc(OUT_BUF_SIZE);
+    buf = fobj_alloc_temp(OUT_BUF_SIZE);
 
     for (;;)
     {
