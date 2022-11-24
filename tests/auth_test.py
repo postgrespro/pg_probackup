@@ -33,6 +33,7 @@ class SimpleAuthTest(ProbackupTest, unittest.TestCase):
         node = self.make_simple_node(
             base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
+            ptrack_enable=self.ptrack,
             initdb_params=['--data-checksums'])
 
         backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
@@ -40,6 +41,11 @@ class SimpleAuthTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
         node.slow_start()
+
+        if self.ptrack:
+            node.safe_psql(
+                "postgres",
+                "CREATE EXTENSION ptrack")
 
         node.safe_psql("postgres", "CREATE ROLE backup with LOGIN")
 
@@ -160,9 +166,10 @@ class SimpleAuthTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node', node, options=['-U', 'backup'])
 
         # PTRACK
-#        self.backup_node(
-#            backup_dir, 'node', node,
-#            backup_type='ptrack', options=['-U', 'backup'])
+        if self.ptrack:
+            self.backup_node(
+                backup_dir, 'node', node,
+                backup_type='ptrack', options=['-U', 'backup'])
 
 
 class AuthTest(unittest.TestCase):
