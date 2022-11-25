@@ -1799,7 +1799,7 @@ class ProbackupTest(object):
                         )
 
         for root, dirs, files in os.walk(pgdata, topdown=False, followlinks=True):
-            for directory in dirs:
+            for directory in sorted(dirs):
                 directory_path = os.path.join(root, directory)
                 directory_relpath = os.path.relpath(directory_path, pgdata)
 
