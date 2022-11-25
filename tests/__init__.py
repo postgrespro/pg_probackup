@@ -1,13 +1,13 @@
 import unittest
 import os
 
-from . import init, merge, option, show, compatibility, \
-    backup, delete, delta, restore, validate, \
-    retention, pgpro560, pgpro589, pgpro2068, false_positive, replica, \
-    compression, page, ptrack, archive, exclude, cfs_backup, cfs_restore, \
-    cfs_validate_backup, auth_test, time_stamp, logging, \
-    locking, remote, external, config, checkdb, set_backup, incr_restore, \
-    catchup, CVE_2018_1058, time_consuming
+from . import init_test, merge_test, option_test, show_test, compatibility_test, \
+    backup_test, delete_test, delta_test, restore_test, validate_test, \
+    retention_test, pgpro560_test, pgpro589_test, pgpro2068_test, false_positive_test, replica_test, \
+    compression_test, page_test, ptrack_test, archive_test, exclude_test, cfs_backup_test, cfs_restore_test, \
+    cfs_validate_backup_test, auth_test, time_stamp_test, logging_test, \
+    locking_test, remote_test, external_test, config_test, checkdb_test, set_backup_test, incr_restore_test, \
+    catchup_test, CVE_2018_1058_test, time_consuming_test
 
 
 def load_tests(loader, tests, pattern):
@@ -19,50 +19,50 @@ def load_tests(loader, tests, pattern):
 
     if 'PG_PROBACKUP_PTRACK' in os.environ:
         if os.environ['PG_PROBACKUP_PTRACK'] == 'ON':
-            suite.addTests(loader.loadTestsFromModule(ptrack))
+            suite.addTests(loader.loadTestsFromModule(ptrack_test))
 
     # PG_PROBACKUP_LONG section for tests that are long
     # by design e.g. they contain loops, sleeps and so on
     if 'PG_PROBACKUP_LONG' in os.environ:
         if os.environ['PG_PROBACKUP_LONG'] == 'ON':
-            suite.addTests(loader.loadTestsFromModule(time_consuming))
+            suite.addTests(loader.loadTestsFromModule(time_consuming_test))
 
     suite.addTests(loader.loadTestsFromModule(auth_test))
-    suite.addTests(loader.loadTestsFromModule(archive))
-    suite.addTests(loader.loadTestsFromModule(backup))
-    suite.addTests(loader.loadTestsFromModule(catchup))
+    suite.addTests(loader.loadTestsFromModule(archive_test))
+    suite.addTests(loader.loadTestsFromModule(backup_test))
+    suite.addTests(loader.loadTestsFromModule(catchup_test))
     if 'PGPROBACKUPBIN_OLD' in os.environ and os.environ['PGPROBACKUPBIN_OLD']:
-        suite.addTests(loader.loadTestsFromModule(compatibility))
-    suite.addTests(loader.loadTestsFromModule(checkdb))
-    suite.addTests(loader.loadTestsFromModule(config))
-    suite.addTests(loader.loadTestsFromModule(cfs_backup))
-    suite.addTests(loader.loadTestsFromModule(cfs_restore))
-    suite.addTests(loader.loadTestsFromModule(cfs_validate_backup))
-    suite.addTests(loader.loadTestsFromModule(compression))
-    suite.addTests(loader.loadTestsFromModule(delete))
-    suite.addTests(loader.loadTestsFromModule(delta))
-    suite.addTests(loader.loadTestsFromModule(exclude))
-    suite.addTests(loader.loadTestsFromModule(external))
-    suite.addTests(loader.loadTestsFromModule(false_positive))
-    suite.addTests(loader.loadTestsFromModule(init))
-    suite.addTests(loader.loadTestsFromModule(incr_restore))
-    suite.addTests(loader.loadTestsFromModule(locking))
-    suite.addTests(loader.loadTestsFromModule(logging))
-    suite.addTests(loader.loadTestsFromModule(merge))
-    suite.addTests(loader.loadTestsFromModule(option))
-    suite.addTests(loader.loadTestsFromModule(page))
-    suite.addTests(loader.loadTestsFromModule(pgpro560))
-    suite.addTests(loader.loadTestsFromModule(pgpro589))
-    suite.addTests(loader.loadTestsFromModule(pgpro2068))
-    suite.addTests(loader.loadTestsFromModule(remote))
-    suite.addTests(loader.loadTestsFromModule(replica))
-    suite.addTests(loader.loadTestsFromModule(restore))
-    suite.addTests(loader.loadTestsFromModule(retention))
-    suite.addTests(loader.loadTestsFromModule(set_backup))
-    suite.addTests(loader.loadTestsFromModule(show))
-    suite.addTests(loader.loadTestsFromModule(time_stamp))
-    suite.addTests(loader.loadTestsFromModule(validate))
-    suite.addTests(loader.loadTestsFromModule(CVE_2018_1058))
+        suite.addTests(loader.loadTestsFromModule(compatibility_test))
+    suite.addTests(loader.loadTestsFromModule(checkdb_test))
+    suite.addTests(loader.loadTestsFromModule(config_test))
+    suite.addTests(loader.loadTestsFromModule(cfs_backup_test))
+    suite.addTests(loader.loadTestsFromModule(cfs_restore_test))
+    suite.addTests(loader.loadTestsFromModule(cfs_validate_backup_test))
+    suite.addTests(loader.loadTestsFromModule(compression_test))
+    suite.addTests(loader.loadTestsFromModule(delete_test))
+    suite.addTests(loader.loadTestsFromModule(delta_test))
+    suite.addTests(loader.loadTestsFromModule(exclude_test))
+    suite.addTests(loader.loadTestsFromModule(external_test))
+    suite.addTests(loader.loadTestsFromModule(false_positive_test))
+    suite.addTests(loader.loadTestsFromModule(init_test))
+    suite.addTests(loader.loadTestsFromModule(incr_restore_test))
+    suite.addTests(loader.loadTestsFromModule(locking_test))
+    suite.addTests(loader.loadTestsFromModule(logging_test))
+    suite.addTests(loader.loadTestsFromModule(merge_test))
+    suite.addTests(loader.loadTestsFromModule(option_test))
+    suite.addTests(loader.loadTestsFromModule(page_test))
+    suite.addTests(loader.loadTestsFromModule(pgpro560_test))
+    suite.addTests(loader.loadTestsFromModule(pgpro589_test))
+    suite.addTests(loader.loadTestsFromModule(pgpro2068_test))
+    suite.addTests(loader.loadTestsFromModule(remote_test))
+    suite.addTests(loader.loadTestsFromModule(replica_test))
+    suite.addTests(loader.loadTestsFromModule(restore_test))
+    suite.addTests(loader.loadTestsFromModule(retention_test))
+    suite.addTests(loader.loadTestsFromModule(set_backup_test))
+    suite.addTests(loader.loadTestsFromModule(show_test))
+    suite.addTests(loader.loadTestsFromModule(time_stamp_test))
+    suite.addTests(loader.loadTestsFromModule(validate_test))
+    suite.addTests(loader.loadTestsFromModule(CVE_2018_1058_test))
 
     return suite
 
