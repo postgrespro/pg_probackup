@@ -65,6 +65,7 @@ extern void *pgut_realloc(void *p, size_t size);
 extern char *pgut_strdup(const char *str);
 extern char *pgut_strndup(const char *str, size_t n);
 extern char *pgut_str_strip_trailing_filename(const char *filepath, const char *filename);
+extern void  pgut_free(void *p);
 
 #define pgut_new(type)			((type *) pgut_malloc(sizeof(type)))
 #define pgut_new0(type)			((type *) pgut_malloc0(sizeof(type)))

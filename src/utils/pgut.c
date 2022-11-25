@@ -979,6 +979,12 @@ pgut_str_strip_trailing_filename(const char *filepath, const char *filename)
 		return pgut_strndup(filepath, fp_len);
 }
 
+void
+pgut_free(void *p)
+{
+	free(p);
+}
+
 #ifdef WIN32
 static int select_win32(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, const struct timeval * timeout);
 #define select		select_win32
