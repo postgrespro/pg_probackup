@@ -262,7 +262,7 @@ fio_get_agent_version(int* protocol, char* payload_buf, size_t payload_buf_size)
 pio_file_kind_e
 pio_statmode2file_kind(mode_t mode, const char* path)
 {
-	pio_file_kind_e	kind;
+	pio_file_kind_e	kind = PIO_KIND_UNKNOWN;
 	if (S_ISREG(mode))
 		kind = PIO_KIND_REGULAR;
 	else if (S_ISDIR(mode))
@@ -296,7 +296,7 @@ pio_statmode2file_kind(mode_t mode, const char* path)
 pio_file_kind_e
 pio_str2file_kind(const char* str, const char* path)
 {
-	pio_file_kind_e	kind;
+	pio_file_kind_e	kind = PIO_KIND_UNKNOWN;
 	if (strncmp(str, "reg", 3) == 0)
 		kind = PIO_KIND_REGULAR;
 	else if (strncmp(str, "dir", 3) == 0)
