@@ -3,6 +3,7 @@ import os
 import gc
 import unittest
 from sys import exit, argv, version_info
+import signal
 import subprocess
 import shutil
 import six
@@ -190,6 +191,14 @@ class PostgresNodeExtended(testgres.PostgresNode):
             self.is_started = False
             return result
 
+    def kill(self, someone = None):
+        if self.is_started:
+            sig = signal.SIGKILL if os.name != 'nt' else signal.SIGBREAK
+            if someone == None:
+                os.kill(self.pid, sig)
+            else:
+                os.kill(self.auxiliary_pids[someone][0], sig)
+            self.is_started = False
 
 class ProbackupTest(object):
     # Class attributes
