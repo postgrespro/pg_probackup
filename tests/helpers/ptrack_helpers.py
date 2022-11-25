@@ -1725,9 +1725,9 @@ class ProbackupTest(object):
                 file_relpath = os.path.relpath(file_fullpath, pgdata)
                 directory_dict['files'][file_relpath] = {'is_datafile': False}
                 with open(file_fullpath, 'rb') as f:
-                    content = f.read()
                     # truncate cfm's content's zero tail
                     if file_relpath.endswith('.cfm'):
+                        content = f.read()
                         zero64 = b"\x00"*64
                         l = len(content)
                         while l > 64:
@@ -1736,9 +1736,14 @@ class ProbackupTest(object):
                                 break
                             l = s
                         content = content[:l]
-                    directory_dict['files'][file_relpath]['md5'] = hashlib.md5(content).hexdigest()
-#                directory_dict['files'][file_relpath]['md5'] = hashlib.md5(
-#                    f = open(file_fullpath, 'rb').read()).hexdigest()
+                        digest = hashlib.md5(content)
+                    else:
+                        digest = hashlib.md5()
+                        while True:
+                            b = f.read(64*1024)
+                            if not b: break
+                            digest.update(b)
+                    directory_dict['files'][file_relpath]['md5'] = digest.hexdigest()
 
                 # crappy algorithm
                 if file.isdigit():
@@ -1750,7 +1755,7 @@ class ProbackupTest(object):
                         )
 
         for root, dirs, files in os.walk(pgdata, topdown=False, followlinks=True):
-            for directory in dirs:
+            for directory in sorted(dirs):
                 directory_path = os.path.join(root, directory)
                 directory_relpath = os.path.relpath(directory_path, pgdata)
 
