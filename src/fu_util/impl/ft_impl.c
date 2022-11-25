@@ -71,11 +71,11 @@ ft_realloc_arr(void* ptr, size_t elem_sz, size_t old_elems, size_t new_elems) {
     return ptr;
 }
 
+#ifdef OPTIMIZE_FT_MEMZERO
 #define MEMZERO_BLOCK 4096
 static const uint8_t zero[4096] = {0};
 void
 ft_memzero(void *_ptr, size_t sz) {
-#ifdef OPTIMIZE_FT_MEMZERO
     uint8_t*  ptr = _ptr;
     uintptr_t ptri = (uintptr_t)ptr;
     uintptr_t diff;
@@ -99,9 +99,14 @@ ft_memzero(void *_ptr, size_t sz) {
     }
 
     if (sz)
-#endif
         memset(ptr, 0, sz);
 }
+#else
+void
+ft_memzero(void *ptr, size_t sz) {
+	memset(ptr, 0, sz);
+}
+#endif
 
 /* String utils */
 
