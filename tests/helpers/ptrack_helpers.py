@@ -1811,13 +1811,13 @@ class ProbackupTest(object):
                 directory_dict['dirs'][directory_relpath] = ContentDir()
 
         # get permissions for every file and directory
-        for file, cfile in directory_dict['dirs'].items():
+        for dir, cdir in directory_dict['dirs'].items():
+            full_path = os.path.join(pgdata, dir)
+            cdir.mode = os.stat(full_path).st_mode
+
+        for file, cfile in directory_dict['files'].items():
             full_path = os.path.join(pgdata, file)
             cfile.mode = os.stat(full_path).st_mode
-
-        for file, cdir in directory_dict['files'].items():
-            full_path = os.path.join(pgdata, file)
-            cdir.mode = os.stat(full_path).st_mode
 
         return directory_dict
 
