@@ -85,7 +85,6 @@ class BugTest(ProbackupTest, unittest.TestCase):
         # get pids of replica background workers
         startup_pid = replica.auxiliary_pids[ProcessType.Startup][0]
         checkpointer_pid = replica.auxiliary_pids[ProcessType.Checkpointer][0]
-        bgwriter_pid = replica.auxiliary_pids[ProcessType.BackgroundWriter][0]
 
         # break checkpointer on UpdateLastRemovedPtr
         gdb_checkpointer = self.gdb_attach(checkpointer_pid)
@@ -108,7 +107,7 @@ class BugTest(ProbackupTest, unittest.TestCase):
         pgbench.stdout.close()
 
         # kill someone, we need a crash
-        os.kill(int(bgwriter_pid), 9)
+        replica.kill(someone=ProcessType.BackgroundWriter)
         gdb_recovery._execute('detach')
         gdb_checkpointer._execute('detach')
 

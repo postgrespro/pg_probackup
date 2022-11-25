@@ -972,7 +972,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         self.set_auto_conf(dst_pg, dst_options)
         dst_pg.slow_start()
         self.assertNotEqual(dst_pg.pid, 0, "Cannot detect pid of running postgres")
-        os.kill(dst_pg.pid, signal.SIGKILL)
+        dst_pg.kill()
 
         # preparation 3: make changes on master (source)
         src_pg.pgbench_init(scale = 10)
@@ -1061,7 +1061,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         self.set_auto_conf(dst_pg, dst_options)
         dst_pg.slow_start()
         self.assertNotEqual(dst_pg.pid, 0, "Cannot detect pid of running postgres")
-        os.kill(dst_pg.pid, signal.SIGKILL)
+        dst_pg.kill()
 
         # preparation 3: make changes on master (source)
         src_pg.pgbench_init(scale = 10)
