@@ -1803,27 +1803,13 @@ class ProbackupTest(object):
                             file_fullpath, size_in_pages
                         )
 
-        for root, dirs, files in os.walk(pgdata, topdown=False, followlinks=True):
-            for directory in sorted(dirs):
+            for directory in dirs:
                 directory_path = os.path.join(root, directory)
                 directory_relpath = os.path.relpath(directory_path, pgdata)
-
-                found = False
-                for d in dirs_to_ignore:
-                    if d in directory_relpath:
-                        found = True
-                        break
-
-                # check if directory already here as part of larger directory
-                if not found:
-                    for d in directory_dict['dirs']:
-                        # print("OLD dir {0}".format(d))
-                        if directory_relpath in d:
-                            found = True
-                            break
-
-                if not found:
-                    directory_dict['dirs'][directory_relpath] = {}
+                parent = os.path.dirname(directory_relpath)
+                if parent in directory_dict['dirs']:
+                    del directory_dict['dirs'][parent]
+                directory_dict['dirs'][directory_relpath] = {}
 
         # get permissions for every file and directory
         for file in directory_dict['dirs']:
