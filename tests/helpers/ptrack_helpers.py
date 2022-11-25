@@ -1996,7 +1996,8 @@ class GDBobj:
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             bufsize=0,
-            universal_newlines=True
+            text=True,
+            errors='replace',
         )
         self.gdb_pid = self.proc.pid
 
