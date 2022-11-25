@@ -1723,7 +1723,8 @@ class ProbackupTest(object):
 
                 file_fullpath = os.path.join(root, file)
                 file_relpath = os.path.relpath(file_fullpath, pgdata)
-                directory_dict['files'][file_relpath] = {'is_datafile': False}
+                cfile = ContentFile(file.isdigit())
+                directory_dict['files'][file_relpath] = cfile
                 with open(file_fullpath, 'rb') as f:
                     # truncate cfm's content's zero tail
                     if file_relpath.endswith('.cfm'):
@@ -1743,49 +1744,31 @@ class ProbackupTest(object):
                             b = f.read(64*1024)
                             if not b: break
                             digest.update(b)
-                    directory_dict['files'][file_relpath]['md5'] = digest.hexdigest()
+                    cfile.md5 = digest.hexdigest()
 
                 # crappy algorithm
-                if file.isdigit():
-                    directory_dict['files'][file_relpath]['is_datafile'] = True
+                if cfile.is_datafile:
                     size_in_pages = os.path.getsize(file_fullpath)/8192
-                    directory_dict['files'][file_relpath][
-                        'md5_per_page'] = self.get_md5_per_page_for_fork(
+                    cfile.md5_per_page = self.get_md5_per_page_for_fork(
                             file_fullpath, size_in_pages
                         )
 
-        for root, dirs, files in os.walk(pgdata, topdown=False, followlinks=True):
-            for directory in sorted(dirs):
+            for directory in dirs:
                 directory_path = os.path.join(root, directory)
                 directory_relpath = os.path.relpath(directory_path, pgdata)
-
-                found = False
-                for d in dirs_to_ignore:
-                    if d in directory_relpath:
-                        found = True
-                        break
-
-                # check if directory already here as part of larger directory
-                if not found:
-                    for d in directory_dict['dirs']:
-                        # print("OLD dir {0}".format(d))
-                        if directory_relpath in d:
-                            found = True
-                            break
-
-                if not found:
-                    directory_dict['dirs'][directory_relpath] = {}
+                parent = os.path.dirname(directory_relpath)
+                if parent in directory_dict['dirs']:
+                    del directory_dict['dirs'][parent]
+                directory_dict['dirs'][directory_relpath] = ContentDir()
 
         # get permissions for every file and directory
-        for file in directory_dict['dirs']:
+        for file, cfile in directory_dict['dirs'].items():
             full_path = os.path.join(pgdata, file)
-            directory_dict['dirs'][file]['mode'] = os.stat(
-                full_path).st_mode
+            cfile.mode = os.stat(full_path).st_mode
 
-        for file in directory_dict['files']:
+        for file, cdir in directory_dict['files'].items():
             full_path = os.path.join(pgdata, file)
-            directory_dict['files'][file]['mode'] = os.stat(
-                full_path).st_mode
+            cdir.mode = os.stat(full_path).st_mode
 
         return directory_dict
 
@@ -1817,123 +1800,117 @@ class ProbackupTest(object):
         error_message = 'Restored PGDATA is not equal to original!\n'
 
         # Compare directories
-        for directory in restored_pgdata['dirs']:
-            if directory not in original_pgdata['dirs']:
-                fail = True
-                error_message += '\nDirectory was not present'
-                error_message += ' in original PGDATA: {0}\n'.format(
-                    os.path.join(restored_pgdata['pgdata'], directory))
-            else:
-                if (
-                    restored_pgdata['dirs'][directory]['mode'] !=
-                    original_pgdata['dirs'][directory]['mode']
-                ):
-                    fail = True
-                    error_message += '\nDir permissions mismatch:\n'
-                    error_message += ' Dir old: {0} Permissions: {1}\n'.format(
-                        os.path.join(original_pgdata['pgdata'], directory),
-                        original_pgdata['dirs'][directory]['mode'])
-                    error_message += ' Dir new: {0} Permissions: {1}\n'.format(
-                        os.path.join(restored_pgdata['pgdata'], directory),
-                        restored_pgdata['dirs'][directory]['mode'])
+        restored_dirs = set(restored_pgdata['dirs'])
+        original_dirs = set(restored_pgdata['dirs'])
 
-        for directory in original_pgdata['dirs']:
-            if directory not in restored_pgdata['dirs']:
-                fail = True
-                error_message += '\nDirectory dissappeared'
-                error_message += ' in restored PGDATA: {0}\n'.format(
-                    os.path.join(restored_pgdata['pgdata'], directory))
+        for directory in sorted(restored_dirs - original_dirs):
+            fail = True
+            error_message += '\nDirectory was not present'
+            error_message += ' in original PGDATA: {0}\n'.format(
+                os.path.join(restored_pgdata['pgdata'], directory))
 
-        for file in restored_pgdata['files']:
+        for directory in sorted(original_dirs - restored_dirs):
+            fail = True
+            error_message += '\nDirectory dissappeared'
+            error_message += ' in restored PGDATA: {0}\n'.format(
+                os.path.join(restored_pgdata['pgdata'], directory))
+
+        for directory in sorted(original_dirs & restored_dirs):
+            original = original_pgdata['dirs'][directory]
+            restored = restored_pgdata['dirs'][directory]
+            if original.mode != restored.mode:
+                fail = True
+                error_message += '\nDir permissions mismatch:\n'
+                error_message += ' Dir old: {0} Permissions: {1}\n'.format(
+                    os.path.join(original_pgdata['pgdata'], directory),
+                    original.mode)
+                error_message += ' Dir new: {0} Permissions: {1}\n'.format(
+                    os.path.join(restored_pgdata['pgdata'], directory),
+                    restored.mode)
+
+        restored_files = set(restored_pgdata['files'])
+        original_files = set(restored_pgdata['files'])
+
+        for file in sorted(restored_files - original_files):
             # File is present in RESTORED PGDATA
             # but not present in ORIGINAL
             # only backup_label is allowed
-            if file not in original_pgdata['files']:
+            fail = True
+            error_message += '\nFile is not present'
+            error_message += ' in original PGDATA: {0}\n'.format(
+                os.path.join(restored_pgdata['pgdata'], file))
+
+        for file in sorted(original_files - restored_files):
+            error_message += (
+                '\nFile disappearance.\n '
+                'File: {0}\n').format(
+                os.path.join(restored_pgdata['pgdata'], file)
+            )
+            fail = True
+
+        for file in sorted(original_files & restored_files):
+            original = original_pgdata['files'][file]
+            restored = restored_pgdata['files'][file]
+            if restored.mode != original.mode:
                 fail = True
-                error_message += '\nFile is not present'
-                error_message += ' in original PGDATA: {0}\n'.format(
-                    os.path.join(restored_pgdata['pgdata'], file))
+                error_message += '\nFile permissions mismatch:\n'
+                error_message += ' File_old: {0} Permissions: {1:o}\n'.format(
+                    os.path.join(original_pgdata['pgdata'], file),
+                    original.mode)
+                error_message += ' File_new: {0} Permissions: {1:o}\n'.format(
+                    os.path.join(restored_pgdata['pgdata'], file),
+                    restored.mode)
 
-        for file in original_pgdata['files']:
-            if file in restored_pgdata['files']:
-
-                if (
-                    restored_pgdata['files'][file]['mode'] !=
-                    original_pgdata['files'][file]['mode']
-                ):
+            if original.md5 != restored.md5:
+                if file not in exclusion_dict:
                     fail = True
-                    error_message += '\nFile permissions mismatch:\n'
-                    error_message += ' File_old: {0} Permissions: {1:o}\n'.format(
+                    error_message += (
+                        '\nFile Checksum mismatch.\n'
+                        'File_old: {0}\nChecksum_old: {1}\n'
+                        'File_new: {2}\nChecksum_new: {3}\n').format(
                         os.path.join(original_pgdata['pgdata'], file),
-                        original_pgdata['files'][file]['mode'])
-                    error_message += ' File_new: {0} Permissions: {1:o}\n'.format(
+                        original.md5,
                         os.path.join(restored_pgdata['pgdata'], file),
-                        restored_pgdata['files'][file]['mode'])
+                        restored.md5
+                    )
 
-                if (
-                    original_pgdata['files'][file]['md5'] !=
-                    restored_pgdata['files'][file]['md5']
-                ):
-                    if file not in exclusion_dict:
+                if not original.is_datafile:
+                    continue
+
+                original_pages = set(original.md5_per_page)
+                restored_pages = set(restored.md5_per_page)
+
+                for page in sorted(original_pages - restored_pages):
+                    error_message += '\n Page {0} dissappeared.\n File: {1}\n'.format(
+                        page,
+                        os.path.join(restored_pgdata['pgdata'], file)
+                    )
+
+
+                for page in sorted(restored_pages - original_pages):
+                    error_message += '\n Extra page {0}\n File: {1}\n'.format(
+                        page,
+                        os.path.join(restored_pgdata['pgdata'], file))
+
+                for page in sorted(original_pages & restored_pages):
+                    if file in exclusion_dict and page in exclusion_dict[file]:
+                        continue
+
+                    if original.md5_per_page[page] != restored.md5_per_page[page]:
                         fail = True
                         error_message += (
-                            '\nFile Checksum mismatch.\n'
-                            'File_old: {0}\nChecksum_old: {1}\n'
-                            'File_new: {2}\nChecksum_new: {3}\n').format(
-                            os.path.join(original_pgdata['pgdata'], file),
-                            original_pgdata['files'][file]['md5'],
-                            os.path.join(restored_pgdata['pgdata'], file),
-                            restored_pgdata['files'][file]['md5']
-                        )
+                            '\n Page checksum mismatch: {0}\n '
+                            ' PAGE Checksum_old: {1}\n '
+                            ' PAGE Checksum_new: {2}\n '
+                            ' File: {3}\n'
+                        ).format(
+                            page,
+                            original.md5_per_page[page],
+                            restored.md5_per_page[page],
+                            os.path.join(
+                                restored_pgdata['pgdata'], file)
+                            )
 
-                    if original_pgdata['files'][file]['is_datafile']:
-                        for page in original_pgdata['files'][file]['md5_per_page']:
-                            if page not in restored_pgdata['files'][file]['md5_per_page']:
-                                error_message += (
-                                    '\n Page {0} dissappeared.\n '
-                                    'File: {1}\n').format(
-                                        page,
-                                        os.path.join(
-                                            restored_pgdata['pgdata'],
-                                            file
-                                        )
-                                    )
-                                continue
-
-                            if not (file in exclusion_dict and page in exclusion_dict[file]):
-                                if (
-                                    original_pgdata['files'][file]['md5_per_page'][page] !=
-                                    restored_pgdata['files'][file]['md5_per_page'][page]
-                                ):
-                                    fail = True
-                                    error_message += (
-                                        '\n Page checksum mismatch: {0}\n '
-                                        ' PAGE Checksum_old: {1}\n '
-                                        ' PAGE Checksum_new: {2}\n '
-                                        ' File: {3}\n'
-                                    ).format(
-                                        page,
-                                        original_pgdata['files'][file][
-                                            'md5_per_page'][page],
-                                        restored_pgdata['files'][file][
-                                            'md5_per_page'][page],
-                                        os.path.join(
-                                            restored_pgdata['pgdata'], file)
-                                        )
-                        for page in restored_pgdata['files'][file]['md5_per_page']:
-                            if page not in original_pgdata['files'][file]['md5_per_page']:
-                                error_message += '\n Extra page {0}\n File: {1}\n'.format(
-                                    page,
-                                    os.path.join(
-                                        restored_pgdata['pgdata'], file))
-
-            else:
-                error_message += (
-                    '\nFile disappearance.\n '
-                    'File: {0}\n').format(
-                    os.path.join(restored_pgdata['pgdata'], file)
-                    )
-                fail = True
         self.assertFalse(fail, error_message)
 
     def gdb_attach(self, pid):
@@ -2186,3 +2163,10 @@ class GDBobj:
 #            if running and line.startswith('*running'):
                 break
         return output
+class ContentFile(object):
+    __slots__ = ('is_datafile', 'mode', 'md5', 'md5_per_page')
+    def __init__(self, is_datafile: bool):
+        self.is_datafile = is_datafile
+
+class ContentDir(object):
+    __slots__ = ('mode')
