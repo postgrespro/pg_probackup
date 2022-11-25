@@ -993,6 +993,12 @@ pgut_str_strip_trailing_filename(const char *filepath, const char *filename)
 		return pgut_strndup(filepath, fp_len);
 }
 
+void
+pgut_free(void *p)
+{
+	free(p);
+}
+
 FILE *
 pgut_fopen(const char *path, const char *mode, bool missing_ok)
 {

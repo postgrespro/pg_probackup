@@ -538,6 +538,9 @@ config_get_opt(int argc, char **argv, ConfigOption cmd_options[],
 		assign_option(opt, optarg, SOURCE_CMD);
 	}
 
+	pgut_free(optstring);
+	pgut_free(longopts);
+
 	return optind;
 }
 
