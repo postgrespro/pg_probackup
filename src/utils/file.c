@@ -93,10 +93,10 @@ typedef struct
 
 static void dir_list_file(parray *files, const char *root, bool handle_tablespaces,
 						  bool follow_symlink, bool backup_logs, bool skip_hidden,
-						  int external_dir_num, fio_location location);
+						  int external_dir_num, pioDrive_i drive);
 static void dir_list_file_internal(parray *files, pgFile *parent, const char *parent_dir,
 								   bool handle_tablespaces, bool follow_symlink, bool backup_logs,
-								   bool skip_hidden, int external_dir_num, fio_location location);
+								   bool skip_hidden, int external_dir_num, pioDrive_i drive);
 
 void
 setMyLocation(ProbackupSubcmd const subcmd)
@@ -3290,11 +3290,13 @@ fio_remove_dir_impl(int out, char* buf) {
  */
 static void
 dir_list_file(parray *files, const char *root, bool handle_tablespaces, bool follow_symlink,
-			  bool backup_logs, bool skip_hidden, int external_dir_num, fio_location location)
+			  bool backup_logs, bool skip_hidden, int external_dir_num, pioDrive_i drive)
 {
 	pgFile	   *file;
 
-	file = pgFileNew(root, "", follow_symlink, external_dir_num, location);
+	Assert(!$i(pioIsRemote, drive));
+
+	file = pgFileNew(root, "", follow_symlink, external_dir_num, drive);
 	if (file == NULL)
 	{
 		/* For external directory this is not ok */
@@ -3315,7 +3317,7 @@ dir_list_file(parray *files, const char *root, bool handle_tablespaces, bool fol
 	}
 
 	dir_list_file_internal(files, file, root, handle_tablespaces, follow_symlink,
-						   backup_logs, skip_hidden, external_dir_num, location);
+						   backup_logs, skip_hidden, external_dir_num, drive);
 
 	pgFileFree(file);
 }
@@ -3333,11 +3335,13 @@ dir_list_file(parray *files, const char *root, bool handle_tablespaces, bool fol
 static void
 dir_list_file_internal(parray *files, pgFile *parent, const char *parent_dir,
 					   bool handle_tablespaces, bool follow_symlink, bool backup_logs,
-					   bool skip_hidden, int external_dir_num, fio_location location)
+					   bool skip_hidden, int external_dir_num, pioDrive_i drive)
 {
 	DIR			  *dir;
 	struct dirent *dent;
 	bool in_tablespace = false;
+
+	Assert(!$i(pioIsRemote, drive));
 
 	if (parent->kind != PIO_KIND_DIRECTORY)
 		elog(ERROR, "\"%s\" is not a directory", parent_dir);
@@ -3345,7 +3349,7 @@ dir_list_file_internal(parray *files, pgFile *parent, const char *parent_dir,
 	in_tablespace = path_is_prefix_of_path(PG_TBLSPC_DIR, parent->rel_path);
 
 	/* Open directory and list contents */
-	dir = fio_opendir(location, parent_dir);
+	dir = opendir(parent_dir);
 	if (dir == NULL)
 	{
 		if (errno == ENOENT)
@@ -3358,7 +3362,7 @@ dir_list_file_internal(parray *files, pgFile *parent, const char *parent_dir,
 	}
 
 	errno = 0;
-	while ((dent = fio_readdir(dir)))
+	while ((dent = readdir(dir)))
 	{
 		pgFile	   *file;
 		char		child[MAXPGPATH];
@@ -3368,7 +3372,7 @@ dir_list_file_internal(parray *files, pgFile *parent, const char *parent_dir,
 		join_path_components(rel_child, parent->rel_path, dent->d_name);
 
 		file = pgFileNew(child, rel_child, follow_symlink,
-						 external_dir_num, location);
+						 external_dir_num, drive);
 		if (file == NULL)
 			continue;
 
@@ -3452,17 +3456,17 @@ dir_list_file_internal(parray *files, pgFile *parent, const char *parent_dir,
 		 */
 		if (file->kind == PIO_KIND_DIRECTORY)
 			dir_list_file_internal(files, file, child, handle_tablespaces, follow_symlink,
-								   backup_logs, skip_hidden, external_dir_num, location);
+								   backup_logs, skip_hidden, external_dir_num, drive);
 	}
 
 	if (errno && errno != ENOENT)
 	{
 		int			errno_tmp = errno;
-		fio_closedir(dir);
+		closedir(dir);
 		elog(ERROR, "Cannot read directory \"%s\": %s",
 			 parent_dir, strerror(errno_tmp));
 	}
-	fio_closedir(dir);
+	closedir(dir);
 }
 
 /*
@@ -3477,7 +3481,7 @@ dir_list_file_internal(parray *files, pgFile *parent, const char *parent_dir,
  * TODO: replace FIO_SEND_FILE and FIO_SEND_FILE_EOF with dedicated messages
  */
 static void
-fio_list_dir_impl(int out, char* buf)
+fio_list_dir_impl(int out, char* buf, pioDrive_i drive)
 {
 	int i;
 	fio_header hdr;
@@ -3494,7 +3498,7 @@ fio_list_dir_impl(int out, char* buf)
 
 	dir_list_file(file_files, req->path, req->handle_tablespaces,
 				  req->follow_symlink, req->backup_logs, req->skip_hidden,
-				  req->external_dir_num, FIO_LOCAL_HOST);
+				  req->external_dir_num, drive);
 
 	/* send information about files to the main process */
 	for (i = 0; i < parray_num(file_files); i++)
@@ -3984,7 +3988,7 @@ fio_communicate(int in, int out)
 			SYS_CHECK(ftruncate(fd[hdr.handle], hdr.arg));
 			break;
 		  case FIO_LIST_DIR:
-			fio_list_dir_impl(out, buf);
+			fio_list_dir_impl(out, buf, drive);
 			break;
           case FIO_REMOVE_DIR:
             fio_remove_dir_impl(out, buf);
@@ -4343,8 +4347,9 @@ pioLocalDrive_pioListDir(VSelf, parray *files, const char *root, bool handle_tab
                          bool follow_symlink, bool backup_logs, bool skip_hidden,
                          int external_dir_num) {
     FOBJ_FUNC_ARP();
+	Self(pioLocalDrive);
     dir_list_file(files, root, handle_tablespaces, follow_symlink, backup_logs,
-                        skip_hidden, external_dir_num, FIO_LOCAL_HOST);
+                        skip_hidden, external_dir_num, $bind(pioDrive, self));
 }
 
 static void
@@ -4360,7 +4365,7 @@ pioLocalDrive_pioRemoveDir(VSelf, const char *root, bool root_as_well) {
 
 	// adding the root directory because it must be deleted too
 	if(root_as_well)
-		parray_append(files, pgFileNew(root, "", false, 0, FIO_LOCAL_HOST));
+		parray_append(files, pgFileNew(root, "", false, 0, $bind(pioDrive, self)));
 
     /* delete leaf node first */
     parray_qsort(files, pgFileCompareRelPathWithExternalDesc);

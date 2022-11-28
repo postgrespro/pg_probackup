@@ -1032,7 +1032,7 @@ extern bool fileExists(const char *path, fio_location location);
 
 extern pgFile *pgFileNew(const char *path, const char *rel_path,
 						 bool follow_symlink, int external_dir_num,
-						 fio_location location);
+						 pioDrive_i drive);
 extern pgFile *pgFileInit(const char *rel_path);
 extern void pgFileFree(void *file);
 

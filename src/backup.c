@@ -1815,6 +1815,7 @@ pg_stop_backup_write_file_helper(const char *path, const char *filename, const c
 	FILE	*fp;
 	pgFile	*file;
 	char	full_filename[MAXPGPATH];
+	pioDrive_i drive = pioDriveForLocation(FIO_BACKUP_HOST);
 
 	join_path_components(full_filename, path, filename);
 	fp = fio_fopen(FIO_BACKUP_HOST, full_filename, PG_BINARY_W);
@@ -1834,8 +1835,7 @@ pg_stop_backup_write_file_helper(const char *path, const char *filename, const c
 	 */
 	if (file_list)
 	{
-		file = pgFileNew(full_filename, filename, true, 0,
-						 FIO_BACKUP_HOST);
+		file = pgFileNew(full_filename, filename, true, 0, drive);
 
 		if (file->kind == PIO_KIND_REGULAR)
 		{

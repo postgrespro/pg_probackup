@@ -139,7 +139,7 @@ static TablespaceList external_remap_list = {NULL, NULL};
 
 pgFile *
 pgFileNew(const char *path, const char *rel_path, bool follow_symlink,
-		  int external_dir_num, fio_location location)
+		  int external_dir_num, pioDrive_i drive)
 {
 	FOBJ_FUNC_ARP();
 	pio_stat_t		st;
@@ -147,8 +147,8 @@ pgFileNew(const char *path, const char *rel_path, bool follow_symlink,
 	err_i 			err;
 
 	/* stat the file */
-	st = $i(pioStat, pioDriveForLocation(location), .path = path,
-			.follow_symlink = follow_symlink, .err = &err);
+	st = $i(pioStat, drive, .path = path, .follow_symlink = follow_symlink,
+			.err = &err);
 	if ($haserr(err)) {
 		/* file not found is not an error case */
 		if (getErrno(err) == ENOENT)
@@ -1450,6 +1450,7 @@ write_database_map(pgBackup *backup, parray *database_map, parray *backup_files_
 	pgFile		*file;
 	char		database_dir[MAXPGPATH];
 	char		database_map_path[MAXPGPATH];
+	pioDrive_i	drive = pioDriveForLocation(FIO_BACKUP_HOST);
 
 	join_path_components(database_dir, backup->root_dir, DATABASE_DIR);
 	join_path_components(database_map_path, database_dir, DATABASE_MAP);
@@ -1470,8 +1471,7 @@ write_database_map(pgBackup *backup, parray *database_map, parray *backup_files_
 	}
 
 	/* Add metadata to backup_content.control */
-	file = pgFileNew(database_map_path, DATABASE_MAP, true, 0,
-								 FIO_BACKUP_HOST);
+	file = pgFileNew(database_map_path, DATABASE_MAP, true, 0, drive);
 	file->crc = pgFileGetCRC32C(database_map_path, false);
 	file->write_size = file->size;
 	file->uncompressed_size = file->size;

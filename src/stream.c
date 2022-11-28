@@ -666,6 +666,7 @@ add_walsegment_to_filelist(parray *filelist, uint32 timeline, XLogRecPtr xlogpos
     char wal_segment_fullpath[MAXPGPATH];
     pgFile *file = NULL;
     pgFile **existing_file = NULL;
+	pioDrive_i	drive = pioDriveForLocation(FIO_BACKUP_HOST);
 
     GetXLogSegNo(xlogpos, xlog_segno, xlog_seg_size);
 
@@ -683,7 +684,7 @@ add_walsegment_to_filelist(parray *filelist, uint32 timeline, XLogRecPtr xlogpos
     join_path_components(wal_segment_fullpath, basedir, wal_segment_name);
     join_path_components(wal_segment_relpath, PG_XLOG_DIR, wal_segment_name);
 
-    file = pgFileNew(wal_segment_fullpath, wal_segment_relpath, false, 0, FIO_BACKUP_HOST);
+    file = pgFileNew(wal_segment_fullpath, wal_segment_relpath, false, 0, drive);
 
     /*
      * Check if file is already in the list
@@ -722,6 +723,7 @@ add_history_file_to_filelist(parray *filelist, uint32 timeline, char *basedir)
     char fullpath[MAXPGPATH];
     char relpath[MAXPGPATH];
     pgFile *file = NULL;
+	pioDrive_i drive = pioDriveForLocation(FIO_BACKUP_HOST);
 
     /* Timeline 1 does not have a history file */
     if (timeline == 1)
@@ -731,7 +733,7 @@ add_history_file_to_filelist(parray *filelist, uint32 timeline, char *basedir)
     join_path_components(fullpath, basedir, filename);
     join_path_components(relpath, PG_XLOG_DIR, filename);
 
-    file = pgFileNew(fullpath, relpath, false, 0, FIO_BACKUP_HOST);
+    file = pgFileNew(fullpath, relpath, false, 0, drive);
 
     /* calculate crc */
     if (do_crc)
