@@ -28,7 +28,7 @@ static bool backup_lock_exit_hook_registered = false;
 static parray *locks = NULL;
 
 static int grab_excl_lock_file(const char *backup_dir, const char *backup_id, bool strict);
-static int grab_shared_lock_file(pgBackup *backup);
+static int grab_shared_lock_file(const char *backup_dir);
 static int wait_shared_owners(pgBackup *backup);
 
 
@@ -231,7 +231,7 @@ lock_backup(pgBackup *backup, bool strict, bool exclusive)
 	if (exclusive)
 		rc = wait_shared_owners(backup);
 	else
-		rc = grab_shared_lock_file(backup);
+		rc = grab_shared_lock_file(backup->root_dir);
 
 	if (rc != 0)
 	{
@@ -298,12 +298,17 @@ int
 grab_excl_lock_file(const char *root_dir, const char *backup_id, bool strict)
 {
 	char		lock_file[MAXPGPATH];
-	int			fd = 0;
+	FILE	   *fp = NULL;
 	char		buffer[256];
 	int			ntries = LOCK_TIMEOUT;
 	int			empty_tries = LOCK_STALE_TIMEOUT;
-	int			len;
-	int			encoded_pid;
+	size_t		len;
+	pid_t		encoded_pid;
+	int			save_errno = 0;
+	enum {
+		GELF_FAILED_WRITE = 1,
+		GELF_FAILED_CLOSE = 2,
+	} failed_action = 0;
 
 	join_path_components(lock_file, root_dir, BACKUP_LOCK_FILE);
 
@@ -314,19 +319,17 @@ grab_excl_lock_file(const char *root_dir, const char *backup_id, bool strict)
 	 */
 	do
 	{
-		FILE *fp_out = NULL;
-
 		if (interrupted)
 			elog(ERROR, "Interrupted while locking backup %s", backup_id);
 
 		/*
-		 * Try to create the lock file --- O_EXCL makes this atomic.
+		 * Try to create the lock file --- "wx" makes this atomic.
 		 *
 		 * Think not to make the file protection weaker than 0600.  See
 		 * comments below.
 		 */
-		fd = fio_open(FIO_BACKUP_HOST, lock_file, O_RDWR | O_CREAT | O_EXCL);
-		if (fd >= 0)
+		fp = fopen(lock_file, "wx");
+		if (fp != NULL)
 			break;				/* Success; exit the retry loop */
 
 		/* read-only fs is a special case */
@@ -342,7 +345,6 @@ grab_excl_lock_file(const char *root_dir, const char *backup_id, bool strict)
 		 * If file already exists or we have some permission problem (???),
 		 * then retry;
 		 */
-//		if ((errno != EEXIST && errno != EACCES))
 		if (errno != EEXIST)
 			elog(ERROR, "Could not create lock file \"%s\": %s",
 				 lock_file, strerror(errno));
@@ -352,18 +354,19 @@ grab_excl_lock_file(const char *root_dir, const char *backup_id, bool strict)
 		 * here: file might have been deleted since we tried to create it.
 		 */
 
-		fp_out = fopen(lock_file, "r");
-		if (fp_out == NULL)
+		fp = fopen(lock_file, "r");
+		if (fp == NULL)
 		{
 			if (errno == ENOENT)
 				continue; 	/* race condition; try again */
 			elog(ERROR, "Cannot open lock file \"%s\": %s", lock_file, strerror(errno));
 		}
 
-		len = fread(buffer, 1, sizeof(buffer) - 1, fp_out);
-		if (ferror(fp_out))
+		len = fread(buffer, 1, sizeof(buffer) - 1, fp);
+		if (ferror(fp))
 			elog(ERROR, "Cannot read from lock file: \"%s\"", lock_file);
-		fclose(fp_out);
+		fclose(fp);
+		fp = NULL;
 
 		/*
 		 * There are several possible reasons for lock file
@@ -400,7 +403,7 @@ grab_excl_lock_file(const char *root_dir, const char *backup_id, bool strict)
 			continue;
 		}
 
-		encoded_pid = atoi(buffer);
+		encoded_pid = (pid_t)atoll(buffer);
 
 		if (encoded_pid <= 0)
 		{
@@ -450,7 +453,7 @@ grab_lock:
 		 * it.  Need a loop because of possible race condition against other
 		 * would-be creators.
 		 */
-		if (fio_remove(FIO_BACKUP_HOST, lock_file, false) < 0)
+		if (remove(lock_file) < 0)
 		{
 			if (errno == ENOENT)
 				continue; /* race condition, again */
@@ -461,21 +464,32 @@ grab_lock:
 	} while (ntries--);
 
 	/* Failed to acquire exclusive lock in time */
-	if (fd <= 0)
+	if (fp == NULL)
 		return LOCK_FAIL_TIMEOUT;
 
 	/*
 	 * Successfully created the file, now fill it.
 	 */
-	snprintf(buffer, sizeof(buffer), "%lld\n", (long long)my_pid);
-
 	errno = 0;
-	if (fio_write(fd, buffer, strlen(buffer)) != strlen(buffer))
-	{
-		int save_errno = errno;
+	fprintf(fp, "%lld\n", (long long)my_pid);
+	fflush(fp);
 
-		fio_close(fd);
-		if (fio_remove(FIO_BACKUP_HOST, lock_file, false) != 0)
+	if (ferror(fp))
+	{
+		failed_action = GELF_FAILED_WRITE;
+		save_errno = errno;
+		clearerr(fp);
+	}
+
+	if (fclose(fp) && save_errno == 0)
+	{
+		failed_action = GELF_FAILED_CLOSE;
+		save_errno = errno;
+	}
+
+	if (save_errno)
+	{
+		if (remove(lock_file) != 0)
 			elog(WARNING, "Cannot remove lock file \"%s\": %s", lock_file, strerror(errno));
 
 		/* In lax mode if we failed to grab lock because of 'out of space error',
@@ -484,40 +498,10 @@ grab_lock:
 		 */
 		if (!strict && save_errno == ENOSPC)
 			return LOCK_FAIL_ENOSPC;
-		else
+		else if (failed_action == GELF_FAILED_WRITE)
 			elog(ERROR, "Could not write lock file \"%s\": %s",
 				 lock_file, strerror(save_errno));
-	}
-
-	if (fio_flush(fd) != 0)
-	{
-		int save_errno = errno;
-
-		fio_close(fd);
-		if (fio_remove(FIO_BACKUP_HOST, lock_file, false) != 0)
-			elog(WARNING, "Cannot remove lock file \"%s\": %s", lock_file, strerror(errno));
-
-		/* In lax mode if we failed to grab lock because of 'out of space error',
-		 * then treat backup as locked.
-		 * Only delete command should be run in lax mode.
-		 */
-		if (!strict && save_errno == ENOSPC)
-			return LOCK_FAIL_ENOSPC;
-		else
-			elog(ERROR, "Could not flush lock file \"%s\": %s",
-					lock_file, strerror(save_errno));
-	}
-
-	if (fio_close(fd) != 0)
-	{
-		int save_errno = errno;
-
-		if (fio_remove(FIO_BACKUP_HOST, lock_file, false) != 0)
-			elog(WARNING, "Cannot remove lock file \"%s\": %s", lock_file, strerror(errno));
-
-		if (!strict && save_errno == ENOSPC)
-			return LOCK_FAIL_ENOSPC;
-		else
+		else if (failed_action == GELF_FAILED_CLOSE)
 			elog(ERROR, "Could not close lock file \"%s\": %s",
 				 lock_file, strerror(save_errno));
 	}
@@ -616,26 +600,21 @@ wait_shared_owners(pgBackup *backup)
     return 0;
 }
 
+#define FT_SLICE		pid
+#define FT_SLICE_TYPE	pid_t
+#include <ft_array.inc.h>
+
 /*
- * Lock backup in shared mode
- * 0 - successs
- * 1 - fail
+ * returns array of pids stored in shared lock file and still alive.
+ * It excludes our own pid, so no need to exclude it explicitely.
  */
-int
-grab_shared_lock_file(pgBackup *backup)
+static ft_arr_pid_t
+read_shared_lock_file(const char *lock_file)
 {
 	FILE *fp_in = NULL;
-	FILE *fp_out = NULL;
 	char  buf_in[256];
 	pid_t encoded_pid;
-	char  lock_file[MAXPGPATH];
-
-	char  buffer[8192]; /*TODO: should be enough, but maybe malloc+realloc is better ? */
-	char  lock_file_tmp[MAXPGPATH];
-	int   buffer_len = 0;
-
-	join_path_components(lock_file, backup->root_dir, BACKUP_RO_LOCK_FILE);
-	snprintf(lock_file_tmp, MAXPGPATH, "%s%s", lock_file, "tmp");
+	ft_arr_pid_t pids = ft_arr_init();
 
 	/* open already existing lock files */
 	fp_in = fopen(lock_file, "r");
@@ -645,7 +624,7 @@ grab_shared_lock_file(pgBackup *backup)
 	/* read PIDs of owners */
 	while (fp_in && fgets(buf_in, sizeof(buf_in), fp_in))
 	{
-		encoded_pid = atoi(buf_in);
+		encoded_pid = (pid_t)atoll(buf_in);
 		if (encoded_pid <= 0)
 		{
 			elog(WARNING, "Bogus data in lock file \"%s\": \"%s\"", lock_file, buf_in);
@@ -661,11 +640,11 @@ grab_shared_lock_file(pgBackup *backup)
 			 * Somebody is still using this backup in shared mode,
 			 * copy this pid into a new file.
 			 */
-			buffer_len += snprintf(buffer+buffer_len, 4096, "%llu\n", (long long)encoded_pid);
+			ft_arr_pid_push(&pids, encoded_pid);
 		}
 		else if (errno != ESRCH)
 			elog(ERROR, "Failed to send signal 0 to a process %lld: %s",
-					(long long)encoded_pid, strerror(errno));
+				 (long long)encoded_pid, strerror(errno));
 	}
 
 	if (fp_in)
@@ -675,31 +654,69 @@ grab_shared_lock_file(pgBackup *backup)
 		fclose(fp_in);
 	}
 
+	return pids;
+}
+
+static void
+write_shared_lock_file(const char *lock_file, ft_arr_pid_t pids)
+{
+	FILE   *fp_out = NULL;
+	char	lock_file_tmp[MAXPGPATH];
+	ssize_t	i;
+
+	snprintf(lock_file_tmp, MAXPGPATH, "%s%s", lock_file, "tmp");
+
 	fp_out = fopen(lock_file_tmp, "w");
 	if (fp_out == NULL)
 	{
 		if (errno == EROFS)
-			return 0;
+			return;
 
 		elog(ERROR, "Cannot open temp lock file \"%s\": %s", lock_file_tmp, strerror(errno));
 	}
 
-	/* add my own pid */
-	buffer_len += snprintf(buffer+buffer_len, sizeof(buffer), "%llu\n", (long long)my_pid);
-
 	/* write out the collected PIDs to temp lock file */
-	fwrite(buffer, 1, buffer_len, fp_out);
+	for (i = 0; i < pids.len; i++)
+		fprintf(fp_out, "%lld\n", (long long)ft_arr_pid_at(&pids, i));
+	fflush(fp_out);
 
 	if (ferror(fp_out))
+	{
+		fclose(fp_out);
+		remove(lock_file_tmp);
 		elog(ERROR, "Cannot write to lock file: \"%s\"", lock_file_tmp);
+	}
 
 	if (fclose(fp_out) != 0)
+	{
+		remove(lock_file_tmp);
 		elog(ERROR, "Cannot close temp lock file \"%s\": %s", lock_file_tmp, strerror(errno));
+	}
 
 	if (rename(lock_file_tmp, lock_file) < 0)
 		elog(ERROR, "Cannot rename file \"%s\" to \"%s\": %s",
-			lock_file_tmp, lock_file, strerror(errno));
+			 lock_file_tmp, lock_file, strerror(errno));
+}
 
+/*
+ * Lock backup in shared mode
+ * 0 - successs
+ * 1 - fail
+ */
+int
+grab_shared_lock_file(const char *backup_dir)
+{
+	char  lock_file[MAXPGPATH];
+	ft_arr_pid_t	pids;
+
+	join_path_components(lock_file, backup_dir, BACKUP_RO_LOCK_FILE);
+
+	pids = read_shared_lock_file(lock_file);
+	/* add my own pid */
+	ft_arr_pid_push(&pids, my_pid);
+
+	write_shared_lock_file(lock_file, pids);
+	ft_arr_pid_free(&pids);
 	return 0;
 }
 
@@ -739,87 +756,23 @@ release_excl_lock_file(const char *backup_dir)
 void
 release_shared_lock_file(const char *backup_dir)
 {
-	FILE *fp_in = NULL;
-	FILE *fp_out = NULL;
-	char  buf_in[256];
-	pid_t encoded_pid;
 	char  lock_file[MAXPGPATH];
-
-	char  buffer[8192]; /*TODO: should be enough, but maybe malloc+realloc is better ? */
-	char  lock_file_tmp[MAXPGPATH];
-	int   buffer_len = 0;
+	ft_arr_pid_t	pids;
 
 	join_path_components(lock_file, backup_dir, BACKUP_RO_LOCK_FILE);
-	snprintf(lock_file_tmp, MAXPGPATH, "%s%s", lock_file, "tmp");
 
-	/* open lock file */
-	fp_in = fopen(lock_file, "r");
-	if (fp_in == NULL)
+	pids = read_shared_lock_file(lock_file);
+	/* read_shared_lock_file already had deleted my own pid */
+	if (pids.len == 0)
 	{
-		if (errno == ENOENT)
-			return;
-		else
-			elog(ERROR, "Cannot open lock file \"%s\": %s", lock_file, strerror(errno));
-	}
-
-	/* read PIDs of owners */
-	while (fgets(buf_in, sizeof(buf_in), fp_in))
-	{
-		encoded_pid = atoi(buf_in);
-
-		if (encoded_pid <= 0)
-		{
-			elog(WARNING, "Bogus data in lock file \"%s\": \"%s\"", lock_file, buf_in);
-			continue;
-		}
-
-		/* remove my pid */
-		if (encoded_pid == my_pid)
-			continue;
-
-		if (kill(encoded_pid, 0) == 0)
-		{
-			/*
-			 * Somebody is still using this backup in shared mode,
-			 * copy this pid into a new file.
-			 */
-			buffer_len += snprintf(buffer+buffer_len, 4096, "%llu\n", (long long)encoded_pid);
-		}
-		else if (errno != ESRCH)
-			elog(ERROR, "Failed to send signal 0 to a process %lld: %s",
-					(long long)encoded_pid, strerror(errno));
-    }
-
-	if (ferror(fp_in))
-		elog(ERROR, "Cannot read from lock file: \"%s\"", lock_file);
-	fclose(fp_in);
-
-	/* if there is no active pid left, then there is nothing to do */
-	if (buffer_len == 0)
-	{
-		if (fio_remove(FIO_BACKUP_HOST, lock_file, false) != 0)
+		ft_arr_pid_free(&pids);
+		if (remove(lock_file) != 0)
 			elog(ERROR, "Cannot remove shared lock file \"%s\": %s", lock_file, strerror(errno));
 		return;
 	}
 
-	fp_out = fopen(lock_file_tmp, "w");
-	if (fp_out == NULL)
-		elog(ERROR, "Cannot open temp lock file \"%s\": %s", lock_file_tmp, strerror(errno));
-
-	/* write out the collected PIDs to temp lock file */
-	fwrite(buffer, 1, buffer_len, fp_out);
-
-	if (ferror(fp_out))
-		elog(ERROR, "Cannot write to lock file: \"%s\"", lock_file_tmp);
-
-	if (fclose(fp_out) != 0)
-		elog(ERROR, "Cannot close temp lock file \"%s\": %s", lock_file_tmp, strerror(errno));
-
-	if (rename(lock_file_tmp, lock_file) < 0)
-		elog(ERROR, "Cannot rename file \"%s\" to \"%s\": %s",
-			lock_file_tmp, lock_file, strerror(errno));
-
-	return;
+	write_shared_lock_file(lock_file, pids);
+	ft_arr_pid_free(&pids);
 }
 
 /*
