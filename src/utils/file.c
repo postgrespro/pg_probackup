@@ -5,6 +5,7 @@
 #include <signal.h>
 
 #include "file.h"
+#include "catalog/pg_tablespace.h"
 #include "storage/checksum.h"
 
 #define PRINTF_BUF_SIZE  1024
@@ -89,6 +90,13 @@ typedef struct
 #undef open
 #undef fopen
 #endif
+
+static void dir_list_file(parray *files, const char *root, bool handle_tablespaces,
+						  bool follow_symlink, bool backup_logs, bool skip_hidden,
+						  int external_dir_num, fio_location location);
+static void dir_list_file_internal(parray *files, pgFile *parent, const char *parent_dir,
+								   bool handle_tablespaces, bool follow_symlink, bool backup_logs,
+								   bool skip_hidden, int external_dir_num, fio_location location);
 
 void
 setMyLocation(ProbackupSubcmd const subcmd)
@@ -3269,6 +3277,192 @@ fio_remove_dir_impl(int out, char* buf) {
     hdr.arg = 0;
 
     IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
+}
+
+/*
+ * List files, symbolic links and directories in the directory "root" and add
+ * pgFile objects to "files".  We add "root" to "files" if add_root is true.
+ *
+ * When follow_symlink is true, symbolic link is ignored and only file or
+ * directory linked to will be listed.
+ *
+ * TODO: make it strictly local
+ */
+static void
+dir_list_file(parray *files, const char *root, bool handle_tablespaces, bool follow_symlink,
+			  bool backup_logs, bool skip_hidden, int external_dir_num, fio_location location)
+{
+	pgFile	   *file;
+
+	file = pgFileNew(root, "", follow_symlink, external_dir_num, location);
+	if (file == NULL)
+	{
+		/* For external directory this is not ok */
+		if (external_dir_num > 0)
+			elog(ERROR, "External directory is not found: \"%s\"", root);
+		else
+			return;
+	}
+
+	if (file->kind != PIO_KIND_DIRECTORY)
+	{
+		if (external_dir_num > 0)
+			elog(ERROR, " --external-dirs option \"%s\": directory or symbolic link expected",
+				 root);
+		else
+			elog(WARNING, "Skip \"%s\": unexpected file format", root);
+		return;
+	}
+
+	dir_list_file_internal(files, file, root, handle_tablespaces, follow_symlink,
+						   backup_logs, skip_hidden, external_dir_num, location);
+
+	pgFileFree(file);
+}
+
+/*
+ * List files in parent->path directory.
+ * If "handle_tablespaces" is true, handle recursive tablespaces
+ * and the ones located inside pgdata.
+ * If "follow_symlink" is true, follow symlinks so that the
+ * fio_stat call fetches the info from the file pointed to by the
+ * symlink, not from the symlink itself.
+ *
+ * TODO: should we check for interrupt here ?
+ */
+static void
+dir_list_file_internal(parray *files, pgFile *parent, const char *parent_dir,
+					   bool handle_tablespaces, bool follow_symlink, bool backup_logs,
+					   bool skip_hidden, int external_dir_num, fio_location location)
+{
+	DIR			  *dir;
+	struct dirent *dent;
+	bool in_tablespace = false;
+
+	if (parent->kind != PIO_KIND_DIRECTORY)
+		elog(ERROR, "\"%s\" is not a directory", parent_dir);
+
+	in_tablespace = path_is_prefix_of_path(PG_TBLSPC_DIR, parent->rel_path);
+
+	/* Open directory and list contents */
+	dir = fio_opendir(location, parent_dir);
+	if (dir == NULL)
+	{
+		if (errno == ENOENT)
+		{
+			/* Maybe the directory was removed */
+			return;
+		}
+		elog(ERROR, "Cannot open directory \"%s\": %s",
+			 parent_dir, strerror(errno));
+	}
+
+	errno = 0;
+	while ((dent = fio_readdir(dir)))
+	{
+		pgFile	   *file;
+		char		child[MAXPGPATH];
+		char		rel_child[MAXPGPATH];
+
+		join_path_components(child, parent_dir, dent->d_name);
+		join_path_components(rel_child, parent->rel_path, dent->d_name);
+
+		file = pgFileNew(child, rel_child, follow_symlink,
+						 external_dir_num, location);
+		if (file == NULL)
+			continue;
+
+		/* Skip entries point current dir or parent dir */
+		if (file->kind == PIO_KIND_DIRECTORY &&
+			(strcmp(dent->d_name, ".") == 0 || strcmp(dent->d_name, "..") == 0))
+		{
+			pgFileFree(file);
+			continue;
+		}
+
+		/* skip hidden files and directories */
+		if (skip_hidden && file->name[0] == '.') {
+			elog(WARNING, "Skip hidden file: '%s'", child);
+			pgFileFree(file);
+			continue;
+		}
+
+		/*
+		 * Add only files, directories and links. Skip sockets and other
+		 * unexpected file formats.
+		 */
+		if (file->kind != PIO_KIND_DIRECTORY && file->kind != PIO_KIND_REGULAR)
+		{
+			elog(WARNING, "Skip '%s': unexpected file format", child);
+			pgFileFree(file);
+			continue;
+		}
+
+		if(handle_tablespaces) {
+			/*
+			 * Do not copy tablespaces twice. It may happen if the tablespace is located
+			 * inside the PGDATA.
+			 */
+			if (file->kind == PIO_KIND_DIRECTORY &&
+				strcmp(file->name, TABLESPACE_VERSION_DIRECTORY) == 0)
+			{
+				Oid			tblspcOid;
+				char		tmp_rel_path[MAXPGPATH];
+				int			sscanf_res;
+
+				/*
+				 * Valid path for the tablespace is
+				 * pg_tblspc/tblsOid/TABLESPACE_VERSION_DIRECTORY
+				 */
+				if (!path_is_prefix_of_path(PG_TBLSPC_DIR, file->rel_path))
+					continue;
+				sscanf_res = sscanf(file->rel_path, PG_TBLSPC_DIR "/%u/%s",
+									&tblspcOid, tmp_rel_path);
+				if (sscanf_res == 0)
+					continue;
+			}
+
+			if (in_tablespace) {
+				char        tmp_rel_path[MAXPGPATH];
+				ssize_t      sscanf_res;
+
+				sscanf_res = sscanf(file->rel_path, PG_TBLSPC_DIR "/%u/%[^/]/%u/",
+									&(file->tblspcOid), tmp_rel_path,
+									&(file->dbOid));
+
+				/*
+				 * We should skip other files and directories rather than
+				 * TABLESPACE_VERSION_DIRECTORY, if this is recursive tablespace.
+				 */
+				if (sscanf_res == 2 && strcmp(tmp_rel_path, TABLESPACE_VERSION_DIRECTORY) != 0)
+					continue;
+			} else if (path_is_prefix_of_path("global", file->rel_path)) {
+				file->tblspcOid = GLOBALTABLESPACE_OID;
+			} else if (path_is_prefix_of_path("base", file->rel_path)) {
+				file->tblspcOid = DEFAULTTABLESPACE_OID;
+				sscanf(file->rel_path, "base/%u/", &(file->dbOid));
+			}
+		}
+
+		parray_append(files, file);
+
+		/*
+		 * If the entry is a directory call dir_list_file_internal()
+		 * recursively.
+		 */
+		if (file->kind == PIO_KIND_DIRECTORY)
+			dir_list_file_internal(files, file, child, handle_tablespaces, follow_symlink,
+								   backup_logs, skip_hidden, external_dir_num, location);
+	}
+
+	if (errno && errno != ENOENT)
+	{
+		int			errno_tmp = errno;
+		fio_closedir(dir);
+		elog(ERROR, "Cannot read directory \"%s\": %s",
+			 parent_dir, strerror(errno_tmp));
+	}
+	fio_closedir(dir);
 }
 
 /*

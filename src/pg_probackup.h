@@ -995,9 +995,6 @@ extern const char* deparse_compress_alg(int alg);
 extern bool get_control_value_int64(const char *str, const char *name, int64 *value_int64, bool is_mandatory);
 extern bool get_control_value_str(const char *str, const char *name,
                                   char *value_str, size_t value_str_size, bool is_mandatory);
-extern void dir_list_file(parray *files, const char *root, bool handle_tablespaces,
-						  bool follow_symlink, bool backup_logs, bool skip_hidden,
-						  int external_dir_num, fio_location location);
 
 extern const char *get_tablespace_mapping(const char *dir);
 extern void create_data_directories(parray *dest_files,
