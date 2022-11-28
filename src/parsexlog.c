@@ -5,7 +5,7 @@
  *
  * Portions Copyright (c) 1996-2016, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
- * Portions Copyright (c) 2015-2019, Postgres Professional
+ * Portions Copyright (c) 2015-2022, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */
@@ -1424,14 +1424,6 @@ XLogThreadWorker(void *arg)
 			elog(ERROR, "Thread [%d]: Interrupted during WAL reading",
 				 reader_data->thread_num);
 
-		/*
-		 * We need to switch to the next WAL segment after reading previous
-		 * record. It may happen if we read contrecord.
-		 */
-		if (reader_data->need_switch &&
-			!SwitchThreadToNextWal(xlogreader, thread_arg))
-			break;
-
 		record = WalReadRecord(xlogreader, thread_arg->startpoint, &errormsg);
 
 		if (record == NULL)
@@ -1439,11 +1431,12 @@ XLogThreadWorker(void *arg)
 			XLogRecPtr	errptr;
 
 			/*
-			 * There is no record, try to switch to the next WAL segment.
+			 * We need to switch to the next WAL segment after reading previous
+			 * record. It may happen if we read contrecord.
 			 * Usually SimpleXLogPageRead() does it by itself. But here we need
 			 * to do it manually to support threads.
 			 */
-			if (reader_data->need_switch && errormsg == NULL)
+			if (reader_data->need_switch)
 			{
 				if (SwitchThreadToNextWal(xlogreader, thread_arg))
 					continue;
