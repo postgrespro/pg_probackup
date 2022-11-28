@@ -3742,6 +3742,26 @@ fio_communicate(int in, int out)
 			}
 			ft_bytes_free(&bytes);
 			break;
+		  case FIO_WRITE_FILE_AT_ONCE:
+			bytes = ft_bytes(buf, hdr.size);
+			ft_bytes_consume(&bytes, strlen(buf)+1);
+			err = $i(pioWriteFile, drive, .path = buf,
+					 .content = bytes, .binary = hdr.arg);
+			if ($haserr(err))
+			{
+				const char *msg = $errmsg(err);
+				hdr.arg = getErrno(err);
+				hdr.size = strlen(msg) + 1;
+				IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
+				IO_CHECK(fio_write_all(out, msg, hdr.size), hdr.size);
+			}
+			else
+			{
+				hdr.arg = 0;
+				hdr.size = 0;
+				IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
+			}
+			break;
 		  case FIO_ACCESS: /* Check presence of file with specified name */
 			hdr.size = 0;
 			hdr.arg = access(buf, hdr.arg) < 0 ? errno  : 0;
@@ -4194,19 +4214,21 @@ pioLocalDrive_pioReadFile(VSelf, path_t path, bool binary, err_i* err)
 	if (st.pst_kind != PIO_KIND_REGULAR)
 	{
 		*err = $err(RT, "File {path:q} is not regular: {kind}", path(path),
-					kind(pio_file_kind2str(st.pst_kind, path)));
+					kind(pio_file_kind2str(st.pst_kind, path)),
+					errNo(EACCES));
 		$iresult(*err);
 		return res;
 	}
 
 	/* forbid too large file because of remote protocol */
-	if (st.pst_size >= INT32_MAX)
+	if (st.pst_size >= PIO_READ_WRITE_FILE_LIMIT)
 	{
 		*err = $err(RT, "File {path:q} is too large: {size}", path(path),
-					size(st.pst_size), errNo(ENOMEM));
+					size(st.pst_size), errNo(EFBIG));
 		$iresult(*err);
 		return res;
 	}
+
 	if (binary)
 		res = ft_bytes_alloc(st.pst_size);
 	else
@@ -4254,6 +4276,60 @@ pioLocalDrive_pioReadFile(VSelf, path_t path, bool binary, err_i* err)
 
 	$i(pioClose, fl);
 	return res;
+}
+
+static err_i
+pioLocalDrive_pioWriteFile(VSelf, path_t path, ft_bytes_t content, bool binary)
+{
+	FOBJ_FUNC_ARP();
+	Self(pioLocalDrive);
+	pioFile_i	fl;
+	size_t		amount;
+	err_i 		err;
+
+	fobj_reset_err(&err);
+
+	if (content.len > PIO_READ_WRITE_FILE_LIMIT)
+	{
+		err = $err(RT, "File content too large {path:q}: {size}",
+				   path(path), size(content.len), errNo(EOVERFLOW));
+		return $iresult(err);
+	}
+
+	/*
+	 * rely on "local file is read whole at once always".
+	 * Is it true?
+	 */
+	fl = $(pioOpen, self, .path = path,
+		   .flags = O_WRONLY | O_CREAT | O_TRUNC | (binary ? PG_BINARY : 0),
+		   .err = &err);
+	if ($haserr(err))
+		return $iresult(err);
+
+	amount = $i(pioWrite, fl, .buf = content, .err = &err);
+	if ($haserr(err))
+		return $iresult(err);
+
+	if (amount != content.len)
+	{
+		err = $err(RT, "File {path:q} is truncated while reading",
+					path(path), errNo(EBUSY));
+		$iresult(err);
+		return err;
+	}
+
+	err = $i(pioWriteFinish, fl);
+	if ($haserr(err))
+		return $iresult(err);
+
+	err = $i(pioClose, fl);
+	if ($haserr(err))
+	{
+		$(pioRemove, self, .path = path);
+		return $iresult(err);
+	}
+
+	return $noerr();
 }
 
 /* LOCAL FILE */
@@ -4673,7 +4749,7 @@ static ft_bytes_t
 pioRemoteDrive_pioReadFile(VSelf, path_t path, bool binary, err_i* err)
 {
 	FOBJ_FUNC_ARP();
-	Self(pioLocalDrive);
+	Self(pioRemoteDrive);
 	ft_bytes_t res;
 
 	fobj_reset_err(err);
@@ -4704,6 +4780,57 @@ pioRemoteDrive_pioReadFile(VSelf, path_t path, bool binary, err_i* err)
 	}
 
 	return res;
+}
+
+static err_i
+pioRemoteDrive_pioWriteFile(VSelf, path_t path, ft_bytes_t content, bool binary)
+{
+	FOBJ_FUNC_ARP();
+	Self(pioLocalDrive);
+	fio_header	hdr;
+	ft_bytes_t	msg;
+	err_i		err;
+	ft_strbuf_t buf = ft_strbuf_zero();
+
+	fobj_reset_err(&err);
+
+	if (content.len > PIO_READ_WRITE_FILE_LIMIT)
+	{
+		err = $err(RT, "File content too large {path:q}: {size}",
+				   path(path), size(content.len), errNo(EOVERFLOW));
+		return $iresult(err);
+	}
+
+	ft_strbuf_catc(&buf, path);
+	ft_strbuf_cat1(&buf, '\x00');
+	ft_strbuf_catbytes(&buf, content);
+
+	hdr = (fio_header){
+			.cop = FIO_WRITE_FILE_AT_ONCE,
+			.handle = -1,
+			.size = buf.len,
+			.arg = binary,
+	};
+
+	IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
+	IO_CHECK(fio_write_all(fio_stdout, buf.ptr, buf.len), buf.len);
+
+	ft_strbuf_free(&buf);
+
+	IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
+	ft_dbg_assert(hdr.cop == FIO_WRITE_FILE_AT_ONCE);
+
+	if (hdr.arg != 0)
+	{
+		msg = ft_bytes_alloc(hdr.size);
+		IO_CHECK(fio_read_all(fio_stdin, msg.ptr, hdr.size), hdr.size);
+		err = $syserr((int)hdr.arg, "Could not write remote file {path:q}: {causeStr}",
+					   path(path), causeStr(msg.ptr));
+		ft_bytes_free(&msg);
+		return $iresult(err);
+	}
+
+	return $noerr();
 }
 
 /* REMOTE FILE */

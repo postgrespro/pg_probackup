@@ -418,6 +418,7 @@ ft_inline bool      ft_strbuf_ensure(ft_strbuf_t *buf, size_t n);
 /* All functions below returns false if fixed buffer was overflowed */
 ft_inline bool      ft_strbuf_may   (ft_strbuf_t *buf);
 ft_inline bool      ft_strbuf_cat   (ft_strbuf_t *buf, ft_str_t s);
+ft_inline bool      ft_strbuf_catbytes(ft_strbuf_t *buf, ft_bytes_t b);
 ft_inline bool      ft_strbuf_cat1  (ft_strbuf_t *buf, char c);
 ft_inline bool      ft_strbuf_cat2  (ft_strbuf_t *buf, char c1, char c2);
 ft_inline bool      ft_strbuf_catc  (ft_strbuf_t *buf, const char *s);

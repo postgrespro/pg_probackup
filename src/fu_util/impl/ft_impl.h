@@ -426,18 +426,24 @@ ft_strbuf_ensure(ft_strbuf_t *buf, size_t n) {
 
 ft_inline bool
 ft_strbuf_cat(ft_strbuf_t *buf, ft_str_t s) {
-    if (!ft_strbuf_may(buf))
-        return false;
-    if (s.len == 0)
-        return true;
-    if (!ft_strbuf_ensure(buf, s.len)) {
-        s.len = buf->cap - buf->len;
-        ft_assert(s.len > 0);
-    }
-    memmove(buf->ptr + buf->len, s.ptr, s.len);
-    buf->len += s.len;
-    buf->ptr[buf->len] = '\0';
-    return ft_strbuf_may(buf);
+	/* we could actually reuse ft_strbuf_catbytes */
+	return ft_strbuf_catbytes(buf, ft_bytes(s.ptr, s.len));
+}
+
+ft_inline bool
+ft_strbuf_catbytes(ft_strbuf_t *buf, ft_bytes_t s) {
+	if (!ft_strbuf_may(buf))
+		return false;
+	if (s.len == 0)
+		return true;
+	if (!ft_strbuf_ensure(buf, s.len)) {
+		s.len = buf->cap - buf->len;
+		ft_assert(s.len > 0);
+	}
+	memmove(buf->ptr + buf->len, s.ptr, s.len);
+	buf->len += s.len;
+	buf->ptr[buf->len] = '\0';
+	return ft_strbuf_may(buf);
 }
 
 ft_inline bool

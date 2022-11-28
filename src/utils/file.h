@@ -70,6 +70,7 @@ typedef enum
 	FIO_PAGE_ZERO,
 	FIO_FILES_ARE_SAME,
 	FIO_READ_FILE_AT_ONCE,
+	FIO_WRITE_FILE_AT_ONCE,
 } fio_operations;
 
 typedef struct
@@ -278,9 +279,13 @@ fobj_iface(pioReadCloser);
                                 (bool, handle_tablespaces), (bool, symlink_and_hidden), \
                                 (bool, backup_logs), (bool, skip_hidden),  (int, external_dir_num)
 #define mth__pioRemoveDir   void, (const char *, root), (bool, root_as_well)
+/* pioReadFile and pioWriteFile should be used only for small files */
+#define PIO_READ_WRITE_FILE_LIMIT (1024*1024)
 #define mth__pioReadFile	ft_bytes_t, (path_t, path), (bool, binary), \
 							(err_i *, err)
 #define mth__pioReadFile__optional() (binary, true)
+#define mth__pioWriteFile	err_i, (path_t, path), (ft_bytes_t, content), (bool, binary)
+#define mth__pioWriteFile__optional() (binary, true)
 
 fobj_method(pioOpen);
 fobj_method(pioStat);
@@ -294,11 +299,12 @@ fobj_method(pioFilesAreSame);
 fobj_method(pioListDir);
 fobj_method(pioRemoveDir);
 fobj_method(pioReadFile);
+fobj_method(pioWriteFile);
 
 #define iface__pioDrive 	mth(pioOpen, pioStat, pioRemove, pioRename), \
 					        mth(pioExists, pioGetCRC32, pioIsRemote),                \
 							mth(pioMakeDir, pioListDir, pioRemoveDir),  \
-							mth(pioFilesAreSame), mth(pioReadFile)
+							mth(pioFilesAreSame, pioReadFile, pioWriteFile)
 fobj_iface(pioDrive);
 
 extern pioDrive_i pioDriveForLocation(fio_location location);
