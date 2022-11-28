@@ -181,6 +181,13 @@ remove_file_or_dir(const char* path)
 #define remove_file_or_dir(path) remove(path)
 #endif
 
+static void
+fio_ensure_remote(void)
+{
+	if (!fio_stdin && !launch_agent())
+		elog(ERROR, "Failed to establish SSH connection: %s", strerror(errno));
+}
+
 /* Check if specified location is local for current node */
 bool
 fio_is_remote(fio_location location)
@@ -4953,6 +4960,8 @@ pioRemoteDrive_pioReadFile(VSelf, path_t path, bool binary, err_i* err)
 
 	fobj_reset_err(err);
 
+	fio_ensure_remote();
+
 	fio_header hdr = {
 			.cop = FIO_READ_FILE_AT_ONCE,
 			.handle = -1,
@@ -4992,6 +5001,8 @@ pioRemoteDrive_pioWriteFile(VSelf, path_t path, ft_bytes_t content, bool binary)
 	ft_strbuf_t buf = ft_strbuf_zero();
 
 	fobj_reset_err(&err);
+
+	fio_ensure_remote();
 
 	if (content.len > PIO_READ_WRITE_FILE_LIMIT)
 	{

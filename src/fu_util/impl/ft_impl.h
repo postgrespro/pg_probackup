@@ -329,7 +329,70 @@ ft_bytes_move(ft_bytes_t *dest, ft_bytes_t *src) {
     ft_bytes_consume(src, len);
 }
 
+ft_inline ft_bytes_t
+ft_bytes_shift_line(ft_bytes_t *bytes)
+{
+	size_t i;
+	char *p = bytes->ptr;
+
+	for (i = 0; i < bytes->len; i++) {
+		if (p[i] == '\r' || p[i] == '\n') {
+			if (p[i] == '\r' && i+1 < bytes->len && p[i+1] == '\n')
+				i++;
+			ft_bytes_consume(bytes, i+1);
+			return ft_bytes(p, i+1);
+		}
+	}
+
+	ft_bytes_consume(bytes, bytes->len);
+	return ft_bytes(p, i);
+}
+
+ft_inline size_t
+ft_bytes_find_bytes(ft_bytes_t haystack, ft_bytes_t needle)
+{
+	// TODO use memmem if present
+	size_t i;
+	char   first;
+
+	if (needle.len == 0)
+		return 0;
+	if (needle.len > haystack.len)
+		return haystack.len;
+
+	first = needle.ptr[0];
+	for (i = 0; i < haystack.len - needle.len; i++)
+	{
+		if (haystack.ptr[i] != first)
+			continue;
+		if (memcmp(haystack.ptr + i, needle.ptr, needle.len) == 0)
+			return i;
+	}
+
+	return haystack.len;
+}
+
+ft_inline size_t
+ft_bytes_find_cstr(ft_bytes_t haystack, const char* needle)
+{
+	return ft_bytes_find_bytes(haystack, ft_str2bytes(ft_cstr(needle)));
+}
+
+ft_inline bool
+ft_bytes_has_cstr(ft_bytes_t haystack, const char* needle)
+{
+	size_t pos = ft_bytes_find_cstr(haystack, needle);
+	return pos != haystack.len;
+}
+
 // String utils
+
+ft_inline ft_str_t
+ft_bytes2str(ft_bytes_t bytes) {
+	ft_dbg_assert(bytes.ptr[bytes.len-1] == '\0');
+	return ft_str(bytes.ptr, bytes.len-1);
+}
+
 ft_inline char *
 ft_cstrdup(const char *str) {
     return (char*)ft_strdupc(str).ptr;
@@ -377,6 +440,32 @@ ft_streqc(ft_str_t str, const char* oth) {
 ft_inline FT_CMP_RES
 ft_strcmpc(ft_str_t str, const char* oth) {
     return ft_strcmp(str, ft_cstr(oth));
+}
+
+ft_inline void
+ft_str_consume(ft_str_t *str, size_t cut) {
+	ft_dbg_assert(cut <= str->len);
+	str->ptr = str->ptr + cut;
+	str->len -= cut;
+}
+
+ft_inline ft_bytes_t
+ft_str_shift_line(ft_str_t *str)
+{
+	size_t i;
+	char *p = str->ptr;
+
+	for (i = 0; i < str->len; i++) {
+		if (p[i] == '\r' || p[i] == '\n') {
+			if (p[i] == '\r' && p[i+1] == '\n')
+				i++;
+			ft_str_consume(str, i+1);
+			return ft_bytes(p, i+1);
+		}
+	}
+
+	ft_str_consume(str, str->len);
+	return ft_bytes(p, i);
 }
 
 ft_inline ft_strbuf_t

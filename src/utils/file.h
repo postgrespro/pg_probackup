@@ -280,7 +280,7 @@ fobj_iface(pioReadCloser);
                                 (bool, backup_logs), (bool, skip_hidden),  (int, external_dir_num)
 #define mth__pioRemoveDir   void, (const char *, root), (bool, root_as_well)
 /* pioReadFile and pioWriteFile should be used only for small files */
-#define PIO_READ_WRITE_FILE_LIMIT (1024*1024)
+#define PIO_READ_WRITE_FILE_LIMIT (16*1024*1024)
 #define mth__pioReadFile	ft_bytes_t, (path_t, path), (bool, binary), \
 							(err_i *, err)
 #define mth__pioReadFile__optional() (binary, true)

@@ -329,6 +329,11 @@ ft_inline void ft_bytes_free(ft_bytes_t* bytes) {
 ft_inline void ft_bytes_consume(ft_bytes_t *bytes, size_t cut);
 ft_inline void ft_bytes_move(ft_bytes_t *dest, ft_bytes_t *src);
 
+ft_inline ft_bytes_t ft_bytes_shift_line(ft_bytes_t *bytes);
+ft_inline size_t 	 ft_bytes_find_bytes(ft_bytes_t haystack, ft_bytes_t needle);
+ft_inline size_t 	 ft_bytes_find_cstr(ft_bytes_t haystack, const char *needle);
+ft_inline bool	 	 ft_bytes_has_cstr(ft_bytes_t haystack, const char *needle);
+
 // String utils
 extern size_t ft_strlcpy(char *dest, const char* src, size_t dest_size);
 /*
@@ -361,6 +366,18 @@ ft_inline ft_bytes_t ft_str2bytes(ft_str_t str) {
     return ft_bytes(str.ptr, str.len);
 }
 
+ft_inline ft_bytes_t ft_str2bytes_withzb(ft_str_t str) {
+	return ft_bytes(str.ptr, str.len+1);
+}
+
+/*
+ * casts to string checking last byte is zero
+ * note:
+ * 	bytes != ft_str2bytes(ft_bytes2str(bytes))
+ * 	bytes == ft_str2bytes_withzb(ft_bytes2str(bytes))
+ */
+ft_inline ft_str_t   ft_bytes2str(ft_bytes_t bytes);
+
 ft_inline ft_str_t  ft_strdup(ft_str_t str);
 ft_inline ft_str_t  ft_strdupc(const char* str);
 /* use only if string was allocated */
@@ -374,6 +391,10 @@ ft_inline bool          ft_streq  (ft_str_t str, ft_str_t oth);
 ft_inline FT_CMP_RES    ft_strcmp (ft_str_t str, ft_str_t oth);
 ft_inline bool          ft_streqc (ft_str_t str, const char* oth);
 ft_inline FT_CMP_RES    ft_strcmpc(ft_str_t str, const char* oth);
+
+/* cuts first line from argument */
+ft_inline void			ft_str_consume(ft_str_t *str, size_t cut);
+ft_inline ft_bytes_t	ft_str_shift_line(ft_str_t *str);
 
 /*
  * String buffer.

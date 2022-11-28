@@ -40,10 +40,10 @@ typedef struct
 
 
 static void
-print_recovery_settings(InstanceState *instanceState, FILE *fp, pgBackup *backup,
+print_recovery_settings(ft_strbuf_t *buf, InstanceState *instanceState, pgBackup *backup,
 							   pgRestoreParams *params, pgRecoveryTarget *rt);
 static void
-print_standby_settings_common(FILE *fp, pgBackup *backup, pgRestoreParams *params);
+print_standby_settings_common(ft_strbuf_t *buf, pgBackup *backup, pgRestoreParams *params);
 
 #if PG_VERSION_NUM >= 120000
 static void
@@ -1374,20 +1374,25 @@ create_recovery_conf(InstanceState *instanceState, time_t backup_id,
 
 /* TODO get rid of using global variables: instance_config */
 static void
-print_recovery_settings(InstanceState *instanceState, FILE *fp, pgBackup *backup,
+print_recovery_settings(ft_strbuf_t *buf, InstanceState *instanceState, pgBackup *backup,
 							   pgRestoreParams *params, pgRecoveryTarget *rt)
 {
-	char restore_command_guc[16384];
-	fio_fprintf(fp, "## recovery settings\n");
+	char restore_command_buf[1024];
+	ft_strbuf_t restore_command_guc;
+
+	restore_command_guc = ft_strbuf_init_stack(restore_command_buf,
+											   sizeof(restore_command_buf));
+
+	ft_strbuf_catf(buf, "## recovery settings\n");
 
 	/* If restore_command is provided, use it. Otherwise construct it from scratch. */
 	if (instance_config.restore_command &&
 		(pg_strcasecmp(instance_config.restore_command, "none") != 0))
-		sprintf(restore_command_guc, "%s", instance_config.restore_command);
+		ft_strbuf_catc(&restore_command_guc, instance_config.restore_command);
 	else
 	{
 		/* default cmdline, ok for local restore */
-		sprintf(restore_command_guc, "\"%s\" archive-get -B \"%s\" --instance \"%s\" "
+		ft_strbuf_catf(&restore_command_guc, "\"%s\" archive-get -B \"%s\" --instance \"%s\" "
 				"--wal-file-path=%%p --wal-file-name=%%f",
 				PROGRAM_FULL_PATH ? PROGRAM_FULL_PATH : PROGRAM_NAME,
 				/* TODO What is going on here? Why do we use catalog path as wal-file-path? */
@@ -1396,20 +1401,20 @@ print_recovery_settings(InstanceState *instanceState, FILE *fp, pgBackup *backup
 		/* append --remote-* parameters provided via --archive-* settings */
 		if (instance_config.archive.host)
 		{
-			strcat(restore_command_guc, " --remote-host=");
-			strcat(restore_command_guc, instance_config.archive.host);
+			ft_strbuf_catc(&restore_command_guc, " --remote-host=");
+			ft_strbuf_catc(&restore_command_guc, instance_config.archive.host);
 		}
 
 		if (instance_config.archive.port)
 		{
-			strcat(restore_command_guc, " --remote-port=");
-			strcat(restore_command_guc, instance_config.archive.port);
+			ft_strbuf_catc(&restore_command_guc, " --remote-port=");
+			ft_strbuf_catc(&restore_command_guc, instance_config.archive.port);
 		}
 
 		if (instance_config.archive.user)
 		{
-			strcat(restore_command_guc, " --remote-user=");
-			strcat(restore_command_guc, instance_config.archive.user);
+			ft_strbuf_catc(&restore_command_guc, " --remote-user=");
+			ft_strbuf_catc(&restore_command_guc, instance_config.archive.user);
 		}
 	}
 
@@ -1418,26 +1423,26 @@ print_recovery_settings(InstanceState *instanceState, FILE *fp, pgBackup *backup
 	 * exclusive options is specified, so the order of calls is insignificant.
 	 */
 	if (rt->target_name)
-		fio_fprintf(fp, "recovery_target_name = '%s'\n", rt->target_name);
+		ft_strbuf_catf(buf, "recovery_target_name = '%s'\n", rt->target_name);
 
 	if (rt->time_string)
-		fio_fprintf(fp, "recovery_target_time = '%s'\n", rt->time_string);
+		ft_strbuf_catf(buf, "recovery_target_time = '%s'\n", rt->time_string);
 
 	if (rt->xid_string)
-		fio_fprintf(fp, "recovery_target_xid = '%s'\n", rt->xid_string);
+		ft_strbuf_catf(buf, "recovery_target_xid = '%s'\n", rt->xid_string);
 
 	if (rt->lsn_string)
-		fio_fprintf(fp, "recovery_target_lsn = '%s'\n", rt->lsn_string);
+		ft_strbuf_catf(buf, "recovery_target_lsn = '%s'\n", rt->lsn_string);
 
 	if (rt->target_stop && (strcmp(rt->target_stop, "immediate") == 0))
-		fio_fprintf(fp, "recovery_target = '%s'\n", rt->target_stop);
+		ft_strbuf_catf(buf, "recovery_target = '%s'\n", rt->target_stop);
 
 	if (rt->inclusive_specified)
-		fio_fprintf(fp, "recovery_target_inclusive = '%s'\n",
+		ft_strbuf_catf(buf, "recovery_target_inclusive = '%s'\n",
 				rt->target_inclusive ? "true" : "false");
 
 	if (rt->target_tli)
-		fio_fprintf(fp, "recovery_target_timeline = '%u'\n", rt->target_tli);
+		ft_strbuf_catf(buf, "recovery_target_timeline = '%u'\n", rt->target_tli);
 	else
 	{
 #if PG_VERSION_NUM >= 120000
@@ -1447,31 +1452,33 @@ print_recovery_settings(InstanceState *instanceState, FILE *fp, pgBackup *backup
 			 * is extremely risky. Explicitly preserve old behavior of recovering to current
 			 * timneline for PG12.
 			 */
-			fio_fprintf(fp, "recovery_target_timeline = 'current'\n");
+			ft_strbuf_catf(buf, "recovery_target_timeline = 'current'\n");
 #endif
 	}
 
 	if (rt->target_action)
-		fio_fprintf(fp, "recovery_target_action = '%s'\n", rt->target_action);
+		ft_strbuf_catf(buf, "recovery_target_action = '%s'\n", rt->target_action);
 	else
 		/* default recovery_target_action is 'pause' */
-		fio_fprintf(fp, "recovery_target_action = '%s'\n", "pause");
+		ft_strbuf_catf(buf, "recovery_target_action = '%s'\n", "pause");
 
-	elog(LOG, "Setting restore_command to '%s'", restore_command_guc);
-	fio_fprintf(fp, "restore_command = '%s'\n", restore_command_guc);
+	elog(LOG, "Setting restore_command to '%s'", restore_command_guc.ptr);
+	ft_strbuf_catf(buf, "restore_command = '%s'\n", restore_command_guc.ptr);
+
+	ft_strbuf_free(&restore_command_guc);
 }
 
 static void
-print_standby_settings_common(FILE *fp, pgBackup *backup, pgRestoreParams *params)
+print_standby_settings_common(ft_strbuf_t *buf, pgBackup *backup, pgRestoreParams *params)
 {
-	fio_fprintf(fp, "\n## standby settings\n");
+	ft_strbuf_catf(buf, "\n## standby settings\n");
 	if (params->primary_conninfo)
-		fio_fprintf(fp, "primary_conninfo = '%s'\n", params->primary_conninfo);
+		ft_strbuf_catf(buf, "primary_conninfo = '%s'\n", params->primary_conninfo);
 	else if (backup->primary_conninfo)
-		fio_fprintf(fp, "primary_conninfo = '%s'\n", backup->primary_conninfo);
+		ft_strbuf_catf(buf, "primary_conninfo = '%s'\n", backup->primary_conninfo);
 
 	if (params->primary_slot_name != NULL)
-		fio_fprintf(fp, "primary_slot_name = '%s'\n", params->primary_slot_name);
+		ft_strbuf_catf(buf, "primary_slot_name = '%s'\n", params->primary_slot_name);
 }
 
 #if PG_VERSION_NUM < 120000
@@ -1479,8 +1486,9 @@ static void
 update_recovery_options_before_v12(InstanceState *instanceState, pgBackup *backup,
 								   pgRestoreParams *params, pgRecoveryTarget *rt)
 {
-	FILE	   *fp;
 	char		path[MAXPGPATH];
+	ft_strbuf_t buf = ft_strbuf_zero();
+	err_i 		err;
 
 	/*
 	 * If PITR is not requested and instance is not restored as replica,
@@ -1492,33 +1500,27 @@ update_recovery_options_before_v12(InstanceState *instanceState, pgBackup *backu
 		return;
 	}
 
-	elog(LOG, "update recovery settings in recovery.conf");
-	join_path_components(path, instance_config.pgdata, "recovery.conf");
-
-	fp = fio_fopen(FIO_DB_HOST, path, "w");
-	if (fp == NULL)
-		elog(ERROR, "cannot open file \"%s\": %s", path,
-			strerror(errno));
-
-	if (fio_chmod(FIO_DB_HOST, path, FILE_PERMISSION) == -1)
-		elog(ERROR, "Cannot change mode of \"%s\": %s", path, strerror(errno));
-
-	fio_fprintf(fp, "# recovery.conf generated by pg_probackup %s\n",
+	ft_strbuf_catf(&buf, "# recovery.conf generated by pg_probackup %s\n",
 				PROGRAM_VERSION);
 
 	if (params->recovery_settings_mode == PITR_REQUESTED)
-		print_recovery_settings(instanceState, fp, backup, params, rt);
+		print_recovery_settings(&buf, instanceState, backup, params, rt);
 
 	if (params->restore_as_replica)
 	{
-		print_standby_settings_common(fp, backup, params);
-		fio_fprintf(fp, "standby_mode = 'on'\n");
+		print_standby_settings_common(&buf, backup, params);
+		ft_strbuf_catc(&buf, "standby_mode = 'on'\n");
 	}
 
-	if (fio_fflush(fp) != 0 ||
-		fio_fclose(fp))
-		elog(ERROR, "cannot write file \"%s\": %s", path,
-			 strerror(errno));
+	elog(LOG, "update recovery settings in recovery.conf");
+
+	join_path_components(path, instance_config.pgdata, "recovery.conf");
+
+	err = $i(pioWriteFile, backup->database_location, .path = path,
+			 .content = ft_str2bytes(ft_strbuf_ref(&buf)), .binary = false);
+
+	if ($haserr(err))
+		ft_logerr(FT_FATAL, $errmsg(err), "writting recovery settings");
 }
 #endif
 
@@ -1536,16 +1538,17 @@ update_recovery_options(InstanceState *instanceState, pgBackup *backup,
 	char		postgres_auto_path[MAXPGPATH];
 	char		postgres_auto_path_tmp[MAXPGPATH];
 	char		path[MAXPGPATH];
-	FILE	   *fp = NULL;
 	FILE	   *fp_tmp = NULL;
-	pio_stat_t	st;
 	char		current_time_str[100];
 	/* postgresql.auto.conf parsing */
-	char		line[16384] = "\0";
-	char	   *buf = NULL;
-	int		    buf_len = 0;
-	int		    buf_len_max = 16384;
+	ft_bytes_t	old_content;
+	ft_bytes_t	parse;
+	ft_bytes_t	line;
+	ft_bytes_t	zero = ft_bytes(NULL, 0);
+	ft_strbuf_t content;
 	err_i 		err;
+
+	content = ft_strbuf_zero();
 
 	elog(LOG, "update recovery settings in postgresql.auto.conf");
 
@@ -1553,20 +1556,13 @@ update_recovery_options(InstanceState *instanceState, pgBackup *backup,
 
 	join_path_components(postgres_auto_path, instance_config.pgdata, "postgresql.auto.conf");
 
-	st = $i(pioStat, pioDriveForLocation(FIO_DB_HOST),
-			.path = postgres_auto_path, .follow_symlink = false, .err = &err);
+	old_content = $i(pioReadFile, backup->database_location,
+					 .path = postgres_auto_path, .err = &err, .binary = false);
+
 	/* file not found is not an error case */
 	if ($haserr(err) && getErrno(err) != ENOENT)
 	{
 		ft_logerr(FT_FATAL, $errmsg(err), "");
-	}
-
-	/* Kludge for 0-sized postgresql.auto.conf file. TODO: make something more intelligent */
-	if (st.pst_size > 0)
-	{
-		fp = fio_open_stream(FIO_DB_HOST, postgres_auto_path);
-		if (fp == NULL)
-			elog(ERROR, "cannot open \"%s\": %s", postgres_auto_path, strerror(errno));
 	}
 
 	sprintf(postgres_auto_path_tmp, "%s.tmp", postgres_auto_path);
@@ -1574,78 +1570,43 @@ update_recovery_options(InstanceState *instanceState, pgBackup *backup,
 	if (fp_tmp == NULL)
 		elog(ERROR, "cannot open \"%s\": %s", postgres_auto_path_tmp, strerror(errno));
 
-	while (fp && fgets(line, lengthof(line), fp))
+	parse = old_content; /* copy since ft_bytes_shift_line mutates bytes */
+	/* chomp zero byte */
+	ft_dbg_assert(parse.ptr[parse.len-1] == 0);
+	parse.len -= 1;
+
+	while (parse.len > 0)
 	{
+		line = ft_bytes_shift_line(&parse);
 		/* ignore "include 'probackup_recovery.conf'" directive */
-		if (strstr(line, "include") &&
-			strstr(line, "probackup_recovery.conf"))
+		if (ft_bytes_has_cstr(line, "include") &&
+			ft_bytes_has_cstr(line, "probackup_recovery.conf"))
 		{
 			continue;
 		}
 
 		/* ignore already existing recovery options */
-		if (strstr(line, "restore_command") ||
-			strstr(line, "recovery_target"))
+		if (ft_bytes_has_cstr(line, "restore_command") ||
+			ft_bytes_has_cstr(line, "recovery_target"))
 		{
 			continue;
 		}
 
-		if (!buf)
-			buf = pgut_malloc(buf_len_max);
-
-		/* avoid buffer overflow */
-		if ((buf_len + strlen(line)) >= buf_len_max)
-		{
-			buf_len_max += (buf_len + strlen(line)) *2;
-			buf = pgut_realloc(buf, buf_len_max);
-		}
-
-		buf_len += snprintf(buf+buf_len, sizeof(line), "%s", line);
+		ft_strbuf_catbytes(&content, line);
 	}
 
-	/* close input postgresql.auto.conf */
-	if (fp)
-		fio_close_stream(fp);
-
-	/* Write data to postgresql.auto.conf.tmp */
-	if (buf_len > 0 &&
-		(fio_fwrite(fp_tmp, buf, buf_len) != buf_len))
-			elog(ERROR, "Cannot write to \"%s\": %s",
-					postgres_auto_path_tmp, strerror(errno));
-
-	if (fio_fflush(fp_tmp) != 0 ||
-		fio_fclose(fp_tmp))
-			elog(ERROR, "Cannot write file \"%s\": %s", postgres_auto_path_tmp,
-				strerror(errno));
-	pg_free(buf);
-
-	if (fio_rename(FIO_DB_HOST, postgres_auto_path_tmp, postgres_auto_path) < 0)
-		elog(ERROR, "Cannot rename file \"%s\" to \"%s\": %s",
-					postgres_auto_path_tmp, postgres_auto_path, strerror(errno));
-
-	if (fio_chmod(FIO_DB_HOST, postgres_auto_path, FILE_PERMISSION) == -1)
-		elog(ERROR, "Cannot change mode of \"%s\": %s", postgres_auto_path, strerror(errno));
+	ft_bytes_free(&old_content);
 
 	if (params)
 	{
-		fp = fio_fopen(FIO_DB_HOST, postgres_auto_path, "a");
-		if (fp == NULL)
-			elog(ERROR, "cannot open file \"%s\": %s", postgres_auto_path,
-				strerror(errno));
-
-		fio_fprintf(fp, "\n# recovery settings added by pg_probackup restore of backup %s at '%s'\n",
+		ft_strbuf_catf(&content, "\n# recovery settings added by pg_probackup restore of backup %s at '%s'\n",
 				backup_id_of(backup), current_time_str);
 
 		if (params->recovery_settings_mode == PITR_REQUESTED)
-			print_recovery_settings(instanceState, fp, backup, params, rt);
+			print_recovery_settings(&content, instanceState, backup, params, rt);
 
 		if (params->restore_as_replica)
-			print_standby_settings_common(fp, backup, params);
-
-		if (fio_fflush(fp) != 0 ||
-			fio_fclose(fp))
-			elog(ERROR, "cannot write file \"%s\": %s", postgres_auto_path,
-				strerror(errno));
+			print_standby_settings_common(&content, backup, params);
 
 		/*
 		* Create "recovery.signal" to mark this recovery as PITR for PostgreSQL.
@@ -1662,15 +1623,11 @@ update_recovery_options(InstanceState *instanceState, pgBackup *backup,
 			elog(LOG, "creating recovery.signal file");
 			join_path_components(path, instance_config.pgdata, "recovery.signal");
 
-			fp = fio_fopen(FIO_DB_HOST, path, PG_BINARY_W);
-			if (fp == NULL)
-				elog(ERROR, "cannot open file \"%s\": %s", path,
-					strerror(errno));
+			err = $i(pioWriteFile, backup->database_location, .path = path,
+					 .content = zero);
 
-			if (fio_fflush(fp) != 0 ||
-				fio_fclose(fp))
-				elog(ERROR, "cannot write file \"%s\": %s", path,
-					strerror(errno));
+			if ($haserr(err))
+				ft_logerr(FT_FATAL, $errmsg(err), "writting recovery.signal");
 		}
 
 		if (params->restore_as_replica)
@@ -1678,17 +1635,29 @@ update_recovery_options(InstanceState *instanceState, pgBackup *backup,
 			elog(LOG, "creating standby.signal file");
 			join_path_components(path, instance_config.pgdata, "standby.signal");
 
-			fp = fio_fopen(FIO_DB_HOST, path, PG_BINARY_W);
-			if (fp == NULL)
-				elog(ERROR, "cannot open file \"%s\": %s", path,
-					strerror(errno));
+			err = $i(pioWriteFile, backup->database_location, .path = path,
+					 .content = zero);
 
-			if (fio_fflush(fp) != 0 ||
-				fio_fclose(fp))
-				elog(ERROR, "cannot write file \"%s\": %s", path,
-					strerror(errno));
+			if ($haserr(err))
+				ft_logerr(FT_FATAL, $errmsg(err), "writting standby.signal");
 		}
 	}
+
+	/* Write data to postgresql.auto.conf.tmp */
+	err = $i(pioWriteFile, backup->database_location,
+			 .path = postgres_auto_path_tmp,
+			 .content = ft_str2bytes(ft_strbuf_ref(&content)));
+	ft_strbuf_free(&content);
+	if ($haserr(err))
+		ft_logerr(FT_FATAL, $errmsg(err), "writting recovery options");
+
+	err = $i(pioRename, backup->database_location,
+			 .old_path = postgres_auto_path_tmp,
+			 .new_path = postgres_auto_path);
+	if ($haserr(err))
+		ft_logerr(FT_FATAL, $errmsg(err), "renaming postgres.auto.conf file");
+
+	/* skip chmod, since pioWriteFile creates with FILE_PERMISSION */
 }
 #endif
 
