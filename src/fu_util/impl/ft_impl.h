@@ -332,7 +332,7 @@ ft_bytes_move(ft_bytes_t *dest, ft_bytes_t *src) {
 // String utils
 ft_inline char *
 ft_cstrdup(const char *str) {
-    return (char*)ft_strdup(ft_cstr(str)).ptr;
+    return (char*)ft_strdupc(str).ptr;
 }
 
 ft_inline ft_str_t
@@ -344,6 +344,18 @@ ft_strdup(ft_str_t str) {
         mem[0] = '\0';
     str.ptr = mem;
     return str;
+}
+
+ft_inline ft_str_t
+ft_strdupc(const char *str) {
+    return ft_strdup(ft_cstr(str));
+}
+
+ft_inline void
+ft_str_free(ft_str_t *str) {
+    ft_free(str->ptr);
+    str->ptr = NULL;
+    str->len = 0;
 }
 
 ft_inline bool

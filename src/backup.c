@@ -1789,45 +1789,31 @@ pg_stop_backup_consume(PGconn *conn, int server_version,
 	}
 
 	/* get backup_label_content */
-	result->backup_label_content = NULL;
 	// if (!PQgetisnull(query_result, 0, backup_label_colno))
-	result->backup_label_content_len = PQgetlength(query_result, 0, backup_label_colno);
-	if (result->backup_label_content_len > 0)
-		result->backup_label_content = pgut_strndup(PQgetvalue(query_result, 0, backup_label_colno),
-							result->backup_label_content_len);
+	result->backup_label_content = ft_strdupc(PQgetvalue(query_result, 0, backup_label_colno));
 
 	/* get tablespace_map_content */
-	result->tablespace_map_content = NULL;
 	// if (!PQgetisnull(query_result, 0, tablespace_map_colno))
-	result->tablespace_map_content_len = PQgetlength(query_result, 0, tablespace_map_colno);
-	if (result->tablespace_map_content_len > 0)
-		result->tablespace_map_content = pgut_strndup(PQgetvalue(query_result, 0, tablespace_map_colno),
-							result->tablespace_map_content_len);
+	result->tablespace_map_content = ft_strdupc(PQgetvalue(query_result, 0, tablespace_map_colno));
 }
 
 /*
  * helper routine used to write backup_label and tablespace_map in pg_stop_backup()
  */
 void
-pg_stop_backup_write_file_helper(const char *path, const char *filename, const char *error_msg_filename,
-		const void *data, size_t len, parray *file_list)
+pg_stop_backup_write_file_helper(pioDrive_i drive, const char *path, const char *filename, const char *error_msg_filename,
+		ft_str_t data, parray *file_list)
 {
-	FILE	*fp;
 	pgFile	*file;
 	char	full_filename[MAXPGPATH];
-	pioDrive_i drive = pioDriveForLocation(FIO_BACKUP_HOST);
+	err_i 	err = $noerr();
 
 	join_path_components(full_filename, path, filename);
-	fp = fio_fopen(FIO_BACKUP_HOST, full_filename, PG_BINARY_W);
-	if (fp == NULL)
-		elog(ERROR, "can't open %s file \"%s\": %s",
-			 error_msg_filename, full_filename, strerror(errno));
 
-	if (fio_fwrite(fp, data, len) != len ||
-		fio_fflush(fp) != 0 ||
-		fio_fclose(fp))
-		elog(ERROR, "can't write %s file \"%s\": %s",
-			 error_msg_filename, full_filename, strerror(errno));
+	err = $i(pioWriteFile, drive, .path = full_filename,
+			.content = ft_str2bytes(data));
+	if ($haserr(err))
+		ft_logerr(FT_FATAL, $errmsg(err), "writting stop backup file");
 
 	/*
 	 * It's vital to check if files_list is initialized,
@@ -1894,26 +1880,22 @@ pg_stop_backup(InstanceState *instanceState, pgBackup *backup, PGconn *pg_startb
 	wait_wal_and_calculate_stop_lsn(xlog_path, stop_backup_result.lsn, backup);
 
 	/* Write backup_label and tablespace_map */
-	Assert(stop_backup_result.backup_label_content != NULL);
+	Assert(stop_backup_result.backup_label_content.len != 0);
 
 	/* Write backup_label */
-	pg_stop_backup_write_file_helper(backup->database_dir, PG_BACKUP_LABEL_FILE, "backup label",
-		stop_backup_result.backup_label_content, stop_backup_result.backup_label_content_len,
-		backup_files_list);
-	free(stop_backup_result.backup_label_content);
-	stop_backup_result.backup_label_content = NULL;
-	stop_backup_result.backup_label_content_len = 0;
+	pg_stop_backup_write_file_helper(backup->backup_location,
+		backup->database_dir, PG_BACKUP_LABEL_FILE, "backup label",
+		stop_backup_result.backup_label_content, backup_files_list);
+	ft_str_free(&stop_backup_result.backup_label_content);
 
 	/* Write tablespace_map */
-	if (stop_backup_result.tablespace_map_content != NULL)
+	if (stop_backup_result.tablespace_map_content.len != 0)
 	{
-		pg_stop_backup_write_file_helper(backup->database_dir, PG_TABLESPACE_MAP_FILE, "tablespace map",
-			stop_backup_result.tablespace_map_content, stop_backup_result.tablespace_map_content_len,
-			backup_files_list);
-		free(stop_backup_result.tablespace_map_content);
-		stop_backup_result.tablespace_map_content = NULL;
-		stop_backup_result.tablespace_map_content_len = 0;
+		pg_stop_backup_write_file_helper(backup->backup_location,
+			backup->database_dir, PG_TABLESPACE_MAP_FILE, "tablespace map",
+			stop_backup_result.tablespace_map_content, backup_files_list);
 	}
+	ft_str_free(&stop_backup_result.tablespace_map_content);
 
 	if (backup->stream)
 	{

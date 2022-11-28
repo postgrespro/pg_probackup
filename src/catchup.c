@@ -1041,19 +1041,17 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 		wait_wal_and_calculate_stop_lsn(dest_xlog_path, stop_backup_result.lsn, &current);
 
 	/* Write backup_label */
-	Assert(stop_backup_result.backup_label_content != NULL);
+	Assert(stop_backup_result.backup_label_content.len != 0);
 	if (!dry_run)
 	{
-		pg_stop_backup_write_file_helper(dest_pgdata, PG_BACKUP_LABEL_FILE, "backup label",
-			stop_backup_result.backup_label_content, stop_backup_result.backup_label_content_len,
-			NULL);
+		pg_stop_backup_write_file_helper(local_location,
+			dest_pgdata, PG_BACKUP_LABEL_FILE, "backup label",
+			stop_backup_result.backup_label_content, NULL);
 	}
-	free(stop_backup_result.backup_label_content);
-	stop_backup_result.backup_label_content = NULL;
-	stop_backup_result.backup_label_content_len = 0;
+	ft_str_free(&stop_backup_result.backup_label_content);
 
 	/* tablespace_map */
-	if (stop_backup_result.tablespace_map_content != NULL)
+	if (stop_backup_result.tablespace_map_content.len != 0)
 	{
 		// TODO what if tablespace is created during catchup?
 		/* Because we have already created symlinks in pg_tblspc earlier,
@@ -1063,10 +1061,8 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 		 *	stop_backup_result.tablespace_map_content, stop_backup_result.tablespace_map_content_len,
 		 *	NULL);
 		 */
-		free(stop_backup_result.tablespace_map_content);
-		stop_backup_result.tablespace_map_content = NULL;
-		stop_backup_result.tablespace_map_content_len = 0;
 	}
+	ft_str_free(&stop_backup_result.tablespace_map_content);
 
 	/* wait for end of wal streaming and calculate wal size transfered */
 	if (!dry_run)

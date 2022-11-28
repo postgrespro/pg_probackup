@@ -1247,10 +1247,8 @@ typedef struct PGStopBackupResult
 	 * Fields that store pg_catalog.pg_stop_backup() result
 	 */
 	XLogRecPtr	lsn;
-	size_t		backup_label_content_len;
-	char		*backup_label_content;
-	size_t		tablespace_map_content_len;
-	char		*tablespace_map_content;
+	ft_str_t 	backup_label_content;
+	ft_str_t	tablespace_map_content;
 } PGStopBackupResult;
 
 extern bool backup_in_progress;
@@ -1265,8 +1263,8 @@ extern void pg_stop_backup_send(PGconn *conn, int server_version, bool is_starte
 extern void pg_stop_backup_consume(PGconn *conn, int server_version,
 		uint32 timeout, const char *query_text,
 		PGStopBackupResult *result);
-extern void pg_stop_backup_write_file_helper(const char *path, const char *filename, const char *error_msg_filename,
-		const void *data, size_t len, parray *file_list);
+extern void pg_stop_backup_write_file_helper(pioDrive_i drive, const char *path, const char *filename, const char *error_msg_filename,
+		ft_str_t data, parray *file_list);
 extern XLogRecPtr wait_wal_lsn(const char *wal_segment_dir, XLogRecPtr lsn, bool is_start_lsn, TimeLineID tli,
 								bool in_prev_segment, bool segment_only,
 								int timeout_elevel, bool in_stream_dir);

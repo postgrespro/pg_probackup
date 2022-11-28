@@ -357,7 +357,14 @@ ft_inline ft_str_t  ft_cstr(const char* ptr) {
     return (ft_str_t){.ptr = (char*)ptr, .len = ptr ? strlen(ptr) : 0};
 }
 
+ft_inline ft_bytes_t ft_str2bytes(ft_str_t str) {
+    return ft_bytes(str.ptr, str.len);
+}
+
 ft_inline ft_str_t  ft_strdup(ft_str_t str);
+ft_inline ft_str_t  ft_strdupc(const char* str);
+/* use only if string was allocated */
+ft_inline void      ft_str_free(ft_str_t *str);
 
 /* print string into ft_malloc-ed buffer */
 extern ft_str_t     ft_asprintf(const char *fmt, ...) ft_gnu_printf(1,2);

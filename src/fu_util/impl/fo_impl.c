@@ -661,7 +661,7 @@ fobj_newstr(ft_str_t s, enum FOBJ_STR_ALLOC ownership) {
     str = fobj_reservestr(s.len);
     memcpy(fobj_getstr(str).ptr, s.ptr, s.len);
     if (ownership == FOBJ_STR_GIFTED)
-        ft_free(s.ptr);
+        ft_str_free(&s);
     return str;
 }
 
