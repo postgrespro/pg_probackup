@@ -2466,6 +2466,7 @@ write_backup(pgBackup *backup, bool strict)
 		ft_logerr(FT_FATAL, $errmsg(err), "Renaming " BACKUP_CONTROL_FILE);
 }
 
+
 /*
  * Output the list of files to backup catalog DATABASE_FILE_LIST
  */
@@ -2473,30 +2474,28 @@ void
 write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 					  parray *external_list, bool sync)
 {
-	FILE	   *out;
 	char		control_path[MAXPGPATH];
 	char		control_path_temp[MAXPGPATH];
 	size_t		i = 0;
-	#define BUFFERSZ (1024*1024)
-	char		*buf;
 	int64 		backup_size_on_disk = 0;
 	int64 		uncompressed_size_on_disk = 0;
 	int64 		wal_size_on_disk = 0;
 
+	pioFile_i 	out;
+	pioDrive_i 	backup_drive = backup->backup_location;
+	err_i 		err;
+
+	ft_strbuf_t line = ft_strbuf_zero();
+
 	join_path_components(control_path, backup->root_dir, DATABASE_FILE_LIST);
 	snprintf(control_path_temp, sizeof(control_path_temp), "%s.tmp", control_path);
 
-	out = fopen(control_path_temp, PG_BINARY_W);
-	if (out == NULL)
+	out = $i(pioOpen, backup_drive, control_path_temp,
+			.flags = O_WRONLY | O_CREAT | O_EXCL | PG_BINARY,
+			.err = &err);
+	if ($haserr(err))
 		elog(ERROR, "Cannot open file list \"%s\": %s", control_path_temp,
 			 strerror(errno));
-
-	if (chmod(control_path_temp, FILE_PERMISSION) == -1)
-		elog(ERROR, "Cannot change mode of \"%s\": %s", control_path_temp,
-			 strerror(errno));
-
-	buf = pgut_malloc(BUFFERSZ);
-	setvbuf(out, buf, _IOFBF, BUFFERSZ);
 
 	if (sync)
 		INIT_CRC32C(backup->content_crc);
@@ -2504,9 +2503,7 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 	/* print each file in the list */
 	for (i = 0; i < parray_num(files); i++)
 	{
-		int       len = 0;
-		char      line[BLCKSZ];
-		pgFile   *file = (pgFile *) parray_get(files, i);
+		pgFile	*file = (pgFile *) parray_get(files, i);
 
 		/* Ignore disappeared file */
 		if (file->write_size == FILE_NOT_FOUND)
@@ -2534,7 +2531,7 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 			}
 		}
 
-		len = sprintf(line, "{\"path\":\"%s\", \"size\":\"" INT64_FORMAT "\", "
+		ft_strbuf_catf(&line,"{\"path\":\"%s\", \"size\":\"" INT64_FORMAT "\", "
 					 "\"kind\":\"%s\", \"mode\":\"%u\", \"is_datafile\":\"%u\", "
 					 "\"is_cfs\":\"%u\", \"crc\":\"%u\", "
 					 "\"compress_alg\":\"%s\", \"external_dir_num\":\"%d\", "
@@ -2551,52 +2548,63 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 
 		if (file->uncompressed_size != 0 &&
 				file->uncompressed_size != file->write_size)
-			len += sprintf(line+len, ",\"full_size\":\"" INT64_FORMAT "\"",
+			ft_strbuf_catf(&line, ",\"full_size\":\"" INT64_FORMAT "\"",
 						   file->uncompressed_size);
 
 		if (file->is_datafile)
-			len += sprintf(line+len, ",\"segno\":\"%d\"", file->segno);
+			ft_strbuf_catf(&line, ",\"segno\":\"%d\"", file->segno);
 
 		if (file->linked)
-			len += sprintf(line+len, ",\"linked\":\"%s\"", file->linked);
+			ft_strbuf_catf(&line, ",\"linked\":\"%s\"", file->linked);
 
 		if (file->n_blocks > 0)
-			len += sprintf(line+len, ",\"n_blocks\":\"%i\"", file->n_blocks);
+			ft_strbuf_catf(&line, ",\"n_blocks\":\"%i\"", file->n_blocks);
 
 		if (file->n_headers > 0)
 		{
-			len += sprintf(line+len, ",\"n_headers\":\"%i\"", file->n_headers);
-			len += sprintf(line+len, ",\"hdr_crc\":\"%u\"", file->hdr_crc);
-			len += sprintf(line+len, ",\"hdr_off\":\"%llu\"", file->hdr_off);
-			len += sprintf(line+len, ",\"hdr_size\":\"%i\"", file->hdr_size);
+			ft_strbuf_catf(&line, ",\"n_headers\":\"%i\"", file->n_headers);
+			ft_strbuf_catf(&line, ",\"hdr_crc\":\"%u\"", file->hdr_crc);
+			ft_strbuf_catf(&line, ",\"hdr_off\":\"%llu\"", file->hdr_off);
+			ft_strbuf_catf(&line, ",\"hdr_size\":\"%i\"", file->hdr_size);
 		}
 
-		sprintf(line+len, "}\n");
+		ft_strbuf_catf(&line, "}\n");
 
 		if (sync)
-			COMP_CRC32C(backup->content_crc, line, strlen(line));
+			COMP_CRC32C(backup->content_crc, (char*)line.ptr, line.len);
 
-		fprintf(out, "%s", line);
+		$i(pioWrite, out, ft_bytes(line.ptr, line.len), &err);
+
+		ft_strbuf_reset_for_reuse(&line);
+
+		if ($haserr(err))
+			ft_logerr(FT_FATAL, $errmsg(err), "Writing into " DATABASE_FILE_LIST ".tmp");
 	}
+
+	ft_strbuf_free(&line);
 
 	if (sync)
 		FIN_CRC32C(backup->content_crc);
 
-	if (fflush(out) != 0)
-		elog(ERROR, "Cannot flush file list \"%s\": %s",
-			 control_path_temp, strerror(errno));
+	err = $i(pioWriteFinish, out);
+	if ($haserr(err))
+		ft_logerr(FT_FATAL, $errmsg(err), "Flushing " DATABASE_FILE_LIST ".tmp");
 
-	if (sync && fsync(fileno(out)) < 0)
-		elog(ERROR, "Cannot sync file list \"%s\": %s",
-			 control_path_temp, strerror(errno));
+	/* if (sync)
+	{
+		err = pioSync(out);
+		if ($haserr(err))
+			ft_logerr(FT_FATAL, $errmsg(err), "Sync " DATABASE_FILE_LIST ".tmp");
+	} */
 
-	if (fclose(out) != 0)
-		elog(ERROR, "Cannot close file list \"%s\": %s",
-			 control_path_temp, strerror(errno));
+	err = $i(pioClose, out, .sync=true);
+	if ($haserr(err))
+		ft_logerr(FT_FATAL, $errmsg(err), "Closing " DATABASE_FILE_LIST ".tmp");
 
-	if (rename(control_path_temp, control_path) < 0)
-		elog(ERROR, "Cannot rename file \"%s\" to \"%s\": %s",
-			 control_path_temp, control_path, strerror(errno));
+	err = $i(pioRename, backup->backup_location,
+			 .old_path = control_path_temp, .new_path = control_path);
+	if ($haserr(err))
+		ft_logerr(FT_FATAL, $errmsg(err), "Renaming " DATABASE_FILE_LIST ".tmp");
 
 	/* use extra variable to avoid reset of previous data_bytes value in case of error */
 	backup->data_bytes = backup_size_on_disk;
@@ -2604,8 +2612,6 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 
 	if (backup->stream)
 		backup->wal_bytes = wal_size_on_disk;
-
-	free(buf);
 }
 
 /*
