@@ -544,6 +544,16 @@ config_get_opt(int argc, char **argv, ConfigOption cmd_options[],
 	return optind;
 }
 
+static void
+ft_bytes_strip_right(ft_bytes_t *line)
+{
+	size_t	i;
+
+	for (i = line->len; i > 0 && IsSpace(line->ptr[i - 1]); i--)
+		line->ptr[i - 1] = '\0';
+	line->len = i;
+}
+
 /*
  * Get configuration from configuration file.
  * Return number of parsed options.
@@ -552,32 +562,41 @@ int
 config_read_opt(const char *path, ConfigOption options[], int elevel,
 				bool strict, bool missing_ok)
 {
-	FILE   *fp;
-	char	buf[4096];
+	pioDrive_i	local_drive = pioDriveForLocation(FIO_BACKUP_HOST);
 	char	key[1024];
 	char	value[2048];
 	int		parsed_options = 0;
+	err_i		err = $noerr();
+	ft_bytes_t	config_file, to_free;
 
 	if (!options)
 		return parsed_options;
 
-	if ((fp = fio_open_stream(FIO_BACKUP_HOST, path)) == NULL)
+	config_file = $i(pioReadFile, local_drive, .path = path, .binary = false,
+			 .err = &err);
+	if ($haserr(err))
 	{
-			if (missing_ok && errno == ENOENT)
-					return parsed_options;
+		ft_bytes_free(&config_file);
 
-			elog(ERROR, "could not open file \"%s\": %s",
-							path, strerror(errno));
+		if (missing_ok && getErrno(err) == ENOENT)
+			return parsed_options;
+
+		ft_logerr(FT_FATAL, $errmsg(err), "could not read file");
+		return parsed_options;
 	}
+	to_free = config_file;
 
-	while (fgets(buf, lengthof(buf), fp))
+	while (true)
 	{
 		size_t		i;
+		ft_bytes_t	line = ft_bytes_shift_line(&config_file);
 
-		for (i = strlen(buf); i > 0 && IsSpace(buf[i - 1]); i--)
-			buf[i - 1] = '\0';
+		if (line.len == 0)
+			break;
 
-		if (parse_pair(buf, key, value))
+		ft_bytes_strip_right(&line);
+
+		if (parse_pair(line.ptr, key, value))
 		{
 			for (i = 0; options[i].type; i++)
 			{
@@ -602,10 +621,7 @@ config_read_opt(const char *path, ConfigOption options[], int elevel,
 		}
 	}
 
-	if (ferror(fp))
-		elog(ERROR, "Failed to read from file: \"%s\"", path);
-
-	fio_close_stream(fp);
+	ft_bytes_free(&to_free);
 
 	return parsed_options;
 }
