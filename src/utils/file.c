@@ -6,6 +6,9 @@
 
 #include "file.h"
 #include "catalog/pg_tablespace.h"
+#if PG_VERSION_NUM < 110000
+#include "catalog/catalog.h"
+#endif
 #include "storage/checksum.h"
 
 #define PRINTF_BUF_SIZE  1024

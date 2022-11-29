@@ -13,10 +13,6 @@
 #include "utils/file.h"
 
 
-#if PG_VERSION_NUM < 110000
-#include "catalog/catalog.h"
-#endif
-
 #include <unistd.h>
 #include <dirent.h>
 
