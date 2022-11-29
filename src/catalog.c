@@ -2318,104 +2318,106 @@ add_note(pgBackup *target_backup, char *note)
 }
 
 /*
- * Write information about backup.in to stream "out".
+ * Write information about backup.in to ft_strbuf_t".
  */
-void
-pgBackupWriteControl(FILE *out, pgBackup *backup, bool utc)
+ft_str_t
+pgBackupWriteControl(pgBackup *backup, bool utc)
 {
 	char		timestamp[100];
+	ft_strbuf_t buf = ft_strbuf_zero();
 
-	fio_fprintf(out, "#Configuration\n");
-	fio_fprintf(out, "backup-mode = %s\n", pgBackupGetBackupMode(backup, false));
-	fio_fprintf(out, "stream = %s\n", backup->stream ? "true" : "false");
-	fio_fprintf(out, "compress-alg = %s\n",
+	ft_strbuf_catf(&buf, "#Configuration\n");
+	ft_strbuf_catf(&buf, "backup-mode = %s\n", pgBackupGetBackupMode(backup, false));
+	ft_strbuf_catf(&buf, "stream = %s\n", backup->stream ? "true" : "false");
+	ft_strbuf_catf(&buf, "compress-alg = %s\n",
 			deparse_compress_alg(backup->compress_alg));
-	fio_fprintf(out, "compress-level = %d\n", backup->compress_level);
-	fio_fprintf(out, "from-replica = %s\n", backup->from_replica ? "true" : "false");
+	ft_strbuf_catf(&buf, "compress-level = %d\n", backup->compress_level);
+	ft_strbuf_catf(&buf, "from-replica = %s\n", backup->from_replica ? "true" : "false");
 
-	fio_fprintf(out, "\n#Compatibility\n");
-	fio_fprintf(out, "block-size = %u\n", backup->block_size);
-	fio_fprintf(out, "xlog-block-size = %u\n", backup->wal_block_size);
-	fio_fprintf(out, "checksum-version = %u\n", backup->checksum_version);
+	ft_strbuf_catf(&buf, "\n#Compatibility\n");
+	ft_strbuf_catf(&buf, "block-size = %u\n", backup->block_size);
+	ft_strbuf_catf(&buf, "xlog-block-size = %u\n", backup->wal_block_size);
+	ft_strbuf_catf(&buf, "checksum-version = %u\n", backup->checksum_version);
 	if (backup->program_version[0] != '\0')
-		fio_fprintf(out, "program-version = %s\n", backup->program_version);
+		ft_strbuf_catf(&buf, "program-version = %s\n", backup->program_version);
 	if (backup->server_version[0] != '\0')
-		fio_fprintf(out, "server-version = %s\n", backup->server_version);
+		ft_strbuf_catf(&buf, "server-version = %s\n", backup->server_version);
 
-	fio_fprintf(out, "\n#Result backup info\n");
-	fio_fprintf(out, "timelineid = %d\n", backup->tli);
+	ft_strbuf_catf(&buf, "\n#Result backup info\n");
+	ft_strbuf_catf(&buf, "timelineid = %d\n", backup->tli);
 	/* LSN returned by pg_start_backup */
-	fio_fprintf(out, "start-lsn = %X/%X\n",
+	ft_strbuf_catf(&buf, "start-lsn = %X/%X\n",
 			(uint32) (backup->start_lsn >> 32),
 			(uint32) backup->start_lsn);
 	/* LSN returned by pg_stop_backup */
-	fio_fprintf(out, "stop-lsn = %X/%X\n",
+	ft_strbuf_catf(&buf, "stop-lsn = %X/%X\n",
 			(uint32) (backup->stop_lsn >> 32),
 			(uint32) backup->stop_lsn);
 
 	time2iso(timestamp, lengthof(timestamp), backup->start_time, utc);
-	fio_fprintf(out, "start-time = '%s'\n", timestamp);
+	ft_strbuf_catf(&buf, "start-time = '%s'\n", timestamp);
 	if (backup->merge_time > 0)
 	{
 		time2iso(timestamp, lengthof(timestamp), backup->merge_time, utc);
-		fio_fprintf(out, "merge-time = '%s'\n", timestamp);
+		ft_strbuf_catf(&buf, "merge-time = '%s'\n", timestamp);
 	}
 	if (backup->end_time > 0)
 	{
 		time2iso(timestamp, lengthof(timestamp), backup->end_time, utc);
-		fio_fprintf(out, "end-time = '%s'\n", timestamp);
+		ft_strbuf_catf(&buf, "end-time = '%s'\n", timestamp);
 	}
-	fio_fprintf(out, "recovery-xid = " XID_FMT "\n", backup->recovery_xid);
+	ft_strbuf_catf(&buf, "recovery-xid = " XID_FMT "\n", backup->recovery_xid);
 	if (backup->recovery_time > 0)
 	{
 		time2iso(timestamp, lengthof(timestamp), backup->recovery_time, utc);
-		fio_fprintf(out, "recovery-time = '%s'\n", timestamp);
+		ft_strbuf_catf(&buf, "recovery-time = '%s'\n", timestamp);
 	}
 	if (backup->expire_time > 0)
 	{
 		time2iso(timestamp, lengthof(timestamp), backup->expire_time, utc);
-		fio_fprintf(out, "expire-time = '%s'\n", timestamp);
+		ft_strbuf_catf(&buf, "expire-time = '%s'\n", timestamp);
 	}
 
 	if (backup->merge_dest_backup != 0)
-		fio_fprintf(out, "merge-dest-id = '%s'\n", base36enc(backup->merge_dest_backup));
+		ft_strbuf_catf(&buf, "merge-dest-id = '%s'\n", base36enc(backup->merge_dest_backup));
 
 	/*
 	 * Size of PGDATA directory. The size does not include size of related
 	 * WAL segments in archive 'wal' directory.
 	 */
 	if (backup->data_bytes != BYTES_INVALID)
-		fio_fprintf(out, "data-bytes = " INT64_FORMAT "\n", backup->data_bytes);
+		ft_strbuf_catf(&buf, "data-bytes = " INT64_FORMAT "\n", backup->data_bytes);
 
 	if (backup->wal_bytes != BYTES_INVALID)
-		fio_fprintf(out, "wal-bytes = " INT64_FORMAT "\n", backup->wal_bytes);
+		ft_strbuf_catf(&buf, "wal-bytes = " INT64_FORMAT "\n", backup->wal_bytes);
 
 	if (backup->uncompressed_bytes >= 0)
-		fio_fprintf(out, "uncompressed-bytes = " INT64_FORMAT "\n", backup->uncompressed_bytes);
+		ft_strbuf_catf(&buf, "uncompressed-bytes = " INT64_FORMAT "\n", backup->uncompressed_bytes);
 
 	if (backup->pgdata_bytes >= 0)
-		fio_fprintf(out, "pgdata-bytes = " INT64_FORMAT "\n", backup->pgdata_bytes);
+		ft_strbuf_catf(&buf, "pgdata-bytes = " INT64_FORMAT "\n", backup->pgdata_bytes);
 
-	fio_fprintf(out, "status = %s\n", status2str(backup->status));
+	ft_strbuf_catf(&buf, "status = %s\n", status2str(backup->status));
 
 	/* 'parent_backup' is set if it is incremental backup */
 	if (backup->parent_backup != 0)
-		fio_fprintf(out, "parent-backup-id = '%s'\n", base36enc(backup->parent_backup));
+		ft_strbuf_catf(&buf, "parent-backup-id = '%s'\n", base36enc(backup->parent_backup));
 
 	/* print connection info except password */
 	if (backup->primary_conninfo)
-		fio_fprintf(out, "primary_conninfo = '%s'\n", backup->primary_conninfo);
+		ft_strbuf_catf(&buf, "primary_conninfo = '%s'\n", backup->primary_conninfo);
 
 	/* print external directories list */
 	if (backup->external_dir_str)
-		fio_fprintf(out, "external-dirs = '%s'\n", backup->external_dir_str);
+		ft_strbuf_catf(&buf, "external-dirs = '%s'\n", backup->external_dir_str);
 
 	if (backup->note)
-		fio_fprintf(out, "note = '%s'\n", backup->note);
+		ft_strbuf_catf(&buf, "note = '%s'\n", backup->note);
 
 	if (backup->content_crc != 0)
-		fio_fprintf(out, "content-crc = %u\n", backup->content_crc);
+		ft_strbuf_catf(&buf, "content-crc = %u\n", backup->content_crc);
 
+	return ft_strbuf_steal(&buf);
 }
 
 /*
@@ -2427,29 +2429,38 @@ pgBackupWriteControl(FILE *out, pgBackup *backup, bool utc)
 void
 write_backup(pgBackup *backup, bool strict)
 {
-	FILE   *fp = NULL;
-	char    path[MAXPGPATH];
+	FOBJ_FUNC_ARP();
+
+	pioFile_i out;
 	char    path_temp[MAXPGPATH];
-	char    buf[8192];
+	char    path[MAXPGPATH];
+	err_i err = $noerr();
+
+	pioDrive_i backup_drive = pioDriveForLocation(FIO_BACKUP_HOST);
 
 	join_path_components(path, backup->root_dir, BACKUP_CONTROL_FILE);
 	snprintf(path_temp, sizeof(path_temp), "%s.tmp", path);
 
-	fp = fopen(path_temp, PG_BINARY_W);
-	if (fp == NULL)
-		elog(ERROR, "Cannot open control file \"%s\": %s",
-			 path_temp, strerror(errno));
+	out = $i(pioOpen, backup_drive, path_temp,
+             .flags = O_WRONLY | O_CREAT | O_EXCL | PG_BINARY,
+             .err = &err);
 
-	if (chmod(path_temp, FILE_PERMISSION) == -1)
-		elog(ERROR, "Cannot change mode of \"%s\": %s", path_temp,
-			 strerror(errno));
+	if ($noerr(err))
+	{
+		size_t length;
+		ft_str_t buf = pgBackupWriteControl(backup, true);
+		length = $i(pioWrite, out, ft_bytes(buf.ptr, buf.len), &err);
 
-	setvbuf(fp, buf, _IOFBF, sizeof(buf));
+		ft_free((char*)buf.ptr);
 
-	pgBackupWriteControl(fp, backup, true);
+		if (length != buf.len)
+			elog(ERROR, "Incorrect size of writing data");
+	}
+	else
+		elog(ERROR, "Failed to open file \"%s\" ", path_temp);
 
-	/* Ignore 'out of space' error in lax mode */
-	if (fflush(fp) != 0)
+	err = $i(pioWriteFinish, out);
+	if ($haserr(err))
 	{
 		int elevel = ERROR;
 		int save_errno = errno;
@@ -2462,16 +2473,21 @@ write_backup(pgBackup *backup, bool strict)
 
 		if (!strict && (save_errno == ENOSPC))
 		{
-			fclose(fp);
-			if (fio_remove(FIO_BACKUP_HOST, path_temp, false) != 0)
+			err = $i(pioClose, out);
+			$i(pioRemove, backup_drive, path_temp, false);
+			if ($haserr(err))
 				elog(elevel, "Additionally cannot remove file \"%s\": %s", path_temp, strerror(errno));
 			return;
 		}
 	}
 
-	if (fclose(fp) != 0)
+	/* Ignore 'out of space' error in lax mode */
+	err = $i(pioClose, out);
+	if ($haserr(err))
+	{
 		elog(ERROR, "Cannot close control file \"%s\": %s",
 			 path_temp, strerror(errno));
+	}
 
 	if (fio_sync(FIO_BACKUP_HOST, path_temp) < 0)
 		elog(ERROR, "Cannot sync control file \"%s\": %s",
