@@ -86,30 +86,25 @@ checkControlFile(ControlFileData *ControlFile)
 static void
 writeControlFile(fio_location location, const char *path, ControlFileData *ControlFile)
 {
-	int			fd;
 	char       *buffer = NULL;
+	pioDrive_i	drive;
+	err_i 		err;
 
 	int			ControlFileSize = PG_CONTROL_FILE_SIZE;
+
+	drive = pioDriveForLocation(location);
 
 	/* copy controlFileSize */
 	buffer = pg_malloc0(ControlFileSize);
 	memcpy(buffer, ControlFile, sizeof(ControlFileData));
 
-	/* Write pg_control */
-	fd = fio_open(location, path,
-				  O_RDWR | O_CREAT | O_TRUNC | PG_BINARY);
+	err = $i(pioWriteFile, drive, .path = path,
+			.content = ft_bytes(buffer, ControlFileSize));
 
-	if (fd < 0)
-		elog(ERROR, "Failed to open file: %s", path);
-
-	if (fio_write(fd, buffer, ControlFileSize) != ControlFileSize)
-		elog(ERROR, "Failed to overwrite file: %s", path);
-
-	if (fio_flush(fd) != 0)
-		elog(ERROR, "Failed to sync file: %s", path);
-
-	fio_close(fd);
 	pg_free(buffer);
+
+	if ($haserr(err))
+		ft_logerr(FT_FATAL, $errmsg(err), "Writting control file");
 }
 
 /*
