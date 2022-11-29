@@ -87,7 +87,7 @@ jobs:
           If (!$Env:MODE -Or $Env:MODE -Eq "basic") {
             $Env:PG_PROBACKUP_TEST_BASIC = "ON"
             python -m unittest -v tests
-            python -m unittest -v tests.init
+            python -m unittest -v tests.init_test
           } else {
             python -m unittest -v tests.$Env:MODE
           }
