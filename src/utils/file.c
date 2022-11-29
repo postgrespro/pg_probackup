@@ -4524,7 +4524,7 @@ pioLocalDrive_pioWriteFile(VSelf, path_t path, ft_bytes_t content, bool binary)
 	if ($haserr(err))
 		return $iresult(err);
 
-	err = $i(pioClose, fl);
+	err = $i(pioClose, fl, .sync = true);
 	if ($haserr(err))
 	{
 		$(pioRemove, self, .path = path);
