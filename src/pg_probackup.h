@@ -958,7 +958,7 @@ extern void do_set_backup(InstanceState *instanceState, time_t backup_id,
 extern void pin_backup(pgBackup	*target_backup,
 							pgSetBackupParams *set_backup_params);
 extern void add_note(pgBackup *target_backup, char *note);
-extern void pgBackupWriteControl(FILE *out, pgBackup *backup, bool utc);
+extern ft_str_t pgBackupWriteControl(pgBackup *backup, bool utc);
 extern void write_backup_filelist(pgBackup *backup, parray *files,
 								  const char *root, parray *external_list, bool sync);
 

@@ -518,7 +518,13 @@ show_backup(InstanceState *instanceState, time_t requested_backup_id)
 	}
 
 	if (show_format == SHOW_PLAIN)
-		pgBackupWriteControl(stdout, backup, false);
+	{
+		ft_str_t buf = pgBackupWriteControl(backup, false);
+
+		fwrite(buf.ptr, 1, buf.len, stdout);
+
+		ft_free((char*)buf.ptr);
+	}
 	else
 		elog(ERROR, "Invalid show format %d", (int) show_format);
 
