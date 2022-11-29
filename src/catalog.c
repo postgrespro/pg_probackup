@@ -2664,14 +2664,8 @@ readBackupControlFile(const char *path)
 	};
 
 	pgBackupInit(backup);
-	if (fio_access(FIO_BACKUP_HOST, path, F_OK) != 0)
-	{
-		elog(WARNING, "Control file \"%s\" doesn't exist", path);
-		pgBackupFree(backup);
-		return NULL;
-	}
 
-	parsed_options = config_read_opt(path, options, WARNING, true, true);
+	parsed_options = config_read_opt(path, options, WARNING, true, false);
 
 	if (parsed_options == 0)
 	{
