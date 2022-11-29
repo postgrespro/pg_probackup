@@ -1571,9 +1571,6 @@ update_recovery_options(InstanceState *instanceState, pgBackup *backup,
 		elog(ERROR, "cannot open \"%s\": %s", postgres_auto_path_tmp, strerror(errno));
 
 	parse = old_content; /* copy since ft_bytes_shift_line mutates bytes */
-	/* chomp zero byte */
-	ft_dbg_assert(parse.ptr[parse.len-1] == 0);
-	parse.len -= 1;
 
 	while (parse.len > 0)
 	{

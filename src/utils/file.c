@@ -4472,13 +4472,9 @@ pioLocalDrive_pioReadFile(VSelf, path_t path, bool binary, err_i* err)
 		return res;
 	}
 
-	if (binary)
-		res.len = amount;
-	else
-	{
-		res.len = amount + 1;
+	res.len = amount;
+	if (!binary)
 		res.ptr[amount] = 0;
-	}
 
 	$i(pioClose, fl);
 	return res;

@@ -387,12 +387,6 @@ ft_bytes_has_cstr(ft_bytes_t haystack, const char* needle)
 
 // String utils
 
-ft_inline ft_str_t
-ft_bytes2str(ft_bytes_t bytes) {
-	ft_dbg_assert(bytes.ptr[bytes.len-1] == '\0');
-	return ft_str(bytes.ptr, bytes.len-1);
-}
-
 ft_inline char *
 ft_cstrdup(const char *str) {
     return (char*)ft_strdupc(str).ptr;
@@ -447,25 +441,6 @@ ft_str_consume(ft_str_t *str, size_t cut) {
 	ft_dbg_assert(cut <= str->len);
 	str->ptr = str->ptr + cut;
 	str->len -= cut;
-}
-
-ft_inline ft_bytes_t
-ft_str_shift_line(ft_str_t *str)
-{
-	size_t i;
-	char *p = str->ptr;
-
-	for (i = 0; i < str->len; i++) {
-		if (p[i] == '\r' || p[i] == '\n') {
-			if (p[i] == '\r' && p[i+1] == '\n')
-				i++;
-			ft_str_consume(str, i+1);
-			return ft_bytes(p, i+1);
-		}
-	}
-
-	ft_str_consume(str, str->len);
-	return ft_bytes(p, i);
 }
 
 ft_inline ft_strbuf_t

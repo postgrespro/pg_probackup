@@ -370,14 +370,6 @@ ft_inline ft_bytes_t ft_str2bytes_withzb(ft_str_t str) {
 	return ft_bytes(str.ptr, str.len+1);
 }
 
-/*
- * casts to string checking last byte is zero
- * note:
- * 	bytes != ft_str2bytes(ft_bytes2str(bytes))
- * 	bytes == ft_str2bytes_withzb(ft_bytes2str(bytes))
- */
-ft_inline ft_str_t   ft_bytes2str(ft_bytes_t bytes);
-
 ft_inline ft_str_t  ft_strdup(ft_str_t str);
 ft_inline ft_str_t  ft_strdupc(const char* str);
 /* use only if string was allocated */
@@ -392,9 +384,7 @@ ft_inline FT_CMP_RES    ft_strcmp (ft_str_t str, ft_str_t oth);
 ft_inline bool          ft_streqc (ft_str_t str, const char* oth);
 ft_inline FT_CMP_RES    ft_strcmpc(ft_str_t str, const char* oth);
 
-/* cuts first line from argument */
 ft_inline void			ft_str_consume(ft_str_t *str, size_t cut);
-ft_inline ft_bytes_t	ft_str_shift_line(ft_str_t *str);
 
 /*
  * String buffer.
