@@ -523,7 +523,7 @@ show_backup(InstanceState *instanceState, time_t requested_backup_id)
 
 		fwrite(buf.ptr, 1, buf.len, stdout);
 
-		ft_free((char*)buf.ptr);
+		ft_str_free(&buf);
 	}
 	else
 		elog(ERROR, "Invalid show format %d", (int) show_format);

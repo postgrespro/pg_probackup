@@ -2431,71 +2431,27 @@ write_backup(pgBackup *backup, bool strict)
 {
 	FOBJ_FUNC_ARP();
 
-	pioFile_i out;
+	ft_str_t  buf;
 	char    path_temp[MAXPGPATH];
 	char    path[MAXPGPATH];
 	err_i err = $noerr();
 
-	pioDrive_i backup_drive = pioDriveForLocation(FIO_BACKUP_HOST);
-
 	join_path_components(path, backup->root_dir, BACKUP_CONTROL_FILE);
 	snprintf(path_temp, sizeof(path_temp), "%s.tmp", path);
 
-	out = $i(pioOpen, backup_drive, path_temp,
-             .flags = O_WRONLY | O_CREAT | O_EXCL | PG_BINARY,
-             .err = &err);
+	buf = pgBackupWriteControl(backup, true);
+	err = $i(pioWriteFile, backup->backup_location, .path = path_temp,
+				.content = ft_bytes(buf.ptr, buf.len), .binary = false);
 
-	if ($noerr(err))
-	{
-		size_t length;
-		ft_str_t buf = pgBackupWriteControl(backup, true);
-		length = $i(pioWrite, out, ft_bytes(buf.ptr, buf.len), &err);
+	ft_str_free(&buf);
 
-		ft_free((char*)buf.ptr);
-
-		if (length != buf.len)
-			elog(ERROR, "Incorrect size of writing data");
-	}
-	else
-		elog(ERROR, "Failed to open file \"%s\" ", path_temp);
-
-	err = $i(pioWriteFinish, out);
 	if ($haserr(err))
-	{
-		int elevel = ERROR;
-		int save_errno = errno;
+		ft_logerr(FT_FATAL, $errmsg(err), "Writting " BACKUP_CONTROL_FILE ".tmp");
 
-		if (!strict && (errno == ENOSPC))
-			elevel = WARNING;
-
-		elog(elevel, "Cannot flush control file \"%s\": %s",
-				 path_temp, strerror(save_errno));
-
-		if (!strict && (save_errno == ENOSPC))
-		{
-			err = $i(pioClose, out);
-			$i(pioRemove, backup_drive, path_temp, false);
-			if ($haserr(err))
-				elog(elevel, "Additionally cannot remove file \"%s\": %s", path_temp, strerror(errno));
-			return;
-		}
-	}
-
-	/* Ignore 'out of space' error in lax mode */
-	err = $i(pioClose, out);
+	err = $i(pioRename, backup->backup_location,
+			 .old_path = path_temp, .new_path = path);
 	if ($haserr(err))
-	{
-		elog(ERROR, "Cannot close control file \"%s\": %s",
-			 path_temp, strerror(errno));
-	}
-
-	if (fio_sync(FIO_BACKUP_HOST, path_temp) < 0)
-		elog(ERROR, "Cannot sync control file \"%s\": %s",
-			 path_temp, strerror(errno));
-
-	if (rename(path_temp, path) < 0)
-		elog(ERROR, "Cannot rename file \"%s\" to \"%s\": %s",
-			 path_temp, path, strerror(errno));
+		ft_logerr(FT_FATAL, $errmsg(err), "Renaming " BACKUP_CONTROL_FILE);
 }
 
 /*
