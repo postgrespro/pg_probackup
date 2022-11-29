@@ -1012,7 +1012,6 @@ extern int  check_tablespace_mapping(pgBackup *backup, bool incremental, bool fo
 extern void check_external_dir_mapping(pgBackup *backup, bool incremental);
 extern char *get_external_remap(char *current_dir);
 
-extern void print_database_map(FILE *out, parray *database_list);
 extern void write_database_map(pgBackup *backup, parray *database_list,
 								   parray *backup_file_list);
 extern void db_map_entry_free(void *map);

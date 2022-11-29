@@ -132,6 +132,8 @@ static void control_string_bad_format(const char* str);
 
 static bool exclude_files_cb(void *value, void *exclude_args);
 
+static void print_database_map(ft_strbuf_t *buf, parray *database_list);
+
 /* Tablespace mapping */
 static TablespaceList tablespace_dirs = {NULL, NULL};
 /* Extra directories mapping */
@@ -1424,8 +1426,8 @@ backup_contains_external(const char *dir, parray *dirs_list)
 /*
  * Print database_map
  */
-void
-print_database_map(FILE *out, parray *database_map)
+static void
+print_database_map(ft_strbuf_t *buf, parray *database_map)
 {
 	int i;
 
@@ -1433,7 +1435,7 @@ print_database_map(FILE *out, parray *database_map)
 	{
 		db_map_entry *db_entry = (db_map_entry *) parray_get(database_map, i);
 
-		fio_fprintf(out, "{\"dbOid\":\"%u\", \"datname\":\"%s\"}\n",
+		ft_strbuf_catf(buf, "{\"dbOid\":\"%u\", \"datname\":\"%s\"}\n",
 				db_entry->dbOid, db_entry->datname);
 	}
 
@@ -1446,29 +1448,26 @@ print_database_map(FILE *out, parray *database_map)
 void
 write_database_map(pgBackup *backup, parray *database_map, parray *backup_files_list)
 {
-	FILE		*fp;
+	ft_strbuf_t buf;
 	pgFile		*file;
 	char		database_dir[MAXPGPATH];
 	char		database_map_path[MAXPGPATH];
 	pioDrive_i	drive = pioDriveForLocation(FIO_BACKUP_HOST);
+	err_i 		err;
 
 	join_path_components(database_dir, backup->root_dir, DATABASE_DIR);
 	join_path_components(database_map_path, database_dir, DATABASE_MAP);
 
-	fp = fio_fopen(FIO_BACKUP_HOST, database_map_path, PG_BINARY_W);
-	if (fp == NULL)
-		elog(ERROR, "Cannot open database map \"%s\": %s", database_map_path,
-			 strerror(errno));
+	buf = ft_strbuf_zero();
+	print_database_map(&buf, database_map);
 
-	print_database_map(fp, database_map);
-	if (fio_fflush(fp) || fio_fclose(fp))
-	{
-		int save_errno = errno;
-		if (fio_remove(FIO_BACKUP_HOST, database_map_path, false) != 0)
-			elog(WARNING, "Cannot cleanup database map \"%s\": %s", database_map_path, strerror(errno));
-		elog(ERROR, "Cannot write database map \"%s\": %s",
-			 database_map_path, strerror(save_errno));
-	}
+	err = $i(pioWriteFile, drive, .path = database_map_path,
+			.content = ft_str2bytes(ft_strbuf_ref(&buf)));
+
+	if ($haserr(err))
+		ft_logerr(FT_FATAL, $errmsg(err), "Writting database map");
+
+	ft_strbuf_free(&buf);
 
 	/* Add metadata to backup_content.control */
 	file = pgFileNew(database_map_path, DATABASE_MAP, true, 0, drive);
