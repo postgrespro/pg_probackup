@@ -1443,7 +1443,14 @@ XLogThreadWorker(void *arg)
 			 * Usually SimpleXLogPageRead() does it by itself. But here we need
 			 * to do it manually to support threads.
 			 */
-			if (reader_data->need_switch && errormsg == NULL)
+			if (reader_data->need_switch && (
+					errormsg == NULL ||
+					/*
+					 * Pg15 now informs if "contrecord" is missing.
+					 * TODO: probably we should abort reading logs at this moment.
+					 * But we continue as we did with bug present in Pg < 15.
+					 */
+					strncmp(errormsg, "missing contrecord", 18) == 0))
 			{
 				if (SwitchThreadToNextWal(xlogreader, thread_arg))
 					continue;
