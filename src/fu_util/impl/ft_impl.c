@@ -640,3 +640,95 @@ ft_small_cstr_hash(const char *key) {
     return h2;
 }
 
+// bytes
+
+ft_bytes_t
+ft_bytes_shift_line(ft_bytes_t *bytes)
+{
+	size_t i;
+	char *p = bytes->ptr;
+
+	for (i = 0; i < bytes->len; i++) {
+		if (p[i] == '\r' || p[i] == '\n') {
+			if (p[i] == '\r' && i+1 < bytes->len && p[i+1] == '\n')
+				i++;
+			ft_bytes_consume(bytes, i+1);
+			return ft_bytes(p, i+1);
+		}
+	}
+
+	ft_bytes_consume(bytes, bytes->len);
+	return ft_bytes(p, i);
+}
+
+
+size_t
+ft_bytes_find_bytes(ft_bytes_t haystack, ft_bytes_t needle)
+{
+	// TODO use memmem if present
+	size_t i;
+	char   first;
+
+	if (needle.len == 0)
+		return 0;
+	if (needle.len > haystack.len)
+		return haystack.len;
+
+	first = needle.ptr[0];
+	for (i = 0; i < haystack.len - needle.len; i++)
+	{
+		if (haystack.ptr[i] != first)
+			continue;
+		if (memcmp(haystack.ptr + i, needle.ptr, needle.len) == 0)
+			return i;
+	}
+
+	return haystack.len;
+}
+
+size_t
+ft_bytes_spn_impl(ft_bytes_t bytes, ft_bytes_t chars, bool include)
+{
+	/* 32*8 = 256 bit */
+	uint32_t mask[8] = {0};
+	size_t i;
+	unsigned char c;
+
+	if (chars.len == 0)
+		return 0;
+
+	if (chars.len == 1 && include) {
+		c = chars.ptr[0];
+		for (i = 0; i < bytes.len; i++)
+			if (bytes.ptr[i] != c)
+				return i;
+		return bytes.len;
+	} else if (chars.len == 1 && !include) {
+		c = chars.ptr[0];
+		for (i = 0; i < bytes.len; i++)
+			if (bytes.ptr[i] == c)
+				return i;
+		return bytes.len;
+	}
+
+	for (i = 0; i < chars.len; i++) {
+		c = chars.ptr[i];
+		mask[c/32] |= 1 << (c&31);
+	}
+
+	if (include) {
+		for (i = 0; i < bytes.len; i++) {
+			c = bytes.ptr[i];
+			if ((mask[c / 32] & (1 << (c & 31))) == 0)
+				return i;
+		}
+	} else {
+		for (i = 0; i < bytes.len; i++) {
+			c = bytes.ptr[i];
+			if ((mask[c / 32] & (1 << (c & 31))) != 0)
+				return i;
+		}
+	}
+
+	return bytes.len;
+}

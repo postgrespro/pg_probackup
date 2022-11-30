@@ -314,10 +314,19 @@ ft__slcindex_unify(ssize_t end, size_t len) {
 
 // Bytes
 
+ft_inline ft_bytes_t
+ft_bytes_split(ft_bytes_t *bytes, size_t n) {
+	ft_dbg_assert(n <= bytes->len);
+	ft_bytes_t head = ft_bytes(bytes->ptr, n);
+	bytes->ptr += n;
+	bytes->len -= n;
+	return head;
+}
+
 ft_inline void
 ft_bytes_consume(ft_bytes_t *bytes, size_t cut) {
 	ft_dbg_assert(cut <= bytes->len);
-	bytes->ptr = bytes->ptr + cut;
+	bytes->ptr += cut;
 	bytes->len -= cut;
 }
 
@@ -329,47 +338,17 @@ ft_bytes_move(ft_bytes_t *dest, ft_bytes_t *src) {
     ft_bytes_consume(src, len);
 }
 
-ft_inline ft_bytes_t
-ft_bytes_shift_line(ft_bytes_t *bytes)
+ft_inline bool
+ft_bytes_starts_with(ft_bytes_t haystack, ft_bytes_t needle)
 {
-	size_t i;
-	char *p = bytes->ptr;
-
-	for (i = 0; i < bytes->len; i++) {
-		if (p[i] == '\r' || p[i] == '\n') {
-			if (p[i] == '\r' && i+1 < bytes->len && p[i+1] == '\n')
-				i++;
-			ft_bytes_consume(bytes, i+1);
-			return ft_bytes(p, i+1);
-		}
-	}
-
-	ft_bytes_consume(bytes, bytes->len);
-	return ft_bytes(p, i);
+	return haystack.len >= needle.len &&
+	       memcmp(haystack.ptr, needle.ptr, needle.len) == 0;
 }
 
-ft_inline size_t
-ft_bytes_find_bytes(ft_bytes_t haystack, ft_bytes_t needle)
+ft_inline bool
+ft_bytes_starts_withc(ft_bytes_t haystack, const char* needle)
 {
-	// TODO use memmem if present
-	size_t i;
-	char   first;
-
-	if (needle.len == 0)
-		return 0;
-	if (needle.len > haystack.len)
-		return haystack.len;
-
-	first = needle.ptr[0];
-	for (i = 0; i < haystack.len - needle.len; i++)
-	{
-		if (haystack.ptr[i] != first)
-			continue;
-		if (memcmp(haystack.ptr + i, needle.ptr, needle.len) == 0)
-			return i;
-	}
-
-	return haystack.len;
+	return ft_bytes_starts_with(haystack, ft_bytesc(needle));
 }
 
 ft_inline size_t
@@ -383,6 +362,32 @@ ft_bytes_has_cstr(ft_bytes_t haystack, const char* needle)
 {
 	size_t pos = ft_bytes_find_cstr(haystack, needle);
 	return pos != haystack.len;
+}
+
+extern size_t ft_bytes_spn_impl(ft_bytes_t bytes, ft_bytes_t chars, bool include);
+
+ft_inline size_t
+ft_bytes_spn(ft_bytes_t bytes, ft_bytes_t chars)
+{
+	return ft_bytes_spn_impl(bytes, chars, true);
+}
+
+ft_inline size_t
+ft_bytes_notspn(ft_bytes_t bytes, ft_bytes_t chars)
+{
+	return ft_bytes_spn_impl(bytes, chars, false);
+}
+
+ft_inline size_t
+ft_bytes_spnc(ft_bytes_t bytes, const char* chars)
+{
+	return ft_bytes_spn(bytes, ft_bytesc(chars));
+}
+
+ft_inline size_t
+ft_bytes_notspnc(ft_bytes_t bytes, const char* chars)
+{
+	return ft_bytes_notspn(bytes, ft_bytesc(chars));
 }
 
 // String utils
@@ -554,6 +559,11 @@ ft_strbuf_cat2(ft_strbuf_t *buf, char c1, char c2) {
 ft_inline bool
 ft_strbuf_catc(ft_strbuf_t *buf, const char *s) {
     return ft_strbuf_cat(buf, ft_cstr(s));
+}
+
+ft_inline void
+ft_strbuf_reset_for_reuse(ft_strbuf_t *buf) {
+	buf->len = 0;
 }
 
 ft_inline void

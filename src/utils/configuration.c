@@ -224,6 +224,16 @@ longopts_to_optstring(const struct option opts[], const size_t len)
 	return result;
 }
 
+static inline char
+key_char(char c)
+{
+	/* '-', '_' and ' ' are equal */
+	if (c == '_' || c == ' ')
+		return '-';
+	else
+		return ToLower(c);
+}
+
 /*
  * Compare two strings ignore cases and ignore.
  */
@@ -231,15 +241,8 @@ static bool
 key_equals(const char *lhs, const char *rhs)
 {
 	for (; *lhs && *rhs; lhs++, rhs++)
-	{
-		if (strchr("-_ ", *lhs))
-		{
-			if (!strchr("-_ ", *rhs))
-				return false;
-		}
-		else if (ToLower(*lhs) != ToLower(*rhs))
+		if (key_char(*lhs) != key_char(*rhs))
 			return false;
-	}
 
 	return *lhs == '\0' && *rhs == '\0';
 }
@@ -356,110 +359,92 @@ assign_option(ConfigOption *opt, const char *optarg, OptionSource src)
 	}
 }
 
-static const char *
-skip_space(const char *str, const char *line)
-{
-	while (IsSpace(*str)) { str++; }
-	return str;
-}
+#define SPACES " \t\n\v\f\r"
 
-static const char *
-get_next_token(const char *src, char *dst, const char *line)
+static bool
+get_next_token(ft_bytes_t *src, ft_strbuf_t *dest)
 {
-	const char   *s;
-	int		i;
-	int		j;
+	ft_bytes_t val;
 
-	if ((s = skip_space(src, line)) == NULL)
-		return NULL;
+	ft_bytes_consume(src, ft_bytes_spnc(*src, SPACES));
 
 	/* parse quoted string */
-	if (*s == '\'')
+	if (ft_bytes_starts_withc(*src, "\'"))
 	{
-		s++;
-		for (i = 0, j = 0; s[i] != '\0'; i++)
+		bool	seen_quote = false;
+
+		ft_bytes_consume(src, 1);
+		while (src->len)
 		{
-			if (s[i] == '\'')
+			char c = src->ptr[0];
+			ft_bytes_consume(src, 1);
+			/* doubled quote becomes just one quote */
+			if (c == '\'' && seen_quote)
 			{
-				i++;
-				/* doubled quote becomes just one quote */
-				if (s[i] == '\'')
-					dst[j] = s[i];
-				else
-					break;
+				ft_strbuf_cat1(dest, '\'');
+				seen_quote = false;
 			}
+			else if (c == '\'')
+				seen_quote = true;
+			else if (seen_quote) /* previous char was closing quote */
+				return true;
 			else
-				dst[j] = s[i];
-			j++;
+				ft_strbuf_cat1(dest, c);
 		}
+		/* last char was closing quote */
+		return seen_quote;
 	}
 	else
 	{
-		i = j = strcspn(s, "#\n\r\t\v");
-		memcpy(dst, s, j);
+		val = ft_bytes_split(src, ft_bytes_notspnc(*src, "#"SPACES));
+		ft_strbuf_catbytes(dest, val);
 	}
 
-	dst[j] = '\0';
-	return s + i;
+	return true;
 }
 
-static bool
-parse_pair(const char buffer[], char key[], char value[])
-{
-	const char *start;
-	const char *end;
+enum pair_result {
+	PAIR_OK,
+	PAIR_EMPTY,
+	PAIR_ERROR,
+};
 
-	key[0] = value[0] = '\0';
+static enum pair_result
+parse_pair(ft_bytes_t buffer, ft_strbuf_t *keybuf, ft_strbuf_t *valuebuf)
+{
+	ft_bytes_t key;
 
 	/*
 	 * parse key
 	 */
-	start = buffer;
-	if ((start = skip_space(start, buffer)) == NULL)
-		return false;
+	ft_bytes_consume(&buffer, ft_bytes_spnc(buffer, SPACES));
+	key = ft_bytes_split(&buffer, ft_bytes_notspnc(buffer, "=#"SPACES));
+	ft_bytes_consume(&buffer, ft_bytes_spnc(buffer, SPACES));
 
-	end = start + strcspn(start, "=# \n\r\t\v");
-
-	/* skip blank buffer */
-	if (end - start <= 0)
+	if (key.len == 0)
 	{
-		if (*start == '=')
-			elog(ERROR, "Syntax error in \"%s\"", buffer);
-		return false;
+		if (ft_bytes_starts_withc(buffer, "="))
+			return PAIR_ERROR;
+		return PAIR_EMPTY;
 	}
 
-	/* key found */
-	strncpy(key, start, end - start);
-	key[end - start] = '\0';
+	if (!ft_bytes_starts_withc(buffer, "="))
+		return PAIR_ERROR;
 
-	/* find key and value split char */
-	if ((start = skip_space(end, buffer)) == NULL)
-		return false;
+	ft_strbuf_catbytes(keybuf, key);
 
-	if (*start != '=')
-	{
-		elog(ERROR, "Syntax error in \"%s\"", buffer);
-		return false;
-	}
+	ft_bytes_consume(&buffer, 1);
 
-	start++;
+	/* take value */
+	if (!get_next_token(&buffer, valuebuf))
+		return PAIR_ERROR;
 
-	/*
-	 * parse value
-	 */
-	if ((end = get_next_token(start, value, buffer)) == NULL)
-		return false;
+	ft_bytes_consume(&buffer, ft_bytes_spnc(buffer, SPACES));
 
-	if ((start = skip_space(end, buffer)) == NULL)
-		return false;
+	if (buffer.len != 0 && buffer.ptr[0] != '#')
+		return PAIR_ERROR;
 
-	if (*start != '\0' && *start != '#')
-	{
-		elog(ERROR, "Syntax error in \"%s\"", buffer);
-		return false;
-	}
-
-	return true;
+	return PAIR_OK;
 }
 
 /*
@@ -544,16 +529,6 @@ config_get_opt(int argc, char **argv, ConfigOption cmd_options[],
 	return optind;
 }
 
-static void
-ft_bytes_strip_right(ft_bytes_t *line)
-{
-	size_t	i;
-
-	for (i = line->len; i > 0 && IsSpace(line->ptr[i - 1]); i--)
-		line->ptr[i - 1] = '\0';
-	line->len = i;
-}
-
 /*
  * Get configuration from configuration file.
  * Return number of parsed options.
@@ -563,9 +538,10 @@ config_read_opt(const char *path, ConfigOption options[], int elevel,
 				bool strict, bool missing_ok)
 {
 	pioDrive_i	local_drive = pioDriveForLocation(FIO_BACKUP_HOST);
-	char	key[1024];
-	char	value[2048];
+	ft_strbuf_t	key = ft_strbuf_zero();
+	ft_strbuf_t	value = ft_strbuf_zero();
 	int		parsed_options = 0;
+	int 	lno = 0;
 	err_i		err = $noerr();
 	ft_bytes_t	config_file, to_free;
 
@@ -576,52 +552,58 @@ config_read_opt(const char *path, ConfigOption options[], int elevel,
 			 .err = &err);
 	if ($haserr(err))
 	{
-		ft_bytes_free(&config_file);
-
 		if (missing_ok && getErrno(err) == ENOENT)
-			return parsed_options;
+			return 0;
 
 		ft_logerr(FT_FATAL, $errmsg(err), "could not read file");
-		return parsed_options;
+		return 0;
 	}
 	to_free = config_file;
 
-	while (true)
+	while (config_file.len > 0)
 	{
 		size_t		i;
 		ft_bytes_t	line = ft_bytes_shift_line(&config_file);
+		enum pair_result pr;
 
-		if (line.len == 0)
-			break;
+		lno++;
+		pr = parse_pair(line, &key, &value);
+		if (pr == PAIR_EMPTY)
+			continue;
 
-		ft_bytes_strip_right(&line);
+		if (pr == PAIR_ERROR)
+			elog(ERROR, "Syntax error on %s:%d: %.*s",
+				 path, lno, (int)line.len, line.ptr);
 
-		if (parse_pair(line.ptr, key, value))
+		for (i = 0; options[i].type; i++)
 		{
-			for (i = 0; options[i].type; i++)
-			{
-				ConfigOption *opt = &options[i];
+			ConfigOption *opt = &options[i];
 
-				if (key_equals(key, opt->lname))
+			if (key_equals(key.ptr, opt->lname))
+			{
+				if (opt->allowed < SOURCE_FILE &&
+					opt->allowed != SOURCE_FILE_STRICT)
+					elog(elevel, "Option %s cannot be specified in file",
+						 opt->lname);
+				else if (opt->source <= SOURCE_FILE)
 				{
-					if (opt->allowed < SOURCE_FILE &&
-						opt->allowed != SOURCE_FILE_STRICT)
-						elog(elevel, "Option %s cannot be specified in file",
-							 opt->lname);
-					else if (opt->source <= SOURCE_FILE)
-					{
-						assign_option(opt, value, SOURCE_FILE);
-						parsed_options++;
-					}
-					break;
+					assign_option(opt, value.ptr, SOURCE_FILE);
+					parsed_options++;
 				}
+				break;
 			}
-			if (strict && !options[i].type)
-				elog(elevel, "Invalid option \"%s\" in file \"%s\"", key, path);
 		}
+
+		if (strict && !options[i].type)
+			elog(elevel, "Invalid option \"%s\" in file \"%s\"", key.ptr, path);
+
+		ft_strbuf_reset_for_reuse(&key);
+		ft_strbuf_reset_for_reuse(&value);
 	}
 
 	ft_bytes_free(&to_free);
+	ft_strbuf_free(&key);
+	ft_strbuf_free(&value);
 
 	return parsed_options;
 }

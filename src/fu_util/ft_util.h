@@ -317,6 +317,10 @@ ft_inline ft_bytes_t ft_bytes(void* ptr, size_t len) {
 	return (ft_bytes_t){.ptr = (char*)ptr, .len = len};
 }
 
+ft_inline ft_bytes_t ft_bytesc(const char* ptr) {
+	return (ft_bytes_t){.ptr = (char*)ptr, .len = strlen(ptr)};
+}
+
 ft_inline ft_bytes_t ft_bytes_alloc(size_t sz) {
 	return ft_bytes(ft_malloc(sz), sz);
 }
@@ -328,11 +332,20 @@ ft_inline void ft_bytes_free(ft_bytes_t* bytes) {
 
 ft_inline void ft_bytes_consume(ft_bytes_t *bytes, size_t cut);
 ft_inline void ft_bytes_move(ft_bytes_t *dest, ft_bytes_t *src);
+ft_inline ft_bytes_t ft_bytes_split(ft_bytes_t *bytes, size_t n);
 
-ft_inline ft_bytes_t ft_bytes_shift_line(ft_bytes_t *bytes);
-ft_inline size_t 	 ft_bytes_find_bytes(ft_bytes_t haystack, ft_bytes_t needle);
+extern ft_bytes_t   ft_bytes_shift_line(ft_bytes_t *bytes);
+extern size_t       ft_bytes_find_bytes(ft_bytes_t haystack, ft_bytes_t needle);
 ft_inline size_t 	 ft_bytes_find_cstr(ft_bytes_t haystack, const char *needle);
 ft_inline bool	 	 ft_bytes_has_cstr(ft_bytes_t haystack, const char *needle);
+
+ft_inline bool    ft_bytes_starts_with(ft_bytes_t haystack, ft_bytes_t needle);
+ft_inline bool    ft_bytes_starts_withc(ft_bytes_t haystack, const char* needle);
+
+ft_inline size_t  ft_bytes_spn(ft_bytes_t bytes, ft_bytes_t chars);
+ft_inline size_t  ft_bytes_notspn(ft_bytes_t bytes, ft_bytes_t chars);
+ft_inline size_t  ft_bytes_spnc(ft_bytes_t bytes, const char* chars);
+ft_inline size_t  ft_bytes_notspnc(ft_bytes_t bytes, const char* chars);
 
 // String utils
 extern size_t ft_strlcpy(char *dest, const char* src, size_t dest_size);
@@ -457,6 +470,11 @@ extern bool         ft_strbuf_vcatf_err (ft_strbuf_t *buf, bool err[1],
  * Useful if `buf->alloced = false` and you will duplicate string in your own way.
  */
 ft_inline ft_str_t  ft_strbuf_ref(ft_strbuf_t *buf);
+
+/*
+ * Reset buffer's len to 0 without deallocation.
+ */
+ft_inline void		ft_strbuf_reset_for_reuse(ft_strbuf_t *buf);
 
 /*
  * Free buffer's buffer, if it was allocated
