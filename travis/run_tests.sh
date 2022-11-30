@@ -111,7 +111,7 @@ if [ "$MODE" = "basic" ]; then
     export PG_PROBACKUP_TEST_BASIC=ON
     echo PG_PROBACKUP_TEST_BASIC=${PG_PROBACKUP_TEST_BASIC}
     python3 -m unittest -v tests
-    python3 -m unittest -v tests.init
+    python3 -m unittest -v tests.init_test
 else
     echo PG_PROBACKUP_TEST_BASIC=${PG_PROBACKUP_TEST_BASIC}
     python3 -m unittest -v tests.$MODE
