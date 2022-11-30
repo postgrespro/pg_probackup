@@ -3846,43 +3846,34 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             f.seek(42)
             f.write(b"blah")
             f.flush()
-            f.close
 
-        try:
+        with self.assertRaises(ProbackupException) as cm:
             self.validate_pb(backup_dir, 'node', backup_id=backup_id)
-            self.assertEqual(
-                1, 0,
-                "Expecting Error because page_header is corrupted.\n "
-                "Output: {0} \n CMD: {1}".format(
-                    self.output, self.cmd))
-        except ProbackupException as e:
-            self.assertRegex(
-                e.message,
-                r'WARNING: An error occured during metadata decompression for file "[\w/]+": (data|buffer) error',
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
-                    repr(e.message), self.cmd))
 
-            self.assertIn("Backup {0} is corrupt".format(backup_id), e.message)
+        e = cm.exception
+        self.assertRegex(
+            cm.exception.message,
+            r'WARNING: An error occured during metadata decompression for file "[\w/]+": (data|buffer) error',
+            '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                repr(e.message), self.cmd))
 
-        try:
+        self.assertIn("Backup {0} is corrupt".format(backup_id), e.message)
+
+        with self.assertRaises(ProbackupException) as cm:
             self.validate_pb(backup_dir)
-            self.assertEqual(
-                1, 0,
-                "Expecting Error because page_header is corrupted.\n "
-                "Output: {0} \n CMD: {1}".format(
-                    self.output, self.cmd))
-        except ProbackupException as e:
-            self.assertTrue(
-                'WARNING: An error occured during metadata decompression' in e.message and
-                'data error' in e.message,
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
-                    repr(e.message), self.cmd))
 
-            self.assertIn("INFO: Backup {0} data files are valid".format(ok_1), e.message)
-            self.assertIn("WARNING: Backup {0} data files are corrupted".format(backup_id), e.message)
-            self.assertIn("INFO: Backup {0} data files are valid".format(ok_2), e.message)
+        e = cm.exception
+        self.assertRegex(
+            e.message,
+            r'WARNING: An error occured during metadata decompression for file "[\w/]+": (data|buffer) error',
+            '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                repr(e.message), self.cmd))
 
-            self.assertIn("WARNING: Some backups are not valid", e.message)
+        self.assertIn("INFO: Backup {0} data files are valid".format(ok_1), e.message)
+        self.assertIn("WARNING: Backup {0} data files are corrupted".format(backup_id), e.message)
+        self.assertIn("INFO: Backup {0} data files are valid".format(ok_2), e.message)
+
+        self.assertIn("WARNING: Some backups are not valid", e.message)
 
     # @unittest.expectedFailure
     # @unittest.skip("skip")
