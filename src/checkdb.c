@@ -171,8 +171,7 @@ check_files(void *arg)
 				 * uses global variables to set connections.
 				 * Need refactoring.
 				 */
-				if (!check_data_file(&(arguments->conn_arg),
-									 file, from_fullpath,
+				if (!check_data_file(file, from_fullpath,
 									 arguments->checksum_version))
 					arguments->ret = 2; /* corruption found */
 			}

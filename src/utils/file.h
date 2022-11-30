@@ -71,6 +71,10 @@ typedef enum
 	FIO_FILES_ARE_SAME,
 	FIO_READ_FILE_AT_ONCE,
 	FIO_WRITE_FILE_AT_ONCE,
+	FIO_PIO_ERROR, /* for sending err_i */
+	FIO_ITERATE_PAGES,
+	FIO_ITERATE_DATA,
+	FIO_ITERATE_EOF,
 } fio_operations;
 
 typedef struct
@@ -198,8 +202,7 @@ extern void db_list_dir(parray *files, const char *root, bool handle_tablespaces
 			bool backup_logs, int external_dir_num);
 extern void backup_list_dir(parray *files, const char *root);
 
-struct PageState; /* defined in pg_probackup.h */
-extern struct PageState *fio_get_checksum_map(fio_location location, const char *fullpath, uint32 checksum_version,
+extern PageState *fio_get_checksum_map(fio_location location, const char *fullpath, uint32 checksum_version,
 									   int n_blocks, XLogRecPtr dest_stop_lsn, BlockNumber segmentno);
 struct datapagemap; /* defined in datapagemap.h */
 extern struct datapagemap *fio_get_lsn_map(fio_location location, const char *fullpath, uint32 checksum_version,
@@ -228,6 +231,7 @@ fobj_error_int_key(writtenSz);
 fobj_error_int_key(wantedSz);
 fobj_error_int_key(size);
 fobj_error_cstr_key(kind);
+fobj_error_int_key(offs);
 
 #ifdef HAVE_LIBZ
 fobj_error_kind(GZ);
@@ -242,13 +246,16 @@ fobj_error_cstr_key(gzErrStr);
 #define mth__pioWrite  		size_t, (ft_bytes_t, buf), (err_i *, err)
 #define mth__pioTruncate 	err_i, (size_t, sz)
 #define mth__pioWriteFinish		err_i
+#define mth__pioSeek		off_t, (off_t, offs), (err_i *, err)
+
 fobj_method(pioClose);
 fobj_method(pioRead);
 fobj_method(pioWrite);
 fobj_method(pioTruncate);
 fobj_method(pioWriteFinish);
+fobj_method(pioSeek);
 
-#define iface__pioFile				mth(pioWrite, pioWriteFinish, pioRead, pioTruncate, pioClose)
+#define iface__pioFile				mth(pioWrite, pioWriteFinish, pioRead, pioTruncate, pioClose, pioSeek)
 #define iface__pioWriteFlush		mth(pioWrite, pioWriteFinish)
 #define iface__pioWriteCloser		mth(pioWrite, pioWriteFinish, pioClose)
 #define iface__pioReadCloser  		mth(pioRead, pioClose)
@@ -256,6 +263,25 @@ fobj_iface(pioFile);
 fobj_iface(pioWriteFlush);
 fobj_iface(pioWriteCloser);
 fobj_iface(pioReadCloser);
+
+// Pages iterator
+typedef struct
+{
+	PageState	state;
+	BlockNumber	blknum;
+	int			page_result;
+	int			compression;
+	size_t		compressed_size;
+	char		compressed_page[BLCKSZ]; /* MUST be last */
+} PageIteratorValue;
+
+#define mth__pioNextPage		err_i, (PageIteratorValue *, value)
+
+fobj_method(pioNextPage);
+
+#define iface__pioPagesIterator	mth(pioNextPage)
+
+fobj_iface(pioPagesIterator);
 
 // Drive
 #define mth__pioOpen 		pioFile_i, (path_t, path), (int, flags), \
@@ -284,6 +310,12 @@ fobj_iface(pioReadCloser);
 #define mth__pioWriteFile	err_i, (path_t, path), (ft_bytes_t, content), (bool, binary)
 #define mth__pioWriteFile__optional() (binary, true)
 
+#define mth__pioIteratePages pioPagesIterator_i, (path_t, from_fullpath), \
+		(pgFile *, file), (XLogRecPtr, start_lsn), (CompressAlg, calg), (int, clevel), \
+		(uint32, checksum_version), (BackupMode, backup_mode), (bool, strict), \
+		(err_i *, err)
+fobj_method(pioIteratePages);
+
 fobj_method(pioOpen);
 fobj_method(pioStat);
 fobj_method(pioRemove);
@@ -301,7 +333,8 @@ fobj_method(pioWriteFile);
 #define iface__pioDrive 	mth(pioOpen, pioStat, pioRemove, pioRename), \
 					        mth(pioExists, pioGetCRC32, pioIsRemote),                \
 							mth(pioMakeDir, pioListDir, pioRemoveDir),  \
-							mth(pioFilesAreSame, pioReadFile, pioWriteFile)
+							mth(pioFilesAreSame, pioReadFile, pioWriteFile), \
+							mth(pioIteratePages)
 fobj_iface(pioDrive);
 
 extern pioDrive_i pioDriveForLocation(fio_location location);

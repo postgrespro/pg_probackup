@@ -84,6 +84,27 @@ typedef struct
 	uint32      checksumVersion;
 } fio_lsn_map_request;
 
+typedef struct
+{
+	size_t from_fullpath_len;
+	XLogRecPtr start_lsn;
+	CompressAlg calg;
+	int clevel;
+	uint32 checksum_version;
+	BackupMode backup_mode;
+	bool strict;
+
+	int64_t file_size;
+	size_t file_rel_path_len;
+	size_t file_linked_len;
+	int file_segno;
+	bool file_exists_in_prev;
+	bool file_pagemap_isabsent;
+	size_t file_bitmapsize;
+} fio_iterate_pages_request;
+
+static void fio_iterate_pages_impl(pioDrive_i drive, int out, const char *from_fullpath,
+								   pgFile *file, fio_iterate_pages_request *params);
 
 /* Convert FIO pseudo handle to index in file descriptor array */
 #define fio_fileno(f) (((size_t)f - 1) | FIO_PIPE_MARKER)
@@ -540,7 +561,6 @@ fio_disconnect(void)
 	if (fio_stdin)
 	{
 		fio_header hdr = (fio_header){.cop = FIO_DISCONNECT};
-
 		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
 		IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
 		Assert(hdr.cop == FIO_DISCONNECTED);
@@ -2186,6 +2206,76 @@ fio_copy_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
 	pg_free(out_buf);
 
 	return n_blocks_read;
+}
+
+static void
+fio_send_pio_err(int out, err_i err)
+{
+	const char *err_msg = $errmsg(err);
+	fio_header hdr = {.cop = FIO_PIO_ERROR, .size = strlen(err_msg) + 1, .arg = getErrno(err)};
+
+	IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
+	IO_CHECK(fio_write_all(out, err_msg, hdr.size), hdr.size);
+
+	/* We also need to send source location and all the KVs */
+}
+
+static err_i
+fio_receive_pio_err(fio_header *hdr)
+{
+	int pio_errno = hdr->arg;
+	char *err_msg = pg_malloc(hdr->size);
+
+	IO_CHECK(fio_read_all(fio_stdin, err_msg, hdr->size), hdr->size);
+
+	return $syserr(pio_errno, err_msg);
+}
+
+static void
+fio_iterate_pages_impl(pioDrive_i drive, int out, const char *from_fullpath,
+					   pgFile *file, fio_iterate_pages_request *params)
+{
+	pioPagesIterator_i	pages;
+	err_i				err = $noerr();
+	fio_header			hdr = {.cop=FIO_ITERATE_DATA};
+
+	pages = $i(pioIteratePages, drive, .from_fullpath = from_fullpath, .file = file,
+			   .start_lsn = params->start_lsn, .calg = params->calg, .clevel = params->clevel,
+			   .checksum_version = params->checksum_version, .backup_mode = params->backup_mode,
+			   .strict = params->strict, .err = &err);
+	if ($haserr(err))
+	{
+		fio_send_pio_err(out, err);
+		return;
+	}
+	ft_strbuf_t req = ft_strbuf_zero();
+	while (true)
+	{
+		PageIteratorValue value;
+
+		err_i err = $i(pioNextPage, pages, &value);
+		if ($haserr(err)) {
+			fio_send_pio_err(out, err);
+			return;
+		}
+		if (value.page_result == PageIsTruncated)
+			break;
+
+		//send page + state
+		size_t value_size = sizeof(PageIteratorValue) - BLCKSZ + value.compressed_size;
+
+		hdr.size = value_size;
+
+		ft_strbuf_reset_for_reuse(&req);
+		ft_strbuf_catbytes(&req, ft_bytes(&hdr, sizeof(hdr)));
+		ft_strbuf_catbytes(&req, ft_bytes(&value, value_size));
+
+		IO_CHECK(fio_write_all(out, req.ptr, req.len), req.len);
+	}
+	ft_strbuf_free(&req);
+
+	hdr = (fio_header){.cop = FIO_ITERATE_EOF};
+	IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 }
 
 /* TODO: read file using large buffer
@@ -4043,6 +4133,63 @@ fio_communicate(int in, int out)
 					IO_CHECK(fio_write_all(out, buf + filename_size, hdr.size), hdr.size);
 			}
 			break;
+		case FIO_ITERATE_PAGES:
+			{
+				ft_bytes_t bytes = {.ptr = buf, .len = hdr.size};
+
+				fio_iterate_pages_request *params;
+				char *from_fullpath = NULL;
+				char *rel_path = NULL;
+				char *linked = NULL;
+				pgFile *file = NULL;
+
+				params = (fio_iterate_pages_request *)bytes.ptr;
+				ft_bytes_consume(&bytes, sizeof(fio_iterate_pages_request));
+
+				if (params->from_fullpath_len)
+				{
+					from_fullpath = bytes.ptr;
+					ft_bytes_consume(&bytes, params->from_fullpath_len);
+				}
+
+				if (params->file_rel_path_len)
+				{
+					// free-d in pgFileFree
+					rel_path = pgut_malloc(params->file_rel_path_len);
+					memcpy(rel_path, bytes.ptr, params->file_rel_path_len);
+					ft_bytes_consume(&bytes, params->file_rel_path_len);
+				}
+
+				if (params->file_linked_len)
+				{
+					// free-d in pgFileFree
+					linked = pgut_malloc(params->file_linked_len);
+					memcpy(linked, bytes.ptr, params->file_linked_len);
+					ft_bytes_consume(&bytes, params->file_linked_len);
+				}
+
+				file = pgFileInit(rel_path);
+
+				file->size = params->file_size;
+				file->segno = params->file_segno;
+				file->exists_in_prev = params->file_exists_in_prev;
+				file->pagemap_isabsent = params->file_pagemap_isabsent;
+				file->rel_path = rel_path;
+				file->linked = linked;
+
+				file->pagemap.bitmapsize = params->file_bitmapsize;
+				if (params->file_bitmapsize)
+				{
+					file->pagemap.bitmap = pgut_malloc(params->file_bitmapsize);
+					memcpy(file->pagemap.bitmap, bytes.ptr, params->file_bitmapsize);
+					ft_bytes_consume(&bytes, params->file_bitmapsize);
+				}
+
+				fio_iterate_pages_impl(drive, out, from_fullpath, file, params);
+
+				pgFileFree(file);
+			}
+			break;
 		  default:
 			Assert(false);
 		}
@@ -4651,6 +4798,23 @@ pioLocalFile_pioWrite(VSelf, ft_bytes_t buf, err_i *err)
 					errNo(EIO));
     }
     return r;
+}
+
+static off_t
+pioLocalFile_pioSeek(VSelf, off_t offs, err_i *err)
+{
+	Self(pioLocalFile);
+	fobj_reset_err(err);
+
+	ft_assert(self->fd >= 0, "Closed file abused \"%s\"", self->p.path);
+
+	off_t pos = lseek(self->fd, offs, SEEK_SET);
+
+	if (pos == (off_t)-1)
+	{
+		*err = $syserr(errno, "Can not seek to {offs} in file {path:q}", offs(offs), path(self->p.path));
+	}
+	return pos;
 }
 
 static err_i
@@ -5339,6 +5503,26 @@ pioRemoteFile_pioWrite(VSelf, ft_bytes_t buf, err_i *err)
     }
 
     return buf.len;
+}
+
+static off_t
+pioRemoteFile_pioSeek(VSelf, off_t offs, err_i *err)
+{
+	Self(pioRemoteFile);
+	fio_header hdr;
+
+	fobj_reset_err(err);
+
+	ft_assert(self->handle >= 0, "Remote closed file abused \"%s\"", self->p.path);
+
+	hdr.cop = FIO_SEEK;
+	hdr.handle = self->handle & ~FIO_PIPE_MARKER;
+	hdr.size = 0;
+	hdr.arg = offs;
+
+	IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
+
+	return 0;
 }
 
 static err_i
@@ -6247,6 +6431,258 @@ retry:
 	}
 	goto retry;
 }
+
+typedef struct pioRemotePagesIterator
+{
+	bool valid;
+} pioRemotePagesIterator;
+
+typedef struct pioLocalPagesIterator
+{
+	bool valid;
+	BlockNumber	blknum;
+
+	bool		strict;
+	pgFile		*file;
+	datapagemap_iterator_t *map_iter;
+	FILE		*in;
+	const char	*from_fullpath;
+	XLogRecPtr	start_lsn;
+
+	CompressAlg	calg;
+	int			clevel;
+	BackupMode	backup_mode;
+	uint32		checksum_version;
+} pioLocalPagesIterator;
+
+#define kls__pioLocalPagesIterator	iface__pioPagesIterator, iface(pioPagesIterator), \
+		mth(fobjDispose)
+fobj_klass(pioLocalPagesIterator);
+
+#define kls__pioRemotePagesIterator	iface__pioPagesIterator, iface(pioPagesIterator)
+fobj_klass(pioRemotePagesIterator);
+
+static pioPagesIterator_i
+pioRemoteDrive_pioIteratePages(VSelf, path_t from_fullpath, pgFile *file,
+							  XLogRecPtr start_lsn, CompressAlg calg, int clevel,
+							  uint32 checksum_version, BackupMode backup_mode,
+							  bool strict, err_i *err)
+{
+	Self(pioRemoteDrive);
+	fobj_t iter = {0};
+	fio_header hdr = {.cop = FIO_ITERATE_PAGES};
+	fio_iterate_pages_request params;
+	memset(&params, 0, sizeof(params));
+	params = (fio_iterate_pages_request){
+		.from_fullpath_len = strlen(from_fullpath)+1,
+		.start_lsn = start_lsn,
+		.calg = calg,
+		.clevel = clevel,
+		.checksum_version=checksum_version,
+		.backup_mode = backup_mode,
+		.strict=strict,
+		.file_size = file->size,
+		.file_rel_path_len = file->rel_path?strlen(file->rel_path)+1:0,
+		.file_linked_len = file->linked?strlen(file->linked)+1:0,
+		.file_segno = file->segno,
+		.file_exists_in_prev = file->exists_in_prev,
+		.file_pagemap_isabsent = file->pagemap_isabsent,
+		.file_bitmapsize = file->pagemap.bitmapsize
+	};
+
+    fobj_reset_err(err);
+
+	if (file->size % BLCKSZ != 0)
+		elog(WARNING, "File: \"%s\", invalid file size %zu", from_fullpath, file->size);
+
+	size_t total_size = sizeof(hdr) + sizeof(params) + params.from_fullpath_len
+		+ params.file_rel_path_len + params.file_linked_len + params.file_bitmapsize;
+
+	ft_strbuf_t req = ft_strbuf_zero();
+
+	hdr.size = total_size - sizeof(hdr);
+
+	ft_strbuf_catbytes(&req, ft_bytes(&hdr, sizeof(hdr)));
+
+	ft_strbuf_catbytes(&req, ft_bytes(&params, sizeof(fio_iterate_pages_request)));
+	if(params.from_fullpath_len)
+		ft_strbuf_catbytes(&req, ft_bytes((char *)from_fullpath, params.from_fullpath_len));
+	if(params.file_rel_path_len)
+		ft_strbuf_catbytes(&req, ft_bytes(file->rel_path, params.file_rel_path_len));
+	if(params.file_linked_len)
+		ft_strbuf_catbytes(&req, ft_bytes(file->linked, params.file_linked_len));
+	if(params.file_bitmapsize)
+		ft_strbuf_catbytes(&req, ft_bytes(file->pagemap.bitmap, params.file_bitmapsize));
+
+	Assert(req.len == total_size);
+	Assert(!req.overflowed);
+
+	IO_CHECK(fio_write_all(fio_stdout, req.ptr, req.len), req.len);
+
+	ft_strbuf_free(&req);
+
+    iter = $alloc(pioRemotePagesIterator, .valid = true);
+
+    return bind_pioPagesIterator(iter);
+}
+
+static err_i
+pioRemotePagesIterator_pioNextPage(VSelf, PageIteratorValue *value)
+{
+	Self(pioRemotePagesIterator);
+
+	fio_header hdr;
+
+	if (!self->valid) {
+		value->page_result = PageIsTruncated;
+		return $noerr();
+	}
+	IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
+	if (hdr.cop == FIO_PIO_ERROR)
+	{
+		self->valid = false;
+		return fio_receive_pio_err(&hdr);
+	}
+	else if (hdr.cop == FIO_ITERATE_EOF)
+	{
+		self->valid = false;
+		value->page_result = PageIsTruncated;
+		return $noerr();
+	}
+	else if (hdr.cop == FIO_ITERATE_DATA)
+	{
+		Assert(hdr.size <= sizeof(PageIteratorValue));
+		memset(value, 0, sizeof(PageIteratorValue));
+		IO_CHECK(fio_read_all(fio_stdin, (void*)value, hdr.size), hdr.size);
+
+		return $noerr();
+	}
+	self->valid = false;
+	return $err(RT, "Unexpected operation {intCode} in remote pioNextPage",
+				intCode(hdr.cop));
+}
+
+static pioPagesIterator_i
+pioLocalDrive_pioIteratePages(VSelf, path_t from_fullpath, pgFile *file,
+							  XLogRecPtr start_lsn, CompressAlg calg, int clevel,
+							  uint32 checksum_version, BackupMode backup_mode,
+							  bool strict, err_i *err)
+{
+	Self(pioLocalDrive);
+	fobj_t	iter = {0};
+	bool	use_pagemap;
+	datapagemap_iterator_t *map_iter = NULL;
+	FILE   *in;
+
+    fobj_reset_err(err);
+
+	if (file->size % BLCKSZ != 0)
+		elog(WARNING, "File: \"%s\", invalid file size %zu", from_fullpath, file->size);
+
+	/*
+	 * Compute expected number of blocks in the file.
+	 * NOTE This is a normal situation, if the file size has changed
+	 * since the moment we computed it.
+	 */
+	file->n_blocks = ft_div_i64u32_to_i32(file->size, BLCKSZ);
+
+	/*
+	 * If page map is empty or file is not present in destination directory,
+	 * then copy backup all pages of the relation.
+	 */
+
+	if (file->pagemap.bitmapsize == PageBitmapIsEmpty ||
+		 file->pagemap_isabsent || !file->exists_in_prev ||
+		 !file->pagemap.bitmap)
+		use_pagemap = false;
+	else
+		use_pagemap = true;
+
+	if (use_pagemap)
+		elog(LOG, "Using pagemap for file \"%s\"", file->rel_path);
+
+	in = fopen(from_fullpath, PG_BINARY_R);
+	if (!in)
+	{
+		pioPagesIterator_i ret = {0};
+		*err = $syserr(errno, "Cannot iterate pages");
+		return ret;
+	}
+
+	BlockNumber blknum;
+	if (use_pagemap)
+	{
+		map_iter = datapagemap_iterate(&file->pagemap);
+		blknum = 0;
+	} else {
+		blknum = -1;
+	}
+
+    iter = $alloc(pioLocalPagesIterator, .valid = true, .blknum = blknum, .strict = strict,
+				  .file = file, .from_fullpath = from_fullpath, .map_iter = map_iter,
+				  .in = in, .start_lsn = start_lsn, .calg = calg, .clevel = clevel, .backup_mode = backup_mode,
+				  .checksum_version = checksum_version);
+
+    return bind_pioPagesIterator(iter);
+}
+
+static void
+pioLocalPagesIterator_fobjDispose(VSelf)
+{
+	Self(pioLocalPagesIterator);
+
+	if (self->map_iter) {
+		/* Only free iterator. Map itself is not owned by us. */
+		pg_free(self->map_iter);
+	}
+	if(self->in) fclose(self->in);
+}
+
+static err_i
+pioLocalPagesIterator_pioNextPage(VSelf, PageIteratorValue *value)
+{
+	FOBJ_FUNC_ARP();
+	Self(pioLocalPagesIterator);
+
+	while (self->valid)
+	{
+		char page_buf[BLCKSZ];
+
+		/* next block */
+		if (self->map_iter)
+		{
+			/* exit if pagemap is exhausted */
+			if (!datapagemap_next(self->map_iter, &(self->blknum)))
+				break;
+		}
+		else
+			self->blknum++;
+
+		if (self->blknum >= self->file->n_blocks)
+			break;
+
+		int rc = prepare_page(self->file, self->start_lsn, self->blknum,
+							  self->in, self->backup_mode, page_buf, self->strict,
+							  self->checksum_version, self->from_fullpath, &value->state);
+		value->blknum = self->blknum;
+		value->page_result = rc;
+		if (rc == PageIsTruncated)
+			break;
+		if (rc == PageIsOk)
+		{
+			value->compressed_size = compress_page(value->compressed_page, BLCKSZ,
+												   value->blknum, page_buf, self->calg,
+												   self->clevel, self->from_fullpath);
+		}
+		return $noerr();
+	}
+	value->page_result = PageIsTruncated;
+	self->valid = false;
+	return $noerr();
+}
+
+fobj_klass_handle(pioLocalPagesIterator);
+fobj_klass_handle(pioRemotePagesIterator);
 
 fobj_klass_handle(pioFile);
 fobj_klass_handle(pioLocalDrive);

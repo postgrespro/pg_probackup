@@ -33,6 +33,7 @@
 #include <port/atomics.h>
 #endif
 
+#include "extra.h"
 #include "utils/configuration.h"
 #include "utils/logger.h"
 #include "utils/remote.h"
@@ -145,12 +146,6 @@ typedef struct RedoParams
 	uint32      checksum_version;
 } RedoParams;
 
-typedef struct PageState
-{
-	uint16  checksum;
-	XLogRecPtr  lsn;
-} PageState;
-
 typedef struct db_map_entry
 {
 	Oid dbOid;
@@ -190,14 +185,6 @@ typedef enum RecoverySettingsMode
 	PITR_REQUESTED, /* can be set based on other parameters
 	                 * if not explicitly forbidden */
 } RecoverySettingsMode;
-
-typedef enum CompressAlg
-{
-	NOT_DEFINED_COMPRESS = 0,
-	NONE_COMPRESS,
-	PGLZ_COMPRESS,
-	ZLIB_COMPRESS,
-} CompressAlg;
 
 typedef enum ForkName
 {
@@ -290,15 +277,6 @@ typedef enum BackupStatus
 	BACKUP_STATUS_ORPHAN,		/* backup validity is unknown but at least one parent backup is corrupted */
 	BACKUP_STATUS_CORRUPT		/* files are corrupted, not available */
 } BackupStatus;
-
-typedef enum BackupMode
-{
-	BACKUP_MODE_INVALID = 0,
-	BACKUP_MODE_DIFF_PAGE,		/* incremental page backup */
-	BACKUP_MODE_DIFF_PTRACK,	/* incremental page backup with ptrack system */
-	BACKUP_MODE_DIFF_DELTA,		/* incremental page backup with lsn comparison */
-	BACKUP_MODE_FULL			/* full backup */
-} BackupMode;
 
 typedef enum ShowFormat
 {
@@ -1051,8 +1029,7 @@ extern bool set_forkname(pgFile *file);
 extern void exclude_files(parray *files, bool backup_logs);
 
 /* in data.c */
-extern bool check_data_file(ConnectionArgs *arguments, pgFile *file,
-							const char *from_fullpath, uint32 checksum_version);
+extern bool check_data_file(pgFile *file, const char *from_fullpath, uint32 checksum_version);
 
 
 extern void catchup_data_file(pgFile *file, const char *from_fullpath, const char *to_fullpath,
@@ -1070,6 +1047,14 @@ extern void backup_non_data_file_internal(const char *from_fullpath,
 										  fio_location from_location,
 										  const char *to_fullpath, pgFile *file,
 										  bool missing_ok);
+
+extern int32 prepare_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
+						  BlockNumber blknum, FILE *in,
+						  BackupMode backup_mode,
+						  Page page, bool strict,
+						  uint32 checksum_version,
+						  const char *from_fullpath,
+						  PageState *page_st);
 
 extern size_t restore_data_file(parray *parent_chain, pgFile *dest_file, FILE *out,
 								const char *to_fullpath, bool use_bitmap, PageState *checksum_map,
@@ -1174,15 +1159,6 @@ extern parray * pg_ptrack_get_pagemapset(PGconn *backup_conn, const char *ptrack
 
 /* open local file to writing */
 extern FILE* open_local_file_rw(const char *to_fullpath, char **out_buf, uint32 buf_size);
-
-extern int send_pages(const char *to_fullpath, const char *from_fullpath,
-					  pgFile *file, XLogRecPtr prev_backup_start_lsn, CompressAlg calg, int clevel,
-					  uint32 checksum_version, bool use_pagemap, BackupPageHeader2 **headers,
-					  BackupMode backup_mode);
-extern int copy_pages(const char *to_fullpath, const char *from_fullpath,
-					  pgFile *file, XLogRecPtr prev_backup_start_lsn,
-					  uint32 checksum_version, bool use_pagemap,
-					  BackupMode backup_mode);
 
 /* FIO */
 extern int fio_send_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,

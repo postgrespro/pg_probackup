@@ -1950,6 +1950,7 @@ backup_cleanup(bool fatal, void *userdata)
 static void *
 backup_files(void *arg)
 {
+	FOBJ_FUNC_ARP();
 	int			i;
 	char		from_fullpath[MAXPGPATH];
 	char		to_fullpath[MAXPGPATH];

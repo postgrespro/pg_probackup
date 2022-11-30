@@ -540,6 +540,7 @@ fobj_error_kind(SysErr);
 fobj_error_object_key(cause);
 fobj_error_cstr_key(causeStr);
 fobj_error_int_key(errNo);
+fobj_error_int_key(intCode);
 fobj_error_cstr_key(errNoStr);
 #define fobj_errno_keys(errno) (errNo, errno), (errNoStr, ft_strerror(errno))
 fobj_error_cstr_key(path);
