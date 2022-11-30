@@ -336,8 +336,8 @@ ft_inline ft_bytes_t ft_bytes_split(ft_bytes_t *bytes, size_t n);
 
 extern ft_bytes_t   ft_bytes_shift_line(ft_bytes_t *bytes);
 extern size_t       ft_bytes_find_bytes(ft_bytes_t haystack, ft_bytes_t needle);
-ft_inline size_t 	 ft_bytes_find_cstr(ft_bytes_t haystack, const char *needle);
-ft_inline bool	 	 ft_bytes_has_cstr(ft_bytes_t haystack, const char *needle);
+ft_inline size_t    ft_bytes_find_cstr(ft_bytes_t haystack, const char *needle);
+ft_inline bool      ft_bytes_has_cstr(ft_bytes_t haystack, const char *needle);
 
 ft_inline bool    ft_bytes_starts_with(ft_bytes_t haystack, ft_bytes_t needle);
 ft_inline bool    ft_bytes_starts_withc(ft_bytes_t haystack, const char* needle);
