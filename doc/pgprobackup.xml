@@ -312,7 +312,7 @@ doc/src/sgml/pgprobackup.sgml
   </para>
   <itemizedlist spacing="compact">
     <listitem>
-      <para>
+      <para id="pbk-modes-full">
         FULL backups contain all the data files required to restore
         the database cluster.
       </para>
@@ -328,7 +328,7 @@ doc/src/sgml/pgprobackup.sgml
       </para>
       <itemizedlist spacing="compact">
         <listitem>
-          <para>
+          <para id="pbk-modes-delta">
             DELTA backup. In this mode, <application>pg_probackup</application> reads all data
             files in the data directory and copies only those pages
             that have changed since the previous backup. This
@@ -337,7 +337,7 @@ doc/src/sgml/pgprobackup.sgml
           </para>
         </listitem>
         <listitem>
-          <para>
+          <para id="pbk-modes-page">
             PAGE backup. In this mode, <application>pg_probackup</application> scans all WAL
             files in the archive from the moment the previous full or
             incremental backup was taken. Newly created backups
@@ -352,7 +352,7 @@ doc/src/sgml/pgprobackup.sgml
           </para>
         </listitem>
         <listitem>
-          <para>
+          <para id="pbk-modes-ptrack">
             PTRACK backup. In this mode, <productname>PostgreSQL</productname> tracks page
             changes on the fly. Continuous archiving is not necessary
             for it to operate. Each time a relation page is updated,
@@ -443,7 +443,7 @@ doc/src/sgml/pgprobackup.sgml
           parameters and have the same major release number.
           Depending on cluster configuration, <productname>PostgreSQL</productname> itself may
           apply additional restrictions, such as CPU architecture
-          or <application>libc</application>/<application>libicu</application> versions.
+          or <application>libc</application>/<application>icu</application> versions.
         </para>
       </listitem>
     </itemizedlist>
@@ -1274,36 +1274,11 @@ pg_probackup backup -B <replaceable>backup_dir</replaceable> --instance <replace
     <para>
       Where <replaceable>backup_mode</replaceable> can take one of the
       following values:
+      <literal><link linkend="pbk-modes-full">FULL</link></literal>,
+      <literal><link linkend="pbk-modes-delta">DELTA</link></literal>,
+      <literal><link linkend="pbk-modes-page">PAGE</link></literal>, and
+      <literal><link linkend="pbk-modes-ptrack">PTRACK</link></literal>.
     </para>
-    <itemizedlist spacing="compact">
-      <listitem>
-        <para>
-          FULL — creates a full backup that contains all the data
-          files of the cluster to be restored.
-        </para>
-      </listitem>
-      <listitem>
-        <para>
-          DELTA — reads all data files in the data directory and
-          creates an incremental backup for pages that have changed
-          since the previous backup.
-        </para>
-      </listitem>
-      <listitem>
-        <para>
-          PAGE — creates an incremental backup based on the WAL
-          files that have been generated since the previous full or
-          incremental backup was taken. Only changed blocks are read
-          from data files.
-        </para>
-      </listitem>
-      <listitem>
-        <para>
-          PTRACK — creates an incremental backup tracking page
-          changes on the fly.
-        </para>
-      </listitem>
-    </itemizedlist>
     <para>
       When restoring a cluster from an incremental backup,
       <application>pg_probackup</application> relies on the parent full backup and all the
@@ -3532,25 +3507,25 @@ pg_probackup catchup -b <replaceable>catchup_mode</replaceable> --source-pgdata=
 </programlisting>
     <para>
       Where <replaceable>catchup_mode</replaceable> can take one of the
-      following values: <literal>FULL</literal>, <literal>DELTA</literal>, or <literal>PTRACK</literal>.
+      following values:
     </para>
     <itemizedlist spacing="compact">
       <listitem>
-        <para>
-          FULL — creates a full copy of the <productname>PostgreSQL</productname> instance.
+        <para id="pbk-catchup-modes-full">
+          <literal>FULL</literal> — creates a full copy of the <productname>PostgreSQL</productname> instance.
           The data directory of the destination instance must be empty for this mode.
         </para>
       </listitem>
       <listitem>
-        <para>
-          DELTA — reads all data files in the data directory and
+        <para id="pbk-catchup-modes-delta">
+          <literal>DELTA</literal> — reads all data files in the data directory and
           creates an incremental copy for pages that have changed
           since the destination instance was shut down.
         </para>
       </listitem>
       <listitem>
-        <para>
-          PTRACK — tracking page changes on the fly,
+        <para id="pbk-catchup-modes-ptrack">
+          <literal>PTRACK</literal> — tracking page changes on the fly,
           only reads and copies pages that have changed since the point of divergence
           of the source and destination instances.
           <warning>
@@ -3817,35 +3792,10 @@ pg_probackup backup -B <replaceable>backup_dir</replaceable> -b <replaceable>bac
       <listitem>
       <para>
         Specifies the backup mode to use. Possible values are:
-
-      <itemizedlist spacing="compact">
-        <listitem>
-          <para>
-            <literal>FULL</literal> — creates a full backup that contains all the data
-            files of the cluster to be restored.
-          </para>
-        </listitem>
-        <listitem>
-          <para>
-            <literal>DELTA</literal> — reads all data files in the data directory and
-            creates an incremental backup for pages that have changed
-            since the previous backup.
-          </para>
-        </listitem>
-        <listitem>
-          <para>
-            <literal>PAGE</literal> — creates an incremental PAGE backup based on the WAL
-            files that have changed since the previous full or
-            incremental backup was taken.
-          </para>
-        </listitem>
-        <listitem>
-          <para>
-            <literal>PTRACK</literal> — creates an incremental PTRACK backup tracking
-            page changes on the fly.
-          </para>
-        </listitem>
-      </itemizedlist>
+        <literal><link linkend="pbk-modes-full">FULL</link></literal>,
+        <literal><link linkend="pbk-modes-delta">DELTA</link></literal>,
+        <literal><link linkend="pbk-modes-page">PAGE</link></literal>, and
+        <literal><link linkend="pbk-modes-ptrack">PTRACK</link></literal>.
       </para>
       </listitem>
       </varlistentry>
@@ -4540,34 +4490,9 @@ pg_probackup catchup -b <replaceable>catchup_mode</replaceable>
       <listitem>
       <para>
         Specifies the catchup mode to use. Possible values are:
-
-      <itemizedlist spacing="compact">
-        <listitem>
-          <para>
-            <literal>FULL</literal> — creates a full copy of the <productname>PostgreSQL</productname> instance.
-          </para>
-        </listitem>
-        <listitem>
-          <para>
-            <literal>DELTA</literal> — reads all data files in the data directory and
-            creates an incremental copy for pages that have changed
-            since the destination instance was shut down.
-          </para>
-        </listitem>
-        <listitem>
-          <para>
-            <literal>PTRACK</literal> — tracking page changes on the fly,
-            only reads and copies pages that have changed since the point of divergence
-            of the source and destination instances.
-            <warning>
-              <para>
-               PTRACK catchup mode requires <application>PTRACK</application>
-               not earlier than 2.0 and hence, <productname>PostgreSQL</productname> not earlier than 11.
-              </para>
-            </warning>
-          </para>
-        </listitem>
-      </itemizedlist>
+        <literal><link linkend="pbk-catchup-modes-full">FULL</link></literal>,
+        <literal><link linkend="pbk-catchup-modes-delta">DELTA</link></literal>, and
+        <literal><link linkend="pbk-catchup-modes-ptrack">PTRACK</link></literal>.
       </para>
       </listitem>
       </varlistentry>
