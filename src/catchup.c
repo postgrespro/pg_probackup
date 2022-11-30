@@ -55,10 +55,8 @@ catchup_init_state(PGNodeInfo	*source_node_info, const char *source_pgdata, cons
 	/* Do some compatibility checks and fill basic info about PG instance */
 	source_conn = pgdata_basic_setup(instance_config.conn_opt, source_node_info);
 
-#if PG_VERSION_NUM >= 110000
 	if (!RetrieveWalSegSize(source_conn))
 		elog(ERROR, "Failed to retrieve wal_segment_size");
-#endif
 
 	get_ptrack_version(source_conn, source_node_info);
 	if (source_node_info->ptrack_version_num > 0)

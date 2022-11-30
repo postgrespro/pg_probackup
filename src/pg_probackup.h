@@ -16,6 +16,8 @@
 #include "libpq-fe.h"
 
 #include "access/xlog_internal.h"
+#include "file_compat.h"
+
 #include "utils/pg_crc.h"
 #include "catalog/pg_control.h"
 
@@ -684,8 +686,6 @@ typedef struct StopBackupCallbackParams
 	 strspn(fname, "0123456789ABCDEF") == XLOG_FNAME_LEN &&		\
 	 strcmp((fname) + XLOG_FNAME_LEN, ".gz") == 0)
 
-#if PG_VERSION_NUM >= 110000
-
 #define WalSegmentOffset(xlogptr, wal_segsz_bytes) \
 	XLogSegmentOffset(xlogptr, wal_segsz_bytes)
 #define GetXLogSegNo(xlrp, logSegNo, wal_segsz_bytes) \
@@ -706,28 +706,6 @@ typedef struct StopBackupCallbackParams
 
 #define GetXLogFromFileName(fname, tli, logSegNo, wal_segsz_bytes) \
 		XLogFromFileName(fname, tli, logSegNo, wal_segsz_bytes)
-#else
-#define WalSegmentOffset(xlogptr, wal_segsz_bytes) \
-	((xlogptr) & ((XLogSegSize) - 1))
-#define GetXLogSegNo(xlrp, logSegNo, wal_segsz_bytes) \
-	XLByteToSeg(xlrp, logSegNo)
-#define GetXLogRecPtr(segno, offset, wal_segsz_bytes, dest) \
-	XLogSegNoOffsetToRecPtr(segno, offset, dest)
-#define GetXLogFileName(fname, tli, logSegNo, wal_segsz_bytes) \
-	XLogFileName(fname, tli, logSegNo)
-#define IsInXLogSeg(xlrp, logSegNo, wal_segsz_bytes) \
-	XLByteInSeg(xlrp, logSegNo)
-#define GetXLogSegName(fname, logSegNo, wal_segsz_bytes) \
-	snprintf(fname, 20, "%08X%08X",\
-			 (uint32) ((logSegNo) / XLogSegmentsPerXLogId), \
-			 (uint32) ((logSegNo) % XLogSegmentsPerXLogId))
-
-#define GetXLogSegNoFromScrath(logSegNo, log, seg, wal_segsz_bytes)	\
-		logSegNo = (uint64) log * XLogSegmentsPerXLogId + seg
-
-#define GetXLogFromFileName(fname, tli, logSegNo, wal_segsz_bytes) \
-		XLogFromFileName(fname, tli, logSegNo)
-#endif
 
 #define IsPartialCompressXLogFileName(fname)	\
 	(strlen(fname) == XLOG_FNAME_LEN + strlen(".gz.partial") && \
