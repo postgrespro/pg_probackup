@@ -1481,6 +1481,9 @@ static fobj_t
 fobj_autorelease(fobj_t obj, fobj_autorelease_pool *pool) {
     fobj_autorelease_chunk  *chunk, *new_chunk;
 
+    if (obj == NULL)
+        return NULL;
+
     ft_assert(pool != NULL);
 
     chunk = pool->last;
@@ -1496,6 +1499,8 @@ fobj_autorelease(fobj_t obj, fobj_autorelease_pool *pool) {
 
 fobj_t
 fobj_store_to_parent_pool(fobj_t obj, fobj_autorelease_pool *child_pool_or_null) {
+    if (obj == NULL)
+        return NULL;
     return fobj_autorelease(obj,
             (child_pool_or_null ?: *fobj_AR_current_ptr())->ref.parent);
 }

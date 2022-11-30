@@ -5952,7 +5952,9 @@ pioCopyWithFilters(pioWriteFlush_i dest, pioRead_i src,
 {
     FOBJ_FUNC_ARP();
     size_t      _fallback_copied = 0;
-    err_i    err = $noerr();
+    err_i       err = $noerr();
+    err_i       rerr = $noerr();
+    err_i       werr = $noerr();
     void*       buf;
     int         i;
 
@@ -5972,38 +5974,37 @@ pioCopyWithFilters(pioWriteFlush_i dest, pioRead_i src,
 
     buf = fobj_alloc_temp(OUT_BUF_SIZE);
 
-    for (;;)
+    while (!$haserr(rerr) && !$haserr(werr))
     {
         size_t read_len = 0;
         size_t write_len = 0;
 
-        read_len = $i(pioRead, src, ft_bytes(buf, OUT_BUF_SIZE), &err);
-
-        if ($haserr(err))
-            $ireturn(err);
+        read_len = pioReadFull(src, ft_bytes(buf, OUT_BUF_SIZE), &rerr);
 
         if (read_len == 0)
             break;
 
-        write_len = $i(pioWrite, dest, ft_bytes(buf, read_len), &err);
-        if (write_len != read_len || $haserr(err))
+        write_len = $i(pioWrite, dest, ft_bytes(buf, read_len), &werr);
+        if (write_len != read_len || $haserr(werr))
         {
-            if ($haserr(err))
-                $ireturn(err);
-
-            $ireturn($err(SysErr, "Short write to destination file {path}: {writtenSz} < {wantedSz}",
+            if (!$haserr(werr))
+                werr = $err(SysErr, "Short write to destination file {path}: {writtenSz} < {wantedSz}",
                          path($irepr(dest)),
-                         wantedSz(read_len), writtenSz(write_len)));
+                         wantedSz(read_len), writtenSz(write_len));
         }
 		*copied += write_len;
     }
 
+    err = fobj_err_combine(rerr, werr);
+    if ($haserr(err))
+        return $iresult(err);
+
     /* pioWriteFinish will check for async error if destination was remote */
     err = $i(pioWriteFinish, dest);
     if ($haserr(err))
-        $ireturn($err(SysErr, "Cannot flush file {path}: {cause}",
-                     path($irepr(dest)), cause(err.self)));
-    return $noerr();
+        err = $err(SysErr, "Cannot flush file {path}: {cause}",
+                     path($irepr(dest)), cause(err.self));
+    return $iresult(err);
 }
 
 size_t
@@ -6020,6 +6021,8 @@ pioReadFull(pioRead_i src, ft_bytes_t bytes, err_i* err)
 		Assert(r <= b.len);
 		ft_bytes_consume(&b, r);
 		if ($haserr(*err))
+			break;
+		if (r == 0)
 			break;
 	}
 	return bytes.len - b.len;
