@@ -414,6 +414,7 @@ struct ft_strbuf_t {
     /* could buffer grow?
      * It could be set on initialization, of if buffer reaches 4GB limit */
     bool        fixed;
+    bool		overflowed;
     /* does ptr points to malloced place? */
     /* if so, then ft_strbuf_finish would not strdup */
     bool        alloced;

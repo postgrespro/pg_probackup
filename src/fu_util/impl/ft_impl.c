@@ -189,6 +189,7 @@ ft__strbuf_ensure(ft_strbuf_t *buf, size_t n) {
     buf->cap = new_cap-1;
     buf->alloced = true;
     buf->fixed = overflowed;
+    buf->overflowed = overflowed;
     return !overflowed;
 }
 
@@ -245,6 +246,7 @@ ft_strbuf_vcatf_err(ft_strbuf_t *buf, bool err[1], const char *fmt, va_list args
         }
         if (overflowed) {
             buf->len = buf->cap;
+            buf->overflowed = true;
             return false;
         }
     }

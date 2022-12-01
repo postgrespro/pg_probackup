@@ -519,11 +519,13 @@ ft_strbuf_catbytes(ft_strbuf_t *buf, ft_bytes_t s) {
 		return true;
 	if (!ft_strbuf_ensure(buf, s.len)) {
 		s.len = buf->cap - buf->len;
-		ft_assert(s.len > 0);
+		buf->overflowed = true;
 	}
-	memmove(buf->ptr + buf->len, s.ptr, s.len);
-	buf->len += s.len;
-	buf->ptr[buf->len] = '\0';
+	if (s.len > 0) {
+		memmove(buf->ptr + buf->len, s.ptr, s.len);
+		buf->len += s.len;
+		buf->ptr[buf->len] = '\0';
+	}
 	return ft_strbuf_may(buf);
 }
 
@@ -535,6 +537,8 @@ ft_strbuf_cat1(ft_strbuf_t *buf, char c) {
         buf->ptr[buf->len+0] = c;
         buf->ptr[buf->len+1] = '\0';
         buf->len++;
+    } else {
+        buf->overflowed = true;
     }
     return ft_strbuf_may(buf);
 }
@@ -548,10 +552,13 @@ ft_strbuf_cat2(ft_strbuf_t *buf, char c1, char c2) {
         buf->ptr[buf->len+1] = c1;
         buf->ptr[buf->len+2] = '\0';
         buf->len+=2;
-    } else {
+    } else if (ft_strbuf_ensure(buf, 1)){
         buf->ptr[buf->len+0] = c1;
         buf->ptr[buf->len+1] = '\0';
         buf->len++;
+        buf->overflowed = true;
+    } else {
+        buf->overflowed = true;
     }
     return ft_strbuf_may(buf);
 }
@@ -563,7 +570,8 @@ ft_strbuf_catc(ft_strbuf_t *buf, const char *s) {
 
 ft_inline void
 ft_strbuf_reset_for_reuse(ft_strbuf_t *buf) {
-	buf->len = 0;
+    buf->len = 0;
+    buf->overflowed = false;
 }
 
 ft_inline void
