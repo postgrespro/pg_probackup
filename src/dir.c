@@ -840,51 +840,52 @@ create_data_directories(parray *dest_files, const char *data_dir, const char *ba
 void
 read_tablespace_map(parray *links, const char *backup_dir)
 {
-	FILE	   *fp;
 	char		db_path[MAXPGPATH],
 				map_path[MAXPGPATH];
-	char		buf[MAXPGPATH * 2];
+	pioDrive_i	drive;
+	ft_bytes_t	content;
+	ft_bytes_t	parse;
+	ft_bytes_t	line;
+	err_i 		err = $noerr();
 
 	join_path_components(db_path, backup_dir, DATABASE_DIR);
 	join_path_components(map_path, db_path, PG_TABLESPACE_MAP_FILE);
 
-	fp = fio_open_stream(FIO_BACKUP_HOST, map_path);
-	if (fp == NULL)
-		elog(ERROR, "Cannot open tablespace map file \"%s\": %s", map_path, strerror(errno));
+	drive = pioDriveForLocation(FIO_BACKUP_HOST);
 
-	while (fgets(buf, lengthof(buf), fp))
+	content = $i(pioReadFile, drive, .path = map_path, .binary = false,
+				 .err = &err);
+	if ($haserr(err))
+		ft_logerr(FT_FATAL, $errmsg(err), "Reading tablespace map");
+
+	parse = content;
+
+	while (parse.len)
 	{
-		char        link_name[MAXPGPATH];
-		char       *path;
-		int         n = 0;
+		ft_bytes_t	link_name;
+		ft_bytes_t	path;
 		pgFile     *file;
-		int         i = 0;
 
-		if (sscanf(buf, "%s %n", link_name, &n) != 1)
+		line = ft_bytes_shift_line(&parse);
+
+		link_name = ft_bytes_split(&line, ft_bytes_notspnc(line, " "));
+		ft_bytes_consume(&line, 1);
+		path = ft_bytes_split(&line, ft_bytes_notspnc(line, "\n\r"));
+
+		if (link_name.len == 0 || path.len == 0)
 			elog(ERROR, "invalid format found in \"%s\"", map_path);
 
-		path = buf + n;
-
-		/* Remove newline character at the end of string if any  */
-		i = strcspn(path, "\n");
-		if (strlen(path) > i)
-			path[i] = '\0';
-
-		file = pgut_new(pgFile);
-		memset(file, 0, sizeof(pgFile));
+		file = pgut_new0(pgFile);
 
 		/* follow the convention for pgFileFree */
-		file->name = pgut_strdup(link_name);
-		file->linked = pgut_strdup(path);
+		file->name = ft_strdup_bytes(link_name).ptr;
+		file->linked = ft_strdup_bytes(path).ptr;
 		canonicalize_path(file->linked);
 
 		parray_append(links, file);
 	}
 
-	if (ferror(fp))
-			elog(ERROR, "Failed to read from file: \"%s\"", map_path);
-
-	fio_close_stream(fp);
+	ft_bytes_free(&content);
 }
 
 /*
