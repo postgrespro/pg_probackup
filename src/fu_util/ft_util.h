@@ -357,6 +357,7 @@ extern size_t ft_strlcat(char *dest, const char* src, size_t dest_size);
 
 /* dup string using ft_malloc */
 ft_inline char * ft_cstrdup(const char *str);
+ft_inline char * ft_cstrdupn(const char *str, size_t n);
 
 /****************
  * String
@@ -385,6 +386,7 @@ ft_inline ft_bytes_t ft_str2bytes_withzb(ft_str_t str) {
 
 ft_inline ft_str_t  ft_strdup(ft_str_t str);
 ft_inline ft_str_t  ft_strdupc(const char* str);
+ft_inline ft_str_t  ft_strdup_bytes(ft_bytes_t bytes);
 /* use only if string was allocated */
 ft_inline void      ft_str_free(ft_str_t *str);
 

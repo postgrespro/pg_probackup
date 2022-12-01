@@ -397,15 +397,23 @@ ft_cstrdup(const char *str) {
     return (char*)ft_strdupc(str).ptr;
 }
 
+ft_inline char *
+ft_cstrdupn(const char *str, size_t n) {
+	return (char*)ft_strdup_bytes(ft_bytes((char*)str, n)).ptr;
+}
+
 ft_inline ft_str_t
 ft_strdup(ft_str_t str) {
+    return ft_strdup_bytes(ft_bytes(str.ptr, str.len));
+}
+
+ft_inline ft_str_t
+ft_strdup_bytes(ft_bytes_t str) {
     char *mem = ft_malloc(str.len + 1);
     if (str.ptr != NULL)
-        memcpy(mem, str.ptr, str.len+1);
-    else
-        mem[0] = '\0';
-    str.ptr = mem;
-    return str;
+        memcpy(mem, str.ptr, str.len);
+    mem[str.len] = '\0';
+    return ft_str(mem, str.len);
 }
 
 ft_inline ft_str_t
