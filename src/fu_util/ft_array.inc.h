@@ -163,6 +163,7 @@
 #define ft_array_ensure     fm_cat(ft_array_pref, _ensure)
 #define ft_array_recapa     fm_cat(ft_array_pref, _recapa)
 #define ft_array_resize     fm_cat(ft_array_pref, _resize)
+#define ft_array_reset_for_reuse     fm_cat(ft_array_pref, _reset_for_reuse)
 #define ft_array_free       fm_cat(ft_array_pref, _free)
 
 #define ft_array_insert_at  fm_cat(ft_array_pref, _insert_at)
@@ -373,6 +374,11 @@ ft_array_resize(ft_array_type *arr, size_t len) {
         ft_array_recapa(arr, arr->len);
 }
 
+ft_inline void
+ft_array_reset_for_reuse(ft_array_type *arr) {
+	arr->len = 0;
+}
+
 ft_inline ft_array_type
 ft_array_alloc(FT_SLICE_TYPE *ptr, size_t len) {
     ft_array_type   arr = {NULL, 0, 0};
@@ -576,6 +582,7 @@ ft_array_walk(ft_array_type *arr, FT_WALK_ACT (*walk)(FT_SLICE_TYPE *el)) {
 #undef ft_array_ensure
 #undef ft_array_recapa
 #undef ft_array_resize
+#undef ft_array_reset_for_reuse
 #undef ft_array_free
 
 #undef ft_array_insert_at

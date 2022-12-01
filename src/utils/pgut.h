@@ -88,6 +88,8 @@ extern void  pgut_free(void *p);
 #define AssertMacro(x)	((void) 0)
 #endif
 
+#define SPACES " \t\n\v\f\r"
+
 #define IsSpace(c)		(isspace((unsigned char)(c)))
 #define IsAlpha(c)		(isalpha((unsigned char)(c)))
 #define IsAlnum(c)		(isalnum((unsigned char)(c)))

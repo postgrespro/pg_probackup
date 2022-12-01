@@ -359,8 +359,6 @@ assign_option(ConfigOption *opt, const char *optarg, OptionSource src)
 	}
 }
 
-#define SPACES " \t\n\v\f\r"
-
 static bool
 get_next_token(ft_bytes_t *src, ft_strbuf_t *dest)
 {

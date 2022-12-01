@@ -124,7 +124,7 @@ static void opt_path_map(ConfigOption *opt, const char *arg,
 						 TablespaceList *list, const char *type);
 static void cleanup_tablespace(const char *path);
 
-static void control_string_bad_format(const char* str);
+static void control_string_bad_format(ft_bytes_t str);
 
 static bool exclude_files_cb(void *value, void *exclude_args);
 
@@ -1135,160 +1135,183 @@ get_external_remap(char *current_dir)
 	return current_dir;
 }
 
-/* Parsing states for get_control_value_str() */
-#define CONTROL_WAIT_NAME			1
-#define CONTROL_INNAME				2
-#define CONTROL_WAIT_COLON			3
-#define CONTROL_WAIT_VALUE			4
-#define CONTROL_INVALUE				5
-#define CONTROL_WAIT_NEXT_NAME		6
-
 /*
- * Get value from json-like line "str" of backup_content.control file.
+ * Parse values from json-like line "str" of backup_content.control file.
  *
  * The line has the following format:
  *   {"name1":"value1", "name2":"value2"}
- *
- * The value will be returned in "value_int64" as int64.
- *
- * Returns true if the value was found in the line and parsed.
  */
-bool
-get_control_value_int64(const char *str, const char *name, int64 *value_int64, bool is_mandatory)
+
+typedef struct pb_control_line_kv {
+	uint32_t key_hash;
+	uint32_t key_start;
+	uint32_t key_len;
+	uint32_t val_len;
+} pb_control_line_kv;
+
+#define FT_SLICE clkv
+#define FT_SLICE_TYPE pb_control_line_kv
+#include "ft_array.inc.h"
+
+void
+init_pb_control_line(pb_control_line* pb_line)
 {
+	pb_line->kvs = ft_malloc(sizeof(ft_arr_clkv_t));
+	*pb_line->kvs = (ft_arr_clkv_t)ft_arr_init();
+	pb_line->strbuf = ft_strbuf_zero();
+}
 
-	char buf_int64[32];
+void
+parse_pb_control_line(pb_control_line* pb_line, ft_bytes_t line)
+{
+	pb_control_line_kv kv = {0};
+	ft_strbuf_t		*strbuf = &pb_line->strbuf;
+	ft_bytes_t		parse;
 
-	assert(value_int64);
+	pb_line->line = line;
+	ft_arr_clkv_reset_for_reuse(pb_line->kvs);
+	ft_strbuf_reset_for_reuse(&pb_line->strbuf);
 
-    /* Set default value */
-    *value_int64 = 0;
+	parse = line;
+	ft_bytes_consume(&parse, ft_bytes_spnc(parse, "{ \t"));
+	while (parse.len)
+	{
+		ft_bytes_t name;
+		ft_bytes_t value;
 
-	if (!get_control_value_str(str, name, buf_int64, sizeof(buf_int64), is_mandatory))
+		ft_bytes_consume(&parse, ft_bytes_spnc(parse, SPACES));
+		/* name in quotes */
+		if (!ft_bytes_starts_withc(parse, "\""))
+			control_string_bad_format(line);
+		ft_bytes_consume(&parse, 1); /* skip quote */
+
+		name = ft_bytes_split(&parse, ft_bytes_notspnc(parse, "\""));
+		if (!ft_bytes_starts_withc(parse, "\""))
+			control_string_bad_format(line);
+		kv.key_start = strbuf->len;
+		kv.key_len = name.len;
+		ft_strbuf_catbytes(strbuf, name);
+		ft_strbuf_cat1(strbuf, '\0');
+		kv.key_hash = ft_small_cstr_hash(strbuf->ptr + kv.key_start);
+
+		ft_bytes_consume(&parse, 1); /* skip quote */
+		ft_bytes_consume(&parse, ft_bytes_spnc(parse, SPACES));
+		if (!ft_bytes_starts_withc(parse, ":"))
+			control_string_bad_format(line);
+		ft_bytes_consume(&parse, 1); /* skip colon */
+		ft_bytes_consume(&parse, ft_bytes_spnc(parse, SPACES));
+
+		/* value in quotes */
+		if (!ft_bytes_starts_withc(parse, "\""))
+			control_string_bad_format(line);
+		ft_bytes_consume(&parse, 1); /* skip quote */
+
+		value = ft_bytes_split(&parse, ft_bytes_notspnc(parse, "\""));
+		if (!ft_bytes_starts_withc(parse, "\""))
+			control_string_bad_format(line);
+		kv.val_len = value.len;
+		ft_strbuf_catbytes(strbuf, value);
+		ft_strbuf_cat1(strbuf, '\0');
+		ft_arr_clkv_push(pb_line->kvs, kv);
+
+		ft_bytes_consume(&parse, 1); /* skip quote */
+		ft_bytes_consume(&parse, ft_bytes_spnc(parse, SPACES));
+		if (ft_bytes_starts_withc(parse, ","))
+		{
+			ft_bytes_consume(&parse, 1);
+			continue;
+		}
+		break;
+	}
+
+	if (!ft_bytes_starts_withc(parse, "}"))
+		control_string_bad_format(line);
+	ft_bytes_consume(&parse, 1);
+	ft_bytes_consume(&parse, ft_bytes_spnc(parse, SPACES));
+	if (parse.len != 0)
+		control_string_bad_format(line);
+}
+
+void
+deinit_pb_control_line(pb_control_line *pb_line)
+{
+	ft_arr_clkv_free(pb_line->kvs);
+	ft_free(pb_line->kvs);
+	pb_line->kvs = NULL;
+	ft_strbuf_free(&pb_line->strbuf);
+}
+
+bool
+pb_control_line_try_str(pb_control_line *pb_line, const char *name, ft_str_t *value)
+{
+	pb_control_line_kv kv;
+	ft_str_t key;
+	uint32_t i;
+	uint32_t key_hash = ft_small_cstr_hash(name);
+
+	for (i = 0; i < pb_line->kvs->len; i++)
+	{
+		kv = ft_arr_clkv_at(pb_line->kvs, i);
+		if (kv.key_hash != key_hash)
+			continue;
+		key = ft_str(pb_line->strbuf.ptr + kv.key_start, kv.key_len);
+		if (!ft_streqc(key, name))
+			continue;
+		*value = ft_str(pb_line->strbuf.ptr + kv.key_start + kv.key_len + 1,
+					    kv.val_len);
+		return true;
+	}
+	*value = ft_str("", 0);
+	return false;
+}
+
+bool
+pb_control_line_try_int64(pb_control_line *pb_line, const char *name, int64 *value)
+{
+	ft_str_t val;
+
+	*value = 0;
+	if (!pb_control_line_try_str(pb_line, name, &val))
 		return false;
 
-	if (!parse_int64(buf_int64, value_int64, 0))
+	if (!parse_int64(val.ptr, value, 0))
 	{
 		/* We assume that too big value is -1 */
 		if (errno == ERANGE)
-			*value_int64 = BYTES_INVALID;
+			*value = BYTES_INVALID;
 		else
-			control_string_bad_format(str);
-        return false;
+			control_string_bad_format(pb_line->line);
+		return false;
 	}
 
 	return true;
 }
 
-/*
- * Get value from json-like line "str" of backup_content.control file.
- *
- * The line has the following format:
- *   {"name1":"value1", "name2":"value2"}
- *
- * The value will be returned to "value_str" as string.
- *
- * Returns true if the value was found in the line.
- */
-
-bool
-get_control_value_str(const char *str, const char *name,
-                      char *value_str, size_t value_str_size, bool is_mandatory)
+ft_str_t
+pb_control_line_get_str(pb_control_line *pb_line, const char *name)
 {
-	int			state = CONTROL_WAIT_NAME;
-	char	   *name_ptr = (char *) name;
-	char	   *buf = (char *) str;
-	char 	   *const value_str_start = value_str;
+	ft_str_t res;
+	if (!pb_control_line_try_str(pb_line, name, &res))
+		elog(ERROR, "field \"%s\" is not found in the line %.*s of the file %s",
+			 name, (int)pb_line->line.len, pb_line->line.ptr, DATABASE_FILE_LIST);
+	return res;
+}
 
-	assert(value_str);
-	assert(value_str_size > 0);
-
-	/* Set default value */
-	*value_str = '\0';
-
-	while (*buf)
-	{
-		switch (state)
-		{
-			case CONTROL_WAIT_NAME:
-				if (*buf == '"')
-					state = CONTROL_INNAME;
-				else if (IsAlpha(*buf))
-					control_string_bad_format(str);
-				break;
-			case CONTROL_INNAME:
-				/* Found target field. Parse value. */
-				if (*buf == '"')
-					state = CONTROL_WAIT_COLON;
-				/* Check next field */
-				else if (*buf != *name_ptr)
-				{
-					name_ptr = (char *) name;
-					state = CONTROL_WAIT_NEXT_NAME;
-				}
-				else
-					name_ptr++;
-				break;
-			case CONTROL_WAIT_COLON:
-				if (*buf == ':')
-					state = CONTROL_WAIT_VALUE;
-				else if (!IsSpace(*buf))
-					control_string_bad_format(str);
-				break;
-			case CONTROL_WAIT_VALUE:
-				if (*buf == '"')
-				{
-					state = CONTROL_INVALUE;
-				}
-				else if (IsAlpha(*buf))
-					control_string_bad_format(str);
-				break;
-			case CONTROL_INVALUE:
-				/* Value was parsed, exit */
-				if (*buf == '"')
-				{
-					*value_str = '\0';
-					return true;
-				}
-				else
-				{
-					/* verify if value_str not exceeds value_str_size limits */
-					if (value_str - value_str_start >= value_str_size - 1) {
-						elog(ERROR, "field \"%s\" is out of range in the line %s of the file %s",
-							 name, str, DATABASE_FILE_LIST);
-					}
-					*value_str = *buf;
-					value_str++;
-				}
-				break;
-			case CONTROL_WAIT_NEXT_NAME:
-				if (*buf == ',')
-					state = CONTROL_WAIT_NAME;
-				break;
-			default:
-				/* Should not happen */
-				break;
-		}
-
-		buf++;
-	}
-
-	/* There is no close quotes */
-	if (state == CONTROL_INNAME || state == CONTROL_INVALUE)
-		control_string_bad_format(str);
-
-	/* Did not find target field */
-	if (is_mandatory)
-		elog(ERROR, "field \"%s\" is not found in the line %s of the file %s",
-			 name, str, DATABASE_FILE_LIST);
-	return false;
+int64_t
+pb_control_line_get_int64(pb_control_line *pb_line, const char *name)
+{
+	int64_t res;
+	if (!pb_control_line_try_int64(pb_line, name, &res))
+		elog(ERROR, "field \"%s\" is not found in the line %.*s of the file %s",
+			 name, (int)pb_line->line.len, pb_line->line.ptr, DATABASE_FILE_LIST);
+	return res;
 }
 
 static void
-control_string_bad_format(const char* str)
+control_string_bad_format(ft_bytes_t str)
 {
-    elog(ERROR, "%s file has invalid format in line %s",
-         DATABASE_FILE_LIST, str);
+	elog(ERROR, "%s file has invalid format in line %.*s",
+		 DATABASE_FILE_LIST, (int)str.len, str.ptr);
 }
 
 /*
@@ -1481,47 +1504,50 @@ write_database_map(pgBackup *backup, parray *database_map, parray *backup_files_
 parray *
 read_database_map(pgBackup *backup)
 {
-	FILE		*fp;
 	parray 		*database_map;
-	char		buf[MAXPGPATH];
 	char		path[MAXPGPATH];
 	char		database_map_path[MAXPGPATH];
+	pioDrive_i	drive;
+	err_i 		err = $noerr();
+	ft_bytes_t	content;
+	ft_bytes_t	parse;
+	ft_bytes_t	line;
+	pb_control_line pb_line;
 
 	join_path_components(path, backup->root_dir, DATABASE_DIR);
 	join_path_components(database_map_path, path, DATABASE_MAP);
 
-	fp = fio_open_stream(FIO_BACKUP_HOST, database_map_path);
-	if (fp == NULL)
-	{
-		/* It is NOT ok for database_map to be missing at this point, so
-		 * we should error here.
-		 * It`s a job of the caller to error if database_map is not empty.
-		 */
-		elog(ERROR, "Cannot open \"%s\": %s", database_map_path, strerror(errno));
-	}
+	drive = pioDriveForLocation(FIO_BACKUP_HOST);
+
+	content = $i(pioReadFile, drive, .path = database_map_path, .binary = false,
+				 .err = &err);
+	if ($haserr(err))
+		ft_logerr(FT_FATAL, $errmsg(err), "Reading database_map");
 
 	database_map = parray_new();
 
-	while (fgets(buf, lengthof(buf), fp))
+	init_pb_control_line(&pb_line);
+
+	parse = content;
+	while (parse.len > 0)
 	{
-		char datname[MAXPGPATH];
+		ft_str_t datname;
 		int64 dbOid;
+		db_map_entry *db_entry = pgut_new0(db_map_entry);
 
-		db_map_entry *db_entry = (db_map_entry *) pgut_malloc(sizeof(db_map_entry));
+		line = ft_bytes_shift_line(&parse);
+		parse_pb_control_line(&pb_line, line);
 
-        get_control_value_int64(buf, "dbOid", &dbOid, true);
-        get_control_value_str(buf, "datname", datname, sizeof(datname), true);
+        dbOid = pb_control_line_get_int64(&pb_line, "dbOid");
+        datname = pb_control_line_get_str(&pb_line, "datname");
 
 		db_entry->dbOid = dbOid;
-		db_entry->datname = pgut_strdup(datname);
+		db_entry->datname = ft_strdup(datname).ptr;
 
 		parray_append(database_map, db_entry);
 	}
 
-	if (ferror(fp))
-			elog(ERROR, "Failed to read from file: \"%s\"", database_map_path);
-
-	fio_close_stream(fp);
+	deinit_pb_control_line(&pb_line);
 
 	/* Return NULL if file is empty */
 	if (parray_num(database_map) == 0)

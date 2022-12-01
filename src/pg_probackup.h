@@ -970,9 +970,20 @@ extern CompressAlg parse_compress_alg(const char *arg);
 extern const char* deparse_compress_alg(int alg);
 
 /* in dir.c */
-extern bool get_control_value_int64(const char *str, const char *name, int64 *value_int64, bool is_mandatory);
-extern bool get_control_value_str(const char *str, const char *name,
-                                  char *value_str, size_t value_str_size, bool is_mandatory);
+typedef struct ft_arr_clkv_t ft_arr_clkv_t;
+typedef struct pb_control_line pb_control_line;
+struct pb_control_line {
+	ft_bytes_t     line;
+	ft_arr_clkv_t *kvs;
+	ft_strbuf_t    strbuf;
+};
+extern void init_pb_control_line(pb_control_line *pb_line);
+extern void parse_pb_control_line(pb_control_line *pb_line, ft_bytes_t line);
+extern void deinit_pb_control_line(pb_control_line *pb_line);
+extern int64_t pb_control_line_get_int64(pb_control_line *pb_line, const char *name);
+extern ft_str_t pb_control_line_get_str(pb_control_line *pb_line, const char *name);
+extern bool pb_control_line_try_int64(pb_control_line *pb_line, const char *name, int64 *value);
+extern bool pb_control_line_try_str(pb_control_line *pb_line, const char *name, ft_str_t *value);
 
 extern const char *get_tablespace_mapping(const char *dir);
 extern void create_data_directories(parray *dest_files,

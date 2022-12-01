@@ -1019,6 +1019,7 @@ get_backup_filelist(pgBackup *backup, bool strict)
 	char     buf[BLCKSZ];
 	char     stdio_buf[STDIO_BUFSIZE];
 	pg_crc32 content_crc = 0;
+	pb_control_line	pb_line;
 
 	join_path_components(backup_filelist_path, backup->root_dir, DATABASE_FILE_LIST);
 
@@ -1034,12 +1035,14 @@ get_backup_filelist(pgBackup *backup, bool strict)
 
 	INIT_CRC32C(content_crc);
 
+	init_pb_control_line(&pb_line);
+
 	while (fgets(buf, lengthof(buf), fp))
 	{
-		char		path[MAXPGPATH];
-		char		linked[MAXPGPATH];
-		char		compress_alg_string[MAXPGPATH];
-		char 		kind[16];
+		ft_str_t 	path;
+		ft_str_t 	linked;
+		ft_str_t 	compress_alg;
+		ft_str_t 	kind;
 		int64		write_size,
 					uncompressed_size,
 					mode,		/* bit length of mode_t depends on platforms */
@@ -1058,59 +1061,66 @@ get_backup_filelist(pgBackup *backup, bool strict)
 
 		COMP_CRC32C(content_crc, buf, strlen(buf));
 
-		get_control_value_str(buf, "path", path, sizeof(path),true);
-		get_control_value_int64(buf, "size", &write_size, true);
-		get_control_value_int64(buf, "mode", &mode, true);
-		get_control_value_int64(buf, "is_datafile", &is_datafile, true);
-		get_control_value_int64(buf, "is_cfs", &is_cfs, false);
-		get_control_value_int64(buf, "crc", &crc, true);
-		get_control_value_str(buf, "compress_alg", compress_alg_string, sizeof(compress_alg_string), false);
-		get_control_value_int64(buf, "external_dir_num", &external_dir_num, false);
-		get_control_value_int64(buf, "dbOid", &dbOid, false);
+		parse_pb_control_line(&pb_line, ft_str2bytes(ft_cstr(buf)));
 
-		file = pgFileInit(path);
+		path         = pb_control_line_get_str(&pb_line,   "path");
+		write_size   = pb_control_line_get_int64(&pb_line, "size");
+		mode         = pb_control_line_get_int64(&pb_line, "mode");
+		is_datafile  = pb_control_line_get_int64(&pb_line, "is_datafile");
+		crc          = pb_control_line_get_int64(&pb_line, "crc");
+
+		pb_control_line_try_int64(&pb_line, "is_cfs",       &is_cfs);
+		pb_control_line_try_int64(&pb_line, "dbOid",        &dbOid);
+		pb_control_line_try_str(&pb_line,   "compress_alg", &compress_alg);
+		pb_control_line_try_int64(&pb_line, "external_dir_num", &external_dir_num);
+
+		if (path.len > MAXPGPATH)
+			elog(ERROR, "File path in "DATABASE_FILE_LIST" is too long: '%s'",
+				 buf);
+
+		file = pgFileInit(path.ptr);
 		file->write_size = (int64) write_size;
 		file->mode = (mode_t) mode;
 		file->is_datafile = is_datafile ? true : false;
 		file->is_cfs = is_cfs ? true : false;
 		file->crc = (pg_crc32) crc;
-		file->compress_alg = parse_compress_alg(compress_alg_string);
-		file->external_dir_num = external_dir_num;
+		file->compress_alg = parse_compress_alg(compress_alg.ptr);
+		file->external_dir_num = (int)external_dir_num;
 		file->dbOid = dbOid ? dbOid : 0;
 
 		/*
 		 * Optional fields
 		 */
-		if (get_control_value_str(buf, "kind", kind, sizeof(kind), false))
-			file->kind = pio_str2file_kind(kind, path);
+		if (pb_control_line_try_str(&pb_line, "kind", &kind))
+			file->kind = pio_str2file_kind(kind.ptr, path.ptr);
 		else /* fallback to mode for old backups */
-			file->kind = pio_statmode2file_kind(file->mode, path);
+			file->kind = pio_statmode2file_kind(file->mode, path.ptr);
 
-		if (get_control_value_str(buf, "linked", linked, sizeof(linked), false) && linked[0])
+		if (pb_control_line_try_str(&pb_line, "linked", &linked) && linked.len > 0)
 		{
-			file->linked = pgut_strdup(linked);
+			file->linked = ft_strdup(linked).ptr;
 			canonicalize_path(file->linked);
 		}
 
-		if (get_control_value_int64(buf, "segno", &segno, false))
+		if (pb_control_line_try_int64(&pb_line, "segno", &segno))
 			file->segno = (int) segno;
 
-		if (get_control_value_int64(buf, "n_blocks", &n_blocks, false))
+		if (pb_control_line_try_int64(&pb_line, "n_blocks", &n_blocks))
 			file->n_blocks = (int) n_blocks;
 
-		if (get_control_value_int64(buf, "n_headers", &n_headers, false))
+		if (pb_control_line_try_int64(&pb_line, "n_headers", &n_headers))
 			file->n_headers = (int) n_headers;
 
-		if (get_control_value_int64(buf, "hdr_crc", &hdr_crc, false))
+		if (pb_control_line_try_int64(&pb_line, "hdr_crc", &hdr_crc))
 			file->hdr_crc = (pg_crc32) hdr_crc;
 
-		if (get_control_value_int64(buf, "hdr_off", &hdr_off, false))
+		if (pb_control_line_try_int64(&pb_line, "hdr_off", &hdr_off))
 			file->hdr_off = hdr_off;
 
-		if (get_control_value_int64(buf, "hdr_size", &hdr_size, false))
+		if (pb_control_line_try_int64(&pb_line, "hdr_size", &hdr_size))
 			file->hdr_size = (int) hdr_size;
 
-		if (get_control_value_int64(buf, "full_size", &uncompressed_size, false))
+		if (pb_control_line_try_int64(&pb_line, "full_size", &uncompressed_size))
 			file->uncompressed_size = uncompressed_size;
 		else
 			file->uncompressed_size = write_size;
@@ -1137,6 +1147,8 @@ get_backup_filelist(pgBackup *backup, bool strict)
 
 		parray_append(files, file);
 	}
+
+	deinit_pb_control_line(&pb_line);
 
 	FIN_CRC32C(content_crc);
 
