@@ -15,6 +15,8 @@ import select
 from time import sleep
 import re
 import json
+from hashlib import md5
+import random
 
 idx_ptrack = {
     't_heap': {
@@ -199,6 +201,32 @@ class PostgresNodeExtended(testgres.PostgresNode):
             else:
                 os.kill(self.auxiliary_pids[someone][0], sig)
             self.is_started = False
+
+    def table_checksum(self, table, sort, dbname="postgres"):
+        curname = "cur_"+str(random.randint(0,2**48))
+
+        sum = md5(b"\x01")
+
+        con = self.connect(dbname=dbname)
+
+        con.execute(f"""
+            DECLARE {curname} NO SCROLL CURSOR FOR
+            SELECT t::text FROM {table} as t ORDER BY {sort};
+        """)
+
+        while True:
+            rows = con.execute(f"FETCH FORWARD 10000 FROM {curname}")
+            if not rows:
+                break
+            for row in rows:
+                sum.update(row[0].encode('utf8'))
+                sum.update(b'\x00')
+
+        con.execute(f"CLOSE {curname}; ROLLBACK;")
+
+        con.close()
+        sum.update(b'\x02')
+        return sum.hexdigest()
 
 class ProbackupTest(object):
     # Class attributes
