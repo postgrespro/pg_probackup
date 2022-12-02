@@ -797,6 +797,9 @@ extern BackupMode parse_backup_mode(const char *value);
 extern const char *deparse_backup_mode(BackupMode mode);
 extern void process_block_change(ForkNumber forknum, RelFileNode rnode,
 								 BlockNumber blkno);
+extern void check_external_for_tablespaces(parray *external_list,
+										   PGconn *backup_conn);
+extern void backup_cleanup(bool fatal, void *userdata);
 
 /* in catchup.c */
 extern int do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, bool sync_dest_files,

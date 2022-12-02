@@ -37,8 +37,6 @@ bool backup_in_progress = false;
 /*
  * Backup routines
  */
-static void backup_cleanup(bool fatal, void *userdata);
-
 static void *backup_files(void *arg);
 
 static void do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
@@ -47,8 +45,6 @@ static void do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 static void pg_switch_wal(PGconn *conn);
 
 
-static void check_external_for_tablespaces(parray *external_list,
-										   PGconn *backup_conn);
 static parray *get_database_map(PGconn *pg_startbackup_conn);
 
 /* pgpro specific functions */
@@ -1926,7 +1922,7 @@ pg_stop_backup(InstanceState *instanceState, pgBackup *backup, PGconn *pg_startb
  * of the DB cluster.
  * Also update backup status to ERROR when the backup is not finished.
  */
-static void
+void
 backup_cleanup(bool fatal, void *userdata)
 {
 	/*
