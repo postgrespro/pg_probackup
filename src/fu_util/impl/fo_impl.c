@@ -1166,6 +1166,7 @@ fobjErr_fobjDispose(VSelf) {
                 break;
         }
     }
+	ft_free((void*)self->message);
     $del(&self->sibling);
 }
 
