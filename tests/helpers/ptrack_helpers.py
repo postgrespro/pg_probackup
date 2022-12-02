@@ -215,7 +215,7 @@ class PostgresNodeExtended(testgres.PostgresNode):
         """)
 
         while True:
-            rows = con.execute(f"FETCH FORWARD 10000 FROM {curname}")
+            rows = con.execute(f"FETCH FORWARD 5000 FROM {curname}")
             if not rows:
                 break
             for row in rows:

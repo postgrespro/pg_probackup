@@ -326,7 +326,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
         self.switch_wal_segment(master)
 
-        before = master.safe_psql("postgres", "SELECT * FROM pgbench_accounts")
+        before = master.table_checksum("pgbench_accounts", "aid")
 
         self.validate_pb(backup_dir, 'replica')
         self.assertEqual(
@@ -342,7 +342,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         node.slow_start()
 
         # CHECK DATA CORRECTNESS
-        after = node.safe_psql("postgres", "SELECT * FROM pgbench_accounts")
+        after = master.table_checksum("pgbench_accounts", "aid")
         self.assertEqual(
             before, after, 'Restored data is not equal to original')
 

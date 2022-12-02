@@ -375,7 +375,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         self.switch_wal_segment(node)
 
-        result = node.safe_psql("postgres", "SELECT * FROM pgbench_accounts")
+        result = node.table_checksum("pgbench_accounts", "aid")
 
         node_restored.cleanup()
         self.restore_node(backup_dir, 'node', node_restored)
@@ -396,9 +396,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         # Logical comparison
         self.assertEqual(
             result,
-            node_restored.safe_psql(
-                'postgres',
-                'SELECT * FROM pgbench_accounts'),
+            node.table_checksum("pgbench_accounts", "aid"),
             'Data loss')
 
     # @unittest.skip("skip")
