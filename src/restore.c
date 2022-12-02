@@ -1536,9 +1536,7 @@ update_recovery_options(InstanceState *instanceState, pgBackup *backup,
 
 {
 	char		postgres_auto_path[MAXPGPATH];
-	char		postgres_auto_path_tmp[MAXPGPATH];
 	char		path[MAXPGPATH];
-	FILE	   *fp_tmp = NULL;
 	char		current_time_str[100];
 	/* postgresql.auto.conf parsing */
 	ft_bytes_t	old_content;
@@ -1564,11 +1562,6 @@ update_recovery_options(InstanceState *instanceState, pgBackup *backup,
 	{
 		ft_logerr(FT_FATAL, $errmsg(err), "");
 	}
-
-	sprintf(postgres_auto_path_tmp, "%s.tmp", postgres_auto_path);
-	fp_tmp = fio_fopen(FIO_DB_HOST, postgres_auto_path_tmp, "w");
-	if (fp_tmp == NULL)
-		elog(ERROR, "cannot open \"%s\": %s", postgres_auto_path_tmp, strerror(errno));
 
 	parse = old_content; /* copy since ft_bytes_shift_line mutates bytes */
 
@@ -1642,19 +1635,11 @@ update_recovery_options(InstanceState *instanceState, pgBackup *backup,
 
 	/* Write data to postgresql.auto.conf.tmp */
 	err = $i(pioWriteFile, backup->database_location,
-			 .path = postgres_auto_path_tmp,
+			 .path = postgres_auto_path,
 			 .content = ft_str2bytes(ft_strbuf_ref(&content)));
 	ft_strbuf_free(&content);
 	if ($haserr(err))
 		ft_logerr(FT_FATAL, $errmsg(err), "writting recovery options");
-
-	err = $i(pioRename, backup->database_location,
-			 .old_path = postgres_auto_path_tmp,
-			 .new_path = postgres_auto_path);
-	if ($haserr(err))
-		ft_logerr(FT_FATAL, $errmsg(err), "renaming postgres.auto.conf file");
-
-	/* skip chmod, since pioWriteFile creates with FILE_PERMISSION */
 }
 #endif
 

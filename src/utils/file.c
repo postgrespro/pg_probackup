@@ -4488,9 +4488,10 @@ pioLocalDrive_pioWriteFile(VSelf, path_t path, ft_bytes_t content, bool binary)
 {
 	FOBJ_FUNC_ARP();
 	Self(pioLocalDrive);
-	pioFile_i	fl;
-	size_t		amount;
 	err_i 		err;
+	ft_str_t	temppath = ft_str(NULL, 0);
+	int			fd = -1;
+	ssize_t		r;
 
 	fobj_reset_err(&err);
 
@@ -4501,40 +4502,96 @@ pioLocalDrive_pioWriteFile(VSelf, path_t path, ft_bytes_t content, bool binary)
 		return $iresult(err);
 	}
 
-	/*
-	 * rely on "local file is read whole at once always".
-	 * Is it true?
-	 */
-	fl = $(pioOpen, self, .path = path,
-		   .flags = O_WRONLY | O_CREAT | O_TRUNC | (binary ? PG_BINARY : 0),
-		   .err = &err);
-	if ($haserr(err))
-		return $iresult(err);
-
-	amount = $i(pioWrite, fl, .buf = content, .err = &err);
-	if ($haserr(err))
-		return $iresult(err);
-
-	if (amount != content.len)
+	if (content.len == 0)
 	{
-		err = $err(RT, "File {path:q} is truncated while reading",
-					path(path), errNo(EBUSY));
-		$iresult(err);
-		return err;
+		/* just create file */
+		fd = creat(path, FILE_PERMISSION);
+		if (fd < 0)
+		{
+			err = $syserr(errno, "Create file for {path} failed", path(path));
+			return $iresult(err);
+		}
+		if (fsync(fd) < 0)
+		{
+			err = $syserr(errno, "Closing file {path} failed", path(path));
+			close(fd);
+			return $iresult(err);
+		}
+		if (close(fd) < 0)
+		{
+			err = $syserr(errno, "Closing file {path} failed", path(path));
+			return $iresult(err);
+		}
+		return $noerr();
 	}
 
-	err = $i(pioWriteFinish, fl);
-	if ($haserr(err))
-		return $iresult(err);
-
-	err = $i(pioClose, fl, .sync = true);
-	if ($haserr(err))
+	/* make temporary name */
+	temppath = ft_asprintf("%s~tmpXXXXXX", path);
+	fd = mkstemp(temppath.ptr);
+	if (fd < 0)
 	{
-		$(pioRemove, self, .path = path);
-		return $iresult(err);
+		err = $syserr(errno, "Create temp file for {path} failed", path(path));
+		goto error;
 	}
 
+#if PG_BINARY
+	if (binary && _setmode(fd, PG_BINARY) < 0)
+	{
+		err = $syserr(errno, "Set file mode for {path} failed", path(temppath.ptr));
+		goto error;
+	}
+#endif
+
+	r = durable_write(fd, content.ptr, content.len);
+	if (r < 0)
+	{
+		err = $syserr(errno, "Cannot write to file {path:q}",
+					   path(temppath.ptr));
+		goto error;
+	}
+
+	if (r < content.len)
+	{
+		err = $err(SysErr, "Short write on {path:q}: {writtenSz} < {wantedSz}",
+					path(temppath.ptr), writtenSz(r), wantedSz(content.len),
+					errNo(EIO));
+		goto error;
+	}
+
+	if (fsync(fd) < 0)
+	{
+		err = $syserr(errno, "Cannot fsync file {path:q}",
+					  path(temppath.ptr));
+		goto error;
+	}
+
+	if (close(fd) < 0)
+	{
+		err = $syserr(errno, "Cannot close file {path:q}",
+					  path(temppath.ptr));
+		goto error;
+	}
+	fd = -1;
+
+	if (rename(temppath.ptr, path) < 0)
+	{
+		err = $syserr(errno, "Cannot close file {path:q}",
+					  path(temppath.ptr));
+		goto error;
+	}
+
+	ft_str_free(&temppath);
 	return $noerr();
+
+error:
+	if (fd >= 0)
+		close(fd);
+	if (temppath.len > 0)
+	{
+		remove(temppath.ptr);
+		ft_str_free(&temppath);
+	}
+	return $iresult(err);
 }
 
 /* LOCAL FILE */
@@ -4616,7 +4673,8 @@ pioLocalFile_pioWrite(VSelf, ft_bytes_t buf, err_i *err)
     if (r < buf.len)
     {
         *err = $err(SysErr, "Short write on {path:q}: {writtenSz} < {wantedSz}",
-                    path(self->p.path), writtenSz(r), wantedSz(buf.len));
+                    path(self->p.path), writtenSz(r), wantedSz(buf.len),
+					errNo(EIO));
     }
     return r;
 }

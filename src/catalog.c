@@ -2441,29 +2441,20 @@ pgBackupWriteControl(pgBackup *backup, bool utc)
 void
 write_backup(pgBackup *backup, bool strict)
 {
-	FOBJ_FUNC_ARP();
-
 	ft_str_t  buf;
-	char    path_temp[MAXPGPATH];
 	char    path[MAXPGPATH];
 	err_i err = $noerr();
 
 	join_path_components(path, backup->root_dir, BACKUP_CONTROL_FILE);
-	snprintf(path_temp, sizeof(path_temp), "%s.tmp", path);
 
 	buf = pgBackupWriteControl(backup, true);
-	err = $i(pioWriteFile, backup->backup_location, .path = path_temp,
+	err = $i(pioWriteFile, backup->backup_location, .path = path,
 				.content = ft_bytes(buf.ptr, buf.len), .binary = false);
 
 	ft_str_free(&buf);
 
 	if ($haserr(err))
 		ft_logerr(FT_FATAL, $errmsg(err), "Writting " BACKUP_CONTROL_FILE ".tmp");
-
-	err = $i(pioRename, backup->backup_location,
-			 .old_path = path_temp, .new_path = path);
-	if ($haserr(err))
-		ft_logerr(FT_FATAL, $errmsg(err), "Renaming " BACKUP_CONTROL_FILE);
 }
 
 
