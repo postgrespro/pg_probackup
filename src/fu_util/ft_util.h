@@ -162,10 +162,11 @@ extern void* ft_realloc(void* ptr, size_t new_sz);
 extern void* ft_calloc(size_t sz);
 extern void* ft_realloc_arr(void* ptr, size_t elem_sz, size_t old_elems, size_t new_elems);
 
-#define ft_malloc(sz)           ft_realloc(NULL, (sz))
-#define ft_malloc_arr(sz, cnt)  ft_realloc(NULL, ft_mul_size((sz), (cnt)))
-#define ft_free(ptr)            ft_realloc((ptr), 0)
-#define ft_calloc_arr(sz, cnt)  ft_calloc(ft_mul_size((sz), (cnt)))
+extern void* ft_malloc(size_t sz);
+extern void* ft_malloc_arr(size_t sz, size_t cnt);
+extern void  ft_free(void* ptr);
+extern void* ft_calloc_arr(size_t sz, size_t cnt);
+
 
 extern void ft_set_allocators(void *(*_realloc)(void *, size_t),
                               void (*_free)(void*));

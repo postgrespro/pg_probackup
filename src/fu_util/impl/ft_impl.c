@@ -63,6 +63,30 @@ ft_realloc(void *oldptr, size_t size) {
 }
 
 void*
+ft_malloc(size_t sz)
+{
+	return ft_realloc(NULL, sz);
+}
+
+void*
+ft_malloc_arr(size_t sz, size_t cnt)
+{
+	return ft_realloc(NULL, ft_mul_size(sz, cnt));
+}
+
+void
+ft_free(void* ptr)
+{
+	ft_realloc(ptr, 0);
+}
+
+void*
+ft_calloc_arr(size_t sz, size_t cnt)
+{
+	return ft_calloc(ft_mul_size(sz, cnt));
+}
+
+void*
 ft_realloc_arr(void* ptr, size_t elem_sz, size_t old_elems, size_t new_elems) {
     ptr = ft_realloc(ptr, ft_mul_size(elem_sz, new_elems));
     if (new_elems > old_elems)
