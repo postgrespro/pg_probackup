@@ -1191,7 +1191,7 @@ class PageTest(ProbackupTest, unittest.TestCase):
 
         pgdata = self.pgdata_content(node.data_dir)
 
-        result = node.table_checksum("pgbench_accounts", "aid")
+        result = node.table_checksum("pgbench_accounts")
 
         node_restored = self.make_simple_node(
             base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
@@ -1203,7 +1203,7 @@ class PageTest(ProbackupTest, unittest.TestCase):
         self.set_auto_conf(node_restored, {'port': node_restored.port})
         node_restored.slow_start()
 
-        result_new = node_restored.table_checksum("pgbench_accounts", "aid")
+        result_new = node_restored.table_checksum("pgbench_accounts")
 
         self.assertEqual(result, result_new)
 

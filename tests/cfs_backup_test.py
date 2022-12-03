@@ -761,7 +761,7 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
                 't_heap', tblspace_name)
         )
 
-        full_result = self.node.table_checksum("t_heap", "id")
+        full_result = self.node.table_checksum("t_heap")
 
         try:
             backup_id_full = self.backup_node(
@@ -783,7 +783,7 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
                 't_heap')
         )
 
-        page_result = self.node.table_checksum("t_heap", "id")
+        page_result = self.node.table_checksum("t_heap")
 
         try:
             backup_id_page = self.backup_node(
@@ -824,7 +824,7 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
         self.node.slow_start()
         self.assertEqual(
             full_result,
-            self.node.table_checksum("t_heap", "id"),
+            self.node.table_checksum("t_heap"),
             'Lost data after restore')
 
         # CHECK PAGE BACKUP
@@ -843,7 +843,7 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
         self.node.slow_start()
         self.assertEqual(
             page_result,
-            self.node.table_checksum("t_heap", "id"),
+            self.node.table_checksum("t_heap"),
             'Lost data after restore')
 
     # @unittest.expectedFailure
@@ -877,8 +877,8 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
             "FROM generate_series(0,1005000) i".format(
                 't_heap_2', tblspace_name_2))
 
-        full_result_1 = self.node.table_checksum("t_heap_1", "id")
-        full_result_2 = self.node.table_checksum("t_heap_2", "id")
+        full_result_1 = self.node.table_checksum("t_heap_1")
+        full_result_2 = self.node.table_checksum("t_heap_2")
 
         try:
             backup_id_full = self.backup_node(
@@ -909,8 +909,8 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
                 't_heap_2')
         )
 
-        page_result_1 = self.node.table_checksum("t_heap_1", "id")
-        page_result_2 = self.node.table_checksum("t_heap_2", "id")
+        page_result_1 = self.node.table_checksum("t_heap_1")
+        page_result_2 = self.node.table_checksum("t_heap_2")
 
         try:
             backup_id_page = self.backup_node(
@@ -951,11 +951,11 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
 
         self.assertEqual(
             full_result_1,
-            self.node.table_checksum("t_heap_1", "id"),
+            self.node.table_checksum("t_heap_1"),
             'Lost data after restore')
         self.assertEqual(
             full_result_2,
-            self.node.table_checksum("t_heap_2", "id"),
+            self.node.table_checksum("t_heap_2"),
             'Lost data after restore')
 
         # CHECK PAGE BACKUP
@@ -972,11 +972,11 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
 
         self.assertEqual(
             page_result_1,
-            self.node.table_checksum("t_heap_1", "id"),
+            self.node.table_checksum("t_heap_1"),
             'Lost data after restore')
         self.assertEqual(
             page_result_2,
-            self.node.table_checksum("t_heap_2", "id"),
+            self.node.table_checksum("t_heap_2"),
             'Lost data after restore')
 
     # @unittest.expectedFailure

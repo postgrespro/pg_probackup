@@ -2215,7 +2215,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         node.slow_start()
 
         node.pgbench_init(scale=20)
-        result = node.table_checksum("pgbench_accounts", "aid")
+        result = node.table_checksum("pgbench_accounts")
         node.stop()
         node.cleanup()
 
@@ -2240,7 +2240,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
         node.slow_start()
 
-        result_new = node.table_checksum("pgbench_accounts", "aid")
+        result_new = node.table_checksum("pgbench_accounts")
 
         self.assertEqual(result, result_new)
 
