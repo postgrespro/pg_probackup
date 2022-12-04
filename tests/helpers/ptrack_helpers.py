@@ -220,7 +220,7 @@ class PostgresNodeExtended(testgres.PostgresNode):
                 # hash uses SipHash since Python3.4, therefore it is good enough
                 sum.update(row[0].encode('utf8'))
 
-        con.execute(f"CLOSE {curname}; ROLLBACK;")
+        con.execute("CLOSE %s; ROLLBACK;" % curname)
 
         con.close()
         return sum.hexdigest()
