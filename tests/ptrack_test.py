@@ -440,7 +440,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         if self.paranoia:
             pgdata = self.pgdata_content(node.data_dir)
 
-        result = node.safe_psql("postgres", "SELECT * FROM t_heap")
+        result = node.table_checksum("t_heap")
 
         node_restored = self.make_simple_node(
             base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
@@ -463,7 +463,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         # Logical comparison
         self.assertEqual(
             result,
-            node_restored.safe_psql("postgres", "SELECT * FROM t_heap"))
+            node_restored.table_checksum("t_heap"))
 
     # @unittest.skip("skip")
     def test_ptrack_unprivileged(self):
@@ -1030,7 +1030,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         if self.paranoia:
             pgdata = self.pgdata_content(node.data_dir)
 
-        result = node.safe_psql("postgres", "SELECT * FROM t_heap")
+        result = node.table_checksum("t_heap")
         node.cleanup()
         self.restore_node(backup_dir, 'node', node, options=["-j", "4"])
 
@@ -1044,7 +1044,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         # Logical comparison
         self.assertEqual(
             result,
-            node.safe_psql("postgres", "SELECT * FROM t_heap"))
+            node.table_checksum("t_heap"))
 
     # @unittest.skip("skip")
     def test_ptrack_stream(self):
@@ -1075,7 +1075,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             " as t_seq, md5(i::text) as text, md5(i::text)::tsvector"
             " as tsvector from generate_series(0,100) i")
 
-        full_result = node.safe_psql("postgres", "SELECT * FROM t_heap")
+        full_result = node.table_checksum("t_heap")
         full_backup_id = self.backup_node(
             backup_dir, 'node', node, options=['--stream'])
 
@@ -1086,7 +1086,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             " md5(i::text) as text, md5(i::text)::tsvector as tsvector"
             " from generate_series(100,200) i")
 
-        ptrack_result = node.safe_psql("postgres", "SELECT * FROM t_heap")
+        ptrack_result = node.table_checksum("t_heap")
         ptrack_backup_id = self.backup_node(
             backup_dir, 'node', node,
             backup_type='ptrack', options=['--stream'])
@@ -1108,7 +1108,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
                 repr(self.output), self.cmd)
             )
         node.slow_start()
-        full_result_new = node.safe_psql("postgres", "SELECT * FROM t_heap")
+        full_result_new = node.table_checksum("t_heap")
         self.assertEqual(full_result, full_result_new)
         node.cleanup()
 
@@ -1128,7 +1128,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             self.compare_pgdata(pgdata, pgdata_restored)
 
         node.slow_start()
-        ptrack_result_new = node.safe_psql("postgres", "SELECT * FROM t_heap")
+        ptrack_result_new = node.table_checksum("t_heap")
         self.assertEqual(ptrack_result, ptrack_result_new)
 
     # @unittest.skip("skip")
@@ -1162,7 +1162,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             " md5(i::text)::tsvector as tsvector"
             " from generate_series(0,100) i")
 
-        full_result = node.safe_psql("postgres", "SELECT * FROM t_heap")
+        full_result = node.table_checksum("t_heap")
         full_backup_id = self.backup_node(backup_dir, 'node', node)
         full_target_time = self.show_pb(
             backup_dir, 'node', full_backup_id)['recovery-time']
@@ -1175,7 +1175,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             " md5(i::text)::tsvector as tsvector"
             " from generate_series(100,200) i")
 
-        ptrack_result = node.safe_psql("postgres", "SELECT * FROM t_heap")
+        ptrack_result = node.table_checksum("t_heap")
         ptrack_backup_id = self.backup_node(
             backup_dir, 'node', node, backup_type='ptrack')
         ptrack_target_time = self.show_pb(
@@ -1208,7 +1208,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         )
         node.slow_start()
 
-        full_result_new = node.safe_psql("postgres", "SELECT * FROM t_heap")
+        full_result_new = node.table_checksum("t_heap")
         self.assertEqual(full_result, full_result_new)
         node.cleanup()
 
@@ -1233,7 +1233,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             self.compare_pgdata(pgdata, pgdata_restored)
 
         node.slow_start()
-        ptrack_result_new = node.safe_psql("postgres", "SELECT * FROM t_heap")
+        ptrack_result_new = node.table_checksum("t_heap")
         self.assertEqual(ptrack_result, ptrack_result_new)
 
         node.cleanup()
@@ -1263,9 +1263,6 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             "postgres",
             "create table t_heap as select i as id, md5(i::text) as text, "
             "md5(i::text)::tsvector as tsvector from generate_series(0,100) i")
-        node.safe_psql(
-            "postgres",
-            "SELECT * FROM t_heap")
 
         backup_id = self.backup_node(
             backup_dir, 'node', node,
@@ -1280,7 +1277,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             "insert into t_heap select i as id, md5(i::text) as text, "
             "md5(i::text)::tsvector as tsvector "
             "from generate_series(100,200) i")
-        node.safe_psql("postgres", "SELECT * FROM t_heap")
+        node.table_checksum("t_heap")
         backup_id = self.backup_node(
             backup_dir, 'node', node,
             backup_type='ptrack', options=["--stream"])
@@ -1339,7 +1336,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             "postgres",
             "create table t_heap as select i as id, md5(i::text) as text, "
             "md5(i::text)::tsvector as tsvector from generate_series(0,100) i")
-        node.safe_psql("postgres", "SELECT * FROM t_heap")
+        node.table_checksum("t_heap")
 
         # PAGE BACKUP
         node.safe_psql(
@@ -1347,7 +1344,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             "insert into t_heap select i as id, md5(i::text) as text, "
             "md5(i::text)::tsvector as tsvector "
             "from generate_series(100,200) i")
-        node.safe_psql("postgres", "SELECT * FROM t_heap")
+        node.table_checksum("t_heap")
         backup_id = self.backup_node(
             backup_dir, 'node', node, backup_type='page')
 
@@ -1403,7 +1400,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             " md5(i::text)::tsvector as tsvector "
             " from generate_series(0,100) i"
         )
-        node.safe_psql("postgres", "SELECT * FROM t_heap")
+        node.table_checksum("t_heap")
         self.backup_node(backup_dir, 'node', node, options=["--stream"])
 
         # SECOND FULL BACKUP
@@ -1413,7 +1410,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             " md5(i::text)::tsvector as tsvector"
             " from generate_series(100,200) i"
         )
-        node.safe_psql("postgres", "SELECT * FROM t_heap")
+        node.table_checksum("t_heap")
         backup_id = self.backup_node(
             backup_dir, 'node', node, options=["--stream"])
 
@@ -1474,7 +1471,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             "create table t_heap as select i as id, md5(i::text) as text, "
             "md5(i::text)::tsvector as tsvector from generate_series(0,100) i")
 
-        node.safe_psql("postgres", "SELECT * FROM t_heap")
+        node.table_checksum("t_heap")
         self.backup_node(
             backup_dir, 'node', node,
             options=["--stream"])
@@ -1694,8 +1691,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         # sys.exit(1)
         # PTRACK BACKUP
-        #result = node.safe_psql(
-        #    "postgres", "select * from t_heap")
+        #result = node.table_checksum("t_heap")
         self.backup_node(
             backup_dir, 'node', node,
             backup_type='ptrack',
@@ -1737,8 +1733,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             node_restored, {'port': node_restored.port})
         node_restored.slow_start()
 
-#        result_new = node_restored.safe_psql(
-#            "postgres", "select * from t_heap")
+#        result_new = node_restored.table_checksum("t_heap")
 #
 #        self.assertEqual(result, result_new, 'lost some data after restore')
 
@@ -1838,7 +1833,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             "create table t_heap as select i as id, md5(i::text) as text, "
             "md5(i::text)::tsvector as tsvector from generate_series(0,100) i")
 
-        result = node.safe_psql("postgres", "select * from t_heap")
+        result = node.table_checksum("t_heap")
         # FULL BACKUP
         self.backup_node(backup_dir, 'node', node, options=["--stream"])
 
@@ -1892,7 +1887,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
                 "Expecting Error because "
                 "tablespace 'somedata' should not be present")
 
-        result_new = node.safe_psql("postgres", "select * from t_heap")
+        result_new = node.table_checksum("t_heap")
         self.assertEqual(result, result_new)
 
         if self.paranoia:
@@ -1930,7 +1925,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             "create table t_heap as select i as id, md5(i::text) as text, "
             "md5(i::text)::tsvector as tsvector from generate_series(0,100) i")
 
-        result = node.safe_psql("postgres", "select * from t_heap")
+        result = node.table_checksum("t_heap")
         # FULL BACKUP
         self.backup_node(backup_dir, 'node', node, options=["--stream"])
 
@@ -1939,7 +1934,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             "postgres",
             "alter table t_heap set tablespace somedata")
         # GET LOGICAL CONTENT FROM NODE
-        result = node.safe_psql("postgres", "select * from t_heap")
+        result = node.table_checksum("t_heap")
 
         # FIRTS PTRACK BACKUP
         self.backup_node(
@@ -1971,8 +1966,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         restored_node.slow_start()
 
         # COMPARE LOGICAL CONTENT
-        result_new = restored_node.safe_psql(
-            "postgres", "select * from t_heap")
+        result_new = restored_node.table_checksum("t_heap")
         self.assertEqual(result, result_new)
 
         restored_node.cleanup()
@@ -2006,8 +2000,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             restored_node, {'port': restored_node.port})
         restored_node.slow_start()
 
-        result_new = restored_node.safe_psql(
-            "postgres", "select * from t_heap")
+        result_new = restored_node.table_checksum("t_heap")
         self.assertEqual(result, result_new)
 
     # @unittest.skip("skip")

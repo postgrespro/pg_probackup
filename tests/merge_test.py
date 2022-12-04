@@ -659,13 +659,8 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         node_restored.slow_start()
 
         # Logical comparison
-        result1 = node.safe_psql(
-            "postgres",
-            "select * from t_heap")
-
-        result2 = node_restored.safe_psql(
-            "postgres",
-            "select * from t_heap")
+        result1 = node.table_checksum("t_heap")
+        result2 = node_restored.table_checksum("t_heap")
 
         self.assertEqual(result1, result2)
 
@@ -744,13 +739,8 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         node_restored.slow_start()
 
         # Logical comparison
-        result1 = node.safe_psql(
-            "postgres",
-            "select * from t_heap")
-
-        result2 = node_restored.safe_psql(
-            "postgres",
-            "select * from t_heap")
+        result1 = node.table_checksum("t_heap")
+        result2 = node_restored.table_checksum("t_heap")
 
         self.assertEqual(result1, result2)
 
@@ -836,13 +826,8 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         node_restored.slow_start()
 
         # Logical comparison
-        result1 = node.safe_psql(
-            "postgres",
-            "select * from t_heap")
-
-        result2 = node_restored.safe_psql(
-            "postgres",
-            "select * from t_heap")
+        result1 = node.table_checksum("t_heap")
+        result2 = node_restored.table_checksum("t_heap")
 
         self.assertEqual(result1, result2)
 
@@ -1931,9 +1916,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         backup_id = self.backup_node(backup_dir, 'node', node, backup_type='page')
         pgdata = self.pgdata_content(node.data_dir)
 
-        result = node.safe_psql(
-            'postgres',
-            'SELECT * from pgbench_accounts')
+        result = node.table_checksum("pgbench_accounts")
 
         node_restored = self.make_simple_node(
             base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
@@ -1959,11 +1942,9 @@ class MergeTest(ProbackupTest, unittest.TestCase):
             {'port': node_restored.port})
         node_restored.slow_start()
 
-        result_new = node_restored.safe_psql(
-            'postgres',
-            'SELECT * from pgbench_accounts')
+        result_new = node_restored.table_checksum("pgbench_accounts")
 
-        self.assertTrue(result, result_new)
+        self.assertEqual(result, result_new)
 
         self.compare_pgdata(pgdata, pgdata_restored)
 
@@ -2458,8 +2439,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
         self.merge_backup(backup_dir, 'node', page_id)
 
-        result = node.safe_psql(
-            "postgres", "select * from pgbench_accounts")
+        result = node.table_checksum("pgbench_accounts")
 
         node_restored = self.make_simple_node(
             base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
@@ -2471,8 +2451,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         self.set_auto_conf(node_restored, {'port': node_restored.port})
         node_restored.slow_start()
 
-        result_new = node_restored.safe_psql(
-            "postgres", "select * from pgbench_accounts")
+        result_new = node_restored.table_checksum("pgbench_accounts")
 
         self.assertEqual(result, result_new)
 

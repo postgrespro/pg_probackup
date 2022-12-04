@@ -22,7 +22,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         src_pg.safe_psql(
             "postgres",
             "CREATE TABLE ultimate_question AS SELECT 42 AS answer")
-        src_query_result = src_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
+        src_query_result = src_pg.table_checksum("ultimate_question")
 
         # do full catchup
         dst_pg = self.make_empty_node(os.path.join(self.module_name, self.fname, 'dst'))
@@ -47,7 +47,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         dst_pg.slow_start()
 
         # 2nd check: run verification query
-        dst_query_result = dst_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
+        dst_query_result = dst_pg.table_checksum("ultimate_question")
         self.assertEqual(src_query_result, dst_query_result, 'Different answer from copy')
 
         # Cleanup
@@ -69,7 +69,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         src_pg.safe_psql(
             "postgres",
             "CREATE TABLE ultimate_question TABLESPACE tblspace1 AS SELECT 42 AS answer")
-        src_query_result = src_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
+        src_query_result = src_pg.table_checksum("ultimate_question")
 
         # do full catchup with tablespace mapping
         dst_pg = self.make_empty_node(os.path.join(self.module_name, self.fname, 'dst'))
@@ -105,7 +105,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         dst_pg.slow_start()
 
         # 2nd check: run verification query
-        dst_query_result = dst_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
+        dst_query_result = dst_pg.table_checksum("ultimate_question")
         self.assertEqual(src_query_result, dst_query_result, 'Different answer from copy')
 
         # Cleanup
@@ -146,7 +146,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         pgbench = src_pg.pgbench(options=['-T', '10', '--no-vacuum'])
         pgbench.wait()
         src_pg.safe_psql("postgres", "INSERT INTO ultimate_question VALUES(42)")
-        src_query_result = src_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
+        src_query_result = src_pg.table_checksum("ultimate_question")
 
         # do delta catchup
         self.catchup_node(
@@ -171,7 +171,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         dst_pg.slow_start(replica = True)
 
         # 2nd check: run verification query
-        dst_query_result = dst_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
+        dst_query_result = dst_pg.table_checksum("ultimate_question")
         self.assertEqual(src_query_result, dst_query_result, 'Different answer from copy')
 
         # Cleanup
@@ -218,7 +218,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         pgbench = src_pg.pgbench(options=['-T', '10', '--no-vacuum'])
         pgbench.wait()
         src_pg.safe_psql("postgres", "INSERT INTO ultimate_question VALUES(42)")
-        src_query_result = src_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
+        src_query_result = src_pg.table_checksum("ultimate_question")
 
         # do ptrack catchup
         self.catchup_node(
@@ -243,7 +243,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         dst_pg.slow_start(replica = True)
 
         # 2nd check: run verification query
-        dst_query_result = dst_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
+        dst_query_result = dst_pg.table_checksum("ultimate_question")
         self.assertEqual(src_query_result, dst_query_result, 'Different answer from copy')
 
         # Cleanup
@@ -282,7 +282,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         src_pg.slow_start(replica = True)
         src_pg.promote()
         src_pg.safe_psql("postgres", "CREATE TABLE ultimate_question AS SELECT 42 AS answer")
-        src_query_result = src_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
+        src_query_result = src_pg.table_checksum("ultimate_question")
 
         # do catchup (src_tli = 2, dst_tli = 1)
         self.catchup_node(
@@ -306,7 +306,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         dst_pg.slow_start(replica = True)
 
         # 2nd check: run verification query
-        dst_query_result = dst_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
+        dst_query_result = dst_pg.table_checksum("ultimate_question")
         self.assertEqual(src_query_result, dst_query_result, 'Different answer from copy')
 
         dst_pg.stop()
@@ -364,7 +364,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(src_tli, "2", "Postgres didn't update TLI after promote")
 
         src_pg.safe_psql("postgres", "CREATE TABLE ultimate_question AS SELECT 42 AS answer")
-        src_query_result = src_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
+        src_query_result = src_pg.table_checksum("ultimate_question")
 
         # do catchup (src_tli = 2, dst_tli = 1)
         self.catchup_node(
@@ -388,7 +388,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         dst_pg.slow_start(replica = True)
 
         # 2nd check: run verification query
-        dst_query_result = dst_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
+        dst_query_result = dst_pg.table_checksum("ultimate_question")
         self.assertEqual(src_query_result, dst_query_result, 'Different answer from copy')
 
         dst_pg.stop()
@@ -818,7 +818,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
 
         # preparation 3: "useful" changes
         src_pg.safe_psql("postgres", "CREATE TABLE ultimate_question AS SELECT 42 AS answer")
-        src_query_result = src_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
+        src_query_result = src_pg.table_checksum("ultimate_question")
 
         # try catchup
         try:
@@ -832,7 +832,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             dst_options['port'] = str(dst_pg.port)
             self.set_auto_conf(dst_pg, dst_options)
             dst_pg.slow_start()
-            dst_query_result = dst_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
+            dst_query_result = dst_pg.table_checksum("ultimate_question")
             dst_pg.stop()
             self.assertEqual(src_query_result, dst_query_result, 'Different answer from copy')
         except ProbackupException as e:
@@ -896,7 +896,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
 
         # preparation 4: "useful" changes
         src_pg.safe_psql("postgres", "CREATE TABLE ultimate_question AS SELECT 42 AS answer")
-        src_query_result = src_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
+        src_query_result = src_pg.table_checksum("ultimate_question")
 
         # try catchup
         try:
@@ -910,7 +910,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             dst_options['port'] = str(dst_pg.port)
             self.set_auto_conf(dst_pg, dst_options)
             dst_pg.slow_start()
-            dst_query_result = dst_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
+            dst_query_result = dst_pg.table_checksum("ultimate_question")
             dst_pg.stop()
             self.assertEqual(src_query_result, dst_query_result, 'Different answer from copy')
         except ProbackupException as e:
@@ -979,7 +979,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         pgbench = src_pg.pgbench(options=['-T', '10', '--no-vacuum'])
         pgbench.wait()
         src_pg.safe_psql("postgres", "INSERT INTO ultimate_question VALUES(42)")
-        src_query_result = src_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
+        src_query_result = src_pg.table_checksum("ultimate_question")
 
         # do delta catchup
         self.catchup_node(
@@ -1004,7 +1004,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         dst_pg.slow_start(replica = True)
 
         # 2nd check: run verification query
-        dst_query_result = dst_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
+        dst_query_result = dst_pg.table_checksum("ultimate_question")
         self.assertEqual(src_query_result, dst_query_result, 'Different answer from copy')
 
         # Cleanup
@@ -1068,7 +1068,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         pgbench = src_pg.pgbench(options=['-T', '10', '--no-vacuum'])
         pgbench.wait()
         src_pg.safe_psql("postgres", "INSERT INTO ultimate_question VALUES(42)")
-        src_query_result = src_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
+        src_query_result = src_pg.table_checksum("ultimate_question")
 
         # do delta catchup
         self.catchup_node(
@@ -1093,7 +1093,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         dst_pg.slow_start(replica = True)
 
         # 2nd check: run verification query
-        dst_query_result = dst_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
+        dst_query_result = dst_pg.table_checksum("ultimate_question")
         self.assertEqual(src_query_result, dst_query_result, 'Different answer from copy')
 
         # Cleanup
@@ -1367,9 +1367,9 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
 
         # check: run verification query
         src_pg.safe_psql("postgres", "INSERT INTO ultimate_question VALUES(42)")
-        src_query_result = src_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
+        src_query_result = src_pg.table_checksum("ultimate_question")
         dst_pg.catchup() # wait for replication
-        dst_query_result = dst_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
+        dst_query_result = dst_pg.table_checksum("ultimate_question")
         self.assertEqual(src_query_result, dst_query_result, 'Different answer from copy')
 
         # preparation 4: make changes on master (source)
@@ -1397,9 +1397,9 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
 
         # check: run verification query
         src_pg.safe_psql("postgres", "INSERT INTO ultimate_question VALUES(2*42)")
-        src_query_result = src_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
+        src_query_result = src_pg.table_checksum("ultimate_question")
         dst_pg.catchup() # wait for replication
-        dst_query_result = dst_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
+        dst_query_result = dst_pg.table_checksum("ultimate_question")
         self.assertEqual(src_query_result, dst_query_result, 'Different answer from copy')
 
         # preparation 5: make changes on master (source)
@@ -1426,9 +1426,9 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
 
         # check: run verification query
         src_pg.safe_psql("postgres", "INSERT INTO ultimate_question VALUES(3*42)")
-        src_query_result = src_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
+        src_query_result = src_pg.table_checksum("ultimate_question")
         dst_pg.catchup() # wait for replication
-        dst_query_result = dst_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
+        dst_query_result = dst_pg.table_checksum("ultimate_question")
         self.assertEqual(src_query_result, dst_query_result, 'Different answer from copy')
 
         # Cleanup

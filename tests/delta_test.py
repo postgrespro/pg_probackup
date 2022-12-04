@@ -239,7 +239,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
             "md5(i::text)::tsvector as tsvector "
             "from generate_series(0,100) i")
 
-        full_result = node.execute("postgres", "SELECT * FROM t_heap")
+        full_result = node.table_checksum("t_heap")
         full_backup_id = self.backup_node(
             backup_dir, 'node', node,
             backup_type='full', options=['--stream'])
@@ -250,7 +250,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
             "insert into t_heap select i as id, md5(i::text) as text, "
             "md5(i::text)::tsvector as tsvector "
             "from generate_series(100,200) i")
-        delta_result = node.execute("postgres", "SELECT * FROM t_heap")
+        delta_result = node.table_checksum("t_heap")
         delta_backup_id = self.backup_node(
             backup_dir, 'node', node,
             backup_type='delta', options=['--stream'])
@@ -270,7 +270,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
             '\n Unexpected Error Message: {0}\n'
             ' CMD: {1}'.format(repr(self.output), self.cmd))
         node.slow_start()
-        full_result_new = node.execute("postgres", "SELECT * FROM t_heap")
+        full_result_new = node.table_checksum("t_heap")
         self.assertEqual(full_result, full_result_new)
         node.cleanup()
 
@@ -286,7 +286,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
             '\n Unexpected Error Message: {0}\n'
             ' CMD: {1}'.format(repr(self.output), self.cmd))
         node.slow_start()
-        delta_result_new = node.execute("postgres", "SELECT * FROM t_heap")
+        delta_result_new = node.table_checksum("t_heap")
         self.assertEqual(delta_result, delta_result_new)
         node.cleanup()
 
@@ -313,7 +313,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
             "postgres",
             "create table t_heap as select i as id, md5(i::text) as text, "
             "md5(i::text)::tsvector as tsvector from generate_series(0,1) i")
-        full_result = node.execute("postgres", "SELECT * FROM t_heap")
+        full_result = node.table_checksum("t_heap")
         full_backup_id = self.backup_node(
             backup_dir, 'node', node, backup_type='full')
 
@@ -322,7 +322,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
             "postgres",
             "insert into t_heap select i as id, md5(i::text) as text, "
             "md5(i::text)::tsvector as tsvector from generate_series(0,2) i")
-        delta_result = node.execute("postgres", "SELECT * FROM t_heap")
+        delta_result = node.table_checksum("t_heap")
         delta_backup_id = self.backup_node(
             backup_dir, 'node', node, backup_type='delta')
 
@@ -341,7 +341,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
         node.slow_start()
-        full_result_new = node.execute("postgres", "SELECT * FROM t_heap")
+        full_result_new = node.table_checksum("t_heap")
         self.assertEqual(full_result, full_result_new)
         node.cleanup()
 
@@ -357,7 +357,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
         node.slow_start()
-        delta_result_new = node.execute("postgres", "SELECT * FROM t_heap")
+        delta_result_new = node.table_checksum("t_heap")
         self.assertEqual(delta_result, delta_result_new)
         node.cleanup()
 
@@ -400,7 +400,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
         node.safe_psql("postgres", "checkpoint")
 
         # GET LOGICAL CONTENT FROM NODE
-        result = node.safe_psql("postgres", "select count(*) from pgbench_accounts")
+        result = node.table_checksum("pgbench_accounts")
         # delta BACKUP
         self.backup_node(
             backup_dir, 'node', node,
@@ -429,9 +429,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
         self.set_auto_conf(restored_node, {'port': restored_node.port})
         restored_node.slow_start()
 
-        result_new = restored_node.safe_psql(
-            "postgres",
-            "select count(*) from pgbench_accounts")
+        result_new = restored_node.table_checksum("pgbench_accounts")
 
         # COMPARE RESTORED FILES
         self.assertEqual(result, result_new, 'data is lost')
@@ -540,7 +538,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
             "create table t_heap as select i as id, md5(i::text) as text, "
             "md5(i::text)::tsvector as tsvector from generate_series(0,100) i")
 
-        node.safe_psql("postgres", "SELECT * FROM t_heap")
+        node.table_checksum("t_heap")
         self.backup_node(
             backup_dir, 'node', node,
             options=["--stream"])
@@ -663,7 +661,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
             "create table t_heap as select i as id, md5(i::text) as text, "
             "md5(i::text)::tsvector as tsvector from generate_series(0,100) i")
 
-        node.safe_psql("postgres", "SELECT * FROM t_heap")
+        node.table_checksum("t_heap")
         filepath = node.safe_psql(
             "postgres",
             "SELECT pg_relation_filepath('t_heap')").decode('utf-8').rstrip()
@@ -774,8 +772,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
             "alter table t_heap set tablespace somedata_new")
 
         # DELTA BACKUP
-        result = node.safe_psql(
-            "postgres", "select * from t_heap")
+        result = node.table_checksum("t_heap")
         self.backup_node(
             backup_dir, 'node', node,
             backup_type='delta',
@@ -813,8 +810,7 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
         self.set_auto_conf(node_restored, {'port': node_restored.port})
         node_restored.slow_start()
 
-        result_new = node_restored.safe_psql(
-            "postgres", "select * from t_heap")
+        result_new = node_restored.table_checksum("t_heap")
 
         self.assertEqual(result, result_new, 'lost some data after restore')
 

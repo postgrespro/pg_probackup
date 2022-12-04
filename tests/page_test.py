@@ -84,13 +84,8 @@ class PageTest(ProbackupTest, unittest.TestCase):
         node_restored.slow_start()
 
         # Logical comparison
-        result1 = node.safe_psql(
-            "postgres",
-            "select * from t_heap")
-
-        result2 = node_restored.safe_psql(
-            "postgres",
-            "select * from t_heap")
+        result1 = node.table_checksum("t_heap")
+        result2 = node_restored.table_checksum("t_heap")
 
         self.assertEqual(result1, result2)
 
@@ -191,7 +186,7 @@ class PageTest(ProbackupTest, unittest.TestCase):
             "md5(i::text)::tsvector as tsvector "
             "from generate_series(0,100) i")
 
-        full_result = node.execute("postgres", "SELECT * FROM t_heap")
+        full_result = node.table_checksum("t_heap")
         full_backup_id = self.backup_node(
             backup_dir, 'node', node,
             backup_type='full', options=['--stream'])
@@ -202,7 +197,7 @@ class PageTest(ProbackupTest, unittest.TestCase):
             "insert into t_heap select i as id, md5(i::text) as text, "
             "md5(i::text)::tsvector as tsvector "
             "from generate_series(100,200) i")
-        page_result = node.execute("postgres", "SELECT * FROM t_heap")
+        page_result = node.table_checksum("t_heap")
         page_backup_id = self.backup_node(
             backup_dir, 'node', node,
             backup_type='page', options=['--stream', '-j', '4'])
@@ -223,7 +218,7 @@ class PageTest(ProbackupTest, unittest.TestCase):
             ' CMD: {1}'.format(repr(self.output), self.cmd))
 
         node.slow_start()
-        full_result_new = node.execute("postgres", "SELECT * FROM t_heap")
+        full_result_new = node.table_checksum("t_heap")
         self.assertEqual(full_result, full_result_new)
         node.cleanup()
 
@@ -242,7 +237,7 @@ class PageTest(ProbackupTest, unittest.TestCase):
             self.compare_pgdata(pgdata, pgdata_restored)
 
         node.slow_start()
-        page_result_new = node.execute("postgres", "SELECT * FROM t_heap")
+        page_result_new = node.table_checksum("t_heap")
         self.assertEqual(page_result, page_result_new)
         node.cleanup()
 
@@ -272,7 +267,7 @@ class PageTest(ProbackupTest, unittest.TestCase):
             "postgres",
             "create table t_heap as select i as id, md5(i::text) as text, "
             "md5(i::text)::tsvector as tsvector from generate_series(0,100) i")
-        full_result = node.execute("postgres", "SELECT * FROM t_heap")
+        full_result = node.table_checksum("t_heap")
         full_backup_id = self.backup_node(
             backup_dir, 'node', node, backup_type='full')
 
@@ -282,7 +277,7 @@ class PageTest(ProbackupTest, unittest.TestCase):
             "insert into t_heap select i as id, "
             "md5(i::text) as text, md5(i::text)::tsvector as tsvector "
             "from generate_series(100, 200) i")
-        page_result = node.execute("postgres", "SELECT * FROM t_heap")
+        page_result = node.table_checksum("t_heap")
         page_backup_id = self.backup_node(
             backup_dir, 'node', node,
             backup_type='page', options=["-j", "4"])
@@ -308,7 +303,7 @@ class PageTest(ProbackupTest, unittest.TestCase):
 
         node.slow_start()
 
-        full_result_new = node.execute("postgres", "SELECT * FROM t_heap")
+        full_result_new = node.table_checksum("t_heap")
         self.assertEqual(full_result, full_result_new)
         node.cleanup()
 
@@ -332,7 +327,7 @@ class PageTest(ProbackupTest, unittest.TestCase):
 
         node.slow_start()
 
-        page_result_new = node.execute("postgres", "SELECT * FROM t_heap")
+        page_result_new = node.table_checksum("t_heap")
         self.assertEqual(page_result, page_result_new)
         node.cleanup()
 
@@ -370,7 +365,7 @@ class PageTest(ProbackupTest, unittest.TestCase):
         pgbench.wait()
 
         # GET LOGICAL CONTENT FROM NODE
-        result = node.safe_psql("postgres", "select count(*) from pgbench_accounts")
+        result = node.table_checksum("pgbench_accounts")
         # PAGE BACKUP
         self.backup_node(backup_dir, 'node', node, backup_type='page')
 
@@ -398,8 +393,7 @@ class PageTest(ProbackupTest, unittest.TestCase):
         self.set_auto_conf(restored_node, {'port': restored_node.port})
         restored_node.slow_start()
 
-        result_new = restored_node.safe_psql(
-            "postgres", "select count(*) from pgbench_accounts")
+        result_new = restored_node.table_checksum("pgbench_accounts")
 
         # COMPARE RESTORED FILES
         self.assertEqual(result, result_new, 'data is lost')
