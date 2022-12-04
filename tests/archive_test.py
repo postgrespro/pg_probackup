@@ -2140,9 +2140,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         node.slow_start()
 
         node.pgbench_init(scale=20)
-        result = node.safe_psql(
-            'postgres',
-            'select * from pgbench_accounts')
+        result = node.table_checksum("pgbench_accounts")
         node.stop()
         node.cleanup()
 
@@ -2167,9 +2165,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
         node.slow_start()
 
-        result_new = node.safe_psql(
-            'postgres',
-            'select * from pgbench_accounts')
+        result_new = node.table_checksum("pgbench_accounts")
 
         self.assertEqual(result, result_new)
 

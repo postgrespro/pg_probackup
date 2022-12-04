@@ -15,6 +15,7 @@ import select
 from time import sleep
 import re
 import json
+import random
 
 idx_ptrack = {
     't_heap': {
@@ -199,6 +200,30 @@ class PostgresNodeExtended(testgres.PostgresNode):
             else:
                 os.kill(self.auxiliary_pids[someone][0], sig)
             self.is_started = False
+
+    def table_checksum(self, table, dbname="postgres"):
+        con = self.connect(dbname=dbname)
+
+        curname = "cur_"+str(random.randint(0,2**48))
+
+        con.execute("""
+            DECLARE %s NO SCROLL CURSOR FOR
+            SELECT t::text FROM %s as t
+        """ % (curname, table))
+
+        sum = hashlib.md5()
+        while True:
+            rows = con.execute("FETCH FORWARD 5000 FROM %s" % curname)
+            if not rows:
+                break
+            for row in rows:
+                # hash uses SipHash since Python3.4, therefore it is good enough
+                sum.update(row[0].encode('utf8'))
+
+        con.execute(f"CLOSE {curname}; ROLLBACK;")
+
+        con.close()
+        return sum.hexdigest()
 
 class ProbackupTest(object):
     # Class attributes
