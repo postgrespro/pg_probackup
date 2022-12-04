@@ -9,7 +9,12 @@
 #ifndef DATAPAGEMAP_H
 #define DATAPAGEMAP_H
 
+#if PG_VERSION_NUM < 160000
 #include "storage/relfilenode.h"
+#else
+#include "storage/relfilelocator.h"
+#define RelFileNode RelFileLocator
+#endif
 #include "storage/block.h"
 
 
