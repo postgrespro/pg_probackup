@@ -53,11 +53,6 @@ class BugTest(ProbackupTest, unittest.TestCase):
             replica,
             {'port': replica.port, 'restart_after_crash': 'off'})
 
-        # we need those later
-        node.safe_psql(
-            "postgres",
-            "CREATE EXTENSION plpython3u")
-
         node.safe_psql(
             "postgres",
             "CREATE EXTENSION pageinspect")
@@ -131,48 +126,37 @@ class BugTest(ProbackupTest, unittest.TestCase):
             recovery_config, "recovery_target_action = 'pause'")
         replica.slow_start(replica=True)
 
+        current_xlog_lsn_query = 'SELECT pg_last_wal_replay_lsn() INTO current_xlog_lsn'
         if self.get_version(node) < 100000:
-            script = '''
+            current_xlog_lsn_query = 'SELECT min_recovery_end_location INTO current_xlog_lsn FROM pg_control_recovery()'
+
+        script = f'''
 DO
 $$
-relations = plpy.execute("select class.oid from pg_class class WHERE class.relkind IN ('r', 'i', 't', 'm')  and class.relpersistence = 'p'")
-current_xlog_lsn = plpy.execute("SELECT min_recovery_end_location as lsn FROM pg_control_recovery()")[0]['lsn']
-plpy.notice('CURRENT LSN: {0}'.format(current_xlog_lsn))
-found_corruption = False
-for relation in relations:
-    pages_from_future = plpy.execute("with number_of_blocks as (select blknum from generate_series(0, pg_relation_size({0}) / 8192 -1) as blknum) select blknum, lsn, checksum, flags, lower, upper, special, pagesize, version, prune_xid from number_of_blocks, page_header(get_raw_page('{0}'::oid::regclass::text, number_of_blocks.blknum::int)) where lsn > '{1}'::pg_lsn".format(relation['oid'], current_xlog_lsn))
-
-    if pages_from_future.nrows() == 0:
-        continue
-
-    for page in pages_from_future:
-        plpy.notice('Found page from future. OID: {0}, BLKNUM: {1}, LSN: {2}'.format(relation['oid'], page['blknum'], page['lsn']))
-        found_corruption = True
-if found_corruption:
-    plpy.error('Found Corruption')
-$$ LANGUAGE plpython3u;
-'''
-        else:
-            script = '''
-DO
-$$
-relations = plpy.execute("select class.oid from pg_class class WHERE class.relkind IN ('r', 'i', 't', 'm')  and class.relpersistence = 'p'")
-current_xlog_lsn = plpy.execute("select pg_last_wal_replay_lsn() as lsn")[0]['lsn']
-plpy.notice('CURRENT LSN: {0}'.format(current_xlog_lsn))
-found_corruption = False
-for relation in relations:
-    pages_from_future = plpy.execute("with number_of_blocks as (select blknum from generate_series(0, pg_relation_size({0}) / 8192 -1) as blknum) select blknum, lsn, checksum, flags, lower, upper, special, pagesize, version, prune_xid from number_of_blocks, page_header(get_raw_page('{0}'::oid::regclass::text, number_of_blocks.blknum::int)) where lsn > '{1}'::pg_lsn".format(relation['oid'], current_xlog_lsn))
-
-    if pages_from_future.nrows() == 0:
-        continue
-
-    for page in pages_from_future:
-        plpy.notice('Found page from future. OID: {0}, BLKNUM: {1}, LSN: {2}'.format(relation['oid'], page['blknum'], page['lsn']))
-        found_corruption = True
-if found_corruption:
-    plpy.error('Found Corruption')
-$$ LANGUAGE plpython3u;
-'''
+DECLARE
+    roid oid;
+    current_xlog_lsn  pg_lsn;
+    pages_from_future RECORD;
+    found_corruption  bool := false;
+BEGIN
+    {current_xlog_lsn_query};
+    RAISE NOTICE 'CURRENT LSN: %', current_xlog_lsn;
+    FOR roid IN select oid from pg_class class where relkind IN ('r', 'i', 't', 'm') and relpersistence = 'p' LOOP
+        FOR pages_from_future IN
+                with number_of_blocks as (select blknum from generate_series(0, pg_relation_size(roid) / 8192 -1) as blknum )
+                select blknum, lsn, checksum, flags, lower, upper, special, pagesize, version, prune_xid
+                from number_of_blocks, page_header(get_raw_page(roid::regclass::text, number_of_blocks.blknum::int))
+                where lsn > current_xlog_lsn LOOP
+            RAISE NOTICE 'Found page from future. OID: %, BLKNUM: %, LSN: %', roid, pages_from_future.blknum, pages_from_future.lsn;
+            found_corruption := true;
+        END LOOP;
+    END LOOP;
+    IF found_corruption THEN
+        RAISE 'Found Corruption';
+    END IF;
+END;
+$$ LANGUAGE plpgsql;
+'''.format(current_xlog_lsn_query=current_xlog_lsn_query)
 
         # Find blocks from future
         replica.safe_psql(
