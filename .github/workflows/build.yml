@@ -1,9 +1,9 @@
 name: Build Probackup
 
 on:
-  push:
-    branches:
-      - "**"
+  #push:
+  #  branches:
+  #    - "**"
   # Runs triggered by pull requests are disabled to prevent executing potentially unsafe code from public pull requests
   # pull_request:
   #   branches:
