@@ -766,7 +766,13 @@ release_shared_lock_file(const char *backup_dir)
 	if (pids.len == 0)
 	{
 		ft_arr_pid_free(&pids);
-		if (remove(lock_file) != 0)
+		/*
+		 * TODO: we should not call 'release_shared_lock_file' if we don't hold it.
+		 * Therefore we should not ignore ENOENT.
+		 * We should find why ENOENT happens, but until then lets ignore it as
+		 * it were ignored for a while.
+		 */
+		if (remove(lock_file) != 0 && errno != ENOENT)
 			elog(ERROR, "Cannot remove shared lock file \"%s\": %s", lock_file, strerror(errno));
 		return;
 	}
