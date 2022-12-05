@@ -605,14 +605,6 @@ readInstanceConfigFile(InstanceState *instanceState)
 
 
 	init_config(instance, instanceState->instance_name);
-
-	if (fio_access(FIO_BACKUP_HOST, instanceState->instance_config_path, F_OK) != 0)
-	{
-		elog(WARNING, "Control file \"%s\" doesn't exist", instanceState->instance_config_path);
-		pfree(instance);
-		return NULL;
-	}
-
 	parsed_options = config_read_opt(instanceState->backup_location,
 									 instanceState->instance_config_path,
 									 instance_options, WARNING, true, true);

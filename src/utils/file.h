@@ -186,7 +186,6 @@ extern int     fio_rename(fio_location location, const char* old_path, const cha
 extern int     fio_symlink(fio_location location, const char* target, const char* link_path, bool overwrite);
 extern int     fio_remove(fio_location location, const char* path, bool missing_ok);
 extern int     fio_chmod(fio_location location, const char* path, int mode);
-extern int     fio_access(fio_location location, const char* path, int mode);
 extern ssize_t fio_readlink(fio_location location, const char *path, char *value, size_t valsiz);
 extern pid_t   fio_check_postmaster(fio_location location, const char *pgdata);
 
@@ -285,7 +284,9 @@ fobj_iface(pioPagesIterator);
 										 (err_i *, err)
 #define mth__pioRemove 		err_i, (path_t, path), (bool, missing_ok)
 #define mth__pioRename 		err_i, (path_t, old_path), (path_t, new_path)
-#define mth__pioExists 		bool, (path_t, path), (err_i *, err)
+#define mth__pioExists 		bool, (path_t, path), (pio_file_kind_e, expected_kind),	\
+									(err_i *, err)
+#define mth__pioExists__optional() (expected_kind, PIO_KIND_REGULAR)
 #define mth__pioGetCRC32 	pg_crc32, (path_t, path), (bool, compressed), \
 									  (err_i *, err)
 /* Compare, that filename1 and filename2 is the same file */

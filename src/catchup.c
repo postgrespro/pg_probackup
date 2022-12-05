@@ -144,9 +144,10 @@ catchup_preflight_checks(PGNodeInfo *source_node_info, PGconn *source_conn,
 	if (current.backup_mode != BACKUP_MODE_FULL)
 	{
 		char	backup_label_filename[MAXPGPATH];
+		err_i err = $noerr();
 
 		join_path_components(backup_label_filename, dest_pgdata, PG_BACKUP_LABEL_FILE);
-		if (fio_access(FIO_LOCAL_HOST, backup_label_filename, F_OK) == 0)
+		if($i(pioExists, current.backup_location, .path = backup_label_filename, .err = &err))
 			elog(ERROR, "Destination directory contains \"" PG_BACKUP_LABEL_FILE "\" file");
 	}
 

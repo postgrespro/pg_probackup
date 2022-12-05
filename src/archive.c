@@ -504,7 +504,7 @@ push_file_internal(const char *wal_file_name, const char *pg_xlog_dir,
     part_opened:
     elog(LOG, "Temp WAL file successfully created: \"%s\"", to_fullpath_part);
 
-    if ($i(pioExists, backup_drive, to_fullpath, &err))
+    if ($i(pioExists, backup_drive, .path = to_fullpath, .err = &err))
     {
         pg_crc32 crc32_src;
         pg_crc32 crc32_dst;

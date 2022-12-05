@@ -231,9 +231,13 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 	if (current.backup_mode == BACKUP_MODE_DIFF_PAGE || !current.stream)
 	{
 		/* Check that archive_dir can be reached */
-		if (fio_access(FIO_BACKUP_HOST, instanceState->instance_wal_subdir_path, F_OK) != 0)
+		err_i err = $noerr();
+
+		if (!$i(pioExists, current.backup_location, .path = instanceState->instance_wal_subdir_path,
+						.expected_kind = PIO_KIND_DIRECTORY, .err = &err))
 			elog(ERROR, "WAL archive directory is not accessible \"%s\": %s",
-				instanceState->instance_wal_subdir_path, strerror(errno));
+				instanceState->instance_wal_subdir_path,
+					$haserr(err) ? $errmsg(err) : "no such file or directory");
 
 		/*
 		 * Do not wait start_lsn for stream backup.

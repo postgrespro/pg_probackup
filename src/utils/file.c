@@ -1068,38 +1068,6 @@ fio_readlink(fio_location location, const char *path, char *value, size_t valsiz
 	}
 }
 
-/* Check presence of the file */
-int
-fio_access(fio_location location, const char* path, int mode)
-{
-	if (fio_is_remote(location))
-	{
-		fio_header hdr = {
-			.cop = FIO_ACCESS,
-			.handle = -1,
-			.size = strlen(path) + 1,
-			.arg = mode,
-		};
-
-		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
-		IO_CHECK(fio_write_all(fio_stdout, path, hdr.size), hdr.size);
-
-		IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
-		Assert(hdr.cop == FIO_ACCESS);
-
-		if (hdr.arg != 0)
-		{
-			errno = hdr.arg;
-			return -1;
-		}
-		return 0;
-	}
-	else
-	{
-		return access(path, mode);
-	}
-}
-
 /* Create symbolic link */
 int
 fio_symlink(fio_location location, const char* target, const char* link_path, bool overwrite)
@@ -3485,7 +3453,7 @@ pioFile_fobjDispose(VSelf)
 }
 
 static bool
-common_pioExists(fobj_t self, path_t path, err_i *err)
+common_pioExists(fobj_t self, path_t path, pio_file_kind_e expected_kind, err_i *err)
 {
     pio_stat_t buf;
     fobj_reset_err(err);
@@ -3497,8 +3465,8 @@ common_pioExists(fobj_t self, path_t path, err_i *err)
         *err = $noerr();
         return false;
     }
-    if ($noerr(*err) && buf.pst_kind != PIO_KIND_REGULAR)
-        *err = $err(SysErr, "File {path:q} is not regular", path(path));
+    if ($noerr(*err) && buf.pst_kind != expected_kind)
+        *err = $err(SysErr, "File {path:q} is not of an expected kind", path(path));
     if ($haserr(*err)) {
         *err = $syserr(getErrno(*err), "Could not check file existance: {cause:$M}",
 					   cause((*err).self));

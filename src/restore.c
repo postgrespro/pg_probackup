@@ -2162,8 +2162,11 @@ check_incremental_compatibility(const char *pgdata, uint64 system_identifier,
 	 */
 	if (incremental_mode == INCR_LSN)
 	{
+		err_i err = $noerr();
+		pioDrive_i drive = pioDriveForLocation(FIO_DB_HOST);
+
 		join_path_components(backup_label, pgdata, "backup_label");
-		if (fio_access(FIO_DB_HOST, backup_label, F_OK) == 0)
+		if($i(pioExists, drive, .path = backup_label, .err = &err))
 		{
 			elog(WARNING, "Destination directory contains \"backup_control\" file. "
 				"This does NOT mean that you should delete this file and retry, only that "

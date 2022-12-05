@@ -1362,7 +1362,8 @@ fileExists(const char *path, fio_location location)
 	err_i	err;
 	bool	exists;
 
-	exists = $i(pioExists, pioDriveForLocation(location), path, &err);
+	exists = $i(pioExists, pioDriveForLocation(location), .path = path,
+					.err = &err);
 
 	return exists;
 }
