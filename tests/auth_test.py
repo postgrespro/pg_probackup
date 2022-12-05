@@ -140,7 +140,6 @@ class SimpleAuthTest(ProbackupTest, unittest.TestCase):
         else:
             node.safe_psql(
                 "postgres",
-                "GRANT EXECUTE ON FUNCTION pg_backup_stop() TO backup; "
                 "GRANT EXECUTE ON FUNCTION pg_backup_stop(boolean) TO backup;")
 
         self.backup_node(
