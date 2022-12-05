@@ -2790,16 +2790,10 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 
         datadir = os.path.join(node.data_dir, '123')
 
-        try:
-            self.backup_node(
-                backup_dir, 'node', node, data_dir='{0}'.format(datadir))
-        except:
-            pass
+        pb1 = self.backup_node(backup_dir, 'node', node, data_dir='{0}'.format(datadir))
+        pb2 = self.backup_node(backup_dir, 'node', node, options=['--stream'])
 
-        out = self.backup_node(backup_dir, 'node', node, options=['--stream'], return_id=False)
-
-        # it is a bit racy
-        self.assertIn("WARNING: Cannot create directory", out)
+        self.assertNotEqual(pb1, pb2)
 
     def test_incr_backup_filenode_map(self):
         """
