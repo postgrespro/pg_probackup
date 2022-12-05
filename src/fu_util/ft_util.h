@@ -38,6 +38,7 @@ typedef SSIZE_T ssize_t;
 #define ft_likely(x)    __builtin_expect(!!(x), 1)
 #define ft_unlikely(x)  __builtin_expect(!!(x), 0)
 #define ft_always_inline __attribute__((always_inline))
+#define ft_cleanup(func) __attribute__((cleanup(func)))
 #else
 #define ft_gcc_const
 #define ft_gcc_pure

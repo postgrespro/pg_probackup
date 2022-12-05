@@ -1013,23 +1013,26 @@ err_proc:
 parray *
 get_backup_filelist(pgBackup *backup, bool strict)
 {
+	FOBJ_FUNC_ARP();
 	parray		*files = NULL;
 	char		backup_filelist_path[MAXPGPATH];
-	FILE    *fp;
-	char     buf[BLCKSZ];
-	char     stdio_buf[STDIO_BUFSIZE];
 	pg_crc32 content_crc = 0;
-	pb_control_line	pb_line;
+	pb_control_line	ft_cleanup(deinit_pb_control_line)
+					pb_line = {0};
+	pio_line_reader ft_cleanup(deinit_pio_line_reader)
+					line_reader = {0};
+	ft_bytes_t	line;
+	err_i    err = $noerr();
+	pioFile_i fl;
 
 	join_path_components(backup_filelist_path, backup->root_dir, DATABASE_FILE_LIST);
 
-	fp = fio_open_stream(FIO_BACKUP_HOST, backup_filelist_path);
-	if (fp == NULL)
-		elog(ERROR, "cannot open \"%s\": %s", backup_filelist_path, strerror(errno));
+	fl = $i(pioOpen, backup->backup_location, .path = backup_filelist_path,
+			.flags = O_RDONLY, .err = &err);
+	if ($haserr(err))
+		ft_logerr(FT_FATAL, $errmsg(err), "Opening backup filelist");
 
-	/* enable stdio buffering for local file */
-	if (!fio_is_remote(FIO_BACKUP_HOST))
-		setvbuf(fp, stdio_buf, _IOFBF, STDIO_BUFSIZE);
+	init_pio_line_reader(&line_reader, $reduce(pioRead, fl), IN_BUF_SIZE);
 
 	files = parray_new();
 
@@ -1037,7 +1040,7 @@ get_backup_filelist(pgBackup *backup, bool strict)
 
 	init_pb_control_line(&pb_line);
 
-	while (fgets(buf, lengthof(buf), fp))
+	for(;;)
 	{
 		ft_str_t 	path;
 		ft_str_t 	linked;
@@ -1059,9 +1062,15 @@ get_backup_filelist(pgBackup *backup, bool strict)
 					hdr_size;
 		pgFile	   *file;
 
-		COMP_CRC32C(content_crc, buf, strlen(buf));
+		line = pio_line_reader_getline(&line_reader, &err);
+		if ($haserr(err))
+			ft_logerr(FT_FATAL, $errmsg(err), "Reading backup filelist");
+		if (line.len == 0)
+			break;
 
-		parse_pb_control_line(&pb_line, ft_str2bytes(ft_cstr(buf)));
+		COMP_CRC32C(content_crc, line.ptr, line.len);
+
+		parse_pb_control_line(&pb_line, line);
 
 		path         = pb_control_line_get_str(&pb_line,   "path");
 		write_size   = pb_control_line_get_int64(&pb_line, "size");
@@ -1075,8 +1084,8 @@ get_backup_filelist(pgBackup *backup, bool strict)
 		pb_control_line_try_int64(&pb_line, "external_dir_num", &external_dir_num);
 
 		if (path.len > MAXPGPATH)
-			elog(ERROR, "File path in "DATABASE_FILE_LIST" is too long: '%s'",
-				 buf);
+			elog(ERROR, "File path in "DATABASE_FILE_LIST" is too long: '%.*s'",
+				 (int)line.len, line.ptr);
 
 		file = pgFileInit(path.ptr);
 		file->write_size = (int64) write_size;
@@ -1148,14 +1157,9 @@ get_backup_filelist(pgBackup *backup, bool strict)
 		parray_append(files, file);
 	}
 
-	deinit_pb_control_line(&pb_line);
-
 	FIN_CRC32C(content_crc);
 
-	if (ferror(fp))
-		elog(ERROR, "Failed to read from file: \"%s\"", backup_filelist_path);
-
-	fio_close_stream(fp);
+	err = $i(pioClose, fl);
 
 	if (backup->content_crc != 0 &&
 		backup->content_crc != content_crc)
