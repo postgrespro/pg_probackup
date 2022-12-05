@@ -151,7 +151,7 @@ do_add_instance(InstanceState *instanceState, InstanceConfig *instance)
 				   SOURCE_DEFAULT);
 
 	/* pgdata was set through command line */
-	do_set_config(instanceState, true);
+	do_set_config(instanceState);
 
 	elog(INFO, "Instance '%s' successfully inited", instanceState->instance_name);
 	return 0;

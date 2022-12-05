@@ -434,18 +434,10 @@ do_validate_all(CatalogState *catalogState, InstanceState *instanceState)
 			/*
 			 * Initialize instance configuration.
 			 */
-			instanceState = pgut_new(InstanceState);
-			strncpy(instanceState->instance_name, dent->d_name, MAXPGPATH);
+			instanceState = makeInstanceState(catalogState, dent->d_name);
 
-			join_path_components(instanceState->instance_backup_subdir_path,
-								catalogState->backup_subdir_path, instanceState->instance_name);
-			join_path_components(instanceState->instance_wal_subdir_path,
-								catalogState->wal_subdir_path, instanceState->instance_name);
-			join_path_components(instanceState->instance_config_path,
-								 instanceState->instance_backup_subdir_path, BACKUP_CATALOG_CONF_FILE);
-
-			if (config_read_opt(instanceState->instance_config_path, instance_options, ERROR, false,
-								true) == 0)
+			if (config_read_opt(catalogState->backup_location, instanceState->instance_config_path,
+								instance_options, ERROR, false, true) == 0)
 			{
 				elog(WARNING, "Configuration file \"%s\" is empty", instanceState->instance_config_path);
 				corrupted_backup_found = true;
@@ -453,6 +445,7 @@ do_validate_all(CatalogState *catalogState, InstanceState *instanceState)
 			}
 
 			do_validate_instance(instanceState);
+			pgut_free(instanceState);
 		}
 	}
 	else

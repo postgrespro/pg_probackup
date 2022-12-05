@@ -21,7 +21,7 @@
 static pgBackup* get_closest_backup(timelineInfo *tlinfo);
 static pgBackup* get_oldest_backup(timelineInfo *tlinfo);
 static const char *backupModes[] = {"", "PAGE", "PTRACK", "DELTA", "FULL"};
-static pgBackup *readBackupControlFile(const char *path);
+static pgBackup *readBackupControlFile(pioDrive_i drive, const char *path);
 static err_i create_backup_dir(pgBackup *backup, const char *backup_instance_path);
 
 static bool backup_lock_exit_hook_registered = false;
@@ -108,13 +108,13 @@ unlink_lock_atexit(bool unused_fatal, void *unused_userdata)
  * If no backup matches, return NULL.
  */
 pgBackup *
-read_backup(const char *root_dir)
+read_backup(pioDrive_i drive, const char *root_dir)
 {
 	char		conf_path[MAXPGPATH];
 
 	join_path_components(conf_path, root_dir, BACKUP_CONTROL_FILE);
 
-	return readBackupControlFile(conf_path);
+	return readBackupControlFile(drive, conf_path);
 }
 
 /*
@@ -129,7 +129,7 @@ write_backup_status(pgBackup *backup, BackupStatus status,
 {
 	pgBackup   *tmp;
 
-	tmp = read_backup(backup->root_dir);
+	tmp = read_backup(backup->backup_location, backup->root_dir);
 	if (!tmp)
 	{
 		/*
@@ -864,15 +864,7 @@ catalog_get_instance_list(CatalogState *catalogState)
 		if (!S_ISDIR(st.st_mode))
 			continue;
 
-		instanceState = pgut_new(InstanceState);
-
-		strncpy(instanceState->instance_name, dent->d_name, MAXPGPATH);
-		join_path_components(instanceState->instance_backup_subdir_path,
-							catalogState->backup_subdir_path, instanceState->instance_name);
-		join_path_components(instanceState->instance_wal_subdir_path,
-							catalogState->wal_subdir_path, instanceState->instance_name);
-		join_path_components(instanceState->instance_config_path,
-							 instanceState->instance_backup_subdir_path, BACKUP_CATALOG_CONF_FILE);
+		instanceState = makeInstanceState(catalogState, dent->d_name);
 
 		instanceState->config = readInstanceConfigFile(instanceState);
 		parray_append(instances, instanceState);
@@ -934,12 +926,12 @@ catalog_get_backup_list(InstanceState *instanceState, time_t requested_backup_id
 
 		/* read backup information from BACKUP_CONTROL_FILE */
 		join_path_components(backup_conf_path, data_path, BACKUP_CONTROL_FILE);
-		backup = readBackupControlFile(backup_conf_path);
+		backup = readBackupControlFile(instanceState->backup_location, backup_conf_path);
 
 		if (!backup)
 		{
 			backup = pgut_new0(pgBackup);
-			pgBackupInit(backup);
+			pgBackupInit(backup, instanceState->backup_location);
 			backup->start_time = base36dec(data_ent->d_name);
 			/* XXX BACKUP_ID change it when backup_id wouldn't match start_time */
 			Assert(backup->backup_id == 0 || backup->backup_id == backup->start_time);
@@ -2621,7 +2613,7 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
  *  - Do not care section.
  */
 static pgBackup *
-readBackupControlFile(const char *path)
+readBackupControlFile(pioDrive_i drive, const char *path)
 {
 	pgBackup   *backup = pgut_new0(pgBackup);
 	char	   *backup_mode = NULL;
@@ -2670,9 +2662,9 @@ readBackupControlFile(const char *path)
 		{0}
 	};
 
-	pgBackupInit(backup);
+	pgBackupInit(backup, drive);
 
-	parsed_options = config_read_opt(path, options, WARNING, true, false);
+	parsed_options = config_read_opt(drive, path, options, WARNING, true, false);
 
 	if (parsed_options == 0)
 	{
@@ -2892,7 +2884,7 @@ pgNodeInit(PGNodeInfo *node)
  * Fill pgBackup struct with default values.
  */
 void
-pgBackupInit(pgBackup *backup)
+pgBackupInit(pgBackup *backup, pioDrive_i drive)
 {
 	backup->backup_id = INVALID_BACKUP_ID;
 	backup->backup_mode = BACKUP_MODE_INVALID;
@@ -2934,8 +2926,7 @@ pgBackupInit(pgBackup *backup)
 	backup->note = NULL;
 	backup->content_crc = 0;
 
-	backup->backup_location = pioDriveForLocation(FIO_BACKUP_HOST);
-	backup->database_location = pioDriveForLocation(FIO_DB_HOST);
+	backup->backup_location = drive;
 }
 
 /* free pgBackup object */
@@ -2946,7 +2937,6 @@ pgBackupFree(void *backup)
 
 	/* Both point to global static vars */
 	b->backup_location.self = NULL;
-	b->database_location.self = NULL;
 
 	pg_free(b->primary_conninfo);
 	pg_free(b->external_dir_str);
@@ -3145,4 +3135,25 @@ append_children(parray *backup_list, pgBackup *target_backup, parray *append_lis
 				parray_append(append_list, backup);
 		}
 	}
+}
+
+InstanceState* makeInstanceState(CatalogState* catalogState, const char* name)
+{
+	InstanceState* instanceState;
+
+	instanceState = pgut_new0(InstanceState);
+
+	instanceState->catalog_state = catalogState;
+
+	strncpy(instanceState->instance_name, name, MAXPGPATH);
+	join_path_components(instanceState->instance_backup_subdir_path,
+						 catalogState->backup_subdir_path, instanceState->instance_name);
+	join_path_components(instanceState->instance_wal_subdir_path,
+						 catalogState->wal_subdir_path, instanceState->instance_name);
+	join_path_components(instanceState->instance_config_path,
+						 instanceState->instance_backup_subdir_path, BACKUP_CATALOG_CONF_FILE);
+
+	instanceState->backup_location = catalogState->backup_location;
+
+	return instanceState;
 }

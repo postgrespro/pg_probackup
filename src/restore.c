@@ -62,7 +62,8 @@ static void create_recovery_conf(InstanceState *instanceState, time_t backup_id,
 static void *restore_files(void *arg);
 static void set_orphan_status(parray *backups, pgBackup *parent_backup);
 
-static void restore_chain(pgBackup *dest_backup, parray *parent_chain,
+static void restore_chain(InstanceState *instanceState,
+						  pgBackup *dest_backup, parray *parent_chain,
 						  parray *dbOid_exclude_list, pgRestoreParams *params,
 						  const char *pgdata_path, bool no_sync, bool cleanup_pgdata,
 						  bool backup_has_tblspc);
@@ -665,7 +666,7 @@ do_restore_or_validate(InstanceState *instanceState, time_t target_backup_id, pg
 					 backup_id_of(dest_backup),
 					 dest_backup->server_version);
 
-		restore_chain(dest_backup, parent_chain, dbOid_exclude_list, params,
+		restore_chain(instanceState, dest_backup, parent_chain, dbOid_exclude_list, params,
 					  instance_config.pgdata, no_sync, cleanup_pgdata, backup_has_tblspc);
 
 		//TODO rename and update comment
@@ -692,7 +693,8 @@ do_restore_or_validate(InstanceState *instanceState, time_t target_backup_id, pg
  * Flag 'cleanup_pgdata' demands the removing of already existing content in PGDATA.
  */
 void
-restore_chain(pgBackup *dest_backup, parray *parent_chain,
+restore_chain(InstanceState *instanceState,
+			  pgBackup *dest_backup, parray *parent_chain,
 			  parray *dbOid_exclude_list, pgRestoreParams *params,
 			  const char *pgdata_path, bool no_sync, bool cleanup_pgdata,
 			  bool backup_has_tblspc)
@@ -815,7 +817,7 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 		{
 			char	*dirpath = parray_get(external_dirs, i);
 
-			err = $i(pioMakeDir, dest_backup->database_location,
+			err = $i(pioMakeDir, instanceState->database_location,
 					 .path = dirpath, .mode = DIR_PERMISSION, .strict = false);
 			if ($haserr(err))
 			{
@@ -848,7 +850,7 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 			join_path_components(dirpath, external_path, file->rel_path);
 
 			elog(LOG, "Create external directory \"%s\"", dirpath);
-			err = $i(pioMakeDir, dest_backup->database_location, .path = dirpath,
+			err = $i(pioMakeDir, instanceState->database_location, .path = dirpath,
 					 .mode = file->mode, .strict = false);
 			if ($haserr(err))
 			{
@@ -1554,7 +1556,7 @@ update_recovery_options(InstanceState *instanceState, pgBackup *backup,
 
 	join_path_components(postgres_auto_path, instance_config.pgdata, "postgresql.auto.conf");
 
-	old_content = $i(pioReadFile, backup->database_location,
+	old_content = $i(pioReadFile, instanceState->database_location,
 					 .path = postgres_auto_path, .err = &err, .binary = false);
 
 	/* file not found is not an error case */
@@ -1613,7 +1615,7 @@ update_recovery_options(InstanceState *instanceState, pgBackup *backup,
 			elog(LOG, "creating recovery.signal file");
 			join_path_components(path, instance_config.pgdata, "recovery.signal");
 
-			err = $i(pioWriteFile, backup->database_location, .path = path,
+			err = $i(pioWriteFile, instanceState->database_location, .path = path,
 					 .content = zero);
 
 			if ($haserr(err))
@@ -1625,7 +1627,7 @@ update_recovery_options(InstanceState *instanceState, pgBackup *backup,
 			elog(LOG, "creating standby.signal file");
 			join_path_components(path, instance_config.pgdata, "standby.signal");
 
-			err = $i(pioWriteFile, backup->database_location, .path = path,
+			err = $i(pioWriteFile, instanceState->database_location, .path = path,
 					 .content = zero);
 
 			if ($haserr(err))
@@ -1634,7 +1636,7 @@ update_recovery_options(InstanceState *instanceState, pgBackup *backup,
 	}
 
 	/* Write data to postgresql.auto.conf.tmp */
-	err = $i(pioWriteFile, backup->database_location,
+	err = $i(pioWriteFile, instanceState->database_location,
 			 .path = postgres_auto_path,
 			 .content = ft_str2bytes(ft_strbuf_ref(&content)));
 	ft_strbuf_free(&content);

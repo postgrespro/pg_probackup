@@ -532,36 +532,21 @@ config_get_opt(int argc, char **argv, ConfigOption cmd_options[],
  * Return number of parsed options.
  */
 int
-config_read_opt(const char *path, ConfigOption options[], int elevel,
-				bool strict, bool missing_ok)
+config_parse_opt(ft_bytes_t content, const char *path,
+				 ConfigOption options[], int elevel, bool strict)
 {
-	pioDrive_i	local_drive = pioDriveForLocation(FIO_BACKUP_HOST);
 	ft_strbuf_t	key = ft_strbuf_zero();
 	ft_strbuf_t	value = ft_strbuf_zero();
 	int		parsed_options = 0;
 	int 	lno = 0;
-	err_i		err = $noerr();
-	ft_bytes_t	config_file, to_free;
 
 	if (!options)
 		return parsed_options;
 
-	config_file = $i(pioReadFile, local_drive, .path = path, .binary = false,
-			 .err = &err);
-	if ($haserr(err))
-	{
-		if (missing_ok && getErrno(err) == ENOENT)
-			return 0;
-
-		ft_logerr(FT_FATAL, $errmsg(err), "could not read file");
-		return 0;
-	}
-	to_free = config_file;
-
-	while (config_file.len > 0)
+	while (content.len > 0)
 	{
 		size_t		i;
-		ft_bytes_t	line = ft_bytes_shift_line(&config_file);
+		ft_bytes_t	line = ft_bytes_shift_line(&content);
 		enum pair_result pr;
 
 		lno++;
@@ -599,7 +584,6 @@ config_read_opt(const char *path, ConfigOption options[], int elevel,
 		ft_strbuf_reset_for_reuse(&value);
 	}
 
-	ft_bytes_free(&to_free);
 	ft_strbuf_free(&key);
 	ft_strbuf_free(&value);
 

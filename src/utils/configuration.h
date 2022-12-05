@@ -105,8 +105,8 @@ extern ProbackupSubcmd parse_subcmd(const char * const subcmd_str);
 extern const char *get_subcmd_name(ProbackupSubcmd const subcmd);
 extern int config_get_opt(int argc, char **argv, ConfigOption cmd_options[],
 						  ConfigOption options[]);
-extern int config_read_opt(const char *path, ConfigOption options[], int elevel,
-						   bool strict, bool missing_ok);
+extern int config_parse_opt(ft_bytes_t content, const char *path,
+							ConfigOption options[], int elevel, bool strict);
 extern void config_get_opt_env(ConfigOption options[]);
 extern void config_set_opt(ConfigOption options[], void *var,
 						   OptionSource source);

@@ -19,7 +19,9 @@ typedef struct CatalogState
 	char		backup_subdir_path[MAXPGPATH];
 	/* $BACKUP_PATH/wal */
 	char		wal_subdir_path[MAXPGPATH]; // previously global var arclog_path
-} CatalogState; 
+
+	pioDrive_i	backup_location;
+} CatalogState;
 
 /* ====== CatalogState (END) ======= */
 

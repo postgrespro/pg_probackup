@@ -284,31 +284,53 @@ do_show_config(void)
 }
 
 /*
+ * Get configuration from configuration file.
+ * Return number of parsed options.
+ */
+int
+config_read_opt(pioDrive_i drive, const char *path, ConfigOption options[], int elevel,
+				bool strict, bool missing_ok)
+{
+	int parsed_options = 0;
+	err_i err = $noerr();
+	ft_bytes_t config_file = {0};
+
+	if (!options)
+		return parsed_options;
+
+	config_file = $i(pioReadFile, drive, .path = path, .binary = false,
+					 .err = &err);
+	if ($haserr(err))
+	{
+		if (missing_ok && getErrno(err) == ENOENT)
+			return 0;
+
+		ft_logerr(FT_FATAL, $errmsg(err), "could not read file");
+		return 0;
+	}
+
+	parsed_options = config_parse_opt(config_file, path, options, elevel, strict);
+
+	ft_bytes_free(&config_file);
+
+	return parsed_options;
+}
+
+/*
  * Save configure options into BACKUP_CATALOG_CONF_FILE. Do not save default
  * values into the file.
  */
 void
-do_set_config(InstanceState *instanceState, bool missing_ok)
+do_set_config(InstanceState *instanceState)
 {
-	char		path_temp[MAXPGPATH];
-	FILE	   *fp;
+	ft_strbuf_t	buf = ft_strbuf_zero();
+	err_i 		err = $noerr();
 	int			i;
-
-	snprintf(path_temp, sizeof(path_temp), "%s.tmp", instanceState->instance_config_path);
-
-	if (!missing_ok && !fileExists(instanceState->instance_config_path, FIO_LOCAL_HOST))
-		elog(ERROR, "Configuration file \"%s\" doesn't exist", instanceState->instance_config_path);
-
-	fp = fopen(path_temp, "wt");
-	if (fp == NULL)
-		elog(ERROR, "Cannot create configuration file \"%s\": %s",
-			 BACKUP_CATALOG_CONF_FILE, strerror(errno));
 
 	current_group = NULL;
 
 	for (i = 0; instance_options[i].type; i++)
 	{
-		int rc = 0;
 		ConfigOption *opt = &instance_options[i];
 		char	   *value;
 
@@ -325,37 +347,24 @@ do_set_config(InstanceState *instanceState, bool missing_ok)
 		if (current_group == NULL || strcmp(opt->group, current_group) != 0)
 		{
 			current_group = opt->group;
-			fprintf(fp, "# %s\n", current_group);
+			ft_strbuf_catf(&buf, "# %s\n", current_group);
 		}
 
 		if (strchr(value, ' '))
-			rc = fprintf(fp, "%s = '%s'\n", opt->lname, value);
+			ft_strbuf_catf(&buf, "%s = '%s'\n", opt->lname, value);
 		else
-			rc = fprintf(fp, "%s = %s\n", opt->lname, value);
-
-		if (rc < 0)
-			elog(ERROR, "Cannot write to configuration file: \"%s\"", path_temp);
+			ft_strbuf_catf(&buf, "%s = %s\n", opt->lname, value);
 
 		pfree(value);
 	}
 
-	if (ferror(fp) || fflush(fp))
-		elog(ERROR, "Cannot write to configuration file: \"%s\"", path_temp);
+	err = $i(pioWriteFile, instanceState->backup_location,
+			 .path = instanceState->instance_config_path,
+			 .content = ft_bytes(buf.ptr, buf.len),
+			 .binary = false);
 
-	if (fclose(fp))
-		elog(ERROR, "Cannot close configuration file: \"%s\"", path_temp);
-
-	if (fio_sync(FIO_LOCAL_HOST, path_temp) != 0)
-		elog(ERROR, "Failed to sync temp configuration file \"%s\": %s",
-			 path_temp, strerror(errno));
-
-	if (rename(path_temp, instanceState->instance_config_path) < 0)
-	{
-		int			errno_temp = errno;
-		unlink(path_temp);
-		elog(ERROR, "Cannot rename configuration file \"%s\" to \"%s\": %s",
-			 path_temp, instanceState->instance_config_path, strerror(errno_temp));
-	}
+	if ($haserr(err))
+		ft_logerr(FT_FATAL, $errmsg(err), "Writting configuration file");
 }
 
 void
@@ -604,7 +613,8 @@ readInstanceConfigFile(InstanceState *instanceState)
 		return NULL;
 	}
 
-	parsed_options = config_read_opt(instanceState->instance_config_path,
+	parsed_options = config_read_opt(instanceState->backup_location,
+									 instanceState->instance_config_path,
 									 instance_options, WARNING, true, true);
 
 	if (parsed_options == 0)

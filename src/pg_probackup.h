@@ -497,7 +497,6 @@ struct pgBackup
 	/* map used for access to page headers */
 	HeaderMap       hdr_map;
 
-	pioDrive_i		database_location; /* Where to backup from/restore to */
 	pioDrive_i		backup_location; /* Where to save to/read from */
 
 	char 			backup_id_encoded[base36bufsize];
@@ -771,6 +770,9 @@ typedef struct InstanceState
 
 	//TODO split into some more meaningdul parts
     InstanceConfig *config;
+
+	pioDrive_i	database_location;
+	pioDrive_i	backup_location;
 } InstanceState;
 
 /* ===== instanceState (END) ===== */
@@ -859,8 +861,10 @@ extern void do_archive_get(InstanceState *instanceState, InstanceConfig *instanc
 						   char *wal_file_name, int batch_size, bool validate_wal);
 
 /* in configure.c */
+extern int config_read_opt(pioDrive_i drive, const char *path, ConfigOption options[], int elevel,
+						   bool strict, bool missing_ok);
 extern void do_show_config(void);
-extern void do_set_config(InstanceState *instanceState, bool missing_ok);
+extern void do_set_config(InstanceState *instanceState);
 extern void init_config(InstanceConfig *config, const char *instance_name);
 extern InstanceConfig *readInstanceConfigFile(InstanceState *instanceState);
 
@@ -911,7 +915,7 @@ extern parray* get_history_streaming(ConnectionOptions *conn_opt, TimeLineID tli
 #define PAGE_LSN_FROM_FUTURE (-6)
 
 /* in catalog.c */
-extern pgBackup *read_backup(const char *root_dir);
+extern pgBackup *read_backup(pioDrive_i drive, const char *root_dir);
 extern void write_backup(pgBackup *backup, bool strict);
 extern void write_backup_status(pgBackup *backup, BackupStatus status,
 								bool strict);
@@ -944,10 +948,11 @@ extern ft_str_t pgBackupWriteControl(pgBackup *backup, bool utc);
 extern void write_backup_filelist(pgBackup *backup, parray *files,
 								  const char *root, parray *external_list, bool sync);
 
+extern InstanceState* makeInstanceState(CatalogState* catalogState, const char* name);
 
 extern void pgBackupInitDir(pgBackup *backup, const char *backup_instance_path);
 extern void pgNodeInit(PGNodeInfo *node);
-extern void pgBackupInit(pgBackup *backup);
+extern void pgBackupInit(pgBackup *backup, pioDrive_i drive);
 extern void pgBackupFree(void *backup);
 extern int pgBackupCompareId(const void *f1, const void *f2);
 extern int pgBackupCompareIdDesc(const void *f1, const void *f2);

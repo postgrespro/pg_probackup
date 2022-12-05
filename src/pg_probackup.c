@@ -304,7 +304,7 @@ main(int argc, char *argv[])
 	init_console();
 
 	/* Initialize current backup */
-	pgBackupInit(&current);
+	pgBackupInit(&current, $null(pioDrive));
 
 	/* Initialize current instance configuration */
 	//TODO get git of this global variable craziness
@@ -474,12 +474,13 @@ main(int argc, char *argv[])
 		if (!is_absolute_path(backup_path))
 			elog(ERROR, "-B, --backup-path must be an absolute path");
 
-		catalogState = pgut_new(CatalogState);
+		catalogState = pgut_new0(CatalogState);
 		strncpy(catalogState->catalog_path, backup_path, MAXPGPATH);
 		join_path_components(catalogState->backup_subdir_path,
 							catalogState->catalog_path, BACKUPS_DIR);
 		join_path_components(catalogState->wal_subdir_path,
 							catalogState->catalog_path, WAL_SUBDIR);
+		catalogState->backup_location = pioDriveForLocation(FIO_BACKUP_HOST);
 	}
 
 	/* backup_path is required for all pg_probackup commands except help, version, checkdb and catchup */
@@ -506,17 +507,7 @@ main(int argc, char *argv[])
 	}
 	else
 	{
-		instanceState = pgut_new(InstanceState);
-		instanceState->catalog_state = catalogState;
-
-		strncpy(instanceState->instance_name, instance_name, MAXPGPATH);
-		join_path_components(instanceState->instance_backup_subdir_path,
-							catalogState->backup_subdir_path, instanceState->instance_name);
-		join_path_components(instanceState->instance_wal_subdir_path,
-							catalogState->wal_subdir_path, instanceState->instance_name);
-		join_path_components(instanceState->instance_config_path,
-							 instanceState->instance_backup_subdir_path, BACKUP_CATALOG_CONF_FILE);
-
+		instanceState = makeInstanceState(catalogState, instance_name);
 	}
 	/* ===== instanceState (END) ======*/
 
@@ -537,7 +528,7 @@ main(int argc, char *argv[])
 		{
 			pio_stat_t st;
 
-			st = $i(pioStat, pioDriveForLocation(FIO_BACKUP_HOST),
+			st = $i(pioStat, catalogState->backup_location,
 					.path = instanceState->instance_backup_subdir_path,
 					.follow_symlink = true,
 					.err = &err);
@@ -574,10 +565,8 @@ main(int argc, char *argv[])
 		if (backup_subcmd != ADD_INSTANCE_CMD &&
 			backup_subcmd != ARCHIVE_GET_CMD)
 		{
-			if (backup_subcmd == CHECKDB_CMD)
-				config_read_opt(instanceState->instance_config_path, instance_options, ERROR, true, true);
-			else
-				config_read_opt(instanceState->instance_config_path, instance_options, ERROR, true, false);
+			config_read_opt(instanceState->backup_location, instanceState->instance_config_path,
+							instance_options, ERROR, true, backup_subcmd == CHECKDB_CMD);
 
 			/*
 			 * We can determine our location only after reading the configuration file,
@@ -591,6 +580,16 @@ main(int argc, char *argv[])
 	{
 		config_get_opt_env(instance_options);
 	}
+
+	/* reset, since it could be changed in setMyLocation above */
+	if (catalogState)
+		catalogState->backup_location = pioDriveForLocation(FIO_BACKUP_HOST);
+	if (instanceState)
+	{
+		instanceState->backup_location = pioDriveForLocation(FIO_BACKUP_HOST);
+		instanceState->database_location = pioDriveForLocation(FIO_DB_HOST);
+	}
+	current.backup_location = pioDriveForLocation(FIO_BACKUP_HOST);
 
 	/*
 	 * Disable logging into file for archive-push and archive-get.
@@ -891,7 +890,7 @@ main(int argc, char *argv[])
 			 */
 			char	*stripped_wal_file_path = pgut_str_strip_trailing_filename(wal_file_path, wal_file_name);
 			join_path_components(archive_push_xlog_dir, instance_config.pgdata, XLOGDIR);
-			if ($i(pioFilesAreSame, pioDriveForLocation(FIO_DB_HOST),
+			if ($i(pioFilesAreSame, instanceState->database_location,
 				   .file1 = stripped_wal_file_path, .file2 = archive_push_xlog_dir))
 			{
 				/* 2nd case */
@@ -1043,7 +1042,7 @@ main(int argc, char *argv[])
 			do_show_config();
 			break;
 		case SET_CONFIG_CMD:
-			do_set_config(instanceState, false);
+			do_set_config(instanceState);
 			break;
 		case SET_BACKUP_CMD:
 			if (!backup_id_string)

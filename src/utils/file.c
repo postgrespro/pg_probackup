@@ -109,13 +109,28 @@ setMyLocation(ProbackupSubcmd const subcmd)
 		elog(ERROR, "Currently remote operations on Windows are not supported");
 #endif
 
-	MyLocation = IsSshProtocol()
-		? (subcmd == ARCHIVE_PUSH_CMD || subcmd == ARCHIVE_GET_CMD)
-		   ? FIO_DB_HOST
-		   : (subcmd == BACKUP_CMD || subcmd == RESTORE_CMD || subcmd == ADD_INSTANCE_CMD || subcmd == CATCHUP_CMD)
-		      ? FIO_BACKUP_HOST
-		      : FIO_LOCAL_HOST
-		: FIO_LOCAL_HOST;
+	if (!IsSshProtocol())
+	{
+		MyLocation = FIO_LOCAL_HOST;
+		return;
+	}
+
+	switch (subcmd)
+	{
+	case ARCHIVE_GET_CMD:
+	case ARCHIVE_PUSH_CMD:
+		MyLocation = FIO_DB_HOST;
+		break;
+	case BACKUP_CMD:
+	case RESTORE_CMD:
+	case ADD_INSTANCE_CMD:
+	case CATCHUP_CMD:
+		MyLocation = FIO_BACKUP_HOST;
+		break;
+	default:
+		MyLocation = FIO_LOCAL_HOST;
+		break;
+	}
 }
 
 /* Use specified file descriptors as stdin/stdout for FIO functions */
