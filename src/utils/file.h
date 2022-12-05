@@ -163,9 +163,6 @@ extern int     fio_fseek(FILE* f, off_t offs);
 extern int     fio_ftruncate(FILE* f, off_t size);
 extern int     fio_fclose(FILE* f);
 
-extern FILE*   fio_open_stream(fio_location location, const char* name);
-extern int     fio_close_stream(FILE* f);
-
 /* gzFile-style functions */
 #ifdef HAVE_LIBZ
 extern gzFile  fio_gzopen(fio_location location, const char* path, const char* mode, int level);
@@ -355,4 +352,16 @@ extern err_i    pioCopyWithFilters(pioWriteFlush_i dest, pioRead_i src,
 })
 
 extern size_t	pioReadFull(pioRead_i src, ft_bytes_t bytes, err_i* err);
+
+typedef struct pio_line_reader pio_line_reader;
+struct pio_line_reader {
+	pioRead_i   source;
+	ft_bytes_t  buf;
+	ft_bytes_t  rest;
+};
+
+extern void init_pio_line_reader(pio_line_reader *r, pioRead_i source, size_t max_length);
+extern void deinit_pio_line_reader(pio_line_reader *r);
+extern ft_bytes_t pio_line_reader_getline(pio_line_reader *r, err_i *err);
+
 #endif

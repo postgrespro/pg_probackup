@@ -14,7 +14,6 @@
 #define PRINTF_BUF_SIZE  1024
 
 static __thread unsigned long fio_fdset = 0;
-static __thread void* fio_stdin_buffer;
 static __thread int fio_stdout = 0;
 static __thread int fio_stdin = 0;
 static __thread int fio_stderr = 0;
@@ -379,59 +378,6 @@ pio_limit_mode(mode_t mode)
 	else
 		mode &= 0x1ff;
 	return mode;
-}
-
-/* Open input stream. Remote file is fetched to the in-memory buffer and then accessed through Linux fmemopen */
-FILE*
-fio_open_stream(fio_location location, const char* path)
-{
-	FILE* f;
-	if (fio_is_remote(location))
-	{
-		fio_header hdr;
-		hdr.cop = FIO_LOAD;
-		hdr.size = strlen(path) + 1;
-
-		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
-		IO_CHECK(fio_write_all(fio_stdout, path, hdr.size), hdr.size);
-
-		IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
-		Assert(hdr.cop == FIO_SEND);
-		if (hdr.size > 0)
-		{
-			Assert(fio_stdin_buffer == NULL);
-			fio_stdin_buffer = pgut_malloc(hdr.size);
-			IO_CHECK(fio_read_all(fio_stdin, fio_stdin_buffer, hdr.size), hdr.size);
-#ifdef WIN32
-			f = tmpfile();
-			IO_CHECK(fwrite(fio_stdin_buffer, 1, hdr.size, f), hdr.size);
-			SYS_CHECK(fseek(f, 0, SEEK_SET));
-#else
-			f = fmemopen(fio_stdin_buffer, hdr.size, "r");
-#endif
-		}
-		else
-		{
-			f = NULL;
-		}
-	}
-	else
-	{
-		f = fopen(path, "rt");
-	}
-	return f;
-}
-
-/* Close input stream */
-int
-fio_close_stream(FILE* f)
-{
-	if (fio_stdin_buffer)
-	{
-		free(fio_stdin_buffer);
-		fio_stdin_buffer = NULL;
-	}
-	return fclose(f);
 }
 
 /* Open directory */
@@ -6084,6 +6030,68 @@ pioReadFull(pioRead_i src, ft_bytes_t bytes, err_i* err)
 			break;
 	}
 	return bytes.len - b.len;
+}
+
+void
+init_pio_line_reader(pio_line_reader *r, pioRead_i source, size_t max_length) {
+	r->source = $iref(source);
+	r->buf = ft_bytes_alloc(max_length);
+	r->rest = ft_bytes(NULL, 0);
+}
+
+void
+deinit_pio_line_reader(pio_line_reader *r)
+{
+	$idel(&r->source);
+	ft_bytes_free(&r->buf);
+	r->rest = ft_bytes(NULL, 0);
+}
+
+ft_bytes_t
+pio_line_reader_getline(pio_line_reader *r, err_i *err)
+{
+	ft_bytes_t res;
+	ft_bytes_t tmp;
+	size_t     sz;
+	char       last;
+
+	fobj_reset_err(err);
+
+retry:
+	res = ft_bytes_shift_line(&r->rest);
+	/* if we got too long line */
+	if (res.len == r->buf.len)
+	{
+		*err = $err(RT, "Line doesn't fit buffer of size {size}",
+				   size(r->buf.len));
+		/* restore rest to produce error again next time */
+		r->rest = r->buf;
+		return ft_bytes(NULL, 0);
+	}
+
+	last = res.len != 0 ? res.ptr[res.len-1] : 0;
+	/* not first time and definitely reached end of line */
+	if (res.len != 0 && (last == '\n' || last == '\r'))
+		return res;
+
+	if (res.ptr != NULL)
+		memmove(r->buf.ptr, res.ptr, res.len);
+
+	r->rest = ft_bytes(r->buf.ptr, res.len);
+	tmp = r->buf;
+	ft_bytes_consume(&tmp, res.len);
+	sz = $i(pioRead, r->source, tmp, err);
+	r->rest.len += sz;
+	if ($haserr(*err))
+		return ft_bytes(NULL, 0);
+	/* reached end of file */
+	if (sz == 0)
+	{
+		res = r->rest;
+		r->rest = ft_bytes(NULL, 0);
+		return res;
+	}
+	goto retry;
 }
 
 fobj_klass_handle(pioFile);

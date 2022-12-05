@@ -106,6 +106,7 @@ extern const char  *PROGRAM_EMAIL;
 #define ERRMSG_MAX_LEN 2048
 #define CHUNK_SIZE (128 * 1024)
 #define LARGE_CHUNK_SIZE (4 * 1024 * 1024)
+#define IN_BUF_SIZE (512 * 1024)
 #define OUT_BUF_SIZE (512 * 1024)
 
 /* retry attempts */
