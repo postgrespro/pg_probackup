@@ -117,7 +117,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             "create table t_heap as select i as id, md5(i::text) as text, "
             "md5(repeat(i::text,10))::tsvector as tsvector "
             "from generate_series(0,256) i")
-        before = master.safe_psql("postgres", "SELECT * FROM t_heap")
+        before = master.table_checksum("t_heap")
 
         # take full backup and restore it
         self.backup_node(backup_dir, 'master', master, options=['--stream'])
@@ -129,7 +129,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
         # Check data correctness on replica
         replica.slow_start(replica=True)
-        after = replica.safe_psql("postgres", "SELECT * FROM t_heap")
+        after = replica.table_checksum("t_heap")
         self.assertEqual(before, after)
 
         # Change data on master, take FULL backup from replica,
@@ -140,7 +140,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             "insert into t_heap select i as id, md5(i::text) as text, "
             "md5(repeat(i::text,10))::tsvector as tsvector "
             "from generate_series(256,512) i")
-        before = master.safe_psql("postgres", "SELECT * FROM t_heap")
+        before = master.table_checksum("t_heap")
         self.add_instance(backup_dir, 'replica', replica)
 
         backup_id = self.backup_node(
@@ -161,7 +161,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         node.slow_start()
 
         # CHECK DATA CORRECTNESS
-        after = node.safe_psql("postgres", "SELECT * FROM t_heap")
+        after = node.table_checksum("t_heap")
         self.assertEqual(before, after)
 
         # Change data on master, take PTRACK backup from replica,
@@ -173,7 +173,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             "md5(repeat(i::text,10))::tsvector as tsvector "
             "from generate_series(512,768) i")
 
-        before = master.safe_psql("postgres", "SELECT * FROM t_heap")
+        before = master.table_checksum("t_heap")
 
         backup_id = self.backup_node(
             backup_dir, 'replica', replica, backup_type='ptrack',
@@ -192,7 +192,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         node.slow_start()
 
         # CHECK DATA CORRECTNESS
-        after = node.safe_psql("postgres", "SELECT * FROM t_heap")
+        after = node.table_checksum("t_heap")
         self.assertEqual(before, after)
 
     # @unittest.skip("skip")
@@ -228,7 +228,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             "md5(repeat(i::text,10))::tsvector as tsvector "
             "from generate_series(0,2560) i")
 
-        before = master.safe_psql("postgres", "SELECT * FROM t_heap")
+        before = master.table_checksum("t_heap")
 
         backup_id = self.backup_node(
             backup_dir, 'master', master, backup_type='page')
@@ -242,7 +242,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         replica.slow_start(replica=True)
 
         # Check data correctness on replica
-        after = replica.safe_psql("postgres", "SELECT * FROM t_heap")
+        after = replica.table_checksum("t_heap")
         self.assertEqual(before, after)
 
         # Change data on master, take FULL backup from replica,
@@ -254,7 +254,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             "md5(repeat(i::text,10))::tsvector as tsvector "
             "from generate_series(256,25120) i")
 
-        before = master.safe_psql("postgres", "SELECT * FROM t_heap")
+        before = master.table_checksum("t_heap")
 
         self.wait_until_replica_catch_with_master(master, replica)
 
@@ -277,7 +277,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         node.slow_start()
 
         # CHECK DATA CORRECTNESS
-        after = node.safe_psql("postgres", "SELECT * FROM t_heap")
+        after = node.table_checksum("t_heap")
         self.assertEqual(before, after)
         node.cleanup()
 
@@ -353,7 +353,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             "md5(repeat(i::text,10))::tsvector as tsvector "
             "from generate_series(0,8192) i")
 
-        before = master.safe_psql("postgres", "SELECT * FROM t_heap")
+        before = master.table_checksum("t_heap")
 
         backup_id = self.backup_node(
             backup_dir, 'master', master, backup_type='page')

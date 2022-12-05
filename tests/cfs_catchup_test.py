@@ -25,7 +25,7 @@ class CfsCatchupNoEncTest(ProbackupTest, unittest.TestCase):
         src_pg.safe_psql(
             "postgres",
             "CREATE TABLE ultimate_question TABLESPACE tblspace1 AS SELECT 42 AS answer")
-        src_query_result = src_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
+        src_query_result = src_pg.table_checksum("ultimate_question")
         src_pg.safe_psql(
             "postgres",
             "CHECKPOINT")
@@ -76,7 +76,7 @@ class CfsCatchupNoEncTest(ProbackupTest, unittest.TestCase):
         dst_pg.slow_start()
 
         # 2nd check: run verification query
-        dst_query_result = dst_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
+        dst_query_result = dst_pg.table_checksum("ultimate_question")
         self.assertEqual(src_query_result, dst_query_result, 'Different answer from copy')
 
         # and now delta backup
@@ -112,6 +112,6 @@ class CfsCatchupNoEncTest(ProbackupTest, unittest.TestCase):
 
 
         # 3rd check: run verification query
-        src_query_result = src_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
-        dst_query_result = dst_pg.safe_psql("postgres", "SELECT * FROM ultimate_question")
+        src_query_result = src_pg.table_checksum("ultimate_question")
+        dst_query_result = dst_pg.table_checksum("ultimate_question")
         self.assertEqual(src_query_result, dst_query_result, 'Different answer from copy')

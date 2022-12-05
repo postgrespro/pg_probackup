@@ -34,7 +34,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         pgbench.wait()
         pgbench.stdout.close()
-        before = node.execute("postgres", "SELECT * FROM pgbench_branches")
+        before = node.table_checksum("pgbench_branches")
         backup_id = self.backup_node(backup_dir, 'node', node)
 
         node.stop()
@@ -60,7 +60,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         node.slow_start()
 
-        after = node.execute("postgres", "SELECT * FROM pgbench_branches")
+        after = node.table_checksum("pgbench_branches")
         self.assertEqual(before, after)
 
     # @unittest.skip("skip")
@@ -88,7 +88,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         backup_id = self.backup_node(
             backup_dir, 'node', node, backup_type="page")
 
-        before = node.execute("postgres", "SELECT * FROM pgbench_branches")
+        before = node.table_checksum("pgbench_branches")
 
         node.stop()
         node.cleanup()
@@ -102,7 +102,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         node.slow_start()
 
-        after = node.execute("postgres", "SELECT * FROM pgbench_branches")
+        after = node.table_checksum("pgbench_branches")
         self.assertEqual(before, after)
 
     # @unittest.skip("skip")
@@ -120,7 +120,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         node.pgbench_init(scale=2)
 
-        before = node.execute("postgres", "SELECT * FROM pgbench_branches")
+        before = node.table_checksum("pgbench_branches")
 
         backup_id = self.backup_node(backup_dir, 'node', node)
 
@@ -164,7 +164,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(int(recovery_target_timeline), target_tli)
 
         node.slow_start()
-        after = node.execute("postgres", "SELECT * FROM pgbench_branches")
+        after = node.table_checksum("pgbench_branches")
         self.assertEqual(before, after)
 
     # @unittest.skip("skip")
@@ -182,7 +182,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         node.slow_start()
 
         node.pgbench_init(scale=2)
-        before = node.execute("postgres", "SELECT * FROM pgbench_branches")
+        before = node.table_checksum("pgbench_branches")
 
         backup_id = self.backup_node(backup_dir, 'node', node)
 
@@ -210,7 +210,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
                 repr(self.output), self.cmd))
 
         node.slow_start()
-        after = node.execute("postgres", "SELECT * FROM pgbench_branches")
+        after = node.table_checksum("pgbench_branches")
         self.assertEqual(before, after)
 
     # @unittest.skip("skip")
@@ -238,7 +238,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         pgbench.wait()
         pgbench.stdout.close()
 
-        before = node.safe_psql("postgres", "SELECT * FROM pgbench_branches")
+        before = node.table_checksum("pgbench_branches")
         with node.connect("postgres") as con:
             res = con.execute("INSERT INTO tbl0005 VALUES ('inserted') RETURNING (xmin)")
             con.commit()
@@ -264,7 +264,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
                 repr(self.output), self.cmd))
 
         node.slow_start()
-        after = node.safe_psql("postgres", "SELECT * FROM pgbench_branches")
+        after = node.table_checksum("pgbench_branches")
         self.assertEqual(before, after)
         self.assertEqual(
             len(node.execute("postgres", "SELECT * FROM tbl0005")), 1)
@@ -294,7 +294,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         pgbench.wait()
         pgbench.stdout.close()
 
-        before = node.execute("postgres", "SELECT * FROM pgbench_branches")
+        before = node.table_checksum("pgbench_branches")
         with node.connect("postgres") as con:
             result = con.execute("INSERT INTO tbl0005 VALUES ('inserted') RETURNING (xmin)")
             con.commit()
@@ -321,7 +321,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
                 repr(self.output), self.cmd))
 
         node.slow_start()
-        after = node.execute("postgres", "SELECT * FROM pgbench_branches")
+        after = node.table_checksum("pgbench_branches")
         self.assertEqual(before, after)
         self.assertEqual(
             len(node.execute("postgres", "SELECT * FROM tbl0005")), 0)
@@ -351,7 +351,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         pgbench.wait()
         pgbench.stdout.close()
 
-        before = node.safe_psql("postgres", "SELECT * FROM pgbench_branches")
+        before = node.table_checksum("pgbench_branches")
         with node.connect("postgres") as con:
             con.execute("INSERT INTO tbl0005 VALUES (1)")
             con.commit()
@@ -384,7 +384,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         node.slow_start()
 
-        after = node.safe_psql("postgres", "SELECT * FROM pgbench_branches")
+        after = node.table_checksum("pgbench_branches")
         self.assertEqual(before, after)
         self.assertEqual(
             len(node.execute("postgres", "SELECT * FROM tbl0005")), 2)
@@ -414,7 +414,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         pgbench.wait()
         pgbench.stdout.close()
 
-        before = node.safe_psql("postgres", "SELECT * FROM pgbench_branches")
+        before = node.table_checksum("pgbench_branches")
         with node.connect("postgres") as con:
             con.execute("INSERT INTO tbl0005 VALUES (1)")
             con.commit()
@@ -448,7 +448,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         node.slow_start()
 
-        after = node.safe_psql("postgres", "SELECT * FROM pgbench_branches")
+        after = node.table_checksum("pgbench_branches")
         self.assertEqual(before, after)
         self.assertEqual(
             len(node.execute("postgres", "SELECT * FROM tbl0005")), 1)
@@ -486,7 +486,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         backup_id = self.backup_node(
             backup_dir, 'node', node, backup_type="ptrack")
 
-        before = node.execute("postgres", "SELECT * FROM pgbench_branches")
+        before = node.table_checksum("pgbench_branches")
 
         node.stop()
         node.cleanup()
@@ -500,7 +500,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
                 repr(self.output), self.cmd))
 
         node.slow_start()
-        after = node.execute("postgres", "SELECT * FROM pgbench_branches")
+        after = node.table_checksum("pgbench_branches")
         self.assertEqual(before, after)
 
     # @unittest.skip("skip")
@@ -543,7 +543,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         backup_id = self.backup_node(
             backup_dir, 'node', node, backup_type="ptrack")
 
-        before = node.execute("postgres", "SELECT * FROM pgbench_branches")
+        before = node.table_checksum("pgbench_branches")
 
         node.stop()
         node.cleanup()
@@ -557,7 +557,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
                 repr(self.output), self.cmd))
 
         node.slow_start()
-        after = node.execute("postgres", "SELECT * FROM pgbench_branches")
+        after = node.table_checksum("pgbench_branches")
         self.assertEqual(before, after)
 
     # @unittest.skip("skip")
@@ -595,7 +595,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node', node,
             backup_type="ptrack", options=["--stream"])
 
-        before = node.execute("postgres", "SELECT * FROM pgbench_branches")
+        before = node.table_checksum("pgbench_branches")
 
         node.stop()
         node.cleanup()
@@ -608,7 +608,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
                 repr(self.output), self.cmd))
 
         node.slow_start()
-        after = node.execute("postgres", "SELECT * FROM pgbench_branches")
+        after = node.table_checksum("pgbench_branches")
         self.assertEqual(before, after)
 
     # @unittest.skip("skip")
@@ -1283,9 +1283,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         node.safe_psql(
             "postgres",
             "create table t_heap as select generate_series(0,10000)")
-        result = node.safe_psql(
-            "postgres",
-            "select * from t_heap")
+        result = node.table_checksum("t_heap")
         node.safe_psql(
             "postgres", "select pg_create_restore_point('savepoint')")
         node.safe_psql(
@@ -1301,7 +1299,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
 
         node.slow_start()
 
-        result_new = node.safe_psql("postgres", "select * from t_heap")
+        result_new = node.table_checksum("t_heap")
         res = node.psql("postgres", "select * from t_heap_1")
         self.assertEqual(
             res[0], 1,

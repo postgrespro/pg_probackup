@@ -35,7 +35,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             "md5(repeat(i::text,10))::tsvector as tsvector from "
             "generate_series(0,100) i")
 
-        result = node.safe_psql("postgres", "SELECT * FROM t_heap")
+        result = node.table_checksum("t_heap")
         self.backup_node(
             backup_dir, 'node', node)
         node.cleanup()
@@ -58,7 +58,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         node.slow_start()
 
         self.assertEqual(
-            result, node.safe_psql("postgres", "SELECT * FROM t_heap"),
+            result, node.table_checksum("t_heap"),
             'data after restore not equal to original data')
 
     # @unittest.skip("skip")
@@ -148,7 +148,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
         backup_id = self.backup_node(backup_dir, 'node', node)
 
-        result = node.safe_psql("postgres", "SELECT * FROM t_heap")
+        result = node.table_checksum("t_heap")
         node.safe_psql(
             "postgres",
             "insert into t_heap select 100503 as id, md5(i::text) as text, "
@@ -200,11 +200,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
                 "select exists(select 1 from t_heap where id > 100500)")[0][0],
             'data after restore not equal to original data')
 
-        self.assertEqual(
-            result,
-            node.safe_psql(
-                "postgres",
-                "SELECT * FROM t_heap"),
+        self.assertEqual(result, node.table_checksum("t_heap"),
             'data after restore not equal to original data')
 
     # @unittest.skip("skip")
@@ -672,7 +668,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             "from generate_series(0,2560) i")
 
         self.backup_node(backup_dir, 'master', master, options=['--stream'])
-        before = master.safe_psql("postgres", "SELECT * FROM t_heap")
+        before = master.table_checksum("t_heap")
 
         # Settings for Replica
         self.restore_node(backup_dir, 'master', replica)
@@ -683,7 +679,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         replica.slow_start(replica=True)
 
         # Check data correctness on replica
-        after = replica.safe_psql("postgres", "SELECT * FROM t_heap")
+        after = replica.table_checksum("t_heap")
         self.assertEqual(before, after)
 
         # Change data on master, take FULL backup from replica,
@@ -694,7 +690,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             "insert into t_heap select i as id, md5(i::text) as text, "
             "md5(repeat(i::text,10))::tsvector as tsvector "
             "from generate_series(256,512) i")
-        before = master.safe_psql("postgres", "SELECT * FROM t_heap")
+        before = master.table_checksum("t_heap")
 
         backup_id = self.backup_node(
             backup_dir, 'replica', replica,
@@ -715,7 +711,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         self.set_auto_conf(node, {'port': node.port})
         node.slow_start()
         # CHECK DATA CORRECTNESS
-        after = node.safe_psql("postgres", "SELECT * FROM t_heap")
+        after = node.table_checksum("t_heap")
         self.assertEqual(before, after)
 
         # Change data on master, make PAGE backup from replica,
@@ -727,7 +723,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             "md5(repeat(i::text,10))::tsvector as tsvector "
             "from generate_series(512,80680) i")
 
-        before = master.safe_psql("postgres", "SELECT * FROM t_heap")
+        before = master.table_checksum("t_heap")
 
         self.wait_until_replica_catch_with_master(master, replica)
 
@@ -751,7 +747,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
         node.slow_start()
         # CHECK DATA CORRECTNESS
-        after = node.safe_psql("postgres", "SELECT * FROM t_heap")
+        after = node.table_checksum("t_heap")
         self.assertEqual(before, after)
 
     # @unittest.expectedFailure
@@ -791,7 +787,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         # TAKE FULL ARCHIVE BACKUP FROM MASTER
         self.backup_node(backup_dir, 'master', master)
         # GET LOGICAL CONTENT FROM MASTER
-        before = master.safe_psql("postgres", "SELECT * FROM t_heap")
+        before = master.table_checksum("t_heap")
         # GET PHYSICAL CONTENT FROM MASTER
         pgdata_master = self.pgdata_content(master.data_dir)
 
@@ -809,7 +805,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         replica.slow_start(replica=True)
 
         # CHECK LOGICAL CORRECTNESS on REPLICA
-        after = replica.safe_psql("postgres", "SELECT * FROM t_heap")
+        after = replica.table_checksum("t_heap")
         self.assertEqual(before, after)
 
         master.psql(
@@ -873,7 +869,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         # TAKE FULL ARCHIVE BACKUP FROM MASTER
         self.backup_node(backup_dir, 'master', master)
         # GET LOGICAL CONTENT FROM MASTER
-        before = master.safe_psql("postgres", "SELECT * FROM t_heap")
+        before = master.table_checksum("t_heap")
         # GET PHYSICAL CONTENT FROM MASTER
         pgdata_master = self.pgdata_content(master.data_dir)
 
@@ -892,7 +888,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         replica.slow_start(replica=True)
 
         # CHECK LOGICAL CORRECTNESS on REPLICA
-        after = replica.safe_psql("postgres", "SELECT * FROM t_heap")
+        after = replica.table_checksum("t_heap")
         self.assertEqual(before, after)
 
         master.psql(
@@ -1054,7 +1050,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             node,
             backup_type='page'
         )
-        result = node.safe_psql("postgres", "SELECT * FROM t_heap")
+        result = node.table_checksum("t_heap")
         self.validate_pb(backup_dir)
 
         # Check data correctness
@@ -1064,9 +1060,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
         self.assertEqual(
             result,
-            node.safe_psql(
-                "postgres", "SELECT * FROM t_heap"
-            ),
+            node.table_checksum("t_heap"),
             'data after restore not equal to original data')
 
         # Clean after yourself
@@ -1120,7 +1114,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'node', node,
             backup_type='page'
             )
-        result = node.safe_psql("postgres", "SELECT * FROM t_heap")
+        result = node.table_checksum("t_heap")
         self.validate_pb(backup_dir)
 
         # Check data correctness
@@ -1129,7 +1123,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         node.slow_start()
 
         self.assertEqual(
-            result, node.safe_psql("postgres", "SELECT * FROM t_heap"),
+            result, node.table_checksum("t_heap"),
             'data after restore not equal to original data')
 
         # Clean after yourself
@@ -2075,13 +2069,8 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
         node_restored.slow_start()
 
-        result = node.safe_psql(
-            "postgres",
-            "select sum(id) from t_heap").decode('utf-8').rstrip()
-
-        result_new = node_restored.safe_psql(
-            "postgres",
-            "select sum(id) from t_heap").decode('utf-8').rstrip()
+        result = node.table_checksum("t_heap")
+        result_new = node_restored.table_checksum("t_heap")
 
         self.assertEqual(result, result_new)
 

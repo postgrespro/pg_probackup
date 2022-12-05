@@ -112,10 +112,7 @@ class CfsRestoreNoencTest(CfsRestoreBase):
                 MD5(repeat(i::text,10))::tsvector AS tsvector \
                 FROM generate_series(0,1e5) i'.format('t1', tblspace_name)
         )
-        self.table_t1 = self.node.safe_psql(
-            "postgres",
-            "SELECT * FROM t1"
-        )
+        self.table_t1 = self.node.table_checksum("t1")
 
     # --- Restore from full backup ---#
     # @unittest.expectedFailure
@@ -154,8 +151,8 @@ class CfsRestoreNoencTest(CfsRestoreBase):
             )
 
         self.assertEqual(
-            repr(self.node.safe_psql("postgres", "SELECT * FROM %s" % 't1')),
-            repr(self.table_t1)
+            self.node.table_checksum("t1"),
+            self.table_t1
         )
 
     # @unittest.expectedFailure
@@ -193,8 +190,8 @@ class CfsRestoreNoencTest(CfsRestoreBase):
             )
 
         self.assertEqual(
-            repr(self.node.safe_psql("postgres", "SELECT * FROM %s" % 't1')),
-            repr(self.table_t1)
+            self.node.table_checksum("t1"),
+            self.table_t1
         )
 
     # @unittest.expectedFailure
@@ -236,8 +233,8 @@ class CfsRestoreNoencTest(CfsRestoreBase):
             )
 
         self.assertEqual(
-            repr(node_new.safe_psql("postgres", "SELECT * FROM %s" % 't1')),
-            repr(self.table_t1)
+            self.node.table_checksum("t1"),
+            self.table_t1
         )
         node_new.cleanup()
 
@@ -280,8 +277,8 @@ class CfsRestoreNoencTest(CfsRestoreBase):
             )
 
         self.assertEqual(
-            repr(node_new.safe_psql("postgres", "SELECT * FROM %s" % 't1')),
-            repr(self.table_t1)
+            self.node.table_checksum("t1"),
+            self.table_t1
         )
         node_new.cleanup()
 
@@ -328,8 +325,8 @@ class CfsRestoreNoencTest(CfsRestoreBase):
             )
 
         self.assertEqual(
-            repr(self.node.safe_psql("postgres", "SELECT * FROM %s" % 't1')),
-            repr(self.table_t1)
+            self.node.table_checksum("t1"),
+            self.table_t1
         )
 
     # @unittest.expectedFailure
@@ -375,8 +372,8 @@ class CfsRestoreNoencTest(CfsRestoreBase):
             )
 
         self.assertEqual(
-            repr(self.node.safe_psql("postgres", "SELECT * FROM %s" % 't1')),
-            repr(self.table_t1)
+            self.node.table_checksum("t1"),
+            self.table_t1
         )
 
     # @unittest.expectedFailure

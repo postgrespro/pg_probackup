@@ -32,7 +32,7 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
             "create table t_heap as select i as id, md5(i::text) as text, "
             "md5(repeat(i::text,10))::tsvector as tsvector "
             "from generate_series(0,256) i")
-        full_result = node.execute("postgres", "SELECT * FROM t_heap")
+        full_result = node.table_checksum("t_heap")
         full_backup_id = self.backup_node(
             backup_dir, 'node', node, backup_type='full',
             options=[
@@ -45,7 +45,7 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
             "insert into t_heap select i as id, md5(i::text) as text, "
             "md5(repeat(i::text,10))::tsvector as tsvector "
             "from generate_series(256,512) i")
-        page_result = node.execute("postgres", "SELECT * FROM t_heap")
+        page_result = node.table_checksum("t_heap")
         page_backup_id = self.backup_node(
             backup_dir, 'node', node, backup_type='page',
             options=[
@@ -57,7 +57,7 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
             "insert into t_heap select i as id, md5(i::text) as text, "
             "md5(repeat(i::text,10))::tsvector as tsvector "
             "from generate_series(512,768) i")
-        delta_result = node.execute("postgres", "SELECT * FROM t_heap")
+        delta_result = node.table_checksum("t_heap")
         delta_backup_id = self.backup_node(
             backup_dir, 'node', node, backup_type='delta',
             options=['--stream', '--compress-algorithm=zlib'])
@@ -77,7 +77,7 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
                 repr(self.output), self.cmd))
         node.slow_start()
 
-        full_result_new = node.execute("postgres", "SELECT * FROM t_heap")
+        full_result_new = node.table_checksum("t_heap")
         self.assertEqual(full_result, full_result_new)
         node.cleanup()
 
@@ -93,7 +93,7 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
                 repr(self.output), self.cmd))
         node.slow_start()
 
-        page_result_new = node.execute("postgres", "SELECT * FROM t_heap")
+        page_result_new = node.table_checksum("t_heap")
         self.assertEqual(page_result, page_result_new)
         node.cleanup()
 
@@ -109,7 +109,7 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
                 repr(self.output), self.cmd))
         node.slow_start()
 
-        delta_result_new = node.execute("postgres", "SELECT * FROM t_heap")
+        delta_result_new = node.table_checksum("t_heap")
         self.assertEqual(delta_result, delta_result_new)
 
     def test_compression_archive_zlib(self):
@@ -134,7 +134,7 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
             "postgres",
             "create table t_heap as select i as id, md5(i::text) as text, "
             "md5(i::text)::tsvector as tsvector from generate_series(0,1) i")
-        full_result = node.execute("postgres", "SELECT * FROM t_heap")
+        full_result = node.table_checksum("t_heap")
         full_backup_id = self.backup_node(
             backup_dir, 'node', node, backup_type='full',
             options=["--compress-algorithm=zlib"])
@@ -145,7 +145,7 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
             "insert into t_heap select i as id, md5(i::text) as text, "
             "md5(i::text)::tsvector as tsvector "
             "from generate_series(0,2) i")
-        page_result = node.execute("postgres", "SELECT * FROM t_heap")
+        page_result = node.table_checksum("t_heap")
         page_backup_id = self.backup_node(
             backup_dir, 'node', node, backup_type='page',
             options=["--compress-algorithm=zlib"])
@@ -155,7 +155,7 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
             "postgres",
             "insert into t_heap select i as id, md5(i::text) as text, "
             "md5(i::text)::tsvector as tsvector from generate_series(0,3) i")
-        delta_result = node.execute("postgres", "SELECT * FROM t_heap")
+        delta_result = node.table_checksum("t_heap")
         delta_backup_id = self.backup_node(
             backup_dir, 'node', node, backup_type='delta',
             options=['--compress-algorithm=zlib'])
@@ -175,7 +175,7 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
                 repr(self.output), self.cmd))
         node.slow_start()
 
-        full_result_new = node.execute("postgres", "SELECT * FROM t_heap")
+        full_result_new = node.table_checksum("t_heap")
         self.assertEqual(full_result, full_result_new)
         node.cleanup()
 
@@ -191,7 +191,7 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
                 repr(self.output), self.cmd))
         node.slow_start()
 
-        page_result_new = node.execute("postgres", "SELECT * FROM t_heap")
+        page_result_new = node.table_checksum("t_heap")
         self.assertEqual(page_result, page_result_new)
         node.cleanup()
 
@@ -207,7 +207,7 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
                 repr(self.output), self.cmd))
         node.slow_start()
 
-        delta_result_new = node.execute("postgres", "SELECT * FROM t_heap")
+        delta_result_new = node.table_checksum("t_heap")
         self.assertEqual(delta_result, delta_result_new)
         node.cleanup()
 
@@ -234,7 +234,7 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
             "create table t_heap as select i as id, md5(i::text) as text, "
             "md5(repeat(i::text,10))::tsvector as tsvector "
             "from generate_series(0,256) i")
-        full_result = node.execute("postgres", "SELECT * FROM t_heap")
+        full_result = node.table_checksum("t_heap")
         full_backup_id = self.backup_node(
             backup_dir, 'node', node, backup_type='full',
             options=['--stream', '--compress-algorithm=pglz'])
@@ -245,7 +245,7 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
             "insert into t_heap select i as id, md5(i::text) as text, "
             "md5(repeat(i::text,10))::tsvector as tsvector "
             "from generate_series(256,512) i")
-        page_result = node.execute("postgres", "SELECT * FROM t_heap")
+        page_result = node.table_checksum("t_heap")
         page_backup_id = self.backup_node(
             backup_dir, 'node', node, backup_type='page',
             options=['--stream', '--compress-algorithm=pglz'])
@@ -256,7 +256,7 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
             "insert into t_heap select i as id, md5(i::text) as text, "
             "md5(repeat(i::text,10))::tsvector as tsvector "
             "from generate_series(512,768) i")
-        delta_result = node.execute("postgres", "SELECT * FROM t_heap")
+        delta_result = node.table_checksum("t_heap")
         delta_backup_id = self.backup_node(
             backup_dir, 'node', node, backup_type='delta',
             options=['--stream', '--compress-algorithm=pglz'])
@@ -276,7 +276,7 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
                 repr(self.output), self.cmd))
         node.slow_start()
 
-        full_result_new = node.execute("postgres", "SELECT * FROM t_heap")
+        full_result_new = node.table_checksum("t_heap")
         self.assertEqual(full_result, full_result_new)
         node.cleanup()
 
@@ -292,7 +292,7 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
                 repr(self.output), self.cmd))
         node.slow_start()
 
-        page_result_new = node.execute("postgres", "SELECT * FROM t_heap")
+        page_result_new = node.table_checksum("t_heap")
         self.assertEqual(page_result, page_result_new)
         node.cleanup()
 
@@ -308,7 +308,7 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
                 repr(self.output), self.cmd))
         node.slow_start()
 
-        delta_result_new = node.execute("postgres", "SELECT * FROM t_heap")
+        delta_result_new = node.table_checksum("t_heap")
         self.assertEqual(delta_result, delta_result_new)
         node.cleanup()
 
@@ -335,7 +335,7 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
             "create table t_heap as select i as id, md5(i::text) as text, "
             "md5(i::text)::tsvector as tsvector "
             "from generate_series(0,100) i")
-        full_result = node.execute("postgres", "SELECT * FROM t_heap")
+        full_result = node.table_checksum("t_heap")
         full_backup_id = self.backup_node(
             backup_dir, 'node', node, backup_type='full',
             options=['--compress-algorithm=pglz'])
@@ -346,7 +346,7 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
             "insert into t_heap select i as id, md5(i::text) as text, "
             "md5(i::text)::tsvector as tsvector "
             "from generate_series(100,200) i")
-        page_result = node.execute("postgres", "SELECT * FROM t_heap")
+        page_result = node.table_checksum("t_heap")
         page_backup_id = self.backup_node(
             backup_dir, 'node', node, backup_type='page',
             options=['--compress-algorithm=pglz'])
@@ -357,7 +357,7 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
             "insert into t_heap select i as id, md5(i::text) as text, "
             "md5(i::text)::tsvector as tsvector "
             "from generate_series(200,300) i")
-        delta_result = node.execute("postgres", "SELECT * FROM t_heap")
+        delta_result = node.table_checksum("t_heap")
         delta_backup_id = self.backup_node(
             backup_dir, 'node', node, backup_type='delta',
             options=['--compress-algorithm=pglz'])
@@ -377,7 +377,7 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
                 repr(self.output), self.cmd))
         node.slow_start()
 
-        full_result_new = node.execute("postgres", "SELECT * FROM t_heap")
+        full_result_new = node.table_checksum("t_heap")
         self.assertEqual(full_result, full_result_new)
         node.cleanup()
 
@@ -393,7 +393,7 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
                 repr(self.output), self.cmd))
         node.slow_start()
 
-        page_result_new = node.execute("postgres", "SELECT * FROM t_heap")
+        page_result_new = node.table_checksum("t_heap")
         self.assertEqual(page_result, page_result_new)
         node.cleanup()
 
@@ -409,7 +409,7 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
                 repr(self.output), self.cmd))
         node.slow_start()
 
-        delta_result_new = node.execute("postgres", "SELECT * FROM t_heap")
+        delta_result_new = node.table_checksum("t_heap")
         self.assertEqual(delta_result, delta_result_new)
         node.cleanup()
 
