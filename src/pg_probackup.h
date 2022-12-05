@@ -916,6 +916,7 @@ extern parray* get_history_streaming(ConnectionOptions *conn_opt, TimeLineID tli
 
 /* in catalog.c */
 extern pgBackup *read_backup(pioDrive_i drive, const char *root_dir);
+extern pgBackup *readBackupControlFile(pioDrive_i drive, const char *path);
 extern void write_backup(pgBackup *backup, bool strict);
 extern void write_backup_status(pgBackup *backup, BackupStatus status,
 								bool strict);

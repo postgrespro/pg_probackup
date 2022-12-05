@@ -21,7 +21,6 @@
 static pgBackup* get_closest_backup(timelineInfo *tlinfo);
 static pgBackup* get_oldest_backup(timelineInfo *tlinfo);
 static const char *backupModes[] = {"", "PAGE", "PTRACK", "DELTA", "FULL"};
-static pgBackup *readBackupControlFile(pioDrive_i drive, const char *path);
 static err_i create_backup_dir(pgBackup *backup, const char *backup_instance_path);
 
 static bool backup_lock_exit_hook_registered = false;
@@ -2612,7 +2611,7 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
  *  - Comment starts with ';'.
  *  - Do not care section.
  */
-static pgBackup *
+pgBackup *
 readBackupControlFile(pioDrive_i drive, const char *path)
 {
 	pgBackup   *backup = pgut_new0(pgBackup);
