@@ -333,7 +333,7 @@ ft_inline void ft_bytes_free(ft_bytes_t* bytes) {
 }
 
 ft_inline void ft_bytes_consume(ft_bytes_t *bytes, size_t cut);
-ft_inline void ft_bytes_move(ft_bytes_t *dest, ft_bytes_t *src);
+ft_inline size_t ft_bytes_move(ft_bytes_t *dest, ft_bytes_t *src);
 ft_inline ft_bytes_t ft_bytes_split(ft_bytes_t *bytes, size_t n);
 
 extern ft_bytes_t   ft_bytes_shift_line(ft_bytes_t *bytes);

@@ -330,12 +330,14 @@ ft_bytes_consume(ft_bytes_t *bytes, size_t cut) {
 	bytes->len -= cut;
 }
 
-ft_inline void
+ft_inline size_t
 ft_bytes_move(ft_bytes_t *dest, ft_bytes_t *src) {
     size_t  len = ft_min(dest->len, src->len);
     memmove(dest->ptr, src->ptr, len);
     ft_bytes_consume(dest, len);
     ft_bytes_consume(src, len);
+
+    return len;
 }
 
 ft_inline bool
