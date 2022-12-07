@@ -344,6 +344,14 @@ extern pioFilter_i	pioGZCompressFilter(int level);
 extern pioFilter_i	pioGZDecompressFilter(bool ignoreTruncate);
 #endif
 
+typedef struct pioCRC32Counter pioCRC32Counter;
+#define kls__pioCRC32Counter iface__pioFilter, iface(pioFilter)
+fobj_klass(pioCRC32Counter);
+extern pioCRC32Counter* pioCRC32Counter_alloc(void);
+extern pg_crc32 pioCRC32Counter_getCRC32(pioCRC32Counter* flt);
+
+extern pioWriteFlush_i pioDevNull_alloc(void);
+
 extern err_i    pioCopyWithFilters(pioWriteFlush_i dest, pioRead_i src,
                                        pioFilter_i *filters, int nfilters, size_t *copied);
 #define pioCopy(dest, src, ...) ({ \

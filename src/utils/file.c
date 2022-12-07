@@ -4146,6 +4146,19 @@ fobj_klass(pioGZCompress);
 fobj_klass(pioGZDecompress);
 #endif
 
+/* CRC32 counter */
+typedef struct pioDevNull
+{
+} pioDevNull;
+
+#define kls__pioDevNull iface__pioWriteFlush, iface(pioWriteFlush)
+fobj_klass(pioDevNull);
+
+typedef struct pioCRC32Counter
+{
+	pg_crc32		crc;
+} pioCRC32Counter;
+
 static pioDrive_i localDrive;
 static pioDrive_i remoteDrive;
 
@@ -5965,6 +5978,82 @@ pioGZDecompress_fobjRepr(VSelf)
 }
 #endif
 
+/* Transform filter method */
+/* Must count crc32 of new portion of data. No output needed */
+static pioFltTransformResult
+pioCRC32Counter_pioFltTransform(VSelf, ft_bytes_t rbuf, ft_bytes_t wbuf, err_i *err)
+{
+	Self(pioCRC32Counter);
+	pioFltTransformResult  tr = {0, 0};
+	fobj_reset_err(err);
+	size_t copied = ft_min(wbuf.len, rbuf.len);
+
+	if (interrupted)
+		elog(ERROR, "interrupted during CRC calculation");
+
+	COMP_CRC32C(self->crc, rbuf.ptr, copied);
+
+	memmove(wbuf.ptr, rbuf.ptr, copied);
+
+	tr.produced = copied;
+	tr.consumed = copied;
+
+	return tr;
+}
+
+static size_t
+pioCRC32Counter_pioFltFinish(VSelf, ft_bytes_t wbuf, err_i *err)
+{
+	Self(pioCRC32Counter);
+	fobj_reset_err(err);
+
+	FIN_CRC32C(self->crc);
+
+	return 0;
+}
+
+pioWriteFlush_i
+pioDevNull_alloc(void)
+{
+	fobj_t				wrap;
+
+	wrap = $alloc(pioDevNull);
+	return bind_pioWriteFlush(wrap);
+}
+
+static size_t
+pioDevNull_pioWrite(VSelf, ft_bytes_t buf, err_i *err)
+{
+	fobj_reset_err(err);
+	return buf.len;
+}
+
+static err_i
+pioDevNull_pioWriteFinish(VSelf)
+{
+	return $noerr();
+}
+
+pg_crc32
+pioCRC32Counter_getCRC32(pioCRC32Counter* flt)
+{
+	return flt->crc;
+}
+
+pioCRC32Counter*
+pioCRC32Counter_alloc(void)
+{
+	pioCRC32Counter		*res;
+	pg_crc32			init_crc = 0;
+
+	INIT_CRC32C(init_crc);
+
+	res = $alloc(pioCRC32Counter, .crc = init_crc);
+
+	return res;
+}
+
+
 err_i
 pioCopyWithFilters(pioWriteFlush_i dest, pioRead_i src,
                    pioFilter_i *filters, int nfilters, size_t *copied)
@@ -6116,6 +6205,8 @@ fobj_klass_handle(pioLocalFile, inherits(pioFile), mth(fobjDispose, fobjRepr));
 fobj_klass_handle(pioRemoteFile, inherits(pioFile), mth(fobjDispose, fobjRepr));
 fobj_klass_handle(pioWriteFilter, mth(fobjDispose, fobjRepr));
 fobj_klass_handle(pioReadFilter, mth(fobjDispose, fobjRepr));
+fobj_klass_handle(pioDevNull);
+fobj_klass_handle(pioCRC32Counter);
 
 #ifdef HAVE_LIBZ
 fobj_klass_handle(pioGZCompress, mth(fobjRepr));
