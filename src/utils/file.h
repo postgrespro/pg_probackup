@@ -14,6 +14,8 @@
 
 #include <fo_obj.h>
 
+#include "datapagemap.h"
+
 /* Directory/File permission */
 #define DIR_PERMISSION		(0700)
 #define FILE_PERMISSION		(0600)
@@ -48,8 +50,6 @@ typedef enum
 	/* used for incremental restore */
 	FIO_GET_CHECKSUM_MAP,
 	FIO_GET_LSN_MAP,
-	/* used in fio_send_pages */
-	FIO_SEND_PAGES,
 	FIO_ERROR,
 	FIO_SEND_FILE,
 //	FIO_CHUNK,
@@ -311,11 +311,10 @@ fobj_iface(pioPagesIterator);
 #define mth__pioWriteFile	err_i, (path_t, path), (ft_bytes_t, content), (bool, binary)
 #define mth__pioWriteFile__optional() (binary, true)
 
-#define mth__pioIteratePages pioPagesIterator_i, (path_t, from_fullpath), \
-		(pgFile *, file), (XLogRecPtr, start_lsn), (CompressAlg, calg), (int, clevel), \
-		(uint32, checksum_version), (BackupMode, backup_mode), (bool, strict), \
-		(err_i *, err)
-fobj_method(pioIteratePages);
+#define mth__pioIteratePages pioPagesIterator_i, (path_t, path), \
+		(int, segno), (datapagemap_t, pagemap), (XLogRecPtr, start_lsn), \
+		(CompressAlg, calg), (int, clevel), \
+		(uint32, checksum_version), (bool, strict), (err_i*, err)
 
 fobj_method(pioOpen);
 fobj_method(pioStat);
@@ -330,6 +329,7 @@ fobj_method(pioListDir);
 fobj_method(pioRemoveDir);
 fobj_method(pioReadFile);
 fobj_method(pioWriteFile);
+fobj_method(pioIteratePages);
 
 #define iface__pioDrive 	mth(pioOpen, pioStat, pioRemove, pioRename), \
 					        mth(pioExists, pioGetCRC32, pioIsRemote),                \
@@ -339,6 +339,27 @@ fobj_method(pioWriteFile);
 fobj_iface(pioDrive);
 
 extern pioDrive_i pioDriveForLocation(fio_location location);
+
+struct doIteratePages_params {
+	path_t from_fullpath;
+	pgFile *file;
+	XLogRecPtr start_lsn;
+	CompressAlg calg;
+	int clevel;
+	uint32 checksum_version;
+	BackupMode backup_mode;
+	bool strict;
+	err_i *err;
+};
+
+extern pioPagesIterator_i
+doIteratePages_impl(pioDrive_i drive, struct doIteratePages_params p);
+#define doIteratePages(drive, ...) \
+	doIteratePages_impl(drive, ((struct doIteratePages_params){ \
+					.start_lsn = InvalidXLogRecPtr,        \
+					.calg = NONE_COMPRESS, .clevel = 0,    \
+					.strict = true,                        \
+					__VA_ARGS__}))
 
 #define mth__pioSetAsync    err_i, (bool, async)
 #define mth__pioSetAsync__optional()  (async, true)

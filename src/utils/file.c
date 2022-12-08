@@ -84,27 +84,16 @@ typedef struct
 	uint32      checksumVersion;
 } fio_lsn_map_request;
 
-typedef struct
+typedef struct __attribute__((packed))
 {
-	size_t from_fullpath_len;
+	int32_t segno;
+	int32_t pagemaplen;
 	XLogRecPtr start_lsn;
 	CompressAlg calg;
 	int clevel;
 	uint32 checksum_version;
-	BackupMode backup_mode;
-	bool strict;
-
-	int64_t file_size;
-	size_t file_rel_path_len;
-	size_t file_linked_len;
-	int file_segno;
-	bool file_exists_in_prev;
-	bool file_pagemap_isabsent;
-	size_t file_bitmapsize;
+	int strict;
 } fio_iterate_pages_request;
-
-static void fio_iterate_pages_impl(pioDrive_i drive, int out, const char *from_fullpath,
-								   pgFile *file, fio_iterate_pages_request *params);
 
 /* Convert FIO pseudo handle to index in file descriptor array */
 #define fio_fileno(f) (((size_t)f - 1) | FIO_PIPE_MARKER)
@@ -1852,362 +1841,6 @@ fio_load_file(int out, const char* path)
 	}
 }
 
-/*
- * Return number of actually(!) readed blocks, attempts or
- * half-readed block are not counted.
- * Return values in case of error:
- *  FILE_MISSING
- *  OPEN_FAILED
- *  READ_ERROR
- *  PAGE_CORRUPTION
- *  WRITE_FAILED
- *
- * If none of the above, this function return number of blocks
- * readed by remote agent.
- *
- * In case of DELTA mode horizonLsn must be a valid lsn,
- * otherwise it should be set to InvalidXLogRecPtr.
- */
-int
-fio_send_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
-				   XLogRecPtr horizonLsn, int calg, int clevel, uint32 checksum_version,
-				   bool use_pagemap, BlockNumber* err_blknum, char **errormsg,
-				   BackupPageHeader2 **headers)
-{
-	FILE *out = NULL;
-	char *out_buf = NULL;
-	struct {
-		fio_header hdr;
-		fio_send_request arg;
-	} req;
-	BlockNumber	n_blocks_read = 0;
-	BlockNumber blknum = 0;
-
-	/* send message with header
-
-	  16bytes      24bytes             var        var
-	--------------------------------------------------------------
-	| fio_header | fio_send_request | FILE PATH | BITMAP(if any) |
-	--------------------------------------------------------------
-	*/
-
-	req.hdr.cop = FIO_SEND_PAGES;
-
-	if (use_pagemap)
-	{
-		req.hdr.size = sizeof(fio_send_request) + (*file).pagemap.bitmapsize + strlen(from_fullpath) + 1;
-		req.arg.bitmapsize = (*file).pagemap.bitmapsize;
-
-		/* TODO: add optimization for the case of pagemap
-		 * containing small number of blocks with big serial numbers:
-		 * https://github.com/postgrespro/pg_probackup/blob/remote_page_backup/src/utils/file.c#L1211
-		 */
-	}
-	else
-	{
-		req.hdr.size = sizeof(fio_send_request) + strlen(from_fullpath) + 1;
-		req.arg.bitmapsize = 0;
-	}
-
-	req.arg.nblocks = ft_div_i64u32_to_i32(file->size, BLCKSZ);
-	req.arg.segmentno = file->segno * RELSEG_SIZE;
-	req.arg.horizonLsn = horizonLsn;
-	req.arg.checksumVersion = checksum_version;
-	req.arg.calg = calg;
-	req.arg.clevel = clevel;
-	req.arg.path_len = strlen(from_fullpath) + 1;
-
-	file->compress_alg = calg; /* TODO: wtf? why here? */
-
-//<-----
-//	datapagemap_iterator_t *iter;
-//	BlockNumber blkno;
-//	iter = datapagemap_iterate(pagemap);
-//	while (datapagemap_next(iter, &blkno))
-//		elog(INFO, "block %u", blkno);
-//	pg_free(iter);
-//<-----
-
-	/* send header */
-	IO_CHECK(fio_write_all(fio_stdout, &req, sizeof(req)), sizeof(req));
-
-	/* send file path */
-	IO_CHECK(fio_write_all(fio_stdout, from_fullpath, req.arg.path_len), req.arg.path_len);
-
-	/* send pagemap if any */
-	if (use_pagemap)
-		IO_CHECK(fio_write_all(fio_stdout, (*file).pagemap.bitmap, (*file).pagemap.bitmapsize), (*file).pagemap.bitmapsize);
-
-	while (true)
-	{
-		fio_header hdr;
-		char buf[BLCKSZ + sizeof(BackupPageHeader)];
-		IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
-
-		if (interrupted)
-			elog(ERROR, "Interrupted during page reading");
-
-		if (hdr.cop == FIO_ERROR)
-		{
-			/* FILE_MISSING, OPEN_FAILED and READ_FAILED */
-			if (hdr.size > 0)
-			{
-				IO_CHECK(fio_read_all(fio_stdin, buf, hdr.size), hdr.size);
-				*errormsg = pgut_malloc(hdr.size);
-				snprintf(*errormsg, hdr.size, "%s", buf);
-			}
-
-			return hdr.arg;
-		}
-		else if (hdr.cop == FIO_SEND_FILE_CORRUPTION)
-		{
-			*err_blknum = hdr.arg;
-
-			if (hdr.size > 0)
-			{
-				IO_CHECK(fio_read_all(fio_stdin, buf, hdr.size), hdr.size);
-				*errormsg = pgut_malloc(hdr.size);
-				snprintf(*errormsg, hdr.size, "%s", buf);
-			}
-			return PAGE_CORRUPTION;
-		}
-		else if (hdr.cop == FIO_SEND_FILE_EOF)
-		{
-			/* n_blocks_read reported by EOF */
-			n_blocks_read = hdr.arg;
-
-			/* receive headers if any */
-			if (hdr.size > 0)
-			{
-				*headers = pgut_malloc(hdr.size);
-				IO_CHECK(fio_read_all(fio_stdin, *headers, hdr.size), hdr.size);
-				file->n_headers = (hdr.size / sizeof(BackupPageHeader2)) -1;
-			}
-
-			break;
-		}
-		else if (hdr.cop == FIO_PAGE)
-		{
-			blknum = hdr.arg;
-
-			Assert(hdr.size <= sizeof(buf));
-			IO_CHECK(fio_read_all(fio_stdin, buf, hdr.size), hdr.size);
-
-			COMP_CRC32C(file->crc, buf, hdr.size);
-
-			/* lazily open backup file */
-			if (!out)
-				out = open_local_file_rw(to_fullpath, &out_buf, STDIO_BUFSIZE);
-
-			if (fio_fwrite(out, buf, hdr.size) != hdr.size)
-			{
-				fio_fclose(out);
-				*err_blknum = blknum;
-				return WRITE_FAILED;
-			}
-			file->write_size += hdr.size;
-			file->uncompressed_size += BLCKSZ;
-		}
-		else
-			elog(ERROR, "Remote agent returned message of unexpected type: %i", hdr.cop);
-	}
-
-	if (out)
-		fclose(out);
-	pg_free(out_buf);
-
-	return n_blocks_read;
-}
-
-/*
- * Return number of actually(!) readed blocks, attempts or
- * half-readed block are not counted.
- * Return values in case of error:
- *  FILE_MISSING
- *  OPEN_FAILED
- *  READ_ERROR
- *  PAGE_CORRUPTION
- *  WRITE_FAILED
- *
- * If none of the above, this function return number of blocks
- * readed by remote agent.
- *
- * In case of DELTA mode horizonLsn must be a valid lsn,
- * otherwise it should be set to InvalidXLogRecPtr.
- * Взято из fio_send_pages
- */
-int
-fio_copy_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
-				   XLogRecPtr horizonLsn, int calg, int clevel, uint32 checksum_version,
-				   bool use_pagemap, BlockNumber* err_blknum, char **errormsg)
-{
-	FILE *out = NULL;
-	char *out_buf = NULL;
-	struct {
-		fio_header hdr;
-		fio_send_request arg;
-	} req;
-	BlockNumber	n_blocks_read = 0;
-	BlockNumber blknum = 0;
-
-	/* send message with header
-
-	  16bytes      24bytes             var        var
-	--------------------------------------------------------------
-	| fio_header | fio_send_request | FILE PATH | BITMAP(if any) |
-	--------------------------------------------------------------
-	*/
-
-	req.hdr.cop = FIO_SEND_PAGES;
-
-	if (use_pagemap)
-	{
-		req.hdr.size = sizeof(fio_send_request) + (*file).pagemap.bitmapsize + strlen(from_fullpath) + 1;
-		req.arg.bitmapsize = (*file).pagemap.bitmapsize;
-
-		/* TODO: add optimization for the case of pagemap
-		 * containing small number of blocks with big serial numbers:
-		 * https://github.com/postgrespro/pg_probackup/blob/remote_page_backup/src/utils/file.c#L1211
-		 */
-	}
-	else
-	{
-		req.hdr.size = sizeof(fio_send_request) + strlen(from_fullpath) + 1;
-		req.arg.bitmapsize = 0;
-	}
-
-	req.arg.nblocks = file->size/BLCKSZ;
-	req.arg.segmentno = file->segno * RELSEG_SIZE;
-	req.arg.horizonLsn = horizonLsn;
-	req.arg.checksumVersion = checksum_version;
-	req.arg.calg = calg;
-	req.arg.clevel = clevel;
-	req.arg.path_len = strlen(from_fullpath) + 1;
-
-	file->compress_alg = calg; /* TODO: wtf? why here? */
-
-//<-----
-//	datapagemap_iterator_t *iter;
-//	BlockNumber blkno;
-//	iter = datapagemap_iterate(pagemap);
-//	while (datapagemap_next(iter, &blkno))
-//		elog(INFO, "block %u", blkno);
-//	pg_free(iter);
-//<-----
-
-	/* send header */
-	IO_CHECK(fio_write_all(fio_stdout, &req, sizeof(req)), sizeof(req));
-
-	/* send file path */
-	IO_CHECK(fio_write_all(fio_stdout, from_fullpath, req.arg.path_len), req.arg.path_len);
-
-	/* send pagemap if any */
-	if (use_pagemap)
-		IO_CHECK(fio_write_all(fio_stdout, (*file).pagemap.bitmap, (*file).pagemap.bitmapsize), (*file).pagemap.bitmapsize);
-
-	out = fio_fopen(FIO_BACKUP_HOST, to_fullpath, PG_BINARY_R "+");
-	if (out == NULL)
-		elog(ERROR, "Cannot open restore target file \"%s\": %s", to_fullpath, strerror(errno));
-
-	/* update file permission */
-	if (fio_chmod(FIO_BACKUP_HOST, to_fullpath, file->mode) == -1)
-		elog(ERROR, "Cannot change mode of \"%s\": %s", to_fullpath,
-			strerror(errno));
-
-	elog(VERBOSE, "ftruncate file \"%s\" to size %zu",
-			to_fullpath, file->size);
-	if (fio_ftruncate(out, file->size) == -1)
-		elog(ERROR, "Cannot ftruncate file \"%s\" to size %zu: %s",
-			to_fullpath, file->size, strerror(errno));
-
-	if (!fio_is_remote_file(out))
-	{
-		out_buf = pgut_malloc(STDIO_BUFSIZE);
-		setvbuf(out, out_buf, _IOFBF, STDIO_BUFSIZE);
-	}
-
-	while (true)
-	{
-		fio_header hdr;
-		char buf[BLCKSZ + sizeof(BackupPageHeader)];
-		IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
-
-		if (interrupted)
-			elog(ERROR, "Interrupted during page reading");
-
-		if (hdr.cop == FIO_ERROR)
-		{
-			/* FILE_MISSING, OPEN_FAILED and READ_FAILED */
-			if (hdr.size > 0)
-			{
-				IO_CHECK(fio_read_all(fio_stdin, buf, hdr.size), hdr.size);
-				*errormsg = pgut_malloc(hdr.size);
-				snprintf(*errormsg, hdr.size, "%s", buf);
-			}
-
-			return hdr.arg;
-		}
-		else if (hdr.cop == FIO_SEND_FILE_CORRUPTION)
-		{
-			*err_blknum = hdr.arg;
-
-			if (hdr.size > 0)
-			{
-				IO_CHECK(fio_read_all(fio_stdin, buf, hdr.size), hdr.size);
-				*errormsg = pgut_malloc(hdr.size);
-				snprintf(*errormsg, hdr.size, "%s", buf);
-			}
-			return PAGE_CORRUPTION;
-		}
-		else if (hdr.cop == FIO_SEND_FILE_EOF)
-		{
-			/* n_blocks_read reported by EOF */
-			n_blocks_read = hdr.arg;
-
-			/* receive headers if any */
-			if (hdr.size > 0)
-			{
-				char *tmp = pgut_malloc(hdr.size);
-				IO_CHECK(fio_read_all(fio_stdin, tmp, hdr.size), hdr.size);
-				pg_free(tmp);
-			}
-
-			break;
-		}
-		else if (hdr.cop == FIO_PAGE)
-		{
-			blknum = hdr.arg;
-
-			Assert(hdr.size <= sizeof(buf));
-			IO_CHECK(fio_read_all(fio_stdin, buf, hdr.size), hdr.size);
-
-			if (fio_fseek(out, blknum * BLCKSZ) < 0)
-			{
-				elog(ERROR, "Cannot seek block %u of \"%s\": %s",
-					blknum, to_fullpath, strerror(errno));
-			}
-			// должен прилетать некомпрессированный блок с заголовком
-			// Вставить assert?
-			if (fio_fwrite(out, buf + sizeof(BackupPageHeader), hdr.size - sizeof(BackupPageHeader)) != BLCKSZ)
-			{
-				fio_fclose(out);
-				*err_blknum = blknum;
-				return WRITE_FAILED;
-			}
-			file->write_size += BLCKSZ;
-			file->uncompressed_size += BLCKSZ;
-		}
-		else
-			elog(ERROR, "Remote agent returned message of unexpected type: %i", hdr.cop);
-	}
-
-	if (out)
-		fclose(out);
-	pg_free(out_buf);
-
-	return n_blocks_read;
-}
-
 static void
 fio_send_pio_err(int out, err_i err)
 {
@@ -2232,17 +1865,25 @@ fio_receive_pio_err(fio_header *hdr)
 }
 
 static void
-fio_iterate_pages_impl(pioDrive_i drive, int out, const char *from_fullpath,
-					   pgFile *file, fio_iterate_pages_request *params)
+fio_iterate_pages_impl(pioDrive_i drive, int out, const char *path,
+						datapagemap_t pagemap,
+						fio_iterate_pages_request *params)
 {
 	pioPagesIterator_i	pages;
 	err_i				err = $noerr();
 	fio_header			hdr = {.cop=FIO_ITERATE_DATA};
 
-	pages = $i(pioIteratePages, drive, .from_fullpath = from_fullpath, .file = file,
-			   .start_lsn = params->start_lsn, .calg = params->calg, .clevel = params->clevel,
-			   .checksum_version = params->checksum_version, .backup_mode = params->backup_mode,
-			   .strict = params->strict, .err = &err);
+	pages = $i(pioIteratePages, drive,
+			   .path      = path,
+			   .segno     = params->segno,
+			   .pagemap   = pagemap,
+			   .start_lsn = params->start_lsn,
+			   .calg      = params->calg,
+			   .clevel    = params->clevel,
+			   .checksum_version = params->checksum_version,
+			   .strict    = params->strict,
+			   .err		  = &err);
+
 	if ($haserr(err))
 	{
 		fio_send_pio_err(out, err);
@@ -2276,277 +1917,6 @@ fio_iterate_pages_impl(pioDrive_i drive, int out, const char *from_fullpath,
 
 	hdr = (fio_header){.cop = FIO_ITERATE_EOF};
 	IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
-}
-
-/* TODO: read file using large buffer
- * Return codes:
- *  FIO_ERROR:
- *  	FILE_MISSING (-1)
- *  	OPEN_FAILED  (-2)
- *  	READ_FAILED  (-3)
-
- *  FIO_SEND_FILE_CORRUPTION
- *  FIO_SEND_FILE_EOF
- */
-static void
-fio_send_pages_impl(int out, char* buf)
-{
-	FILE        *in = NULL;
-	BlockNumber  blknum = 0;
-	int          current_pos = 0;
-	BlockNumber  n_blocks_read = 0;
-	PageState    page_st;
-	char         read_buffer[BLCKSZ+1];
-	char         in_buf[STDIO_BUFSIZE];
-	fio_header   hdr;
-	fio_send_request *req = (fio_send_request*) buf;
-	char             *from_fullpath = (char*) buf + sizeof(fio_send_request);
-	bool with_pagemap = req->bitmapsize > 0 ? true : false;
-	/* error reporting */
-	char *errormsg = NULL;
-	/* parse buffer */
-	datapagemap_t *map = NULL;
-	datapagemap_iterator_t *iter = NULL;
-	/* page headers */
-	int32       hdr_num = -1;
-	int32       cur_pos_out = 0;
-	BackupPageHeader2 *headers = NULL;
-
-	/* open source file */
-	in = fopen(from_fullpath, PG_BINARY_R);
-	if (!in)
-	{
-		hdr.cop = FIO_ERROR;
-
-		/* do not send exact wording of ENOENT error message
-		 * because it is a very common error in our case, so
-		 * error code is enough.
-		 */
-		if (errno == ENOENT)
-		{
-			hdr.arg = FILE_MISSING;
-			hdr.size = 0;
-		}
-		else
-		{
-			hdr.arg = OPEN_FAILED;
-			errormsg = pgut_malloc(ERRMSG_MAX_LEN);
-			/* Construct the error message */
-			snprintf(errormsg, ERRMSG_MAX_LEN, "Cannot open file \"%s\": %s",
-					 from_fullpath, strerror(errno));
-			hdr.size = strlen(errormsg) + 1;
-		}
-
-		/* send header and message */
-		IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
-		if (errormsg)
-			IO_CHECK(fio_write_all(out, errormsg, hdr.size), hdr.size);
-
-		goto cleanup;
-	}
-
-	if (with_pagemap)
-	{
-		map = pgut_malloc(sizeof(datapagemap_t));
-		map->bitmapsize = req->bitmapsize;
-		map->bitmap = (char*) buf + sizeof(fio_send_request) + req->path_len;
-
-		/* get first block */
-		iter = datapagemap_iterate(map);
-		datapagemap_next(iter, &blknum);
-
-		setvbuf(in, NULL, _IONBF, BUFSIZ);
-	}
-	else
-		setvbuf(in, in_buf, _IOFBF, STDIO_BUFSIZE);
-
-	/* TODO: what is this barrier for? */
-	read_buffer[BLCKSZ] = 1; /* barrier */
-
-	while (blknum < req->nblocks)
-	{
-		int    rc = 0;
-		size_t read_len = 0;
-		int    retry_attempts = PAGE_READ_ATTEMPTS;
-
-		/* TODO: handle signals on the agent */
-		if (interrupted)
-			elog(ERROR, "Interrupted during remote page reading");
-
-		/* read page, check header and validate checksumms */
-		for (;;)
-		{
-			/*
-			 * Optimize stdio buffer usage, fseek only when current position
-			 * does not match the position of requested block.
-			 */
-			if (current_pos != blknum*BLCKSZ)
-			{
-				current_pos = blknum*BLCKSZ;
-				if (fseek(in, current_pos, SEEK_SET) != 0)
-					elog(ERROR, "fseek to position %u is failed on remote file '%s': %s",
-							current_pos, from_fullpath, strerror(errno));
-			}
-
-			read_len = fread(read_buffer, 1, BLCKSZ, in);
-
-			current_pos += read_len;
-
-			/* report error */
-			if (ferror(in))
-			{
-				hdr.cop = FIO_ERROR;
-				hdr.arg = READ_FAILED;
-
-				errormsg = pgut_malloc(ERRMSG_MAX_LEN);
-				/* Construct the error message */
-				snprintf(errormsg, ERRMSG_MAX_LEN, "Cannot read block %u of '%s': %s",
-						blknum, from_fullpath, strerror(errno));
-				hdr.size = strlen(errormsg) + 1;
-
-				/* send header and message */
-				IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
-				IO_CHECK(fio_write_all(out, errormsg, hdr.size), hdr.size);
-				goto cleanup;
-			}
-
-			if (read_len == BLCKSZ)
-			{
-				rc = validate_one_page(read_buffer, req->segmentno + blknum,
-										   InvalidXLogRecPtr, &page_st,
-										   req->checksumVersion);
-
-				/* TODO: optimize copy of zeroed page */
-				if (rc == PAGE_IS_ZEROED)
-					break;
-				else if (rc == PAGE_IS_VALID)
-					break;
-			}
-
-			if (feof(in))
-				goto eof;
-//		  	else /* readed less than BLKSZ bytes, retry */
-
-			/* File is either has insane header or invalid checksum,
-			 * retry. If retry attempts are exhausted, report corruption.
-			 */
-			if (--retry_attempts == 0)
-			{
-				hdr.cop = FIO_SEND_FILE_CORRUPTION;
-				hdr.arg = blknum;
-
-				/* Construct the error message */
-				if (rc == PAGE_HEADER_IS_INVALID)
-					get_header_errormsg(read_buffer, &errormsg);
-				else if (rc == PAGE_CHECKSUM_MISMATCH)
-					get_checksum_errormsg(read_buffer, &errormsg,
-										  req->segmentno + blknum);
-
-				/* if error message is not empty, set payload size to its length */
-				hdr.size = errormsg ? strlen(errormsg) + 1 : 0;
-
-				/* send header */
-				IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
-
-				/* send error message if any */
-				if (errormsg)
-					IO_CHECK(fio_write_all(out, errormsg, hdr.size), hdr.size);
-
-				goto cleanup;
-			}
-		}
-
-		n_blocks_read++;
-
-		/*
-		 * horizonLsn is not 0 only in case of delta and ptrack backup.
-		 * As far as unsigned number are always greater or equal than zero,
-		 * there is no sense to add more checks.
-		 */
-		if ((req->horizonLsn == InvalidXLogRecPtr) ||                 /* full, page */
-			(page_st.lsn == InvalidXLogRecPtr) ||                     /* zeroed page */
-			(req->horizonLsn > 0 && page_st.lsn > req->horizonLsn))   /* delta, ptrack */
-		{
-			int  compressed_size = 0;
-			char write_buffer[BLCKSZ*2];
-			BackupPageHeader* bph = (BackupPageHeader*)write_buffer;
-
-			/* compress page */
-			hdr.cop = FIO_PAGE;
-			hdr.arg = blknum;
-
-			compressed_size = do_compress(write_buffer + sizeof(BackupPageHeader),
-										  sizeof(write_buffer) - sizeof(BackupPageHeader),
-										  read_buffer, BLCKSZ, req->calg, req->clevel,
-										  NULL);
-
-			if (compressed_size <= 0 || compressed_size >= BLCKSZ)
-			{
-				/* Do not compress page */
-				memcpy(write_buffer + sizeof(BackupPageHeader), read_buffer, BLCKSZ);
-				compressed_size = BLCKSZ;
-			}
-			bph->block = blknum;
-			bph->compressed_size = compressed_size;
-
-			hdr.size = compressed_size + sizeof(BackupPageHeader);
-
-			IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
-			IO_CHECK(fio_write_all(out, write_buffer, hdr.size), hdr.size);
-
-			/* set page header for this file */
-			hdr_num++;
-			if (!headers)
-				headers = (BackupPageHeader2 *) pgut_malloc(sizeof(BackupPageHeader2));
-			else
-				headers = (BackupPageHeader2 *) pgut_realloc(headers, (hdr_num+1) * sizeof(BackupPageHeader2));
-
-			headers[hdr_num].block = blknum;
-			headers[hdr_num].lsn = page_st.lsn;
-			headers[hdr_num].checksum = page_st.checksum;
-			headers[hdr_num].pos = cur_pos_out;
-
-			cur_pos_out += hdr.size;
-		}
-
-		/* next block */
-		if (with_pagemap)
-		{
-			/* exit if pagemap is exhausted */
-			if (!datapagemap_next(iter, &blknum))
-				break;
-		}
-		else
-			blknum++;
-	}
-
-eof:
-	/* We are done, send eof */
-	hdr.cop = FIO_SEND_FILE_EOF;
-	hdr.arg = n_blocks_read;
-	hdr.size = 0;
-
-	if (headers)
-	{
-		hdr.size = (hdr_num+2) * sizeof(BackupPageHeader2);
-
-		/* add dummy header */
-		headers = (BackupPageHeader2 *) pgut_realloc(headers, (hdr_num+2) * sizeof(BackupPageHeader2));
-		headers[hdr_num+1].pos = cur_pos_out;
-	}
-	IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
-
-	if (headers)
-		IO_CHECK(fio_write_all(out, headers, hdr.size), hdr.size);
-
-cleanup:
-	pg_free(map);
-	pg_free(iter);
-	pg_free(errormsg);
-	pg_free(headers);
-	if (in)
-		fclose(in);
-	return;
 }
 
 typedef struct send_file_state {
@@ -4051,10 +3421,6 @@ fio_communicate(int in, int out)
           case FIO_REMOVE_DIR:
             fio_remove_dir_impl(out, buf);
             break;
-		  case FIO_SEND_PAGES:
-			/* buf contain fio_send_request header and bitmap. */
-			fio_send_pages_impl(out, buf);
-			break;
 		  case FIO_SEND_FILE:
 			fio_send_file_impl(out, buf);
 			break;
@@ -4136,58 +3502,20 @@ fio_communicate(int in, int out)
 		case FIO_ITERATE_PAGES:
 			{
 				ft_bytes_t bytes = {.ptr = buf, .len = hdr.size};
-
 				fio_iterate_pages_request *params;
-				char *from_fullpath = NULL;
-				char *rel_path = NULL;
-				char *linked = NULL;
-				pgFile *file = NULL;
+				char         *from_fullpath;
+				datapagemap_t pagemap;
 
-				params = (fio_iterate_pages_request *)bytes.ptr;
-				ft_bytes_consume(&bytes, sizeof(fio_iterate_pages_request));
+				params = (fio_iterate_pages_request*)bytes.ptr;
+				ft_bytes_consume(&bytes, sizeof(*params));
 
-				if (params->from_fullpath_len)
-				{
-					from_fullpath = bytes.ptr;
-					ft_bytes_consume(&bytes, params->from_fullpath_len);
-				}
+				pagemap.bitmapsize = params->pagemaplen;
+				pagemap.bitmap = bytes.ptr;
+				ft_bytes_consume(&bytes, pagemap.bitmapsize);
 
-				if (params->file_rel_path_len)
-				{
-					// free-d in pgFileFree
-					rel_path = pgut_malloc(params->file_rel_path_len);
-					memcpy(rel_path, bytes.ptr, params->file_rel_path_len);
-					ft_bytes_consume(&bytes, params->file_rel_path_len);
-				}
+				from_fullpath = bytes.ptr;
 
-				if (params->file_linked_len)
-				{
-					// free-d in pgFileFree
-					linked = pgut_malloc(params->file_linked_len);
-					memcpy(linked, bytes.ptr, params->file_linked_len);
-					ft_bytes_consume(&bytes, params->file_linked_len);
-				}
-
-				file = pgFileInit(rel_path);
-
-				file->size = params->file_size;
-				file->segno = params->file_segno;
-				file->exists_in_prev = params->file_exists_in_prev;
-				file->pagemap_isabsent = params->file_pagemap_isabsent;
-				file->rel_path = rel_path;
-				file->linked = linked;
-
-				file->pagemap.bitmapsize = params->file_bitmapsize;
-				if (params->file_bitmapsize)
-				{
-					file->pagemap.bitmap = pgut_malloc(params->file_bitmapsize);
-					memcpy(file->pagemap.bitmap, bytes.ptr, params->file_bitmapsize);
-					ft_bytes_consume(&bytes, params->file_bitmapsize);
-				}
-
-				fio_iterate_pages_impl(drive, out, from_fullpath, file, params);
-
-				pgFileFree(file);
+				fio_iterate_pages_impl(drive, out, from_fullpath, pagemap, params);
 			}
 			break;
 		  default:
@@ -6463,67 +5791,41 @@ fobj_klass(pioLocalPagesIterator);
 fobj_klass(pioRemotePagesIterator);
 
 static pioPagesIterator_i
-pioRemoteDrive_pioIteratePages(VSelf, path_t from_fullpath, pgFile *file,
-							  XLogRecPtr start_lsn, CompressAlg calg, int clevel,
-							  uint32 checksum_version, BackupMode backup_mode,
-							  bool strict, err_i *err)
+pioRemoteDrive_pioIteratePages(VSelf, path_t from_fullpath,
+								int segno, datapagemap_t pagemap,
+								XLogRecPtr start_lsn,
+								CompressAlg calg, int clevel,
+								uint32 checksum_version, bool strict, err_i *err)
 {
 	Self(pioRemoteDrive);
 	fobj_t iter = {0};
 	fio_header hdr = {.cop = FIO_ITERATE_PAGES};
-	fio_iterate_pages_request params;
-	memset(&params, 0, sizeof(params));
-	params = (fio_iterate_pages_request){
-		.from_fullpath_len = strlen(from_fullpath)+1,
-		.start_lsn = start_lsn,
-		.calg = calg,
-		.clevel = clevel,
-		.checksum_version=checksum_version,
-		.backup_mode = backup_mode,
-		.strict=strict,
-		.file_size = file->size,
-		.file_rel_path_len = file->rel_path?strlen(file->rel_path)+1:0,
-		.file_linked_len = file->linked?strlen(file->linked)+1:0,
-		.file_segno = file->segno,
-		.file_exists_in_prev = file->exists_in_prev,
-		.file_pagemap_isabsent = file->pagemap_isabsent,
-		.file_bitmapsize = file->pagemap.bitmapsize
+	ft_strbuf_t buf = ft_strbuf_zero();
+	fio_iterate_pages_request req = {
+			.segno = segno,
+			.pagemaplen = pagemap.bitmapsize,
+			.start_lsn = start_lsn,
+			.calg = calg,
+			.clevel = clevel,
+			.checksum_version = checksum_version,
+			.strict = strict,
 	};
 
-    fobj_reset_err(err);
+	ft_strbuf_catbytes(&buf, ft_bytes(&hdr, sizeof(hdr)));
+	ft_strbuf_catbytes(&buf, ft_bytes(&req, sizeof(req)));
+	ft_strbuf_catbytes(&buf, ft_bytes(pagemap.bitmap, pagemap.bitmapsize));
+	ft_strbuf_catc(&buf, from_fullpath);
+	ft_strbuf_cat1(&buf, '\0');
 
-	if (file->size % BLCKSZ != 0)
-		elog(WARNING, "File: \"%s\", invalid file size %zu", from_fullpath, file->size);
+	((fio_header*)buf.ptr)->size = buf.len - sizeof(fio_header);
 
-	size_t total_size = sizeof(hdr) + sizeof(params) + params.from_fullpath_len
-		+ params.file_rel_path_len + params.file_linked_len + params.file_bitmapsize;
+	IO_CHECK(fio_write_all(fio_stdout, buf.ptr, buf.len), buf.len);
 
-	ft_strbuf_t req = ft_strbuf_zero();
+	ft_strbuf_free(&buf);
 
-	hdr.size = total_size - sizeof(hdr);
+	iter = $alloc(pioRemotePagesIterator, .valid = true);
 
-	ft_strbuf_catbytes(&req, ft_bytes(&hdr, sizeof(hdr)));
-
-	ft_strbuf_catbytes(&req, ft_bytes(&params, sizeof(fio_iterate_pages_request)));
-	if(params.from_fullpath_len)
-		ft_strbuf_catbytes(&req, ft_bytes((char *)from_fullpath, params.from_fullpath_len));
-	if(params.file_rel_path_len)
-		ft_strbuf_catbytes(&req, ft_bytes(file->rel_path, params.file_rel_path_len));
-	if(params.file_linked_len)
-		ft_strbuf_catbytes(&req, ft_bytes(file->linked, params.file_linked_len));
-	if(params.file_bitmapsize)
-		ft_strbuf_catbytes(&req, ft_bytes(file->pagemap.bitmap, params.file_bitmapsize));
-
-	Assert(req.len == total_size);
-	Assert(!req.overflowed);
-
-	IO_CHECK(fio_write_all(fio_stdout, req.ptr, req.len), req.len);
-
-	ft_strbuf_free(&req);
-
-    iter = $alloc(pioRemotePagesIterator, .valid = true);
-
-    return bind_pioPagesIterator(iter);
+	return bind_pioPagesIterator(iter);
 }
 
 static err_i
@@ -6562,45 +5864,60 @@ pioRemotePagesIterator_pioNextPage(VSelf, PageIteratorValue *value)
 				intCode(hdr.cop));
 }
 
-static pioPagesIterator_i
-pioLocalDrive_pioIteratePages(VSelf, path_t from_fullpath, pgFile *file,
-							  XLogRecPtr start_lsn, CompressAlg calg, int clevel,
-							  uint32 checksum_version, BackupMode backup_mode,
-							  bool strict, err_i *err)
+pioPagesIterator_i
+doIteratePages_impl(pioDrive_i drive, struct doIteratePages_params p)
 {
-	Self(pioLocalDrive);
-	fobj_t	iter = {0};
-	bool	use_pagemap;
-	FILE   *in;
-
-    fobj_reset_err(err);
-
-	if (file->size % BLCKSZ != 0)
-		elog(WARNING, "File: \"%s\", invalid file size %zu", from_fullpath, file->size);
-
-	/*
-	 * Compute expected number of blocks in the file.
-	 * NOTE This is a normal situation, if the file size has changed
-	 * since the moment we computed it.
-	 */
-	file->n_blocks = ft_div_i64u32_to_i32(file->size, BLCKSZ);
+	datapagemap_t pagemap = {0};
+	fobj_reset_err(p.err);
 
 	/*
 	 * If page map is empty or file is not present in destination directory,
 	 * then copy backup all pages of the relation.
 	 */
+	if (p.file->pagemap.bitmapsize != PageBitmapIsEmpty &&
+		!p.file->pagemap_isabsent && p.file->exists_in_prev &&
+		p.file->pagemap.bitmap)
+		pagemap = p.file->pagemap;
 
-	if (file->pagemap.bitmapsize == PageBitmapIsEmpty ||
-		 file->pagemap_isabsent || !file->exists_in_prev ||
-		 !file->pagemap.bitmap)
-		use_pagemap = false;
-	else
-		use_pagemap = true;
+	/* Skip page if page lsn is less than START_LSN of parent backup. */
+	if (p.start_lsn != InvalidXLogRecPtr)
+	{
+		if (!p.file->exists_in_prev)
+			p.start_lsn = InvalidXLogRecPtr;
+		if (p.backup_mode != BACKUP_MODE_DIFF_DELTA &&
+		    p.backup_mode != BACKUP_MODE_DIFF_PTRACK)
+			p.start_lsn = InvalidXLogRecPtr;
+	}
 
-	if (use_pagemap)
-		elog(LOG, "Using pagemap for file \"%s\"", file->rel_path);
+	return $i(pioIteratePages, drive,
+			  .path = p.from_fullpath,
+			  .segno = p.file->segno,
+			  .pagemap = pagemap,
+			  .start_lsn = p.start_lsn,
+			  .calg = p.calg,
+			  .clevel = p.clevel,
+			  .checksum_version = p.checksum_version,
+			  .strict = p.strict,
+			  .err = p.err);
+}
 
-	in = fopen(from_fullpath, PG_BINARY_R);
+static pioPagesIterator_i
+pioLocalDrive_pioIteratePages(VSelf, path_t path,
+							  int segno, datapagemap_t pagemap,
+							  XLogRecPtr start_lsn,
+							  CompressAlg calg, int clevel,
+							  uint32 checksum_version, bool strict, err_i *err)
+{
+	Self(pioLocalDrive);
+	fobj_t	iter = {0};
+	BlockNumber n_blocks;
+	FILE   *in;
+	int		fd;
+	struct stat st;
+
+	fobj_reset_err(err);
+
+	in = fopen(path, PG_BINARY_R);
 	if (!in)
 	{
 		pioPagesIterator_i ret = {0};
@@ -6608,33 +5925,32 @@ pioLocalDrive_pioIteratePages(VSelf, path_t from_fullpath, pgFile *file,
 		return ret;
 	}
 
-	BlockNumber blknum;
-	datapagemap_t map = {0};
-	if (use_pagemap)
+	fd = fileno(in);
+	if (fstat(fd, &st) == -1)
 	{
-		map = file->pagemap;
+		*err = $syserr(errno, "Cannot stat datafile");
 	}
-	blknum = 0;
 
-	if (start_lsn != InvalidXLogRecPtr &&
-		!((backup_mode == BACKUP_MODE_DIFF_DELTA || backup_mode == BACKUP_MODE_DIFF_PTRACK) &&
-		  file->exists_in_prev))
-		start_lsn = InvalidXLogRecPtr;
+	/*
+	 * Compute expected number of blocks in the file.
+	 * NOTE This is a normal situation, if the file size has changed
+	 * since the moment we computed it.
+	 */
+	n_blocks = ft_div_i64u32_to_i32(st.st_size, BLCKSZ);
 
-    iter = $alloc(pioLocalPagesIterator,
-				  .segno = file->segno,
-				  .blknum = blknum,
-				  .n_blocks = file->n_blocks,
+	iter = $alloc(pioLocalPagesIterator,
+				  .segno = segno,
+				  .n_blocks = n_blocks,
 				  .strict = strict,
-				  .from_fullpath = from_fullpath,
-				  .map = map,
+				  .from_fullpath = path,
+				  .map = pagemap,
 				  .in = in,
 				  .start_lsn = start_lsn,
 				  .calg = calg,
 				  .clevel = clevel,
 				  .checksum_version = checksum_version);
 
-    return bind_pioPagesIterator(iter);
+	return bind_pioPagesIterator(iter);
 }
 
 static void

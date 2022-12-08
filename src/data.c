@@ -1323,10 +1323,13 @@ check_data_file(pgFile *file, const char *from_fullpath, uint32 checksum_version
 	bool				is_valid = true;
 	err_i				err;
 
-	pages = $i(pioIteratePages, local_location, .from_fullpath = from_fullpath,
-			   .file = file, .start_lsn = InvalidXLogRecPtr, .calg = /* No data needed */ NONE_COMPRESS, .clevel = 0,
-			   .checksum_version = checksum_version, .backup_mode = BACKUP_MODE_FULL,
-			   .strict = false, .err = &err);
+	pages = doIteratePages(local_location,
+						   .from_fullpath = from_fullpath,
+						   .file = file,
+						   .checksum_version = checksum_version,
+						   .backup_mode = BACKUP_MODE_FULL,
+						   .strict = false,
+						   .err = &err);
 	if ($haserr(err))
 	{
 		if (getErrno(err) == ENOENT) {
@@ -1787,10 +1790,10 @@ send_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
 	parray *harray = NULL;
 	err_i err = $noerr();
 
-	pages = $i(pioIteratePages, db_location, .from_fullpath = from_fullpath, .file = file,
+	pages = doIteratePages(db_location, .from_fullpath = from_fullpath, .file = file,
 			   .start_lsn = prev_backup_start_lsn, .calg = calg, .clevel = clevel,
 			   .checksum_version = checksum_version, .backup_mode = backup_mode,
-			   .strict = true, .err = &err);
+			   .err = &err);
 	if ($haserr(err))
 		return $iresult(err);
 
@@ -1895,10 +1898,10 @@ copy_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
 	pioPagesIterator_i pages;
 	pioFile_i out;
 
-	pages = $i(pioIteratePages, backup_location, .from_fullpath = from_fullpath,
-			   .file = file, .start_lsn = sync_lsn, .calg = NONE_COMPRESS, .clevel = 0,
+	pages = doIteratePages(backup_location, .from_fullpath = from_fullpath,
+			   .file = file, .start_lsn = sync_lsn,
 			   .checksum_version = checksum_version,
-			   .backup_mode = backup_mode, .strict = true, .err = &err);
+			   .backup_mode = backup_mode, .err = &err);
 	if ($haserr(err))
 		return $iresult(err);
 

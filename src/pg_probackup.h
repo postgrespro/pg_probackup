@@ -1153,14 +1153,6 @@ extern parray * pg_ptrack_get_pagemapset(PGconn *backup_conn, const char *ptrack
 extern FILE* open_local_file_rw(const char *to_fullpath, char **out_buf, uint32 buf_size);
 
 /* FIO */
-extern int fio_send_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
-	                      XLogRecPtr horizonLsn, int calg, int clevel, uint32 checksum_version,
-	                      bool use_pagemap, BlockNumber *err_blknum, char **errormsg,
-	                      BackupPageHeader2 **headers);
-extern int fio_copy_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
-	                      XLogRecPtr horizonLsn, int calg, int clevel, uint32 checksum_version,
-	                      bool use_pagemap, BlockNumber *err_blknum, char **errormsg);
-/* return codes for fio_send_pages */
 extern int fio_send_file(const char *from_fullpath, FILE* out, bool cut_zero_tail,
 														pgFile *file, char **errormsg);
 extern int fio_send_file_local(const char *from_fullpath, FILE* out, bool cut_zero_tail,
@@ -1171,7 +1163,7 @@ extern bool pgut_rmtree(const char *path, bool rmtopdir, bool strict);
 extern void pgut_setenv(const char *key, const char *val);
 extern void pgut_unsetenv(const char *key);
 
-/* return codes for fio_send_pages() and fio_send_file() */
+/* return codes for fio_send_file() */
 #define SEND_OK       (0)
 #define FILE_MISSING (-1)
 #define OPEN_FAILED  (-2)
