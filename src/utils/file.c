@@ -748,46 +748,6 @@ fio_truncate(int fd, off_t size)
 	}
 }
 
-
-/*
- * Read file from specified location.
- */
-int
-fio_pread(FILE* f, void* buf, off_t offs)
-{
-	if (fio_is_remote_file(f))
-	{
-		int fd = fio_fileno(f);
-		fio_header hdr;
-
-		hdr.cop = FIO_PREAD;
-		hdr.handle = fd & ~FIO_PIPE_MARKER;
-		hdr.size = 0;
-		hdr.arg = offs;
-
-		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
-
-		IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
-		Assert(hdr.cop == FIO_SEND);
-		if (hdr.size != 0)
-			IO_CHECK(fio_read_all(fio_stdin, buf, hdr.size), hdr.size);
-
-		/* TODO: error handling */
-
-		return hdr.arg;
-	}
-	else
-	{
-		/* For local file, opened by fopen, we should use stdio functions */
-		int rc = fseek(f, offs, SEEK_SET);
-
-		if (rc < 0)
-			return rc;
-
-		return fread(buf, 1, BLCKSZ, f);
-	}
-}
-
 /* Set position in stdio file */
 int
 fio_fseek(FILE* f, off_t offs)
@@ -6093,8 +6053,14 @@ prepare_page(pioLocalPagesIterator *iter, BlockNumber blknum, Page page, PageSta
 	 */
 	while (!page_is_valid && try_again--)
 	{
-		/* read the block */
-		int read_len = fio_pread(iter->in, page, blknum * BLCKSZ);
+		int read_len = fseeko(iter->in, (off_t)blknum * BLCKSZ, SEEK_SET);
+		if (read_len == 0) /* seek is successful */
+		{
+			/* read the block */
+			read_len = fread(page, 1, BLCKSZ, iter->in);
+			if (read_len == 0 && ferror(iter->in))
+				read_len = -1;
+		}
 
 		/* The block could have been truncated. It is fine. */
 		if (read_len == 0)

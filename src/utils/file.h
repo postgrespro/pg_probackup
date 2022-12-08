@@ -160,7 +160,6 @@ extern ssize_t fio_fwrite_async_compressed(FILE* f, void const* buf, size_t size
 extern size_t  fio_fwrite_async(FILE* f, void const* buf, size_t size);
 extern int     fio_check_error_file(FILE* f, char **errmsg);
 extern ssize_t fio_fread(FILE* f, void* buf, size_t size);
-extern int     fio_pread(FILE* f, void* buf, off_t offs);
 extern int     fio_fprintf(FILE* f, const char* arg, ...) pg_attribute_printf(2, 3);
 extern int     fio_fflush(FILE* f);
 extern int     fio_fseek(FILE* f, off_t offs);
