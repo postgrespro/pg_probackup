@@ -6087,20 +6087,19 @@ pioCopyWithFilters(pioWriteFlush_i dest, pioRead_i src,
         size_t read_len = 0;
         size_t write_len = 0;
 
-        read_len = pioReadFull(src, ft_bytes(buf, OUT_BUF_SIZE), &rerr);
+        read_len = $i(pioRead, src, ft_bytes(buf, OUT_BUF_SIZE), &rerr);
 
         if (read_len == 0)
             break;
 
         write_len = $i(pioWrite, dest, ft_bytes(buf, read_len), &werr);
-        if (write_len != read_len || $haserr(werr))
+        *copied += write_len;
+        if (write_len != read_len)
         {
-            if (!$haserr(werr))
-                werr = $err(SysErr, "Short write to destination file {path}: {writtenSz} < {wantedSz}",
-                         path($irepr(dest)),
-                         wantedSz(read_len), writtenSz(write_len));
+			werr = $err(SysErr, "Short write to destination file {path}: {writtenSz} < {wantedSz}",
+					 path($irepr(dest)),
+					 wantedSz(read_len), writtenSz(write_len));
         }
-		*copied += write_len;
     }
 
     err = fobj_err_combine(rerr, werr);
