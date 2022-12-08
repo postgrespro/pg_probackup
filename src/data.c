@@ -450,41 +450,24 @@ compress_page(char *write_buffer, size_t buffer_size, BlockNumber blknum, void *
 }
 
 static int
-backup_page(pgFile *file, BlockNumber blknum, pioFile_i out,
-						 pg_crc32 *crc, void *compressed_page, size_t compressed_size, CompressAlg calg, int clevel,
-						const char *from_fullpath, const char *to_fullpath)
+backup_page(pioWrite_i out, BlockNumber blknum, ft_bytes_t page, const char *to_fullpath)
 {
-	size_t		write_buffer_size = 0;
-	char		write_buffer[BLCKSZ*2]; /* compressed page may require more space than uncompressed */
-	BackupPageHeader* bph = (BackupPageHeader*)write_buffer;
+	BackupPageHeader bph;
 	err_i	err = $noerr();
-	size_t	rc;
 
-	memcpy(write_buffer + sizeof(BackupPageHeader), compressed_page, compressed_size);
+	bph.block = blknum;
+	bph.compressed_size = page.len;
 
-	file->compress_alg = calg; /* TODO: wtf? why here? */
-
-	bph->block = blknum;
-	bph->compressed_size = compressed_size;
-	write_buffer_size = compressed_size + sizeof(BackupPageHeader);
-
-	/* Update CRC */
-	COMP_CRC32C(*crc, write_buffer, write_buffer_size);
+	$i(pioWrite, out, .buf = ft_bytes(&bph, sizeof(bph)), .err = &err);
+	if ($haserr(err))
+		ft_logerr(ERROR, $errmsg(err), "Write page header in backup_page");
 
 	/* write data page */
-	rc = $i(pioWrite, out, .buf = ft_bytes(write_buffer, write_buffer_size), .err = &err);
+	$i(pioWrite, out, .buf = page, .err = &err);
 	if ($haserr(err))
-	{
 		ft_logerr(ERROR, $errmsg(err), "Write error in compress and backup");
-	}
-	if (rc != write_buffer_size)
-		elog(ERROR, "File: \"%s\", cannot write at block %u: %s",
-			 to_fullpath, blknum, strerror(errno));
 
-	file->write_size += write_buffer_size;
-	file->uncompressed_size += BLCKSZ;
-
-	return compressed_size;
+	return sizeof(bph) + page.len;
 }
 
 /* Write page as-is. TODO: make it fastpath option in compress_and_backup_page() */
@@ -576,7 +559,7 @@ backup_data_file(pgFile *file, const char *from_fullpath, const char *to_fullpat
 	file->read_size = 0;
 	file->write_size = 0;
 	file->uncompressed_size = 0;
-	INIT_CRC32C(file->crc);
+	file->crc = 0; /* crc of empty file is 0 */
 
 	/*
 	 * Read each page, verify checksum and write it to backup.
@@ -652,9 +635,6 @@ backup_data_file(pgFile *file, const char *from_fullpath, const char *to_fullpat
 	}
 
 cleanup:
-
-	/* finish CRC calculation */
-	FIN_CRC32C(file->crc);
 
 	/* dump page headers */
 	write_page_headers(headers, file, hdr_map, is_merge);
@@ -2019,8 +1999,8 @@ send_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
 	pioPagesIterator_i pages;
 	int   n_blocks_read = 0;
 	pioFile_i out = $null(pioFile);
-	off_t cur_pos_out = 0;
-	int   compressed_size = 0;
+	pioWriteFlush_i wrapped = $null(pioWriteFlush);
+	pioCRC32Counter *crc32 = NULL;
 	BackupPageHeader2 *header = NULL;
 	parray *harray = NULL;
 	err_i err = $noerr();
@@ -2057,21 +2037,27 @@ send_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
 				{
 					ft_logerr(FT_FATAL, $errmsg(err), "Cannot write file");
 				}
+				crc32 = pioCRC32Counter_alloc();
+				wrapped = pioWrapWriteFilter($reduce(pioWriteFlush, out),
+											 $bind(pioFilter, crc32),
+											 BLCKSZ + sizeof(BackupPageHeader));
+				file->compress_alg = calg;
 			}
 
 			header = pgut_new0(BackupPageHeader2);
 			*header = (BackupPageHeader2){
 					.block = value.blknum,
-					.pos = cur_pos_out,
+					.pos = file->write_size,
 					.lsn = value.state.lsn,
 					.checksum = value.state.checksum,
 			};
 			parray_append(harray, header);
 
-			compressed_size  = backup_page(file, value.blknum, out, &(file->crc),
-														value.compressed_page, value.compressed_size, calg, clevel,
-														from_fullpath, to_fullpath);
-			cur_pos_out += compressed_size + sizeof(BackupPageHeader);
+			file->write_size += backup_page($reduce(pioWrite, wrapped), value.blknum,
+											ft_bytes(value.compressed_page, value.compressed_size),
+											to_fullpath);
+			file->uncompressed_size += BLCKSZ;
+
 		}
 		n_blocks_read++;
 	}
@@ -2093,13 +2079,23 @@ send_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
 			(*headers)[i] = *header;
 			pg_free(header);
 		}
-		(*headers)[hdr_num] = (BackupPageHeader2){.pos=cur_pos_out};
+		(*headers)[hdr_num] = (BackupPageHeader2){.pos=file->write_size};
 	}
 	parray_free(harray);
 
 	/* close local output file */
 	if ($notNULL(out))
-		$i(pioClose, out, true);
+	{
+		err = $i(pioWriteFinish, wrapped);
+		if ($haserr(err))
+			ft_logerr(FT_FATAL, $errmsg(err), "Finish write backup file");
+		file->crc = pioCRC32Counter_getCRC32(crc32);
+		ft_dbg_assert(file->write_size == pioCRC32Counter_getSize(crc32));
+
+		err = $i(pioClose, out, true);
+		if ($haserr(err))
+			ft_logerr(FT_FATAL, $errmsg(err), "Close write backup file");
+	}
 
 	return n_blocks_read;
 }
