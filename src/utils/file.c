@@ -121,14 +121,6 @@ static void dir_list_file_internal(parray *files, pgFile *parent, const char *pa
 								   bool handle_tablespaces, bool follow_symlink, bool backup_logs,
 								   bool skip_hidden, int external_dir_num, pioDrive_i drive);
 
-static int32 prepare_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
-						  BlockNumber blknum, FILE *in,
-						  BackupMode backup_mode,
-						  Page page, bool strict,
-						  uint32 checksum_version,
-						  const char *from_fullpath,
-						  PageState *page_st);
-
 void
 setMyLocation(ProbackupSubcmd const subcmd)
 {
@@ -6447,19 +6439,19 @@ typedef struct pioRemotePagesIterator
 
 typedef struct pioLocalPagesIterator
 {
-	bool valid;
 	BlockNumber	blknum;
+	BlockNumber n_blocks;
 
 	bool		strict;
-	pgFile		*file;
-	datapagemap_iterator_t *map_iter;
+	int			segno;
+	datapagemap_t map;
 	FILE		*in;
 	const char	*from_fullpath;
+	/* prev_backup_start_lsn */
 	XLogRecPtr	start_lsn;
 
 	CompressAlg	calg;
 	int			clevel;
-	BackupMode	backup_mode;
 	uint32		checksum_version;
 } pioLocalPagesIterator;
 
@@ -6579,7 +6571,6 @@ pioLocalDrive_pioIteratePages(VSelf, path_t from_fullpath, pgFile *file,
 	Self(pioLocalDrive);
 	fobj_t	iter = {0};
 	bool	use_pagemap;
-	datapagemap_iterator_t *map_iter = NULL;
 	FILE   *in;
 
     fobj_reset_err(err);
@@ -6618,17 +6609,29 @@ pioLocalDrive_pioIteratePages(VSelf, path_t from_fullpath, pgFile *file,
 	}
 
 	BlockNumber blknum;
+	datapagemap_t map = {0};
 	if (use_pagemap)
 	{
-		map_iter = datapagemap_iterate(&file->pagemap);
-		blknum = 0;
-	} else {
-		blknum = -1;
+		map = file->pagemap;
 	}
+	blknum = 0;
 
-    iter = $alloc(pioLocalPagesIterator, .valid = true, .blknum = blknum, .strict = strict,
-				  .file = file, .from_fullpath = from_fullpath, .map_iter = map_iter,
-				  .in = in, .start_lsn = start_lsn, .calg = calg, .clevel = clevel, .backup_mode = backup_mode,
+	if (start_lsn != InvalidXLogRecPtr &&
+		!((backup_mode == BACKUP_MODE_DIFF_DELTA || backup_mode == BACKUP_MODE_DIFF_PTRACK) &&
+		  file->exists_in_prev))
+		start_lsn = InvalidXLogRecPtr;
+
+    iter = $alloc(pioLocalPagesIterator,
+				  .segno = file->segno,
+				  .blknum = blknum,
+				  .n_blocks = file->n_blocks,
+				  .strict = strict,
+				  .from_fullpath = from_fullpath,
+				  .map = map,
+				  .in = in,
+				  .start_lsn = start_lsn,
+				  .calg = calg,
+				  .clevel = clevel,
 				  .checksum_version = checksum_version);
 
     return bind_pioPagesIterator(iter);
@@ -6639,12 +6642,13 @@ pioLocalPagesIterator_fobjDispose(VSelf)
 {
 	Self(pioLocalPagesIterator);
 
-	if (self->map_iter) {
-		/* Only free iterator. Map itself is not owned by us. */
-		pg_free(self->map_iter);
-	}
 	if(self->in) fclose(self->in);
 }
+
+static int32 prepare_page(pioLocalPagesIterator *iter,
+						  BlockNumber blknum,
+						  Page page,
+						  PageState *page_st);
 
 static err_i
 pioLocalPagesIterator_pioNextPage(VSelf, PageIteratorValue *value)
@@ -6652,27 +6656,23 @@ pioLocalPagesIterator_pioNextPage(VSelf, PageIteratorValue *value)
 	FOBJ_FUNC_ARP();
 	Self(pioLocalPagesIterator);
 
-	while (self->valid)
+	while (self->blknum < self->n_blocks)
 	{
 		char page_buf[BLCKSZ];
+		BlockNumber blknum = self->blknum;
 
 		/* next block */
-		if (self->map_iter)
+		if (self->map.bitmapsize &&
+			!datapagemap_first(self->map, &blknum))
 		{
-			/* exit if pagemap is exhausted */
-			if (!datapagemap_next(self->map_iter, &(self->blknum)))
-				break;
-		}
-		else
-			self->blknum++;
-
-		if (self->blknum >= self->file->n_blocks)
+			self->blknum = self->n_blocks;
 			break;
+		}
 
-		int rc = prepare_page(self->file, self->start_lsn, self->blknum,
-							  self->in, self->backup_mode, page_buf, self->strict,
-							  self->checksum_version, self->from_fullpath, &value->state);
-		value->blknum = self->blknum;
+		value->blknum = blknum;
+		self->blknum = blknum+1;
+
+		int rc = prepare_page(self, blknum, page_buf, &value->state);
 		value->page_result = rc;
 		if (rc == PageIsTruncated)
 			break;
@@ -6685,7 +6685,6 @@ pioLocalPagesIterator_pioNextPage(VSelf, PageIteratorValue *value)
 		return $noerr();
 	}
 	value->page_result = PageIsTruncated;
-	self->valid = false;
 	return $noerr();
 }
 
@@ -6706,18 +6705,13 @@ pioLocalPagesIterator_pioNextPage(VSelf, PageIteratorValue *value)
  *                                TODO: probably we should always
  *                                      return it to the caller
  */
-int32
-prepare_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
-			 BlockNumber blknum, FILE *in,
-			 BackupMode backup_mode,
-			 Page page, bool strict,
-			 uint32 checksum_version,
-			 const char *from_fullpath,
-			 PageState *page_st)
+static int32
+prepare_page(pioLocalPagesIterator *iter, BlockNumber blknum, Page page, PageState *page_st)
 {
 	int			try_again = PAGE_READ_ATTEMPTS;
 	bool		page_is_valid = false;
-	BlockNumber absolute_blknum = file->segno * RELSEG_SIZE + blknum;
+	const char *from_fullpath = iter->from_fullpath;
+	BlockNumber absolute_blknum = iter->segno * RELSEG_SIZE + blknum;
 	int rc = 0;
 
 	/* check for interrupt */
@@ -6732,7 +6726,7 @@ prepare_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 	while (!page_is_valid && try_again--)
 	{
 		/* read the block */
-		int read_len = fio_pread(in, page, blknum * BLCKSZ);
+		int read_len = fio_pread(iter->in, page, blknum * BLCKSZ);
 
 		/* The block could have been truncated. It is fine. */
 		if (read_len == 0)
@@ -6753,7 +6747,7 @@ prepare_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 			/* We have BLCKSZ of raw data, validate it */
 			rc = validate_one_page(page, absolute_blknum,
 								   InvalidXLogRecPtr, page_st,
-								   checksum_version);
+								   iter->checksum_version);
 			switch (rc)
 			{
 				case PAGE_IS_ZEROED:
@@ -6762,7 +6756,7 @@ prepare_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 
 				case PAGE_IS_VALID:
 					/* in DELTA or PTRACK modes we must compare lsn */
-					if (backup_mode == BACKUP_MODE_DIFF_DELTA || backup_mode == BACKUP_MODE_DIFF_PTRACK)
+					if (iter->start_lsn != InvalidXLogRecPtr)
 						page_is_valid = true;
 					else
 						return PageIsOk;
@@ -6782,7 +6776,7 @@ prepare_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 			}
 		}
 		/* avoid re-reading once buffered data, flushing on further attempts, see PBCKP-150 */
-		fflush(in);
+		fflush(iter->in);
 	}
 
 	/*
@@ -6799,12 +6793,12 @@ prepare_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 			get_header_errormsg(page, &errormsg);
 		else if (rc == PAGE_CHECKSUM_MISMATCH)
 			get_checksum_errormsg(page, &errormsg,
-								  file->segno * RELSEG_SIZE + blknum);
+								  absolute_blknum);
 
 		/* Error out in case of merge or backup without ptrack support;
 		 * issue warning in case of checkdb or backup with ptrack support
 		 */
-		if (!strict)
+		if (!iter->strict)
 			elevel = WARNING;
 
 		if (errormsg)
@@ -6819,23 +6813,20 @@ prepare_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 	}
 
 	/* Checkdb not going futher */
-	if (!strict)
+	if (!iter->strict)
 		return PageIsOk;
 
 	/*
 	 * Skip page if page lsn is less than START_LSN of parent backup.
 	 * Nullified pages must be copied by DELTA backup, just to be safe.
 	 */
-	if ((backup_mode == BACKUP_MODE_DIFF_DELTA || backup_mode == BACKUP_MODE_DIFF_PTRACK) &&
-		file->exists_in_prev &&
-		page_st->lsn > 0 &&
-		page_st->lsn < prev_backup_start_lsn)
+	if (page_st->lsn > 0 &&
+		page_st->lsn < iter->start_lsn)
 	{
-		elog(VERBOSE, "Skipping blknum %u in file: \"%s\", file->exists_in_prev: %s, page_st->lsn: %X/%X, prev_backup_start_lsn: %X/%X",
+		elog(VERBOSE, "Skipping blknum %u in file: \"%s\", page_st->lsn: %X/%X, prev_backup_start_lsn: %X/%X",
 			 blknum, from_fullpath,
-			 file->exists_in_prev ? "true" : "false",
 			 (uint32) (page_st->lsn >> 32), (uint32) page_st->lsn,
-			 (uint32) (prev_backup_start_lsn >> 32), (uint32) prev_backup_start_lsn);
+			 (uint32) (iter->start_lsn >> 32), (uint32) iter->start_lsn);
 		return SkipCurrentPage;
 	}
 

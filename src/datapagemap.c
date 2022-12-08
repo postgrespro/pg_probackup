@@ -16,7 +16,7 @@
 
 struct datapagemap_iterator
 {
-	datapagemap_t *map;
+	datapagemap_t map;
 	BlockNumber nextblkno;
 };
 
@@ -65,6 +65,31 @@ datapagemap_add(datapagemap_t *map, BlockNumber blkno)
 	map->bitmap[offset] |= (1 << bitno);
 }
 
+bool
+datapagemap_first(datapagemap_t map, BlockNumber *start_and_result)
+{
+	BlockNumber blk = *start_and_result;
+	for (;;)
+	{
+		int			nextoff = blk / 8;
+		int			bitno = blk % 8;
+
+		if (nextoff >= map.bitmapsize)
+			break;
+
+		if (map.bitmap[nextoff] & (1 << bitno))
+		{
+			*start_and_result = blk;
+			return true;
+		}
+		blk++;
+	}
+
+	/* no more set bits in this bitmap. */
+	*start_and_result = UINT32_MAX;
+	return false;
+}
+
 /*
  * Start iterating through all entries in the page map.
  *
@@ -78,7 +103,7 @@ datapagemap_iterate(datapagemap_t *map)
 	datapagemap_iterator_t *iter;
 
 	iter = pg_malloc(sizeof(datapagemap_iterator_t));
-	iter->map = map;
+	iter->map = *map;
 	iter->nextblkno = 0;
 
 	return iter;
@@ -87,7 +112,7 @@ datapagemap_iterate(datapagemap_t *map)
 bool
 datapagemap_next(datapagemap_iterator_t *iter, BlockNumber *blkno)
 {
-	datapagemap_t *map = iter->map;
+	datapagemap_t *map = &iter->map;
 
 	for (;;)
 	{

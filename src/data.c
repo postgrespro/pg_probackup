@@ -36,12 +36,12 @@ typedef struct DataPage
 static bool get_page_header(FILE *in, const char *fullpath, BackupPageHeader *bph,
 							pg_crc32 *crc, uint32 backup_version);
 
-static int send_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
+static err_i send_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
 					  XLogRecPtr prev_backup_start_lsn, CompressAlg calg, int clevel,
 					  uint32 checksum_version,
 					  BackupPageHeader2 **headers, BackupMode backup_mode);
 
-static int copy_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
+static err_i copy_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
 					  XLogRecPtr sync_lsn, uint32 checksum_version,
 					  BackupMode backup_mode);
 
@@ -296,25 +296,23 @@ compress_page(char *write_buffer, size_t buffer_size, BlockNumber blknum, void *
 	return compressed_size;
 }
 
-static int
-backup_page(pioWrite_i out, BlockNumber blknum, ft_bytes_t page, const char *to_fullpath)
+static size_t
+backup_page(pioWrite_i out, BlockNumber blknum, ft_bytes_t page,
+			const char *to_fullpath, err_i *err)
 {
 	BackupPageHeader bph;
-	err_i	err = $noerr();
+	size_t n;
+	fobj_reset_err(err);
 
 	bph.block = blknum;
 	bph.compressed_size = page.len;
 
-	$i(pioWrite, out, .buf = ft_bytes(&bph, sizeof(bph)), .err = &err);
-	if ($haserr(err))
-		ft_logerr(ERROR, $errmsg(err), "Write page header in backup_page");
+	n = $i(pioWrite, out, .buf = ft_bytes(&bph, sizeof(bph)), .err = err);
+	if ($haserr(*err))
+		return n;
 
 	/* write data page */
-	$i(pioWrite, out, .buf = page, .err = &err);
-	if ($haserr(err))
-		ft_logerr(ERROR, $errmsg(err), "Write error in compress and backup");
-
-	return sizeof(bph) + page.len;
+	return n + $i(pioWrite, out, .buf = page, .err = err);
 }
 
 /* Write page as-is. TODO: make it fastpath option in compress_and_backup_page() */
@@ -367,11 +365,9 @@ backup_data_file(pgFile *file, const char *from_fullpath, const char *to_fullpat
 				 CompressAlg calg, int clevel, uint32 checksum_version,
 				 HeaderMap *hdr_map, bool is_merge)
 {
-	int         rc;
-	char	   *errmsg = NULL;
-	BlockNumber err_blknum = 0;
 	/* page headers */
 	BackupPageHeader2 *headers = NULL;
+	err_i 		err = $noerr();
 
 	/* sanity */
 	if (file->size % BLCKSZ != 0)
@@ -422,48 +418,21 @@ backup_data_file(pgFile *file, const char *from_fullpath, const char *to_fullpat
 	XLogRecPtr start_lsn = (backup_mode == BACKUP_MODE_DIFF_DELTA || backup_mode == BACKUP_MODE_DIFF_PTRACK) &&
 		file->exists_in_prev ? prev_backup_start_lsn : InvalidXLogRecPtr;
 	/* TODO: stop handling errors internally */
-	rc = send_pages(to_fullpath, from_fullpath, file, start_lsn,
+	err = send_pages(to_fullpath, from_fullpath, file, start_lsn,
 					   calg, clevel, checksum_version,
 					   &headers, backup_mode);
 
-	/* check for errors */
-	if (rc == FILE_MISSING)
+	if ($haserr(err))
 	{
-		elog(is_merge ? ERROR : LOG, "File not found: \"%s\"", from_fullpath);
-		file->write_size = FILE_NOT_FOUND;
-		goto cleanup;
+		if (getErrno(err) == ENOENT)
+		{
+			elog(is_merge ? ERROR : LOG, "File not found: \"%s\"",
+				 from_fullpath);
+			file->write_size = FILE_NOT_FOUND;
+			goto cleanup;
+		}
+		ft_logerr(FT_FATAL, $errmsg(err), "Copying data file \"%s\"", file->rel_path);
 	}
-
-	else if (rc == WRITE_FAILED)
-		elog(ERROR, "Cannot write block %u of \"%s\": %s",
-				err_blknum, to_fullpath, strerror(errno));
-
-	else if (rc == PAGE_CORRUPTION)
-	{
-		if (errmsg)
-			elog(ERROR, "Corruption detected in file \"%s\", block %u: %s",
-					from_fullpath, err_blknum, errmsg);
-		else
-			elog(ERROR, "Corruption detected in file \"%s\", block %u",
-					from_fullpath, err_blknum);
-	}
-	/* OPEN_FAILED and READ_FAILED */
-	else if (rc == OPEN_FAILED)
-	{
-		if (errmsg)
-			elog(ERROR, "%s", errmsg);
-		else
-			elog(ERROR, "Cannot open file \"%s\"", from_fullpath);
-	}
-	else if (rc == READ_FAILED)
-	{
-		if (errmsg)
-			elog(ERROR, "%s", errmsg);
-		else
-			elog(ERROR, "Cannot read file \"%s\"", from_fullpath);
-	}
-
-	file->read_size = (int64_t)rc * BLCKSZ;
 
 	/* refresh n_blocks for FULL and DELTA */
 	if (backup_mode == BACKUP_MODE_FULL ||
@@ -486,7 +455,6 @@ cleanup:
 	/* dump page headers */
 	write_page_headers(headers, file, hdr_map, is_merge);
 
-	pg_free(errmsg);
 	pg_free(file->pagemap.bitmap);
 	pg_free(headers);
 }
@@ -503,9 +471,7 @@ catchup_data_file(pgFile *file, const char *from_fullpath, const char *to_fullpa
 				  XLogRecPtr sync_lsn, BackupMode backup_mode,
 				  uint32 checksum_version, int64_t prev_size)
 {
-	int         rc;
-	char       *errmsg = NULL;
-	BlockNumber	err_blknum = 0;
+	err_i       err = $noerr();
 
 	/*
 	 * Compute expected number of blocks in the file.
@@ -539,47 +505,18 @@ catchup_data_file(pgFile *file, const char *from_fullpath, const char *to_fullpa
 	XLogRecPtr start_lsn = ((backup_mode == BACKUP_MODE_DIFF_DELTA || backup_mode == BACKUP_MODE_DIFF_PTRACK) &&
 						   file->exists_in_prev) ? sync_lsn : InvalidXLogRecPtr;
 	/* TODO: stop handling errors internally */
-	rc = copy_pages(to_fullpath, from_fullpath, file, start_lsn,
+	err = copy_pages(to_fullpath, from_fullpath, file, start_lsn,
 					checksum_version, backup_mode);
-
-	/* check for errors */
-	if (rc == FILE_MISSING)
+	if ($haserr(err))
 	{
-		elog(LOG, "File not found: \"%s\"", from_fullpath);
-		file->write_size = FILE_NOT_FOUND;
-		goto cleanup;
+		if (getErrno(err) == ENOENT)
+		{
+			elog(LOG, "File not found: \"%s\"", from_fullpath);
+			file->write_size = FILE_NOT_FOUND;
+			goto cleanup;
+		}
+		ft_logerr(FT_FATAL, $errmsg(err), "Copying file \"%s\"", file->rel_path);
 	}
-
-	else if (rc == WRITE_FAILED)
-		elog(ERROR, "Cannot write block %u of \"%s\": %s",
-				err_blknum, to_fullpath, strerror(errno));
-
-	else if (rc == PAGE_CORRUPTION)
-	{
-		if (errmsg)
-			elog(ERROR, "Corruption detected in file \"%s\", block %u: %s",
-					from_fullpath, err_blknum, errmsg);
-		else
-			elog(ERROR, "Corruption detected in file \"%s\", block %u",
-					from_fullpath, err_blknum);
-	}
-	/* OPEN_FAILED and READ_FAILED */
-	else if (rc == OPEN_FAILED)
-	{
-		if (errmsg)
-			elog(ERROR, "%s", errmsg);
-		else
-			elog(ERROR, "Cannot open file \"%s\"", from_fullpath);
-	}
-	else if (rc == READ_FAILED)
-	{
-		if (errmsg)
-			elog(ERROR, "%s", errmsg);
-		else
-			elog(ERROR, "Cannot read file \"%s\"", from_fullpath);
-	}
-
-	file->read_size = (int64_t)rc * BLCKSZ;
 
 	/* Determine that file didn`t changed in case of incremental catchup */
 	if (backup_mode != BACKUP_MODE_FULL &&
@@ -591,7 +528,6 @@ catchup_data_file(pgFile *file, const char *from_fullpath, const char *to_fullpa
 	}
 
 cleanup:
-	pg_free(errmsg);
 	pg_free(file->pagemap.bitmap);
 }
 
@@ -1834,7 +1770,7 @@ open_local_file_rw(const char *to_fullpath, char **out_buf, uint32 buf_size)
 }
 
 /* backup local file */
-static int
+static err_i
 send_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
 		   XLogRecPtr prev_backup_start_lsn, CompressAlg calg, int clevel,
 		   uint32 checksum_version, BackupPageHeader2 **headers,
@@ -1844,7 +1780,6 @@ send_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
 	pioDrive_i backup_location = pioDriveForLocation(FIO_BACKUP_HOST);
 	pioDrive_i db_location = pioDriveForLocation(FIO_DB_HOST);
 	pioPagesIterator_i pages;
-	int   n_blocks_read = 0;
 	pioFile_i out = $null(pioFile);
 	pioWriteFlush_i wrapped = $null(pioWriteFlush);
 	pioCRC32Counter *crc32 = NULL;
@@ -1857,22 +1792,15 @@ send_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
 			   .checksum_version = checksum_version, .backup_mode = backup_mode,
 			   .strict = true, .err = &err);
 	if ($haserr(err))
-	{
-		if (getErrno(err) == ENOENT)
-			return FILE_MISSING;
-		ft_logerr(FT_FATAL, $errmsg(err), "send_pages");
-		return OPEN_FAILED;
-	}
+		return $iresult(err);
 
 	harray = parray_new();
 	while (true)
 	{
 		PageIteratorValue value;
 		err_i err = $i(pioNextPage, pages, &value);
-		if ($haserr(err)) {
-			ft_logerr(FT_FATAL, $errmsg(err), "sending data file pages");
-			return READ_FAILED;
-		}
+		if ($haserr(err))
+			return $iresult(err);
 		if (value.page_result == PageIsTruncated)
 			break;
 
@@ -1881,9 +1809,7 @@ send_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
 			{
 				out = $i(pioOpen, backup_location, to_fullpath, PG_BINARY|O_CREAT|O_RDWR, 0, &err);
 				if ($haserr(err))
-				{
-					ft_logerr(FT_FATAL, $errmsg(err), "Cannot write file");
-				}
+					return $iresult(err);
 				crc32 = pioCRC32Counter_alloc();
 				wrapped = pioWrapWriteFilter($reduce(pioWriteFlush, out),
 											 $bind(pioFilter, crc32),
@@ -1900,13 +1826,21 @@ send_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
 			};
 			parray_append(harray, header);
 
+			file->uncompressed_size += BLCKSZ;
 			file->write_size += backup_page($reduce(pioWrite, wrapped), value.blknum,
 											ft_bytes(value.compressed_page, value.compressed_size),
-											to_fullpath);
-			file->uncompressed_size += BLCKSZ;
-
+											to_fullpath, &err);
+			if ($haserr(err))
+				return $iresult(err);
 		}
-		n_blocks_read++;
+
+		if (value.page_result == PageIsCorrupted)
+		{
+			err = $err(RT, "Page %d is corrupted",
+					   blknum(value.blknum));
+			return $iresult(err);
+		}
+		file->read_size += BLCKSZ;
 	}
 
 	/*
@@ -1935,29 +1869,28 @@ send_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
 	{
 		err = $i(pioWriteFinish, wrapped);
 		if ($haserr(err))
-			ft_logerr(FT_FATAL, $errmsg(err), "Finish write backup file");
+			return $iresult(err);
 		file->crc = pioCRC32Counter_getCRC32(crc32);
 		ft_dbg_assert(file->write_size == pioCRC32Counter_getSize(crc32));
 
 		err = $i(pioClose, out, true);
 		if ($haserr(err))
-			ft_logerr(FT_FATAL, $errmsg(err), "Close write backup file");
+			return $iresult(err);
 	}
 
-	return n_blocks_read;
+	return $noerr();
 }
 
 /*
  * Copy data file just as send_pages but without attaching additional header and compression
  */
-static int
+static err_i
 copy_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
 			  XLogRecPtr sync_lsn, uint32 checksum_version,
 			  BackupMode backup_mode)
 {
 	FOBJ_FUNC_ARP();
 	pioDrive_i	backup_location = pioDriveForLocation(FIO_BACKUP_HOST);
-	int			n_blocks_read = 0;
 	err_i		err = $noerr();
 	pioPagesIterator_i pages;
 	pioFile_i out;
@@ -1967,27 +1900,19 @@ copy_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
 			   .checksum_version = checksum_version,
 			   .backup_mode = backup_mode, .strict = true, .err = &err);
 	if ($haserr(err))
-	{
-		if (getErrno(err) == ENOENT)
-			return FILE_MISSING;
-		ft_logerr(FT_FATAL, $errmsg(err), "Cannot iterate pages");
-		return OPEN_FAILED;
-	}
+		return $iresult(err);
 
 	out = $i(pioOpen, backup_location, to_fullpath, PG_BINARY|O_RDWR|O_CREAT, file->mode, &err);
 	if ($haserr(err))
-	{
-		ft_logerr(FT_FATAL, $errmsg(err), "Cannot write output file");
-	}
+		return $iresult(err);
 
 	while (true)
 	{
 		PageIteratorValue value;
-		err_i err = $i(pioNextPage, pages, &value);
-		if ($haserr(err)) {
-			ft_logerr(FT_FATAL, $errmsg(err), "copying data file pages");
-			return READ_FAILED;
-		}
+		err = $i(pioNextPage, pages, &value);
+		if ($haserr(err))
+			return $iresult(err);
+
 		if (value.page_result == PageIsTruncated)
 			break;
 
@@ -1996,19 +1921,22 @@ copy_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
 			write_page(file, out, value.blknum, value.compressed_page);
 		}
 
-		n_blocks_read++;
+		if (value.page_result == PageIsCorrupted) {
+			elog(WARNING, "Page %d of \"%s\" is corrupted",
+				 value.blknum, file->rel_path);
+		}
+
+		file->read_size += BLCKSZ;
 	}
 
 	err = $i(pioTruncate, out, file->size);
 	if ($haserr(err))
-	{
-		ft_logerr(FT_ERROR, $errmsg(err), "truncate in copy_pages");
-	}
+		return $iresult(err);
 
 	/* close local output file */
 	$i(pioClose, out, true);
 
-	return n_blocks_read;
+	return $noerr();
 }
 
 /*

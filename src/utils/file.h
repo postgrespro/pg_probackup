@@ -232,6 +232,7 @@ fobj_error_int_key(wantedSz);
 fobj_error_int_key(size);
 fobj_error_cstr_key(kind);
 fobj_error_int_key(offs);
+fobj_error_int_key(blknum);
 
 #ifdef HAVE_LIBZ
 fobj_error_kind(GZ);
