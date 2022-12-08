@@ -1,5 +1,6 @@
 import unittest
 import os
+import re
 from time import sleep, time
 from .helpers.ptrack_helpers import base36enc, ProbackupTest, ProbackupException
 import shutil
@@ -2667,18 +2668,33 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         """
         backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
-            set_replication=True,
-            initdb_params=['--data-checksums'])
+            base_dir=os.path.join(self.module_name, self.fname, 'node'))
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
-        node.slow_start()
 
         datadir = os.path.join(node.data_dir, '123')
 
-        pb1 = self.backup_node(backup_dir, 'node', node, data_dir='{0}'.format(datadir))
-        pb2 = self.backup_node(backup_dir, 'node', node, options=['--stream'])
+        t0 = time()
+        while True:
+            with self.assertRaises(ProbackupException) as ctx:
+                self.backup_node(backup_dir, 'node', node)
+            pb1 = re.search(r' backup ID: ([^\s,]+),', ctx.exception.message).groups()[0]
+
+            t = time()
+            if int(pb1, 36) == int(t) and t % 1 < 0.5:
+                # ok, we have a chance to start next backup in same second
+                break
+            elif t - t0 > 20:
+                # Oops, we are waiting for too long. Looks like this runner
+                # is too slow. Lets skip the test.
+                self.skipTest("runner is too slow")
+            # sleep to the second's end so backup will not sleep for a second.
+            sleep(1 - t % 1)
+
+        with self.assertRaises(ProbackupException) as ctx:
+            self.backup_node(backup_dir, 'node', node)
+        pb2 = re.search(r' backup ID: ([^\s,]+),', ctx.exception.message).groups()[0]
 
         self.assertNotEqual(pb1, pb2)
 

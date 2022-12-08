@@ -596,6 +596,9 @@ pg_probackup add-instance -B <replaceable>backup_dir</replaceable> -D <replaceab
       only in the database <emphasis role="strong">used for
       connection</emphasis> to the <productname>PostgreSQL</productname> server:
     </para>
+    <para>
+      For <productname>PostgreSQL</productname> versions 10 &mdash; 14:
+    </para>
     <programlisting>
 BEGIN;
 CREATE ROLE backup WITH LOGIN;

@@ -1650,7 +1650,7 @@ class ProbackupTest(object):
             parts.append('0')
         num = 0
         for part in parts:
-            num = num * 100 + int(re.sub("[^\d]", "", part))
+            num = num * 100 + int(re.sub(r"[^\d]", "", part))
         return num
 
     def switch_wal_segment(self, node):
@@ -1989,7 +1989,7 @@ class GDBobj:
 
         # Get version
         gdb_version_number = re.search(
-            b"^GNU gdb [^\d]*(\d+)\.(\d)",
+            br"^GNU gdb [^\d]*(\d+)\.(\d)",
             gdb_version)
         self.major_version = int(gdb_version_number.group(1))
         self.minor_version = int(gdb_version_number.group(2))
