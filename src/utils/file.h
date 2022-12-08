@@ -329,6 +329,9 @@ fobj_method(pioFltTransform);
 #define mth__pioFltFinish		size_t, (ft_bytes_t, out), (err_i*, err)
 fobj_method(pioFltFinish);
 
+#define mth__pioFltInPlace		err_i, (ft_bytes_t, buf)
+fobj_method(pioFltInPlace);
+
 #define iface__pioFilter	mth(pioFltTransform, pioFltFinish)
 fobj_iface(pioFilter);
 
@@ -345,10 +348,11 @@ extern pioFilter_i	pioGZDecompressFilter(bool ignoreTruncate);
 #endif
 
 typedef struct pioCRC32Counter pioCRC32Counter;
-#define kls__pioCRC32Counter iface__pioFilter, iface(pioFilter)
+#define kls__pioCRC32Counter iface__pioFilter, mth(pioFltInPlace), iface(pioFilter)
 fobj_klass(pioCRC32Counter);
 extern pioCRC32Counter* pioCRC32Counter_alloc(void);
 extern pg_crc32 pioCRC32Counter_getCRC32(pioCRC32Counter* flt);
+extern int64_t pioCRC32Counter_getSize(pioCRC32Counter* flt);
 
 extern pioWriteFlush_i pioDevNull_alloc(void);
 

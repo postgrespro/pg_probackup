@@ -4104,6 +4104,7 @@ fobj_klass(pioRemoteFile);
 typedef struct pioReadFilter {
     pioRead_i	wrapped;
     pioFilter_i	filter;
+    pioFltInPlace_i inplace;
     char*		buffer;
     size_t		len;
     size_t		capa;
@@ -4116,6 +4117,7 @@ fobj_klass(pioReadFilter);
 typedef struct pioWriteFilter {
     pioWriteFlush_i	wrapped;
     pioFilter_i		filter;
+    pioFltInPlace_i inplace;
     char*			buffer;
     size_t			capa;
     bool			finished;
@@ -4154,6 +4156,7 @@ fobj_klass(pioDevNull);
 typedef struct pioCRC32Counter
 {
 	pg_crc32		crc;
+	int64_t			size;
 } pioCRC32Counter;
 
 static pioDrive_i localDrive;
@@ -5483,7 +5486,7 @@ pioRead_i
 pioWrapReadFilter(pioRead_i fl, pioFilter_i flt, size_t buf_size)
 {
     void *buf;
-    fobj_t wrap;
+    pioReadFilter* wrap;
 
     buf = ft_malloc(buf_size);
     wrap = $alloc(pioReadFilter,
@@ -5491,6 +5494,7 @@ pioWrapReadFilter(pioRead_i fl, pioFilter_i flt, size_t buf_size)
                   .filter = $iref(flt),
                   .buffer = buf,
                   .capa = buf_size);
+    $implements(pioFltInPlace, flt.self, &wrap->inplace);
     return bind_pioRead(wrap);
 }
 
@@ -5506,6 +5510,26 @@ pioReadFilter_pioRead(VSelf, ft_bytes_t wbuf, err_i *err)
 
     if (self->eof && self->finished)
         return 0;
+
+    if ($notNULL(self->inplace) && !self->eof)
+    {
+        r = pioReadFull(self->wrapped, wbuf, err);
+        if (r > 0)
+        {
+            err_i flterr;
+            flterr = $i(pioFltInPlace, self->inplace, ft_bytes(wbuf.ptr, r));
+            *err = fobj_err_combine(*err, flterr);
+            ft_bytes_consume(&wbuf, r);
+        }
+
+        if ($haserr(*err))
+            return wlen - wbuf.len;
+        if (r == 0)
+        {
+            self->eof = true;
+            goto eof;
+        }
+    }
 
     while (wbuf.len > 0)
     {
@@ -5543,6 +5567,7 @@ pioReadFilter_pioRead(VSelf, ft_bytes_t wbuf, err_i *err)
         self->len += r;
     }
 
+eof:
     while (wbuf.len > 0 && self->eof)
     {
         r = $i(pioFltFinish, self->filter, wbuf, err);
@@ -5599,7 +5624,7 @@ pioWriteFlush_i
 pioWrapWriteFilter(pioWriteFlush_i fl, pioFilter_i flt, size_t buf_size)
 {
     void *buf;
-    fobj_t wrap;
+    pioWriteFilter* wrap;
 
     buf = ft_malloc(buf_size);
     wrap = $alloc(pioWriteFilter,
@@ -5607,6 +5632,7 @@ pioWrapWriteFilter(pioWriteFlush_i fl, pioFilter_i flt, size_t buf_size)
                   .filter = $iref(flt),
                   .buffer = buf,
                   .capa = buf_size);
+    $implements(pioFltInPlace, flt.self, &wrap->inplace);
     return bind_pioWriteFlush(wrap);
 }
 
@@ -5619,6 +5645,16 @@ pioWriteFilter_pioWrite(VSelf, ft_bytes_t rbuf, err_i *err)
     size_t      rlen = rbuf.len;
     ft_bytes_t	wbuf;
     size_t 		r;
+
+    if ($notNULL(self->inplace))
+    {
+        *err = $i(pioFltInPlace, self->inplace, rbuf);
+        if ($haserr(*err))
+            return 0;
+        r = $i(pioWrite, self->wrapped, rbuf, err);
+        ft_bytes_consume(&rbuf, r);
+        return rlen - rbuf.len;
+    }
 
     while (rbuf.len > 0)
     {
@@ -5994,8 +6030,20 @@ pioCRC32Counter_pioFltTransform(VSelf, ft_bytes_t rbuf, ft_bytes_t wbuf, err_i *
 
 	tr.produced = copied;
 	tr.consumed = copied;
+	self->size += copied;
 
 	return tr;
+}
+
+static err_i
+pioCRC32Counter_pioFltInPlace(VSelf, ft_bytes_t rbuf)
+{
+	Self(pioCRC32Counter);
+
+	COMP_CRC32C(self->crc, rbuf.ptr, rbuf.len);
+	self->size += rbuf.len;
+
+	return $noerr();
 }
 
 static size_t
@@ -6007,6 +6055,18 @@ pioCRC32Counter_pioFltFinish(VSelf, ft_bytes_t wbuf, err_i *err)
 	FIN_CRC32C(self->crc);
 
 	return 0;
+}
+
+pg_crc32
+pioCRC32Counter_getCRC32(pioCRC32Counter* flt)
+{
+	return flt->crc;
+}
+
+int64_t
+pioCRC32Counter_getSize(pioCRC32Counter* flt)
+{
+	return flt->size;
 }
 
 pioWriteFlush_i
@@ -6029,12 +6089,6 @@ static err_i
 pioDevNull_pioWriteFinish(VSelf)
 {
 	return $noerr();
-}
-
-pg_crc32
-pioCRC32Counter_getCRC32(pioCRC32Counter* flt)
-{
-	return flt->crc;
 }
 
 pioCRC32Counter*
