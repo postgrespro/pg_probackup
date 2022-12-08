@@ -14,12 +14,6 @@
 
 #include "datapagemap.h"
 
-struct datapagemap_iterator
-{
-	datapagemap_t map;
-	BlockNumber nextblkno;
-};
-
 /*****
  * Public functions
  */
@@ -73,66 +67,24 @@ datapagemap_first(datapagemap_t map, BlockNumber *start_and_result)
 	{
 		int			nextoff = blk / 8;
 		int			bitno = blk % 8;
+		unsigned char c;
 
 		if (nextoff >= map.bitmapsize)
 			break;
 
-		if (map.bitmap[nextoff] & (1 << bitno))
+		c = map.bitmap[nextoff] >> bitno;
+		if (c == 0)
+			blk += 8 - bitno;
+		else if (c&1)
 		{
 			*start_and_result = blk;
 			return true;
 		}
-		blk++;
+		else
+			blk += ffs(c)-1;
 	}
 
 	/* no more set bits in this bitmap. */
 	*start_and_result = UINT32_MAX;
 	return false;
 }
-
-/*
- * Start iterating through all entries in the page map.
- *
- * After datapagemap_iterate, call datapagemap_next to return the entries,
- * until it returns false. After you're done, use pg_free() to destroy the
- * iterator.
- */
-datapagemap_iterator_t *
-datapagemap_iterate(datapagemap_t *map)
-{
-	datapagemap_iterator_t *iter;
-
-	iter = pg_malloc(sizeof(datapagemap_iterator_t));
-	iter->map = *map;
-	iter->nextblkno = 0;
-
-	return iter;
-}
-
-bool
-datapagemap_next(datapagemap_iterator_t *iter, BlockNumber *blkno)
-{
-	datapagemap_t *map = &iter->map;
-
-	for (;;)
-	{
-		BlockNumber blk = iter->nextblkno;
-		int			nextoff = blk / 8;
-		int			bitno = blk % 8;
-
-		if (nextoff >= map->bitmapsize)
-			break;
-
-		iter->nextblkno++;
-
-		if (map->bitmap[nextoff] & (1 << bitno))
-		{
-			*blkno = blk;
-			return true;
-		}
-	}
-
-	/* no more set bits in this bitmap. */
-	return false;
-}
-

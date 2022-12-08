@@ -501,14 +501,10 @@ datapagemap_is_set(datapagemap_t *map, BlockNumber blkno)
 void
 datapagemap_print_debug(datapagemap_t *map)
 {
-	datapagemap_iterator_t *iter;
-	BlockNumber blocknum;
+	BlockNumber blocknum = 0;
 
-	iter = datapagemap_iterate(map);
-	while (datapagemap_next(iter, &blocknum))
+	for (;datapagemap_first(*map, &blocknum); blocknum++)
 		elog(VERBOSE, "  block %u", blocknum);
-
-	pg_free(iter);
 }
 
 const char*
