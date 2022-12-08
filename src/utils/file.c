@@ -92,7 +92,7 @@ typedef struct __attribute__((packed))
 	CompressAlg calg;
 	int clevel;
 	uint32 checksum_version;
-	int strict;
+	int just_validate;
 } fio_iterate_pages_request;
 
 /* Convert FIO pseudo handle to index in file descriptor array */
@@ -1881,7 +1881,7 @@ fio_iterate_pages_impl(pioDrive_i drive, int out, const char *path,
 			   .calg      = params->calg,
 			   .clevel    = params->clevel,
 			   .checksum_version = params->checksum_version,
-			   .strict    = params->strict,
+			   .just_validate    = params->just_validate,
 			   .err		  = &err);
 
 	if ($haserr(err))
@@ -5770,7 +5770,7 @@ typedef struct pioLocalPagesIterator
 	BlockNumber	blknum;
 	BlockNumber n_blocks;
 
-	bool		strict;
+	bool		just_validate;
 	int			segno;
 	datapagemap_t map;
 	FILE		*in;
@@ -5795,7 +5795,7 @@ pioRemoteDrive_pioIteratePages(VSelf, path_t from_fullpath,
 								int segno, datapagemap_t pagemap,
 								XLogRecPtr start_lsn,
 								CompressAlg calg, int clevel,
-								uint32 checksum_version, bool strict, err_i *err)
+								uint32 checksum_version, bool just_validate, err_i *err)
 {
 	Self(pioRemoteDrive);
 	fobj_t iter = {0};
@@ -5808,7 +5808,7 @@ pioRemoteDrive_pioIteratePages(VSelf, path_t from_fullpath,
 			.calg = calg,
 			.clevel = clevel,
 			.checksum_version = checksum_version,
-			.strict = strict,
+			.just_validate = just_validate,
 	};
 
 	ft_strbuf_catbytes(&buf, ft_bytes(&hdr, sizeof(hdr)));
@@ -5897,7 +5897,7 @@ doIteratePages_impl(pioIteratePages_i drive, struct doIteratePages_params p)
 			  .calg = p.calg,
 			  .clevel = p.clevel,
 			  .checksum_version = p.checksum_version,
-			  .strict = p.strict,
+			  .just_validate = p.just_validate,
 			  .err = p.err);
 }
 
@@ -5906,7 +5906,7 @@ pioLocalDrive_pioIteratePages(VSelf, path_t path,
 							  int segno, datapagemap_t pagemap,
 							  XLogRecPtr start_lsn,
 							  CompressAlg calg, int clevel,
-							  uint32 checksum_version, bool strict, err_i *err)
+							  uint32 checksum_version, bool just_validate, err_i *err)
 {
 	Self(pioLocalDrive);
 	fobj_t	iter = {0};
@@ -5941,7 +5941,7 @@ pioLocalDrive_pioIteratePages(VSelf, path_t path,
 	iter = $alloc(pioLocalPagesIterator,
 				  .segno = segno,
 				  .n_blocks = n_blocks,
-				  .strict = strict,
+				  .just_validate = just_validate,
 				  .from_fullpath = path,
 				  .map = pagemap,
 				  .in = in,
@@ -5972,6 +5972,7 @@ pioLocalPagesIterator_pioNextPage(VSelf, PageIteratorValue *value)
 	FOBJ_FUNC_ARP();
 	Self(pioLocalPagesIterator);
 
+	value->compressed_size = 0;
 	while (self->blknum < self->n_blocks)
 	{
 		char page_buf[BLCKSZ];
@@ -5992,7 +5993,7 @@ pioLocalPagesIterator_pioNextPage(VSelf, PageIteratorValue *value)
 		value->page_result = rc;
 		if (rc == PageIsTruncated)
 			break;
-		if (rc == PageIsOk)
+		if (rc == PageIsOk && !self->just_validate)
 		{
 			value->compressed_size = compress_page(value->compressed_page, BLCKSZ,
 												   value->blknum, page_buf, self->calg,
@@ -6114,7 +6115,7 @@ prepare_page(pioLocalPagesIterator *iter, BlockNumber blknum, Page page, PageSta
 		/* Error out in case of merge or backup without ptrack support;
 		 * issue warning in case of checkdb or backup with ptrack support
 		 */
-		if (!iter->strict)
+		if (iter->just_validate)
 			elevel = WARNING;
 
 		if (errormsg)
@@ -6129,7 +6130,7 @@ prepare_page(pioLocalPagesIterator *iter, BlockNumber blknum, Page page, PageSta
 	}
 
 	/* Checkdb not going futher */
-	if (!iter->strict)
+	if (iter->just_validate)
 		return PageIsOk;
 
 	/*

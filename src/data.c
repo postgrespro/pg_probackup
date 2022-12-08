@@ -1328,7 +1328,7 @@ check_data_file(pgFile *file, const char *from_fullpath, uint32 checksum_version
 						   .file = file,
 						   .checksum_version = checksum_version,
 						   .backup_mode = BACKUP_MODE_FULL,
-						   .strict = false,
+						   .just_validate = true,
 						   .err = &err);
 	if ($haserr(err))
 	{

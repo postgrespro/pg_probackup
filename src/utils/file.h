@@ -271,7 +271,6 @@ typedef struct
 	PageState	state;
 	BlockNumber	blknum;
 	int			page_result;
-	int			compression;
 	size_t		compressed_size;
 	char		compressed_page[BLCKSZ]; /* MUST be last */
 } PageIteratorValue;
@@ -314,7 +313,7 @@ fobj_iface(pioPagesIterator);
 #define mth__pioIteratePages pioPagesIterator_i, (path_t, path), \
 		(int, segno), (datapagemap_t, pagemap), (XLogRecPtr, start_lsn), \
 		(CompressAlg, calg), (int, clevel), \
-		(uint32, checksum_version), (bool, strict), (err_i*, err)
+		(uint32, checksum_version), (bool, just_validate), (err_i*, err)
 
 fobj_method(pioOpen);
 fobj_method(pioStat);
@@ -350,7 +349,7 @@ struct doIteratePages_params {
 	int clevel;
 	uint32 checksum_version;
 	BackupMode backup_mode;
-	bool strict;
+	bool just_validate;
 	err_i *err;
 };
 
@@ -360,7 +359,7 @@ doIteratePages_impl(pioIteratePages_i drive, struct doIteratePages_params p);
 	doIteratePages_impl($bind(pioIteratePages, drive.self), ((struct doIteratePages_params){ \
 					.start_lsn = InvalidXLogRecPtr,        \
 					.calg = NONE_COMPRESS, .clevel = 0,    \
-					.strict = true,                        \
+					.just_validate = false,                \
 					__VA_ARGS__}))
 
 #define mth__pioSetAsync    err_i, (bool, async)
