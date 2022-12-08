@@ -276,9 +276,7 @@ fio_write_all(int fd, void const* buf, size_t size)
 void
 fio_get_agent_version(int* protocol, char* payload_buf, size_t payload_buf_size)
 {
-	fio_header hdr;
-	hdr.cop = FIO_AGENT_VERSION;
-	hdr.size = 0;
+	fio_header hdr = (fio_header){.cop = FIO_AGENT_VERSION};
 
 	IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
 	IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
@@ -541,9 +539,8 @@ fio_disconnect(void)
 {
 	if (fio_stdin)
 	{
-		fio_header hdr;
-		hdr.cop = FIO_DISCONNECT;
-		hdr.size = 0;
+		fio_header hdr = (fio_header){.cop = FIO_DISCONNECT};
+
 		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
 		IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
 		Assert(hdr.cop == FIO_DISCONNECTED);
@@ -3512,7 +3509,7 @@ fio_list_dir_impl(int out, char* buf, pioDrive_i drive)
 	}
 
 	parray_free(file_files);
-	hdr.cop = FIO_SEND_FILE_EOF;
+	hdr = (fio_header){.cop = FIO_SEND_FILE_EOF};
 	IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 }
 
@@ -4895,6 +4892,7 @@ pioRemoteDrive_pioListDir(VSelf, parray *files, const char *root, bool handle_ta
     char *buf = pgut_malloc(CHUNK_SIZE);
 
     /* Send to the agent message with parameters for directory listing */
+	memset(&req, 0, sizeof(req));
     snprintf(req.path, MAXPGPATH, "%s", root);
     req.handle_tablespaces = handle_tablespaces;
     req.follow_symlink = follow_symlink;
@@ -4902,8 +4900,7 @@ pioRemoteDrive_pioListDir(VSelf, parray *files, const char *root, bool handle_ta
 	req.skip_hidden = skip_hidden;
     req.external_dir_num = external_dir_num;
 
-    hdr.cop = FIO_LIST_DIR;
-    hdr.size = sizeof(req);
+	hdr = (fio_header){.cop = FIO_LIST_DIR, .size=sizeof(req)};
 
     IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
     IO_CHECK(fio_write_all(fio_stdout, &req, hdr.size), hdr.size);
