@@ -1872,6 +1872,7 @@ fio_iterate_pages_impl(pioDrive_i drive, int out, const char *path,
 	pioPagesIterator_i	pages;
 	err_i				err = $noerr();
 	fio_header			hdr = {.cop=FIO_ITERATE_DATA};
+	BlockNumber			finalN;
 
 	pages = $(pioIteratePages, drive.self,
 			   .path      = path,
@@ -1913,10 +1914,17 @@ fio_iterate_pages_impl(pioDrive_i drive, int out, const char *path,
 
 		IO_CHECK(fio_write_all(out, req.ptr, req.len), req.len);
 	}
-	ft_strbuf_free(&req);
 
-	hdr = (fio_header){.cop = FIO_ITERATE_EOF};
-	IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
+	ft_strbuf_reset_for_reuse(&req);
+
+	finalN = $i(pioFinalPageN, pages);
+	hdr = (fio_header){.cop = FIO_ITERATE_EOF, .size = sizeof(finalN)};
+	ft_strbuf_catbytes(&req, ft_bytes(&hdr, sizeof(hdr)));
+	ft_strbuf_catbytes(&req, ft_bytes(&finalN, sizeof(finalN)));
+
+	IO_CHECK(fio_write_all(out, req.ptr, req.len), req.len);
+
+	ft_strbuf_free(&req);
 }
 
 typedef struct send_file_state {
@@ -5763,11 +5771,13 @@ retry:
 typedef struct pioRemotePagesIterator
 {
 	bool valid;
+	BlockNumber n_blocks;
 } pioRemotePagesIterator;
 
 typedef struct pioLocalPagesIterator
 {
 	BlockNumber	blknum;
+	BlockNumber	lastblkn;
 	BlockNumber n_blocks;
 
 	bool		just_validate;
@@ -5835,6 +5845,8 @@ pioRemotePagesIterator_pioNextPage(VSelf, PageIteratorValue *value)
 
 	fio_header hdr;
 
+	value->compressed_size = 0;
+
 	if (!self->valid) {
 		value->page_result = PageIsTruncated;
 		return $noerr();
@@ -5847,7 +5859,9 @@ pioRemotePagesIterator_pioNextPage(VSelf, PageIteratorValue *value)
 	}
 	else if (hdr.cop == FIO_ITERATE_EOF)
 	{
+		ft_assert(hdr.size == sizeof(BlockNumber));
 		self->valid = false;
+		IO_CHECK(fio_read_all(fio_stdin, &self->n_blocks, sizeof(self->n_blocks)), sizeof(self->n_blocks));
 		value->page_result = PageIsTruncated;
 		return $noerr();
 	}
@@ -5862,6 +5876,13 @@ pioRemotePagesIterator_pioNextPage(VSelf, PageIteratorValue *value)
 	self->valid = false;
 	return $err(RT, "Unexpected operation {intCode} in remote pioNextPage",
 				intCode(hdr.cop));
+}
+
+static BlockNumber
+pioRemotePagesIterator_pioFinalPageN(VSelf)
+{
+	Self(pioRemotePagesIterator);
+	return self->n_blocks;
 }
 
 pioPagesIterator_i
@@ -5971,38 +5992,68 @@ pioLocalPagesIterator_pioNextPage(VSelf, PageIteratorValue *value)
 {
 	FOBJ_FUNC_ARP();
 	Self(pioLocalPagesIterator);
+	char page_buf[BLCKSZ];
+	BlockNumber blknum;
+	BlockNumber n_blocks;
+	int rc = PageIsOk;
 
+	blknum = self->blknum;
 	value->compressed_size = 0;
-	while (self->blknum < self->n_blocks)
+	if (self->blknum >= self->n_blocks)
+		goto truncated;
+
+	/* next block */
+	if (self->map.bitmapsize &&
+		!datapagemap_first(self->map, &blknum))
 	{
-		char page_buf[BLCKSZ];
-		BlockNumber blknum = self->blknum;
-
-		/* next block */
-		if (self->map.bitmapsize &&
-			!datapagemap_first(self->map, &blknum))
-		{
-			self->blknum = self->n_blocks;
-			break;
-		}
-
-		value->blknum = blknum;
-		self->blknum = blknum+1;
-
-		int rc = prepare_page(self, blknum, page_buf, &value->state);
-		value->page_result = rc;
-		if (rc == PageIsTruncated)
-			break;
-		if (rc == PageIsOk && !self->just_validate)
-		{
-			value->compressed_size = compress_page(value->compressed_page, BLCKSZ,
-												   value->blknum, page_buf, self->calg,
-												   self->clevel, self->from_fullpath);
-		}
-		return $noerr();
+		self->blknum = self->n_blocks;
+		goto truncated;
 	}
+
+	value->blknum = blknum;
+	self->blknum = blknum+1;
+
+	rc = prepare_page(self, blknum, page_buf, &value->state);
+	value->page_result = rc;
+	if (rc == PageIsTruncated)
+		goto re_stat;
+	self->lastblkn = blknum+1;
+	if (rc == PageIsOk && !self->just_validate)
+	{
+		value->compressed_size = compress_page(value->compressed_page, BLCKSZ,
+											   value->blknum, page_buf, self->calg,
+											   self->clevel, self->from_fullpath);
+	}
+	return $noerr();
+
+re_stat:
+	{
+		/*
+		 * prepare_page found file is shorter than expected.
+		 * Lets re-investigate its length.
+		 */
+		struct stat st;
+		int fd = fileno(self->in);
+		if (fstat(fd, &st) < 0)
+			return $syserr(errno, "Re-stat-ting file {path}",
+						   path(self->from_fullpath));
+		n_blocks = ft_div_i64u32_to_i32(st.st_size, BLCKSZ);
+		/* we should not "forget" already produced pages */
+		if (n_blocks < self->lastblkn)
+			n_blocks = self->lastblkn;
+		if (n_blocks < self->n_blocks)
+			self->n_blocks = blknum;
+	}
+truncated:
 	value->page_result = PageIsTruncated;
 	return $noerr();
+}
+
+static BlockNumber
+pioLocalPagesIterator_pioFinalPageN(VSelf)
+{
+	Self(pioLocalPagesIterator);
+	return self->n_blocks;
 }
 
 /*

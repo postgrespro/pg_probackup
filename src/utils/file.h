@@ -276,10 +276,12 @@ typedef struct
 } PageIteratorValue;
 
 #define mth__pioNextPage		err_i, (PageIteratorValue *, value)
+#define mth__pioFinalPageN		BlockNumber
 
 fobj_method(pioNextPage);
+fobj_method(pioFinalPageN);
 
-#define iface__pioPagesIterator	mth(pioNextPage)
+#define iface__pioPagesIterator	mth(pioNextPage, pioFinalPageN)
 
 fobj_iface(pioPagesIterator);
 

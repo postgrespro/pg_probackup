@@ -434,13 +434,6 @@ backup_data_file(pgFile *file, const char *from_fullpath, const char *to_fullpat
 		ft_logerr(FT_FATAL, $errmsg(err), "Copying data file \"%s\"", file->rel_path);
 	}
 
-	/* refresh n_blocks for FULL and DELTA */
-	if (backup_mode == BACKUP_MODE_FULL ||
-	    backup_mode == BACKUP_MODE_DIFF_DELTA)
-	{
-		file->n_blocks = ft_div_i64u32_to_i32(file->read_size, BLCKSZ);
-	}
-
 	/* Determine that file didn`t changed in case of incremental backup */
 	if (backup_mode != BACKUP_MODE_FULL &&
 		file->exists_in_prev &&
@@ -1845,6 +1838,7 @@ send_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
 		}
 		file->read_size += BLCKSZ;
 	}
+	file->n_blocks = $i(pioFinalPageN, pages);
 
 	/*
 	 * Add dummy header, so we can later extract the length of last header
@@ -1932,6 +1926,8 @@ copy_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
 		file->read_size += BLCKSZ;
 	}
 
+	file->n_blocks = $i(pioFinalPageN, pages);
+	file->size = (int64_t)file->n_blocks * BLCKSZ;
 	err = $i(pioTruncate, out, file->size);
 	if ($haserr(err))
 		return $iresult(err);
