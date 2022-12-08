@@ -121,6 +121,14 @@ static void dir_list_file_internal(parray *files, pgFile *parent, const char *pa
 								   bool handle_tablespaces, bool follow_symlink, bool backup_logs,
 								   bool skip_hidden, int external_dir_num, pioDrive_i drive);
 
+static int32 prepare_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
+						  BlockNumber blknum, FILE *in,
+						  BackupMode backup_mode,
+						  Page page, bool strict,
+						  uint32 checksum_version,
+						  const char *from_fullpath,
+						  PageState *page_st);
+
 void
 setMyLocation(ProbackupSubcmd const subcmd)
 {
@@ -6680,6 +6688,160 @@ pioLocalPagesIterator_pioNextPage(VSelf, PageIteratorValue *value)
 	self->valid = false;
 	return $noerr();
 }
+
+/*
+ * Retrieves a page taking the backup mode into account
+ * and writes it into argument "page". Argument "page"
+ * should be a pointer to allocated BLCKSZ of bytes.
+ *
+ * Prints appropriate warnings/errors/etc into log.
+ * Returns:
+ *                 PageIsOk(0) if page was successfully retrieved
+ *         PageIsTruncated(-1) if the page was truncated
+ *         SkipCurrentPage(-2) if we need to skip this page,
+ *                                only used for DELTA and PTRACK backup
+ *         PageIsCorrupted(-3) if the page checksum mismatch
+ *                                or header corruption,
+ *                                only used for checkdb
+ *                                TODO: probably we should always
+ *                                      return it to the caller
+ */
+int32
+prepare_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
+			 BlockNumber blknum, FILE *in,
+			 BackupMode backup_mode,
+			 Page page, bool strict,
+			 uint32 checksum_version,
+			 const char *from_fullpath,
+			 PageState *page_st)
+{
+	int			try_again = PAGE_READ_ATTEMPTS;
+	bool		page_is_valid = false;
+	BlockNumber absolute_blknum = file->segno * RELSEG_SIZE + blknum;
+	int rc = 0;
+
+	/* check for interrupt */
+	if (interrupted || thread_interrupted)
+		elog(ERROR, "Interrupted during page reading");
+
+	/*
+	 * Read the page and verify its header and checksum.
+	 * Under high write load it's possible that we've read partly
+	 * flushed page, so try several times before throwing an error.
+	 */
+	while (!page_is_valid && try_again--)
+	{
+		/* read the block */
+		int read_len = fio_pread(in, page, blknum * BLCKSZ);
+
+		/* The block could have been truncated. It is fine. */
+		if (read_len == 0)
+		{
+			elog(VERBOSE, "Cannot read block %u of \"%s\": "
+						  "block truncated", blknum, from_fullpath);
+			return PageIsTruncated;
+		}
+		else if (read_len < 0)
+			elog(ERROR, "Cannot read block %u of \"%s\": %s",
+				 blknum, from_fullpath, strerror(errno));
+		else if (read_len != BLCKSZ)
+			elog(WARNING, "Cannot read block %u of \"%s\": "
+						  "read %i of %d, try again",
+				 blknum, from_fullpath, read_len, BLCKSZ);
+		else
+		{
+			/* We have BLCKSZ of raw data, validate it */
+			rc = validate_one_page(page, absolute_blknum,
+								   InvalidXLogRecPtr, page_st,
+								   checksum_version);
+			switch (rc)
+			{
+				case PAGE_IS_ZEROED:
+					elog(VERBOSE, "File: \"%s\" blknum %u, empty page", from_fullpath, blknum);
+					return PageIsOk;
+
+				case PAGE_IS_VALID:
+					/* in DELTA or PTRACK modes we must compare lsn */
+					if (backup_mode == BACKUP_MODE_DIFF_DELTA || backup_mode == BACKUP_MODE_DIFF_PTRACK)
+						page_is_valid = true;
+					else
+						return PageIsOk;
+					break;
+
+				case PAGE_HEADER_IS_INVALID:
+					elog(VERBOSE, "File: \"%s\" blknum %u have wrong page header, try again",
+						 from_fullpath, blknum);
+					break;
+
+				case PAGE_CHECKSUM_MISMATCH:
+					elog(VERBOSE, "File: \"%s\" blknum %u have wrong checksum, try again",
+						 from_fullpath, blknum);
+					break;
+				default:
+					Assert(false);
+			}
+		}
+		/* avoid re-reading once buffered data, flushing on further attempts, see PBCKP-150 */
+		fflush(in);
+	}
+
+	/*
+	 * If page is not valid after PAGE_READ_ATTEMPTS attempts to read it
+	 * throw an error.
+	 */
+	if (!page_is_valid)
+	{
+		int elevel = ERROR;
+		char *errormsg = NULL;
+
+		/* Get the details of corruption */
+		if (rc == PAGE_HEADER_IS_INVALID)
+			get_header_errormsg(page, &errormsg);
+		else if (rc == PAGE_CHECKSUM_MISMATCH)
+			get_checksum_errormsg(page, &errormsg,
+								  file->segno * RELSEG_SIZE + blknum);
+
+		/* Error out in case of merge or backup without ptrack support;
+		 * issue warning in case of checkdb or backup with ptrack support
+		 */
+		if (!strict)
+			elevel = WARNING;
+
+		if (errormsg)
+			elog(elevel, "Corruption detected in file \"%s\", block %u: %s",
+				 from_fullpath, blknum, errormsg);
+		else
+			elog(elevel, "Corruption detected in file \"%s\", block %u",
+				 from_fullpath, blknum);
+
+		pg_free(errormsg);
+		return PageIsCorrupted;
+	}
+
+	/* Checkdb not going futher */
+	if (!strict)
+		return PageIsOk;
+
+	/*
+	 * Skip page if page lsn is less than START_LSN of parent backup.
+	 * Nullified pages must be copied by DELTA backup, just to be safe.
+	 */
+	if ((backup_mode == BACKUP_MODE_DIFF_DELTA || backup_mode == BACKUP_MODE_DIFF_PTRACK) &&
+		file->exists_in_prev &&
+		page_st->lsn > 0 &&
+		page_st->lsn < prev_backup_start_lsn)
+	{
+		elog(VERBOSE, "Skipping blknum %u in file: \"%s\", file->exists_in_prev: %s, page_st->lsn: %X/%X, prev_backup_start_lsn: %X/%X",
+			 blknum, from_fullpath,
+			 file->exists_in_prev ? "true" : "false",
+			 (uint32) (page_st->lsn >> 32), (uint32) page_st->lsn,
+			 (uint32) (prev_backup_start_lsn >> 32), (uint32) prev_backup_start_lsn);
+		return SkipCurrentPage;
+	}
+
+	return PageIsOk;
+}
+
 
 fobj_klass_handle(pioLocalPagesIterator);
 fobj_klass_handle(pioRemotePagesIterator);

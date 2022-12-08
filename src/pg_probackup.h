@@ -1048,14 +1048,6 @@ extern void backup_non_data_file_internal(const char *from_fullpath,
 										  const char *to_fullpath, pgFile *file,
 										  bool missing_ok);
 
-extern int32 prepare_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
-						  BlockNumber blknum, FILE *in,
-						  BackupMode backup_mode,
-						  Page page, bool strict,
-						  uint32 checksum_version,
-						  const char *from_fullpath,
-						  PageState *page_st);
-
 extern size_t restore_data_file(parray *parent_chain, pgFile *dest_file, FILE *out,
 								const char *to_fullpath, bool use_bitmap, PageState *checksum_map,
 								XLogRecPtr shift_lsn, datapagemap_t *lsn_map, bool use_headers);
