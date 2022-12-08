@@ -1181,6 +1181,8 @@ get_database_map(PGconn *conn)
 		parray_append(database_map, db_entry);
 	}
 
+	PQclear(res);
+
 	return database_map;
 }
 
