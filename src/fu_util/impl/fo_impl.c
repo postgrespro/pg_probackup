@@ -179,6 +179,7 @@ fobj__method_callback_t
 fobj_method_search(const fobj_t self, fobj_method_handle_t meth, fobj_klass_handle_t for_child, bool validate) {
     fobj_header_t              *h;
     fobj_klass_handle_t         klass;
+    fobj_klass_handle_t         for_klass;
     fobj__method_callback_t     cb = {self, NULL};
 
     if (ft_unlikely(ft_dbg_enabled())) {
@@ -214,6 +215,8 @@ fobj_method_search(const fobj_t self, fobj_method_handle_t meth, fobj_klass_hand
         klass = fobj_klasses[klass].parent;
     }
 
+    for_klass = klass;
+
     do {
         cb.impl = fobj_search_impl(meth, klass);
         if (cb.impl != NULL)
@@ -221,6 +224,10 @@ fobj_method_search(const fobj_t self, fobj_method_handle_t meth, fobj_klass_hand
 
         klass = fobj_klasses[klass].parent;
     } while (klass);
+    if (validate)
+        ft_assert(cb.impl != NULL, "Klass '%s' has no method '%s'",
+                  fobj_klasses[for_klass].name,
+                  fobj_methods[meth].name);
     cb.self = NULL;
     return cb;
 }
