@@ -334,9 +334,11 @@ fobj_method(pioIteratePages);
 #define iface__pioDrive 	mth(pioOpen, pioStat, pioRemove, pioRename), \
 					        mth(pioExists, pioGetCRC32, pioIsRemote),                \
 							mth(pioMakeDir, pioListDir, pioRemoveDir),  \
-							mth(pioFilesAreSame, pioReadFile, pioWriteFile), \
-							mth(pioIteratePages)
+							mth(pioFilesAreSame, pioReadFile, pioWriteFile)
 fobj_iface(pioDrive);
+
+#define iface__pioDBDrive	iface__pioDrive, mth(pioIteratePages)
+fobj_iface(pioDBDrive);
 
 extern pioDrive_i pioDriveForLocation(fio_location location);
 
@@ -353,9 +355,9 @@ struct doIteratePages_params {
 };
 
 extern pioPagesIterator_i
-doIteratePages_impl(pioDrive_i drive, struct doIteratePages_params p);
+doIteratePages_impl(pioIteratePages_i drive, struct doIteratePages_params p);
 #define doIteratePages(drive, ...) \
-	doIteratePages_impl(drive, ((struct doIteratePages_params){ \
+	doIteratePages_impl($bind(pioIteratePages, drive.self), ((struct doIteratePages_params){ \
 					.start_lsn = InvalidXLogRecPtr,        \
 					.calg = NONE_COMPRESS, .clevel = 0,    \
 					.strict = true,                        \

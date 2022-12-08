@@ -1873,7 +1873,7 @@ fio_iterate_pages_impl(pioDrive_i drive, int out, const char *path,
 	err_i				err = $noerr();
 	fio_header			hdr = {.cop=FIO_ITERATE_DATA};
 
-	pages = $i(pioIteratePages, drive,
+	pages = $(pioIteratePages, drive.self,
 			   .path      = path,
 			   .segno     = params->segno,
 			   .pagemap   = pagemap,
@@ -3534,13 +3534,13 @@ fio_communicate(int in, int out)
 typedef struct pioLocalDrive
 {
 } pioLocalDrive;
-#define kls__pioLocalDrive	iface__pioDrive, iface(pioDrive)
+#define kls__pioLocalDrive	iface__pioDBDrive, iface(pioDBDrive)
 fobj_klass(pioLocalDrive);
 
 typedef struct pioRemoteDrive
 {
 } pioRemoteDrive;
-#define kls__pioRemoteDrive	iface__pioDrive, iface(pioDrive)
+#define kls__pioRemoteDrive	iface__pioDBDrive, iface(pioDBDrive)
 fobj_klass(pioRemoteDrive);
 
 typedef struct pioFile
@@ -5865,7 +5865,7 @@ pioRemotePagesIterator_pioNextPage(VSelf, PageIteratorValue *value)
 }
 
 pioPagesIterator_i
-doIteratePages_impl(pioDrive_i drive, struct doIteratePages_params p)
+doIteratePages_impl(pioIteratePages_i drive, struct doIteratePages_params p)
 {
 	datapagemap_t pagemap = {0};
 	fobj_reset_err(p.err);
