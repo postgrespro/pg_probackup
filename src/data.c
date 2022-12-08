@@ -1765,6 +1765,10 @@ open_local_file_rw(const char *to_fullpath, char **out_buf, uint32 buf_size)
 	return out;
 }
 
+#define FT_SLICE bpph2
+#define FT_SLICE_TYPE BackupPageHeader2
+#include <ft_array.inc.h>
+
 /* backup local file */
 static err_i
 send_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
@@ -1779,8 +1783,7 @@ send_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
 	pioFile_i out = $null(pioFile);
 	pioWriteFlush_i wrapped = $null(pioWriteFlush);
 	pioCRC32Counter *crc32 = NULL;
-	BackupPageHeader2 *header = NULL;
-	parray *harray = NULL;
+	ft_arr_bpph2_t	harray = ft_arr_init();
 	err_i err = $noerr();
 
 	pages = doIteratePages(db_location, .from_fullpath = from_fullpath, .file = file,
@@ -1790,7 +1793,6 @@ send_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
 	if ($haserr(err))
 		return $iresult(err);
 
-	harray = parray_new();
 	while (true)
 	{
 		PageIteratorValue value;
@@ -1813,14 +1815,12 @@ send_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
 				file->compress_alg = calg;
 			}
 
-			header = pgut_new0(BackupPageHeader2);
-			*header = (BackupPageHeader2){
+			ft_arr_bpph2_push(&harray, (BackupPageHeader2){
 					.block = value.blknum,
 					.pos = file->write_size,
 					.lsn = value.state.lsn,
 					.checksum = value.state.checksum,
-			};
-			parray_append(harray, header);
+			});
 
 			file->uncompressed_size += BLCKSZ;
 			file->write_size += backup_page($reduce(pioWrite, wrapped), value.blknum,
@@ -1844,22 +1844,12 @@ send_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
 	 * Add dummy header, so we can later extract the length of last header
 	 * as difference between their offsets.
 	 */
-	if (parray_num(harray) > 0)
+	if (harray.len > 0)
 	{
-		size_t hdr_num = parray_num(harray);
-		size_t i;
-
-		file->n_headers = (int) hdr_num; /* is it valid? */
-		*headers = (BackupPageHeader2 *) pgut_malloc0((hdr_num + 1) * sizeof(BackupPageHeader2));
-		for (i = 0; i < hdr_num; i++)
-		{
-			header = (BackupPageHeader2 *)parray_get(harray, i);
-			(*headers)[i] = *header;
-			pg_free(header);
-		}
-		(*headers)[hdr_num] = (BackupPageHeader2){.pos=file->write_size};
+		file->n_headers = harray.len;
+		ft_arr_bpph2_push(&harray, (BackupPageHeader2){.pos=file->write_size});
+		*headers = harray.ptr;
 	}
-	parray_free(harray);
 
 	/* close local output file */
 	if ($notNULL(out))
