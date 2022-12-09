@@ -5744,6 +5744,7 @@ typedef struct pioLocalPagesIterator
 	int			segno;
 	datapagemap_t map;
 	FILE		*in;
+	void		*buf;
 	const char	*from_fullpath;
 	/* prev_backup_start_lsn */
 	XLogRecPtr	start_lsn;
@@ -5893,6 +5894,8 @@ pioLocalDrive_pioIteratePages(VSelf, path_t path,
 	fobj_t	iter = {0};
 	BlockNumber n_blocks;
 	FILE   *in;
+	void   *buf;
+	size_t  bufsz;
 	int		fd;
 	struct stat st;
 
@@ -5909,8 +5912,14 @@ pioLocalDrive_pioIteratePages(VSelf, path_t path,
 	fd = fileno(in);
 	if (fstat(fd, &st) == -1)
 	{
+		fclose(in);
 		*err = $syserr(errno, "Cannot stat datafile");
+		return $null(pioPagesIterator);
 	}
+
+	bufsz = pagemap.bitmapsize > 0 ? SMALL_CHUNK_SIZE : MEDIUM_CHUNK_SIZE;
+	buf = ft_malloc(bufsz);
+	setvbuf(in, buf, _IOFBF, bufsz);
 
 	/*
 	 * Compute expected number of blocks in the file.
@@ -5926,6 +5935,7 @@ pioLocalDrive_pioIteratePages(VSelf, path_t path,
 				  .from_fullpath = path,
 				  .map = pagemap,
 				  .in = in,
+				  .buf = buf,
 				  .start_lsn = start_lsn,
 				  .calg = calg,
 				  .clevel = clevel,
@@ -5939,7 +5949,8 @@ pioLocalPagesIterator_fobjDispose(VSelf)
 {
 	Self(pioLocalPagesIterator);
 
-	if(self->in) fclose(self->in);
+	if (self->buf) ft_free(self->buf);
+	if (self->in) fclose(self->in);
 }
 
 static int32 prepare_page(pioLocalPagesIterator *iter,
