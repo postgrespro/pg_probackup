@@ -145,22 +145,16 @@ extern void    fio_get_agent_version(int* protocol, char* payload_buf, size_t pa
 extern int     fio_open(fio_location location, const char* name, int mode);
 extern ssize_t fio_write(int fd, void const* buf, size_t size);
 extern ssize_t fio_write_async(int fd, void const* buf, size_t size);
-extern int     fio_check_error_fd(int fd, char **errmsg);
-extern int     fio_check_error_fd_gz(gzFile f, char **errmsg);
 extern ssize_t fio_read(int fd, void* buf, size_t size);
-extern int     fio_flush(int fd);
 extern int     fio_seek(int fd, off_t offs);
 extern int     fio_truncate(int fd, off_t size);
 extern int     fio_close(int fd);
 
 /* FILE-style functions */
 extern FILE*   fio_fopen(fio_location location, const char* name, const char* mode);
-extern size_t  fio_fwrite(FILE* f, void const* buf, size_t size);
 extern ssize_t fio_fwrite_async_compressed(FILE* f, void const* buf, size_t size, int compress_alg);
 extern size_t  fio_fwrite_async(FILE* f, void const* buf, size_t size);
 extern int     fio_check_error_file(FILE* f, char **errmsg);
-extern ssize_t fio_fread(FILE* f, void* buf, size_t size);
-extern int     fio_fprintf(FILE* f, const char* arg, ...) pg_attribute_printf(2, 3);
 extern int     fio_fflush(FILE* f);
 extern int     fio_fseek(FILE* f, off_t offs);
 extern int     fio_ftruncate(FILE* f, off_t size);

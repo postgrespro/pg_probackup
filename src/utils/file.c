@@ -609,33 +609,6 @@ fio_fopen(fio_location location, const char* path, const char* mode)
 	return f;
 }
 
-/* Format output to file stream */
-int
-fio_fprintf(FILE* f, const char* format, ...)
-{
-	int rc;
-	va_list args;
-	va_start (args, format);
-	if (fio_is_remote_file(f))
-	{
-		char buf[PRINTF_BUF_SIZE];
-#ifdef HAS_VSNPRINTF
-		rc = vsnprintf(buf, sizeof(buf), format,  args);
-#else
-		rc = vsprintf(buf, format,  args);
-#endif
-		if (rc > 0) {
-			fio_fwrite(f, buf, rc);
-		}
-	}
-	else
-	{
-		rc = vfprintf(f, format, args);
-	}
-	va_end (args);
-	return rc;
-}
-
 /* Flush stream data (does nothing for remote file) */
 int
 fio_fflush(FILE* f)
@@ -644,13 +617,6 @@ fio_fflush(FILE* f)
 	if (!fio_is_remote_file(f))
 		rc = fflush(f);
 	return rc;
-}
-
-/* Sync file to the disk (does nothing for remote file) */
-int
-fio_flush(int fd)
-{
-	return fio_is_remote_fd(fd) ? 0 : fsync(fd);
 }
 
 /* Close output stream */
@@ -798,16 +764,6 @@ fio_seek_impl(int fd, off_t offs)
 		async_errormsg = pgut_malloc(ERRMSG_MAX_LEN);
 		snprintf(async_errormsg, ERRMSG_MAX_LEN, "%s", strerror(errno));
 	}
-}
-
-/* Write data to stdio file */
-size_t
-fio_fwrite(FILE* f, void const* buf, size_t size)
-{
-	if (fio_is_remote_file(f))
-		return fio_write(fio_fileno(f), buf, size);
-	else
-		return fwrite(buf, 1, size, f);
 }
 
 /*
@@ -1050,32 +1006,6 @@ fio_check_error_file(FILE* f, char **errmsg)
 	return 0;
 }
 
-/* check if remote agent encountered any error during execution of async operations */
-int
-fio_check_error_fd(int fd, char **errmsg)
-{
-	if (fio_is_remote_fd(fd))
-	{
-		fio_header hdr;
-
-		hdr.cop = FIO_GET_ASYNC_ERROR;
-		hdr.size = 0;
-
-		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
-
-		/* check results */
-		IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
-
-		if (hdr.size > 0)
-		{
-			*errmsg = pgut_malloc(ERRMSG_MAX_LEN);
-			IO_CHECK(fio_read_all(fio_stdin, *errmsg, hdr.size), hdr.size);
-			return 1;
-		}
-	}
-	return 0;
-}
-
 static void
 fio_get_async_error_impl(int out)
 {
@@ -1103,17 +1033,6 @@ fio_get_async_error_impl(int out)
 		/* send header */
 		IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 	}
-}
-
-/* Read data from stdio file */
-ssize_t
-fio_fread(FILE* f, void* buf, size_t size)
-{
-	size_t rc;
-	if (fio_is_remote_file(f))
-		return fio_read(fio_fileno(f), buf, size);
-	rc = fread(buf, 1, size, f);
-	return rc == 0 && !feof(f) ? -1 : rc;
 }
 
 /* Read data from file */
@@ -1583,32 +1502,6 @@ typedef struct fioGZFile
 	bool     eof;
 	Bytef    buf[ZLIB_BUFFER_SIZE];
 } fioGZFile;
-
-/* check if remote agent encountered any error during execution of async operations */
-int
-fio_check_error_fd_gz(gzFile f, char **errmsg)
-{
-	if (f && ((size_t)f & FIO_GZ_REMOTE_MARKER))
-	{
-		fio_header hdr;
-
-		hdr.cop = FIO_GET_ASYNC_ERROR;
-		hdr.size = 0;
-
-		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
-
-		/* check results */
-		IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
-
-		if (hdr.size > 0)
-		{
-			*errmsg = pgut_malloc(ERRMSG_MAX_LEN);
-			IO_CHECK(fio_read_all(fio_stdin, *errmsg, hdr.size), hdr.size);
-			return 1;
-		}
-	}
-	return 0;
-}
 
 /* On error returns NULL and errno should be checked */
 gzFile
