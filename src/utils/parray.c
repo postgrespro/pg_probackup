@@ -217,3 +217,30 @@ bool parray_contains(parray *array, void *elem)
 	}
 	return false;
 }
+
+/* effectively remove elements that satisfy certain criterion */
+void
+parray_remove_if(parray *array, criterion_fn criterion, void *args, cleanup_fn clean) {
+	int i = 0;
+	int j = 0;
+
+	/* removing certain elements */
+	while(j < parray_num(array)) {
+		void *value = array->data[j];
+		// if the value satisfies the criterion, clean it up
+		if(criterion(value, args)) {
+			clean(value);
+			j++;
+			continue;
+		}
+
+		if(i != j)
+			array->data[i] = array->data[j];
+
+		i++;
+		j++;
+	}
+
+	/* adjust the number of used elements */
+	array->used -= j - i;
+}

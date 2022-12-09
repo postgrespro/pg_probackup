@@ -65,7 +65,11 @@ static bool pg_is_in_recovery(PGconn *conn);
 static bool pg_is_superuser(PGconn *conn);
 static void check_server_version(PGconn *conn, PGNodeInfo *nodeInfo);
 static void confirm_block_size(PGconn *conn, const char *name, int blcksz);
-static void set_cfs_datafiles(parray *files, const char *root, char *relative, size_t i);
+static size_t rewind_and_mark_cfs_datafiles(parray *files, const char *root, char *relative, size_t i);
+static void group_cfs_segments(parray *files, size_t first, size_t last);
+static bool remove_excluded_files_criterion(void *value, void *exclude_args);
+static void backup_cfs_segment(int i, pgFile *file, backup_files_arg *arguments);
+static void process_file(int i, pgFile *file, backup_files_arg *arguments);
 
 static StopBackupCallbackParams stop_callback_params;
 
@@ -2054,8 +2058,6 @@ static void *
 backup_files(void *arg)
 {
 	int			i;
-	char		from_fullpath[MAXPGPATH];
-	char		to_fullpath[MAXPGPATH];
 	static time_t prev_time;
 
 	backup_files_arg *arguments = (backup_files_arg *) arg;
@@ -2067,7 +2069,6 @@ backup_files(void *arg)
 	for (i = 0; i < n_backup_files_list; i++)
 	{
 		pgFile	*file = (pgFile *) parray_get(arguments->files_list, i);
-		pgFile	*prev_file = NULL;
 
 		/* We have already copied all directories */
 		if (S_ISDIR(file->mode))
@@ -2087,6 +2088,9 @@ backup_files(void *arg)
 			}
 		}
 
+		if (file->skip_cfs_nested)
+			continue;
+
 		if (!pg_atomic_test_set_flag(&file->lock))
 			continue;
 
@@ -2097,80 +2101,14 @@ backup_files(void *arg)
 		elog(progress ? INFO : LOG, "Progress: (%d/%d). Process file \"%s\"",
 			 i + 1, n_backup_files_list, file->rel_path);
 
-		/* Handle zero sized files */
-		if (file->size == 0)
+		if (file->is_cfs)
 		{
-			file->write_size = 0;
-			continue;
-		}
-
-		/* construct destination filepath */
-		if (file->external_dir_num == 0)
-		{
-			join_path_components(from_fullpath, arguments->from_root, file->rel_path);
-			join_path_components(to_fullpath, arguments->to_root, file->rel_path);
+			backup_cfs_segment(i, file, arguments);
 		}
 		else
 		{
-			char 	external_dst[MAXPGPATH];
-			char	*external_path = parray_get(arguments->external_dirs,
-												file->external_dir_num - 1);
-
-			makeExternalDirPathByNum(external_dst,
-								 arguments->external_prefix,
-								 file->external_dir_num);
-
-			join_path_components(to_fullpath, external_dst, file->rel_path);
-			join_path_components(from_fullpath, external_path, file->rel_path);
+			process_file(i, file, arguments);
 		}
-
-		/* Encountered some strange beast */
-		if (!S_ISREG(file->mode))
-			elog(WARNING, "Unexpected type %d of file \"%s\", skipping",
-							file->mode, from_fullpath);
-
-		/* Check that file exist in previous backup */
-		if (current.backup_mode != BACKUP_MODE_FULL)
-		{
-			pgFile	**prev_file_tmp = NULL;
-			prev_file_tmp = (pgFile **) parray_bsearch(arguments->prev_filelist,
-											file, pgFileCompareRelPathWithExternal);
-			if (prev_file_tmp)
-			{
-				/* File exists in previous backup */
-				file->exists_in_prev = true;
-				prev_file = *prev_file_tmp;
-			}
-		}
-
-		/* backup file */
-		if (file->is_datafile && !file->is_cfs)
-		{
-			backup_data_file(file, from_fullpath, to_fullpath,
-							 arguments->prev_start_lsn,
-							 current.backup_mode,
-							 instance_config.compress_alg,
-							 instance_config.compress_level,
-							 arguments->nodeInfo->checksum_version,
-							 arguments->hdr_map, false);
-		}
-		else
-		{
-			backup_non_data_file(file, prev_file, from_fullpath, to_fullpath,
-								 current.backup_mode, current.parent_backup, true);
-		}
-
-		if (file->write_size == FILE_NOT_FOUND)
-			continue;
-
-		if (file->write_size == BYTES_INVALID)
-		{
-			elog(LOG, "Skipping the unchanged file: \"%s\"", from_fullpath);
-			continue;
-		}
-
-		elog(LOG, "File \"%s\". Copied "INT64_FORMAT " bytes",
-						from_fullpath, file->write_size);
 	}
 
 	/* ssh connection to longer needed */
@@ -2180,6 +2118,129 @@ backup_files(void *arg)
 	arguments->ret = 0;
 
 	return NULL;
+}
+
+static void
+process_file(int i, pgFile *file, backup_files_arg *arguments)
+{
+	char		from_fullpath[MAXPGPATH];
+	char		to_fullpath[MAXPGPATH];
+	pgFile	   *prev_file = NULL;
+
+	elog(progress ? INFO : LOG, "Progress: (%d/%zu). Process file \"%s\"",
+		 i + 1, parray_num(arguments->files_list), file->rel_path);
+
+	/* Handle zero sized files */
+	if (file->size == 0)
+	{
+		file->write_size = 0;
+		return;
+	}
+
+	/* construct from_fullpath & to_fullpath */
+	if (file->external_dir_num == 0)
+	{
+		join_path_components(from_fullpath, arguments->from_root, file->rel_path);
+		join_path_components(to_fullpath, arguments->to_root, file->rel_path);
+	}
+	else
+	{
+		char 	external_dst[MAXPGPATH];
+		char	*external_path = parray_get(arguments->external_dirs,
+										file->external_dir_num - 1);
+
+		makeExternalDirPathByNum(external_dst,
+								 arguments->external_prefix,
+								 file->external_dir_num);
+
+		join_path_components(to_fullpath, external_dst, file->rel_path);
+		join_path_components(from_fullpath, external_path, file->rel_path);
+	}
+
+	/* Encountered some strange beast */
+	if (!S_ISREG(file->mode))
+	{
+		elog(WARNING, "Unexpected type %d of file \"%s\", skipping",
+			 				file->mode, from_fullpath);
+		return;
+	}
+
+	/* Check that file exist in previous backup */
+	if (current.backup_mode != BACKUP_MODE_FULL)
+	{
+		pgFile **prevFileTmp = NULL;
+		prevFileTmp = (pgFile **) parray_bsearch(arguments->prev_filelist,
+												 file, pgFileCompareRelPathWithExternal);
+		if (prevFileTmp)
+		{
+			/* File exists in previous backup */
+			file->exists_in_prev = true;
+			prev_file = *prevFileTmp;
+		}
+	}
+
+	/* backup file */
+	if (file->is_datafile && !file->is_cfs)
+	{
+		backup_data_file(file, from_fullpath, to_fullpath,
+						 arguments->prev_start_lsn,
+						 current.backup_mode,
+						 instance_config.compress_alg,
+						 instance_config.compress_level,
+						 arguments->nodeInfo->checksum_version,
+						 arguments->hdr_map, false);
+	}
+	else
+	{
+		backup_non_data_file(file, prev_file, from_fullpath, to_fullpath,
+							 current.backup_mode, current.parent_backup, true);
+	}
+
+	if (file->write_size == FILE_NOT_FOUND)
+		return;
+
+	if (file->write_size == BYTES_INVALID)
+	{
+		elog(LOG, "Skipping the unchanged file: \"%s\"", from_fullpath);
+		return;
+	}
+
+	elog(LOG, "File \"%s\". Copied "INT64_FORMAT " bytes",
+		 				from_fullpath, file->write_size);
+
+}
+
+static void
+backup_cfs_segment(int i, pgFile *file, backup_files_arg *arguments) {
+	pgFile	*data_file = file;
+	pgFile	*cfm_file = NULL;
+	pgFile	*data_bck_file = NULL;
+	pgFile	*cfm_bck_file = NULL;
+
+	while (data_file->cfs_chain)
+	{
+		data_file = data_file->cfs_chain;
+		if (data_file->forkName == cfm)
+			cfm_file = data_file;
+		if (data_file->forkName == cfs_bck)
+			data_bck_file = data_file;
+		if (data_file->forkName == cfm_bck)
+			cfm_bck_file = data_file;
+	}
+	data_file = file;
+	Assert(cfm_file); /* ensure we always have cfm exist */
+
+	elog(LOG, "backup CFS segment %s, data_file=%s, cfm_file=%s, data_bck_file=%s, cfm_bck_file=%s",
+		 data_file->name, data_file->name, cfm_file->name, data_bck_file == NULL? "NULL": data_bck_file->name, cfm_bck_file == NULL? "NULL": cfm_bck_file->name);
+
+	/* storing cfs in order data_bck_file -> cfm_bck -> data_file -> map */
+	if (cfm_bck_file)
+		process_file(i, cfm_bck_file, arguments);
+	if (data_bck_file)
+		process_file(i, data_bck_file, arguments);
+	process_file(i, cfm_file, arguments);
+	process_file(i, data_file, arguments);
+	elog(LOG, "Backup CFS segment %s done", data_file->name);
 }
 
 /*
@@ -2209,11 +2270,12 @@ parse_filelist_filenames(parray *files, const char *root)
 			 */
 			if (strcmp(file->name, "pg_compression") == 0)
 			{
+				/* processing potential cfs tablespace */
 				Oid			tblspcOid;
 				Oid			dbOid;
 				char		tmp_rel_path[MAXPGPATH];
 				/*
-				 * Check that the file is located under
+				 * Check that pg_compression is located under
 				 * TABLESPACE_VERSION_DIRECTORY
 				 */
 				sscanf_result = sscanf(file->rel_path, PG_TBLSPC_DIR "/%u/%s/%u",
@@ -2222,8 +2284,12 @@ parse_filelist_filenames(parray *files, const char *root)
 				/* Yes, it is */
 				if (sscanf_result == 2 &&
 					strncmp(tmp_rel_path, TABLESPACE_VERSION_DIRECTORY,
-							strlen(TABLESPACE_VERSION_DIRECTORY)) == 0)
-					set_cfs_datafiles(files, root, file->rel_path, i);
+							strlen(TABLESPACE_VERSION_DIRECTORY)) == 0) {
+					/* rewind index to the beginning of cfs tablespace */
+					size_t start = rewind_and_mark_cfs_datafiles(files, root, file->rel_path, i);
+					/* group every  to cfs segments chains */
+					group_cfs_segments(files, start, i);
+				}
 			}
 		}
 
@@ -2238,7 +2304,7 @@ parse_filelist_filenames(parray *files, const char *root)
 				 */
 				int			unlogged_file_num = i - 1;
 				pgFile	   *unlogged_file = (pgFile *) parray_get(files,
-																  unlogged_file_num);
+														  unlogged_file_num);
 
 				unlogged_file_reloid = file->relOid;
 
@@ -2246,11 +2312,10 @@ parse_filelist_filenames(parray *files, const char *root)
 					   (unlogged_file_reloid != 0) &&
 					   (unlogged_file->relOid == unlogged_file_reloid))
 				{
-					pgFileFree(unlogged_file);
-					parray_remove(files, unlogged_file_num);
+					/* flagged to remove from list on stage 2 */
+					unlogged_file->remove_from_list = true;
 
 					unlogged_file_num--;
-					i--;
 
 					unlogged_file = (pgFile *) parray_get(files,
 														  unlogged_file_num);
@@ -2259,6 +2324,68 @@ parse_filelist_filenames(parray *files, const char *root)
 		}
 
 		i++;
+	}
+
+	/* stage 2. clean up from temporary tables */
+	parray_remove_if(files, remove_excluded_files_criterion, NULL, pgFileFree);
+}
+
+static bool
+remove_excluded_files_criterion(void *value, void *exclude_args) {
+	pgFile	*file = (pgFile*)value;
+	return file->remove_from_list;
+}
+
+/*
+ * For every cfs segment do group its files to linked list, datafile on the head.
+ * All non data files of segment moved to linked list and marked to skip in backup processing threads.
+ * @param first - first index of cfs tablespace files
+ * @param last  - last index of cfs tablespace files
+ */
+void group_cfs_segments(parray *files, size_t first, size_t last) {/* grouping cfs files by relOid.segno, removing leafs of group */
+
+	for (;first <= last; first++)
+	{
+		pgFile	*file = parray_get(files, first);
+
+		if (file->is_cfs)
+		{
+			pgFile	*cfs_file = file;
+			size_t	 counter = first + 1;
+			pgFile	*chain_file = parray_get(files, counter);
+
+			bool has_cfm = false; /* flag for later assertion the cfm file also exist */
+
+			elog(LOG, "Preprocessing cfs file %s, %u.%d", cfs_file->name, cfs_file->relOid, cfs_file->segno);
+
+			elog(LOG, "Checking file %s, %u.%d as cfs chain", chain_file->name, chain_file->relOid, chain_file->segno);
+
+			/* scanning cfs segment files */
+			while (cfs_file->relOid == chain_file->relOid &&
+					cfs_file->segno == chain_file->segno)
+			{
+				elog(LOG, "Grouping cfs chain file %s, %d.%d", chain_file->name, chain_file->relOid, chain_file->segno);
+				chain_file->skip_cfs_nested = true;
+				cfs_file->cfs_chain = chain_file; /* adding to cfs group */
+				cfs_file = chain_file;
+
+				/* next file */
+				counter++;
+				chain_file = parray_get(files, counter);
+				elog(LOG, "Checking file %s, %u.%d as cfs chain", chain_file->name, chain_file->relOid, chain_file->segno);
+			}
+
+			/* assertion - we always have cfs data + cfs map files */
+			cfs_file = file;
+			for (; cfs_file; cfs_file = cfs_file->cfs_chain) {
+				elog(LOG, "searching cfm in %s, chain is %s", cfs_file->name, cfs_file->cfs_chain == NULL? "NULL": cfs_file->cfs_chain->name);
+				has_cfm = cfs_file->forkName == cfm;
+			}
+			Assert(has_cfm);
+
+			/* shifting to last cfs segment file */
+			first = counter-1;
+		}
 	}
 }
 
@@ -2273,9 +2400,11 @@ parse_filelist_filenames(parray *files, const char *root)
  * tblspcOid/TABLESPACE_VERSION_DIRECTORY/dboid/1
  * tblspcOid/TABLESPACE_VERSION_DIRECTORY/dboid/1.cfm
  * tblspcOid/TABLESPACE_VERSION_DIRECTORY/pg_compression
+ *
+ * @returns index of first tablespace entry, i.e tblspcOid/TABLESPACE_VERSION_DIRECTORY
  */
-static void
-set_cfs_datafiles(parray *files, const char *root, char *relative, size_t i)
+static size_t
+rewind_and_mark_cfs_datafiles(parray *files, const char *root, char *relative, size_t i)
 {
 	int			len;
 	int			p;
@@ -2311,6 +2440,7 @@ set_cfs_datafiles(parray *files, const char *root, char *relative, size_t i)
 		}
 	}
 	free(cfs_tblspc_path);
+	return p+1;
 }
 
 /*

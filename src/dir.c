@@ -1837,7 +1837,19 @@ set_forkname(pgFile *file)
 			return false;
 	}
 
-	/* CFS "fork name" */
+	/* CFS family fork names */
+	if (file->forkName == none &&
+		is_forkname(file->name, &i, ".cfm.bck"))
+	{
+		/* /^\d+(\.\d+)?\.cfm\.bck$/ */
+		file->forkName = cfm_bck;
+	}
+	if (file->forkName == none &&
+		is_forkname(file->name, &i, ".bck"))
+	{
+		/* /^\d+(\.\d+)?\.bck$/ */
+		file->forkName = cfs_bck;
+	}
 	if (file->forkName == none &&
 		is_forkname(file->name, &i, ".cfm"))
 	{

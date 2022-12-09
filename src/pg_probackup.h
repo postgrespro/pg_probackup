@@ -222,7 +222,9 @@ typedef enum ForkName
 	fsm,
 	cfm,
 	init,
-	ptrack
+	ptrack,
+	cfs_bck,
+	cfm_bck
 } ForkName;
 
 #define INIT_FILE_CRC32(use_crc32c, crc) \
@@ -278,6 +280,7 @@ typedef struct pgFile
 	int		segno;			/* Segment number for ptrack */
 	int		n_blocks;		/* number of blocks in the data file in data directory */
 	bool	is_cfs;			/* Flag to distinguish files compressed by CFS*/
+	struct pgFile  *cfs_chain;	/* linked list of CFS segment's cfm, bck, cfm_bck related files */
 	int		external_dir_num;	/* Number of external directory. 0 if not external */
 	bool	exists_in_prev;		/* Mark files, both data and regular, that exists in previous backup */
 	CompressAlg		compress_alg;		/* compression algorithm applied to the file */
@@ -292,6 +295,8 @@ typedef struct pgFile
 	pg_off_t hdr_off;       /* offset in header map */
 	int      hdr_size;      /* length of headers */
 	bool	excluded;	/* excluded via --exclude-path option */
+	bool	skip_cfs_nested; 	/* mark to skip in processing treads as nested to cfs_chain */
+	bool	remove_from_list;	/* tmp flag to clean up files list from temp and unlogged tables */
 } pgFile;
 
 typedef struct page_map_entry
