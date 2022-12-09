@@ -794,41 +794,6 @@ durable_write(int fd, const char* buf, size_t size)
 	return size;
 }
 
-/* Write data to the file synchronously */
-ssize_t
-fio_write(int fd, void const* buf, size_t size)
-{
-	if (fio_is_remote_fd(fd))
-	{
-		fio_header hdr = {
-			.cop = FIO_WRITE,
-			.handle = fd & ~FIO_PIPE_MARKER,
-			.size = size,
-			.arg = 0,
-		};
-
-		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
-		IO_CHECK(fio_write_all(fio_stdout, buf, size), size);
-
-		/* check results */
-		IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
-		Assert(hdr.cop == FIO_WRITE);
-
-		/* set errno */
-		if (hdr.arg > 0)
-		{
-			errno = hdr.arg;
-			return -1;
-		}
-
-		return size;
-	}
-	else
-	{
-		return durable_write(fd, buf, size);
-	}
-}
-
 static void
 fio_write_impl(int fd, void const* buf, size_t size, int out)
 {

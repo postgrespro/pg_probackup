@@ -143,7 +143,6 @@ extern void    fio_get_agent_version(int* protocol, char* payload_buf, size_t pa
 
 /* fd-style functions */
 extern int     fio_open(fio_location location, const char* name, int mode);
-extern ssize_t fio_write(int fd, void const* buf, size_t size);
 extern ssize_t fio_write_async(int fd, void const* buf, size_t size);
 extern ssize_t fio_read(int fd, void* buf, size_t size);
 extern int     fio_seek(int fd, off_t offs);
