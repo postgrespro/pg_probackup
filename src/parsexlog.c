@@ -107,7 +107,7 @@ typedef struct XLogReaderData
 	bool		xlogexists;
 
 	char		 page_buf[XLOG_BLCKSZ];
-	uint32		 prev_page_off;
+	int64_t		 prev_page_ptr;
 
 	bool		need_switch;
 
@@ -533,7 +533,8 @@ read_recovery_info(const char *archivedir, TimeLineID tli, uint32 wal_seg_size,
 				   XLogRecPtr start_lsn, XLogRecPtr stop_lsn,
 				   time_t *recovery_time)
 {
-	XLogRecPtr	startpoint = stop_lsn;
+	XLogRecPtr	startpoint = stop_lsn - (stop_lsn % wal_seg_size) + SizeOfXLogLongPHD;
+	XLogRecPtr	endpoint = stop_lsn;
 	XLogReaderState *xlogreader;
 	XLogReaderData reader_data;
 	bool		res;
@@ -552,44 +553,55 @@ read_recovery_info(const char *archivedir, TimeLineID tli, uint32 wal_seg_size,
 	/* Read records from stop_lsn down to start_lsn */
 	do
 	{
+		XLogRecPtr	curpoint = startpoint;
 		XLogRecord *record;
 		TimestampTz last_time = 0;
 		char	   *errormsg;
 
+		if (curpoint < start_lsn)
+			curpoint = start_lsn;
 #if PG_VERSION_NUM >= 130000
-		if (XLogRecPtrIsInvalid(startpoint))
-			startpoint = SizeOfXLogShortPHD;
-		XLogBeginRead(xlogreader, startpoint);
+		if (XLogRecPtrIsInvalid(curpoint))
+			curpoint = SizeOfXLogShortPHD;
+		XLogBeginRead(xlogreader, curpoint);
 #endif
 
-		record = WalReadRecord(xlogreader, startpoint, &errormsg);
-		if (record == NULL)
-		{
-			XLogRecPtr	errptr;
+		do {
 
-			errptr = startpoint ? startpoint : xlogreader->EndRecPtr;
+			record = WalReadRecord(xlogreader, curpoint, &errormsg);
+			if (record == NULL)
+			{
+				XLogRecPtr	errptr;
 
-			if (errormsg)
-				elog(ERROR, "Could not read WAL record at %X/%X: %s",
-					 (uint32) (errptr >> 32), (uint32) (errptr),
-					 errormsg);
-			else
-				elog(ERROR, "Could not read WAL record at %X/%X",
-					 (uint32) (errptr >> 32), (uint32) (errptr));
-		}
+				//errptr = startpoint ? startpoint : xlogreader->EndRecPtr;
+				errptr = curpoint;
 
-		/* Read previous record */
-		startpoint = record->xl_prev;
+				if (errormsg)
+					elog(ERROR, "Could not read WAL record at %X/%X: %s",
+						 (uint32) (errptr >> 32), (uint32) (errptr),
+						 errormsg);
+				else
+					elog(ERROR, "Could not read WAL record at %X/%X",
+						 (uint32) (errptr >> 32), (uint32) (errptr));
+			}
 
-		if (getRecordTimestamp(xlogreader, &last_time))
-		{
-			*recovery_time = timestamptz_to_time_t(last_time);
+			curpoint = xlogreader->EndRecPtr;
 
-			/* Found timestamp in WAL record 'record' */
-			res = true;
+			if (getRecordTimestamp(xlogreader, &last_time))
+			{
+				*recovery_time = timestamptz_to_time_t(last_time);
+
+				/* Found timestamp in WAL record 'record' */
+				res = true;
+			}
+		} while (curpoint <= endpoint);
+
+		if (res)
 			goto cleanup;
-		}
-	} while (startpoint >= start_lsn);
+
+		/* goto previous segment */
+		startpoint -= wal_seg_size;
+	} while (startpoint + wal_seg_size > start_lsn);
 
 	/* Didn't find timestamp from WAL records between start_lsn and stop_lsn */
 	res = false;
@@ -1079,11 +1091,11 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 	 */
 	Assert(reader_data->xlogexists);
 
+	Assert(reader_data->prev_page_ptr <= (int64_t)targetPagePtr);
 	/*
 	 * Do not read same page read earlier from the file, read it from the buffer
 	 */
-	if (reader_data->prev_page_off != 0 &&
-		reader_data->prev_page_off == targetPageOff)
+	if (reader_data->prev_page_ptr == targetPagePtr)
 	{
 		memcpy(readBuf, reader_data->page_buf, XLOG_BLCKSZ);
 #if PG_VERSION_NUM < 130000
@@ -1131,7 +1143,7 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 #endif
 
 	memcpy(reader_data->page_buf, readBuf, XLOG_BLCKSZ);
-	reader_data->prev_page_off = targetPageOff;
+	reader_data->prev_page_ptr = targetPagePtr;
 #if PG_VERSION_NUM < 130000
 	*pageTLI = reader_data->tli;
 #endif
@@ -1156,6 +1168,7 @@ InitXLogPageRead(XLogReaderData *reader_data, const char *archivedir,
 	MemSet(reader_data, 0, sizeof(XLogReaderData));
 	reader_data->tli = tli;
 	reader_data->xlogfile = -1;
+	reader_data->prev_page_ptr = -1;
 
 	if (allocate_reader)
 	{
@@ -1361,7 +1374,7 @@ XLogThreadWorker(void *arg)
 	XLogReaderState *xlogreader;
 	XLogSegNo	nextSegNo = 0;
 	XLogRecPtr	found;
-	uint32		prev_page_off = 0;
+	int64_t		prev_page_ptr = -1;
 	bool		need_read = true;
 
 	xlogreader = WalReaderAllocate(wal_seg_size, reader_data);
@@ -1532,8 +1545,8 @@ XLogThreadWorker(void *arg)
 		 * Check if other thread got the target segment. Check it not very
 		 * often, only every WAL page.
 		 */
-		if (wal_consistent_read && prev_page_off != 0 &&
-			prev_page_off != reader_data->prev_page_off)
+		if (wal_consistent_read &&
+			prev_page_ptr != reader_data->prev_page_ptr)
 		{
 			XLogSegNo	segno;
 
@@ -1544,7 +1557,7 @@ XLogThreadWorker(void *arg)
 			if (segno != 0 && segno < reader_data->xlogsegno)
 				break;
 		}
-		prev_page_off = reader_data->prev_page_off;
+		prev_page_ptr = reader_data->prev_page_ptr;
 
 		/* continue reading at next record */
 		thread_arg->startpoint = InvalidXLogRecPtr;
@@ -1726,7 +1739,7 @@ CleanupXLogPageRead(XLogReaderState *xlogreader)
 		reader_data->gz_xlogfile = NULL;
 	}
 #endif
-	reader_data->prev_page_off = 0;
+	reader_data->prev_page_ptr = -1;
 	reader_data->xlogexists = false;
 }
 
