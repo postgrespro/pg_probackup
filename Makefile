@@ -34,7 +34,7 @@ PROGRAM := pg_probackup
 OBJS := src/utils/configuration.o src/utils/json.o src/utils/logger.o \
 	src/utils/parray.o src/utils/pgut.o src/utils/thread.o src/utils/remote.o src/utils/file.o
 OBJS += src/archive.o src/backup.o src/catalog.o src/checkdb.o src/configure.o src/data.o \
-	src/delete.o src/dir.o src/fetch.o src/help.o src/init.o src/merge.o \
+	src/delete.o src/dir.o src/help.o src/init.o src/merge.o \
 	src/parsexlog.o src/ptrack.o src/pg_probackup.o src/restore.o src/show.o src/stream.o \
 	src/util.o src/validate.o src/datapagemap.o src/catchup.o \
 	src/compatibility/pg-11.o src/utils/simple_prompt.o

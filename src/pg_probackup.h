@@ -862,14 +862,6 @@ extern int do_delete_instance(InstanceState *instanceState);
 extern void do_delete_status(InstanceState *instanceState, 
 					InstanceConfig *instance_config, const char *status);
 
-/* in fetch.c */
-extern char *slurpFile(fio_location location,
-					   const char *datadir,
-					   const char *path,
-					   size_t *filesize,
-					   bool safe);
-extern char *fetchFile(PGconn *conn, const char *filename, size_t *filesize);
-
 /* in help.c */
 extern void help_print_version(void);
 extern void help_pg_probackup(void);
