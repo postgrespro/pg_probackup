@@ -530,7 +530,8 @@ read_recovery_info(const char *archivedir, TimeLineID tli, uint32 wal_seg_size,
 				   XLogRecPtr start_lsn, XLogRecPtr stop_lsn,
 				   time_t *recovery_time)
 {
-	XLogRecPtr	startpoint = stop_lsn;
+	XLogRecPtr	startpoint = stop_lsn - (stop_lsn % wal_seg_size) + SizeOfXLogLongPHD;
+	XLogRecPtr	endpoint = stop_lsn;
 	XLogReaderState *xlogreader;
 	XLogReaderData reader_data;
 	bool		res;
@@ -549,44 +550,57 @@ read_recovery_info(const char *archivedir, TimeLineID tli, uint32 wal_seg_size,
 	/* Read records from stop_lsn down to start_lsn */
 	do
 	{
+		XLogRecPtr	curpoint = startpoint;
 		XLogRecord *record;
 		TimestampTz last_time = 0;
 		char	   *errormsg;
 
+		if (curpoint < start_lsn)
+			curpoint = start_lsn;
 #if PG_VERSION_NUM >= 130000
-		if (XLogRecPtrIsInvalid(startpoint))
-			startpoint = SizeOfXLogShortPHD;
-		XLogBeginRead(xlogreader, startpoint);
+		XLogBeginRead(xlogreader, curpoint);
 #endif
 
-		record = WalReadRecord(xlogreader, startpoint, &errormsg);
-		if (record == NULL)
-		{
-			XLogRecPtr	errptr;
+		do {
 
-			errptr = startpoint ? startpoint : xlogreader->EndRecPtr;
+			record = WalReadRecord(xlogreader, curpoint, &errormsg);
+			if (record == NULL)
+			{
+				XLogRecPtr	errptr;
 
-			if (errormsg)
-				elog(ERROR, "Could not read WAL record at %X/%X: %s",
-					 (uint32) (errptr >> 32), (uint32) (errptr),
-					 errormsg);
-			else
-				elog(ERROR, "Could not read WAL record at %X/%X",
-					 (uint32) (errptr >> 32), (uint32) (errptr));
-		}
+				errptr = xlogreader->ReadRecPtr;
 
-		/* Read previous record */
-		startpoint = record->xl_prev;
+				if (errormsg)
+					elog(ERROR, "Could not read WAL record at %X/%X: %s",
+						 (uint32) (errptr >> 32), (uint32) (errptr),
+						 errormsg);
+				else
+					elog(ERROR, "Could not read WAL record at %X/%X",
+						 (uint32) (errptr >> 32), (uint32) (errptr));
+			}
 
-		if (getRecordTimestamp(xlogreader, &last_time))
-		{
-			*recovery_time = timestamptz_to_time_t(last_time);
+			/*
+			 * Prior Pg13 we need to set it to continue.
+			 * After Pg13 it is ignored in WalReadRecord.
+			 */
+			curpoint = InvalidXLogRecPtr;
 
-			/* Found timestamp in WAL record 'record' */
-			res = true;
+			if (getRecordTimestamp(xlogreader, &last_time))
+			{
+				*recovery_time = timestamptz_to_time_t(last_time);
+
+				/* Found timestamp in WAL record 'record' */
+				res = true;
+			}
+		} while (xlogreader->EndRecPtr < endpoint+1);
+
+		if (res)
 			goto cleanup;
-		}
-	} while (startpoint >= start_lsn);
+
+		/* goto previous segment */
+		endpoint = endpoint - (endpoint % wal_seg_size) - 1;
+		startpoint -= wal_seg_size;
+	} while (startpoint + wal_seg_size > start_lsn);
 
 	/* Didn't find timestamp from WAL records between start_lsn and stop_lsn */
 	res = false;
