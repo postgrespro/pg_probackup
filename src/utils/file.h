@@ -280,6 +280,11 @@ fobj_iface(pioPagesIterator);
 #define mth__pioOpen 		pioFile_i, (path_t, path), (int, flags), \
 									   (int, permissions), (err_i *, err)
 #define mth__pioOpen__optional() (permissions, FILE_PERMISSION)
+#define mth__pioOpenRewrite pioWriteCloser_i, (path_t, path), (int, permissions), \
+                                              (bool, binary), (bool, use_temp),     \
+											  (err_i *, err)
+#define mth__pioOpenRewrite__optional() (binary, true), (use_temp, true), \
+                                        (permissions, FILE_PERMISSION)
 #define mth__pioStat 		pio_stat_t, (path_t, path), (bool, follow_symlink), \
 										 (err_i *, err)
 #define mth__pioRemove 		err_i, (path_t, path), (bool, missing_ok)
@@ -311,6 +316,7 @@ fobj_iface(pioPagesIterator);
 		(uint32, checksum_version), (bool, just_validate), (err_i*, err)
 
 fobj_method(pioOpen);
+fobj_method(pioOpenRewrite);
 fobj_method(pioStat);
 fobj_method(pioRemove);
 fobj_method(pioRename);
@@ -326,9 +332,10 @@ fobj_method(pioWriteFile);
 fobj_method(pioIteratePages);
 
 #define iface__pioDrive 	mth(pioOpen, pioStat, pioRemove, pioRename), \
-					        mth(pioExists, pioGetCRC32, pioIsRemote),                \
+					        mth(pioExists, pioGetCRC32, pioIsRemote),          \
 							mth(pioMakeDir, pioListDir, pioRemoveDir),  \
-							mth(pioFilesAreSame, pioReadFile, pioWriteFile)
+							mth(pioFilesAreSame, pioReadFile, pioWriteFile),   \
+							mth(pioOpenRewrite)
 fobj_iface(pioDrive);
 
 #define iface__pioDBDrive	iface__pioDrive, mth(pioIteratePages)

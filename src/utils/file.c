@@ -3368,6 +3368,19 @@ typedef struct pioLocalFile
 #define kls__pioLocalFile	iface__pioFile, iface(pioFile)
 fobj_klass(pioLocalFile);
 
+typedef struct pioLocalWriteFile
+{
+	ft_str_t path;
+	ft_str_t path_tmp;
+	FILE*	 fl;
+	ft_bytes_t buf;
+	bool     use_temp;
+	bool     renamed;
+} pioLocalWriteFile;
+#define kls__pioLocalWriteFile	iface__pioWriteCloser, mth(fobjDispose), \
+								iface(pioWriteCloser)
+fobj_klass(pioLocalWriteFile);
+
 typedef struct pioRemoteFile
 {
     pioFile	p;
@@ -3520,6 +3533,73 @@ pioLocalDrive_pioOpen(VSelf, path_t path, int flags,
     file = $alloc(pioLocalFile, .fd = fd,
                   .p = { .path = ft_cstrdup(path), .flags = flags } );
     return bind_pioFile(file);
+}
+
+static pioWriteCloser_i
+pioLocalDrive_pioOpenRewrite(VSelf, path_t path, int permissions,
+						     bool binary, bool use_temp, err_i *err)
+{
+	Self(pioLocalDrive);
+	ft_str_t	temppath;
+	int			fd = -1;
+	FILE*		fl;
+	ft_bytes_t  buf;
+	fobj_t		res;
+
+	fobj_reset_err(err);
+
+	if (use_temp)
+	{
+		temppath = ft_asprintf("%s~tmpXXXXXX", path);
+		fd = mkstemp(temppath.ptr);
+	}
+	else
+	{
+		temppath = ft_strdupc(path);
+		fd = open(path, O_CREAT|O_TRUNC|O_WRONLY, permissions);
+	}
+
+	if (fd < 0)
+	{
+		*err = $syserr(errno, "Create file {path} failed", path(temppath.ptr));
+		close(fd);
+		ft_str_free(&temppath);
+		return $null(pioWriteCloser);
+	}
+
+#ifdef WIN32
+	if (binary && _setmode(fd, _O_BINARY) < 0)
+	{
+		*err = $syserr(errno, "Changing permissions for {path} failed",
+					   path(temppath.ptr));
+		close(fd);
+		ft_str_free(&temppath);
+		return $null(pioWriteCloser);
+	}
+#endif
+
+	if (chmod(temppath.ptr, permissions))
+	{
+		*err = $syserr(errno, "Changing permissions for {path} failed",
+					   path(temppath.ptr));
+		close(fd);
+		ft_str_free(&temppath);
+		return $null(pioWriteCloser);
+	}
+
+	fl = fdopen(fd, binary ? "wb" : "w");
+	ft_assert(fl != NULL);
+
+	buf = ft_bytes_alloc(CHUNK_SIZE);
+	setvbuf(fl, buf.ptr, _IOFBF, buf.len);
+
+	res = $alloc(pioLocalWriteFile,
+				 .path = ft_strdupc(path),
+				 .path_tmp = temppath,
+				 .use_temp = use_temp,
+				 .fl = fl,
+				 .buf = buf);
+	return $bind(pioWriteCloser, res);
 }
 
 static pio_stat_t
@@ -3987,6 +4067,118 @@ pioLocalFile_fobjRepr(VSelf)
     Self(pioLocalFile);
     return $fmt("pioLocalFile({path:q}, fd:{fd}",
                 (path, $S(self->p.path)), (fd, $I(self->fd)));
+}
+
+static size_t
+pioLocalWriteFile_pioWrite(VSelf, ft_bytes_t buf, err_i* err)
+{
+	Self(pioLocalWriteFile);
+	fobj_reset_err(err);
+	size_t r;
+
+	if (buf.len == 0)
+		return 0;
+
+	r = fwrite(buf.ptr, 1, buf.len, self->fl);
+	if (r < buf.len)
+		*err = $syserr(errno, "Writting file {path:q}",
+					   path(self->path_tmp.ptr));
+	return r;
+}
+
+static err_i
+pioLocalWriteFile_pioWriteFinish(VSelf)
+{
+	Self(pioLocalWriteFile);
+	err_i	err = $noerr();
+
+	if (fflush(self->fl) != 0)
+		err = $syserr(errno, "Flushing file {path:q}",
+					  path(self->path_tmp.ptr));
+	return err;
+}
+
+static err_i
+pioLocalWriteFile_pioClose(VSelf, bool sync)
+{
+	Self(pioLocalWriteFile);
+	int fd;
+	int r;
+
+	fd = fileno(self->fl);
+
+	if (ferror(self->fl))
+	{
+		fclose(self->fl);
+		self->fl = NULL;
+		if (remove(self->path_tmp.ptr))
+			return $syserr(errno, "Couldn't remove file {path:q}",
+						   path(self->path_tmp.ptr));
+		return $noerr();
+	}
+
+	if (fflush(self->fl) != 0)
+		return $syserr(errno, "Flushing file {path:q}",
+					  path(self->path_tmp.ptr));
+
+	if (sync)
+	{
+		r = fsync(fd);
+		if (r < 0)
+			return $syserr(errno, "Cannot fsync file {path:q}",
+				 		   path(self->path_tmp.ptr));
+	}
+
+	if (self->use_temp)
+	{
+		if (rename(self->path_tmp.ptr, self->path.ptr))
+			return $syserr(errno, "Cannot rename file {old_path:q} to {new_path:q}",
+						   old_path(self->path_tmp.ptr),
+						   new_path(self->path.ptr));
+		/* mark as renamed so fobjDispose will not delete it */
+		self->renamed = true;
+
+		if (sync)
+		{
+			/*
+			 * To guarantee renaming the file is persistent, fsync the file with its
+			 * new name, and its containing directory.
+			 */
+			r = fsync(fd);
+			if (r < 0)
+				return $syserr(errno, "Cannot fsync file {path:q}",
+							   path(self->path.ptr));
+
+			if (fsync_parent_path_compat(self->path.ptr) != 0)
+				return $syserr(errno, "Cannot fsync file {path:q}",
+							   path(self->path.ptr));
+		}
+	}
+
+	if (fclose(self->fl))
+		return $syserr(errno, "Cannot close file {path:q}",
+					   path(self->path_tmp.ptr));
+	self->fl = NULL;
+
+	return $noerr();
+}
+
+static void
+pioLocalWriteFile_fobjDispose(VSelf)
+{
+	Self(pioLocalWriteFile);
+	if (self->fl != NULL)
+	{
+		fclose(self->fl);
+		self->fl = NULL;
+	}
+	if (self->use_temp && !self->renamed)
+	{
+		remove(self->path_tmp.ptr);
+	}
+	ft_str_free(&self->path);
+	ft_str_free(&self->path_tmp);
+	ft_bytes_free(&self->buf);
 }
 
 /* REMOTE DRIVE */
@@ -4800,6 +4992,15 @@ pioRemoteFile_fobjRepr(VSelf)
                 (hnd, $I(self->handle)),
                 (asyncMode, $B(self->asyncMode)),
                 (err, self->asyncError.self));
+}
+
+static pioWriteCloser_i
+pioRemoteDrive_pioOpenRewrite(VSelf, path_t path, int permissions,
+							 bool binary, bool use_temp, err_i *err)
+{
+	Self(pioRemoteDrive);
+	*err = $err(RT, "NOT IMPLEMENTED");
+	return $null(pioWriteCloser);
 }
 
 pioRead_i
@@ -6028,6 +6229,7 @@ fobj_klass_handle(pioLocalDrive);
 fobj_klass_handle(pioRemoteDrive);
 fobj_klass_handle(pioLocalFile, inherits(pioFile), mth(fobjDispose, fobjRepr));
 fobj_klass_handle(pioRemoteFile, inherits(pioFile), mth(fobjDispose, fobjRepr));
+fobj_klass_handle(pioLocalWriteFile);
 fobj_klass_handle(pioWriteFilter, mth(fobjDispose, fobjRepr));
 fobj_klass_handle(pioReadFilter, mth(fobjDispose, fobjRepr));
 fobj_klass_handle(pioDevNull);
