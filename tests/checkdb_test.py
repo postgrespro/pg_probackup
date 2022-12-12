@@ -40,9 +40,11 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
             "create table idxpart (a int) "
             "partition by range (a)")
 
-        node.safe_psql(
-            "postgres",
-            "create index on idxpart(a)")
+        # there aren't partitioned indexes on 10 and lesser versions
+        if self.get_version(node) >= 110000:
+            node.safe_psql(
+                "postgres",
+                "create index on idxpart(a)")
 
         try:
             node.safe_psql(
