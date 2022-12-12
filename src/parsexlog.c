@@ -573,8 +573,7 @@ read_recovery_info(const char *archivedir, TimeLineID tli, uint32 wal_seg_size,
 			{
 				XLogRecPtr	errptr;
 
-				//errptr = startpoint ? startpoint : xlogreader->EndRecPtr;
-				errptr = curpoint;
+				errptr = xlogreader->ReadRecPtr;
 
 				if (errormsg)
 					elog(ERROR, "Could not read WAL record at %X/%X: %s",
@@ -585,7 +584,11 @@ read_recovery_info(const char *archivedir, TimeLineID tli, uint32 wal_seg_size,
 						 (uint32) (errptr >> 32), (uint32) (errptr));
 			}
 
-			curpoint = xlogreader->EndRecPtr;
+			/*
+			 * Prior Pg13 we need to set it to continue.
+			 * After Pg13 it is ignored in WalReadRecord.
+			 */
+			curpoint = InvalidXLogRecPtr;
 
 			if (getRecordTimestamp(xlogreader, &last_time))
 			{
@@ -594,12 +597,13 @@ read_recovery_info(const char *archivedir, TimeLineID tli, uint32 wal_seg_size,
 				/* Found timestamp in WAL record 'record' */
 				res = true;
 			}
-		} while (curpoint <= endpoint);
+		} while (xlogreader->EndRecPtr < endpoint+1);
 
 		if (res)
 			goto cleanup;
 
 		/* goto previous segment */
+		endpoint = endpoint - (endpoint % wal_seg_size) - 1;
 		startpoint -= wal_seg_size;
 	} while (startpoint + wal_seg_size > start_lsn);
 
