@@ -104,7 +104,7 @@ typedef struct XLogReaderData
 	bool		xlogexists;
 
 	char		 page_buf[XLOG_BLCKSZ];
-	uint32		 prev_page_off;
+	int64_t		 prev_page_ptr;
 
 	bool		need_switch;
 
@@ -1090,11 +1090,11 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 	 */
 	Assert(reader_data->xlogexists);
 
+	Assert(reader_data->prev_page_ptr <= (int64_t)targetPagePtr);
 	/*
 	 * Do not read same page read earlier from the file, read it from the buffer
 	 */
-	if (reader_data->prev_page_off != 0 &&
-		reader_data->prev_page_off == targetPageOff)
+	if (reader_data->prev_page_ptr == targetPagePtr)
 	{
 		memcpy(readBuf, reader_data->page_buf, XLOG_BLCKSZ);
 #if PG_VERSION_NUM < 130000
@@ -1142,7 +1142,7 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 #endif
 
 	memcpy(reader_data->page_buf, readBuf, XLOG_BLCKSZ);
-	reader_data->prev_page_off = targetPageOff;
+	reader_data->prev_page_ptr = targetPagePtr;
 #if PG_VERSION_NUM < 130000
 	*pageTLI = reader_data->tli;
 #endif
@@ -1167,6 +1167,7 @@ InitXLogPageRead(XLogReaderData *reader_data, const char *archivedir,
 	MemSet(reader_data, 0, sizeof(XLogReaderData));
 	reader_data->tli = tli;
 	reader_data->xlogfile = -1;
+	reader_data->prev_page_ptr = -1;
 
 	if (allocate_reader)
 	{
@@ -1372,7 +1373,7 @@ XLogThreadWorker(void *arg)
 	XLogReaderState *xlogreader;
 	XLogSegNo	nextSegNo = 0;
 	XLogRecPtr	found;
-	uint32		prev_page_off = 0;
+	int64_t		prev_page_ptr = -1;
 	bool		need_read = true;
 
 	xlogreader = WalReaderAllocate(wal_seg_size, reader_data);
@@ -1540,8 +1541,8 @@ XLogThreadWorker(void *arg)
 		 * Check if other thread got the target segment. Check it not very
 		 * often, only every WAL page.
 		 */
-		if (wal_consistent_read && prev_page_off != 0 &&
-			prev_page_off != reader_data->prev_page_off)
+		if (wal_consistent_read &&
+			prev_page_ptr != reader_data->prev_page_ptr)
 		{
 			XLogSegNo	segno;
 
@@ -1552,7 +1553,7 @@ XLogThreadWorker(void *arg)
 			if (segno != 0 && segno < reader_data->xlogsegno)
 				break;
 		}
-		prev_page_off = reader_data->prev_page_off;
+		prev_page_ptr = reader_data->prev_page_ptr;
 
 		/* continue reading at next record */
 		thread_arg->startpoint = InvalidXLogRecPtr;
@@ -1736,7 +1737,7 @@ CleanupXLogPageRead(XLogReaderState *xlogreader)
 		reader_data->gz_xlogfile = NULL;
 	}
 #endif
-	reader_data->prev_page_off = 0;
+	reader_data->prev_page_ptr = -1;
 	reader_data->xlogexists = false;
 }
 
