@@ -1461,10 +1461,7 @@ XLogThreadWorker(void *arg)
 					 */
 					strncmp(errormsg, "missing contrecord", 18) == 0))
 			{
-				if (SwitchThreadToNextWal(xlogreader, thread_arg))
-					continue;
-				else
-					break;
+				continue;
 			}
 
 			/*
@@ -1649,6 +1646,8 @@ SwitchThreadToNextWal(XLogReaderState *xlogreader, xlog_thread_arg *arg)
 		PrintXLogCorruptionMsg(reader_data, ERROR);
 	}
 	arg->startpoint = found;
+	/* Reset xlog reader therefore we don't have to seek back */
+	CleanupXLogPageRead(xlogreader);
 
 	elog(VERBOSE, "Thread [%d]: Switched to LSN %X/%X",
 		 reader_data->thread_num,
