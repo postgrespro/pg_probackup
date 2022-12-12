@@ -1446,7 +1446,7 @@ XLogThreadWorker(void *arg)
 					 * TODO: probably we should abort reading logs at this moment.
 					 * But we continue as we did with bug present in Pg < 15.
 					 */
-					strncmp(errormsg, "missing contrecord", 18) == 0))
+					!XLogRecPtrIsInvalid(xlogreader->abortedRecPtr)))
 			{
 				if (SwitchThreadToNextWal(xlogreader, thread_arg))
 					continue;
