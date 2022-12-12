@@ -1518,7 +1518,7 @@ update_recovery_options_before_v12(InstanceState *instanceState, pgBackup *backu
 
 	join_path_components(path, instance_config.pgdata, "recovery.conf");
 
-	err = $i(pioWriteFile, backup->database_location, .path = path,
+	err = $i(pioWriteFile, instanceState->database_location, .path = path,
 			 .content = ft_str2bytes(ft_strbuf_ref(&buf)), .binary = false);
 
 	if ($haserr(err))
