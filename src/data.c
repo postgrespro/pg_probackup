@@ -1768,7 +1768,7 @@ send_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
 	pioDrive_i backup_location = pioDriveForLocation(FIO_BACKUP_HOST);
 	pioDBDrive_i db_location = pioDBDriveForLocation(FIO_DB_HOST);
 	pioPagesIterator_i pages;
-	pioFile_i out = $null(pioFile);
+	pioWriteCloser_i out = $null(pioWriteCloser);
 	pioWriteFlush_i wrapped = $null(pioWriteFlush);
 	pioCRC32Counter *crc32 = NULL;
 	ft_arr_bpph2_t	harray = ft_arr_init();
@@ -1793,7 +1793,8 @@ send_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
 		if (value.page_result == PageIsOk) {
 			if($isNULL(out))
 			{
-				out = $i(pioOpen, backup_location, to_fullpath, PG_BINARY|O_CREAT|O_RDWR, 0, &err);
+				out = $i(pioOpenRewrite, backup_location, to_fullpath,
+						 .use_temp = false, .err = &err);
 				if ($haserr(err))
 					return $iresult(err);
 				crc32 = pioCRC32Counter_alloc();
