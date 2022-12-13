@@ -2466,31 +2466,32 @@ void
 write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 					  parray *external_list, bool sync)
 {
+	FOBJ_FUNC_ARP();
 	char		control_path[MAXPGPATH];
-	char		control_path_temp[MAXPGPATH];
 	size_t		i = 0;
 	int64 		backup_size_on_disk = 0;
 	int64 		uncompressed_size_on_disk = 0;
 	int64 		wal_size_on_disk = 0;
 
-	pioFile_i 	out;
+	pioWriteCloser_i 	out;
+	pioCRC32Counter*	crc;
+	pioWriteFlush_i		wrapped;
 	pioDrive_i 	backup_drive = backup->backup_location;
 	err_i 		err;
 
 	ft_strbuf_t line = ft_strbuf_zero();
 
 	join_path_components(control_path, backup->root_dir, DATABASE_FILE_LIST);
-	snprintf(control_path_temp, sizeof(control_path_temp), "%s.tmp", control_path);
 
-	out = $i(pioOpen, backup_drive, control_path_temp,
-			.flags = O_WRONLY | O_CREAT | O_EXCL | PG_BINARY,
-			.err = &err);
+	out = $i(pioOpenRewrite, backup_drive, control_path, .err = &err);
 	if ($haserr(err))
-		elog(ERROR, "Cannot open file list \"%s\": %s", control_path_temp,
+		elog(ERROR, "Cannot open file list \"%s\": %s", control_path,
 			 strerror(errno));
 
-	if (sync)
-		INIT_CRC32C(backup->content_crc);
+	crc = pioCRC32Counter_alloc();
+	wrapped = pioWrapWriteFilter($reduce(pioWriteFlush, out),
+								 $bind(pioFilter, crc),
+								 OUT_BUF_SIZE);
 
 	/* print each file in the list */
 	for (i = 0; i < parray_num(files); i++)
@@ -2562,10 +2563,7 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 
 		ft_strbuf_catf(&line, "}\n");
 
-		if (sync)
-			COMP_CRC32C(backup->content_crc, (char*)line.ptr, line.len);
-
-		$i(pioWrite, out, ft_bytes(line.ptr, line.len), &err);
+		$i(pioWrite, wrapped, ft_bytes(line.ptr, line.len), &err);
 
 		ft_strbuf_reset_for_reuse(&line);
 
@@ -2575,28 +2573,16 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 
 	ft_strbuf_free(&line);
 
-	if (sync)
-		FIN_CRC32C(backup->content_crc);
-
-	err = $i(pioWriteFinish, out);
+	err = $i(pioWriteFinish, wrapped);
 	if ($haserr(err))
 		ft_logerr(FT_FATAL, $errmsg(err), "Flushing " DATABASE_FILE_LIST ".tmp");
 
-	/* if (sync)
-	{
-		err = pioSync(out);
-		if ($haserr(err))
-			ft_logerr(FT_FATAL, $errmsg(err), "Sync " DATABASE_FILE_LIST ".tmp");
-	} */
+	if (sync)
+		backup->content_crc = pioCRC32Counter_getCRC32(crc);
 
-	err = $i(pioClose, out, .sync=true);
+	err = $i(pioClose, out, .sync=sync);
 	if ($haserr(err))
 		ft_logerr(FT_FATAL, $errmsg(err), "Closing " DATABASE_FILE_LIST ".tmp");
-
-	err = $i(pioRename, backup->backup_location,
-			 .old_path = control_path_temp, .new_path = control_path);
-	if ($haserr(err))
-		ft_logerr(FT_FATAL, $errmsg(err), "Renaming " DATABASE_FILE_LIST ".tmp");
 
 	/* use extra variable to avoid reset of previous data_bytes value in case of error */
 	backup->data_bytes = backup_size_on_disk;
