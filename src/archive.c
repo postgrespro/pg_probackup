@@ -13,12 +13,12 @@
 #include "utils/thread.h"
 #include "portability/instr_time.h"
 
-static int push_file_internal(const char *wal_file_name,
+static err_i push_file_internal(const char *wal_file_name,
                               const char *pg_xlog_dir,
                               const char *archive_dir,
                               bool overwrite, bool no_sync,
                               bool is_compress, int compress_level,
-                              uint32 archive_timeout);
+                              uint32 archive_timeout, bool *skipped);
 static void *push_files(void *arg);
 static void *get_files(void *arg);
 static bool get_wal_file(const char *filename, const char *from_path, const char *to_path,
@@ -324,14 +324,19 @@ push_file(WALSegno *xlogfile, const char *archive_status_dir,
 		  bool no_ready_rename, bool is_compress,
 		  int compress_level)
 {
-	int     rc;
+	bool  skipped = false;
+	err_i err;
 
 	elog(LOG, "pushing file \"%s\"", xlogfile->name);
 
-	rc = push_file_internal(xlogfile->name, pg_xlog_dir,
+	err = push_file_internal(xlogfile->name, pg_xlog_dir,
 							archive_dir, overwrite, no_sync,
 							is_compress, compress_level,
-							archive_timeout);
+						    archive_timeout, &skipped);
+	if ($haserr(err))
+	{
+		ft_logerr(FT_ERROR, $errmsg(err), "Archiving %s", xlogfile->name);
+	}
 
 	/* take '--no-ready-rename' flag into account */
 	if (!no_ready_rename && archive_status_dir != NULL)
@@ -355,15 +360,7 @@ push_file(WALSegno *xlogfile, const char *archive_status_dir,
 				wal_file_ready, wal_file_done, strerror(errno));
 	}
 
-	return rc;
-}
-
-static void
-remove_temp_wal_file(pioDrive_i backup_drive, char *partpath)
-{
-	err_i   remerr = $i(pioRemove, backup_drive, partpath, false);
-	if ($haserr(remerr))
-		elog(WARNING, "Temp WAL: %s", $errmsg(remerr));
+	return skipped;
 }
 
 /*
@@ -374,24 +371,18 @@ remove_temp_wal_file(pioDrive_i backup_drive, char *partpath)
  *  1 - push was skipped because file already exists in the archive and
  *      has the same checksum
  */
-int
+err_i
 push_file_internal(const char *wal_file_name, const char *pg_xlog_dir,
                    const char *archive_dir, bool overwrite, bool no_sync,
                    bool is_compress, int compress_level,
-                   uint32 archive_timeout)
+                   uint32 archive_timeout, bool *skipped)
 {
     FOBJ_FUNC_ARP();
     pioFile_i in;
-    pioFile_i out;
-    char *buf = pgut_malloc(OUT_BUF_SIZE); /* 1MB buffer */
+    pioWriteCloser_i out;
     char from_fullpath[MAXPGPATH];
     char to_fullpath[MAXPGPATH];
-    char to_fullpath_part[MAXPGPATH];
 /* partial handling */
-    pio_stat_t st;
-    int partial_try_count = 0;
-    int64_t partial_file_size = 0;
-    bool partial_is_stale = true;
     size_t len;
     err_i err = $noerr();
 
@@ -409,100 +400,10 @@ push_file_internal(const char *wal_file_name, const char *pg_xlog_dir,
         /* destination file with .gz suffix */
         len = ft_strlcat(to_fullpath, ".gz", sizeof(to_fullpath));
         if (len >= sizeof(to_fullpath))
-            elog(ERROR, "File path too long: \"%s\"", to_fullpath);
+            return $iresult($err(RT, "File path too long: {path:q}",
+								 path(to_fullpath)));
     }
     /* open destination partial file for write */
-    len = snprintf(to_fullpath_part, sizeof(to_fullpath_part), "%s.part",
-                   to_fullpath);
-    if (len >= sizeof(to_fullpath))
-        elog(ERROR, "File path too long: \"%s\"", to_fullpath);
-
-    /* Open source file for read */
-    in = $i(pioOpen, db_drive, from_fullpath, O_RDONLY | PG_BINARY, .err = &err);
-    if ($haserr(err))
-        elog(ERROR, "Source file: %s", $errmsg(err));
-
-    retry_open:
-    out = $i(pioOpen, backup_drive, to_fullpath_part,
-             .flags = O_WRONLY | O_CREAT | O_EXCL | PG_BINARY,
-             .err = &err);
-    if ($noerr(err))
-        goto part_opened;
-
-    if (getErrno(err) != EEXIST)
-        /* Already existing destination temp file is not an error condition */
-        elog(ERROR, "Temp WAL file: %s", $errmsg(err));
-
-    /*
-     * Partial file already exists, it could have happened due to:
-     * 1. failed archive-push
-     * 2. concurrent archiving
-     *
-     * For ARCHIVE_TIMEOUT period we will try to create partial file
-     * and look for the size of already existing partial file, to
-     * determine if it is changing or not.
-     * If after ARCHIVE_TIMEOUT we still failed to create partial
-     * file, we will make a decision about discarding
-     * already existing partial file.
-     */
-
-    while (partial_try_count < archive_timeout)
-    {
-        FOBJ_LOOP_ARP();
-        st = $i(pioStat, backup_drive, .path = to_fullpath_part,
-                .follow_symlink = false, .err = &err);
-        if ($haserr(err))
-        {
-            if (getErrno(err) == ENOENT)
-                //part file is gone, lets try to grab it
-                goto retry_open;
-            else
-                elog(ERROR, "Temp WAL: %s", $errmsg(err));
-        }
-
-        /* first round */
-        if (!partial_try_count)
-        {
-            elog(LOG,
-                 "Temp WAL file already exists, waiting on it %u seconds: \"%s\"",
-                 archive_timeout, to_fullpath_part);
-            partial_file_size = st.pst_size;
-        }
-
-        /* file size is changing */
-        if (st.pst_size != partial_file_size)
-            partial_is_stale = false;
-
-        sleep(1);
-        partial_try_count++;
-    }
-    /* The possible exit conditions:
-     * 1. File is not grabbed, and it is not stale
-     * 2. File is not grabbed, and it is stale.
-     */
-
-    /*
-     * If temp file was not grabbed for ARCHIVE_TIMEOUT and temp file is not stale,
-     * then exit with error.
-     */
-    if (!partial_is_stale)
-        elog(ERROR, "Failed to open temp WAL file \"%s\" in %i seconds",
-             to_fullpath_part, archive_timeout);
-
-    /* Partial segment is considered stale, so reuse it */
-    elog(LOG, "Reusing stale temp WAL file \"%s\"", to_fullpath_part);
-    err = $i(pioRemove, backup_drive, .path = to_fullpath_part, .missing_ok = false);
-    if ($haserr(err))
-        elog(ERROR, "Temp WAL: %s", $errmsg(err));
-
-    out = $i(pioOpen, backup_drive, .path = to_fullpath_part,
-             .flags = O_WRONLY | O_CREAT | O_EXCL | PG_BINARY,
-             .err = &err);
-    if ($haserr(err))
-        elog(ERROR, "Temp WAL: %s", $errmsg(err));
-
-    part_opened:
-    elog(LOG, "Temp WAL file successfully created: \"%s\"", to_fullpath_part);
 
     if ($i(pioExists, backup_drive, .path = to_fullpath, .err = &err))
     {
@@ -512,23 +413,19 @@ push_file_internal(const char *wal_file_name, const char *pg_xlog_dir,
         crc32_src = $i(pioGetCRC32, db_drive, from_fullpath,
                        .compressed = false, .err = &err);
         if ($haserr(err))
-            elog(ERROR, "Cannot count crc32 for source file \"%s\": %s",
-                 from_fullpath, $errmsg(err));
+			return $iresult(err);
 
         crc32_dst = $i(pioGetCRC32, backup_drive, to_fullpath,
                        .compressed = is_compress, .err = &err);
         if ($haserr(err))
-            elog(ERROR, "Cannot count crc32 for destination file \"%s\": %s",
-                 to_fullpath, $errmsg(err));
+			return $iresult(err);
 
         if (crc32_src == crc32_dst)
         {
             elog(LOG, "WAL file already exists in archive with the same "
                       "checksum, skip pushing: \"%s\"", from_fullpath);
-            $i(pioClose, in);
-            $i(pioClose, out);
-            remove_temp_wal_file(backup_drive, to_fullpath_part);
-            return 1;
+			*skipped = true;
+            return $noerr();
         }
         else if (overwrite)
         {
@@ -538,18 +435,24 @@ push_file_internal(const char *wal_file_name, const char *pg_xlog_dir,
         }
         else
         {
-            $i(pioClose, in);
-            $i(pioClose, out);
-            remove_temp_wal_file(backup_drive, to_fullpath_part);
-
-            elog(ERROR, "WAL file already exists in archive with "
-                        "different checksum: \"%s\"", to_fullpath);
+			return $iresult($err(RT, "WAL file already exists in archive with "
+									 "different checksum: {path:q}",
+									 path(to_fullpath)));
         }
     }
     else if ($haserr(err))
     {
-        elog(ERROR, "%s", $errmsg(err));
+		return $iresult(err);
     }
+
+	/* Open source file for read */
+	in = $i(pioOpen, db_drive, from_fullpath, O_RDONLY | PG_BINARY, .err = &err);
+	if ($haserr(err))
+		return $iresult(err);
+
+	out = $i(pioOpenRewrite, backup_drive, .path = to_fullpath, .err = &err);
+	if ($haserr(err))
+		return $iresult(err);
 
     /* enable streaming compression */
     if (is_compress)
@@ -573,29 +476,13 @@ push_file_internal(const char *wal_file_name, const char *pg_xlog_dir,
     $i(pioClose, in); /* ignore error */
 
     if ($haserr(err))
-    {
-        $i(pioClose, out);
-        remove_temp_wal_file(backup_drive, to_fullpath_part);
-        elog(ERROR, "Copy WAL: %s", $errmsg(err));
-    }
+		return $iresult(err);
 
     err = $i(pioClose, out, .sync = !no_sync);
     if ($haserr(err))
-    {
-        remove_temp_wal_file(backup_drive, to_fullpath_part);
-        elog(ERROR, "Temp WAL: %s", $errmsg(err));
-    }
+		return $iresult(err);
 
-    /* Rename temp file to destination file */
-    err = $i(pioRename, backup_drive, to_fullpath_part, to_fullpath);
-    if ($haserr(err))
-    {
-        remove_temp_wal_file(backup_drive, to_fullpath_part);
-        elog(ERROR, "%s", $errmsg(err));
-    }
-
-    free(buf);
-    return 0;
+    return $noerr();
 }
 
 /* Copy file attributes */

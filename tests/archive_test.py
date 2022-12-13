@@ -491,82 +491,11 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             'WAL file already exists in archive with '
             'different checksum, overwriting', log_content)
 
-    # @unittest.skip("skip")
-    def test_archive_push_partial_file_exists(self):
-        """Archive-push if stale '.part' file exists"""
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
-            set_replication=True,
-            initdb_params=['--data-checksums'])
-
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
-        self.set_archiving(
-            backup_dir, 'node', node,
-            log_level='verbose', archive_timeout=60)
-
-        node.slow_start()
-
-        # this backup is needed only for validation to xid
-        self.backup_node(backup_dir, 'node', node)
-
-        node.safe_psql(
-            "postgres",
-            "create table t1(a int)")
-
-        xid = node.safe_psql(
-            "postgres",
-            "INSERT INTO t1 VALUES (1) RETURNING (xmin)").decode('utf-8').rstrip()
-
-        filename_orig = node.safe_psql(
-            "postgres",
-            "SELECT file_name "
-            "FROM pg_walfile_name_offset(pg_current_wal_flush_lsn());").rstrip()
-
-        filename_orig = filename_orig.decode('utf-8')
-
-        # form up path to next .part WAL segment
-        wals_dir = os.path.join(backup_dir, 'wal', 'node')
-        if self.archive_compress:
-            filename = filename_orig + '.gz' + '.part'
-            file = os.path.join(wals_dir, filename)
-        else:
-            filename = filename_orig + '.part'
-            file = os.path.join(wals_dir, filename)
-
-        # emulate stale .part file
-        with open(file, 'a+b') as f:
-            f.write(b"blahblah")
-            f.flush()
-            f.close()
-
-        self.switch_wal_segment(node)
-        sleep(70)
-
-        # check that segment is archived
-        if self.archive_compress:
-            filename_orig = filename_orig + '.gz'
-
-        file = os.path.join(wals_dir, filename_orig)
-        self.assertTrue(os.path.isfile(file))
-
-        # successful validate means that archive-push reused stale wal segment
-        self.validate_pb(
-            backup_dir, 'node',
-            options=['--recovery-target-xid={0}'.format(xid)])
-
-        log_file = os.path.join(node.logs_dir, 'postgresql.log')
-        with open(log_file, 'r') as f:
-            log_content = f.read()
-
-            self.assertIn(
-                'Reusing stale temp WAL file',
-                log_content)
-
-    # @unittest.skip("skip")
+    @unittest.skip("should be redone with file locking")
     def test_archive_push_part_file_exists_not_stale(self):
         """Archive-push if .part file exists and it is not stale"""
+        # TODO: this test is not completely obsolete, but should be rewritten
+        # with use of file locking when push_file_internal will use it.
         backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
             base_dir=os.path.join(self.module_name, self.fname, 'node'),
@@ -2412,7 +2341,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
         os.rename(
             os.path.join(wals_dir, filename),
-            os.path.join(wals_dir, '{0}.part'.format(filename)))
+            os.path.join(wals_dir, '{0}~tmp123451'.format(filename)))
 
         # .gz.part file
         node.safe_psql(
@@ -2430,7 +2359,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
         os.rename(
             os.path.join(wals_dir, filename),
-            os.path.join(wals_dir, '{0}.gz.part'.format(filename)))
+            os.path.join(wals_dir, '{0}.gz~tmp234513'.format(filename)))
 
         # .partial file
         node.safe_psql(

@@ -693,14 +693,14 @@ typedef struct StopBackupCallbackParams
 	 strcmp((fname) + XLOG_FNAME_LEN, ".gz.partial") == 0)
 
 #define IsTempXLogFileName(fname)	\
-	(strlen(fname) == XLOG_FNAME_LEN + strlen(".part") &&	\
+	(strlen(fname) == XLOG_FNAME_LEN + strlen("~tmp") + 6 &&	\
 	 strspn(fname, "0123456789ABCDEF") == XLOG_FNAME_LEN &&		\
-	 strcmp((fname) + XLOG_FNAME_LEN, ".part") == 0)
+	 strncmp((fname) + XLOG_FNAME_LEN, "~tmp", 4) == 0)
 
 #define IsTempCompressXLogFileName(fname)	\
-	(strlen(fname) == XLOG_FNAME_LEN + strlen(".gz.part") && \
+	(strlen(fname) == XLOG_FNAME_LEN + strlen(".gz~tmp") + 6 && \
 	 strspn(fname, "0123456789ABCDEF") == XLOG_FNAME_LEN &&		\
-	 strcmp((fname) + XLOG_FNAME_LEN, ".gz.part") == 0)
+	 strncmp((fname) + XLOG_FNAME_LEN, ".gz~tmp", 7) == 0)
 
 #define IsSshProtocol() (instance_config.remote.host && strcmp(instance_config.remote.proto, "ssh") == 0)
 
