@@ -1439,6 +1439,7 @@ XLogThreadWorker(void *arg)
 			 * Usually SimpleXLogPageRead() does it by itself. But here we need
 			 * to do it manually to support threads.
 			 */
+#if PG_VERSION_NUM >= 150000
 			if (reader_data->need_switch && (
 					errormsg == NULL ||
 					/*
@@ -1447,6 +1448,9 @@ XLogThreadWorker(void *arg)
 					 * But we continue as we did with bug present in Pg < 15.
 					 */
 					!XLogRecPtrIsInvalid(xlogreader->abortedRecPtr)))
+#else
+			if (reader_data->need_switch && errormsg == NULL)
+#endif
 			{
 				if (SwitchThreadToNextWal(xlogreader, thread_arg))
 					continue;
