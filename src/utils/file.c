@@ -3939,9 +3939,7 @@ pioLocalDrive_pioWriteFile(VSelf, path_t path, ft_bytes_t content, bool binary)
 	FOBJ_FUNC_ARP();
 	Self(pioLocalDrive);
 	err_i 		err;
-	ft_str_t	temppath = ft_str(NULL, 0);
-	int			fd = -1;
-	ssize_t		r;
+	pioWriteCloser_i fl;
 
 	fobj_reset_err(&err);
 
@@ -3952,95 +3950,20 @@ pioLocalDrive_pioWriteFile(VSelf, path_t path, ft_bytes_t content, bool binary)
 		return $iresult(err);
 	}
 
-	if (content.len == 0)
-	{
-		/* just create file */
-		fd = creat(path, FILE_PERMISSION);
-		if (fd < 0)
-		{
-			err = $syserr(errno, "Create file for {path} failed", path(path));
-			return $iresult(err);
-		}
-		if (fsync(fd) < 0)
-		{
-			err = $syserr(errno, "Closing file {path} failed", path(path));
-			close(fd);
-			return $iresult(err);
-		}
-		if (close(fd) < 0)
-		{
-			err = $syserr(errno, "Closing file {path} failed", path(path));
-			return $iresult(err);
-		}
-		return $noerr();
-	}
+	fl = $(pioOpenRewrite, self, path,
+		   .binary = binary, .err = &err);
+	if ($haserr(err))
+		return $iresult(err);
 
-	/* make temporary name */
-	temppath = ft_asprintf("%s~tmpXXXXXX", path);
-	fd = mkstemp(temppath.ptr);
-	if (fd < 0)
-	{
-		err = $syserr(errno, "Create temp file for {path} failed", path(path));
-		goto error;
-	}
+	$i(pioWrite, fl, content, .err = &err);
+	if ($haserr(err))
+		return $iresult(err);
 
-#if PG_BINARY
-	if (binary && _setmode(fd, PG_BINARY) < 0)
-	{
-		err = $syserr(errno, "Set file mode for {path} failed", path(temppath.ptr));
-		goto error;
-	}
-#endif
+	err = $i(pioWriteFinish, fl);
+	if ($haserr(err))
+		return $iresult(err);
 
-	r = durable_write(fd, content.ptr, content.len);
-	if (r < 0)
-	{
-		err = $syserr(errno, "Cannot write to file {path:q}",
-					   path(temppath.ptr));
-		goto error;
-	}
-
-	if (r < content.len)
-	{
-		err = $err(SysErr, "Short write on {path:q}: {writtenSz} < {wantedSz}",
-					path(temppath.ptr), writtenSz(r), wantedSz(content.len),
-					errNo(EIO));
-		goto error;
-	}
-
-	if (fsync(fd) < 0)
-	{
-		err = $syserr(errno, "Cannot fsync file {path:q}",
-					  path(temppath.ptr));
-		goto error;
-	}
-
-	if (close(fd) < 0)
-	{
-		err = $syserr(errno, "Cannot close file {path:q}",
-					  path(temppath.ptr));
-		goto error;
-	}
-	fd = -1;
-
-	if (rename(temppath.ptr, path) < 0)
-	{
-		err = $syserr(errno, "Cannot close file {path:q}",
-					  path(temppath.ptr));
-		goto error;
-	}
-
-	ft_str_free(&temppath);
-	return $noerr();
-
-error:
-	if (fd >= 0)
-		close(fd);
-	if (temppath.len > 0)
-	{
-		remove(temppath.ptr);
-		ft_str_free(&temppath);
-	}
+	err = $i(pioClose, fl);
 	return $iresult(err);
 }
 
