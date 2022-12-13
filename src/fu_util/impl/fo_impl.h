@@ -524,8 +524,8 @@ extern void fobj__validate_args(fobj_method_handle_t meth, fobj_t self,
 #define fobj__del_impl(ptr)         fobj_del((void**)(ptr))
 #endif
 
-#define fobj__iref(iface)	((__typeof(iface)){.self=fobj_ref((iface).self)})
-#define fobj__iunref(iface)	((__typeof(iface)){.self=fobj_unref((iface).self)})
+#define fobj__iref(iface)	({__typeof(iface) t = (iface); t.self=fobj_ref(t.self); t;})
+#define fobj__iunref(iface)	({__typeof(iface) t = (iface); t.self=fobj_unref(t.self); t;})
 #ifndef NDEBUG
 #define fobj__iset(ptr, iface) do { \
 	__typeof(*(ptr)) fm_uniq(_validate_ptr_) ft_unused = (__typeof(iface)){}; \
