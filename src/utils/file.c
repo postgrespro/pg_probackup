@@ -5033,7 +5033,8 @@ pioWriteFilter_pioWriteFinish(VSelf)
             return err;
         ft_assert(r == wbuf.len);
     }
-    return err;
+
+    return $i(pioWriteFinish, self->wrapped);
 }
 
 static err_i
