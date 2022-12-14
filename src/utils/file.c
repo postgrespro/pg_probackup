@@ -5143,6 +5143,8 @@ pioRemoteWriteFile_pioWriteCompressed(VSelf, ft_bytes_t buf, CompressAlg compres
 	IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
 	IO_CHECK(fio_write_all(fio_stdout, buf.ptr, buf.len), buf.len);
 
+	self->did_async = true;
+
 	return $noerr();
 }
 
