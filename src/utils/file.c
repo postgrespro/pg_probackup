@@ -13,7 +13,7 @@
 
 #define PRINTF_BUF_SIZE  1024
 
-static __thread unsigned long fio_fdset = 0;
+static __thread uint64_t fio_fdset = 0;
 static __thread int fio_stdout = 0;
 static __thread int fio_stdin = 0;
 static __thread int fio_stderr = 0;
@@ -237,6 +237,31 @@ fio_is_remote_simple(fio_location location)
 	return is_remote;
 }
 
+static int
+find_free_handle(void)
+{
+	uint64_t m = fio_fdset;
+	int i;
+	for (i = 0; (m & 1); i++, m>>=1) {}
+	if (i == FIO_FDMAX) {
+		elog(ERROR, "Descriptor pool for remote files is exhausted, "
+					"probably too many remote directories are opened");
+	}
+	return i;
+}
+
+static void
+set_handle(int i)
+{
+	fio_fdset |= 1 << i;
+}
+
+static void
+unset_handle(int i)
+{
+	fio_fdset &= ~(1 << i);
+}
+
 /* Try to read specified amount of bytes unless error or EOF are encountered */
 static ssize_t
 fio_read_all(int fd, void* buf, size_t size)
@@ -410,20 +435,14 @@ fio_opendir(fio_location location, const char* path)
 	DIR* dir;
 	if (fio_is_remote(location))
 	{
-		int i;
+		int handle;
 		fio_header hdr;
-		unsigned long mask;
 
-		mask = fio_fdset;
-		for (i = 0; (mask & 1) != 0; i++, mask >>= 1);
-		if (i == FIO_FDMAX) {
-			elog(ERROR, "Descriptor pool for remote files is exhausted, "
-					"probably too many remote directories are opened");
-		}
+		handle = find_free_handle();
 		hdr.cop = FIO_OPENDIR;
-		hdr.handle = i;
+		hdr.handle = handle;
 		hdr.size = strlen(path) + 1;
-		fio_fdset |= 1 << i;
+		set_handle(handle);
 
 		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
 		IO_CHECK(fio_write_all(fio_stdout, path, hdr.size), hdr.size);
@@ -433,10 +452,10 @@ fio_opendir(fio_location location, const char* path)
 		if (hdr.arg != 0)
 		{
 			errno = hdr.arg;
-			fio_fdset &= ~(1 << hdr.handle);
+			unset_handle(hdr.handle);
 			return NULL;
 		}
-		dir = (DIR*)(size_t)(i + 1);
+		dir = (DIR*)(size_t)(handle + 1);
 	}
 	else
 	{
@@ -484,7 +503,7 @@ fio_closedir(DIR *dir)
 		hdr.cop = FIO_CLOSEDIR;
 		hdr.handle = (size_t)dir - 1;
 		hdr.size = 0;
-		fio_fdset &= ~(1 << hdr.handle);
+		unset_handle(hdr.handle);
 
 		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
 		return 0;
@@ -502,24 +521,18 @@ fio_open(fio_location location, const char* path, int mode)
 	int fd;
 	if (fio_is_remote(location))
 	{
-		int i;
+		int handle;
 		fio_header hdr;
-		unsigned long mask;
 
-		mask = fio_fdset;
-		for (i = 0; (mask & 1) != 0; i++, mask >>= 1);
-		if (i == FIO_FDMAX)
-			elog(ERROR, "Descriptor pool for remote files is exhausted, "
-					"probably too many remote files are opened");
-
+		handle = find_free_handle();
 		hdr.cop = FIO_OPEN;
-		hdr.handle = i;
+		hdr.handle = handle;
 		hdr.size = strlen(path) + 1;
 		hdr.arg = mode;
 //		hdr.arg = mode & ~O_EXCL;
 //		elog(INFO, "PATH: %s MODE: %i, %i", path, mode, O_EXCL);
 //		elog(INFO, "MODE: %i", hdr.arg);
-		fio_fdset |= 1 << i;
+		set_handle(handle);
 
 		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
 		IO_CHECK(fio_write_all(fio_stdout, path, hdr.size), hdr.size);
@@ -530,10 +543,10 @@ fio_open(fio_location location, const char* path, int mode)
 		if (hdr.arg != 0)
 		{
 			errno = hdr.arg;
-			fio_fdset &= ~(1 << hdr.handle);
+			unset_handle(hdr.handle);
 			return -1;
 		}
-		fd = i | FIO_PIPE_MARKER;
+		fd = handle | FIO_PIPE_MARKER;
 	}
 	else
 	{
@@ -641,7 +654,7 @@ fio_close(int fd)
 			.arg = 0,
 		};
 
-		fio_fdset &= ~(1 << hdr.handle);
+		unset_handle(hdr.handle);
 		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
 
 		/* Wait for response */
@@ -3975,23 +3988,18 @@ pioRemoteDrive_pioOpen(VSelf, path_t path,
                        int flags, int permissions,
                        err_i *err)
 {
-    int i;
+    int handle;
     fio_header hdr;
-    unsigned long mask;
     fobj_reset_err(err);
     fobj_t file;
 
-    mask = fio_fdset;
-    for (i = 0; (mask & 1) != 0; i++, mask >>= 1);
-    if (i == FIO_FDMAX)
-        elog(ERROR, "Descriptor pool for remote files is exhausted, "
-                    "probably too many remote files are opened");
+	handle = find_free_handle();
 
     hdr.cop = FIO_OPEN;
-    hdr.handle = i;
+    hdr.handle = handle;
     hdr.size = strlen(path) + 1;
     hdr.arg = flags;
-    fio_fdset |= 1 << i;
+	set_handle(handle);
 
     IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
     IO_CHECK(fio_write_all(fio_stdout, path, hdr.size), hdr.size);
@@ -4003,10 +4011,10 @@ pioRemoteDrive_pioOpen(VSelf, path_t path,
     {
         *err = $syserr((int)hdr.arg, "Cannot open remote file {path:q}",
 					   path(path));
-        fio_fdset &= ~(1 << hdr.handle);
+		unset_handle(hdr.handle);
         return (pioFile_i){NULL};
     }
-    file = $alloc(pioRemoteFile, .handle = i,
+    file = $alloc(pioRemoteFile, .handle = handle,
                   .p = { .path = ft_cstrdup(path), .flags = flags });
     return bind_pioFile(file);
 }
@@ -4398,7 +4406,7 @@ pioRemoteFile_doClose(VSelf)
 			.arg = 0,
 	};
 
-	fio_fdset &= ~(1 << hdr.handle);
+	unset_handle(hdr.handle);
 	IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
 
 	/* Wait for response */
