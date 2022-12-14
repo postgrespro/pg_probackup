@@ -2562,7 +2562,7 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 
 		ft_strbuf_catf(&line, "}\n");
 
-		$i(pioWrite, wrapped, ft_bytes(line.ptr, line.len), &err);
+		err = $i(pioWrite, wrapped, ft_bytes(line.ptr, line.len));
 
 		ft_strbuf_reset_for_reuse(&line);
 

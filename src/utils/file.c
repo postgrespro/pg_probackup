@@ -3397,8 +3397,7 @@ fio_communicate(int in, int out)
 			ft_assert(hdr.handle >= 0);
 			ft_assert(objs[hdr.handle] != NULL);
 
-			$(pioWrite, objs[hdr.handle], ft_bytes(buf, hdr.size),
-						.err = &err);
+			err = $(pioWrite, objs[hdr.handle], ft_bytes(buf, hdr.size));
 			if ($haserr(err))
 				$iset(&async_errs[hdr.handle], err);
 			break;
@@ -4081,7 +4080,7 @@ pioLocalDrive_pioWriteFile(VSelf, path_t path, ft_bytes_t content, bool binary)
 	if ($haserr(err))
 		return $iresult(err);
 
-	$i(pioWrite, fl, content, .err = &err);
+	err = $i(pioWrite, fl, content);
 	if ($haserr(err))
 		return $iresult(err);
 
@@ -4166,28 +4165,26 @@ pioLocalFile_fobjRepr(VSelf)
                 (path, $S(self->p.path)), (fd, $I(self->fd)));
 }
 
-static size_t
-pioLocalWriteFile_pioWrite(VSelf, ft_bytes_t buf, err_i* err)
+static err_i
+pioLocalWriteFile_pioWrite(VSelf, ft_bytes_t buf)
 {
 	Self(pioLocalWriteFile);
-	fobj_reset_err(err);
 	size_t r;
 
 	if (buf.len == 0)
-		return 0;
+		return $noerr();
 
 	r = fwrite(buf.ptr, 1, buf.len, self->fl);
 	if (r < buf.len)
-		*err = $syserr(errno, "Writting file {path:q}",
+		return $syserr(errno, "Writting file {path:q}",
 					   path(self->path_tmp.ptr));
-	return r;
+	return $noerr();
 }
 
 static err_i
 pioLocalWriteFile_pioWriteCompressed(VSelf, ft_bytes_t buf, CompressAlg compress_alg)
 {
 	Self(pioLocalWriteFile);
-	err_i  err;
 	char   decbuf[BLCKSZ];
 	const char *errormsg = NULL;
 	int32  uncompressed_size;
@@ -4208,8 +4205,7 @@ pioLocalWriteFile_pioWriteCompressed(VSelf, ft_bytes_t buf, CompressAlg compress
 					path(self->path.ptr), size(uncompressed_size));
 	}
 
-	$(pioWrite, self, ft_bytes(decbuf, BLCKSZ), .err = &err);
-	return err;
+	return $(pioWrite, self, ft_bytes(decbuf, BLCKSZ));
 }
 
 static err_i
@@ -5105,17 +5101,16 @@ pioRemoteDrive_pioOpenWrite(VSelf, path_t path, int permissions,
 	return $bind(pioDBWriter, fl);
 }
 
-static size_t
-pioRemoteWriteFile_pioWrite(VSelf, ft_bytes_t buf, err_i* err)
+static err_i
+pioRemoteWriteFile_pioWrite(VSelf, ft_bytes_t buf)
 {
 	Self(pioRemoteWriteFile);
-	fobj_reset_err(err);
 	fio_header hdr;
 
 	ft_assert(self->handle >= 0);
 
 	if (buf.len == 0)
-		return 0;
+		return $noerr();
 
 	hdr = (fio_header){
 			.cop = PIO_WRITE_ASYNC,
@@ -5129,7 +5124,7 @@ pioRemoteWriteFile_pioWrite(VSelf, ft_bytes_t buf, err_i* err)
 
 	self->did_async = true;
 
-	return buf.len;
+	return $noerr();
 }
 
 static err_i
@@ -5433,24 +5428,21 @@ pioWrapWriteFilter(pioWriteFlush_i fl, pioFilter_i flt, size_t buf_size)
     return bind_pioWriteFlush(wrap);
 }
 
-static size_t
-pioWriteFilter_pioWrite(VSelf, ft_bytes_t rbuf, err_i *err)
+static err_i
+pioWriteFilter_pioWrite(VSelf, ft_bytes_t rbuf)
 {
     Self(pioWriteFilter);
-    fobj_reset_err(err);
+	err_i		err = $noerr();
     pioFltTransformResult tr;
     size_t      rlen = rbuf.len;
     ft_bytes_t	wbuf;
-    size_t 		r;
 
     if ($notNULL(self->inplace))
     {
-        *err = $i(pioFltInPlace, self->inplace, rbuf);
-        if ($haserr(*err))
-            return 0;
-        r = $i(pioWrite, self->wrapped, rbuf, err);
-        ft_bytes_consume(&rbuf, r);
-        return rlen - rbuf.len;
+        err = $i(pioFltInPlace, self->inplace, rbuf);
+        if ($haserr(err))
+            return err;
+        return $i(pioWrite, self->wrapped, rbuf);
     }
 
     while (rbuf.len > 0)
@@ -5458,9 +5450,9 @@ pioWriteFilter_pioWrite(VSelf, ft_bytes_t rbuf, err_i *err)
         wbuf = ft_bytes(self->buffer, self->capa);
         while (wbuf.len > 0)
         {
-            tr = $i(pioFltTransform, self->filter, rbuf, wbuf, err);
-            if ($haserr(*err))
-                return rlen - rbuf.len;
+            tr = $i(pioFltTransform, self->filter, rbuf, wbuf, &err);
+            if ($haserr(err))
+                return err;
             ft_bytes_consume(&rbuf, tr.consumed);
             ft_bytes_consume(&wbuf, tr.produced);
 
@@ -5475,18 +5467,17 @@ pioWriteFilter_pioWrite(VSelf, ft_bytes_t rbuf, err_i *err)
             ft_dbg_assert(rbuf.len == 0);
             break;
         }
-        r = $i(pioWrite, self->wrapped, wbuf, err);
-        if ($haserr(*err))
-            return rlen - rbuf.len;
-        ft_assert(r == wbuf.len);
+        err = $i(pioWrite, self->wrapped, wbuf);
+        if ($haserr(err))
+            return err;
     }
 
     if (rbuf.len)
     {
-        *err = $err(SysErr, "short write: {writtenSz} < {wantedSz}",
+        return $err(SysErr, "short write: {writtenSz} < {wantedSz}",
                     writtenSz(rlen - rbuf.len), wantedSz(rbuf.len));
     }
-    return rlen - rbuf.len;
+    return $noerr();
 }
 
 static err_i
@@ -5519,10 +5510,9 @@ pioWriteFilter_pioWriteFinish(VSelf)
             break;
 
         ft_assert(wbuf.len > 0);
-        r = $i(pioWrite, self->wrapped, wbuf, &err);
+        err = $i(pioWrite, self->wrapped, wbuf);
         if ($haserr(err))
             return err;
-        ft_assert(r == wbuf.len);
     }
 
     return $i(pioWriteFinish, self->wrapped);
@@ -5876,11 +5866,10 @@ pioDevNull_alloc(void)
 	return bind_pioWriteFlush(wrap);
 }
 
-static size_t
-pioDevNull_pioWrite(VSelf, ft_bytes_t buf, err_i *err)
+static err_i
+pioDevNull_pioWrite(VSelf, ft_bytes_t buf)
 {
-	fobj_reset_err(err);
-	return buf.len;
+	return $noerr();
 }
 
 static err_i
@@ -5926,21 +5915,15 @@ pioCopyWithFilters(pioWriteFlush_i dest, pioRead_i src,
     while (!$haserr(rerr) && !$haserr(werr))
     {
         size_t read_len = 0;
-        size_t write_len = 0;
 
         read_len = $i(pioRead, src, ft_bytes(buf, OUT_BUF_SIZE), &rerr);
 
         if (read_len == 0)
             break;
 
-        write_len = $i(pioWrite, dest, ft_bytes(buf, read_len), &werr);
-        *copied += write_len;
-        if (write_len != read_len)
-        {
-			werr = $err(SysErr, "Short write to destination file {path}: {writtenSz} < {wantedSz}",
-					 path($irepr(dest)),
-					 wantedSz(read_len), writtenSz(write_len));
-        }
+        werr = $i(pioWrite, dest, ft_bytes(buf, read_len));
+		if ($noerr(werr))
+			*copied += read_len;
     }
 
     err = fobj_err_combine(rerr, werr);

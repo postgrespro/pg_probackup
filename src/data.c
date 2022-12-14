@@ -307,12 +307,16 @@ backup_page(pioWrite_i out, BlockNumber blknum, ft_bytes_t page,
 	bph.block = blknum;
 	bph.compressed_size = page.len;
 
-	n = $i(pioWrite, out, .buf = ft_bytes(&bph, sizeof(bph)), .err = err);
+	*err = $i(pioWrite, out, .buf = ft_bytes(&bph, sizeof(bph)));
 	if ($haserr(*err))
-		return n;
+		return 0;
+	n = sizeof(bph);
 
 	/* write data page */
-	return n + $i(pioWrite, out, .buf = page, .err = err);
+	*err = $i(pioWrite, out, .buf = page);
+	if ($noerr(*err))
+		n += page.len;
+	return n;
 }
 
 /* Write page as-is. TODO: make it fastpath option in compress_and_backup_page() */
@@ -321,17 +325,15 @@ write_page(pgFile *file, pioDBWriter_i out, int blknum, Page page)
 {
 	err_i err = $noerr();
 	off_t target = blknum * BLCKSZ;
-	size_t rc;
 
 	err = $i(pioSeek, out, target);
 	if ($haserr(err))
 		ft_logerr(FT_ERROR, $errmsg(err), "write_page");
 
 	/* write data page */
-	rc = $i(pioWrite, out, .buf = ft_bytes(page, BLCKSZ), .err = &err);
+	err = $i(pioWrite, out, .buf = ft_bytes(page, BLCKSZ));
 	if ($haserr(err))
 		ft_log(FT_INFO, $errmsg(err), "write_page");
-	ft_assert(rc == BLCKSZ);
 
 	file->write_size += BLCKSZ;
 	file->uncompressed_size += BLCKSZ;

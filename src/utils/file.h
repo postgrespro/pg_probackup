@@ -244,7 +244,7 @@ fobj_error_cstr_key(gzErrStr);
 #define mth__pioClose  		err_i, (bool, sync)
 #define mth__pioClose__optional() (sync, false)
 #define mth__pioRead  		size_t, (ft_bytes_t, buf), (err_i *, err)
-#define mth__pioWrite  		size_t, (ft_bytes_t, buf), (err_i *, err)
+#define mth__pioWrite  		err_i, (ft_bytes_t, buf)
 #define mth__pioWriteCompressed  err_i, (ft_bytes_t, buf), (CompressAlg, compress_alg)
 #define mth__pioTruncate 	err_i, (size_t, sz)
 #define mth__pioWriteFinish		err_i
