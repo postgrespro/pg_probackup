@@ -4143,7 +4143,7 @@ pioLocalFile_pioRead(VSelf, ft_bytes_t buf, err_i *err)
 }
 
 static err_i
-pioLocalFile_pioSeek(VSelf, off_t offs)
+pioLocalFile_pioSeek(VSelf, uint64_t offs)
 {
 	Self(pioLocalFile);
 
@@ -4209,7 +4209,7 @@ pioLocalWriteFile_pioWriteCompressed(VSelf, ft_bytes_t buf, CompressAlg compress
 }
 
 static err_i
-pioLocalWriteFile_pioSeek(VSelf, off_t offs)
+pioLocalWriteFile_pioSeek(VSelf, uint64_t offs)
 {
 	Self(pioLocalWriteFile);
 
@@ -4234,7 +4234,7 @@ pioLocalWriteFile_pioWriteFinish(VSelf)
 }
 
 static err_i
-pioLocalWriteFile_pioTruncate(VSelf, size_t sz)
+pioLocalWriteFile_pioTruncate(VSelf, uint64_t sz)
 {
 	Self(pioLocalWriteFile);
 	ft_assert(self->fl != NULL, "Closed file abused \"%s\"", self->path_tmp.ptr);
@@ -4942,7 +4942,7 @@ pioRemoteFile_pioRead(VSelf, ft_bytes_t buf, err_i *err)
 }
 
 static err_i
-pioRemoteFile_pioSeek(VSelf, off_t offs)
+pioRemoteFile_pioSeek(VSelf, uint64_t offs)
 {
 	Self(pioRemoteFile);
 	fio_header hdr;
@@ -5149,7 +5149,7 @@ pioRemoteWriteFile_pioWriteCompressed(VSelf, ft_bytes_t buf, CompressAlg compres
 }
 
 static err_i
-pioRemoteWriteFile_pioSeek(VSelf, off_t offs)
+pioRemoteWriteFile_pioSeek(VSelf, uint64_t offs)
 {
 	Self(pioRemoteWriteFile);
 	struct __attribute__((packed)) {
@@ -5200,7 +5200,7 @@ pioRemoteWriteFile_pioWriteFinish(VSelf)
 }
 
 static err_i
-pioRemoteWriteFile_pioTruncate(VSelf, size_t sz)
+pioRemoteWriteFile_pioTruncate(VSelf, uint64_t sz)
 {
     Self(pioRemoteWriteFile);
 
