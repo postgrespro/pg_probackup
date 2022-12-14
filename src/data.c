@@ -1206,27 +1206,33 @@ cleanup:
  * Create empty file, used for partial restore
  */
 bool
-create_empty_file(fio_location from_location, const char *to_root,
-				  fio_location to_location, pgFile *file)
+create_empty_file(const char *to_root, fio_location to_location, pgFile *file)
 {
+	FOBJ_FUNC_ARP();
 	char		to_path[MAXPGPATH];
-	FILE	   *out;
+	pioDrive_i  drive = pioDriveForLocation(to_location);
+	pioWriteCloser_i fl;
+	err_i		err;
 
 	/* open file for write  */
 	join_path_components(to_path, to_root, file->rel_path);
-	out = fio_fopen(to_location, to_path, PG_BINARY_W);
+	/*
+	 * TODO: possibly it is better to use pioWriteFile, but it doesn't have
+	 * permissions parameter, and I don't want to introduce is just for one
+	 * use case
+	 */
+	fl = $i(pioOpenRewrite, drive,
+			.permissions = file->mode,
+			.use_temp = false,
+			.err = &err);
+	if ($haserr(err))
+		ft_logerr(FT_ERROR, $errmsg(err), "Creating empty file");
 
-	if (out == NULL)
-		elog(ERROR, "Cannot open destination file \"%s\": %s",
-			 to_path, strerror(errno));
+	err = $i(pioWriteFinish, fl);
+	err = fobj_err_combine(err, $i(pioClose, fl, .sync=false));
 
-	/* update file permission */
-	if (fio_chmod(to_location, to_path, file->mode) == -1)
-		elog(ERROR, "Cannot change mode of \"%s\": %s", to_path,
-			 strerror(errno));
-
-	if (fio_fclose(out))
-		elog(ERROR, "Cannot close \"%s\": %s", to_path, strerror(errno));
+	if ($haserr(err))
+		ft_logerr(FT_ERROR, $errmsg(err), "Closing empty file");
 
 	return true;
 }

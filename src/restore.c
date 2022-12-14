@@ -1158,8 +1158,7 @@ restore_files(void *arg)
 				 * We cannot simply skip the file, because it may lead to
 				 * failure during WAL redo; hence, create empty file.
 				 */
-				create_empty_file(FIO_BACKUP_HOST,
-					  arguments->to_root, FIO_DB_HOST, dest_file);
+				create_empty_file(arguments->to_root, FIO_DB_HOST, dest_file);
 
 				elog(LOG, "Skip file due to partial restore: \"%s\"",
 						dest_file->rel_path);

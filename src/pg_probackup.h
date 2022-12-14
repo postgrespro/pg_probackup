@@ -1054,8 +1054,7 @@ extern size_t restore_non_data_file(parray *parent_chain, pgBackup *dest_backup,
 									bool already_exists);
 extern void restore_non_data_file_internal(FILE *in, FILE *out, pgFile *file,
 										   const char *from_fullpath, const char *to_fullpath);
-extern bool create_empty_file(fio_location from_location, const char *to_root,
-							  fio_location to_location, pgFile *file);
+extern bool create_empty_file(const char *to_root, fio_location to_location, pgFile *file);
 
 extern PageState *get_checksum_map(const char *fullpath, uint32 checksum_version,
 								int n_blocks, XLogRecPtr dest_stop_lsn, BlockNumber segmentno);
