@@ -317,7 +317,7 @@ backup_page(pioWrite_i out, BlockNumber blknum, ft_bytes_t page,
 
 /* Write page as-is. TODO: make it fastpath option in compress_and_backup_page() */
 static int
-write_page(pgFile *file, pioFile_i out, int blknum, Page page)
+write_page(pgFile *file, pioDBWriter_i out, int blknum, Page page)
 {
 	err_i err = $noerr();
 	off_t target = blknum * BLCKSZ;
@@ -1875,7 +1875,7 @@ copy_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
 	pioDBDrive_i	backup_location = pioDBDriveForLocation(FIO_BACKUP_HOST);
 	err_i		err = $noerr();
 	pioPagesIterator_i pages;
-	pioFile_i out;
+	pioDBWriter_i out;
 
 	pages = doIteratePages(backup_location, .from_fullpath = from_fullpath,
 			   .file = file, .start_lsn = sync_lsn,
@@ -1884,7 +1884,8 @@ copy_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
 	if ($haserr(err))
 		return $iresult(err);
 
-	out = $i(pioOpen, backup_location, to_fullpath, PG_BINARY|O_RDWR|O_CREAT, file->mode, &err);
+	out = $i(pioOpenWrite, backup_location, to_fullpath,
+			 .permissions = file->mode, .err = &err);
 	if ($haserr(err))
 		return $iresult(err);
 
@@ -1917,8 +1918,13 @@ copy_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
 	if ($haserr(err))
 		return $iresult(err);
 
-	/* close local output file */
-	$i(pioClose, out, true);
+	err = $i(pioWriteFinish, out);
+	if ($haserr(err))
+		return $iresult(err);
+
+	err = $i(pioClose, out, false);
+	if ($haserr(err))
+		return $iresult(err);
 
 	return $noerr();
 }
