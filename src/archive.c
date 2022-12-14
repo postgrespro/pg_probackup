@@ -942,7 +942,7 @@ get_wal_file(const char *filename, const char *from_fullpath,
 			 const char *to_fullpath, bool prefetch_mode)
 {
     FOBJ_FUNC_ARP();
-    pioFile_i out = {NULL};
+    pioDBWriter_i out = {NULL};
     pioFile_i in = {NULL};
     char *buf = pgut_malloc(OUT_BUF_SIZE); /* 1MB buffer */
     err_i err = $noerr();
@@ -950,15 +950,15 @@ get_wal_file(const char *filename, const char *from_fullpath,
     bool compressed = false;
     bool src_partial = false;
 
-    pioDrive_i db_drive = pioDriveForLocation(FIO_DB_HOST);
+    pioDBDrive_i db_drive = pioDBDriveForLocation(FIO_DB_HOST);
     pioDrive_i backup_drive = pioDriveForLocation(FIO_BACKUP_HOST);
 
     snprintf(from_fullpath_gz, sizeof(from_fullpath_gz), "%s.gz",
              from_fullpath);
 
     /* open destination file */
-    out = $i(pioOpen, db_drive, .path = to_fullpath, .err = &err,
-               .flags = O_WRONLY | O_CREAT | O_EXCL | O_TRUNC | PG_BINARY);
+    out = $i(pioOpenWrite, db_drive, .path = to_fullpath, .err = &err,
+               .exclusive = true);
     if ($haserr(err))
     {
         elog(WARNING, "%s", $errmsg(err));
