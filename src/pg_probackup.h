@@ -1040,18 +1040,12 @@ extern void backup_non_data_file_internal(const char *from_fullpath,
 										  const char *to_fullpath, pgFile *file,
 										  bool missing_ok);
 
-extern size_t restore_data_file(parray *parent_chain, pgFile *dest_file, FILE *out,
+extern size_t restore_data_file(parray *parent_chain, pgFile *dest_file, pioDBWriter_i out,
 								const char *to_fullpath, bool use_bitmap, PageState *checksum_map,
 								XLogRecPtr shift_lsn, datapagemap_t *lsn_map, bool use_headers);
-extern size_t restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_version,
-										 const char *from_fullpath, const char *to_fullpath, int nblocks,
-										 datapagemap_t *map, PageState *checksum_map, int checksum_version,
-										 datapagemap_t *lsn_map, BackupPageHeader2 *headers);
 extern size_t restore_non_data_file(parray *parent_chain, pgBackup *dest_backup,
-									pgFile *dest_file, FILE *out, const char *to_fullpath,
+									pgFile *dest_file, pioDBWriter_i out, const char *to_fullpath,
 									bool already_exists);
-extern void restore_non_data_file_internal(FILE *in, FILE *out, pgFile *file,
-										   const char *from_fullpath, const char *to_fullpath);
 extern bool create_empty_file(const char *to_root, fio_location to_location, pgFile *file);
 
 extern PageState *get_checksum_map(const char *fullpath, uint32 checksum_version,

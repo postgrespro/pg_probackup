@@ -917,12 +917,14 @@ merge_rename:
 static void *
 merge_files(void *arg)
 {
+	FOBJ_FUNC_ARP();
 	int		i;
 	merge_files_arg *arguments = (merge_files_arg *) arg;
 	size_t n_files = parray_num(arguments->dest_backup->files);
 
 	for (i = 0; i < n_files; i++)
 	{
+		FOBJ_LOOP_ARP();
 		pgFile	   *dest_file = (pgFile *) parray_get(arguments->dest_backup->files, i);
 		pgFile	   *tmp_file;
 		bool		in_place = false; /* keep file as it is */
@@ -1176,11 +1178,13 @@ merge_data_file(parray *parent_chain, pgBackup *full_backup,
 				const char *full_database_dir, bool use_bitmap, bool is_retry,
 				bool no_sync)
 {
-	FILE   *out = NULL;
 	char   *buffer = pgut_malloc(STDIO_BUFSIZE);
 	char    to_fullpath[MAXPGPATH];
 	char    to_fullpath_tmp1[MAXPGPATH]; /* used for restore */
 	char    to_fullpath_tmp2[MAXPGPATH]; /* used for backup */
+	pioDBDrive_i drive = pioDBDriveForLocation(FIO_BACKUP_HOST);
+	pioDBWriter_i out;
+	err_i	err;
 
 	/* The next possible optimization is copying "as is" the file
 	 * from intermediate incremental backup, that didn`t changed in
@@ -1193,20 +1197,19 @@ merge_data_file(parray *parent_chain, pgBackup *full_backup,
 	snprintf(to_fullpath_tmp2, MAXPGPATH, "%s_tmp2", to_fullpath);
 
 	/* open temp file */
-	out = fopen(to_fullpath_tmp1, PG_BINARY_W);
-	if (out == NULL)
-		elog(ERROR, "Cannot open merge target file \"%s\": %s",
-			 to_fullpath_tmp1, strerror(errno));
-	setvbuf(out, buffer, _IOFBF, STDIO_BUFSIZE);
+	out = $i(pioOpenWrite, drive, to_fullpath_tmp1, .err = &err);
+	if ($haserr(err))
+		ft_logerr(FT_FATAL, $errmsg(err), "Open merge target file");
 
 	/* restore file into temp file */
 	tmp_file->size = restore_data_file(parent_chain, dest_file, out, to_fullpath_tmp1,
 									   use_bitmap, NULL, InvalidXLogRecPtr, NULL,
 									   /* when retrying merge header map cannot be trusted */
 									   is_retry ? false : true);
-	if (fclose(out) != 0)
-		elog(ERROR, "Cannot close file \"%s\": %s",
-			 to_fullpath_tmp1, strerror(errno));
+
+	err = $i(pioClose, out, .sync = false);
+	if ($haserr(err))
+		ft_logerr(FT_FATAL, $errmsg(err), "Closing target file");
 
 	pg_free(buffer);
 

@@ -1115,23 +1115,28 @@ restore_chain(InstanceState *instanceState,
 static void *
 restore_files(void *arg)
 {
+	FOBJ_FUNC_ARP();
 	int         i;
 	size_t      n_files;
 	char        to_fullpath[MAXPGPATH];
-	FILE       *out = NULL;
-	char       *out_buf = pgut_malloc(STDIO_BUFSIZE);
+
+	pioDBWriter_i out;
+	pioDBDrive_i  db_drive;
 
 	restore_files_arg *arguments = (restore_files_arg *) arg;
 
 	n_files = parray_num(arguments->dest_files);
 
+	db_drive = pioDBDriveForLocation(FIO_DB_HOST);
+
 	for (i = 0; i < parray_num(arguments->dest_files); i++)
 	{
+		FOBJ_LOOP_ARP();
 		bool     already_exists = false;
 		PageState      *checksum_map = NULL; /* it should take ~1.5MB at most */
 		datapagemap_t  *lsn_map = NULL;      /* it should take 16kB at most */
-		char           *errmsg = NULL;       /* remote agent error message */
 		pgFile	*dest_file = (pgFile *) parray_get(arguments->dest_files, i);
+		err_i			err = $noerr();
 
 		/* Directories were created before */
 		if (dest_file->kind == PIO_KIND_DIRECTORY)
@@ -1228,28 +1233,17 @@ restore_files(void *arg)
 			}
 		}
 
-		/*
-		 * Open dest file and truncate it to zero, if destination
-		 * file already exists and dest file size is zero, or
-		 * if file do not exist
-		 */
-		if ((already_exists && dest_file->write_size == 0) || !already_exists)
-			out = fio_fopen(FIO_DB_HOST, to_fullpath, PG_BINARY_W);
-		/*
-		 * If file already exists and dest size is not zero,
-		 * then open it for reading and writing.
-		 */
-		else
-			out = fio_fopen(FIO_DB_HOST, to_fullpath, PG_BINARY_R "+");
+		out = $i(pioOpenWrite, db_drive, .path = to_fullpath,
+				.permissions = dest_file->mode, .err = &err);
+		if ($haserr(err))
+			ft_logerr(FT_FATAL, $errmsg(err), "Cannot open restore target file");
 
-		if (out == NULL)
-			elog(ERROR, "Cannot open restore target file \"%s\": %s",
-				 to_fullpath, strerror(errno));
-
-		/* update file permission */
-		if (fio_chmod(FIO_DB_HOST, to_fullpath, dest_file->mode) == -1)
-			elog(ERROR, "Cannot change mode of \"%s\": %s", to_fullpath,
-				 strerror(errno));
+		if (already_exists && dest_file->write_size == 0)
+		{
+			err = $i(pioTruncate, out, .size = 0);
+			if ($haserr(err))
+				ft_logerr(FT_FATAL, $errmsg(err), "Cannot truncate datafile");
+		}
 
 		if (!dest_file->is_datafile || dest_file->is_cfs)
 			elog(LOG, "Restoring non-data file: \"%s\"", to_fullpath);
@@ -1263,9 +1257,6 @@ restore_files(void *arg)
 		/* Restore destination file */
 		if (dest_file->is_datafile && !dest_file->is_cfs)
 		{
-			/* enable stdio buffering for local destination data file */
-			if (!fio_is_remote_file(out))
-				setvbuf(out, out_buf, _IOFBF, STDIO_BUFSIZE);
 			/* Destination file is data file */
 			arguments->restored_bytes += restore_data_file(arguments->parent_chain,
 														   dest_file, out, to_fullpath,
@@ -1274,9 +1265,6 @@ restore_files(void *arg)
 		}
 		else
 		{
-			/* disable stdio buffering for local destination non-data file */
-			if (!fio_is_remote_file(out))
-				setvbuf(out, NULL, _IONBF, BUFSIZ);
 			/* Destination file is non-data file */
 			arguments->restored_bytes += restore_non_data_file(arguments->parent_chain,
 										arguments->dest_backup, dest_file, out, to_fullpath,
@@ -1284,14 +1272,10 @@ restore_files(void *arg)
 		}
 
 done:
-		/* Writing is asynchronous in case of restore in remote mode, so check the agent status */
-		if (fio_check_error_file(out, &errmsg))
-			elog(ERROR, "Cannot write to the remote file \"%s\": %s", to_fullpath, errmsg);
-
 		/* close file */
-		if (fio_fclose(out) != 0)
-			elog(ERROR, "Cannot close file \"%s\": %s", to_fullpath,
-				 strerror(errno));
+		err = $i(pioClose, out, .sync = false);
+		if ($haserr(err))
+			ft_logerr(FT_FATAL, $errmsg(err), "Close restored file");
 
 		/* free pagemap used for restore optimization */
 		pg_free(dest_file->pagemap.bitmap);
@@ -1302,8 +1286,6 @@ done:
 		pg_free(lsn_map);
 		pg_free(checksum_map);
 	}
-
-	free(out_buf);
 
 	/* ssh connection to longer needed */
 	fio_disconnect();

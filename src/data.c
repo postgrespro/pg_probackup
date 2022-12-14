@@ -45,6 +45,13 @@ static err_i copy_pages(const char *to_fullpath, const char *from_fullpath, pgFi
 					  XLogRecPtr sync_lsn, uint32 checksum_version,
 					  BackupMode backup_mode);
 
+static size_t restore_data_file_internal(FILE *in, pioDBWriter_i out, pgFile *file, uint32 backup_version,
+										 const char *from_fullpath, const char *to_fullpath, int nblocks,
+										 datapagemap_t *map, PageState *checksum_map, int checksum_version,
+										 datapagemap_t *lsn_map, BackupPageHeader2 *headers);
+static void restore_non_data_file_internal(FILE *in, pioDBWriter_i out, pgFile *file,
+										   const char *from_fullpath, const char *to_fullpath);
+
 #ifdef HAVE_LIBZ
 /* Implementation of zlib compression method */
 static int32
@@ -569,13 +576,14 @@ backup_non_data_file(pgFile *file, pgFile *prev_file,
  * Apply changed blocks to destination file from every backup in parent chain.
  */
 size_t
-restore_data_file(parray *parent_chain, pgFile *dest_file, FILE *out,
+restore_data_file(parray *parent_chain, pgFile *dest_file, pioDBWriter_i out,
 				  const char *to_fullpath, bool use_bitmap, PageState *checksum_map,
 				  XLogRecPtr shift_lsn, datapagemap_t *lsn_map, bool use_headers)
 {
 	size_t total_write_len = 0;
 	char  *in_buf = pgut_malloc(STDIO_BUFSIZE);
 	int    backup_seq = 0;
+	err_i  err;
 
 	/*
 	 * FULL -> INCR -> DEST
@@ -682,6 +690,13 @@ restore_data_file(parray *parent_chain, pgFile *dest_file, FILE *out,
 	}
 	pg_free(in_buf);
 
+	if (dest_file->n_blocks > 0) /* old binary's backups didn't have n_blocks field */
+	{
+		err = $i(pioTruncate, out, .size = (int64_t)dest_file->n_blocks * BLCKSZ);
+		if ($haserr(err))
+			ft_logerr(FT_FATAL, $errmsg(err), "Could not truncate datafile");
+	}
+
 	return total_write_len;
 }
 
@@ -695,7 +710,7 @@ restore_data_file(parray *parent_chain, pgFile *dest_file, FILE *out,
  * marked as already restored, then page is skipped.
  */
 size_t
-restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_version,
+restore_data_file_internal(FILE *in, pioDBWriter_i out, pgFile *file, uint32 backup_version,
 						   const char *from_fullpath, const char *to_fullpath, int nblocks,
 						   datapagemap_t *map, PageState *checksum_map, int checksum_version,
 						   datapagemap_t *lsn_map, BackupPageHeader2 *headers)
@@ -705,6 +720,7 @@ restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_vers
 	size_t write_len = 0;
 	off_t cur_pos_out = 0;
 	off_t cur_pos_in = 0;
+	err_i err = $noerr();
 
 	/* should not be possible */
 	Assert(!(backup_version >= 20400 && file->n_headers <= 0));
@@ -719,9 +735,9 @@ restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_vers
 	 * a lot when blocks from incremental backup are restored,
 	 * but should never happen in case of blocks from FULL backup.
 	 */
-	if (fio_fseek(out, cur_pos_out) < 0)
-		elog(ERROR, "Cannot seek block %u of \"%s\": %s",
-				blknum, to_fullpath, strerror(errno));
+	err = $i(pioSeek, out, cur_pos_out);
+	if ($haserr(err))
+		ft_logerr(FT_FATAL, $errmsg(err), "Cannot seek block %u");
 
 	for (;;)
 	{
@@ -811,16 +827,9 @@ restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_vers
 
 			elog(VERBOSE, "Truncate file \"%s\" to block %u", to_fullpath, blknum);
 
-			/* To correctly truncate file, we must first flush STDIO buffers */
-			if (fio_fflush(out) != 0)
-				elog(ERROR, "Cannot flush file \"%s\": %s", to_fullpath, strerror(errno));
-
-			/* Set position to the start of file */
-			if (fio_fseek(out, 0) < 0)
-				elog(ERROR, "Cannot seek to the start of file \"%s\": %s", to_fullpath, strerror(errno));
-
-			if (fio_ftruncate(out, blknum * BLCKSZ) != 0)
-				elog(ERROR, "Cannot truncate file \"%s\": %s", to_fullpath, strerror(errno));
+			err = $i(pioTruncate, out, (uint64_t)blknum * BLCKSZ);
+			if ($haserr(err))
+				ft_logerr(FT_FATAL, $errmsg(err), "");
 
 			break;
 		}
@@ -910,9 +919,10 @@ restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_vers
 
 		if (cur_pos_out != write_pos)
 		{
-			if (fio_fseek(out, write_pos) < 0)
-				elog(ERROR, "Cannot seek block %u of \"%s\": %s",
-					blknum, to_fullpath, strerror(errno));
+			err = $i(pioSeek, out, write_pos);
+			if ($haserr(err))
+				ft_logerr(FT_FATAL, $errmsg(err), "Cannot seek block %u",
+						  blknum);
 
 			cur_pos_out = write_pos;
 		}
@@ -922,20 +932,13 @@ restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_vers
 		 * send compressed page to the remote side.
 		 */
 		if (is_compressed)
-		{
-			ssize_t rc;
-			rc = fio_fwrite_async_compressed(out, page.data, compressed_size, file->compress_alg);
-
-			if (!fio_is_remote_file(out) && rc != BLCKSZ)
-				elog(ERROR, "Cannot write block %u of \"%s\": %s, size: %u",
-					 blknum, to_fullpath, strerror(errno), compressed_size);
-		}
+			err = $i(pioWriteCompressed, out, ft_bytes(page.data, compressed_size),
+					 .compress_alg = file->compress_alg);
 		else
-		{
-			if (fio_fwrite_async(out, page.data, BLCKSZ) != BLCKSZ)
-				elog(ERROR, "Cannot write block %u of \"%s\": %s",
-					 blknum, to_fullpath, strerror(errno));
-		}
+			err = $i(pioWrite, out, ft_bytes(page.data, BLCKSZ));
+		if ($haserr(err))
+			ft_logerr(FT_FATAL, $errmsg(err), "Cannot write block %u",
+					  blknum);
 
 		write_len += BLCKSZ;
 		cur_pos_out += BLCKSZ; /* update current write position */
@@ -955,9 +958,10 @@ restore_data_file_internal(FILE *in, FILE *out, pgFile *file, uint32 backup_vers
  * it is either small control file or already compressed cfs file.
  */
 void
-restore_non_data_file_internal(FILE *in, FILE *out, pgFile *file,
+restore_non_data_file_internal(FILE *in, pioDBWriter_i out, pgFile *file,
 							   const char *from_fullpath, const char *to_fullpath)
 {
+	err_i  err;
 	size_t read_len = 0;
 	char  *buf = pgut_malloc(STDIO_BUFSIZE); /* 64kB buffer */
 
@@ -978,9 +982,9 @@ restore_non_data_file_internal(FILE *in, FILE *out, pgFile *file,
 
 		if (read_len > 0)
 		{
-			if (fio_fwrite_async(out, buf, read_len) != read_len)
-				elog(ERROR, "Cannot write to \"%s\": %s", to_fullpath,
-					 strerror(errno));
+			err = $i(pioWrite, out, ft_bytes(buf, read_len));
+			if ($haserr(err))
+				ft_logerr(FT_FATAL, $errmsg(err), "");
 		}
 
 		if (feof(in))
@@ -994,12 +998,13 @@ restore_non_data_file_internal(FILE *in, FILE *out, pgFile *file,
 
 size_t
 restore_non_data_file(parray *parent_chain, pgBackup *dest_backup,
-					  pgFile *dest_file, FILE *out, const char *to_fullpath,
+					  pgFile *dest_file, pioDBWriter_i out, const char *to_fullpath,
 					  bool already_exists)
 {
 	char		from_root[MAXPGPATH];
 	char		from_fullpath[MAXPGPATH];
 	FILE		*in = NULL;
+	err_i		err;
 
 	pgFile		*tmp_file = NULL;
 	pgBackup	*tmp_backup = NULL;
@@ -1043,9 +1048,12 @@ restore_non_data_file(parray *parent_chain, pgBackup *dest_backup,
 			if (tmp_file->write_size == 0)
 			{
 				/* In case of incremental restore truncate file just to be safe */
-				if (already_exists && fio_ftruncate(out, 0))
-					elog(ERROR, "Cannot truncate file \"%s\": %s",
-							to_fullpath, strerror(errno));
+				if (already_exists)
+				{
+					err = $i(pioTruncate, out, 0);
+					if ($haserr(err))
+						ft_logerr(FT_FATAL, $errmsg(err), "");
+				}
 				return 0;
 			}
 
@@ -1090,9 +1098,9 @@ restore_non_data_file(parray *parent_chain, pgBackup *dest_backup,
 		}
 
 		/* Checksum mismatch, truncate file and overwrite it */
-		if (fio_ftruncate(out, 0))
-			elog(ERROR, "Cannot truncate file \"%s\": %s",
-					to_fullpath, strerror(errno));
+		err = $i(pioTruncate, out, 0);
+		if ($haserr(err))
+			ft_logerr(FT_FATAL, $errmsg(err), "");
 	}
 
 	if (tmp_file->external_dir_num == 0)
