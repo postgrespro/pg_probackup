@@ -337,13 +337,9 @@ write_page(pgFile *file, pioFile_i out, int blknum, Page page)
 	err = $noerr();
 
 	rc = $i(pioWrite, out, .buf = ft_bytes(page, BLCKSZ), .err = &err);
-
 	if ($haserr(err))
-	{
 		ft_log(FT_INFO, $errmsg(err), "write_page");
-	}
-	if (rc != BLCKSZ)
-		return -1;
+	ft_assert(rc == BLCKSZ);
 
 	file->write_size += BLCKSZ;
 	file->uncompressed_size += BLCKSZ;
