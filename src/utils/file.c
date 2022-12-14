@@ -3511,7 +3511,6 @@ fobj_klass(pioRemoteDrive);
 typedef struct pioFile
 {
     const char *path;
-    int		flags;
     bool	closed;
 } pioFile;
 #define kls__pioFile	mth(fobjDispose)
@@ -3522,7 +3521,7 @@ typedef struct pioLocalFile
     pioFile	p;
     int		fd;
 } pioLocalFile;
-#define kls__pioLocalFile	iface__pioFile, iface(pioFile)
+#define kls__pioLocalFile	iface__pioReader, iface(pioReader, pioReadStream)
 fobj_klass(pioLocalFile);
 
 typedef struct pioLocalWriteFile
@@ -3550,7 +3549,8 @@ typedef struct pioRemoteFile
     void*   asyncChunk;
     ft_bytes_t  chunkRest;
 } pioRemoteFile;
-#define kls__pioRemoteFile	iface__pioFile, iface(pioFile), \
+#define kls__pioRemoteFile	iface__pioReader, \
+                            iface(pioReader, pioReadStream), \
                             mth(pioSetAsync, pioAsyncRead)
 fobj_klass(pioRemoteFile);
 
@@ -3678,29 +3678,30 @@ common_pioExists(fobj_t self, path_t path, pio_file_kind_e expected_kind, err_i 
 
 /* LOCAL DRIVE */
 
-static pioFile_i
-pioLocalDrive_pioOpen(VSelf, path_t path, int flags,
-                      int permissions, err_i *err)
+static pioReader_i
+pioLocalDrive_pioOpenRead(VSelf, path_t path, err_i *err)
 {
     int	fd;
     fobj_reset_err(err);
     fobj_t file;
 
-	ft_assert((flags & O_ACCMODE) == O_RDONLY);
-
-    if (permissions == 0)
-        fd = open(path, flags, FILE_PERMISSION);
-    else
-        fd = open(path, flags, permissions);
+	fd = open(path, O_RDONLY);
     if (fd < 0)
     {
         *err = $syserr(errno, "Cannot open file {path:q}", path(path));
-        return (pioFile_i){NULL};
+        return (pioReader_i){NULL};
     }
 
     file = $alloc(pioLocalFile, .fd = fd,
-                  .p = { .path = ft_cstrdup(path), .flags = flags } );
-    return bind_pioFile(file);
+                  .p = { .path = ft_cstrdup(path) } );
+    return $bind(pioReader, file);
+}
+
+static pioReadStream_i
+pioLocalDrive_pioOpenReadStream(VSelf, path_t path, err_i *err)
+{
+	Self(pioLocalDrive);
+	return $reduce(pioReadStream, $(pioOpenRead, self, path, .err = err));
 }
 
 static pioWriteCloser_i
@@ -3970,9 +3971,8 @@ pioLocalDrive_pioRemoveDir(VSelf, const char *root, bool root_as_well) {
 static ft_bytes_t
 pioLocalDrive_pioReadFile(VSelf, path_t path, bool binary, err_i* err)
 {
-	FOBJ_FUNC_ARP();
 	Self(pioLocalDrive);
-	pioFile_i	fl;
+	FILE*       fl = NULL;
 	pio_stat_t	st;
 	ft_bytes_t	res = ft_bytes(NULL, 0);
 	size_t		amount;
@@ -3982,7 +3982,6 @@ pioLocalDrive_pioReadFile(VSelf, path_t path, bool binary, err_i* err)
 	st = $(pioStat, self, .path = path, .follow_symlink = true, .err = err);
 	if ($haserr(*err))
 	{
-		$iresult(*err);
 		return res;
 	}
 	if (st.pst_kind != PIO_KIND_REGULAR)
@@ -3990,7 +3989,6 @@ pioLocalDrive_pioReadFile(VSelf, path_t path, bool binary, err_i* err)
 		*err = $err(RT, "File {path:q} is not regular: {kind}", path(path),
 					kind(pio_file_kind2str(st.pst_kind, path)),
 					errNo(EACCES));
-		$iresult(*err);
 		return res;
 	}
 
@@ -3999,7 +3997,6 @@ pioLocalDrive_pioReadFile(VSelf, path_t path, bool binary, err_i* err)
 	{
 		*err = $err(RT, "File {path:q} is too large: {size}", path(path),
 					size(st.pst_size), errNo(EFBIG));
-		$iresult(*err);
 		return res;
 	}
 
@@ -4015,28 +4012,30 @@ pioLocalDrive_pioReadFile(VSelf, path_t path, bool binary, err_i* err)
 	 * rely on "local file is read whole at once always".
 	 * Is it true?
 	 */
-	fl = $(pioOpen, self, .path = path, .flags = O_RDONLY | (binary ? PG_BINARY : 0),
-		   .err = err);
-	if ($haserr(*err))
+	fl = fopen(path, binary ? "rb" : "r");
+	if (fl == NULL)
 	{
-		$iresult(*err);
+		*err = $syserr(errno, "Opening file {path:q}", path(path));
+		ft_bytes_free(&res);
 		return res;
 	}
 
-	amount = pioReadFull($reduce(pioRead, fl), res, err);
-	if ($haserr(*err))
+	amount = fread(res.ptr, 1, res.len, fl);
+	if (ferror(fl))
 	{
+		*err = $syserr(errno, "Opening file {path:q}", path(path));
+		fclose(fl);
 		ft_bytes_free(&res);
-		$iresult(*err);
 		return res;
 	}
+
+	fclose(fl);
 
 	if (amount != st.pst_size)
 	{
 		ft_bytes_free(&res);
 		*err = $err(RT, "File {path:q} is truncated while reading",
 					path(path), errNo(EBUSY));
-		$iresult(*err);
 		return res;
 	}
 
@@ -4044,7 +4043,6 @@ pioLocalDrive_pioReadFile(VSelf, path_t path, bool binary, err_i* err)
 	if (!binary)
 		res.ptr[amount] = 0;
 
-	$i(pioClose, fl);
 	return res;
 }
 
@@ -4104,13 +4102,6 @@ pioLocalFile_pioClose(VSelf, bool sync)
 
     ft_assert(self->fd >= 0, "Closed file abused \"%s\"", self->p.path);
 
-    if (sync && (self->p.flags & O_ACCMODE) != O_RDONLY)
-    {
-        r = fsync(self->fd);
-        if (r < 0)
-            err = $syserr(errno, "Cannot fsync file {path:q}",
-						  path(self->p.path));
-    }
     r = close(self->fd);
     if (r < 0 && $isNULL(err))
         err = $syserr(errno, "Cannot close file {path:q}",
@@ -4307,24 +4298,20 @@ pioLocalWriteFile_fobjDispose(VSelf)
 
 /* REMOTE DRIVE */
 
-static pioFile_i
-pioRemoteDrive_pioOpen(VSelf, path_t path,
-                       int flags, int permissions,
-                       err_i *err)
+static pioReader_i
+pioRemoteDrive_pioOpenRead(VSelf, path_t path, err_i *err)
 {
     int handle;
     fio_header hdr;
     fobj_reset_err(err);
     fobj_t file;
 
-	ft_assert((flags & O_ACCMODE) == O_RDONLY);
-
 	handle = find_free_handle();
 
     hdr.cop = FIO_OPEN;
     hdr.handle = handle;
     hdr.size = strlen(path) + 1;
-    hdr.arg = flags;
+    hdr.arg = O_RDONLY;
 	set_handle(handle);
 
     IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
@@ -4338,11 +4325,30 @@ pioRemoteDrive_pioOpen(VSelf, path_t path,
         *err = $syserr((int)hdr.arg, "Cannot open remote file {path:q}",
 					   path(path));
 		unset_handle(hdr.handle);
-        return (pioFile_i){NULL};
+        return (pioReader_i){NULL};
     }
     file = $alloc(pioRemoteFile, .handle = handle,
-                  .p = { .path = ft_cstrdup(path), .flags = flags });
-    return bind_pioFile(file);
+                  .p = { .path = ft_cstrdup(path) });
+    return $bind(pioReader, file);
+}
+
+static pioReadStream_i
+pioRemoteDrive_pioOpenReadStream(VSelf, path_t path, err_i *err)
+{
+	Self(pioRemoteDrive);
+
+	pioReader_i fl = $(pioOpenRead, self, path, err);
+	if ($haserr(*err))
+		return $null(pioReadStream);
+
+	*err = $(pioSetAsync, fl.self, true);
+	if ($haserr(*err))
+	{
+		$idel(&fl);
+		return $null(pioReadStream);
+	}
+
+	return $reduce(pioReadStream, fl);
 }
 
 static pio_stat_t
@@ -5850,14 +5856,6 @@ pioCopyWithFilters(pioWriteFlush_i dest, pioRead_i src,
 
     if (copied == NULL)
         copied = &_fallback_copied;
-
-    if ($ifdef(err = , pioSetAsync, src.self) && $haserr(err))
-        elog(ERROR, "Cannot enable async mode on source \"%s\": %s",
-             $irepr(src), $errmsg(err));
-
-    if ($ifdef(err = , pioSetAsync, dest.self) && $haserr(err))
-        elog(ERROR, "Cannot enable async mode on destination \"%s\": %s",
-             $irepr(dest), $errmsg(err));
 
     for (i = nfilters - 1; i >= 0; i--)
         dest = pioWrapWriteFilter(dest, filters[i], OUT_BUF_SIZE);

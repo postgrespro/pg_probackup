@@ -1020,12 +1020,11 @@ get_backup_filelist(pgBackup *backup, bool strict)
 					line_reader = {0};
 	ft_bytes_t	line;
 	err_i    err = $noerr();
-	pioFile_i fl;
+	pioReadStream_i fl;
 
 	join_path_components(backup_filelist_path, backup->root_dir, DATABASE_FILE_LIST);
 
-	fl = $i(pioOpen, backup->backup_location, .path = backup_filelist_path,
-			.flags = O_RDONLY, .err = &err);
+	fl = $i(pioOpenReadStream, backup->backup_location, .path = backup_filelist_path, .err = &err);
 	if ($haserr(err))
 		ft_logerr(FT_FATAL, $errmsg(err), "Opening backup filelist");
 

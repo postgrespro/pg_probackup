@@ -378,7 +378,7 @@ push_file_internal(const char *wal_file_name, const char *pg_xlog_dir,
                    uint32 archive_timeout, bool *skipped)
 {
     FOBJ_FUNC_ARP();
-    pioFile_i in;
+    pioReadStream_i in;
     pioWriteCloser_i out;
     char from_fullpath[MAXPGPATH];
     char to_fullpath[MAXPGPATH];
@@ -446,7 +446,7 @@ push_file_internal(const char *wal_file_name, const char *pg_xlog_dir,
     }
 
 	/* Open source file for read */
-	in = $i(pioOpen, db_drive, from_fullpath, O_RDONLY | PG_BINARY, .err = &err);
+	in = $i(pioOpenReadStream, db_drive, from_fullpath, .err = &err);
 	if ($haserr(err))
 		return $iresult(err);
 
@@ -943,7 +943,7 @@ get_wal_file(const char *filename, const char *from_fullpath,
 {
     FOBJ_FUNC_ARP();
     pioDBWriter_i out = {NULL};
-    pioFile_i in = {NULL};
+    pioReadStream_i in = {NULL};
     char *buf = pgut_malloc(OUT_BUF_SIZE); /* 1MB buffer */
     err_i err = $noerr();
     char from_fullpath_gz[MAXPGPATH];
@@ -970,8 +970,7 @@ get_wal_file(const char *filename, const char *from_fullpath,
     /* If requested file is regular WAL segment, then try to open it with '.gz' suffix... */
     if (IsXLogFileName(filename))
     {
-        in = $i(pioOpen, backup_drive, from_fullpath_gz, O_RDONLY | PG_BINARY,
-                  .err = &err);
+        in = $i(pioOpenReadStream, backup_drive, from_fullpath_gz, .err = &err);
         compressed = in.self != NULL;
         if ($haserr(err) && getErrno(err) != ENOENT)
             elog(ERROR, "Source file: %s", $errmsg(err));
@@ -979,8 +978,7 @@ get_wal_file(const char *filename, const char *from_fullpath,
 #endif
     if (in.self == NULL)
     {
-        in = $i(pioOpen, backup_drive, from_fullpath, O_RDONLY | PG_BINARY,
-                  .err = &err);
+        in = $i(pioOpenReadStream, backup_drive, from_fullpath, .err = &err);
         if ($haserr(err) && getErrno(err) != ENOENT)
             elog(ERROR, "Source file: %s", $errmsg(err));
     }
@@ -992,8 +990,7 @@ get_wal_file(const char *filename, const char *from_fullpath,
         snprintf(from_partial, sizeof(from_partial), "%s.gz.partial",
                  from_fullpath);
 
-        in = $i(pioOpen, backup_drive, from_partial, O_RDONLY | PG_BINARY,
-                  .err = &err);
+        in = $i(pioOpenReadStream, backup_drive, from_partial, .err = &err);
         compressed = in.self != NULL;
         if ($haserr(err) && getErrno(err) != ENOENT)
             elog(ERROR, "Source partial file: %s", $errmsg(err));
@@ -1003,9 +1000,7 @@ get_wal_file(const char *filename, const char *from_fullpath,
         {
             snprintf(from_partial, sizeof(from_partial), "%s.partial",
                      from_fullpath);
-            in = $i(pioOpen, backup_drive,
-                      .path = from_partial,
-                      .flags = O_RDONLY | PG_BINARY,
+            in = $i(pioOpenReadStream, backup_drive, .path = from_partial,
                       .err = &err);
             if ($haserr(err) && getErrno(err) != ENOENT)
                 elog(ERROR, "Source partial file: %s", $errmsg(err));

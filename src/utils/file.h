@@ -255,12 +255,14 @@ fobj_method(pioTruncate);
 fobj_method(pioWriteFinish);
 fobj_method(pioSeek);
 
-#define iface__pioFile				mth(pioRead, pioClose, pioSeek)
+#define iface__pioReader			mth(pioRead, pioClose, pioSeek)
+#define iface__pioReadStream		mth(pioRead, pioClose)
 #define iface__pioWriteFlush		mth(pioWrite, pioWriteFinish)
 #define iface__pioWriteCloser		mth(pioWrite, pioWriteFinish, pioClose)
 #define iface__pioDBWriter			mth(pioWrite, pioSeek, pioWriteFinish, pioTruncate, pioClose)
 #define iface__pioReadCloser  		mth(pioRead, pioClose)
-fobj_iface(pioFile);
+fobj_iface(pioReader);
+fobj_iface(pioReadStream);
 fobj_iface(pioWriteFlush);
 fobj_iface(pioWriteCloser);
 fobj_iface(pioDBWriter);
@@ -287,9 +289,8 @@ fobj_method(pioFinalPageN);
 fobj_iface(pioPagesIterator);
 
 // Drive
-#define mth__pioOpen 		pioFile_i, (path_t, path), (int, flags), \
-									   (int, permissions), (err_i *, err)
-#define mth__pioOpen__optional() (permissions, FILE_PERMISSION)
+#define mth__pioOpenRead	pioReader_i, (path_t, path), (err_i *, err)
+#define mth__pioOpenReadStream	pioReadStream_i, (path_t, path), (err_i *, err)
 #define mth__pioOpenWrite   pioDBWriter_i, (path_t, path), (int, permissions), \
 										   (bool, exclusive), (err_i *, err)
 #define mth__pioOpenWrite__optional() (exclusive, false), (permissions, FILE_PERMISSION)
@@ -328,7 +329,8 @@ fobj_iface(pioPagesIterator);
 		(CompressAlg, calg), (int, clevel), \
 		(uint32, checksum_version), (bool, just_validate), (err_i*, err)
 
-fobj_method(pioOpen);
+fobj_method(pioOpenRead);
+fobj_method(pioOpenReadStream);
 fobj_method(pioOpenRewrite);
 fobj_method(pioOpenWrite);
 fobj_method(pioStat);
@@ -345,7 +347,8 @@ fobj_method(pioReadFile);
 fobj_method(pioWriteFile);
 fobj_method(pioIteratePages);
 
-#define iface__pioDrive 	mth(pioOpen, pioStat, pioRemove, pioRename), \
+#define iface__pioDrive 	mth(pioOpenRead, pioOpenReadStream), \
+							mth(pioStat, pioRemove, pioRename), \
 					        mth(pioExists, pioGetCRC32, pioIsRemote),          \
 							mth(pioMakeDir, pioListDir, pioRemoveDir),  \
 							mth(pioFilesAreSame, pioReadFile, pioWriteFile),   \
