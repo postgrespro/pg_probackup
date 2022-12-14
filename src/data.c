@@ -2046,8 +2046,10 @@ cleanup:
 void
 write_page_headers(BackupPageHeader2 *headers, pgFile *file, HeaderMap *hdr_map, bool is_merge)
 {
+	FOBJ_FUNC_ARP();
+	pioDBDrive_i	drive = pioDBDriveForLocation(FIO_BACKUP_HOST);
+	err_i	err = $noerr();
 	size_t  read_len = 0;
-	char   *map_path = NULL;
 	/* header compression */
 	int     z_len = 0;
 	char   *zheaders = NULL;
@@ -2057,7 +2059,6 @@ write_page_headers(BackupPageHeader2 *headers, pgFile *file, HeaderMap *hdr_map,
 		return;
 
 	/* when running merge we must write headers into temp map */
-	map_path = (is_merge) ? hdr_map->path_tmp : hdr_map->path;
 	read_len = (file->n_headers + 1) * sizeof(BackupPageHeader2);
 
 	/* calculate checksums */
@@ -2075,23 +2076,17 @@ write_page_headers(BackupPageHeader2 *headers, pgFile *file, HeaderMap *hdr_map,
 	/* writing to header map must be serialized */
 	pthread_lock(&(hdr_map->mutex)); /* what if we crash while trying to obtain mutex? */
 
-	if (!hdr_map->fp)
+	if ($isNULL(hdr_map->fp))
 	{
-		elog(LOG, "Creating page header map \"%s\"", map_path);
+		elog(LOG, "Creating page header map \"%s\"", hdr_map->path);
 
-		hdr_map->fp = fopen(map_path, PG_BINARY_A);
-		if (hdr_map->fp == NULL)
-			elog(ERROR, "Cannot open header file \"%s\": %s",
-				 map_path, strerror(errno));
-
-		/* enable buffering for header file */
-		hdr_map->buf = pgut_malloc(LARGE_CHUNK_SIZE);
-		setvbuf(hdr_map->fp, hdr_map->buf, _IOFBF, LARGE_CHUNK_SIZE);
-
-		/* update file permission */
-		if (chmod(map_path, FILE_PERMISSION) == -1)
-			elog(ERROR, "Cannot change mode of \"%s\": %s", map_path,
-				 strerror(errno));
+		hdr_map->fp = $iref( $i(pioOpenRewrite, drive, .path = hdr_map->path,
+								.permissions = FILE_PERMISSION, .binary = true,
+								.use_temp = is_merge, &err) );
+		if ($haserr(err))
+		{
+			ft_logerr(FT_FATAL, $errmsg(err), "opening header map for write");
+		}
 
 		file->hdr_off = 0;
 	}
@@ -2111,8 +2106,9 @@ write_page_headers(BackupPageHeader2 *headers, pgFile *file, HeaderMap *hdr_map,
 	elog(VERBOSE, "Writing headers for file \"%s\" offset: %llu, len: %i, crc: %u",
 			file->rel_path, file->hdr_off, z_len, file->hdr_crc);
 
-	if (fwrite(zheaders, 1, z_len, hdr_map->fp) != z_len)
-		elog(ERROR, "Cannot write to file \"%s\": %s", map_path, strerror(errno));
+	err = $i(pioWrite, hdr_map->fp, .buf = ft_bytes(zheaders, z_len));
+	if ($haserr(err))
+		ft_logerr(FT_FATAL, $errmsg(err), "writing header map");
 
 	file->hdr_size = z_len;	  /* save the length of compressed headers */
 	hdr_map->offset += z_len; /* update current offset in map */
@@ -2126,21 +2122,27 @@ write_page_headers(BackupPageHeader2 *headers, pgFile *file, HeaderMap *hdr_map,
 void
 init_header_map(pgBackup *backup)
 {
-	backup->hdr_map.fp = NULL;
-	backup->hdr_map.buf = NULL;
+	$setNULL(&backup->hdr_map.fp);
+
 	join_path_components(backup->hdr_map.path, backup->root_dir, HEADER_MAP);
-	join_path_components(backup->hdr_map.path_tmp, backup->root_dir, HEADER_MAP_TMP);
 	backup->hdr_map.mutex = (pthread_mutex_t)PTHREAD_MUTEX_INITIALIZER;
 }
 
 void
 cleanup_header_map(HeaderMap *hdr_map)
 {
+	FOBJ_FUNC_ARP();
+	err_i err = $noerr();
+
 	/* cleanup descriptor */
-	if (hdr_map->fp && fclose(hdr_map->fp))
-		elog(ERROR, "Cannot close file \"%s\"", hdr_map->path);
-	hdr_map->fp = NULL;
+	if ($notNULL(hdr_map->fp))
+	{
+		err = $i(pioClose, hdr_map->fp, .sync = true);
+		if ($haserr(err))
+			ft_logerr(FT_FATAL, $errmsg(err), "closing header map");
+		$idel(&hdr_map->fp);
+		$setNULL(&hdr_map->fp);
+	}
+
 	hdr_map->offset = 0;
-	pg_free(hdr_map->buf);
-	hdr_map->buf = NULL;
 }

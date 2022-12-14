@@ -386,9 +386,7 @@ typedef struct PGNodeInfo
 typedef struct HeaderMap
 {
 	char     path[MAXPGPATH];
-	char     path_tmp[MAXPGPATH]; /* used only in merge */
-	FILE    *fp;                  /* used only for writing */
-	char    *buf;                 /* buffer */
+	pioWriteCloser_i	fp;                  /* used only for writing */
 	pg_off_t offset;              /* current position in fp */
 	pthread_mutex_t mutex;
 

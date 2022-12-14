@@ -434,6 +434,7 @@ merge_chain(InstanceState *instanceState,
 			parray *parent_chain, pgBackup *full_backup, pgBackup *dest_backup,
 			bool no_validate, bool no_sync)
 {
+	FOBJ_FUNC_ARP();
 	int			i;
 	char		full_external_prefix[MAXPGPATH];
 	char		full_database_dir[MAXPGPATH];
@@ -704,19 +705,9 @@ merge_chain(InstanceState *instanceState,
 				pretty_time);
 
 	/* If temp header map is open, then close it and make rename */
-	if (full_backup->hdr_map.fp)
+	if ($notNULL(full_backup->hdr_map.fp))
 	{
 		cleanup_header_map(&(full_backup->hdr_map));
-
-		/* sync new header map to disk */
-		if (fio_sync(FIO_BACKUP_HOST, full_backup->hdr_map.path_tmp) != 0)
-			elog(ERROR, "Cannot sync temp header map \"%s\": %s",
-				full_backup->hdr_map.path_tmp, strerror(errno));
-
-		/* Replace old header map with new one */
-		if (rename(full_backup->hdr_map.path_tmp, full_backup->hdr_map.path))
-			elog(ERROR, "Could not rename file \"%s\" to \"%s\": %s",
-				 full_backup->hdr_map.path_tmp, full_backup->hdr_map.path, strerror(errno));
 	}
 
 	/* Close page header maps */

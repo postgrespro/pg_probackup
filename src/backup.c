@@ -523,12 +523,9 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 	}
 
 	/* close and sync page header map */
-	if (current.hdr_map.fp)
+	if ($notNULL(current.hdr_map.fp))
 	{
 		cleanup_header_map(&(current.hdr_map));
-
-		if (fio_sync(FIO_BACKUP_HOST, current.hdr_map.path) != 0)
-			elog(ERROR, "Cannot sync file \"%s\": %s", current.hdr_map.path, strerror(errno));
 	}
 
 	/* close ssh session in main thread */
