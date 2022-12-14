@@ -3532,7 +3532,7 @@ typedef struct pioLocalWriteFile
 	FILE*	 fl;
 	ft_bytes_t buf;
 	bool     use_temp;
-	bool     renamed;
+	bool     delete_in_dispose;
 } pioLocalWriteFile;
 #define kls__pioLocalWriteFile	iface__pioDBWriter, mth(fobjDispose), \
 								iface(pioWriteCloser, pioDBWriter)
@@ -3764,6 +3764,7 @@ pioLocalDrive_pioOpenRewrite(VSelf, path_t path, int permissions,
 				 .path = ft_strdupc(path),
 				 .path_tmp = temppath,
 				 .use_temp = use_temp,
+				 .delete_in_dispose = true,
 				 .fl = fl,
 				 .buf = buf);
 	return $bind(pioWriteCloser, res);
@@ -3813,6 +3814,7 @@ pioLocalDrive_pioOpenWrite(VSelf, path_t path, int permissions,
 				 .path = ft_strdupc(path),
 				 .path_tmp = ft_strdupc(path),
 				 .use_temp = false,
+				 .delete_in_dispose = exclusive,
 				 .fl = fl,
 				 .buf = buf);
 	return $bind(pioDBWriter, res);
@@ -4229,19 +4231,16 @@ pioLocalWriteFile_pioClose(VSelf, bool sync)
 
 	fd = fileno(self->fl);
 
+	if (fflush(self->fl) != 0)
+		return $syserr(errno, "Flushing file {path:q}",
+					   path(self->path_tmp.ptr));
+
 	if (ferror(self->fl))
 	{
 		fclose(self->fl);
 		self->fl = NULL;
-		if (remove(self->path_tmp.ptr))
-			return $syserr(errno, "Couldn't remove file {path:q}",
-						   path(self->path_tmp.ptr));
 		return $noerr();
 	}
-
-	if (fflush(self->fl) != 0)
-		return $syserr(errno, "Flushing file {path:q}",
-					  path(self->path_tmp.ptr));
 
 	if (sync)
 	{
@@ -4258,7 +4257,7 @@ pioLocalWriteFile_pioClose(VSelf, bool sync)
 						   old_path(self->path_tmp.ptr),
 						   new_path(self->path.ptr));
 		/* mark as renamed so fobjDispose will not delete it */
-		self->renamed = true;
+		self->delete_in_dispose = false;
 
 		if (sync)
 		{
@@ -4276,6 +4275,8 @@ pioLocalWriteFile_pioClose(VSelf, bool sync)
 							   path(self->path.ptr));
 		}
 	}
+	else
+		self->delete_in_dispose = false;
 
 	if (fclose(self->fl))
 		return $syserr(errno, "Cannot close file {path:q}",
@@ -4294,7 +4295,7 @@ pioLocalWriteFile_fobjDispose(VSelf)
 		fclose(self->fl);
 		self->fl = NULL;
 	}
-	if (self->use_temp && !self->renamed)
+	if (self->delete_in_dispose)
 	{
 		remove(self->path_tmp.ptr);
 	}
