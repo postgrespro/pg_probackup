@@ -78,6 +78,7 @@ typedef enum
 	PIO_OPEN_REWRITE,
 	PIO_OPEN_WRITE,
 	PIO_WRITE_ASYNC,
+	PIO_WRITE_COMPRESSED_ASYNC,
 	PIO_SEEK,
 	PIO_TRUNCATE,
 	PIO_GET_ASYNC_ERROR,
@@ -244,6 +245,7 @@ fobj_error_cstr_key(gzErrStr);
 #define mth__pioClose__optional() (sync, false)
 #define mth__pioRead  		size_t, (ft_bytes_t, buf), (err_i *, err)
 #define mth__pioWrite  		size_t, (ft_bytes_t, buf), (err_i *, err)
+#define mth__pioWriteCompressed  err_i, (ft_bytes_t, buf), (CompressAlg, compress_alg)
 #define mth__pioTruncate 	err_i, (size_t, sz)
 #define mth__pioWriteFinish		err_i
 #define mth__pioSeek		err_i, (off_t, offs)
@@ -251,6 +253,7 @@ fobj_error_cstr_key(gzErrStr);
 fobj_method(pioClose);
 fobj_method(pioRead);
 fobj_method(pioWrite);
+fobj_method(pioWriteCompressed);
 fobj_method(pioTruncate);
 fobj_method(pioWriteFinish);
 fobj_method(pioSeek);
@@ -259,7 +262,8 @@ fobj_method(pioSeek);
 #define iface__pioReadStream		mth(pioRead, pioClose)
 #define iface__pioWriteFlush		mth(pioWrite, pioWriteFinish)
 #define iface__pioWriteCloser		mth(pioWrite, pioWriteFinish, pioClose)
-#define iface__pioDBWriter			mth(pioWrite, pioSeek, pioWriteFinish, pioTruncate, pioClose)
+#define iface__pioDBWriter			mth(pioWrite, pioSeek, pioWriteCompressed), \
+									mth(pioWriteFinish, pioTruncate, pioClose)
 #define iface__pioReadCloser  		mth(pioRead, pioClose)
 fobj_iface(pioReader);
 fobj_iface(pioReadStream);

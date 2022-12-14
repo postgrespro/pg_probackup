@@ -3403,6 +3403,19 @@ fio_communicate(int in, int out)
 				$iset(&async_errs[hdr.handle], err);
 			break;
 		}
+		case PIO_WRITE_COMPRESSED_ASYNC:
+		{
+			err_i  err;
+
+			ft_assert(hdr.handle >= 0);
+			ft_assert(objs[hdr.handle] != NULL);
+
+			err = $(pioWriteCompressed, objs[hdr.handle], ft_bytes(buf, hdr.size),
+								  .compress_alg = hdr.arg);
+			if ($haserr(err))
+				$iset(&async_errs[hdr.handle], err);
+			break;
+		}
 		case PIO_SEEK:
 		{
 			err_i  err;
@@ -4168,6 +4181,35 @@ pioLocalWriteFile_pioWrite(VSelf, ft_bytes_t buf, err_i* err)
 		*err = $syserr(errno, "Writting file {path:q}",
 					   path(self->path_tmp.ptr));
 	return r;
+}
+
+static err_i
+pioLocalWriteFile_pioWriteCompressed(VSelf, ft_bytes_t buf, CompressAlg compress_alg)
+{
+	Self(pioLocalWriteFile);
+	err_i  err;
+	char   decbuf[BLCKSZ];
+	const char *errormsg = NULL;
+	int32  uncompressed_size;
+
+	ft_assert(buf.len != 0);
+
+	uncompressed_size = do_decompress(decbuf, BLCKSZ, buf.ptr, buf.len,
+									  compress_alg, &errormsg);
+	if (errormsg != NULL)
+	{
+		return $err(RT, "An error occured during decompressing block for {path:q}: {causeStr}",
+					path(self->path.ptr), causeStr(errormsg));
+	}
+
+	if (uncompressed_size != BLCKSZ)
+	{
+		return $err(RT, "Page uncompressed to {size} bytes != BLCKSZ (for {path:q})",
+					path(self->path.ptr), size(uncompressed_size));
+	}
+
+	$(pioWrite, self, ft_bytes(decbuf, BLCKSZ), .err = &err);
+	return err;
 }
 
 static err_i
@@ -5088,6 +5130,25 @@ pioRemoteWriteFile_pioWrite(VSelf, ft_bytes_t buf, err_i* err)
 	self->did_async = true;
 
 	return buf.len;
+}
+
+static err_i
+pioRemoteWriteFile_pioWriteCompressed(VSelf, ft_bytes_t buf, CompressAlg compress_alg)
+{
+	Self(pioRemoteWriteFile);
+	fio_header hdr = {
+			.cop = PIO_WRITE_COMPRESSED_ASYNC,
+			.handle = self->handle,
+			.size = buf.len,
+			.arg = compress_alg,
+	};
+
+	ft_assert(self->handle >= 0);
+
+	IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
+	IO_CHECK(fio_write_all(fio_stdout, buf.ptr, buf.len), buf.len);
+
+	return $noerr();
 }
 
 static err_i
