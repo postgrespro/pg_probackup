@@ -3935,21 +3935,19 @@ pioLocalFile_pioWrite(VSelf, ft_bytes_t buf, err_i *err)
     return r;
 }
 
-static off_t
-pioLocalFile_pioSeek(VSelf, off_t offs, err_i *err)
+static err_i
+pioLocalFile_pioSeek(VSelf, off_t offs)
 {
 	Self(pioLocalFile);
-	fobj_reset_err(err);
 
 	ft_assert(self->fd >= 0, "Closed file abused \"%s\"", self->p.path);
 
 	off_t pos = lseek(self->fd, offs, SEEK_SET);
 
 	if (pos == (off_t)-1)
-	{
-		*err = $syserr(errno, "Can not seek to {offs} in file {path:q}", offs(offs), path(self->p.path));
-	}
-	return pos;
+		return $syserr(errno, "Can not seek to {offs} in file {path:q}", offs(offs), path(self->p.path));
+	ft_assert(pos == offs);
+	return $noerr();
 }
 
 static err_i
@@ -4635,24 +4633,22 @@ pioRemoteFile_pioWrite(VSelf, ft_bytes_t buf, err_i *err)
     return buf.len;
 }
 
-static off_t
-pioRemoteFile_pioSeek(VSelf, off_t offs, err_i *err)
+static err_i
+pioRemoteFile_pioSeek(VSelf, off_t offs)
 {
 	Self(pioRemoteFile);
 	fio_header hdr;
 
-	fobj_reset_err(err);
-
 	ft_assert(self->handle >= 0, "Remote closed file abused \"%s\"", self->p.path);
 
 	hdr.cop = FIO_SEEK;
-	hdr.handle = self->handle & ~FIO_PIPE_MARKER;
+	hdr.handle = self->handle;
 	hdr.size = 0;
 	hdr.arg = offs;
 
 	IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
 
-	return 0;
+	return $noerr();
 }
 
 static err_i

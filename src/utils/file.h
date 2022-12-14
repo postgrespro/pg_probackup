@@ -238,7 +238,7 @@ fobj_error_cstr_key(gzErrStr);
 #define mth__pioWrite  		size_t, (ft_bytes_t, buf), (err_i *, err)
 #define mth__pioTruncate 	err_i, (size_t, sz)
 #define mth__pioWriteFinish		err_i
-#define mth__pioSeek		off_t, (off_t, offs), (err_i *, err)
+#define mth__pioSeek		err_i, (off_t, offs)
 
 fobj_method(pioClose);
 fobj_method(pioRead);

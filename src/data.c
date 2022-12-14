@@ -321,21 +321,13 @@ write_page(pgFile *file, pioFile_i out, int blknum, Page page)
 {
 	err_i err = $noerr();
 	off_t target = blknum * BLCKSZ;
-	off_t position;
 	size_t rc;
 
-	position = $i(pioSeek, out, target, &err);
+	err = $i(pioSeek, out, target);
 	if ($haserr(err))
-	{
 		ft_logerr(FT_ERROR, $errmsg(err), "write_page");
-	}
-	if (position != target)
-	{
-		elog(ERROR, "Can't seek to position %ld", target);
-	}
-	/* write data page */
-	err = $noerr();
 
+	/* write data page */
 	rc = $i(pioWrite, out, .buf = ft_bytes(page, BLCKSZ), .err = &err);
 	if ($haserr(err))
 		ft_log(FT_INFO, $errmsg(err), "write_page");
