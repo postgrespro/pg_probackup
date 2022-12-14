@@ -95,6 +95,12 @@ typedef struct __attribute__((packed))
 	int just_validate;
 } fio_iterate_pages_request;
 
+struct __attribute__((packed)) fio_req_open_rewrite {
+	uint32_t  permissions;
+	bool      binary;
+	bool      use_temp;
+};
+
 /* Convert FIO pseudo handle to index in file descriptor array */
 #define fio_fileno(f) (((size_t)f - 1) | FIO_PIPE_MARKER)
 
@@ -3028,6 +3034,10 @@ fio_communicate(int in, int out)
 	 */
 	int fd[FIO_FDMAX];
 	DIR* dir[FIO_FDMAX];
+
+	fobj_t objs[FIO_FDMAX] = {0};
+	err_i  async_errs[FIO_FDMAX] = {0};
+
 	struct dirent* entry;
 	size_t buf_size = 128*1024;
 	char* buf = (char*)pgut_malloc(buf_size);
@@ -3326,6 +3336,92 @@ fio_communicate(int in, int out)
 				fio_iterate_pages_impl(drive, out, from_fullpath, pagemap, params);
 			}
 			break;
+		case PIO_OPEN_REWRITE:
+		{
+			struct fio_req_open_rewrite *req = (void*)buf;
+			const char *path = buf + sizeof(*req);
+			pioWriteCloser_i fl;
+			err_i err;
+
+			ft_assert(hdr.handle >= 0);
+			ft_assert(objs[hdr.handle] == NULL);
+
+			fl = $i(pioOpenRewrite, drive, .path = path,
+					.permissions = req->permissions,
+					.binary = req->binary,
+					.use_temp = req->use_temp,
+					.err = &err);
+			if ($haserr(err))
+				fio_send_pio_err(out, err);
+			else
+			{
+				hdr.size = 0;
+				IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
+				objs[hdr.handle] = $ref(fl.self);
+			}
+			break;
+		}
+		case PIO_WRITE_ASYNC:
+		{
+			err_i  err;
+
+			ft_assert(hdr.handle >= 0);
+			ft_assert(objs[hdr.handle] != NULL);
+
+			$(pioWrite, objs[hdr.handle], ft_bytes(buf, hdr.size),
+						.err = &err);
+			if ($haserr(err))
+				$iset(&async_errs[hdr.handle], err);
+			break;
+		}
+		case PIO_GET_ASYNC_ERROR:
+		{
+			ft_assert(hdr.handle >= 0);
+			ft_assert(objs[hdr.handle] != NULL);
+			ft_assert(hdr.size == 0);
+
+			if ($haserr(async_errs[hdr.handle]))
+			{
+				fio_send_pio_err(out, async_errs[hdr.handle]);
+				$idel(&async_errs[hdr.handle]);
+			}
+			else
+				IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
+			break;
+		}
+		case PIO_CLOSE:
+		{
+			err_i err;
+
+			ft_assert(hdr.handle >= 0);
+			ft_assert(objs[hdr.handle] != NULL);
+			ft_assert(hdr.size == 1);
+
+			err = $(pioClose, objs[hdr.handle], .sync = buf[0]);
+			err = fobj_err_combine(err, async_errs[hdr.handle]);
+			if ($haserr(err))
+			{
+				fio_send_pio_err(out, err);
+			}
+			else
+			{
+				hdr.size = 0;
+				IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
+			}
+			$del(&objs[hdr.handle]);
+			$idel(&async_errs[hdr.handle]);
+			break;
+		}
+		case PIO_DISPOSE:
+		{
+			ft_assert(hdr.handle >= 0);
+			ft_assert(objs[hdr.handle] != NULL);
+			ft_assert(hdr.size == 0);
+
+			$del(&objs[hdr.handle]);
+			$idel(&async_errs[hdr.handle]);
+			break;
+		}
 		  default:
 			Assert(false);
 		}
@@ -3396,6 +3492,14 @@ typedef struct pioRemoteFile
 #define kls__pioRemoteFile	iface__pioFile, iface(pioFile), \
                             mth(pioSetAsync, pioAsyncRead, pioAsyncWrite, pioAsyncError)
 fobj_klass(pioRemoteFile);
+
+typedef struct pioRemoteWriteFile {
+	ft_str_t	path;
+	int			handle;
+} pioRemoteWriteFile;
+#define kls__pioRemoteWriteFile	iface__pioWriteCloser, mth(fobjDispose), \
+								iface(pioWriteCloser)
+fobj_klass(pioRemoteWriteFile);
 
 typedef struct pioReadFilter {
     pioRead_i	wrapped;
@@ -4999,8 +5103,144 @@ pioRemoteDrive_pioOpenRewrite(VSelf, path_t path, int permissions,
 							 bool binary, bool use_temp, err_i *err)
 {
 	Self(pioRemoteDrive);
-	*err = $err(RT, "NOT IMPLEMENTED");
-	return $null(pioWriteCloser);
+	ft_strbuf_t buf = ft_strbuf_zero();
+	fobj_t		fl;
+	int         handle = find_free_handle();
+
+	fio_header hdr = {
+			.cop    = PIO_OPEN_REWRITE,
+			.handle = handle,
+	};
+
+	struct fio_req_open_rewrite req = {
+			.permissions = permissions,
+			.binary = binary,
+			.use_temp = use_temp
+	};
+
+	fio_ensure_remote();
+
+	ft_strbuf_catbytes(&buf, ft_bytes(&hdr, sizeof(hdr)));
+	ft_strbuf_catbytes(&buf, ft_bytes(&req, sizeof(req)));
+	ft_strbuf_catc(&buf, path);
+	ft_strbuf_cat1(&buf, '\0');
+
+	((fio_header*)buf.ptr)->size = buf.len - sizeof(hdr);
+
+	IO_CHECK(fio_write_all(fio_stdout, buf.ptr, buf.len), buf.len);
+
+	IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
+
+	if (hdr.cop == FIO_PIO_ERROR)
+	{
+		*err = fio_receive_pio_err(&hdr);
+		return $null(pioWriteCloser);
+	}
+	ft_dbg_assert(hdr.cop == PIO_OPEN_REWRITE &&
+				  hdr.handle == handle);
+
+	set_handle(handle);
+
+	fl = $alloc(pioRemoteWriteFile,
+				.path = ft_strdupc(path),
+				.handle = handle);
+	return $bind(pioWriteCloser, fl);
+}
+
+static size_t
+pioRemoteWriteFile_pioWrite(VSelf, ft_bytes_t buf, err_i* err)
+{
+	Self(pioRemoteWriteFile);
+	fobj_reset_err(err);
+	fio_header hdr;
+
+	ft_assert(self->handle >= 0);
+
+	if (buf.len == 0)
+		return 0;
+
+	hdr = (fio_header){
+			.cop = PIO_WRITE_ASYNC,
+			.handle = self->handle,
+			.size = buf.len,
+			.arg = 0,
+	};
+
+	IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
+	IO_CHECK(fio_write_all(fio_stdout, buf.ptr, buf.len), buf.len);
+
+	return buf.len;
+}
+
+static err_i
+pioRemoteWriteFile_pioWriteFinish(VSelf)
+{
+	Self(pioRemoteWriteFile);
+	fio_header hdr;
+
+	ft_assert(self->handle >= 0);
+
+	hdr = (fio_header){
+			.cop = PIO_GET_ASYNC_ERROR,
+			.handle = self->handle,
+	};
+
+	IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
+
+	IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
+
+	if (hdr.cop == FIO_PIO_ERROR)
+		return fio_receive_pio_err(&hdr);
+	ft_dbg_assert(hdr.cop == PIO_GET_ASYNC_ERROR);
+
+	return $noerr();
+}
+
+static err_i
+pioRemoteWriteFile_pioClose(VSelf, bool sync)
+{
+	Self(pioRemoteWriteFile);
+	fio_header hdr;
+	struct __attribute__((packed)) {
+		fio_header hdr;
+		bool sync;
+	} req = {
+		.hdr = {
+				.cop = PIO_CLOSE,
+				.handle = self->handle,
+				.size = 1,
+		},
+		.sync = sync,
+	};
+
+	ft_assert(self->handle >= 0);
+
+	IO_CHECK(fio_write_all(fio_stdout, &req, sizeof(req)), sizeof(req));
+	IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
+
+	unset_handle(self->handle);
+	self->handle = -1;
+
+	if (hdr.cop == FIO_PIO_ERROR)
+		return fio_receive_pio_err(&hdr);
+	return $noerr();
+}
+
+static void
+pioRemoteWriteFile_fobjDispose(VSelf)
+{
+	Self(pioRemoteWriteFile);
+
+	if (self->handle >= 0)
+	{
+		fio_header hdr = {
+				.cop = PIO_DISPOSE,
+				.handle = self->handle,
+		};
+		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
+		unset_handle(self->handle);
+	}
+	ft_str_free(&self->path);
 }
 
 pioRead_i
@@ -6230,6 +6470,7 @@ fobj_klass_handle(pioRemoteDrive);
 fobj_klass_handle(pioLocalFile, inherits(pioFile), mth(fobjDispose, fobjRepr));
 fobj_klass_handle(pioRemoteFile, inherits(pioFile), mth(fobjDispose, fobjRepr));
 fobj_klass_handle(pioLocalWriteFile);
+fobj_klass_handle(pioRemoteWriteFile);
 fobj_klass_handle(pioWriteFilter, mth(fobjDispose, fobjRepr));
 fobj_klass_handle(pioReadFilter, mth(fobjDispose, fobjRepr));
 fobj_klass_handle(pioDevNull);
