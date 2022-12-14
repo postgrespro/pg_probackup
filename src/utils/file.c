@@ -101,6 +101,11 @@ struct __attribute__((packed)) fio_req_open_rewrite {
 	bool      use_temp;
 };
 
+struct __attribute__((packed)) fio_req_open_write {
+	uint32_t  permissions;
+	bool exclusive;
+};
+
 /* Convert FIO pseudo handle to index in file descriptor array */
 #define fio_fileno(f) (((size_t)f - 1) | FIO_PIPE_MARKER)
 
@@ -3361,6 +3366,30 @@ fio_communicate(int in, int out)
 			}
 			break;
 		}
+		case PIO_OPEN_WRITE:
+		{
+			struct fio_req_open_write *req = (void*)buf;
+			const char *path = buf + sizeof(*req);
+			pioDBWriter_i fl;
+			err_i err;
+
+			ft_assert(hdr.handle >= 0);
+			ft_assert(objs[hdr.handle] == NULL);
+
+			fl = $i(pioOpenWrite, drive, .path = path,
+					.permissions = req->permissions,
+					.exclusive = req->exclusive,
+					.err = &err);
+			if ($haserr(err))
+				fio_send_pio_err(out, err);
+			else
+			{
+				hdr.size = 0;
+				IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
+				objs[hdr.handle] = $ref(fl.self);
+			}
+			break;
+		}
 		case PIO_WRITE_ASYNC:
 		{
 			err_i  err;
@@ -3370,6 +3399,22 @@ fio_communicate(int in, int out)
 
 			$(pioWrite, objs[hdr.handle], ft_bytes(buf, hdr.size),
 						.err = &err);
+			if ($haserr(err))
+				$iset(&async_errs[hdr.handle], err);
+			break;
+		}
+		case PIO_SEEK:
+		{
+			err_i  err;
+			uint64_t offs;
+
+			ft_assert(hdr.handle >= 0);
+			ft_assert(objs[hdr.handle] != NULL);
+			ft_assert(hdr.size == sizeof(uint64_t));
+
+			memcpy(&offs, buf, sizeof(uint64_t));
+
+			err = $(pioSeek, objs[hdr.handle], offs);
 			if ($haserr(err))
 				$iset(&async_errs[hdr.handle], err);
 			break;
@@ -3473,8 +3518,8 @@ typedef struct pioLocalWriteFile
 	bool     use_temp;
 	bool     renamed;
 } pioLocalWriteFile;
-#define kls__pioLocalWriteFile	iface__pioWriteCloser, mth(fobjDispose), \
-								iface(pioWriteCloser)
+#define kls__pioLocalWriteFile	iface__pioDBWriter, mth(fobjDispose), \
+								iface(pioWriteCloser, pioDBWriter)
 fobj_klass(pioLocalWriteFile);
 
 typedef struct pioRemoteFile
@@ -3497,8 +3542,8 @@ typedef struct pioRemoteWriteFile {
 	ft_str_t	path;
 	int			handle;
 } pioRemoteWriteFile;
-#define kls__pioRemoteWriteFile	iface__pioWriteCloser, mth(fobjDispose), \
-								iface(pioWriteCloser)
+#define kls__pioRemoteWriteFile	iface__pioDBWriter, mth(fobjDispose), \
+								iface(pioWriteCloser, pioDBWriter)
 fobj_klass(pioRemoteWriteFile);
 
 typedef struct pioReadFilter {
@@ -3704,6 +3749,55 @@ pioLocalDrive_pioOpenRewrite(VSelf, path_t path, int permissions,
 				 .fl = fl,
 				 .buf = buf);
 	return $bind(pioWriteCloser, res);
+}
+
+static pioDBWriter_i
+pioLocalDrive_pioOpenWrite(VSelf, path_t path, int permissions,
+						   bool exclusive, err_i *err)
+{
+	Self(pioLocalDrive);
+	int			fd = -1;
+	FILE*		fl;
+	ft_bytes_t  buf;
+	fobj_t		res;
+	int			flags;
+
+	fobj_reset_err(err);
+
+	flags = O_CREAT|O_WRONLY|PG_BINARY;
+	if (exclusive)
+		flags |= O_EXCL;
+
+	fd = open(path, flags, permissions);
+
+	if (fd < 0)
+	{
+		*err = $syserr(errno, "Create file {path} failed", path(path));
+		close(fd);
+		return $null(pioDBWriter);
+	}
+
+	if (!exclusive && chmod(path, permissions))
+	{
+		*err = $syserr(errno, "Changing permissions for {path} failed",
+					   path(path));
+		close(fd);
+		return $null(pioDBWriter);
+	}
+
+	fl = fdopen(fd, "wb");
+	ft_assert(fl != NULL);
+
+	buf = ft_bytes_alloc(CHUNK_SIZE);
+	setvbuf(fl, buf.ptr, _IOFBF, buf.len);
+
+	res = $alloc(pioLocalWriteFile,
+				 .path = ft_strdupc(path),
+				 .path_tmp = ft_strdupc(path),
+				 .use_temp = false,
+				 .fl = fl,
+				 .buf = buf);
+	return $bind(pioDBWriter, res);
 }
 
 static pio_stat_t
@@ -4111,6 +4205,19 @@ pioLocalWriteFile_pioWrite(VSelf, ft_bytes_t buf, err_i* err)
 		*err = $syserr(errno, "Writting file {path:q}",
 					   path(self->path_tmp.ptr));
 	return r;
+}
+
+static err_i
+pioLocalWriteFile_pioSeek(VSelf, off_t offs)
+{
+	Self(pioLocalWriteFile);
+
+	ft_assert(self->fl != NULL, "Closed file abused \"%s\"", self->path.ptr);
+
+	if (fseeko(self->fl, offs, SEEK_SET))
+		return $syserr(errno, "Can not seek to {offs} in file {path:q}", offs(offs), path(self->path.ptr));
+
+	return $noerr();
 }
 
 static err_i
@@ -5070,6 +5177,54 @@ pioRemoteDrive_pioOpenRewrite(VSelf, path_t path, int permissions,
 	return $bind(pioWriteCloser, fl);
 }
 
+static pioDBWriter_i
+pioRemoteDrive_pioOpenWrite(VSelf, path_t path, int permissions,
+							bool exclusive, err_i *err)
+{
+	Self(pioRemoteDrive);
+	ft_strbuf_t buf = ft_strbuf_zero();
+	fobj_t		fl;
+	int         handle = find_free_handle();
+
+	fio_header hdr = {
+			.cop    = PIO_OPEN_WRITE,
+			.handle = handle,
+	};
+
+	struct fio_req_open_write req = {
+			.permissions = permissions,
+			.exclusive   = exclusive,
+	};
+
+	fio_ensure_remote();
+
+	ft_strbuf_catbytes(&buf, ft_bytes(&hdr, sizeof(hdr)));
+	ft_strbuf_catbytes(&buf, ft_bytes(&req, sizeof(req)));
+	ft_strbuf_catc(&buf, path);
+	ft_strbuf_cat1(&buf, '\0');
+
+	((fio_header*)buf.ptr)->size = buf.len - sizeof(hdr);
+
+	IO_CHECK(fio_write_all(fio_stdout, buf.ptr, buf.len), buf.len);
+
+	IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
+
+	if (hdr.cop == FIO_PIO_ERROR)
+	{
+		*err = fio_receive_pio_err(&hdr);
+		return $null(pioDBWriter);
+	}
+	ft_dbg_assert(hdr.cop == PIO_OPEN_WRITE &&
+				  hdr.handle == handle);
+
+	set_handle(handle);
+
+	fl = $alloc(pioRemoteWriteFile,
+				.path = ft_strdupc(path),
+				.handle = handle);
+	return $bind(pioDBWriter, fl);
+}
+
 static size_t
 pioRemoteWriteFile_pioWrite(VSelf, ft_bytes_t buf, err_i* err)
 {
@@ -5093,6 +5248,29 @@ pioRemoteWriteFile_pioWrite(VSelf, ft_bytes_t buf, err_i* err)
 	IO_CHECK(fio_write_all(fio_stdout, buf.ptr, buf.len), buf.len);
 
 	return buf.len;
+}
+
+static err_i
+pioRemoteWriteFile_pioSeek(VSelf, off_t offs)
+{
+	Self(pioRemoteWriteFile);
+	struct __attribute__((packed)) {
+		fio_header hdr;
+		uint64_t   off;
+	} req = {
+			.hdr = {
+					.cop = PIO_SEEK,
+					.handle = self->handle,
+					.size = sizeof(uint64_t),
+			},
+			.off = offs,
+	};
+
+	ft_assert(self->handle >= 0, "Remote closed file abused \"%s\"", self->path.ptr);
+
+	IO_CHECK(fio_write_all(fio_stdout, &req, sizeof(req)), sizeof(req));
+
+	return $noerr();
 }
 
 static err_i

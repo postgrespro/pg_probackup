@@ -76,7 +76,9 @@ typedef enum
 	FIO_ITERATE_DATA,
 	FIO_ITERATE_EOF,
 	PIO_OPEN_REWRITE,
+	PIO_OPEN_WRITE,
 	PIO_WRITE_ASYNC,
+	PIO_SEEK,
 	PIO_GET_ASYNC_ERROR,
 	PIO_CLOSE,
 	PIO_DISPOSE,
@@ -255,10 +257,12 @@ fobj_method(pioSeek);
 #define iface__pioFile				mth(pioWrite, pioWriteFinish, pioRead, pioTruncate, pioClose, pioSeek)
 #define iface__pioWriteFlush		mth(pioWrite, pioWriteFinish)
 #define iface__pioWriteCloser		mth(pioWrite, pioWriteFinish, pioClose)
+#define iface__pioDBWriter			mth(pioWrite, pioSeek, pioWriteFinish, pioClose)
 #define iface__pioReadCloser  		mth(pioRead, pioClose)
 fobj_iface(pioFile);
 fobj_iface(pioWriteFlush);
 fobj_iface(pioWriteCloser);
+fobj_iface(pioDBWriter);
 fobj_iface(pioReadCloser);
 
 // Pages iterator
@@ -285,6 +289,9 @@ fobj_iface(pioPagesIterator);
 #define mth__pioOpen 		pioFile_i, (path_t, path), (int, flags), \
 									   (int, permissions), (err_i *, err)
 #define mth__pioOpen__optional() (permissions, FILE_PERMISSION)
+#define mth__pioOpenWrite   pioDBWriter_i, (path_t, path), (int, permissions), \
+										   (bool, exclusive), (err_i *, err)
+#define mth__pioOpenWrite__optional() (exclusive, false), (permissions, FILE_PERMISSION)
 #define mth__pioOpenRewrite pioWriteCloser_i, (path_t, path), (int, permissions), \
                                               (bool, binary), (bool, use_temp),     \
 											  (err_i *, err)
@@ -322,6 +329,7 @@ fobj_iface(pioPagesIterator);
 
 fobj_method(pioOpen);
 fobj_method(pioOpenRewrite);
+fobj_method(pioOpenWrite);
 fobj_method(pioStat);
 fobj_method(pioRemove);
 fobj_method(pioRename);
@@ -343,7 +351,7 @@ fobj_method(pioIteratePages);
 							mth(pioOpenRewrite)
 fobj_iface(pioDrive);
 
-#define iface__pioDBDrive	iface__pioDrive, mth(pioIteratePages)
+#define iface__pioDBDrive	iface__pioDrive, mth(pioIteratePages, pioOpenWrite)
 fobj_iface(pioDBDrive);
 
 extern pioDrive_i pioDriveForLocation(fio_location location);
