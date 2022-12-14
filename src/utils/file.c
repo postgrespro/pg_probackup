@@ -105,10 +105,10 @@ typedef struct __attribute__((packed))
 
 static void dir_list_file(parray *files, const char *root, bool handle_tablespaces,
 						  bool follow_symlink, bool backup_logs, bool skip_hidden,
-						  int external_dir_num, pioDrive_i drive);
+						  int external_dir_num, pioDBDrive_i drive);
 static void dir_list_file_internal(parray *files, pgFile *parent, const char *parent_dir,
 								   bool handle_tablespaces, bool follow_symlink, bool backup_logs,
-								   bool skip_hidden, int external_dir_num, pioDrive_i drive);
+								   bool skip_hidden, int external_dir_num, pioDBDrive_i drive);
 
 void
 setMyLocation(ProbackupSubcmd const subcmd)
@@ -1664,7 +1664,7 @@ fio_receive_pio_err(fio_header *hdr)
 }
 
 static void
-fio_iterate_pages_impl(pioDrive_i drive, int out, const char *path,
+fio_iterate_pages_impl(pioDBDrive_i drive, int out, const char *path,
 						datapagemap_t pagemap,
 						fio_iterate_pages_request *params)
 {
@@ -1673,7 +1673,7 @@ fio_iterate_pages_impl(pioDrive_i drive, int out, const char *path,
 	fio_header			hdr = {.cop=FIO_ITERATE_DATA};
 	BlockNumber			finalN;
 
-	pages = $(pioIteratePages, drive.self,
+	pages = $i(pioIteratePages, drive,
 			   .path      = path,
 			   .segno     = params->segno,
 			   .pagemap   = pagemap,
@@ -2525,13 +2525,14 @@ fio_remove_dir_impl(int out, char* buf) {
  */
 static void
 dir_list_file(parray *files, const char *root, bool handle_tablespaces, bool follow_symlink,
-			  bool backup_logs, bool skip_hidden, int external_dir_num, pioDrive_i drive)
+			  bool backup_logs, bool skip_hidden, int external_dir_num, pioDBDrive_i drive)
 {
 	pgFile	   *file;
 
 	Assert(!$i(pioIsRemote, drive));
 
-	file = pgFileNew(root, "", follow_symlink, external_dir_num, drive);
+	file = pgFileNew(root, "", follow_symlink, external_dir_num,
+					 $reduce(pioDrive, drive));
 	if (file == NULL)
 	{
 		/* For external directory this is not ok */
@@ -2570,7 +2571,7 @@ dir_list_file(parray *files, const char *root, bool handle_tablespaces, bool fol
 static void
 dir_list_file_internal(parray *files, pgFile *parent, const char *parent_dir,
 					   bool handle_tablespaces, bool follow_symlink, bool backup_logs,
-					   bool skip_hidden, int external_dir_num, pioDrive_i drive)
+					   bool skip_hidden, int external_dir_num, pioDBDrive_i drive)
 {
 	DIR			  *dir;
 	struct dirent *dent;
@@ -2607,7 +2608,7 @@ dir_list_file_internal(parray *files, pgFile *parent, const char *parent_dir,
 		join_path_components(rel_child, parent->rel_path, dent->d_name);
 
 		file = pgFileNew(child, rel_child, follow_symlink,
-						 external_dir_num, drive);
+						 external_dir_num, $reduce(pioDrive, drive));
 		if (file == NULL)
 			continue;
 
@@ -2716,7 +2717,7 @@ dir_list_file_internal(parray *files, pgFile *parent, const char *parent_dir,
  * TODO: replace FIO_SEND_FILE and FIO_SEND_FILE_EOF with dedicated messages
  */
 static void
-fio_list_dir_impl(int out, char* buf, pioDrive_i drive)
+fio_list_dir_impl(int out, char* buf, pioDBDrive_i drive)
 {
 	int i;
 	fio_header hdr;
@@ -3031,7 +3032,7 @@ fio_communicate(int in, int out)
 	size_t buf_size = 128*1024;
 	char* buf = (char*)pgut_malloc(buf_size);
 	fio_header hdr;
-	pioDrive_i drive;
+	pioDBDrive_i drive;
 	pio_stat_t st;
 	ft_bytes_t bytes;
 	int rc;
@@ -3041,7 +3042,7 @@ fio_communicate(int in, int out)
 
 	FOBJ_FUNC_ARP();
 
-	drive = pioDriveForLocation(FIO_LOCAL_HOST);
+	drive = pioDBDriveForLocation(FIO_LOCAL_HOST);
 
 #ifdef WIN32
 	SYS_CHECK(setmode(in, _O_BINARY));
@@ -3441,16 +3442,25 @@ typedef struct pioCRC32Counter
 	int64_t			size;
 } pioCRC32Counter;
 
-static pioDrive_i localDrive;
-static pioDrive_i remoteDrive;
+static pioDBDrive_i localDrive;
+static pioDBDrive_i remoteDrive;
 
 pioDrive_i
 pioDriveForLocation(fio_location loc)
 {
     if (fio_is_remote(loc))
-        return remoteDrive;
+        return $reduce(pioDrive, remoteDrive);
     else
-        return localDrive;
+        return $reduce(pioDrive, localDrive);
+}
+
+pioDBDrive_i
+pioDBDriveForLocation(fio_location loc)
+{
+	if (fio_is_remote(loc))
+		return remoteDrive;
+	else
+		return localDrive;
 }
 
 /* Base physical file type */
@@ -3615,7 +3625,7 @@ pioLocalDrive_pioListDir(VSelf, parray *files, const char *root, bool handle_tab
     FOBJ_FUNC_ARP();
 	Self(pioLocalDrive);
     dir_list_file(files, root, handle_tablespaces, follow_symlink, backup_logs,
-                        skip_hidden, external_dir_num, $bind(pioDrive, self));
+                        skip_hidden, external_dir_num, $bind(pioDBDrive, self));
 }
 
 static void
@@ -6033,6 +6043,6 @@ init_pio_objects(void)
 {
     FOBJ_FUNC_ARP();
 
-    localDrive = bindref_pioDrive($alloc(pioLocalDrive));
-    remoteDrive = bindref_pioDrive($alloc(pioRemoteDrive));
+    localDrive = bindref_pioDBDrive($alloc(pioLocalDrive));
+    remoteDrive = bindref_pioDBDrive($alloc(pioRemoteDrive));
 }

@@ -335,6 +335,7 @@ fobj_iface(pioDrive);
 fobj_iface(pioDBDrive);
 
 extern pioDrive_i pioDriveForLocation(fio_location location);
+extern pioDBDrive_i pioDBDriveForLocation(fio_location location);
 
 struct doIteratePages_params {
 	path_t from_fullpath;
@@ -351,7 +352,7 @@ struct doIteratePages_params {
 extern pioPagesIterator_i
 doIteratePages_impl(pioIteratePages_i drive, struct doIteratePages_params p);
 #define doIteratePages(drive, ...) \
-	doIteratePages_impl($bind(pioIteratePages, drive.self), ((struct doIteratePages_params){ \
+	doIteratePages_impl($reduce(pioIteratePages, drive), ((struct doIteratePages_params){ \
 					.start_lsn = InvalidXLogRecPtr,        \
 					.calg = NONE_COMPRESS, .clevel = 0,    \
 					.just_validate = false,                \

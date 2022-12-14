@@ -1299,7 +1299,7 @@ bool
 check_data_file(pgFile *file, const char *from_fullpath, uint32 checksum_version)
 {
 	FOBJ_FUNC_ARP();
-	pioDrive_i			local_location = pioDriveForLocation(FIO_LOCAL_HOST);
+	pioDBDrive_i		local_location = pioDBDriveForLocation(FIO_LOCAL_HOST);
 	pioPagesIterator_i	pages;
 	bool				is_valid = true;
 	err_i				err;
@@ -1766,7 +1766,7 @@ send_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
 {
 	FOBJ_FUNC_ARP();
 	pioDrive_i backup_location = pioDriveForLocation(FIO_BACKUP_HOST);
-	pioDrive_i db_location = pioDriveForLocation(FIO_DB_HOST);
+	pioDBDrive_i db_location = pioDBDriveForLocation(FIO_DB_HOST);
 	pioPagesIterator_i pages;
 	pioFile_i out = $null(pioFile);
 	pioWriteFlush_i wrapped = $null(pioWriteFlush);
@@ -1865,7 +1865,7 @@ copy_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
 			  BackupMode backup_mode)
 {
 	FOBJ_FUNC_ARP();
-	pioDrive_i	backup_location = pioDriveForLocation(FIO_BACKUP_HOST);
+	pioDBDrive_i	backup_location = pioDBDriveForLocation(FIO_BACKUP_HOST);
 	err_i		err = $noerr();
 	pioPagesIterator_i pages;
 	pioFile_i out;
