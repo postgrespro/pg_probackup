@@ -3557,6 +3557,7 @@ fobj_klass(pioRemoteFile);
 typedef struct pioRemoteWriteFile {
 	ft_str_t	path;
 	int			handle;
+	bool		did_async;
 } pioRemoteWriteFile;
 #define kls__pioRemoteWriteFile	iface__pioDBWriter, mth(fobjDispose), \
 								iface(pioWriteCloser, pioDBWriter)
@@ -5078,6 +5079,8 @@ pioRemoteWriteFile_pioWrite(VSelf, ft_bytes_t buf, err_i* err)
 	IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
 	IO_CHECK(fio_write_all(fio_stdout, buf.ptr, buf.len), buf.len);
 
+	self->did_async = true;
+
 	return buf.len;
 }
 
@@ -5101,6 +5104,8 @@ pioRemoteWriteFile_pioSeek(VSelf, off_t offs)
 
 	IO_CHECK(fio_write_all(fio_stdout, &req, sizeof(req)), sizeof(req));
 
+	self->did_async = true;
+
 	return $noerr();
 }
 
@@ -5120,6 +5125,8 @@ pioRemoteWriteFile_pioWriteFinish(VSelf)
 	IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
 
 	IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
+
+	self->did_async = false;
 
 	if (hdr.cop == FIO_PIO_ERROR)
 		return fio_receive_pio_err(&hdr);
@@ -5149,6 +5156,8 @@ pioRemoteWriteFile_pioTruncate(VSelf, size_t sz)
 
 	IO_CHECK(fio_write_all(fio_stdout, &req, sizeof(req)), sizeof(req));
 
+	self->did_async = true;
+
     return $noerr();
 }
 
@@ -5157,6 +5166,7 @@ pioRemoteWriteFile_pioClose(VSelf, bool sync)
 {
 	Self(pioRemoteWriteFile);
 	fio_header hdr;
+	err_i	   err = $noerr();
 	struct __attribute__((packed)) {
 		fio_header hdr;
 		bool sync;
@@ -5171,6 +5181,9 @@ pioRemoteWriteFile_pioClose(VSelf, bool sync)
 
 	ft_assert(self->handle >= 0);
 
+	if (self->did_async)
+		err = $(pioWriteFinish, self);
+
 	IO_CHECK(fio_write_all(fio_stdout, &req, sizeof(req)), sizeof(req));
 	IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
 
@@ -5178,8 +5191,8 @@ pioRemoteWriteFile_pioClose(VSelf, bool sync)
 	self->handle = -1;
 
 	if (hdr.cop == FIO_PIO_ERROR)
-		return fio_receive_pio_err(&hdr);
-	return $noerr();
+		err = fobj_err_combine(err, fio_receive_pio_err(&hdr));
+	return err;
 }
 
 static void
