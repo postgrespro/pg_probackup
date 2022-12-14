@@ -3419,6 +3419,22 @@ fio_communicate(int in, int out)
 				$iset(&async_errs[hdr.handle], err);
 			break;
 		}
+		case PIO_TRUNCATE:
+		{
+			err_i  err;
+			uint64_t offs;
+
+			ft_assert(hdr.handle >= 0);
+			ft_assert(objs[hdr.handle] != NULL);
+			ft_assert(hdr.size == sizeof(uint64_t));
+
+			memcpy(&offs, buf, sizeof(uint64_t));
+
+			err = $(pioTruncate, objs[hdr.handle], offs);
+			if ($haserr(err))
+				$iset(&async_errs[hdr.handle], err);
+			break;
+		}
 		case PIO_GET_ASYNC_ERROR:
 		{
 			ft_assert(hdr.handle >= 0);
@@ -4230,6 +4246,25 @@ pioLocalWriteFile_pioWriteFinish(VSelf)
 		err = $syserr(errno, "Flushing file {path:q}",
 					  path(self->path_tmp.ptr));
 	return err;
+}
+
+static err_i
+pioLocalWriteFile_pioTruncate(VSelf, size_t sz)
+{
+	Self(pioLocalWriteFile);
+	ft_assert(self->fl != NULL, "Closed file abused \"%s\"", self->path_tmp.ptr);
+
+	/* it is better to flush before we will truncate */
+	if (fflush(self->fl))
+		return $syserr(errno, "Cannot flush file {path:q}",
+					   path(self->path_tmp.ptr));
+
+	if (ftruncate(fileno(self->fl), sz) < 0)
+		return $syserr(errno, "Cannot truncate file {path:q}",
+					   path(self->path_tmp.ptr));
+	/* TODO: what to do with file position? */
+
+	return $noerr();
 }
 
 static err_i
@@ -5295,6 +5330,30 @@ pioRemoteWriteFile_pioWriteFinish(VSelf)
 	ft_dbg_assert(hdr.cop == PIO_GET_ASYNC_ERROR);
 
 	return $noerr();
+}
+
+static err_i
+pioRemoteWriteFile_pioTruncate(VSelf, size_t sz)
+{
+    Self(pioRemoteWriteFile);
+
+	struct __attribute__((packed)) {
+		fio_header hdr;
+		uint64_t   off;
+	} req = {
+			.hdr = {
+					.cop = PIO_TRUNCATE,
+					.handle = self->handle,
+					.size = sizeof(uint64_t),
+			},
+			.off = sz,
+	};
+
+	ft_assert(self->handle >= 0, "Remote closed file abused \"%s\"", self->path.ptr);
+
+	IO_CHECK(fio_write_all(fio_stdout, &req, sizeof(req)), sizeof(req));
+
+    return $noerr();
 }
 
 static err_i

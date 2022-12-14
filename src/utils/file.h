@@ -79,6 +79,7 @@ typedef enum
 	PIO_OPEN_WRITE,
 	PIO_WRITE_ASYNC,
 	PIO_SEEK,
+	PIO_TRUNCATE,
 	PIO_GET_ASYNC_ERROR,
 	PIO_CLOSE,
 	PIO_DISPOSE,
@@ -257,7 +258,7 @@ fobj_method(pioSeek);
 #define iface__pioFile				mth(pioWrite, pioWriteFinish, pioRead, pioTruncate, pioClose, pioSeek)
 #define iface__pioWriteFlush		mth(pioWrite, pioWriteFinish)
 #define iface__pioWriteCloser		mth(pioWrite, pioWriteFinish, pioClose)
-#define iface__pioDBWriter			mth(pioWrite, pioSeek, pioWriteFinish, pioClose)
+#define iface__pioDBWriter			mth(pioWrite, pioSeek, pioWriteFinish, pioTruncate, pioClose)
 #define iface__pioReadCloser  		mth(pioRead, pioClose)
 fobj_iface(pioFile);
 fobj_iface(pioWriteFlush);
