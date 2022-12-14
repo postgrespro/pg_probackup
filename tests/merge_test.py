@@ -1132,6 +1132,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         gdb = self.merge_backup(backup_dir, "node", backup_id, gdb=True)
 
         gdb.set_breakpoint('fio_remove')
+        gdb.set_breakpoint('pioRemove__do')
 
         gdb.run_until_break()
 
@@ -1612,6 +1613,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         gdb.run_until_break()
 
         gdb.set_breakpoint('fio_remove')
+        gdb.set_breakpoint('pioRemove__do')
         gdb.continue_execution_until_break(20)
 
         gdb._execute('signal SIGKILL')
@@ -1695,6 +1697,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 #        gdb.continue_execution_until_break()
 
         gdb.set_breakpoint('fio_remove')
+        gdb.set_breakpoint('pioRemove__do')
         gdb.continue_execution_until_break(30)
         gdb._execute('signal SIGKILL')
 
@@ -1758,6 +1761,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         gdb.set_breakpoint('delete_backup_files')
         gdb.run_until_break()
         gdb.set_breakpoint('fio_remove')
+        gdb.set_breakpoint('pioRemove__do')
         gdb.run_until_break()
         gdb.continue_execution_until_break(2)
         gdb._execute('signal SIGKILL')
@@ -1835,6 +1839,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         gdb.run_until_break()
 
         gdb.set_breakpoint('fio_remove')
+        gdb.set_breakpoint('pioRemove__do')
         gdb.continue_execution_until_break(20)
 
         gdb._execute('signal SIGKILL')
