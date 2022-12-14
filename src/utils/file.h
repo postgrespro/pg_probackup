@@ -255,7 +255,7 @@ fobj_method(pioTruncate);
 fobj_method(pioWriteFinish);
 fobj_method(pioSeek);
 
-#define iface__pioFile				mth(pioWrite, pioWriteFinish, pioRead, pioTruncate, pioClose, pioSeek)
+#define iface__pioFile				mth(pioRead, pioClose, pioSeek)
 #define iface__pioWriteFlush		mth(pioWrite, pioWriteFinish)
 #define iface__pioWriteCloser		mth(pioWrite, pioWriteFinish, pioClose)
 #define iface__pioDBWriter			mth(pioWrite, pioSeek, pioWriteFinish, pioTruncate, pioClose)

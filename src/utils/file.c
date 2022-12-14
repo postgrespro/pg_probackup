@@ -3551,7 +3551,7 @@ typedef struct pioRemoteFile
     ft_bytes_t  chunkRest;
 } pioRemoteFile;
 #define kls__pioRemoteFile	iface__pioFile, iface(pioFile), \
-                            mth(pioSetAsync, pioAsyncRead, pioAsyncWrite, pioAsyncError)
+                            mth(pioSetAsync, pioAsyncRead)
 fobj_klass(pioRemoteFile);
 
 typedef struct pioRemoteWriteFile {
@@ -3684,6 +3684,8 @@ pioLocalDrive_pioOpen(VSelf, path_t path, int flags,
     int	fd;
     fobj_reset_err(err);
     fobj_t file;
+
+	ft_assert((flags & O_ACCMODE) == O_RDONLY);
 
     if (permissions == 0)
         fd = open(path, flags, FILE_PERMISSION);
@@ -4134,34 +4136,6 @@ pioLocalFile_pioRead(VSelf, ft_bytes_t buf, err_i *err)
     return r;
 }
 
-static size_t
-pioLocalFile_pioWrite(VSelf, ft_bytes_t buf, err_i *err)
-{
-    Self(pioLocalFile);
-    ssize_t r;
-    fobj_reset_err(err);
-
-    ft_assert(self->fd >= 0, "Closed file abused \"%s\"", self->p.path);
-
-    if (buf.len == 0)
-        return 0;
-
-    r = durable_write(self->fd, buf.ptr, buf.len);
-    if (r < 0)
-    {
-        *err = $syserr(errno, "Cannot write to file {path:q}",
-					   path(self->p.path));
-        return 0;
-    }
-    if (r < buf.len)
-    {
-        *err = $err(SysErr, "Short write on {path:q}: {writtenSz} < {wantedSz}",
-                    path(self->p.path), writtenSz(r), wantedSz(buf.len),
-					errNo(EIO));
-    }
-    return r;
-}
-
 static err_i
 pioLocalFile_pioSeek(VSelf, off_t offs)
 {
@@ -4175,27 +4149,6 @@ pioLocalFile_pioSeek(VSelf, off_t offs)
 		return $syserr(errno, "Can not seek to {offs} in file {path:q}", offs(offs), path(self->p.path));
 	ft_assert(pos == offs);
 	return $noerr();
-}
-
-static err_i
-pioLocalFile_pioWriteFinish(VSelf)
-{
-    Self(pioLocalFile);
-    ft_assert(self->fd >= 0, "Closed file abused \"%s\"", self->p.path);
-    /* do nothing for unbuffered file */
-    return $noerr();
-}
-
-static err_i
-pioLocalFile_pioTruncate(VSelf, size_t sz)
-{
-    Self(pioLocalFile);
-    ft_assert(self->fd >= 0, "Closed file abused \"%s\"", self->p.path);
-
-    if (ftruncate(self->fd, sz) < 0)
-        return $syserr(errno, "Cannot truncate file {path:q}",
-					   path(self->p.path));
-    return $noerr();
 }
 
 static fobjStr*
@@ -4361,6 +4314,8 @@ pioRemoteDrive_pioOpen(VSelf, path_t path,
     fio_header hdr;
     fobj_reset_err(err);
     fobj_t file;
+
+	ft_assert((flags & O_ACCMODE) == O_RDONLY);
 
 	handle = find_free_handle();
 
@@ -4740,28 +4695,6 @@ pioRemoteDrive_pioWriteFile(VSelf, path_t path, ft_bytes_t content, bool binary)
 /* REMOTE FILE */
 
 static err_i
-pioRemoteFile_pioSync(VSelf)
-{
-    Self(pioRemoteFile);
-
-    fio_header hdr;
-    hdr.cop = FIO_SYNC_FILE;
-    hdr.handle = self->handle;
-    hdr.arg = 0;
-    hdr.size = 0;
-
-    IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
-    IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
-
-    if (hdr.arg != 0)
-    {
-        return $syserr((int)hdr.arg, "Cannot fsync remote file {path:q}",
-					   path(self->p.path));
-    }
-    return $noerr();
-}
-
-static err_i
 pioRemoteFile_doClose(VSelf)
 {
 	Self(pioRemoteFile);
@@ -4800,9 +4733,6 @@ pioRemoteFile_pioClose(VSelf, bool sync)
 	err_i err = $noerr();
 
 	ft_assert(self->handle >= 0, "Remote closed file abused \"%s\"", self->p.path);
-
-	if (sync && (self->p.flags & O_ACCMODE) != O_RDONLY)
-		err = pioRemoteFile_pioSync(self);
 
 	return fobj_err_combine(err, pioRemoteFile_doClose(self));
 }
@@ -4965,45 +4895,6 @@ pioRemoteFile_pioRead(VSelf, ft_bytes_t buf, err_i *err)
     return hdr.size;
 }
 
-static size_t
-pioRemoteFile_pioWrite(VSelf, ft_bytes_t buf, err_i *err)
-{
-    Self(pioRemoteFile);
-    fio_header hdr;
-    fobj_reset_err(err);
-
-    ft_assert(self->handle >= 0, "Remote closed file abused \"%s\"", self->p.path);
-
-    if (buf.len == 0)
-        return 0;
-
-    if (self->asyncMode)
-        return pioAsyncWrite(self, buf, err);
-
-    hdr = (fio_header){
-            .cop = FIO_WRITE,
-            .handle = self->handle,
-            .size = buf.len,
-            .arg = 0,
-    };
-
-    IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
-    IO_CHECK(fio_write_all(fio_stdout, buf.ptr, buf.len), buf.len);
-
-    /* check results */
-    IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
-    ft_dbg_assert(hdr.cop == FIO_WRITE);
-
-    /* set errno */
-    if (hdr.arg != 0) {
-        *err = $syserr((int)hdr.arg, "Cannot write remote file {path:q}",
-					   path(self->p.path));
-        return 0;
-    }
-
-    return buf.len;
-}
-
 static err_i
 pioRemoteFile_pioSeek(VSelf, off_t offs)
 {
@@ -5023,37 +4914,6 @@ pioRemoteFile_pioSeek(VSelf, off_t offs)
 }
 
 static err_i
-pioRemoteFile_pioWriteFinish(VSelf)
-{
-    Self(pioRemoteFile);
-
-    ft_assert(self->handle >= 0, "Remote closed file abused \"%s\"", self->p.path);
-
-    if (self->asyncMode)
-        return pioAsyncError(self);
-    return $noerr();
-}
-
-static err_i
-pioRemoteFile_pioTruncate(VSelf, size_t sz)
-{
-    Self(pioRemoteFile);
-
-    ft_assert(self->handle >= 0, "Remote closed file abused \"%s\"", self->p.path);
-
-    fio_header hdr = {
-            .cop = FIO_TRUNCATE,
-            .handle = self->handle,
-            .size = 0,
-            .arg = sz,
-    };
-
-    IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
-
-    return $noerr();
-}
-
-static err_i
 pioRemoteFile_pioSetAsync(VSelf, bool async)
 {
     Self(pioRemoteFile);
@@ -5062,78 +4922,13 @@ pioRemoteFile_pioSetAsync(VSelf, bool async)
 
     if (!self->asyncMode && async)
     {
-        if ((self->p.flags & O_ACCMODE) == O_RDWR)
-            return $err(RT, "Could not enable async mode on Read-Write file");
         self->asyncMode = true;
     }
     else if (self->asyncMode && !async)
     {
-        err_i err = pioAsyncError(self);
         self->asyncMode = false;
-        return err;
     }
     return $noerr();
-}
-
-static size_t
-pioRemoteFile_pioAsyncWrite(VSelf, ft_bytes_t buf, err_i *err)
-{
-    Self(pioRemoteFile);
-    fio_header hdr;
-
-    ft_assert(self->handle >= 0, "Remote closed file abused \"%s\"", self->p.path);
-
-    if ($haserr(self->asyncError)) {
-        *err = self->asyncError;
-        return 0;
-    }
-
-    if (buf.len == 0)
-        return 0;
-
-    hdr = (fio_header){
-            .cop = FIO_WRITE_ASYNC,
-            .handle = self->handle,
-            .size = buf.len,
-            .arg = 0,
-    };
-
-    IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
-    IO_CHECK(fio_write_all(fio_stdout, buf.ptr, buf.len), buf.len);
-    self->didAsync = true;
-    return buf.len;
-}
-
-static err_i
-pioRemoteFile_pioAsyncError(VSelf)
-{
-    Self(pioRemoteFile);
-    char *errmsg;
-    fio_header hdr;
-
-    if ($haserr(self->asyncError) || !self->didAsync)
-    {
-        self->didAsync = false;
-        return self->asyncError;
-    }
-
-    hdr.cop = FIO_GET_ASYNC_ERROR;
-    hdr.size = 0;
-
-    IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
-
-    /* check results */
-    IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
-
-    if (hdr.size == 0)
-        return $noerr();
-
-    errmsg = pgut_malloc(ERRMSG_MAX_LEN);
-    IO_CHECK(fio_read_all(fio_stdin, errmsg, hdr.size), hdr.size);
-    self->asyncError = $err(SysErr, "{remotemsg}", remotemsg(errmsg));
-    self->didAsync = false;
-    free(errmsg);
-    return self->asyncError;
 }
 
 static void
