@@ -437,7 +437,7 @@ typedef struct {
     fobj__nm_invoke(meth)(self, fobj_self_klass, fobj_pass_params(meth, __VA_ARGS__))
 
 #define fobj_call_super(meth, _klassh, self, ...) \
-    fobj__nm_invoke(meth)(self, _klassh, true), fobj_pass_params(meth, __VA_ARGS__))
+    fobj__nm_invoke(meth)(self, _klassh, fobj_pass_params(meth, __VA_ARGS__))
 
 #define fobj_iface_call(meth, iface, ...) \
     fobj_call(meth, (fobj_t)(iface).fobj__nm_has(meth), __VA_ARGS__)
