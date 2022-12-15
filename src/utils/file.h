@@ -443,8 +443,6 @@ extern err_i    pioCopyWithFilters(pioWriteFlush_i dest, pioRead_i src,
         pioCopyWithFilters((dest), (src), _fltrs_, ft_arrsz(_fltrs_), NULL); \
 })
 
-extern size_t	pioReadFull(pioRead_i src, ft_bytes_t bytes, err_i* err);
-
 typedef struct pio_line_reader pio_line_reader;
 struct pio_line_reader {
 	pioRead_i   source;

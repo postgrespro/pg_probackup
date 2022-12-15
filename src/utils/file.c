@@ -5307,7 +5307,7 @@ pioReadFilter_pioRead(VSelf, ft_bytes_t wbuf, err_i *err)
 
     if ($notNULL(self->inplace) && !self->eof)
     {
-        r = pioReadFull(self->wrapped, wbuf, err);
+        r = $i(pioRead, self->wrapped, wbuf, err);
         if (r > 0)
         {
             err_i flterr;
@@ -5938,27 +5938,6 @@ pioCopyWithFilters(pioWriteFlush_i dest, pioRead_i src,
         err = $err(SysErr, "Cannot flush file {path}: {cause}",
                      path($irepr(dest)), cause(err.self));
     return $iresult(err);
-}
-
-size_t
-pioReadFull(pioRead_i src, ft_bytes_t bytes, err_i* err)
-{
-	ft_bytes_t	b;
-	size_t		r;
-	fobj_reset_err(err);
-
-	b = bytes;
-	while (b.len)
-	{
-		r = $i(pioRead, src, b, err);
-		Assert(r <= b.len);
-		ft_bytes_consume(&b, r);
-		if ($haserr(*err))
-			break;
-		if (r == 0)
-			break;
-	}
-	return bytes.len - b.len;
 }
 
 void
