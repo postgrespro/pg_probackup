@@ -233,7 +233,7 @@ class CfsRestoreNoencTest(CfsRestoreBase):
             )
 
         self.assertEqual(
-            self.node.table_checksum("t1"),
+            node_new.table_checksum("t1"),
             self.table_t1
         )
         node_new.cleanup()
@@ -277,7 +277,7 @@ class CfsRestoreNoencTest(CfsRestoreBase):
             )
 
         self.assertEqual(
-            self.node.table_checksum("t1"),
+            node_new.table_checksum("t1"),
             self.table_t1
         )
         node_new.cleanup()
