@@ -108,13 +108,9 @@ typedef struct XLogReaderData
 
 	bool		need_switch;
 
-	int			xlogfile;
+	pioDrive_i  drive;
+	pioReader_i	xlogfile;
 	char		xlogpath[MAXPGPATH];
-
-#ifdef HAVE_LIBZ
-	gzFile		 gz_xlogfile;
-	char		 gz_xlogpath[MAXPGPATH];
-#endif
 } XLogReaderData;
 
 /* Function to process a WAL record */
@@ -924,24 +920,6 @@ get_prior_record_lsn(const char *archivedir, XLogRecPtr start_lsn,
 	return res;
 }
 
-#ifdef HAVE_LIBZ
-/*
- * Show error during work with compressed file
- */
-static const char *
-get_gz_error(gzFile gzf)
-{
-	int			errnum;
-	const char *errmsg;
-
-	errmsg = fio_gzerror(gzf, &errnum);
-	if (errnum == Z_ERRNO)
-		return strerror(errno);
-	else
-		return errmsg;
-}
-#endif
-
 /* XLogreader callback function, to read a WAL page */
 static int
 SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
@@ -953,6 +931,9 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 {
 	XLogReaderData *reader_data;
 	uint32		targetPageOff;
+	FOBJ_FUNC_ARP();
+	err_i 		err;
+	size_t		rd;
 
 	reader_data = (XLogReaderData *) xlogreader->private_data;
 	targetPageOff = targetPagePtr % wal_seg_size;
@@ -1009,25 +990,26 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 	if (!reader_data->xlogexists)
 	{
 		char		xlogfname[MAXFNAMELEN];
+		char		gz_file[MAXPGPATH];
 		char		partial_file[MAXPGPATH];
 
 		GetXLogFileName(xlogfname, reader_data->tli, reader_data->xlogsegno, wal_seg_size);
 
 		join_path_components(reader_data->xlogpath, wal_archivedir, xlogfname);
-		snprintf(reader_data->gz_xlogpath, MAXPGPATH, "%s.gz", reader_data->xlogpath);
 
 		/* We fall back to using .partial segment in case if we are running
 		 * multi-timeline incremental backup right after standby promotion.
 		 * TODO: it should be explicitly enabled.
 		 */
 		snprintf(partial_file, MAXPGPATH, "%s.partial", reader_data->xlogpath);
+		snprintf(gz_file, MAXPGPATH, "%s.gz", reader_data->xlogpath);
 
 		/* If segment do not exists, but the same
 		 * segment with '.partial' suffix does, use it instead */
 		if (!fileExists(reader_data->xlogpath, FIO_LOCAL_HOST) &&
 			fileExists(partial_file, FIO_LOCAL_HOST))
 		{
-			snprintf(reader_data->xlogpath, MAXPGPATH, "%s", partial_file);
+			ft_strlcpy(reader_data->xlogpath, partial_file, MAXPGPATH);
 		}
 
 		if (fileExists(reader_data->xlogpath, FIO_LOCAL_HOST))
@@ -1036,34 +1018,35 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 				 reader_data->thread_num, reader_data->xlogpath);
 
 			reader_data->xlogexists = true;
-			reader_data->xlogfile = fio_open(FIO_LOCAL_HOST, reader_data->xlogpath,
-											 O_RDONLY | PG_BINARY);
-
-			if (reader_data->xlogfile < 0)
+			reader_data->xlogfile = $iref($i(pioOpenRead, reader_data->drive,
+									   .path = reader_data->xlogpath, .err = &err));
+			if ($haserr(err))
 			{
-				elog(WARNING, "Thread [%d]: Could not open WAL segment \"%s\": %s",
-					 reader_data->thread_num, reader_data->xlogpath,
-					 strerror(errno));
+				ft_logerr(FT_WARNING, $errmsg(err), "Thread [%d]: Open WAL segment");
 				return -1;
 			}
 		}
 #ifdef HAVE_LIBZ
 		/* Try to open compressed WAL segment */
-		else if (fileExists(reader_data->gz_xlogpath, FIO_LOCAL_HOST))
+		else if (fileExists(gz_file, FIO_LOCAL_HOST))
 		{
+			pioReader_i reader;
+			ft_strlcpy(reader_data->xlogpath, gz_file, MAXPGPATH);
+
 			elog(LOG, "Thread [%d]: Opening compressed WAL segment \"%s\"",
-				 reader_data->thread_num, reader_data->gz_xlogpath);
+				 reader_data->thread_num, reader_data->xlogpath);
 
 			reader_data->xlogexists = true;
-			reader_data->gz_xlogfile = fio_gzopen(FIO_LOCAL_HOST, reader_data->gz_xlogpath,
-													  "rb", -1);
-			if (reader_data->gz_xlogfile == NULL)
+			reader = $i(pioOpenRead, reader_data->drive,
+						.path = reader_data->xlogpath, .err = &err);
+			if ($haserr(err))
 			{
-				elog(WARNING, "Thread [%d]: Could not open compressed WAL segment \"%s\": %s",
-					 reader_data->thread_num, reader_data->gz_xlogpath,
-					 strerror(errno));
+				ft_logerr(FT_WARNING, $errmsg(err),
+						  "Thread [%d]: Open compressed WAL segment");
 				return -1;
 			}
+			reader = pioWrapForReSeek(reader, pioGZDecompressWrapper(false));
+			reader_data->xlogfile = $iref(reader);
 		}
 #endif
 		/* Exit without error if WAL segment doesn't exist */
@@ -1090,42 +1073,27 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 	}
 
 	/* Read the requested page */
-	if (reader_data->xlogfile != -1)
+	err = $i(pioSeek, reader_data->xlogfile, targetPageOff);
+	if ($haserr(err))
 	{
-		if (fio_seek(reader_data->xlogfile, (off_t) targetPageOff) < 0)
-		{
-			elog(WARNING, "Thread [%d]: Could not seek in WAL segment \"%s\": %s",
-				 reader_data->thread_num, reader_data->xlogpath, strerror(errno));
-			return -1;
-		}
-
-		if (fio_read(reader_data->xlogfile, readBuf, XLOG_BLCKSZ) != XLOG_BLCKSZ)
-		{
-			elog(WARNING, "Thread [%d]: Could not read from WAL segment \"%s\": %s",
-				 reader_data->thread_num, reader_data->xlogpath, strerror(errno));
-			return -1;
-		}
+		ft_logerr(FT_WARNING, $errmsg(err), "Thread [%d]: Seek in WAL segment",
+			 reader_data->thread_num);
+		return -1;
 	}
-#ifdef HAVE_LIBZ
-	else
+
+	rd = $i(pioRead, reader_data->xlogfile, ft_bytes(readBuf, XLOG_BLCKSZ),
+			.err = &err);
+	if ($noerr(err) && rd != XLOG_BLCKSZ)
 	{
-		if (fio_gzseek(reader_data->gz_xlogfile, (z_off_t) targetPageOff, SEEK_SET) == -1)
-		{
-			elog(WARNING, "Thread [%d]: Could not seek in compressed WAL segment \"%s\": %s",
-				reader_data->thread_num, reader_data->gz_xlogpath,
-				get_gz_error(reader_data->gz_xlogfile));
-			return -1;
-		}
-
-		if (fio_gzread(reader_data->gz_xlogfile, readBuf, XLOG_BLCKSZ) != XLOG_BLCKSZ)
-		{
-			elog(WARNING, "Thread [%d]: Could not read from compressed WAL segment \"%s\": %s",
-				reader_data->thread_num, reader_data->gz_xlogpath,
-				get_gz_error(reader_data->gz_xlogfile));
-			return -1;
-		}
+		err = $err(RT, "Short read from {path}: {size} < XLOG_BLCKSZ",
+				   path(reader_data->xlogpath), size(rd));
 	}
-#endif
+	if ($haserr(err))
+	{
+		ft_logerr(FT_WARNING, $errmsg(err), "Thread [%d]: Read from WAL segment",
+				  reader_data->thread_num);
+		return -1;
+	}
 
 	memcpy(reader_data->page_buf, readBuf, XLOG_BLCKSZ);
 	reader_data->prev_page_off = targetPageOff;
@@ -1152,7 +1120,8 @@ InitXLogPageRead(XLogReaderData *reader_data, const char *archivedir,
 
 	MemSet(reader_data, 0, sizeof(XLogReaderData));
 	reader_data->tli = tli;
-	reader_data->xlogfile = -1;
+	reader_data->drive = pioDriveForLocation(FIO_BACKUP_HOST);
+	$setNULL(&reader_data->xlogfile);
 
 	if (allocate_reader)
 	{
@@ -1715,18 +1684,11 @@ CleanupXLogPageRead(XLogReaderState *xlogreader)
 	XLogReaderData *reader_data;
 
 	reader_data = (XLogReaderData *) xlogreader->private_data;
-	if (reader_data->xlogfile >= 0)
+	if (!$isNULL(reader_data->xlogfile))
 	{
-		fio_close(reader_data->xlogfile);
-		reader_data->xlogfile = -1;
+		$i(pioClose, reader_data->xlogfile);
+		$idel(&reader_data->xlogfile);
 	}
-#ifdef HAVE_LIBZ
-	else if (reader_data->gz_xlogfile != NULL)
-	{
-		fio_gzclose(reader_data->gz_xlogfile);
-		reader_data->gz_xlogfile = NULL;
-	}
-#endif
 	reader_data->prev_page_off = 0;
 	reader_data->xlogexists = false;
 }
@@ -1743,16 +1705,10 @@ PrintXLogCorruptionMsg(XLogReaderData *reader_data, int elevel)
 		if (!reader_data->xlogexists)
 			elog(elevel, "Thread [%d]: WAL segment \"%s\" is absent",
 				 reader_data->thread_num, reader_data->xlogpath);
-		else if (reader_data->xlogfile != -1)
+		else
 			elog(elevel, "Thread [%d]: Possible WAL corruption. "
 						 "Error has occured during reading WAL segment \"%s\"",
 				 reader_data->thread_num, reader_data->xlogpath);
-#ifdef HAVE_LIBZ
-		else if (reader_data->gz_xlogfile != NULL)
-			elog(elevel, "Thread [%d]: Possible WAL corruption. "
-						 "Error has occured during reading WAL segment \"%s\"",
-				 reader_data->thread_num, reader_data->gz_xlogpath);
-#endif
 	}
 	else
 	{
