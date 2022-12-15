@@ -396,9 +396,20 @@ extern pioRead_i       pioWrapReadFilter(pioRead_i fl,
                                          pioFilter_i flt,
                                          size_t buf_size);
 
+#define mth__pioWrapRead pioRead_i, (pioRead_i, reader), (err_i*, err)
+fobj_method(pioWrapRead);
+
+/*
+ * Usefull for seek-able GZip reader - ie imitate gzseek.
+ * Has same limitations: will read from start if seek-ed back.
+ */
+extern pioReader_i     pioWrapForReSeek(pioReader_i fl,
+										pioWrapRead_i wr);
+
 #ifdef HAVE_LIBZ
 extern pioFilter_i	pioGZCompressFilter(int level);
 extern pioFilter_i	pioGZDecompressFilter(bool ignoreTruncate);
+extern pioWrapRead_i pioGZDecompressWrapper(bool ignoreTruncate);
 #endif
 
 typedef struct pioCRC32Counter pioCRC32Counter;

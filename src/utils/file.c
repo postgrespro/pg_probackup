@@ -3193,11 +3193,28 @@ typedef struct pioGZDecompress {
     bool        ignoreTruncate;
 } pioGZDecompress;
 
+typedef struct pioGZDecompressWrapperObj {
+	bool		ignoreTruncate;
+} pioGZDecompressWrapperObj;
+
 #define kls__pioGZCompress	iface__pioFilter, mth(fobjDispose), iface(pioFilter)
 fobj_klass(pioGZCompress);
 #define kls__pioGZDecompress	iface__pioFilter, mth(fobjDispose), iface(pioFilter)
 fobj_klass(pioGZDecompress);
+#define kls__pioGZDecompressWrapperObj mth(pioWrapRead)
+fobj_klass(pioGZDecompressWrapperObj);
 #endif
+
+typedef struct pioReSeekableReader {
+	pioReader_i           reader;
+	pioRead_i             wrapped;
+	pioWrapRead_i         wrapper;
+	int64_t               pos;
+	bool                  closed;
+	bool                  had_err;
+} pioReSeekableReader;
+#define kls__pioReSeekableReader iface__pioReader, mth(fobjDispose)
+fobj_klass(pioReSeekableReader);
 
 /* CRC32 counter */
 typedef struct pioDevNull
@@ -5379,7 +5396,130 @@ pioGZDecompress_fobjRepr(VSelf)
     Self(pioGZCompress);
     return $S("pioGZDecompress");
 }
+
+pioWrapRead_i
+pioGZDecompressWrapper(bool ignoreTruncate)
+{
+	return $bind(pioWrapRead, $alloc(pioGZDecompressWrapperObj,
+									 .ignoreTruncate = ignoreTruncate));
+}
+
+static pioRead_i
+pioGZDecompressWrapperObj_pioWrapRead(VSelf, pioRead_i rdr, err_i* err)
+{
+	Self(pioGZDecompressWrapperObj);
+	pioFilter_i flt;
+	fobj_reset_err(err);
+
+	flt = pioGZDecompressFilter(self->ignoreTruncate);
+	return pioWrapReadFilter(rdr, flt, CHUNK_SIZE);
+}
 #endif
+
+extern pioReader_i
+pioWrapForReSeek(pioReader_i fl, pioWrapRead_i wr)
+{
+	pioReSeekableReader* reseek;
+	err_i	err;
+
+	reseek = $alloc(pioReSeekableReader,
+					.reader = $iref(fl),
+					.wrapper = $iref(wr),
+					);
+	reseek->wrapped = $iref($i(pioWrapRead, wr,
+							   .reader=$reduce(pioRead, fl),
+							   .err=&err));
+	if ($haserr(err))
+		ft_logerr(FT_FATAL, $errmsg(err), "wrap failed");
+
+	return $bind(pioReader, reseek);
+}
+
+static size_t
+pioReSeekableReader_pioRead(VSelf, ft_bytes_t buf, err_i *err)
+{
+	Self(pioReSeekableReader);
+	size_t r;
+
+	ft_assert(!self->had_err, "use after error");
+	ft_assert(!self->closed, "use after close");
+
+	r = $i(pioRead, self->wrapped, buf, err);
+	self->pos += r;
+	if ($haserr(*err))
+		self->had_err = true;
+	return r;
+}
+
+static err_i
+pioReSeekableReader_pioSeek(VSelf, uint64_t pos)
+{
+	FOBJ_FUNC_ARP();
+	Self(pioReSeekableReader);
+	char buf[4096];
+	size_t need, r;
+	err_i err;
+
+	ft_assert(!self->had_err, "use after error");
+	ft_assert(!self->closed, "use after close");
+
+	if (pos < self->pos)
+	{
+		pioRead_i wrapped;
+		/* had to read from the beginning and reset filter */
+		self->had_err = true;
+		err = $i(pioSeek, self->reader, 0);
+		if ($haserr(err))
+			return $iresult(err);
+		self->pos = 0;
+
+		wrapped = $i(pioWrapRead, self->wrapper,
+					 .reader = $reduce(pioRead, self->reader),
+					 .err = &err);
+		if ($haserr(err))
+			return $iresult(err);
+		$iset(&self->wrapped, wrapped);
+		self->had_err = false;
+	}
+
+	while (pos > self->pos)
+	{
+		need = ft_min(pos - self->pos, sizeof(buf));
+		r = $(pioRead, self, ft_bytes(buf, need), .err = &err);
+		if ($haserr(err))
+		{
+			self->had_err = true;
+			return $iresult(err);
+		}
+		/* lseek/fseek seeks past the file end without error, so we do */
+		if (r < need)
+			break;
+	}
+
+	return $noerr();
+}
+
+static err_i
+pioReSeekableReader_pioClose(VSelf, bool sync)
+{
+	Self(pioReSeekableReader);
+	err_i err;
+
+	err = $i(pioClose, self->reader);
+	self->closed = true;
+	return err;
+}
+
+static void
+pioReSeekableReader_fobjDispose(VSelf)
+{
+	Self(pioReSeekableReader);
+	if (!self->closed)
+		$i(pioClose, self->reader);
+	$idel(&self->reader);
+	$idel(&self->wrapper);
+	$idel(&self->wrapped);
+}
 
 /* Transform filter method */
 /* Must count crc32 of new portion of data. No output needed */
@@ -6047,10 +6187,12 @@ fobj_klass_handle(pioWriteFilter, mth(fobjDispose, fobjRepr));
 fobj_klass_handle(pioReadFilter, mth(fobjDispose, fobjRepr));
 fobj_klass_handle(pioDevNull);
 fobj_klass_handle(pioCRC32Counter);
+fobj_klass_handle(pioReSeekableReader);
 
 #ifdef HAVE_LIBZ
 fobj_klass_handle(pioGZCompress, mth(fobjRepr));
 fobj_klass_handle(pioGZDecompress, mth(fobjRepr));
+fobj_klass_handle(pioGZDecompressWrapperObj);
 #endif
 
 void
