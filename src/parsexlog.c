@@ -992,6 +992,7 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 		char		xlogfname[MAXFNAMELEN];
 		char		gz_file[MAXPGPATH];
 		char		partial_file[MAXPGPATH];
+		err_i		err2 = $noerr();
 
 		GetXLogFileName(xlogfname, reader_data->tli, reader_data->xlogsegno, wal_seg_size);
 
@@ -1006,13 +1007,19 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 
 		/* If segment do not exists, but the same
 		 * segment with '.partial' suffix does, use it instead */
-		if (!fileExists(reader_data->xlogpath, FIO_LOCAL_HOST) &&
-			fileExists(partial_file, FIO_LOCAL_HOST))
+		if (!$i(pioExists, reader_data->drive, reader_data->xlogpath, .err=&err) &&
+		    $i(pioExists, reader_data->drive, partial_file, .err=&err2))
 		{
 			ft_strlcpy(reader_data->xlogpath, partial_file, MAXPGPATH);
 		}
+		else if ($haserr(err) || $haserr(err2))
+		{
+			ft_logerr(FT_WARNING, $errmsg(fobj_err_combine(err, err2)),
+								  "Thread [%d]: Looking for WAL segment");
+			return -1;
+		}
 
-		if (fileExists(reader_data->xlogpath, FIO_LOCAL_HOST))
+		if ($i(pioExists, reader_data->drive, reader_data->xlogpath, .err=&err))
 		{
 			elog(LOG, "Thread [%d]: Opening WAL segment \"%s\"",
 				 reader_data->thread_num, reader_data->xlogpath);
@@ -1020,15 +1027,11 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 			reader_data->xlogexists = true;
 			reader_data->xlogfile = $iref($i(pioOpenRead, reader_data->drive,
 									   .path = reader_data->xlogpath, .err = &err));
-			if ($haserr(err))
-			{
-				ft_logerr(FT_WARNING, $errmsg(err), "Thread [%d]: Open WAL segment");
-				return -1;
-			}
 		}
 #ifdef HAVE_LIBZ
 		/* Try to open compressed WAL segment */
-		else if (fileExists(gz_file, FIO_LOCAL_HOST))
+		else if ($noerr(err) &&
+				$i(pioExists, reader_data->drive, gz_file, .err=&err))
 		{
 			pioReader_i reader;
 			ft_strlcpy(reader_data->xlogpath, gz_file, MAXPGPATH);
@@ -1039,16 +1042,18 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 			reader_data->xlogexists = true;
 			reader = $i(pioOpenRead, reader_data->drive,
 						.path = reader_data->xlogpath, .err = &err);
-			if ($haserr(err))
+			if ($noerr(err))
 			{
-				ft_logerr(FT_WARNING, $errmsg(err),
-						  "Thread [%d]: Open compressed WAL segment");
-				return -1;
+				reader = pioWrapForReSeek(reader, pioGZDecompressWrapper(false));
+				reader_data->xlogfile = $iref(reader);
 			}
-			reader = pioWrapForReSeek(reader, pioGZDecompressWrapper(false));
-			reader_data->xlogfile = $iref(reader);
 		}
 #endif
+		if ($haserr(err))
+		{
+			ft_logerr(FT_WARNING, $errmsg(err), "Thread [%d]: Open WAL segment");
+			return -1;
+		}
 		/* Exit without error if WAL segment doesn't exist */
 		if (!reader_data->xlogexists)
 			return -1;
