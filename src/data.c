@@ -33,8 +33,29 @@ typedef struct DataPage
 	char            data[BLCKSZ];
 } DataPage;
 
-static bool get_page_header(FILE *in, const char *fullpath, BackupPageHeader *bph,
-							pg_crc32 *crc, uint32 backup_version);
+typedef struct backup_page_iterator {
+	/* arguments */
+	const char*        fullpath;
+	pioReader_i        in;
+	BackupPageHeader2 *headers;
+	int                n_headers;
+	uint32_t           backup_version;
+	CompressAlg        compress_alg;
+
+	/* iterator value */
+	int64_t            cur_pos;
+	int64_t            read_pos;
+	BlockNumber	       blknum;
+	XLogRecPtr         page_lsn;
+	uint16_t           page_crc;
+	uint32_t           n_hdr;
+	bool               truncated;
+	bool               is_compressed;
+	ft_bytes_t         whole_read;
+	ft_bytes_t         read_to;
+	ft_bytes_t         compressed;
+	DataPage           page;
+} backup_page_iterator;
 
 static err_i send_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
 					  XLogRecPtr prev_backup_start_lsn, CompressAlg calg, int clevel,
@@ -45,7 +66,7 @@ static err_i copy_pages(const char *to_fullpath, const char *from_fullpath, pgFi
 					  XLogRecPtr sync_lsn, uint32 checksum_version,
 					  BackupMode backup_mode);
 
-static size_t restore_data_file_internal(FILE *in, pioDBWriter_i out, pgFile *file, uint32 backup_version,
+static size_t restore_data_file_internal(pioReader_i in, pioDBWriter_i out, pgFile *file, uint32 backup_version,
 										 const char *from_fullpath, const char *to_fullpath, int nblocks,
 										 datapagemap_t *map, PageState *checksum_map, int checksum_version,
 										 datapagemap_t *lsn_map, BackupPageHeader2 *headers);
@@ -153,7 +174,7 @@ do_decompress(void *dst, size_t dst_size, void const *src, size_t src_size,
  * But at least we will do this check only for pages which will no pass validation step.
  */
 static bool
-page_may_be_compressed(Page page, CompressAlg alg, uint32 backup_version)
+page_may_be_compressed(Page page, CompressAlg alg)
 {
 	PageHeader	phdr;
 
@@ -169,12 +190,6 @@ page_may_be_compressed(Page page, CompressAlg alg, uint32 backup_version)
 		  phdr->pd_special <= BLCKSZ &&
 		  phdr->pd_special == MAXALIGN(phdr->pd_special)))
 	{
-		/* ... end only if it is invalid, then do more checks */
-		if (backup_version >= 20023)
-		{
-			/* Versions 2.0.23 and higher don't have such bug */
-			return false;
-		}
 #ifdef HAVE_LIBZ
 		/* For zlib we can check page magic:
 		 * https://stackoverflow.com/questions/9050260/what-does-a-zlib-header-look-like
@@ -584,6 +599,7 @@ restore_data_file(parray *parent_chain, pgFile *dest_file, pioDBWriter_i out,
 	char  *in_buf = pgut_malloc(STDIO_BUFSIZE);
 	int    backup_seq = 0;
 	err_i  err;
+	pioDrive_i backup_drive = pioDriveForLocation(FIO_BACKUP_HOST);
 
 	/*
 	 * FULL -> INCR -> DEST
@@ -602,9 +618,10 @@ restore_data_file(parray *parent_chain, pgFile *dest_file, pioDBWriter_i out,
 //	for (i = 0; i < parray_num(parent_chain); i++)
 	while (backup_seq >= 0 && backup_seq < parray_num(parent_chain))
 	{
+		FOBJ_LOOP_ARP();
 		char     from_root[MAXPGPATH];
 		char     from_fullpath[MAXPGPATH];
-		FILE    *in = NULL;
+		pioReader_i in;
 
 		pgFile **res_file = NULL;
 		pgFile  *tmp_file = NULL;
@@ -648,13 +665,9 @@ restore_data_file(parray *parent_chain, pgFile *dest_file, pioDBWriter_i out,
 		join_path_components(from_root, backup->root_dir, DATABASE_DIR);
 		join_path_components(from_fullpath, from_root, tmp_file->rel_path);
 
-		in = fopen(from_fullpath, PG_BINARY_R);
-		if (in == NULL)
-			elog(ERROR, "Cannot open backup file \"%s\": %s", from_fullpath,
-				 strerror(errno));
-
-		/* set stdio buffering for input data file */
-		setvbuf(in, in_buf, _IOFBF, STDIO_BUFSIZE);
+		in = $i(pioOpenRead, backup_drive, from_fullpath, .err = &err);
+		if ($haserr(err))
+			ft_logerr(FT_FATAL, $errmsg(err), "Open backup file");
 
 		/* get headers for this file */
 		if (use_headers && tmp_file->n_headers > 0)
@@ -680,9 +693,7 @@ restore_data_file(parray *parent_chain, pgFile *dest_file, pioDBWriter_i out,
 													  backup->stop_lsn <= shift_lsn ? lsn_map : NULL,
 													  headers);
 
-		if (fclose(in) != 0)
-			elog(ERROR, "Cannot close file \"%s\": %s", from_fullpath,
-				strerror(errno));
+		$i(pioClose, in);
 
 		pg_free(headers);
 
@@ -700,6 +711,146 @@ restore_data_file(parray *parent_chain, pgFile *dest_file, pioDBWriter_i out,
 	return total_write_len;
 }
 
+static bool
+backup_page_next(backup_page_iterator *it)
+{
+	size_t	read_len;
+	int32_t compressed_size;
+	err_i   err;
+
+
+	it->truncated = false;
+	/* newer backups have headers in separate storage */
+	if (it->headers)
+	{
+		BackupPageHeader2* hd;
+		uint32_t n_hdr = it->n_hdr;
+		if (n_hdr >= it->n_headers)
+			return false;
+		it->n_hdr++;
+
+		hd = &it->headers[n_hdr];
+		it->blknum = hd->block;
+		it->page_lsn = hd->lsn;
+		it->page_crc = hd->checksum;
+
+		ft_assert(hd->pos >= 0);
+		ft_assert((hd+1)->pos > hd->pos + sizeof(BackupPageHeader));
+		it->read_pos = hd->pos;
+
+		/* calculate payload size by comparing current and next page positions */
+		read_len = (hd+1)->pos - hd->pos;
+		it->read_to = ft_bytes(&it->page, read_len);
+		compressed_size = read_len - sizeof(BackupPageHeader);
+		ft_assert(compressed_size <= BLCKSZ);
+		it->whole_read = ft_bytes(&it->page, read_len);
+	}
+	else
+	{
+		/* We get into this branch either when restoring old backup
+		 * or when merging something. Align read_len only when restoring
+		 * or merging old backups.
+		 */
+		read_len = $i(pioRead, it->in, ft_bytes(&it->page.bph, sizeof(it->page.bph)),
+					  .err = &err);
+		if ($haserr(err))
+			ft_logerr(FT_FATAL, $errmsg(err), "Reading block header");
+		if (read_len == 0) /* end of file */
+			return false;
+		if (read_len != sizeof(it->page.bph))
+			ft_log(FT_FATAL, "Cannot read header at offset %lld of \"%s\"",
+				   (long long)it->cur_pos, it->fullpath);
+		if (it->page.bph.block == 0 && it->page.bph.compressed_size == 0)
+			ft_log(FT_FATAL, "Empty block in file \"%s\"", it->fullpath);
+
+		it->cur_pos += sizeof(BackupPageHeader);
+		it->read_pos = it->cur_pos;
+		it->blknum = it->page.bph.block;
+		compressed_size = it->page.bph.compressed_size;
+		if (compressed_size == PageIsTruncated)
+		{
+			it->truncated = true;
+			compressed_size = 0;
+		}
+		ft_assert(compressed_size >= 0 && compressed_size <= BLCKSZ);
+		it->page_lsn = 0;
+		it->page_crc = 0;
+
+		/* this has a potential to backfire when retrying merge of old backups,
+		 * so we just forbid the retrying of failed merges between versions >= 2.4.0 and
+		 * version < 2.4.0
+		 */
+		if (it->backup_version >= 20400)
+			read_len = compressed_size;
+		else
+			/* For some unknown and possibly dump reason I/O operations
+			 * in versions < 2.4.0 were always aligned to 8 bytes.
+			 * Now we have to deal with backward compatibility.
+			 */
+			read_len = MAXALIGN(compressed_size);
+		it->read_to = ft_bytes(&it->page.data, read_len);
+		it->whole_read = ft_bytes(&it->page,
+								  sizeof(BackupPageHeader) + read_len);
+	}
+
+	it->compressed = ft_bytes(&it->page.data, compressed_size);
+	return true;
+}
+
+static err_i
+backup_page_read(backup_page_iterator *it)
+{
+	err_i	err;
+	size_t  read_len;
+
+	if (it->read_pos != it->cur_pos)
+	{
+		err = $i(pioSeek, it->in, it->read_pos);
+		if ($haserr(err))
+			ft_logerr(FT_FATAL, $errmsg(err), "Cannot seek block %u",
+					  it->blknum);
+		it->cur_pos = it->read_pos;
+	}
+
+	read_len = $i(pioRead, it->in, it->read_to, &err);
+	if ($haserr(err))
+		return $err(RT, "Cannot read block {blknum} of file {path}: {cause}",
+					blknum(it->blknum), cause(err.self), path(it->fullpath));
+	if (read_len != it->read_to.len)
+		return $err(RT, "Short read of block {blknum} of file {path}",
+					blknum(it->blknum), path(it->fullpath));
+	it->cur_pos += read_len;
+
+	it->is_compressed = it->compressed.len != BLCKSZ;
+	/*
+	 * Compression skip magic part 2:
+	 * if page size is smaller than BLCKSZ, decompress the page.
+	 * BUGFIX for versions < 2.0.23: if page size is equal to BLCKSZ.
+	 * we have to check, whether it is compressed or not using
+	 * page_may_be_compressed() function.
+	 */
+	if (!it->is_compressed && it->backup_version < 20023 &&
+		page_may_be_compressed(it->compressed.ptr, it->compress_alg))
+	{
+		it->is_compressed = true;
+	}
+	return $noerr();
+}
+
+static err_i
+backup_page_skip(backup_page_iterator *it)
+{
+	if (it->headers != NULL)
+		return $noerr();
+
+	/* Backward compatibility kludge TODO: remove in 3.0
+	 * go to the next page.
+	 */
+	it->cur_pos += it->read_to.len;
+	it->read_pos = it->cur_pos;
+	return $i(pioSeek, it->in, it->cur_pos);
+}
+
 /* Restore block from "in" file to "out" file.
  * If "nblocks" is greater than zero, then skip restoring blocks,
  * whose position if greater than "nblocks".
@@ -710,17 +861,23 @@ restore_data_file(parray *parent_chain, pgFile *dest_file, pioDBWriter_i out,
  * marked as already restored, then page is skipped.
  */
 size_t
-restore_data_file_internal(FILE *in, pioDBWriter_i out, pgFile *file, uint32 backup_version,
+restore_data_file_internal(pioReader_i in, pioDBWriter_i out, pgFile *file, uint32 backup_version,
 						   const char *from_fullpath, const char *to_fullpath, int nblocks,
 						   datapagemap_t *map, PageState *checksum_map, int checksum_version,
 						   datapagemap_t *lsn_map, BackupPageHeader2 *headers)
 {
-	BlockNumber	blknum = 0;
-	int n_hdr = -1;
 	size_t write_len = 0;
 	off_t cur_pos_out = 0;
-	off_t cur_pos_in = 0;
 	err_i err = $noerr();
+
+	backup_page_iterator iter = {
+			.fullpath = from_fullpath,
+			.in = in,
+			.headers = headers,
+			.n_headers = file->n_headers,
+			.backup_version = backup_version,
+			.compress_alg = file->compress_alg,
+	};
 
 	/* should not be possible */
 	Assert(!(backup_version >= 20400 && file->n_headers <= 0));
@@ -739,72 +896,13 @@ restore_data_file_internal(FILE *in, pioDBWriter_i out, pgFile *file, uint32 bac
 	if ($haserr(err))
 		ft_logerr(FT_FATAL, $errmsg(err), "Cannot seek block %u");
 
-	for (;;)
+	while (backup_page_next(&iter))
 	{
 		off_t		write_pos;
-		size_t		len;
-		size_t		read_len;
-		DataPage	page;
-		int32		compressed_size = 0;
-		bool		is_compressed = false;
-
-		/* incremental restore vars */
-		uint16 page_crc = 0;
-		XLogRecPtr page_lsn = InvalidXLogRecPtr;
 
 		/* check for interrupt */
 		if (interrupted || thread_interrupted)
 			elog(ERROR, "Interrupted during data file restore");
-
-		/* newer backups have headers in separate storage */
-		if (headers)
-		{
-			n_hdr++;
-			if (n_hdr >= file->n_headers)
-				break;
-
-			blknum = headers[n_hdr].block;
-			page_lsn = headers[n_hdr].lsn;
-			page_crc = headers[n_hdr].checksum;
-			/* calculate payload size by comparing current and next page positions,
-			 * page header is not included */
-			compressed_size = headers[n_hdr+1].pos - headers[n_hdr].pos - sizeof(BackupPageHeader);
-
-			Assert(compressed_size > 0);
-			Assert(compressed_size <= BLCKSZ);
-
-			read_len = compressed_size + sizeof(BackupPageHeader);
-		}
-		else
-		{
-			/* We get into this function either when restoring old backup
-			 * or when merging something. Align read_len only when restoring
-			 * or merging old backups.
-			 */
-			if (get_page_header(in, from_fullpath, &(page).bph, NULL, backup_version))
-			{
-				cur_pos_in += sizeof(BackupPageHeader);
-
-				/* backward compatibility kludge TODO: remove in 3.0 */
-				blknum = page.bph.block;
-				compressed_size = page.bph.compressed_size;
-
-				/* this has a potential to backfire when retrying merge of old backups,
-				 * so we just forbid the retrying of failed merges between versions >= 2.4.0 and
-				 * version < 2.4.0
-				 */
-				if (backup_version >= 20400)
-					read_len = compressed_size;
-				else
-					/* For some unknown and possibly dump reason I/O operations
-					 * in versions < 2.4.0 were always aligned to 8 bytes.
-					 * Now we have to deal with backward compatibility.
-					 */
-					read_len = MAXALIGN(compressed_size);
-			}
-			else
-				break;
-		}
 
 		/*
 		 * Backward compatibility kludge: in the good old days
@@ -818,37 +916,31 @@ restore_data_file_internal(FILE *in, pioDBWriter_i out, pgFile *file, uint32 bac
 		 * is not happening in the first place.
 		 * TODO: remove in 3.0.0
 		 */
-		if (compressed_size == PageIsTruncated)
+		if (iter.truncated)
 		{
 			/*
 			 * Block header contains information that this block was truncated.
 			 * We need to truncate file to this length.
 			 */
 
-			elog(VERBOSE, "Truncate file \"%s\" to block %u", to_fullpath, blknum);
+			elog(VERBOSE, "Truncate file \"%s\" to block %u", to_fullpath, iter.blknum);
 
-			err = $i(pioTruncate, out, (uint64_t)blknum * BLCKSZ);
+			err = $i(pioTruncate, out, (uint64_t)iter.blknum * BLCKSZ);
 			if ($haserr(err))
 				ft_logerr(FT_FATAL, $errmsg(err), "");
 
 			break;
 		}
 
-		Assert(compressed_size > 0);
-		Assert(compressed_size <= BLCKSZ);
-
 		/* no point in writing redundant data */
-		if (nblocks > 0 && blknum >= nblocks)
+		if (nblocks > 0 && iter.blknum >= nblocks)
 			break;
 
-		if (compressed_size > BLCKSZ)
-			elog(ERROR, "Size of a blknum %i exceed BLCKSZ: %i", blknum, compressed_size);
-
 		/* Incremental restore in LSN mode */
-		if (map && lsn_map && datapagemap_is_set(lsn_map, blknum))
-			datapagemap_add(map, blknum);
+		if (map && lsn_map && datapagemap_is_set(lsn_map, iter.blknum))
+			datapagemap_add(map, iter.blknum);
 
-		if (map && checksum_map && checksum_map[blknum].checksum != 0)
+		if (map && checksum_map && checksum_map[iter.blknum].checksum != 0)
 		{
 			//elog(INFO, "HDR CRC: %u, MAP CRC: %u", page_crc, checksum_map[blknum].checksum);
 			/*
@@ -856,73 +948,37 @@ restore_data_file_internal(FILE *in, pioDBWriter_i out, pgFile *file, uint32 bac
 			 * If page in backup has the same checksum and lsn as
 			 * page in backup, then page can be skipped.
 			 */
-			if (page_crc == checksum_map[blknum].checksum &&
-				page_lsn == checksum_map[blknum].lsn)
+			if (iter.page_crc == checksum_map[iter.blknum].checksum &&
+				iter.page_lsn == checksum_map[iter.blknum].lsn)
 			{
-				datapagemap_add(map, blknum);
+				datapagemap_add(map, iter.blknum);
 			}
 		}
 
 		/* if this page is marked as already restored, then skip it */
-		if (map && datapagemap_is_set(map, blknum))
+		if (map && datapagemap_is_set(map, iter.blknum))
 		{
-			/* Backward compatibility kludge TODO: remove in 3.0
-			 * go to the next page.
-			 */
-			if (!headers && fseek(in, read_len, SEEK_CUR) != 0)
-				elog(ERROR, "Cannot seek block %u of \"%s\": %s",
-					blknum, from_fullpath, strerror(errno));
+			backup_page_skip(&iter);
 			continue;
 		}
 
-		if (headers &&
-			cur_pos_in != headers[n_hdr].pos)
-		{
-			if (fseek(in, headers[n_hdr].pos, SEEK_SET) != 0)
-				elog(ERROR, "Cannot seek to offset %u of \"%s\": %s",
-					headers[n_hdr].pos, from_fullpath, strerror(errno));
-
-			cur_pos_in = headers[n_hdr].pos;
-		}
-
-		/* read a page from file */
-		if (headers)
-			len = fread(&page, 1, read_len, in);
-		else
-			len = fread(page.data, 1, read_len, in);
-
-		if (len != read_len)
-			elog(ERROR, "Cannot read block %u file \"%s\": %s",
-						blknum, from_fullpath, strerror(errno));
-
-		cur_pos_in += read_len;
-
-		/*
-		 * Compression skip magic part 2:
-		 * if page size is smaller than BLCKSZ, decompress the page.
-		 * BUGFIX for versions < 2.0.23: if page size is equal to BLCKSZ.
-		 * we have to check, whether it is compressed or not using
-		 * page_may_be_compressed() function.
-		 */
-		if (compressed_size != BLCKSZ
-			|| page_may_be_compressed(page.data, file->compress_alg, backup_version))
-		{
-			is_compressed = true;
-		}
+		err = backup_page_read(&iter);
+		if ($haserr(err))
+			ft_logerr(FT_FATAL, $errmsg(err), "");
 
 		/*
 		 * Seek and write the restored page.
 		 * When restoring file from FULL backup, pages are written sequentially,
 		 * so there is no need to issue fseek for every page.
 		 */
-		write_pos = blknum * BLCKSZ;
+		write_pos = iter.blknum * BLCKSZ;
 
 		if (cur_pos_out != write_pos)
 		{
 			err = $i(pioSeek, out, write_pos);
 			if ($haserr(err))
 				ft_logerr(FT_FATAL, $errmsg(err), "Cannot seek block %u",
-						  blknum);
+						  iter.blknum);
 
 			cur_pos_out = write_pos;
 		}
@@ -931,21 +987,21 @@ restore_data_file_internal(FILE *in, pioDBWriter_i out, pgFile *file, uint32 bac
 		 * If page is compressed and restore is in remote mode,
 		 * send compressed page to the remote side.
 		 */
-		if (is_compressed)
-			err = $i(pioWriteCompressed, out, ft_bytes(page.data, compressed_size),
+		if (iter.is_compressed)
+			err = $i(pioWriteCompressed, out, iter.compressed,
 					 .compress_alg = file->compress_alg);
 		else
-			err = $i(pioWrite, out, ft_bytes(page.data, BLCKSZ));
+			err = $i(pioWrite, out, iter.compressed);
 		if ($haserr(err))
 			ft_logerr(FT_FATAL, $errmsg(err), "Cannot write block %u",
-					  blknum);
+					  iter.blknum);
 
 		write_len += BLCKSZ;
 		cur_pos_out += BLCKSZ; /* update current write position */
 
 		/* Mark page as restored to avoid reading this page when restoring parent backups */
 		if (map)
-			datapagemap_add(map, blknum);
+			datapagemap_add(map, iter.blknum);
 	}
 
 	elog(LOG, "Copied file \"%s\": %zu bytes", from_fullpath, write_len);
@@ -1368,27 +1424,34 @@ bool
 validate_file_pages(pgFile *file, const char *fullpath, XLogRecPtr stop_lsn,
 					uint32 checksum_version, uint32 backup_version, HeaderMap *hdr_map)
 {
-	size_t		read_len = 0;
+	FOBJ_FUNC_ARP();
 	bool		is_valid = true;
-	FILE		*in;
 	pg_crc32	crc;
 	BackupPageHeader2 *headers = NULL;
-	int         n_hdr = -1;
-	off_t       cur_pos_in = 0;
+	pioDrive_i  drive;
+	err_i 		err;
+
+	backup_page_iterator iter = {
+			.fullpath = fullpath,
+			.n_headers = file->n_headers,
+			.backup_version = backup_version,
+			.compress_alg = file->compress_alg,
+	};
 
 	elog(LOG, "Validate relation blocks for file \"%s\"", fullpath);
 
 	/* should not be possible */
 	Assert(!(backup_version >= 20400 && file->n_headers <= 0));
 
-	in = fopen(fullpath, PG_BINARY_R);
-	if (in == NULL)
-		elog(ERROR, "Cannot open file \"%s\": %s",
-			 fullpath, strerror(errno));
+	drive = pioDriveForLocation(FIO_BACKUP_HOST);
 
-	headers = get_data_file_headers(hdr_map, file, backup_version, false);
+	iter.in = $i(pioOpenRead, drive, fullpath, .err = &err);
+	if ($haserr(err))
+		ft_logerr(FT_FATAL, $errmsg(err), "");
 
-	if (!headers && file->n_headers > 0)
+	iter.headers = get_data_file_headers(hdr_map, file, backup_version, false);
+
+	if (!iter.headers && file->n_headers > 0)
 	{
 		elog(WARNING, "Cannot get page headers for file \"%s\"", fullpath);
 		return false;
@@ -1398,155 +1461,93 @@ validate_file_pages(pgFile *file, const char *fullpath, XLogRecPtr stop_lsn,
 	INIT_CRC32_COMPAT(backup_version, crc);
 
 	/* read and validate pages one by one */
-	while (true)
+	while (backup_page_next(&iter))
 	{
 		int		rc = 0;
-		size_t		len = 0;
-		DataPage	compressed_page; /* used as read buffer */
-		int			compressed_size = 0;
 		DataPage	page;
-		BlockNumber blknum = 0;
+		ft_bytes_t  uncompressed;
 		PageState	page_st;
 
 		if (interrupted || thread_interrupted)
 			elog(ERROR, "Interrupted during data file validation");
 
-		/* newer backups (post 2.4.0) have page headers in separate storage */
-		if (headers)
-		{
-			n_hdr++;
-			if (n_hdr >= file->n_headers)
-				break;
-
-			blknum = headers[n_hdr].block;
-			/* calculate payload size by comparing current and next page positions,
-			 * page header is not included.
-			 */
-			compressed_size = headers[n_hdr+1].pos - headers[n_hdr].pos - sizeof(BackupPageHeader);
-
-			Assert(compressed_size > 0);
-			Assert(compressed_size <= BLCKSZ);
-
-			read_len = sizeof(BackupPageHeader) + compressed_size;
-
-			if (cur_pos_in != headers[n_hdr].pos)
-			{
-				if (fio_fseek(in, headers[n_hdr].pos) < 0)
-					elog(ERROR, "Cannot seek block %u of \"%s\": %s",
-						blknum, fullpath, strerror(errno));
-				else
-					elog(VERBOSE, "Seek to %u", headers[n_hdr].pos);
-
-				cur_pos_in = headers[n_hdr].pos;
-			}
-		}
-		/* old backups (pre 2.4.0) rely on header located directly in data file */
-		else
-		{
-			if (get_page_header(in, fullpath, &(compressed_page).bph, &crc, backup_version))
-			{
-				/* Backward compatibility kludge, TODO: remove in 3.0
-				 * for some reason we padded compressed pages in old versions
-				 */
-				blknum = compressed_page.bph.block;
-				compressed_size = compressed_page.bph.compressed_size;
-				read_len = MAXALIGN(compressed_size);
-			}
-			else
-				break;
-		}
-
 		/* backward compatibility kludge TODO: remove in 3.0 */
-		if (compressed_size == PageIsTruncated)
+		if (iter.truncated)
 		{
 			elog(VERBOSE, "Block %u of \"%s\" is truncated",
-				 blknum, fullpath);
+				 iter.blknum, fullpath);
 			continue;
 		}
 
-		Assert(compressed_size <= BLCKSZ);
-		Assert(compressed_size > 0);
+		ft_assert(iter.read_pos == iter.cur_pos);
 
-		if (headers)
-			len = fread(&compressed_page, 1, read_len, in);
-		else
-			len = fread(compressed_page.data, 1, read_len, in);
-
-		if (len != read_len)
+		err = backup_page_read(&iter);
+		if ($haserr(err))
 		{
-			elog(WARNING, "Cannot read block %u file \"%s\": %s",
-				blknum, fullpath, strerror(errno));
+			ft_logerr(FT_WARNING, $errmsg(err), "");
 			return false;
 		}
 
-		/* update current position */
-		cur_pos_in += read_len;
+		COMP_CRC32_COMPAT(backup_version, crc, iter.whole_read.ptr, iter.whole_read.len);
 
-		if (headers)
-			COMP_CRC32_COMPAT(backup_version, crc, &compressed_page, read_len);
-		else
-			COMP_CRC32_COMPAT(backup_version, crc, compressed_page.data, read_len);
-
-		if (compressed_size != BLCKSZ
-			|| page_may_be_compressed(compressed_page.data, file->compress_alg,
-									  backup_version))
+		if (iter.is_compressed)
 		{
 			int32       uncompressed_size = 0;
 			const char *errormsg = NULL;
 
 			uncompressed_size = do_decompress(page.data, BLCKSZ,
-											  compressed_page.data,
-											  compressed_size,
+											  iter.compressed.ptr,
+											  iter.compressed.len,
 											  file->compress_alg,
 											  &errormsg);
 			if (uncompressed_size < 0 && errormsg != NULL)
 			{
 				elog(WARNING, "An error occured during decompressing block %u of file \"%s\": %s",
-					 blknum, fullpath, errormsg);
+					 iter.blknum, fullpath, errormsg);
 				return false;
 			}
 
 			if (uncompressed_size != BLCKSZ)
 			{
-				if (compressed_size == BLCKSZ)
+				elog(WARNING, "Page %u of file \"%s\" uncompressed to %d bytes. != BLCKSZ",
+					 iter.blknum, fullpath, uncompressed_size);
+				if (iter.compressed.len == BLCKSZ)
 				{
 					is_valid = false;
 					continue;
 				}
-				elog(WARNING, "Page %u of file \"%s\" uncompressed to %d bytes. != BLCKSZ",
-						blknum, fullpath, uncompressed_size);
 				return false;
 			}
 
-			rc = validate_one_page(page.data,
-								   file->segno * RELSEG_SIZE + blknum,
-								   stop_lsn, &page_st, checksum_version);
+			uncompressed = ft_bytes(page.data, BLCKSZ);
 		}
 		else
-			rc = validate_one_page(compressed_page.data,
-								   file->segno * RELSEG_SIZE + blknum,
-								   stop_lsn, &page_st, checksum_version);
+			uncompressed = iter.compressed;
+
+		rc = validate_one_page(uncompressed.ptr,
+							   file->segno * RELSEG_SIZE + iter.blknum,
+							   stop_lsn, &page_st, checksum_version);
 
 		switch (rc)
 		{
 			case PAGE_IS_NOT_FOUND:
-				elog(VERBOSE, "File \"%s\", block %u, page is NULL", file->rel_path, blknum);
+				elog(VERBOSE, "File \"%s\", block %u, page is NULL", file->rel_path, iter.blknum);
 				break;
 			case PAGE_IS_ZEROED:
-				elog(VERBOSE, "File: %s blknum %u, empty zeroed page", file->rel_path, blknum);
+				elog(VERBOSE, "File: %s blknum %u, empty zeroed page", file->rel_path, iter.blknum);
 				break;
 			case PAGE_HEADER_IS_INVALID:
-				elog(WARNING, "Page header is looking insane: %s, block %i", file->rel_path, blknum);
+				elog(WARNING, "Page header is looking insane: %s, block %i", file->rel_path, iter.blknum);
 				is_valid = false;
 				break;
 			case PAGE_CHECKSUM_MISMATCH:
-				elog(WARNING, "File: %s blknum %u have wrong checksum: %u", file->rel_path, blknum, page_st.checksum);
+				elog(WARNING, "File: %s blknum %u have wrong checksum: %u", file->rel_path, iter.blknum, page_st.checksum);
 				is_valid = false;
 				break;
 			case PAGE_LSN_FROM_FUTURE:
 				elog(WARNING, "File: %s, block %u, checksum is %s. "
 								"Page is from future: pageLSN %X/%X stopLSN %X/%X",
-							file->rel_path, blknum,
+							file->rel_path, iter.blknum,
 							checksum_version ? "correct" : "not enabled",
 							(uint32) (page_st.lsn >> 32), (uint32) page_st.lsn,
 							(uint32) (stop_lsn >> 32), (uint32) stop_lsn);
@@ -1555,7 +1556,7 @@ validate_file_pages(pgFile *file, const char *fullpath, XLogRecPtr stop_lsn,
 	}
 
 	FIN_CRC32_COMPAT(backup_version, crc);
-	fclose(in);
+	$i(pioClose, iter.in);
 
 	if (crc != file->crc)
 	{
@@ -1705,45 +1706,6 @@ get_lsn_map(const char *fullpath, uint32 checksum_version,
 	}
 
 	return lsn_map;
-}
-
-/* Every page in data file contains BackupPageHeader, extract it */
-bool
-get_page_header(FILE *in, const char *fullpath, BackupPageHeader* bph,
-				pg_crc32 *crc, uint32 backup_version)
-{
-	/* read BackupPageHeader */
-	size_t read_len = fread(bph, 1, sizeof(BackupPageHeader), in);
-
-	if (ferror(in))
-		elog(ERROR, "Cannot read file \"%s\": %s",
-				fullpath, strerror(errno));
-
-	if (read_len != sizeof(BackupPageHeader))
-	{
-		if (read_len == 0 && feof(in))
-			return false;		/* EOF found */
-		else if (read_len != 0 && feof(in))
-			elog(ERROR,
-				 "Odd size page found at offset %lld of \"%s\"",
-				 (long long)ftello(in), fullpath);
-		else
-			elog(ERROR, "Cannot read header at offset %lld of \"%s\": %s",
-				 (long long)ftello(in), fullpath, strerror(errno));
-	}
-
-	/* In older versions < 2.4.0, when crc for file was calculated, header was
-	 * not included in crc calculations. Now it is. And now we have
-	 * the problem of backward compatibility for backups of old versions
-	 */
-	if (crc)
-		COMP_CRC32_COMPAT(backup_version, *crc, bph, read_len);
-
-	if (bph->block == 0 && bph->compressed_size == 0)
-		elog(ERROR, "Empty block in file \"%s\"", fullpath);
-
-	Assert(bph->compressed_size != 0);
-	return true;
 }
 
 /* Open local backup file for writing, set permissions and buffering */
