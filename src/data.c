@@ -70,8 +70,6 @@ static size_t restore_data_file_internal(pioReader_i in, pioDBWriter_i out, pgFi
 										 const char *from_fullpath, const char *to_fullpath, int nblocks,
 										 datapagemap_t *map, PageState *checksum_map, int checksum_version,
 										 datapagemap_t *lsn_map, BackupPageHeader2 *headers);
-static void restore_non_data_file_internal(FILE *in, pioDBWriter_i out, pgFile *file,
-										   const char *from_fullpath, const char *to_fullpath);
 
 #ifdef HAVE_LIBZ
 /* Implementation of zlib compression method */
@@ -1008,50 +1006,6 @@ restore_data_file_internal(pioReader_i in, pioDBWriter_i out, pgFile *file, uint
 	return write_len;
 }
 
-/*
- * Copy file to backup.
- * We do not apply compression to these files, because
- * it is either small control file or already compressed cfs file.
- */
-void
-restore_non_data_file_internal(FILE *in, pioDBWriter_i out, pgFile *file,
-							   const char *from_fullpath, const char *to_fullpath)
-{
-	err_i  err;
-	size_t read_len = 0;
-	char  *buf = pgut_malloc(STDIO_BUFSIZE); /* 64kB buffer */
-
-	/* copy content */
-	for (;;)
-	{
-		read_len = 0;
-
-		/* check for interrupt */
-		if (interrupted || thread_interrupted)
-			elog(ERROR, "Interrupted during non-data file restore");
-
-		read_len = fread(buf, 1, STDIO_BUFSIZE, in);
-
-		if (ferror(in))
-			elog(ERROR, "Cannot read backup file \"%s\": %s",
-				from_fullpath, strerror(errno));
-
-		if (read_len > 0)
-		{
-			err = $i(pioWrite, out, ft_bytes(buf, read_len));
-			if ($haserr(err))
-				ft_logerr(FT_FATAL, $errmsg(err), "");
-		}
-
-		if (feof(in))
-			break;
-	}
-
-	pg_free(buf);
-
-	elog(LOG, "Copied file \"%s\": %llu bytes", from_fullpath, (long long)file->write_size);
-}
-
 size_t
 restore_non_data_file(parray *parent_chain, pgBackup *dest_backup,
 					  pgFile *dest_file, pioDBWriter_i out, const char *to_fullpath,
@@ -1059,7 +1013,7 @@ restore_non_data_file(parray *parent_chain, pgBackup *dest_backup,
 {
 	char		from_root[MAXPGPATH];
 	char		from_fullpath[MAXPGPATH];
-	FILE		*in = NULL;
+	pioReadStream_i in;
 	err_i		err;
 
 	pgFile		*tmp_file = NULL;
@@ -1171,20 +1125,18 @@ restore_non_data_file(parray *parent_chain, pgBackup *dest_backup,
 
 	join_path_components(from_fullpath, from_root, dest_file->rel_path);
 
-	in = fopen(from_fullpath, PG_BINARY_R);
-	if (in == NULL)
-		elog(ERROR, "Cannot open backup file \"%s\": %s", from_fullpath,
-			 strerror(errno));
+	in = $i(pioOpenReadStream, dest_backup->backup_location, from_fullpath,
+			.err = &err);
+	if ($haserr(err))
+		ft_logerr(FT_FATAL, $errmsg(err), "Open backup file");
 
-	/* disable stdio buffering for non-data files */
-	setvbuf(in, NULL, _IONBF, BUFSIZ);
+	err = pioCopy($reduce(pioWriteFlush, out), $reduce(pioRead, in));
+	if ($haserr(err))
+		ft_logerr(FT_FATAL, $errmsg(err), "Copying backup file");
 
-	/* do actual work */
-	restore_non_data_file_internal(in, out, tmp_file, from_fullpath, to_fullpath);
-
-	if (fclose(in) != 0)
-		elog(ERROR, "Cannot close file \"%s\": %s", from_fullpath,
-			strerror(errno));
+	$i(pioClose, in);
+	elog(LOG, "Copied file \"%s\": %llu bytes", from_fullpath,
+		 (long long)dest_file->write_size);
 
 	return tmp_file->write_size;
 }
