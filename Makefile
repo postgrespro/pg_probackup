@@ -81,7 +81,7 @@ PG_CPPFLAGS += -Isrc
 endif
 override CPPFLAGS := -DFRONTEND $(CPPFLAGS) $(PG_CPPFLAGS)
 PG_LIBS_INTERNAL = $(libpq_pgport) ${PTHREAD_CFLAGS}
-CFLAGS += -fexception
+CFLAGS += -fexceptions
 
 # additional dependencies on borrowed files
 src/backup.o src/catchup.o src/pg_probackup.o: src/compatibility/streamutil.h
