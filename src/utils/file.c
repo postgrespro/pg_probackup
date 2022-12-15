@@ -4946,6 +4946,9 @@ pioReadFilter_pioRead(VSelf, ft_bytes_t wbuf, err_i *err)
             memmove(self->buffer, rbuf.ptr, rbuf.len);
         self->len = rbuf.len;
 
+		if (wbuf.len == 0)
+			break;
+
         /* feed buffer */
         rbuf = ft_bytes(self->buffer, self->capa);
         ft_bytes_consume(&rbuf, self->len);
