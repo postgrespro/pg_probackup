@@ -2579,7 +2579,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
                 logfile_content = f.read()
 
         self.assertIn(
-            'ERROR: Cannot open backup file "{0}": No such file or directory'.format(file_to_remove),
+            'ERROR: Open backup file: Cannot open file "{0}": No such file or directory'.format(file_to_remove),
             logfile_content)
 
     # @unittest.skip("skip")
