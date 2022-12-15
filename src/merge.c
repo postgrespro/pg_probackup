@@ -1178,7 +1178,6 @@ merge_data_file(parray *parent_chain, pgBackup *full_backup,
 				const char *full_database_dir, bool use_bitmap, bool is_retry,
 				bool no_sync)
 {
-	char   *buffer = pgut_malloc(STDIO_BUFSIZE);
 	char    to_fullpath[MAXPGPATH];
 	char    to_fullpath_tmp1[MAXPGPATH]; /* used for restore */
 	char    to_fullpath_tmp2[MAXPGPATH]; /* used for backup */
@@ -1210,8 +1209,6 @@ merge_data_file(parray *parent_chain, pgBackup *full_backup,
 	err = $i(pioClose, out, .sync = false);
 	if ($haserr(err))
 		ft_logerr(FT_FATAL, $errmsg(err), "Closing target file");
-
-	pg_free(buffer);
 
 	/* tmp_file->size is greedy, even if there is single 8KB block in file,
 	 * that was overwritten twice during restore_data_file, we would assume that its size is
