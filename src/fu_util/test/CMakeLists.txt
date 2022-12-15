@@ -23,6 +23,9 @@ target_link_libraries(sort_p fu_utils)
 add_executable(obj1 obj1.c)
 target_link_libraries(obj1 fu_utils)
 
+add_executable(thread thread.c)
+target_link_libraries(thread fu_utils)
+
 enable_testing()
 
 add_test(NAME fm COMMAND fm)
@@ -33,3 +36,4 @@ add_test(NAME fuprintf COMMAND fuprintf)
 add_test(NAME sort COMMAND sort)
 add_test(NAME sort_p COMMAND sort_p)
 add_test(NAME obj1 COMMAND obj1)
+add_test(NAME thread COMMAND thread)
