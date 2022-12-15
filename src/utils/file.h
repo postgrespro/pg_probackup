@@ -32,40 +32,28 @@ typedef enum
 	FIO_SYMLINK,
 	FIO_REMOVE,
 	FIO_MKDIR,
-	FIO_CHMOD,
 	FIO_SEEK,
-	FIO_TRUNCATE,
-	FIO_PREAD,
 	FIO_READ,
-	FIO_LOAD,
 	FIO_STAT,
 	FIO_SEND,
-	FIO_ACCESS,
 	FIO_OPENDIR,
 	FIO_READDIR,
 	FIO_CLOSEDIR,
 	FIO_PAGE,
-	FIO_WRITE_COMPRESSED_ASYNC,
 	FIO_GET_CRC32,
 	/* used for incremental restore */
 	FIO_GET_CHECKSUM_MAP,
 	FIO_GET_LSN_MAP,
 	FIO_ERROR,
 	FIO_SEND_FILE,
-//	FIO_CHUNK,
 	FIO_SEND_FILE_EOF,
-	FIO_SEND_FILE_CORRUPTION,
-	FIO_SEND_FILE_HEADERS,
 	/* messages for closing connection */
 	FIO_DISCONNECT,
 	FIO_DISCONNECTED,
 	FIO_LIST_DIR,
     FIO_REMOVE_DIR,
 	FIO_CHECK_POSTMASTER,
-	FIO_GET_ASYNC_ERROR,
-	FIO_WRITE_ASYNC,
 	FIO_READLINK,
-	FIO_SYNC_FILE,
 	FIO_SEND_FILE_CONTENT,
 	FIO_PAGE_ZERO,
 	FIO_FILES_ARE_SAME,
@@ -152,21 +140,9 @@ extern void    fio_get_agent_version(int* protocol, char* payload_buf, size_t pa
 
 /* fd-style functions */
 extern int     fio_open(fio_location location, const char* name, int mode);
-extern ssize_t fio_write_async(int fd, void const* buf, size_t size);
 extern ssize_t fio_read(int fd, void* buf, size_t size);
 extern int     fio_seek(int fd, off_t offs);
-extern int     fio_truncate(int fd, off_t size);
 extern int     fio_close(int fd);
-
-/* FILE-style functions */
-extern FILE*   fio_fopen(fio_location location, const char* name, const char* mode);
-extern ssize_t fio_fwrite_async_compressed(FILE* f, void const* buf, size_t size, int compress_alg);
-extern size_t  fio_fwrite_async(FILE* f, void const* buf, size_t size);
-extern int     fio_check_error_file(FILE* f, char **errmsg);
-extern int     fio_fflush(FILE* f);
-extern int     fio_fseek(FILE* f, off_t offs);
-extern int     fio_ftruncate(FILE* f, off_t size);
-extern int     fio_fclose(FILE* f);
 
 /* gzFile-style functions */
 #ifdef HAVE_LIBZ
@@ -191,10 +167,8 @@ extern pg_crc32
 fio_get_crc32_truncated(fio_location location, const char *file_path,
 			  bool missing_ok);
 
-extern int     fio_rename(fio_location location, const char* old_path, const char* new_path);
 extern int     fio_symlink(fio_location location, const char* target, const char* link_path, bool overwrite);
 extern int     fio_remove(fio_location location, const char* path, bool missing_ok);
-extern int     fio_chmod(fio_location location, const char* path, int mode);
 extern ssize_t fio_readlink(fio_location location, const char *path, char *value, size_t valsiz);
 extern pid_t   fio_check_postmaster(fio_location location, const char *pgdata);
 

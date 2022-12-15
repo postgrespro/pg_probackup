@@ -324,8 +324,10 @@ push_file(WALSegno *xlogfile, const char *archive_status_dir,
 		  bool no_ready_rename, bool is_compress,
 		  int compress_level)
 {
+	FOBJ_FUNC_ARP();
 	bool  skipped = false;
 	err_i err;
+	pioDBDrive_i drive = pioDBDriveForLocation(FIO_DB_HOST);
 
 	elog(LOG, "pushing file \"%s\"", xlogfile->name);
 
@@ -355,9 +357,9 @@ push_file(WALSegno *xlogfile, const char *archive_status_dir,
 		elog(LOG, "Rename \"%s\" to \"%s\"", wal_file_ready, wal_file_done);
 
 		/* do not error out, if rename failed */
-		if (fio_rename(FIO_DB_HOST, wal_file_ready, wal_file_done) < 0)
-			elog(WARNING, "Cannot rename ready file \"%s\" to \"%s\": %s",
-				wal_file_ready, wal_file_done, strerror(errno));
+		err = $i(pioRename, drive, wal_file_ready, wal_file_done);
+		if ($haserr(err))
+			ft_logerr(FT_WARNING, $errmsg(err), "Renaming ready file");
 	}
 
 	return skipped;

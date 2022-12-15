@@ -587,71 +587,6 @@ fio_disconnect(void)
 	}
 }
 
-/* Open stdio file */
-FILE*
-fio_fopen(fio_location location, const char* path, const char* mode)
-{
-	FILE	   *f = NULL;
-
-	if (fio_is_remote(location))
-	{
-		int flags = 0;
-		int fd;
-		if (strcmp(mode, PG_BINARY_W) == 0) {
-			flags = O_TRUNC|PG_BINARY|O_RDWR|O_CREAT;
-		} else if (strcmp(mode, "w") == 0) {
-			flags = O_TRUNC|O_RDWR|O_CREAT;
-		} else if (strcmp(mode, PG_BINARY_R) == 0) {
-			flags = O_RDONLY|PG_BINARY;
-		} else if (strcmp(mode, "r") == 0) {
-			flags = O_RDONLY;
-		} else if (strcmp(mode, PG_BINARY_R "+") == 0) {
-			/* stdio fopen("rb+") actually doesn't create unexisted file, but probackup frequently
-			 * needs to open existed file or create new one if not exists.
-			 * In stdio it can be done using two fopen calls: fopen("r+") and if failed then fopen("w").
-			 * But to eliminate extra call which especially critical in case of remote connection
-			 * we change r+ semantic to create file if not exists.
-			 */
-			flags = O_RDWR|O_CREAT|PG_BINARY;
-		} else if (strcmp(mode, "r+") == 0) { /* see comment above */
-			flags |= O_RDWR|O_CREAT;
-		} else if (strcmp(mode, "a") == 0) {
-			flags |= O_CREAT|O_RDWR|O_APPEND;
-		} else {
-			Assert(false);
-		}
-		fd = fio_open(location, path, flags);
-		if (fd >= 0)
-			f = (FILE*)(size_t)((fd + 1) & ~FIO_PIPE_MARKER);
-	}
-	else
-	{
-		f = fopen(path, mode);
-		if (f == NULL && strcmp(mode, PG_BINARY_R "+") == 0)
-			f = fopen(path, PG_BINARY_W);
-	}
-	return f;
-}
-
-/* Flush stream data (does nothing for remote file) */
-int
-fio_fflush(FILE* f)
-{
-	int rc = 0;
-	if (!fio_is_remote_file(f))
-		rc = fflush(f);
-	return rc;
-}
-
-/* Close output stream */
-int
-fio_fclose(FILE* f)
-{
-	return fio_is_remote_file(f)
-		? fio_close(fio_fileno(f))
-		: fclose(f);
-}
-
 /* Close file */
 int
 fio_close(int fd)
@@ -702,49 +637,6 @@ fio_close_impl(int fd, int out)
 
 	/* send header */
 	IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
-}
-
-/* Truncate stdio file */
-int
-fio_ftruncate(FILE* f, off_t size)
-{
-	return fio_is_remote_file(f)
-		? fio_truncate(fio_fileno(f), size)
-		: ftruncate(fileno(f), size);
-}
-
-/* Truncate file
- * TODO: make it synchronous
- */
-int
-fio_truncate(int fd, off_t size)
-{
-	if (fio_is_remote_fd(fd))
-	{
-		fio_header hdr = {
-			.cop = FIO_TRUNCATE,
-			.handle = fd & ~FIO_PIPE_MARKER,
-			.size = 0,
-			.arg = size,
-		};
-
-		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
-
-		return 0;
-	}
-	else
-	{
-		return ftruncate(fd, size);
-	}
-}
-
-/* Set position in stdio file */
-int
-fio_fseek(FILE* f, off_t offs)
-{
-	return fio_is_remote_file(f)
-		? fio_seek(fio_fileno(f), offs)
-		: fseek(f, offs, SEEK_SET);
 }
 
 /* Set position in file */
@@ -838,190 +730,6 @@ fio_write_impl(int fd, void const* buf, size_t size, int out)
 	IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 
 	return;
-}
-
-size_t
-fio_fwrite_async(FILE* f, void const* buf, size_t size)
-{
-	return fio_is_remote_file(f)
-		? fio_write_async(fio_fileno(f), buf, size)
-		: fwrite(buf, 1, size, f);
-}
-
-/* Write data to the file */
-/* TODO: support async report error */
-ssize_t
-fio_write_async(int fd, void const* buf, size_t size)
-{
-	if (size == 0)
-		return 0;
-
-	if (fio_is_remote_fd(fd))
-	{
-		fio_header hdr = {
-			.cop = FIO_WRITE_ASYNC,
-			.handle = fd & ~FIO_PIPE_MARKER,
-			.size = size,
-			.arg = 0,
-		};
-
-		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
-		IO_CHECK(fio_write_all(fio_stdout, buf, size), size);
-		return size;
-	}
-	else
-		return durable_write(fd, buf, size);
-}
-
-static void
-fio_write_async_impl(int fd, void const* buf, size_t size, int out)
-{
-	/* Quick exit if agent is tainted */
-	if (async_errormsg)
-		return;
-
-	if (durable_write(fd, buf, size) <= 0)
-	{
-		async_errormsg = pgut_malloc(ERRMSG_MAX_LEN);
-		snprintf(async_errormsg, ERRMSG_MAX_LEN, "%s", strerror(errno));
-	}
-}
-
-static int32
-fio_decompress(void* dst, void const* src, size_t size, int compress_alg, char **errormsg)
-{
-	const char *internal_errormsg = NULL;
-	int32 uncompressed_size = do_decompress(dst, BLCKSZ,
-										    src,
-											size,
-											compress_alg, &internal_errormsg);
-
-	if (uncompressed_size < 0 && internal_errormsg != NULL)
-	{
-		*errormsg = pgut_malloc(ERRMSG_MAX_LEN);
-		snprintf(*errormsg, ERRMSG_MAX_LEN, "An error occured during decompressing block: %s", internal_errormsg);
-		return -1;
-	}
-
-	if (uncompressed_size != BLCKSZ)
-	{
-		*errormsg = pgut_malloc(ERRMSG_MAX_LEN);
-		snprintf(*errormsg, ERRMSG_MAX_LEN, "Page uncompressed to %d bytes != BLCKSZ", uncompressed_size);
-		return -1;
-	}
-	return uncompressed_size;
-}
-
-/* Write data to the file */
-ssize_t
-fio_fwrite_async_compressed(FILE* f, void const* buf, size_t size, int compress_alg)
-{
-	if (fio_is_remote_file(f))
-	{
-		fio_header hdr;
-
-		hdr.cop = FIO_WRITE_COMPRESSED_ASYNC;
-		hdr.handle = fio_fileno(f) & ~FIO_PIPE_MARKER;
-		hdr.size = size;
-		hdr.arg = compress_alg;
-
-		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
-		IO_CHECK(fio_write_all(fio_stdout, buf, size), size);
-
-		return size;
-	}
-	else
-	{
-		char *errormsg = NULL;
-		char decompressed_buf[BLCKSZ];
-		int32 decompressed_size = fio_decompress(decompressed_buf, buf, size, compress_alg, &errormsg);
-
-		if (decompressed_size < 0)
-			elog(ERROR, "%s", errormsg);
-
-		return fwrite(decompressed_buf, 1, decompressed_size, f);
-	}
-}
-
-static void
-fio_write_compressed_impl(int fd, void const* buf, size_t size, int compress_alg)
-{
-	int32 decompressed_size;
-	char decompressed_buf[BLCKSZ];
-
-	/* If the previous command already have failed,
-	 * then there is no point in bashing a head against the wall
-	 */
-	if (async_errormsg)
-		return;
-
-	/* decompress chunk */
-	decompressed_size = fio_decompress(decompressed_buf, buf, size, compress_alg, &async_errormsg);
-
-	if (decompressed_size < 0)
-		return;
-
-	if (durable_write(fd, decompressed_buf, decompressed_size) <= 0)
-	{
-		async_errormsg = pgut_malloc(ERRMSG_MAX_LEN);
-		snprintf(async_errormsg, ERRMSG_MAX_LEN, "%s", strerror(errno));
-	}
-}
-
-/* check if remote agent encountered any error during execution of async operations */
-int
-fio_check_error_file(FILE* f, char **errmsg)
-{
-	if (fio_is_remote_file(f))
-	{
-		fio_header hdr;
-
-		hdr.cop = FIO_GET_ASYNC_ERROR;
-		hdr.size = 0;
-
-		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
-
-		/* check results */
-		IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
-
-		if (hdr.size > 0)
-		{
-			*errmsg = pgut_malloc(ERRMSG_MAX_LEN);
-			IO_CHECK(fio_read_all(fio_stdin, *errmsg, hdr.size), hdr.size);
-			return 1;
-		}
-	}
-
-	return 0;
-}
-
-static void
-fio_get_async_error_impl(int out)
-{
-	fio_header hdr;
-	hdr.cop = FIO_GET_ASYNC_ERROR;
-
-	/* send error message */
-	if (async_errormsg)
-	{
-		hdr.size = strlen(async_errormsg) + 1;
-
-		/* send header */
-		IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
-
-		/* send message itself */
-		IO_CHECK(fio_write_all(out, async_errormsg, hdr.size), hdr.size);
-
-		//TODO: should we reset the tainted state ?
-//		pg_free(async_errormsg);
-//		async_errormsg = NULL;
-	}
-	else
-	{
-		hdr.size = 0;
-		/* send header */
-		IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
-	}
 }
 
 /* Read data from file */
@@ -1147,41 +855,6 @@ fio_symlink_impl(const char* target, const char* link_path, bool overwrite, int 
 		hdr.arg = errno;
 
 	IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
-}
-
-/* Rename file */
-int
-fio_rename(fio_location location, const char* old_path, const char* new_path)
-{
-	if (fio_is_remote(location))
-	{
-		size_t old_path_len = strlen(old_path) + 1;
-		size_t new_path_len = strlen(new_path) + 1;
-		fio_header hdr = {
-			.cop = FIO_RENAME,
-			.handle = -1,
-			.size = old_path_len + new_path_len,
-			.arg = 0,
-		};
-
-		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
-		IO_CHECK(fio_write_all(fio_stdout, old_path, old_path_len), old_path_len);
-		IO_CHECK(fio_write_all(fio_stdout, new_path, new_path_len), new_path_len);
-
-		IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
-		Assert(hdr.cop == FIO_RENAME);
-
-		if (hdr.arg != 0)
-		{
-			errno = hdr.arg;
-			return -1;
-		}
-		return 0;
-	}
-	else
-	{
-		return rename(old_path, new_path);
-	}
 }
 
 static void
@@ -1415,30 +1088,6 @@ fio_mkdir_impl(const char* path, int mode, bool strict, int out)
 	IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 }
 
-/* Change file mode */
-int
-fio_chmod(fio_location location, const char* path, int mode)
-{
-	if (fio_is_remote(location))
-	{
-		fio_header hdr;
-		size_t path_len = strlen(path) + 1;
-		hdr.cop = FIO_CHMOD;
-		hdr.handle = -1;
-		hdr.size = path_len;
-		hdr.arg = mode;
-
-		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
-		IO_CHECK(fio_write_all(fio_stdout, path, path_len), path_len);
-
-		return 0;
-	}
-	else
-	{
-		return chmod(path, mode);
-	}
-}
-
 #ifdef HAVE_LIBZ
 
 #define ZLIB_BUFFER_SIZE     (64*1024)
@@ -1620,36 +1269,6 @@ fio_gzseek(gzFile f, z_off_t offset, int whence)
 
 
 #endif
-
-/* Send file content
- * Note: it should not be used for large files.
- */
-static void
-fio_load_file(int out, const char* path)
-{
-	int fd = open(path, O_RDONLY);
-	fio_header hdr;
-	void* buf = NULL;
-
-	hdr.cop = FIO_SEND;
-	hdr.size = 0;
-
-	if (fd >= 0)
-	{
-		off_t size = lseek(fd, 0, SEEK_END);
-		buf = pgut_malloc(size);
-		lseek(fd, 0, SEEK_SET);
-		IO_CHECK(fio_read_all(fd, buf, size), size);
-		hdr.size = size;
-		SYS_CHECK(close(fd));
-	}
-	IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
-	if (buf)
-	{
-		IO_CHECK(fio_write_all(out, buf, hdr.size), hdr.size);
-		free(buf);
-	}
-}
 
 static void
 fio_send_pio_err(int out, err_i err)
@@ -3077,9 +2696,6 @@ fio_communicate(int in, int out)
 		}
 		errno = 0; /* reset errno */
 		switch (hdr.cop) {
-		  case FIO_LOAD: /* Send file content */
-			fio_load_file(out, buf);
-			break;
 		  case FIO_OPENDIR: /* Open directory for traversal */
 			dir[hdr.handle] = opendir(buf);
 			hdr.arg = dir[hdr.handle] == NULL ? errno : 0;
@@ -3117,12 +2733,6 @@ fio_communicate(int in, int out)
 //			IO_CHECK(fio_write_all(fd[hdr.handle], buf, hdr.size), hdr.size);
 			fio_write_impl(fd[hdr.handle], buf, hdr.size, out);
 			break;
-		  case FIO_WRITE_ASYNC: /* Write to the current position in file */
-			fio_write_async_impl(fd[hdr.handle], buf, hdr.size, out);
-			break;
-		  case FIO_WRITE_COMPRESSED_ASYNC: /* Write to the current position in file */
-			fio_write_compressed_impl(fd[hdr.handle], buf, hdr.size, hdr.arg);
-			break;
 		  case FIO_READ: /* Read from the current position in file */
 			if ((size_t)hdr.arg > buf_size) {
 				buf_size = hdr.arg;
@@ -3136,15 +2746,6 @@ fio_communicate(int in, int out)
 			IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 			if (hdr.size != 0)
 				IO_CHECK(fio_write_all(out, buf, hdr.size), hdr.size);
-			break;
-		  case FIO_PREAD: /* Read from specified position in file, ignoring pages beyond horizon of delta backup */
-			rc = pread(fd[hdr.handle], buf, BLCKSZ, hdr.arg);
-			hdr.cop = FIO_SEND;
-			hdr.arg = rc;
-			hdr.size = rc >= 0 ? rc : 0;
-			IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
-			if (hdr.size != 0)
-				IO_CHECK(fio_write_all(out, buf, hdr.size),  hdr.size);
 			break;
 		  case FIO_AGENT_VERSION:
 			{
@@ -3211,11 +2812,6 @@ fio_communicate(int in, int out)
 				IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 			}
 			break;
-		  case FIO_ACCESS: /* Check presence of file with specified name */
-			hdr.size = 0;
-			hdr.arg = access(buf, hdr.arg) < 0 ? errno  : 0;
-			IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
-			break;
 		  case FIO_RENAME: /* Rename file */
 			/* possible buffer overflow */
 			fio_rename_impl(buf, buf + strlen(buf) + 1, out);
@@ -3229,14 +2825,8 @@ fio_communicate(int in, int out)
 		  case FIO_MKDIR:  /* Create directory */
 			fio_mkdir_impl(buf, hdr.arg, hdr.handle == 1, out);
 			break;
-		  case FIO_CHMOD:  /* Change file mode */
-			SYS_CHECK(chmod(buf, hdr.arg));
-			break;
 		  case FIO_SEEK:   /* Set current position in file */
 			fio_seek_impl(fd[hdr.handle], hdr.arg);
-			break;
-		  case FIO_TRUNCATE: /* Truncate file */
-			SYS_CHECK(ftruncate(fd[hdr.handle], hdr.arg));
 			break;
 		  case FIO_LIST_DIR:
 			fio_list_dir_impl(out, buf, drive);
@@ -3266,13 +2856,6 @@ fio_communicate(int in, int out)
 
 			IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 			break;
-          case FIO_SYNC_FILE:
-            if (fsync(fd[hdr.handle]) == 0)
-                hdr.arg = 0;
-            else
-                hdr.arg = errno;
-            IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
-            break;
 		  case FIO_GET_CRC32:
 			Assert((hdr.arg & GET_CRC32_TRUNCATED) == 0 ||
 				   (hdr.arg & (GET_CRC32_TRUNCATED|GET_CRC32_DECOMPRESS)) == GET_CRC32_TRUNCATED);
@@ -3299,9 +2882,6 @@ fio_communicate(int in, int out)
 			IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 			free(buf);
 			return;
-		  case FIO_GET_ASYNC_ERROR:
-			fio_get_async_error_impl(out);
-			break;
 		  case FIO_READLINK: /* Read content of a symbolic link */
 			{
 				/*
