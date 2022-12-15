@@ -106,9 +106,6 @@ struct __attribute__((packed)) fio_req_open_write {
 	bool exclusive;
 };
 
-/* Convert FIO pseudo handle to index in file descriptor array */
-#define fio_fileno(f) (((size_t)f - 1) | FIO_PIPE_MARKER)
-
 #if defined(WIN32)
 #undef open
 #undef fopen
@@ -184,13 +181,6 @@ fio_error(int rc, int size, const char* file, int line)
 		else
 			elog(ERROR, "Communication error: %s", rc >= 0 ? "end of data" :  strerror(errno));
 	}
-}
-
-/* Check if file descriptor is local or remote (created by FIO) */
-static bool
-fio_is_remote_fd(int fd)
-{
-	return (fd & FIO_PIPE_MARKER) != 0;
 }
 
 #ifdef WIN32
@@ -525,47 +515,6 @@ fio_closedir(DIR *dir)
 	}
 }
 
-/* Open file */
-int
-fio_open(fio_location location, const char* path, int mode)
-{
-	int fd;
-	if (fio_is_remote(location))
-	{
-		int handle;
-		fio_header hdr;
-
-		handle = find_free_handle();
-		hdr.cop = FIO_OPEN;
-		hdr.handle = handle;
-		hdr.size = strlen(path) + 1;
-		hdr.arg = mode;
-//		hdr.arg = mode & ~O_EXCL;
-//		elog(INFO, "PATH: %s MODE: %i, %i", path, mode, O_EXCL);
-//		elog(INFO, "MODE: %i", hdr.arg);
-		set_handle(handle);
-
-		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
-		IO_CHECK(fio_write_all(fio_stdout, path, hdr.size), hdr.size);
-
-		/* check results */
-		IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
-
-		if (hdr.arg != 0)
-		{
-			errno = hdr.arg;
-			unset_handle(hdr.handle);
-			return -1;
-		}
-		fd = handle | FIO_PIPE_MARKER;
-	}
-	else
-	{
-		fd = open(path, mode, FILE_PERMISSION);
-	}
-	return fd;
-}
-
 
 /* Close ssh session */
 void
@@ -587,40 +536,6 @@ fio_disconnect(void)
 	}
 }
 
-/* Close file */
-int
-fio_close(int fd)
-{
-	if (fio_is_remote_fd(fd))
-	{
-		fio_header hdr = {
-			.cop = FIO_CLOSE,
-			.handle = fd & ~FIO_PIPE_MARKER,
-			.size = 0,
-			.arg = 0,
-		};
-
-		unset_handle(hdr.handle);
-		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
-
-		/* Wait for response */
-		IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
-		Assert(hdr.cop == FIO_CLOSE);
-
-		if (hdr.arg != 0)
-		{
-			errno = hdr.arg;
-			return -1;
-		}
-
-		return 0;
-	}
-	else
-	{
-		return close(fd);
-	}
-}
-
 /* Close remote file implementation */
 static void
 fio_close_impl(int fd, int out)
@@ -637,30 +552,6 @@ fio_close_impl(int fd, int out)
 
 	/* send header */
 	IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
-}
-
-/* Set position in file */
-/* TODO: make it synchronous or check async error */
-int
-fio_seek(int fd, off_t offs)
-{
-	if (fio_is_remote_fd(fd))
-	{
-		fio_header hdr;
-
-		hdr.cop = FIO_SEEK;
-		hdr.handle = fd & ~FIO_PIPE_MARKER;
-		hdr.size = 0;
-		hdr.arg = offs;
-
-		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
-
-		return 0;
-	}
-	else
-	{
-		return lseek(fd, offs, SEEK_SET);
-	}
 }
 
 /* seek is asynchronous */
@@ -730,34 +621,6 @@ fio_write_impl(int fd, void const* buf, size_t size, int out)
 	IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 
 	return;
-}
-
-/* Read data from file */
-ssize_t
-fio_read(int fd, void* buf, size_t size)
-{
-	if (fio_is_remote_fd(fd))
-	{
-		fio_header hdr = {
-			.cop = FIO_READ,
-			.handle = fd & ~FIO_PIPE_MARKER,
-			.size = 0,
-			.arg = size,
-		};
-
-		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
-
-		IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
-		Assert(hdr.cop == FIO_SEND);
-		IO_CHECK(fio_read_all(fio_stdin, buf, hdr.size), hdr.size);
-		errno = hdr.arg;
-
-		return hdr.size;
-	}
-	else
-	{
-		return read(fd, buf, size);
-	}
 }
 
 /*
@@ -1087,188 +950,6 @@ fio_mkdir_impl(const char* path, int mode, bool strict, int out)
 
 	IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 }
-
-#ifdef HAVE_LIBZ
-
-#define ZLIB_BUFFER_SIZE     (64*1024)
-#define MAX_WBITS            15 /* 32K LZ77 window */
-#define DEF_MEM_LEVEL        8
-/* last bit used to differenciate remote gzFile from local gzFile
- * TODO: this is insane, we should create our own scructure for this,
- * not flip some bits in someone's else and hope that it will not break
- * between zlib versions.
- */
-#define FIO_GZ_REMOTE_MARKER 1
-
-typedef struct fioGZFile
-{
-	z_stream strm;
-	int      fd;
-	int      errnum;
-	bool     eof;
-	Bytef    buf[ZLIB_BUFFER_SIZE];
-} fioGZFile;
-
-/* On error returns NULL and errno should be checked */
-gzFile
-fio_gzopen(fio_location location, const char* path, const char* mode, int level)
-{
-	int rc;
-
-	if (strchr(mode, 'w') != NULL) /* compress */
-	{
-		Assert(false);
-		elog(ERROR, "fio_gzopen(\"wb\") is not implemented");
-	}
-
-	if (fio_is_remote(location))
-	{
-		fioGZFile* gz = (fioGZFile*) pgut_malloc(sizeof(fioGZFile));
-		memset(&gz->strm, 0, sizeof(gz->strm));
-		gz->eof = 0;
-		gz->errnum = Z_OK;
-		gz->strm.next_in = gz->buf;
-		gz->strm.avail_in = ZLIB_BUFFER_SIZE;
-		rc = inflateInit2(&gz->strm, 15 + 16);
-		gz->strm.avail_in = 0;
-		if (rc == Z_OK)
-		{
-			gz->fd = fio_open(location, path, O_RDONLY | PG_BINARY);
-			if (gz->fd < 0)
-			{
-				free(gz);
-				return NULL;
-			}
-		}
-		if (rc != Z_OK)
-		{
-			elog(ERROR, "zlib internal error when opening file %s: %s",
-				path, gz->strm.msg);
-		}
-		return (gzFile)((size_t)gz + FIO_GZ_REMOTE_MARKER);
-	}
-	else
-	{
-		gzFile file;
-		file = gzopen(path, mode);
-		if (file != NULL && level != Z_DEFAULT_COMPRESSION)
-		{
-			if (gzsetparams(file, level, Z_DEFAULT_STRATEGY) != Z_OK)
-				elog(ERROR, "Cannot set compression level %d: %s",
-					 level, strerror(errno));
-		}
-		return file;
-	}
-}
-
-int
-fio_gzread(gzFile f, void *buf, unsigned size)
-{
-	if ((size_t)f & FIO_GZ_REMOTE_MARKER)
-	{
-		int rc;
-		fioGZFile* gz = (fioGZFile*)((size_t)f - FIO_GZ_REMOTE_MARKER);
-
-		if (gz->eof)
-		{
-			return 0;
-		}
-
-		gz->strm.next_out = (Bytef *)buf;
-		gz->strm.avail_out = size;
-
-		while (1)
-		{
-			if (gz->strm.avail_in != 0) /* If there is some data in receiver buffer, then decompress it */
-			{
-				rc = inflate(&gz->strm, Z_NO_FLUSH);
-				if (rc == Z_STREAM_END)
-				{
-					gz->eof = 1;
-				}
-				else if (rc != Z_OK)
-				{
-					gz->errnum = rc;
-					return -1;
-				}
-				if (gz->strm.avail_out != size)
-				{
-					return size - gz->strm.avail_out;
-				}
-				if (gz->strm.avail_in == 0)
-				{
-					gz->strm.next_in = gz->buf;
-				}
-			}
-			else
-			{
-				gz->strm.next_in = gz->buf;
-			}
-			rc = fio_read(gz->fd, gz->strm.next_in + gz->strm.avail_in,
-						  gz->buf + ZLIB_BUFFER_SIZE - gz->strm.next_in - gz->strm.avail_in);
-			if (rc > 0)
-			{
-				gz->strm.avail_in += rc;
-			}
-			else
-			{
-				if (rc == 0)
-				{
-					gz->eof = 1;
-				}
-				return rc;
-			}
-		}
-	}
-	else
-	{
-		return gzread(f, buf, size);
-	}
-}
-
-int
-fio_gzclose(gzFile f)
-{
-	if ((size_t)f & FIO_GZ_REMOTE_MARKER)
-	{
-		fioGZFile* gz = (fioGZFile*)((size_t)f - FIO_GZ_REMOTE_MARKER);
-		int rc;
-		inflateEnd(&gz->strm);
-		rc = fio_close(gz->fd);
-		free(gz);
-		return rc;
-	}
-	else
-	{
-		return gzclose(f);
-	}
-}
-
-const char*
-fio_gzerror(gzFile f, int *errnum)
-{
-	if ((size_t)f & FIO_GZ_REMOTE_MARKER)
-	{
-		fioGZFile* gz = (fioGZFile*)((size_t)f - FIO_GZ_REMOTE_MARKER);
-		if (errnum)
-			*errnum = gz->errnum;
-		return gz->strm.msg;
-	}
-	else
-	{
-		return gzerror(f, errnum);
-	}
-}
-
-z_off_t
-fio_gzseek(gzFile f, z_off_t offset, int whence)
-{
-	Assert(!((size_t)f & FIO_GZ_REMOTE_MARKER));
-	return gzseek(f, offset, whence);
-}
-
-
-#endif
 
 static void
 fio_send_pio_err(int out, err_i err)
@@ -5157,6 +4838,9 @@ pioWriteFilter_fobjRepr(VSelf)
 }
 
 #ifdef HAVE_LIBZ
+#define MAX_WBITS            15 /* 32K LZ77 window */
+#define DEF_MEM_LEVEL        8
+
 static err_i
 newGZError(const char *gzmsg, int gzerrno)
 {

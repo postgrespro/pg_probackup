@@ -125,7 +125,6 @@ extern void    fio_communicate(int in, int out);
 extern void    fio_disconnect(void);
 
 #define FIO_FDMAX 64
-#define FIO_PIPE_MARKER 0x40000000
 
 /* Check if FILE handle is local or remote (created by FIO) */
 #define fio_is_remote_file(file) ((size_t)(file) <= FIO_FDMAX)
@@ -137,21 +136,6 @@ extern void    fio_error(int rc, int size, const char* file, int line);
 #define IO_CHECK(cmd, size) do { int _rc = (cmd); if (_rc != (size)) fio_error(_rc, size, __FILE__, __LINE__); } while (0)
 
 extern void    fio_get_agent_version(int* protocol, char* payload_buf, size_t payload_buf_size);
-
-/* fd-style functions */
-extern int     fio_open(fio_location location, const char* name, int mode);
-extern ssize_t fio_read(int fd, void* buf, size_t size);
-extern int     fio_seek(int fd, off_t offs);
-extern int     fio_close(int fd);
-
-/* gzFile-style functions */
-#ifdef HAVE_LIBZ
-extern gzFile  fio_gzopen(fio_location location, const char* path, const char* mode, int level);
-extern int     fio_gzclose(gzFile file);
-extern int     fio_gzread(gzFile f, void *buf, unsigned size);
-extern z_off_t fio_gzseek(gzFile f, z_off_t offset, int whence);
-extern const char* fio_gzerror(gzFile file, int *errnum);
-#endif
 
 /* DIR-style functions */
 extern DIR*    fio_opendir(fio_location location, const char* path);
