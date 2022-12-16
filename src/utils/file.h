@@ -70,6 +70,8 @@ typedef enum
 	PIO_SEEK,
 	PIO_TRUNCATE,
 	PIO_GET_ASYNC_ERROR,
+	PIO_DIR_OPEN,
+	PIO_DIR_NEXT,
 	PIO_CLOSE,
 	PIO_DISPOSE,
 } fio_operations;
@@ -108,11 +110,16 @@ typedef enum pio_file_kind {
 } pio_file_kind_e;
 
 typedef struct pio_stat {
+	pio_file_kind_e pst_kind;
+	uint32_t 		pst_mode;
 	int64_t			pst_size;
 	int64_t	 		pst_mtime;
-	uint32_t 		pst_mode;
-	pio_file_kind_e pst_kind;
 } pio_stat_t;
+
+typedef struct pio_dirent {
+	pio_stat_t		stat;
+	ft_str_t		name;
+} pio_dirent_t;
 
 extern fio_location MyLocation;
 
@@ -229,6 +236,12 @@ fobj_iface(pioWriteCloser);
 fobj_iface(pioDBWriter);
 fobj_iface(pioReadCloser);
 
+// DIR
+#define mth__pioDirNext				pio_dirent_t, (err_i*, err)
+fobj_method(pioDirNext);
+#define iface__pioDirIter			mth(pioDirNext, pioClose)
+fobj_iface(pioDirIter);
+
 // Pages iterator
 typedef struct
 {
@@ -270,6 +283,7 @@ fobj_iface(pioPagesIterator);
 #define mth__pioFilesAreSame bool, (path_t, file1), (path_t, file2)
 #define mth__pioIsRemote 	bool
 #define mth__pioMakeDir	err_i, (path_t, path), (mode_t, mode), (bool, strict)
+#define mth__pioOpenDir		pioDirIter_i, (path_t, path), (err_i*, err)
 #define mth__pioListDir     void, (parray *, files), (const char *, root), \
                                 (bool, handle_tablespaces), (bool, symlink_and_hidden), \
                                 (bool, backup_logs), (bool, skip_hidden),  (int, external_dir_num)
@@ -298,6 +312,7 @@ fobj_method(pioIsRemote);
 fobj_method(pioGetCRC32);
 fobj_method(pioMakeDir);
 fobj_method(pioFilesAreSame);
+fobj_method(pioOpenDir);
 fobj_method(pioListDir);
 fobj_method(pioRemoveDir);
 fobj_method(pioReadFile);
@@ -307,7 +322,7 @@ fobj_method(pioIteratePages);
 #define iface__pioDrive 	mth(pioOpenRead, pioOpenReadStream), \
 							mth(pioStat, pioRemove), \
 					        mth(pioExists, pioGetCRC32, pioIsRemote),          \
-							mth(pioMakeDir, pioListDir, pioRemoveDir),  \
+							mth(pioMakeDir, pioOpenDir, pioListDir, pioRemoveDir),  \
 							mth(pioFilesAreSame, pioReadFile, pioWriteFile),   \
 							mth(pioOpenRewrite)
 fobj_iface(pioDrive);

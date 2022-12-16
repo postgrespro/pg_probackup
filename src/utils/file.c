@@ -23,6 +23,8 @@ static char *async_errormsg = NULL;
 #define PAGE_ZEROSEARCH_FINE_GRANULARITY 64
 static const char zerobuf[PAGE_ZEROSEARCH_COARSE_GRANULARITY] = {0};
 
+#define PIO_DIR_REMOTE_BATCH 100
+
 fio_location MyLocation;
 
 typedef struct
@@ -2736,6 +2738,61 @@ fio_communicate(int in, int out)
 				IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 			break;
 		}
+		case PIO_DIR_OPEN:
+		{
+			ft_assert(hdr.handle >= 0 && hdr.handle < FIO_FDMAX);
+			ft_assert(objs[hdr.handle] == NULL);
+			pioDirIter_i iter;
+			err_i        err;
+
+			iter = $i(pioOpenDir, drive, buf, .err = &err);
+			if ($haserr(err))
+				fio_send_pio_err(out, err);
+			else
+			{
+				objs[hdr.handle] = $ref(iter.self);
+				hdr.size = 0;
+				IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
+			}
+			break;
+		}
+		case PIO_DIR_NEXT:
+		{
+			ft_assert(hdr.handle >= 0 && hdr.handle < FIO_FDMAX);
+			ft_assert(objs[hdr.handle] != NULL);
+			ft_strbuf_t  stats = ft_strbuf_zero();
+			ft_strbuf_t  names = ft_strbuf_zero();
+			pio_dirent_t dirent;
+			int          n;
+
+			for (n = 0; n < PIO_DIR_REMOTE_BATCH; n++)
+			{
+				dirent = $(pioDirNext, objs[hdr.handle], .err = &err);
+				if ($haserr(err))
+					break;
+				if (dirent.stat.pst_kind == PIO_KIND_UNKNOWN)
+					break;
+				ft_strbuf_catbytes(&stats, FT_BYTES_FOR(dirent.stat));
+				ft_strbuf_cat_zt(&names, dirent.name);
+			}
+
+			if ($haserr(err))
+				fio_send_pio_err(out, err);
+			else
+			{
+				hdr.arg = n;
+				hdr.size = stats.len + names.len;
+				IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
+				if (n > 0)
+				{
+					IO_CHECK(fio_write_all(out, stats.ptr, stats.len), stats.len);
+					IO_CHECK(fio_write_all(out, names.ptr, names.len), names.len);
+				}
+			}
+			ft_strbuf_free(&stats);
+			ft_strbuf_free(&names);
+			break;
+		}
 		case PIO_CLOSE:
 		{
 			err_i err;
@@ -2827,6 +2884,7 @@ typedef struct pioLocalDir
 {
 	ft_str_t path;
 	DIR*     dir;
+	ft_strbuf_t name_buf;
 } pioLocalDir;
 #define kls__pioLocalDir iface__pioDirIter, iface(pioDirIter), mth(fobjDispose)
 fobj_klass(pioLocalDir);
@@ -2856,6 +2914,21 @@ typedef struct pioRemoteWriteFile {
 #define kls__pioRemoteWriteFile	iface__pioDBWriter, mth(fobjDispose), \
 								iface(pioWriteCloser, pioDBWriter)
 fobj_klass(pioRemoteWriteFile);
+
+#define FT_SLICE dirent
+#define FT_SLICE_TYPE pio_dirent_t
+#include <ft_array.inc.h>
+
+typedef struct pioRemoteDir
+{
+	ft_str_t path;
+	int      handle;
+	int		 pos;
+	ft_bytes_t      names_buf;
+	ft_arr_dirent_t entries;
+} pioRemoteDir;
+#define kls__pioRemoteDir iface__pioDirIter, iface(pioDirIter), mth(fobjDispose)
+fobj_klass(pioRemoteDir);
 
 typedef struct pioReadFilter {
     pioRead_i	wrapped;
@@ -3239,6 +3312,26 @@ pioLocalDrive_pioListDir(VSelf, parray *files, const char *root, bool handle_tab
 	Self(pioLocalDrive);
     dir_list_file(files, root, handle_tablespaces, follow_symlink, backup_logs,
                         skip_hidden, external_dir_num, $bind(pioDBDrive, self));
+}
+
+static pioDirIter_i
+pioLocalDrive_pioOpenDir(VSelf, path_t path, err_i* err)
+{
+	Self(pioLocalDrive);
+	DIR* dir;
+	fobj_reset_err(err);
+
+	dir = opendir(path);
+	if (dir == NULL)
+	{
+		*err = $syserr(errno, "Cannot open dir {path:q}", path(path));
+		return $null(pioDirIter);
+	}
+
+	return $bind(pioDirIter,
+				 $alloc(pioLocalDir,
+						.path = ft_strdupc(path),
+						.dir = dir));
 }
 
 static void
@@ -3635,6 +3728,82 @@ pioLocalWriteFile_fobjDispose(VSelf)
 	ft_bytes_free(&self->buf);
 }
 
+static pio_dirent_t
+pioLocalDir_pioDirNext(VSelf, err_i* err)
+{
+	Self(pioLocalDir);
+	struct dirent* ent;
+	pio_dirent_t   entry = {.stat={.pst_kind=PIO_KIND_UNKNOWN}};
+	char           path[MAXPGPATH];
+	fobj_reset_err(err);
+
+	ft_assert(self->dir != NULL, "Abuse closed dir");
+
+	ft_strbuf_reset_for_reuse(&self->name_buf);
+
+	for (;;)
+	{
+		errno = 0;
+		ent = readdir(self->dir);
+		if (ent == NULL && errno != 0)
+			*err = $syserr(errno, "Could not read dir {path:q}",
+						   path(self->path.ptr));
+		if (ent == NULL)
+			return entry;
+
+		/* Skip '.', '..' and all hidden files as well */
+		if (ent->d_name[0] == '.')
+			continue;
+
+		join_path_components(path, self->path.ptr, ent->d_name);
+		entry.stat = $i(pioStat, localDrive, path, true, .err = err);
+		if ($haserr(*err))
+			return entry;
+
+		/*
+		 * Add only files, directories and links. Skip sockets and other
+		 * unexpected file formats.
+		 */
+		if (entry.stat.pst_kind != PIO_KIND_DIRECTORY &&
+		    entry.stat.pst_kind != PIO_KIND_REGULAR)
+		{
+			elog(WARNING, "Skip '%s': unexpected file kind %s", path,
+				 pio_file_kind2str(entry.stat.pst_kind, path));
+			continue;
+		}
+
+		ft_strbuf_catc(&self->name_buf, ent->d_name);
+		entry.name = ft_strbuf_ref(&self->name_buf);
+		return entry;
+	}
+}
+
+static err_i
+pioLocalDir_pioClose(VSelf)
+{
+	Self(pioLocalDir);
+	int rc;
+
+	rc = closedir(self->dir);
+	self->dir = NULL;
+	if (rc)
+		return $syserr(errno, "Could not close dir {path:q}",
+					   path(self->path.ptr));
+	return $noerr();
+}
+
+static void
+pioLocalDir_fobjDispose(VSelf)
+{
+	Self(pioLocalDir);
+
+	if (self->dir)
+		closedir(self->dir);
+	self->dir = NULL;
+	ft_str_free(&self->path);
+	ft_strbuf_free(&self->name_buf);
+}
+
 /* REMOTE DRIVE */
 
 static pioReader_i
@@ -3727,9 +3896,8 @@ pioRemoteDrive_pioFilesAreSame(VSelf, path_t file1, path_t file2)
 	};
 	char _buf[512];
 	ft_strbuf_t buf = ft_strbuf_init_stack(_buf, sizeof(_buf));
-	ft_strbuf_catc(&buf, file1);
-	ft_strbuf_cat1(&buf, '\x00');
-	ft_strbuf_catc(&buf, file2);
+	ft_strbuf_catc_zt(&buf, file1);
+	ft_strbuf_catc_zt(&buf, file2);
 	hdr.size = buf.len + 1;
 
 	IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
@@ -3921,6 +4089,35 @@ pioRemoteDrive_pioListDir(VSelf, parray *files, const char *root, bool handle_ta
     }
 
     pg_free(buf);
+}
+
+static pioDirIter_i
+pioRemoteDrive_pioOpenDir(VSelf, path_t path, err_i* err)
+{
+	Self(pioRemoteDrive);
+	fio_header hdr = {
+		.cop = PIO_DIR_OPEN,
+		.handle = find_free_handle(),
+		.size = strlen(path)+1,
+	};
+	fobj_reset_err(err);
+
+	IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
+	IO_CHECK(fio_write_all(fio_stdout, path, hdr.size), hdr.size);
+
+	IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
+	if (hdr.cop == FIO_PIO_ERROR)
+	{
+		*err = fio_receive_pio_err(&hdr);
+		return $null(pioDirIter);
+	}
+	ft_assert(hdr.cop == PIO_DIR_OPEN);
+	set_handle(hdr.handle);
+	return $bind(pioDirIter,
+				 $alloc(pioRemoteDir,
+						.path = ft_strdupc(path),
+						.handle = hdr.handle,
+						.pos = 0));
 }
 
 static void
@@ -4563,6 +4760,109 @@ pioRemoteWriteFile_fobjDispose(VSelf)
 		unset_handle(self->handle);
 	}
 	ft_str_free(&self->path);
+}
+
+static pio_dirent_t
+pioRemoteDir_pioDirNext(VSelf, err_i *err)
+{
+	Self(pioRemoteDir);
+	fio_header   hdr;
+	pio_dirent_t entry = {.stat={.pst_kind=PIO_KIND_UNKNOWN}};
+	ft_bytes_t   tofree = ft_bytes(NULL, 0);
+	ft_bytes_t   buf;
+	int          n;
+	fobj_reset_err(err);
+
+	ft_assert(self->handle >= 0, "Abuse closed dir");
+
+	if (self->pos == self->entries.len)
+	{
+		ft_bytes_free(&self->names_buf);
+		ft_arr_dirent_reset_for_reuse(&self->entries);
+		self->pos = 0;
+
+		hdr = (fio_header){
+			.cop = PIO_DIR_NEXT,
+			.handle = self->handle,
+		};
+
+		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
+		IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
+
+		if (hdr.cop == FIO_PIO_ERROR)
+		{
+			*err = fio_receive_pio_err(&hdr);
+			return entry;
+		}
+		ft_assert(hdr.cop == PIO_DIR_NEXT);
+
+		if (hdr.arg == 0)
+		{
+			/* End of iteration */
+			return entry;
+		}
+
+		buf = ft_bytes_alloc(hdr.size);
+		tofree = buf;
+		IO_CHECK(fio_read_all(fio_stdin, buf.ptr, buf.len), buf.len);
+
+		for (n = 0; n < hdr.arg; n++)
+		{
+			ft_bytes_shift_must(&buf, FT_BYTES_FOR(entry.stat));
+			ft_arr_dirent_push(&self->entries, entry);
+		}
+
+		self->names_buf = ft_bytes_dup(buf);
+		buf = self->names_buf;
+
+		for (n = 0; n < self->entries.len; n++)
+			self->entries.ptr[n].name = ft_bytes_shift_zt(&buf);
+
+		ft_bytes_free(&tofree);
+	}
+
+	entry = self->entries.ptr[self->pos];
+	self->pos++;
+	return entry;
+}
+
+static err_i
+pioRemoteDir_pioClose(VSelf)
+{
+	Self(pioRemoteDir);
+	err_i	   err = $noerr();
+	fio_header hdr = {.cop = PIO_CLOSE, .handle = self->handle };
+
+	ft_assert(self->handle >= 0);
+
+	IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
+	IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
+
+	unset_handle(self->handle);
+	self->handle = -1;
+
+	if (hdr.cop == FIO_PIO_ERROR)
+		err = fobj_err_combine(err, fio_receive_pio_err(&hdr));
+	return err;
+}
+
+static void
+pioRemoteDir_fobjDispose(VSelf)
+{
+	Self(pioRemoteDir);
+
+	if (self->handle >= 0)
+	{
+		fio_header hdr = {
+				.cop = PIO_DISPOSE,
+				.handle = self->handle,
+		};
+		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
+		unset_handle(self->handle);
+	}
+	ft_str_free(&self->path);
+	ft_bytes_free(&self->names_buf);
+	ft_arr_dirent_reset_for_reuse(&self->entries);
 }
 
 pioRead_i
@@ -5922,6 +6222,8 @@ fobj_klass_handle(pioLocalFile, inherits(pioFile), mth(fobjDispose, fobjRepr));
 fobj_klass_handle(pioRemoteFile, inherits(pioFile), mth(fobjDispose, fobjRepr));
 fobj_klass_handle(pioLocalWriteFile);
 fobj_klass_handle(pioRemoteWriteFile);
+fobj_klass_handle(pioLocalDir);
+fobj_klass_handle(pioRemoteDir);
 fobj_klass_handle(pioWriteFilter, mth(fobjDispose, fobjRepr));
 fobj_klass_handle(pioReadFilter, mth(fobjDispose, fobjRepr));
 fobj_klass_handle(pioDevNull);
