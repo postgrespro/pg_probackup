@@ -687,6 +687,22 @@ ft_bytes_shift_line(ft_bytes_t *bytes)
 	return ft_bytes(p, i);
 }
 
+ft_str_t
+ft_bytes_shift_zt(ft_bytes_t *bytes)
+{
+	size_t i;
+	char *p = bytes->ptr;
+
+	for (i = 0; i < bytes->len; i++) {
+		if (p[i] == '\0') {
+			ft_bytes_consume(bytes, i+1);
+			return ft_str(p, i);
+		}
+	}
+
+	ft_assert(bytes->len == 0, "ft_bytes_shift_str have to be on zero-terminated bytes");
+	return ft_str(NULL, 0);
+}
 
 size_t
 ft_bytes_find_bytes(ft_bytes_t haystack, ft_bytes_t needle)

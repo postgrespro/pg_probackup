@@ -522,6 +522,12 @@ ft_strbuf_cat(ft_strbuf_t *buf, ft_str_t s) {
 }
 
 ft_inline bool
+ft_strbuf_cat_zt(ft_strbuf_t *buf, ft_str_t s) {
+	/* we could actually reuse ft_strbuf_catbytes */
+	return ft_strbuf_catbytes(buf, ft_bytes(s.ptr, s.len+1));
+}
+
+ft_inline bool
 ft_strbuf_catbytes(ft_strbuf_t *buf, ft_bytes_t s) {
 	if (!ft_strbuf_may(buf))
 		return false;
@@ -576,6 +582,11 @@ ft_strbuf_cat2(ft_strbuf_t *buf, char c1, char c2) {
 ft_inline bool
 ft_strbuf_catc(ft_strbuf_t *buf, const char *s) {
     return ft_strbuf_cat(buf, ft_cstr(s));
+}
+
+ft_inline bool
+ft_strbuf_catc_zt(ft_strbuf_t *buf, const char *s) {
+	return ft_strbuf_cat_zt(buf, ft_cstr(s));
 }
 
 ft_inline void

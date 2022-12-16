@@ -403,6 +403,9 @@ ft_inline FT_CMP_RES    ft_strcmpc(ft_str_t str, const char* oth);
 
 ft_inline void			ft_str_consume(ft_str_t *str, size_t cut);
 
+/* shift zero-terminated string. Will assert if no zero-byte found and it is not last */
+extern ft_str_t     ft_bytes_shift_zt(ft_bytes_t *bytes);
+
 /*
  * String buffer.
  * It could be growable or fixed.
@@ -454,10 +457,13 @@ ft_inline bool      ft_strbuf_ensure(ft_strbuf_t *buf, size_t n);
 /* All functions below returns false if fixed buffer was overflowed */
 ft_inline bool      ft_strbuf_may   (ft_strbuf_t *buf);
 ft_inline bool      ft_strbuf_cat   (ft_strbuf_t *buf, ft_str_t s);
+/* cat string together with zero-terminated byte */
+ft_inline bool      ft_strbuf_cat_zt(ft_strbuf_t *buf, ft_str_t s);
 ft_inline bool      ft_strbuf_catbytes(ft_strbuf_t *buf, ft_bytes_t b);
 ft_inline bool      ft_strbuf_cat1  (ft_strbuf_t *buf, char c);
 ft_inline bool      ft_strbuf_cat2  (ft_strbuf_t *buf, char c1, char c2);
 ft_inline bool      ft_strbuf_catc  (ft_strbuf_t *buf, const char *s);
+ft_inline bool      ft_strbuf_catc_zt(ft_strbuf_t *buf, const char *s);
 ft_gnu_printf(2, 3)
 extern bool         ft_strbuf_catf  (ft_strbuf_t *buf, const char *fmt, ...);
 ft_gnu_printf(2, 0)
