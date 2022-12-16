@@ -2448,7 +2448,7 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 
 	join_path_components(control_path, backup->root_dir, DATABASE_FILE_LIST);
 
-	out = $i(pioOpenRewrite, backup_drive, control_path, .err = &err);
+	out = $i(pioOpenRewrite, backup_drive, control_path, .sync = sync, .err = &err);
 	if ($haserr(err))
 		elog(ERROR, "Cannot open file list \"%s\": %s", control_path,
 			 strerror(errno));
@@ -2545,7 +2545,7 @@ write_backup_filelist(pgBackup *backup, parray *files, const char *root,
 	if (sync)
 		backup->content_crc = pioCRC32Counter_getCRC32(crc);
 
-	err = $i(pioClose, out, .sync=sync);
+	err = $i(pioClose, out);
 	if ($haserr(err))
 		ft_logerr(FT_FATAL, $errmsg(err), "Closing " DATABASE_FILE_LIST ".tmp");
 

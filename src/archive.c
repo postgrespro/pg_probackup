@@ -452,7 +452,8 @@ push_file_internal(const char *wal_file_name, const char *pg_xlog_dir,
 	if ($haserr(err))
 		return $iresult(err);
 
-	out = $i(pioOpenRewrite, backup_drive, .path = to_fullpath, .err = &err);
+	out = $i(pioOpenRewrite, backup_drive, .path = to_fullpath,
+			 .sync = !no_sync, .err = &err);
 	if ($haserr(err))
 		return $iresult(err);
 
@@ -480,7 +481,7 @@ push_file_internal(const char *wal_file_name, const char *pg_xlog_dir,
     if ($haserr(err))
 		return $iresult(err);
 
-    err = $i(pioClose, out, .sync = !no_sync);
+    err = $i(pioClose, out);
     if ($haserr(err))
 		return $iresult(err);
 

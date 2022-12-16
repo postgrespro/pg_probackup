@@ -1273,7 +1273,7 @@ restore_files(void *arg)
 
 done:
 		/* close file */
-		err = $i(pioClose, out, .sync = false);
+		err = $i(pioClose, out);
 		if ($haserr(err))
 			ft_logerr(FT_FATAL, $errmsg(err), "Close restored file");
 

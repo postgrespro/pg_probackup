@@ -1247,7 +1247,7 @@ create_empty_file(const char *to_root, fio_location to_location, pgFile *file)
 		ft_logerr(FT_ERROR, $errmsg(err), "Creating empty file");
 
 	err = $i(pioWriteFinish, fl);
-	err = fobj_err_combine(err, $i(pioClose, fl, .sync=false));
+	err = fobj_err_combine(err, $i(pioClose, fl));
 
 	if ($haserr(err))
 		ft_logerr(FT_ERROR, $errmsg(err), "Closing empty file");
@@ -1724,7 +1724,7 @@ send_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
 			if($isNULL(out))
 			{
 				out = $i(pioOpenRewrite, backup_location, to_fullpath,
-						 .use_temp = false, .err = &err);
+						 .use_temp = false, .sync = true, .err = &err);
 				if ($haserr(err))
 					return $iresult(err);
 				crc32 = pioCRC32Counter_alloc();
@@ -1779,7 +1779,7 @@ send_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
 		file->crc = pioCRC32Counter_getCRC32(crc32);
 		ft_dbg_assert(file->write_size == pioCRC32Counter_getSize(crc32));
 
-		err = $i(pioClose, out, true);
+		err = $i(pioClose, out);
 		if ($haserr(err))
 			return $iresult(err);
 	}
@@ -1846,7 +1846,7 @@ copy_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
 	if ($haserr(err))
 		return $iresult(err);
 
-	err = $i(pioClose, out, false);
+	err = $i(pioClose, out);
 	if ($haserr(err))
 		return $iresult(err);
 
@@ -2004,7 +2004,8 @@ write_page_headers(BackupPageHeader2 *headers, pgFile *file, HeaderMap *hdr_map,
 
 		hdr_map->fp = $iref( $i(pioOpenRewrite, drive, .path = hdr_map->path,
 								.permissions = FILE_PERMISSION, .binary = true,
-								.use_temp = is_merge, &err) );
+								.use_temp = is_merge, .sync = true,
+								.err = &err) );
 		if ($haserr(err))
 		{
 			ft_logerr(FT_FATAL, $errmsg(err), "opening header map for write");
@@ -2059,7 +2060,7 @@ cleanup_header_map(HeaderMap *hdr_map)
 	/* cleanup descriptor */
 	if ($notNULL(hdr_map->fp))
 	{
-		err = $i(pioClose, hdr_map->fp, .sync = true);
+		err = $i(pioClose, hdr_map->fp);
 		if ($haserr(err))
 			ft_logerr(FT_FATAL, $errmsg(err), "closing header map");
 		$idel(&hdr_map->fp);

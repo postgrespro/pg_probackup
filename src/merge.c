@@ -1206,7 +1206,7 @@ merge_data_file(parray *parent_chain, pgBackup *full_backup,
 									   /* when retrying merge header map cannot be trusted */
 									   is_retry ? false : true);
 
-	err = $i(pioClose, out, .sync = false);
+	err = $i(pioClose, out);
 	if ($haserr(err))
 		ft_logerr(FT_FATAL, $errmsg(err), "Closing target file");
 

@@ -199,8 +199,7 @@ fobj_error_cstr_key(gzErrStr);
 #endif
 
 // File
-#define mth__pioClose  		err_i, (bool, sync)
-#define mth__pioClose__optional() (sync, false)
+#define mth__pioClose  		err_i
 #define mth__pioRead  		size_t, (ft_bytes_t, buf), (err_i *, err)
 #define mth__pioWrite  		err_i, (ft_bytes_t, buf)
 #define mth__pioWriteCompressed  err_i, (ft_bytes_t, buf), (CompressAlg, compress_alg)
@@ -254,13 +253,14 @@ fobj_iface(pioPagesIterator);
 #define mth__pioOpenRead	pioReader_i, (path_t, path), (err_i *, err)
 #define mth__pioOpenReadStream	pioReadStream_i, (path_t, path), (err_i *, err)
 #define mth__pioOpenWrite   pioDBWriter_i, (path_t, path), (int, permissions), \
-										   (bool, exclusive), (err_i *, err)
-#define mth__pioOpenWrite__optional() (exclusive, false), (permissions, FILE_PERMISSION)
+										   (bool, exclusive), (bool, sync), \
+										   (err_i *, err)
+#define mth__pioOpenWrite__optional() (exclusive, false), (sync, false), (permissions, FILE_PERMISSION)
 #define mth__pioOpenRewrite pioWriteCloser_i, (path_t, path), (int, permissions), \
-                                              (bool, binary), (bool, use_temp),     \
-											  (err_i *, err)
+                                              (bool, binary), (bool, use_temp),   \
+											  (bool, sync), (err_i *, err)
 #define mth__pioOpenRewrite__optional() (binary, true), (use_temp, true), \
-                                        (permissions, FILE_PERMISSION)
+                                        (sync, false), (permissions, FILE_PERMISSION)
 #define mth__pioStat 		pio_stat_t, (path_t, path), (bool, follow_symlink), \
 										 (err_i *, err)
 #define mth__pioRemove 		err_i, (path_t, path), (bool, missing_ok)

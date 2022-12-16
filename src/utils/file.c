@@ -99,11 +99,13 @@ struct __attribute__((packed)) fio_req_open_rewrite {
 	uint32_t  permissions;
 	bool      binary;
 	bool      use_temp;
+	bool      sync;
 };
 
 struct __attribute__((packed)) fio_req_open_write {
 	uint32_t  permissions;
 	bool exclusive;
+	bool sync;
 };
 
 #if defined(WIN32)
@@ -2621,6 +2623,7 @@ fio_communicate(int in, int out)
 					.permissions = req->permissions,
 					.binary = req->binary,
 					.use_temp = req->use_temp,
+					.sync = req->sync,
 					.err = &err);
 			if ($haserr(err))
 				fio_send_pio_err(out, err);
@@ -2645,6 +2648,7 @@ fio_communicate(int in, int out)
 			fl = $i(pioOpenWrite, drive, .path = path,
 					.permissions = req->permissions,
 					.exclusive = req->exclusive,
+					.sync = req->sync,
 					.err = &err);
 			if ($haserr(err))
 				fio_send_pio_err(out, err);
@@ -2734,9 +2738,8 @@ fio_communicate(int in, int out)
 
 			ft_assert(hdr.handle >= 0);
 			ft_assert(objs[hdr.handle] != NULL);
-			ft_assert(hdr.size == 1);
 
-			err = $(pioClose, objs[hdr.handle], .sync = buf[0]);
+			err = $(pioClose, objs[hdr.handle]);
 			err = fobj_err_combine(err, async_errs[hdr.handle]);
 			if ($haserr(err))
 			{
@@ -2810,6 +2813,7 @@ typedef struct pioLocalWriteFile
 	ft_bytes_t buf;
 	bool     use_temp;
 	bool     delete_in_dispose;
+	bool     sync;
 } pioLocalWriteFile;
 #define kls__pioLocalWriteFile	iface__pioDBWriter, mth(fobjDispose), \
 								iface(pioWriteCloser, pioDBWriter)
@@ -3009,7 +3013,7 @@ pioLocalDrive_pioOpenReadStream(VSelf, path_t path, err_i *err)
 
 static pioWriteCloser_i
 pioLocalDrive_pioOpenRewrite(VSelf, path_t path, int permissions,
-						     bool binary, bool use_temp, err_i *err)
+						     bool binary, bool use_temp, bool sync, err_i *err)
 {
 	Self(pioLocalDrive);
 	ft_str_t	temppath;
@@ -3071,13 +3075,14 @@ pioLocalDrive_pioOpenRewrite(VSelf, path_t path, int permissions,
 				 .use_temp = use_temp,
 				 .delete_in_dispose = true,
 				 .fl = fl,
+				 .sync = sync,
 				 .buf = buf);
 	return $bind(pioWriteCloser, res);
 }
 
 static pioDBWriter_i
 pioLocalDrive_pioOpenWrite(VSelf, path_t path, int permissions,
-						   bool exclusive, err_i *err)
+						   bool exclusive, bool sync, err_i *err)
 {
 	Self(pioLocalDrive);
 	int			fd = -1;
@@ -3121,6 +3126,7 @@ pioLocalDrive_pioOpenWrite(VSelf, path_t path, int permissions,
 				 .use_temp = false,
 				 .delete_in_dispose = exclusive,
 				 .fl = fl,
+				 .sync = sync,
 				 .buf = buf);
 	return $bind(pioDBWriter, res);
 }
@@ -3397,7 +3403,7 @@ pioLocalFile_fobjDispose(VSelf)
 }
 
 static err_i
-pioLocalFile_pioClose(VSelf, bool sync)
+pioLocalFile_pioClose(VSelf)
 {
     Self(pioLocalFile);
     err_i	err = $noerr();
@@ -3544,7 +3550,7 @@ pioLocalWriteFile_pioTruncate(VSelf, uint64_t sz)
 }
 
 static err_i
-pioLocalWriteFile_pioClose(VSelf, bool sync)
+pioLocalWriteFile_pioClose(VSelf)
 {
 	Self(pioLocalWriteFile);
 	int fd;
@@ -3563,7 +3569,7 @@ pioLocalWriteFile_pioClose(VSelf, bool sync)
 		return $noerr();
 	}
 
-	if (sync)
+	if (self->sync)
 	{
 		r = fsync(fd);
 		if (r < 0)
@@ -3580,7 +3586,7 @@ pioLocalWriteFile_pioClose(VSelf, bool sync)
 		/* mark as renamed so fobjDispose will not delete it */
 		self->delete_in_dispose = false;
 
-		if (sync)
+		if (self->sync)
 		{
 			/*
 			 * To guarantee renaming the file is persistent, fsync the file with its
@@ -4063,7 +4069,7 @@ pioRemoteFile_doClose(VSelf)
 }
 
 static err_i
-pioRemoteFile_pioClose(VSelf, bool sync)
+pioRemoteFile_pioClose(VSelf)
 {
 	Self(pioRemoteFile);
 	err_i err = $noerr();
@@ -4296,7 +4302,7 @@ pioRemoteFile_fobjRepr(VSelf)
 
 static pioWriteCloser_i
 pioRemoteDrive_pioOpenRewrite(VSelf, path_t path, int permissions,
-							 bool binary, bool use_temp, err_i *err)
+							 bool binary, bool use_temp, bool sync, err_i *err)
 {
 	Self(pioRemoteDrive);
 	ft_strbuf_t buf = ft_strbuf_zero();
@@ -4311,7 +4317,8 @@ pioRemoteDrive_pioOpenRewrite(VSelf, path_t path, int permissions,
 	struct fio_req_open_rewrite req = {
 			.permissions = permissions,
 			.binary = binary,
-			.use_temp = use_temp
+			.use_temp = use_temp,
+			.sync = sync,
 	};
 
 	fio_ensure_remote();
@@ -4344,7 +4351,7 @@ pioRemoteDrive_pioOpenRewrite(VSelf, path_t path, int permissions,
 
 static pioDBWriter_i
 pioRemoteDrive_pioOpenWrite(VSelf, path_t path, int permissions,
-							bool exclusive, err_i *err)
+							bool exclusive, bool sync, err_i *err)
 {
 	Self(pioRemoteDrive);
 	ft_strbuf_t buf = ft_strbuf_zero();
@@ -4359,6 +4366,7 @@ pioRemoteDrive_pioOpenWrite(VSelf, path_t path, int permissions,
 	struct fio_req_open_write req = {
 			.permissions = permissions,
 			.exclusive   = exclusive,
+			.sync        = sync,
 	};
 
 	fio_ensure_remote();
@@ -4514,29 +4522,18 @@ pioRemoteWriteFile_pioTruncate(VSelf, uint64_t sz)
 }
 
 static err_i
-pioRemoteWriteFile_pioClose(VSelf, bool sync)
+pioRemoteWriteFile_pioClose(VSelf)
 {
 	Self(pioRemoteWriteFile);
-	fio_header hdr;
 	err_i	   err = $noerr();
-	struct __attribute__((packed)) {
-		fio_header hdr;
-		bool sync;
-	} req = {
-		.hdr = {
-				.cop = PIO_CLOSE,
-				.handle = self->handle,
-				.size = 1,
-		},
-		.sync = sync,
-	};
+	fio_header hdr = {.cop = PIO_CLOSE, .handle = self->handle };
 
 	ft_assert(self->handle >= 0);
 
 	if (self->did_async)
 		err = $(pioWriteFinish, self);
 
-	IO_CHECK(fio_write_all(fio_stdout, &req, sizeof(req)), sizeof(req));
+	IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
 	IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
 
 	unset_handle(self->handle);
@@ -4670,7 +4667,7 @@ eof:
 }
 
 static err_i
-pioReadFilter_pioClose(VSelf, bool sync)
+pioReadFilter_pioClose(VSelf)
 {
     Self(pioReadFilter);
     err_i err = $noerr();
@@ -4682,7 +4679,7 @@ pioReadFilter_pioClose(VSelf, bool sync)
         r = $i(pioFltFinish, self->filter, ft_bytes(NULL, 0), &err);
         ft_assert(r == 0);
     }
-    if ($ifdef(errcl =, pioClose, self->wrapped.self, sync))
+    if ($ifdef(errcl =, pioClose, self->wrapped.self))
         err = fobj_err_combine(err, errcl);
     return err;
 }
@@ -4812,7 +4809,7 @@ pioWriteFilter_pioWriteFinish(VSelf)
 }
 
 static err_i
-pioWriteFilter_pioClose(VSelf, bool sync)
+pioWriteFilter_pioClose(VSelf)
 {
     Self(pioWriteFilter);
     err_i err = $noerr();
@@ -4824,7 +4821,7 @@ pioWriteFilter_pioClose(VSelf, bool sync)
         r = $i(pioFltFinish, self->filter, ft_bytes(NULL, 0), &err);
         ft_assert(r == 0);
     }
-    if ($ifdef(errcl =, pioClose, self->wrapped.self, sync))
+    if ($ifdef(errcl =, pioClose, self->wrapped.self))
         err = fobj_err_combine(err, errcl);
     return err;
 }
@@ -5197,7 +5194,7 @@ pioReSeekableReader_pioSeek(VSelf, uint64_t pos)
 }
 
 static err_i
-pioReSeekableReader_pioClose(VSelf, bool sync)
+pioReSeekableReader_pioClose(VSelf)
 {
 	Self(pioReSeekableReader);
 	err_i err;
