@@ -802,27 +802,6 @@ pgBackupGetBackupMode(pgBackup *backup, bool show_color)
 		return backupModes[backup->backup_mode];
 }
 
-static bool
-IsDir(const char *dirpath, const char *entry, fio_location location)
-{
-	FOBJ_FUNC_ARP();
-	char		path[MAXPGPATH];
-	pio_stat_t	st;
-	err_i 		err;
-
-	join_path_components(path, dirpath, entry);
-
-	st = $i(pioStat, pioDriveForLocation(location),
-			.path = path, .follow_symlink = false, .err = &err);
-	if ($haserr(err))
-	{
-		ft_logerr(FT_WARNING, $errmsg(err), "IsDir");
-		return false;
-	}
-
-	return st.pst_kind == PIO_KIND_DIRECTORY;
-}
-
 /*
  * Create list of instances in given backup catalog.
  *
@@ -893,35 +872,35 @@ catalog_get_instance_list(CatalogState *catalogState)
 parray *
 catalog_get_backup_list(InstanceState *instanceState, time_t requested_backup_id)
 {
-	DIR		   *data_dir = NULL;
-	struct dirent *data_ent = NULL;
 	parray	   *backups = NULL;
+	parray	   *files = NULL;
 	int			i;
 
-	/* open backup instance backups directory */
-	data_dir = fio_opendir(FIO_BACKUP_HOST, instanceState->instance_backup_subdir_path);
-	if (data_dir == NULL)
-	{
-		elog(WARNING, "cannot open directory \"%s\": %s", instanceState->instance_backup_subdir_path,
-			strerror(errno));
-		goto err_proc;
-	}
+	files = parray_new();
+	backup_list_dir(files, instanceState->instance_backup_subdir_path);
 
 	/* scan the directory and list backups */
 	backups = parray_new();
-	for (; (data_ent = fio_readdir(data_dir)) != NULL; errno = 0)
+	for(i = 0; i < parray_num(files); ++i)
 	{
 		char		backup_conf_path[MAXPGPATH];
 		char		data_path[MAXPGPATH];
+		char		backup_dir_name[MAXPGPATH];
+		pgFile	   *file = (pgFile *) parray_get(files, i);
 		pgBackup   *backup = NULL;
+		char	   *slash;
 
-		/* skip not-directory entries and hidden entries */
-		if (!IsDir(instanceState->instance_backup_subdir_path, data_ent->d_name, FIO_BACKUP_HOST)
-			|| data_ent->d_name[0] == '.')
+		if (strcmp(file->name, BACKUP_CONTROL_FILE) != 0)
 			continue;
 
+		slash = strchr(file->rel_path, '/');
+		if(!slash)
+			continue;
+		memcpy(backup_dir_name, file->rel_path, slash - file->rel_path);
+		backup_dir_name[slash - file->rel_path] = 0;
+
 		/* open subdirectory of specific backup */
-		join_path_components(data_path, instanceState->instance_backup_subdir_path, data_ent->d_name);
+		join_path_components(data_path, instanceState->instance_backup_subdir_path, backup_dir_name);
 
 		/* read backup information from BACKUP_CONTROL_FILE */
 		join_path_components(backup_conf_path, data_path, BACKUP_CONTROL_FILE);
@@ -931,12 +910,12 @@ catalog_get_backup_list(InstanceState *instanceState, time_t requested_backup_id
 		{
 			backup = pgut_new0(pgBackup);
 			pgBackupInit(backup, instanceState->backup_location);
-			backup->start_time = base36dec(data_ent->d_name);
+			backup->start_time = base36dec(backup_dir_name);
 			/* XXX BACKUP_ID change it when backup_id wouldn't match start_time */
 			Assert(backup->backup_id == 0 || backup->backup_id == backup->start_time);
 			backup->backup_id = backup->start_time;
 		}
-		else if (strcmp(backup_id_of(backup), data_ent->d_name) != 0)
+		else if (strcmp(backup_id_of(backup), backup_dir_name) != 0)
 		{
 			/* TODO there is no such guarantees */
 			elog(WARNING, "backup ID in control file \"%s\" doesn't match name of the backup folder \"%s\"",
@@ -944,7 +923,6 @@ catalog_get_backup_list(InstanceState *instanceState, time_t requested_backup_id
 		}
 
 		backup->root_dir = pgut_strdup(data_path);
-
 		backup->database_dir = pgut_malloc(MAXPGPATH);
 		join_path_components(backup->database_dir, backup->root_dir, DATABASE_DIR);
 
@@ -961,15 +939,14 @@ catalog_get_backup_list(InstanceState *instanceState, time_t requested_backup_id
 		parray_append(backups, backup);
 	}
 
-	if (errno)
-	{
-		elog(WARNING, "Cannot read backup root directory \"%s\": %s",
-			instanceState->instance_backup_subdir_path, strerror(errno));
-		goto err_proc;
-	}
+	parray_walk(files, pgFileFree);
+	parray_free(files);
 
-	fio_closedir(data_dir);
-	data_dir = NULL;
+	if (parray_num(backups) == 0)
+	{
+		elog(WARNING, "Cannot find any backups in \"%s\"",
+			instanceState->instance_backup_subdir_path);
+	}
 
 	parray_qsort(backups, pgBackupCompareIdDesc);
 
@@ -991,17 +968,6 @@ catalog_get_backup_list(InstanceState *instanceState, time_t requested_backup_id
 	}
 
 	return backups;
-
-err_proc:
-	if (data_dir)
-		fio_closedir(data_dir);
-	if (backups)
-		parray_walk(backups, pgBackupFree);
-	parray_free(backups);
-
-	elog(ERROR, "Failed to get backup list");
-
-	return NULL;
 }
 
 /*
