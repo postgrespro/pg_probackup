@@ -2350,6 +2350,8 @@ fio_communicate(int in, int out)
 	pioDBDrive_i drive;
 	pio_stat_t st;
 	ft_bytes_t bytes;
+	ft_str_t   path;
+	ft_str_t   path2;
 	int rc;
 	int tmp_fd;
 	pg_crc32 crc;
@@ -2448,7 +2450,10 @@ fio_communicate(int in, int out)
 			IO_CHECK(fio_write_all(out, &st, sizeof(st)), sizeof(st));
 			break;
 		  case FIO_FILES_ARE_SAME:
-			hdr.arg = (int)$i(pioFilesAreSame, drive, buf, buf+strlen(buf)+1);
+			bytes = ft_bytes(buf, hdr.size);
+			path = ft_bytes_shift_zt(&bytes);
+			path2 = ft_bytes_shift_zt(&bytes);
+			hdr.arg = (int)$i(pioFilesAreSame, drive, path.ptr, path2.ptr);
 			hdr.size = 0;
 			IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 			break;
@@ -2475,8 +2480,8 @@ fio_communicate(int in, int out)
 			break;
 		  case FIO_WRITE_FILE_AT_ONCE:
 			bytes = ft_bytes(buf, hdr.size);
-			ft_bytes_consume(&bytes, strlen(buf)+1);
-			err = $i(pioWriteFile, drive, .path = buf,
+			path = ft_bytes_shift_zt(&bytes);
+			err = $i(pioWriteFile, drive, .path = path.ptr,
 					 .content = bytes, .binary = hdr.arg);
 			if ($haserr(err))
 			{
@@ -2809,6 +2814,14 @@ typedef struct pioLocalWriteFile
 #define kls__pioLocalWriteFile	iface__pioDBWriter, mth(fobjDispose), \
 								iface(pioWriteCloser, pioDBWriter)
 fobj_klass(pioLocalWriteFile);
+
+typedef struct pioLocalDir
+{
+	ft_str_t path;
+	DIR*     dir;
+} pioLocalDir;
+#define kls__pioLocalDir iface__pioDirIter, iface(pioDirIter), mth(fobjDispose)
+fobj_klass(pioLocalDir);
 
 typedef struct pioRemoteFile
 {
@@ -3984,8 +3997,7 @@ pioRemoteDrive_pioWriteFile(VSelf, path_t path, ft_bytes_t content, bool binary)
 		return $iresult(err);
 	}
 
-	ft_strbuf_catc(&buf, path);
-	ft_strbuf_cat1(&buf, '\x00');
+	ft_strbuf_catc_zt(&buf, path);
 	ft_strbuf_catbytes(&buf, content);
 
 	hdr = (fio_header){
@@ -4306,8 +4318,7 @@ pioRemoteDrive_pioOpenRewrite(VSelf, path_t path, int permissions,
 
 	ft_strbuf_catbytes(&buf, ft_bytes(&hdr, sizeof(hdr)));
 	ft_strbuf_catbytes(&buf, ft_bytes(&req, sizeof(req)));
-	ft_strbuf_catc(&buf, path);
-	ft_strbuf_cat1(&buf, '\0');
+	ft_strbuf_catc_zt(&buf, path);
 
 	((fio_header*)buf.ptr)->size = buf.len - sizeof(hdr);
 
@@ -4354,8 +4365,7 @@ pioRemoteDrive_pioOpenWrite(VSelf, path_t path, int permissions,
 
 	ft_strbuf_catbytes(&buf, ft_bytes(&hdr, sizeof(hdr)));
 	ft_strbuf_catbytes(&buf, ft_bytes(&req, sizeof(req)));
-	ft_strbuf_catc(&buf, path);
-	ft_strbuf_cat1(&buf, '\0');
+	ft_strbuf_catc_zt(&buf, path);
 
 	((fio_header*)buf.ptr)->size = buf.len - sizeof(hdr);
 
@@ -5466,8 +5476,7 @@ pioRemoteDrive_pioIteratePages(VSelf, path_t from_fullpath,
 	ft_strbuf_catbytes(&buf, ft_bytes(&hdr, sizeof(hdr)));
 	ft_strbuf_catbytes(&buf, ft_bytes(&req, sizeof(req)));
 	ft_strbuf_catbytes(&buf, ft_bytes(pagemap.bitmap, pagemap.bitmapsize));
-	ft_strbuf_catc(&buf, from_fullpath);
-	ft_strbuf_cat1(&buf, '\0');
+	ft_strbuf_catc_zt(&buf, from_fullpath);
 
 	((fio_header*)buf.ptr)->size = buf.len - sizeof(fio_header);
 
