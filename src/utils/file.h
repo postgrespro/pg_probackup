@@ -310,14 +310,15 @@ fobj_method(pioWriteFile);
 fobj_method(pioIteratePages);
 
 #define iface__pioDrive 	mth(pioOpenRead, pioOpenReadStream), \
-							mth(pioStat, pioRemove, pioRename), \
+							mth(pioStat, pioRemove), \
 					        mth(pioExists, pioGetCRC32, pioIsRemote),          \
 							mth(pioMakeDir, pioListDir, pioRemoveDir),  \
 							mth(pioFilesAreSame, pioReadFile, pioWriteFile),   \
 							mth(pioOpenRewrite)
 fobj_iface(pioDrive);
 
-#define iface__pioDBDrive	iface__pioDrive, mth(pioIteratePages, pioOpenWrite)
+#define iface__pioDBDrive	iface__pioDrive, mth(pioIteratePages, pioOpenWrite), \
+                            mth(pioRename)
 fobj_iface(pioDBDrive);
 
 extern pioDrive_i pioDriveForLocation(fio_location location);
