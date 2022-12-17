@@ -323,8 +323,16 @@ ft_inline ft_bytes_t ft_bytesc(const char* ptr) {
 	return (ft_bytes_t){.ptr = (char*)ptr, .len = strlen(ptr)};
 }
 
+#define FT_BYTES_FOR(var) ft_bytes(&(var), sizeof(var))
+
 ft_inline ft_bytes_t ft_bytes_alloc(size_t sz) {
 	return ft_bytes(ft_malloc(sz), sz);
+}
+
+ft_inline ft_bytes_t ft_bytes_dup(ft_bytes_t bytes) {
+	ft_bytes_t r = ft_bytes_alloc(bytes.len);
+	memmove(r.ptr, bytes.ptr, bytes.len);
+	return r;
 }
 
 ft_inline void ft_bytes_free(ft_bytes_t* bytes) {
@@ -337,6 +345,9 @@ ft_inline size_t ft_bytes_move(ft_bytes_t *dest, ft_bytes_t *src);
 ft_inline ft_bytes_t ft_bytes_split(ft_bytes_t *bytes, size_t n);
 
 extern ft_bytes_t   ft_bytes_shift_line(ft_bytes_t *bytes);
+ft_inline bool      ft_bytes_shift_to(ft_bytes_t *bytes, ft_bytes_t to);
+ft_inline void      ft_bytes_shift_must(ft_bytes_t *bytes, ft_bytes_t to);
+
 extern size_t       ft_bytes_find_bytes(ft_bytes_t haystack, ft_bytes_t needle);
 ft_inline size_t    ft_bytes_find_cstr(ft_bytes_t haystack, const char *needle);
 ft_inline bool      ft_bytes_has_cstr(ft_bytes_t haystack, const char *needle);

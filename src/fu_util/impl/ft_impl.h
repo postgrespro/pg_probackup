@@ -341,6 +341,24 @@ ft_bytes_move(ft_bytes_t *dest, ft_bytes_t *src) {
 }
 
 ft_inline bool
+ft_bytes_shift_to(ft_bytes_t *bytes, ft_bytes_t to)
+{
+	if (bytes->len < to.len)
+		return false;
+	memmove(to.ptr, bytes->ptr, to.len);
+	ft_bytes_consume(bytes, to.len);
+	return true;
+}
+
+ft_inline void
+ft_bytes_shift_must(ft_bytes_t *bytes, ft_bytes_t to)
+{
+	ft_dbg_assert(to.len <= bytes->len);
+	memmove(to.ptr, bytes->ptr, to.len);
+	ft_bytes_consume(bytes, to.len);
+}
+
+ft_inline bool
 ft_bytes_starts_with(ft_bytes_t haystack, ft_bytes_t needle)
 {
 	return haystack.len >= needle.len &&
