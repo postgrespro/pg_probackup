@@ -252,22 +252,18 @@ fobj_iface(pioPagesIterator);
 // Drive
 #define mth__pioOpenRead	pioReader_i, (path_t, path), (err_i *, err)
 #define mth__pioOpenReadStream	pioReadStream_i, (path_t, path), (err_i *, err)
-#define mth__pioOpenWrite   pioDBWriter_i, (path_t, path), (int, permissions), \
-										   (bool, exclusive), (bool, sync), \
+#define mth__pioOpenWrite   pioDBWriter_i, (path_t, path), (int, permissions, FILE_PERMISSION), \
+										   (bool, exclusive, false), (bool, sync, false), \
 										   (err_i *, err)
-#define mth__pioOpenWrite__optional() (exclusive, false), (sync, false), (permissions, FILE_PERMISSION)
-#define mth__pioOpenRewrite pioWriteCloser_i, (path_t, path), (int, permissions), \
-                                              (bool, binary), (bool, use_temp),   \
-											  (bool, sync), (err_i *, err)
-#define mth__pioOpenRewrite__optional() (binary, true), (use_temp, true), \
-                                        (sync, false), (permissions, FILE_PERMISSION)
+#define mth__pioOpenRewrite pioWriteCloser_i, (path_t, path), (int, permissions, FILE_PERMISSION), \
+                                              (bool, binary, true), (bool, use_temp, true),   \
+											  (bool, sync, false), (err_i *, err)
 #define mth__pioStat 		pio_stat_t, (path_t, path), (bool, follow_symlink), \
 										 (err_i *, err)
 #define mth__pioRemove 		err_i, (path_t, path), (bool, missing_ok)
 #define mth__pioRename 		err_i, (path_t, old_path), (path_t, new_path)
-#define mth__pioExists 		bool, (path_t, path), (pio_file_kind_e, expected_kind),	\
+#define mth__pioExists 		bool, (path_t, path), (pio_file_kind_e, expected_kind, PIO_KIND_REGULAR),	\
 									(err_i *, err)
-#define mth__pioExists__optional() (expected_kind, PIO_KIND_REGULAR)
 #define mth__pioGetCRC32 	pg_crc32, (path_t, path), (bool, compressed), \
 									  (err_i *, err)
 /* Compare, that filename1 and filename2 is the same file */
@@ -280,11 +276,10 @@ fobj_iface(pioPagesIterator);
 #define mth__pioRemoveDir   void, (const char *, root), (bool, root_as_well)
 /* pioReadFile and pioWriteFile should be used only for small files */
 #define PIO_READ_WRITE_FILE_LIMIT (16*1024*1024)
-#define mth__pioReadFile	ft_bytes_t, (path_t, path), (bool, binary), \
+#define mth__pioReadFile	ft_bytes_t, (path_t, path), (bool, binary, true), \
 							(err_i *, err)
-#define mth__pioReadFile__optional() (binary, true)
-#define mth__pioWriteFile	err_i, (path_t, path), (ft_bytes_t, content), (bool, binary)
-#define mth__pioWriteFile__optional() (binary, true)
+#define mth__pioWriteFile	err_i, (path_t, path), (ft_bytes_t, content), \
+                                   (bool, binary, true)
 
 #define mth__pioIteratePages pioPagesIterator_i, (path_t, path), \
 		(int, segno), (datapagemap_t, pagemap), (XLogRecPtr, start_lsn), \
@@ -345,8 +340,7 @@ doIteratePages_impl(pioIteratePages_i drive, struct doIteratePages_params p);
 					.just_validate = false,                \
 					__VA_ARGS__}))
 
-#define mth__pioSetAsync    err_i, (bool, async)
-#define mth__pioSetAsync__optional()  (async, true)
+#define mth__pioSetAsync    err_i, (bool, async, true)
 #define mth__pioAsyncRead   size_t, (ft_bytes_t, buf), (err_i*, err)
 #define mth__pioAsyncWrite  size_t, (ft_bytes_t, buf), (err_i*, err)
 #define mth__pioAsyncError  err_i

@@ -1240,6 +1240,7 @@ create_empty_file(const char *to_root, fio_location to_location, pgFile *file)
 	 * use case
 	 */
 	fl = $i(pioOpenRewrite, drive,
+			.path = to_path,
 			.permissions = file->mode,
 			.use_temp = false,
 			.err = &err);
