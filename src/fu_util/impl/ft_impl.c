@@ -207,7 +207,12 @@ ft__strbuf_ensure(ft_strbuf_t *buf, size_t n) {
         buf->ptr = ft_realloc(buf->ptr, new_cap);
     else {
         char*   newbuf = ft_malloc(new_cap);
-        memcpy(newbuf, buf->ptr, (size_t)buf->len+1);
+        if (buf->ptr != NULL)
+            memcpy(newbuf, buf->ptr, (size_t)buf->len+1);
+        else {
+            ft_assert(buf->len == 0);
+            newbuf[0] = '\0';
+        }
         buf->ptr = newbuf;
     }
     buf->cap = new_cap-1;
