@@ -2743,7 +2743,6 @@ fio_communicate(int in, int out)
 			ft_assert(hdr.handle >= 0 && hdr.handle < FIO_FDMAX);
 			ft_assert(objs[hdr.handle] == NULL);
 			pioDirIter_i iter;
-			err_i        err;
 
 			iter = $i(pioOpenDir, drive, buf, .err = &err);
 			if ($haserr(err))
@@ -2795,7 +2794,6 @@ fio_communicate(int in, int out)
 		}
 		case PIO_CLOSE:
 		{
-			err_i err;
 
 			ft_assert(hdr.handle >= 0);
 			ft_assert(objs[hdr.handle] != NULL);
