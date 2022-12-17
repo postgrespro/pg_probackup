@@ -260,32 +260,9 @@ fobj_method_implements(const fobj_t self, fobj_method_handle_t meth) {
     return false;
 }
 
-extern void
-fobj__validate_args(fobj_method_handle_t meth,
-                    fobj_t self,
-                    const char* const * paramnames,
-                    const char *set,
-                    size_t cnt) {
-    fobj_header_t              *h;
-    fobj_klass_handle_t         klass;
-    size_t  i;
-
-    ft_assert(fobj_global_state != FOBJ_RT_NOT_INITIALIZED);
-    ft_assert(meth > 0 && meth <= atload(&fobj_methods_n));
-    ft_assert(meth != fobj__nm_mhandle(fobjDispose)());
-    ft_assert(self != NULL, "call '%s' on NULL object", fobj_methods[meth].name);
-
-    h = ((fobj_header_t*)self - 1);
-    assert(h->magic == FOBJ_HEADER_MAGIC);
-    klass = h->klass;
-    ft_dbg_assert(klass > 0 && klass <= atload(&fobj_klasses_n));
-
-    for (i = 0; i < cnt; i++) {
-        ft_assert(set[i] != 0, "Calling '%s' on '%s' miss argument '%s'",
-                                fobj_methods[meth].name,
-                                fobj_klasses[klass].name,
-                                paramnames[i]);
-    }
+_Noreturn 
+void fobj__validate_arg(const char* file, int line, const char *arg) {
+	ft_log(FT_FATAL, "%s:%d: missing argument %s", file, line, arg);
 }
 
 const char *

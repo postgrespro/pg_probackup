@@ -220,7 +220,7 @@
 #define fm_foreach_tuple_arg_join_n(join1, join2, macro, arg, x, y, ...) \
     join1() fm_apply(macro, arg, fm_expand x) \
     join2() fm_apply(macro, arg, fm_expand y) \
-    fm_recurs2(fm_foreach_tuple_arg_join_, fm_va_01n(__VA_ARGS__))(join1, join2, macro, arg, __VA_ARGS__)
+    fm_recurs2(fm_foreach_tuple_arg_join_, fm_va_01n(__VA_ARGS__))(join2, join2, macro, arg, __VA_ARGS__)
 
 #define fm_foreach_tuple_arg(macro, arg, ...) \
     fm_foreach_tuple_arg_join(fm_empty, macro, arg, __VA_ARGS__)
@@ -244,6 +244,9 @@
 
 #define fm_eval_tuples_comma(macro, ...) \
     fm_eval(fm_foreach_tuple_comma(macro, __VA_ARGS__))
+
+#define fm_eval_tuples_arg_comma(macro, arg, ...) \
+    fm_eval(fm_foreach_tuple_arg_comma(macro, arg, __VA_ARGS__))
 
 #define fm__dumb_require_semicolon \
     struct __dumb_struct_declaration_for_semicolon

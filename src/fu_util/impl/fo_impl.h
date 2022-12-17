@@ -63,7 +63,6 @@ typedef struct {
 #define fobj__nm_mhandle(meth)      meth##__mh
 #define fobj__nm_do(meth)           meth##__do
 #define fobj__nm_params_t(meth)     meth##__params_t
-#define fobj__nm_invoke(meth)       meth##__invoke
 #define fobj__nm_impl_t(meth)       meth##__impl
 #define fobj__nm_cb(meth)           meth##__fetch_cb
 #define fobj__nm_cb_t(meth)         meth##__cb_t
@@ -99,7 +98,6 @@ typedef struct {
             fobj__nm_mhandle(meth), \
             fobj__nm_params_t(meth), \
             fobj__nm_do(meth), \
-            fobj__nm_invoke(meth), \
             fobj__nm_impl_t(meth), \
             fobj__nm_cb(meth), \
             fobj__nm_cb_t(meth), \
@@ -129,7 +127,7 @@ typedef struct {
 
 #define fobj__method_declare_impl(meth, handle, \
                                   params_t, \
-                                  meth_do, invoke_methparams, \
+                                  meth_do, \
                                   impl_meth_t, \
                                   cb_meth, cb_meth_t, \
                                   register_meth, wrap_decl, \
@@ -165,19 +163,7 @@ typedef struct {
     ft_inline ft_always_inline res \
     meth(fobj_t self comma() fobj__mapArgs_toArgs(__VA_ARGS__)) {  \
         return meth_do(self, fobj_self_klass comma() fobj__mapArgs_toNames(__VA_ARGS__)); \
-    } \
-    \
-    ft_inline ft_always_inline res \
-    invoke_methparams(fobj_t self, fobj_klass_handle_t parent, params_t params) {\
-        fobj__params_defaults(meth);        \
-        fm_when_isnt_empty(__VA_ARGS__)( \
-        if (ft_unlikely(!(fobj__assertArgsAnd(__VA_ARGS__)))) { \
-            const char * const params_s[] = { fobj__mapArgs_toNameStrs(__VA_ARGS__) }; \
-            char set[] = {fobj__assertArgsVals(__VA_ARGS__)};                           \
-            fobj__validate_args(handle(), self, params_s, set, ft_arrsz(set));  \
-        } ) \
-        return meth_do(self, parent comma() fobj__mapArgs_toNamedParams(__VA_ARGS__)); \
-    } \
+    }
 
 #define fobj__method_common(meth, handle, impl_meth_t, register_meth, \
                             wrap_decl, comma, res, ...) \
@@ -216,35 +202,18 @@ typedef struct {
     fm_eval_tuples_comma(fobj__mapArgs_toNames_do, __VA_ARGS__)
 #define fobj__mapArgs_toNames_do(x, y, ...) y
 
-#define fobj__mapArgs_toNameStrs(...) \
-    fm_eval_tuples_comma(fobj__mapArgs_toNameStrs_do, __VA_ARGS__)
-#define fobj__mapArgs_toNameStrs_do(x, y, ...) #y
+#define fobj__mapArgs_toNamedParams(params, ...) \
+    fm_eval_tuples_arg_comma(fobj__mapArgs_toNamedParams_do, params, __VA_ARGS__)
+#define fobj__mapArgs_toNamedParams_do(params, x, y, ...) params.y
 
-#define fobj__mapArgs_toNamedParams(...) \
-    fm_eval_tuples_comma(fobj__mapArgs_toNamedParams_do, __VA_ARGS__)
-#define fobj__mapArgs_toNamedParams_do(x, y, ...) params.y
-
-#define fobj__assertArgsAnd(...) \
-    1 fm_eval_tuples(fobj__assertArgsAnd_do, __VA_ARGS__)
-#define fobj__assertArgsAnd_do(x, y, ...) & fobj__check_arg(params.y)
-
-#define fobj__assertArgsVals(...) \
-    fm_eval_tuples_comma(fobj__assertArgsVals_do, __VA_ARGS__)
-#define fobj__assertArgsVals_do(x, y, ...) fobj__check_arg(params.y)
-
-#define fobj__params_defaults(meth) \
-    fobj__params_defaults_i(meth, fobj__nm_mthdflt(meth)())
-#define fobj__params_defaults_i(meth, ...) \
-    fm_when(fm_is_tuple(fm_head(__VA_ARGS__))) ( \
-        fobj__params_defaults_impl(__VA_ARGS__) \
-    )
-#define fobj__params_defaults_impl(...) \
-    fm_eval_tuples(fobj__params_defaults_each, __VA_ARGS__)
-#define fobj__params_defaults_each(x, ...) \
-    if (!fobj__check_arg(params.x)) { \
-        fm_when_isnt_empty(__VA_ARGS__)( params.x = __VA_ARGS__; ) \
-        params.fobj__nm_given(x) = fobj__dumb_arg; \
-    }
+#define fobj__params_defaultsEach(params, ...) \
+	fm_eval_tuples_arg(fobj__params_defaultsEach_do, params, __VA_ARGS__)
+#define fobj__params_defaultsEach_do(params, x, y, ...) \
+	if (!fobj__check_arg(params.y)) { \
+		fm_if(fm_is_empty(__VA_ARGS__), \
+				fobj__validate_arg(__FILE__, __LINE__, #y), \
+				params.y = __VA_ARGS__); \
+	}
 
 /* Klass declarations */
 
@@ -433,11 +402,19 @@ typedef struct {
 
 /* Method invocation */
 
-#define fobj_call(meth, self, ...) \
-    fobj__nm_invoke(meth)(self, fobj_self_klass, fobj_pass_params(meth, __VA_ARGS__))
+#define fobj_call(meth, self, ...) fobj__call_1(meth, self, fobj_self_klass, fm_uniq(params), __VA_ARGS__)
+#define fobj__call_1(meth, self, parent, params, ...) ({\
+	ft_unused fobj__nm_params_t(meth) params = fobj_pass_params(meth, __VA_ARGS__); \
+	fobj__call_2(meth, (self), parent, params, fobj__nm_mth(meth)) \
+	})
+#define fobj__call_2(meth, self, parent, params, ...) \
+	fobj__call_3(meth, self, parent, params, __VA_ARGS__)
+#define fobj__call_3(meth, self, parent, params, res, ...) \
+	fobj__params_defaultsEach(params, __VA_ARGS__);        \
+	fobj__nm_do(meth)(self, parent fm_va_comma(__VA_ARGS__) fobj__mapArgs_toNamedParams(params, __VA_ARGS__));
 
 #define fobj_call_super(meth, _klassh, self, ...) \
-    fobj__nm_invoke(meth)(self, _klassh, fobj_pass_params(meth, __VA_ARGS__))
+    fobj__call_1(meth, self, _klassh, fm_uniq(params), __VA_ARGS__)
 
 #define fobj_iface_call(meth, iface, ...) \
     fobj_call(meth, (fobj_t)(iface).fobj__nm_has(meth), __VA_ARGS__)
@@ -453,14 +430,14 @@ typedef struct {
 
 #define fobj_ifdef(assignment, meth, self, ...) \
     fobj__ifdef_impl(assignment, meth, (self), \
-            fm_uniq(cb), fm_uniq(_self), fobj__nm_cb(meth), fobj__nm_cb_t(meth), \
-            fobj__nm_invoke(meth), __VA_ARGS__)
-#define fobj__ifdef_impl(assignment, meth, self_, cb, self, cb_meth, cb_meth_t, \
-            invoke_meth__params, ...) ({                                  \
+            fm_uniq(cb), fm_uniq(_self), fobj__nm_cb(meth), \
+			fobj__nm_cb_t(meth), __VA_ARGS__)
+#define fobj__ifdef_impl(assignment, meth, self_, cb, self, \
+                        cb_meth, cb_meth_t, ...) ({ \
             fobj_t self = (self_);                                                             \
             cb_meth_t cb = cb_meth(self, fobj_self_klass, false); \
             if (cb.impl != NULL) { \
-                assignment invoke_meth__params(self, fobj_self_klass, fobj_pass_params(meth, __VA_ARGS__)); \
+                assignment fobj_call(meth, self, __VA_ARGS__); \
             } \
             cb.impl != NULL; \
             })
@@ -508,8 +485,11 @@ extern bool fobj_method_implements(fobj_t self,
 extern void* fobj_klass_method_search(fobj_klass_handle_t klass,
                                       fobj_method_handle_t meth);
 
-extern void fobj__validate_args(fobj_method_handle_t meth, fobj_t self,
-                                const char* const * paramnames, const char *set, size_t cnt);
+extern _Noreturn
+#if __OPTIMIZE__ || defined(__clang__)
+__attribute__((error("missing argument")))
+#endif
+void fobj__validate_arg(const char* file, int line, const char *arg);
 
 /* Variable set helpers */
 

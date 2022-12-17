@@ -370,8 +370,7 @@ fobj_klass(fobjBase);
 /*
  * fobjFormat should be defined for pretty printing
  */
-#define mth__fobjFormat  void, (ft_strbuf_t*, out), (const char*, fmt)
-#define mth__fobjFormat__optional() (fmt, NULL)
+#define mth__fobjFormat  void, (ft_strbuf_t*, out), (const char*, fmt, NULL)
 fobj_method(fobjFormat);
 
 /*********************************

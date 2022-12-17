@@ -8,8 +8,7 @@
 static int verbose = 0;
 #define logf(...) ft_log(FT_DEBUG, __VA_ARGS__)
 
-#define mth__ioRead   ssize_t, (void *, buf), (size_t, count)
-#define mth__ioRead__optional() (count, 4)
+#define mth__ioRead   ssize_t, (void *, buf), (size_t, count, 4)
 #define mth__ioClose  int
 #define mth__ioStatus int
 #define mth__fobjGetError err_i
@@ -206,7 +205,7 @@ int main(int argc, char** argv) {
     ft_assert(i != ioStatus(a));
     ft_assert($ifdef(i =, ioStatus, a));
     ft_assert(i == ioStatus(a));
-    ft_assert(!$ifdef(,fobjFormat, a));
+    ft_assert(!$ifdef(,fobjFormat, a, NULL));
 
     err = $(fobjGetError, a);
     logf("Error: %s", $errmsg(err));
