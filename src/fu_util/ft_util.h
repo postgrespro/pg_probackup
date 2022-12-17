@@ -34,7 +34,11 @@ typedef SSIZE_T ssize_t;
 #define ft_gcc_malloc(free, idx) __attribute__((malloc))
 #endif
 #define ft_unused __attribute__((unused))
+#if !defined(__clang__)
 #define ft_gnu_printf(fmt, arg) __attribute__((format(gnu_printf,fmt,arg)))
+#else
+#define ft_gnu_printf(fmt, arg) __attribute__((format(printf,fmt,arg)))
+#endif
 #define ft_likely(x)    __builtin_expect(!!(x), 1)
 #define ft_unlikely(x)  __builtin_expect(!!(x), 0)
 #define ft_always_inline __attribute__((always_inline))
