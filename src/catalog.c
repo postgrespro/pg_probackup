@@ -802,27 +802,6 @@ pgBackupGetBackupMode(pgBackup *backup, bool show_color)
 		return backupModes[backup->backup_mode];
 }
 
-static bool
-IsDir(const char *dirpath, const char *entry, fio_location location)
-{
-	FOBJ_FUNC_ARP();
-	char		path[MAXPGPATH];
-	pio_stat_t	st;
-	err_i 		err;
-
-	join_path_components(path, dirpath, entry);
-
-	st = $i(pioStat, pioDriveForLocation(location),
-			.path = path, .follow_symlink = false, .err = &err);
-	if ($haserr(err))
-	{
-		ft_logerr(FT_WARNING, $errmsg(err), "IsDir");
-		return false;
-	}
-
-	return st.pst_kind == PIO_KIND_DIRECTORY;
-}
-
 /*
  * Create list of instances in given backup catalog.
  *
@@ -893,35 +872,43 @@ catalog_get_instance_list(CatalogState *catalogState)
 parray *
 catalog_get_backup_list(InstanceState *instanceState, time_t requested_backup_id)
 {
-	DIR		   *data_dir = NULL;
-	struct dirent *data_ent = NULL;
+	FOBJ_FUNC_ARP();
+	pioDirIter_i  data_dir;
+	pio_dirent_t  data_ent;
+	err_i 		err = $noerr();
 	parray	   *backups = NULL;
 	int			i;
 
 	/* open backup instance backups directory */
-	data_dir = fio_opendir(FIO_BACKUP_HOST, instanceState->instance_backup_subdir_path);
-	if (data_dir == NULL)
+	data_dir = $i(pioOpenDir, instanceState->backup_location,
+				  instanceState->instance_backup_subdir_path, .err = &err);
+	if ($haserr(err) && getErrno(err) != ENOENT)
 	{
-		elog(WARNING, "cannot open directory \"%s\": %s", instanceState->instance_backup_subdir_path,
-			strerror(errno));
-		goto err_proc;
+		ft_logerr(FT_FATAL, $errmsg(err), "Failed to get backup list");
 	}
 
 	/* scan the directory and list backups */
 	backups = parray_new();
-	for (; (data_ent = fio_readdir(data_dir)) != NULL; errno = 0)
+	if ($isNULL(data_dir))
+	{
+		elog(WARNING, "Cannot find any backups in \"%s\"",
+			 instanceState->instance_backup_subdir_path);
+		return backups;
+	}
+
+	while ((data_ent = $i(pioDirNext, data_dir, .err=&err)).stat.pst_kind)
 	{
 		char		backup_conf_path[MAXPGPATH];
 		char		data_path[MAXPGPATH];
 		pgBackup   *backup = NULL;
 
-		/* skip not-directory entries and hidden entries */
-		if (!IsDir(instanceState->instance_backup_subdir_path, data_ent->d_name, FIO_BACKUP_HOST)
-			|| data_ent->d_name[0] == '.')
+		/* skip not-directory entries (hidden are skipped already) */
+		if (data_ent.stat.pst_kind != PIO_KIND_DIRECTORY)
 			continue;
 
 		/* open subdirectory of specific backup */
-		join_path_components(data_path, instanceState->instance_backup_subdir_path, data_ent->d_name);
+		join_path_components(data_path, instanceState->instance_backup_subdir_path,
+							 data_ent.name.ptr);
 
 		/* read backup information from BACKUP_CONTROL_FILE */
 		join_path_components(backup_conf_path, data_path, BACKUP_CONTROL_FILE);
@@ -931,12 +918,12 @@ catalog_get_backup_list(InstanceState *instanceState, time_t requested_backup_id
 		{
 			backup = pgut_new0(pgBackup);
 			pgBackupInit(backup, instanceState->backup_location);
-			backup->start_time = base36dec(data_ent->d_name);
+			backup->start_time = base36dec(data_ent.name.ptr);
 			/* XXX BACKUP_ID change it when backup_id wouldn't match start_time */
 			Assert(backup->backup_id == 0 || backup->backup_id == backup->start_time);
 			backup->backup_id = backup->start_time;
 		}
-		else if (strcmp(backup_id_of(backup), data_ent->d_name) != 0)
+		else if (strcmp(backup_id_of(backup), data_ent.name.ptr) != 0)
 		{
 			/* TODO there is no such guarantees */
 			elog(WARNING, "backup ID in control file \"%s\" doesn't match name of the backup folder \"%s\"",
@@ -961,15 +948,13 @@ catalog_get_backup_list(InstanceState *instanceState, time_t requested_backup_id
 		parray_append(backups, backup);
 	}
 
-	if (errno)
+	$i(pioClose, data_dir); // ignore error
+
+	if ($haserr(err))
 	{
-		elog(WARNING, "Cannot read backup root directory \"%s\": %s",
-			instanceState->instance_backup_subdir_path, strerror(errno));
+		ft_logerr(FT_WARNING, $errmsg(err), "Read backup root directory");
 		goto err_proc;
 	}
-
-	fio_closedir(data_dir);
-	data_dir = NULL;
 
 	parray_qsort(backups, pgBackupCompareIdDesc);
 
@@ -993,8 +978,6 @@ catalog_get_backup_list(InstanceState *instanceState, time_t requested_backup_id
 	return backups;
 
 err_proc:
-	if (data_dir)
-		fio_closedir(data_dir);
 	if (backups)
 		parray_walk(backups, pgBackupFree);
 	parray_free(backups);
