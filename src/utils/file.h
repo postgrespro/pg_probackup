@@ -36,9 +36,6 @@ typedef enum
 	FIO_READ,
 	FIO_STAT,
 	FIO_SEND,
-	FIO_OPENDIR,
-	FIO_READDIR,
-	FIO_CLOSEDIR,
 	FIO_PAGE,
 	FIO_GET_CRC32,
 	/* used for incremental restore */
@@ -158,11 +155,6 @@ extern void    fio_error(int rc, int size, const char* file, int line);
 #define IO_CHECK(cmd, size) do { int _rc = (cmd); if (_rc != (size)) fio_error(_rc, size, __FILE__, __LINE__); } while (0)
 
 extern void    fio_get_agent_version(int* protocol, char* payload_buf, size_t payload_buf_size);
-
-/* DIR-style functions */
-extern DIR*    fio_opendir(fio_location location, const char* path);
-extern struct dirent * fio_readdir(DIR *dirp);
-extern int     fio_closedir(DIR *dirp);
 
 /* pathname-style functions */
 extern int     fio_sync(fio_location location, const char* path);

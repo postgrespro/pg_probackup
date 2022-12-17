@@ -412,93 +412,6 @@ pio_limit_mode(mode_t mode)
 	return mode;
 }
 
-/* Open directory */
-DIR*
-fio_opendir(fio_location location, const char* path)
-{
-	DIR* dir;
-	if (fio_is_remote(location))
-	{
-		int handle;
-		fio_header hdr;
-
-		handle = find_free_handle();
-		hdr.cop = FIO_OPENDIR;
-		hdr.handle = handle;
-		hdr.size = strlen(path) + 1;
-		set_handle(handle);
-
-		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
-		IO_CHECK(fio_write_all(fio_stdout, path, hdr.size), hdr.size);
-
-		IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
-
-		if (hdr.arg != 0)
-		{
-			errno = hdr.arg;
-			unset_handle(hdr.handle);
-			return NULL;
-		}
-		dir = (DIR*)(size_t)(handle + 1);
-	}
-	else
-	{
-		dir = opendir(path);
-	}
-	return dir;
-}
-
-/* Get next directory entry */
-struct dirent*
-fio_readdir(DIR *dir)
-{
-	if (fio_is_remote_file((FILE*)dir))
-	{
-		fio_header hdr;
-		static __thread struct dirent entry;
-
-		hdr.cop = FIO_READDIR;
-		hdr.handle = (size_t)dir - 1;
-		hdr.size = 0;
-		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
-
-		IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
-		Assert(hdr.cop == FIO_SEND);
-		if (hdr.size) {
-			Assert(hdr.size == sizeof(entry));
-			IO_CHECK(fio_read_all(fio_stdin, &entry, sizeof(entry)), sizeof(entry));
-		}
-
-		return hdr.size ? &entry : NULL;
-	}
-	else
-	{
-		return readdir(dir);
-	}
-}
-
-/* Close directory */
-int
-fio_closedir(DIR *dir)
-{
-	if (fio_is_remote_file((FILE*)dir))
-	{
-		fio_header hdr;
-		hdr.cop = FIO_CLOSEDIR;
-		hdr.handle = (size_t)dir - 1;
-		hdr.size = 0;
-		unset_handle(hdr.handle);
-
-		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
-		return 0;
-	}
-	else
-	{
-		return closedir(dir);
-	}
-}
-
-
 /* Close ssh session */
 void
 fio_disconnect(void)
@@ -2044,12 +1957,10 @@ fio_communicate(int in, int out)
 	 * can use the same index at both sides.
 	 */
 	int fd[FIO_FDMAX];
-	DIR* dir[FIO_FDMAX];
 
 	fobj_t objs[FIO_FDMAX] = {0};
 	err_i  async_errs[FIO_FDMAX] = {0};
 
-	struct dirent* entry;
 	size_t buf_size = 128*1024;
 	char* buf = (char*)pgut_malloc(buf_size);
 	fio_header hdr;
@@ -2085,30 +1996,6 @@ fio_communicate(int in, int out)
 		}
 		errno = 0; /* reset errno */
 		switch (hdr.cop) {
-		  case FIO_OPENDIR: /* Open directory for traversal */
-			dir[hdr.handle] = opendir(buf);
-			hdr.arg = dir[hdr.handle] == NULL ? errno : 0;
-			hdr.size = 0;
-			IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
-			break;
-		  case FIO_READDIR: /* Get next directory entry */
-			hdr.cop = FIO_SEND;
-			entry = readdir(dir[hdr.handle]);
-			if (entry != NULL)
-			{
-				hdr.size = sizeof(*entry);
-				IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
-				IO_CHECK(fio_write_all(out, entry, hdr.size), hdr.size);
-			}
-			else
-			{
-				hdr.size = 0;
-				IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
-			}
-			break;
-		  case FIO_CLOSEDIR: /* Finish directory traversal */
-			SYS_CHECK(closedir(dir[hdr.handle]));
-			break;
 		  case FIO_OPEN: /* Open file */
 			fd[hdr.handle] = open(buf, hdr.arg, FILE_PERMISSION);
 			hdr.arg = fd[hdr.handle] < 0 ? errno : 0;
