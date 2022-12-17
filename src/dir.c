@@ -1320,36 +1320,15 @@ control_string_bad_format(ft_bytes_t str)
 bool
 dir_is_empty(const char *path, fio_location location)
 {
-	DIR		   *dir;
-	struct dirent *dir_ent;
+	pioDrive_i drive = pioDriveForLocation(location);
+	err_i err;
+	bool  is_empty;
 
-	dir = fio_opendir(location, path);
-	if (dir == NULL)
-	{
-		/* Directory in path doesn't exist */
-		if (errno == ENOENT)
-			return true;
-		elog(ERROR, "cannot open directory \"%s\": %s", path, strerror(errno));
-	}
+	is_empty = $i(pioIsDirEmpty, drive, path, &err);
+	if ($haserr(err))
+		ft_logerr(FT_FATAL, $errmsg(err), "Checking dir is empty");
 
-	errno = 0;
-	while ((dir_ent = fio_readdir(dir)))
-	{
-		/* Skip entries point current dir or parent dir */
-		if (strcmp(dir_ent->d_name, ".") == 0 ||
-			strcmp(dir_ent->d_name, "..") == 0)
-			continue;
-
-		/* Directory is not empty */
-		fio_closedir(dir);
-		return false;
-	}
-	if (errno)
-		elog(ERROR, "cannot read directory \"%s\": %s", path, strerror(errno));
-
-	fio_closedir(dir);
-
-	return true;
+	return is_empty;
 }
 
 /*

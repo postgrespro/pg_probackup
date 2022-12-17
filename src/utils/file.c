@@ -2792,9 +2792,24 @@ fio_communicate(int in, int out)
 			ft_strbuf_free(&names);
 			break;
 		}
+		case PIO_IS_DIR_EMPTY:
+		{
+			bool is_empty;
+
+			is_empty = $i(pioIsDirEmpty, drive, buf, .err = &err);
+			if ($haserr(err))
+				fio_send_pio_err(out, err);
+			else
+			{
+				hdr.size = 0;
+				hdr.arg = is_empty;
+
+				IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
+			}
+			break;
+		}
 		case PIO_CLOSE:
 		{
-
 			ft_assert(hdr.handle >= 0);
 			ft_assert(objs[hdr.handle] != NULL);
 
@@ -3330,6 +3345,42 @@ pioLocalDrive_pioOpenDir(VSelf, path_t path, err_i* err)
 				 $alloc(pioLocalDir,
 						.path = ft_strdupc(path),
 						.dir = dir));
+}
+
+static bool
+pioLocalDrive_pioIsDirEmpty(VSelf, path_t path, err_i* err)
+{
+	Self(pioLocalDrive);
+	DIR* dir;
+	struct dirent *dent;
+	bool is_empty = true;
+	fobj_reset_err(err);
+
+	dir = opendir(path);
+	if (dir == NULL)
+	{
+		if (errno == ENOENT)
+			return true;
+		*err = $syserr(errno, "Cannot open dir {path:q}", path(path));
+		return false;
+	}
+
+	while ((dent = readdir(dir)) != NULL)
+	{
+		if (strcmp(dent->d_name, ".") == 0)
+			continue;
+		if (strcmp(dent->d_name, "..") == 0)
+			continue;
+		is_empty = false;
+		break;
+	}
+
+	if (errno)
+		*err = $syserr(errno, "Couldn't read dir {path:q}", path(path));
+
+	closedir(dir);
+
+	return is_empty;
 }
 
 static void
@@ -4116,6 +4167,29 @@ pioRemoteDrive_pioOpenDir(VSelf, path_t path, err_i* err)
 						.path = ft_strdupc(path),
 						.handle = hdr.handle,
 						.pos = 0));
+}
+
+static bool
+pioRemoteDrive_pioIsDirEmpty(VSelf, path_t path, err_i* err)
+{
+	Self(pioRemoteDrive);
+	fio_header hdr = {
+			.cop = PIO_IS_DIR_EMPTY,
+			.size = strlen(path)+1,
+	};
+	fobj_reset_err(err);
+
+	IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
+	IO_CHECK(fio_write_all(fio_stdout, path, hdr.size), hdr.size);
+
+	IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
+	if (hdr.cop == FIO_PIO_ERROR)
+	{
+		*err = fio_receive_pio_err(&hdr);
+		return false;
+	}
+	ft_assert(hdr.cop == PIO_IS_DIR_EMPTY);
+	return hdr.arg;
 }
 
 static void

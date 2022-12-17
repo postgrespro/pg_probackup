@@ -72,6 +72,7 @@ typedef enum
 	PIO_GET_ASYNC_ERROR,
 	PIO_DIR_OPEN,
 	PIO_DIR_NEXT,
+	PIO_IS_DIR_EMPTY,
 	PIO_CLOSE,
 	PIO_DISPOSE,
 } fio_operations;
@@ -284,6 +285,7 @@ fobj_iface(pioPagesIterator);
 #define mth__pioIsRemote 	bool
 #define mth__pioMakeDir	err_i, (path_t, path), (mode_t, mode), (bool, strict)
 #define mth__pioOpenDir		pioDirIter_i, (path_t, path), (err_i*, err)
+#define mth__pioIsDirEmpty	bool, (path_t, path), (err_i*, err)
 #define mth__pioListDir     void, (parray *, files), (const char *, root), \
                                 (bool, handle_tablespaces), (bool, symlink_and_hidden), \
                                 (bool, backup_logs), (bool, skip_hidden),  (int, external_dir_num)
@@ -313,6 +315,7 @@ fobj_method(pioGetCRC32);
 fobj_method(pioMakeDir);
 fobj_method(pioFilesAreSame);
 fobj_method(pioOpenDir);
+fobj_method(pioIsDirEmpty);
 fobj_method(pioListDir);
 fobj_method(pioRemoveDir);
 fobj_method(pioReadFile);
@@ -322,7 +325,7 @@ fobj_method(pioIteratePages);
 #define iface__pioDrive 	mth(pioOpenRead, pioOpenReadStream), \
 							mth(pioStat, pioRemove), \
 					        mth(pioExists, pioGetCRC32, pioIsRemote),          \
-							mth(pioMakeDir, pioOpenDir, pioListDir, pioRemoveDir),  \
+							mth(pioMakeDir, pioOpenDir, pioIsDirEmpty, pioListDir, pioRemoveDir),  \
 							mth(pioFilesAreSame, pioReadFile, pioWriteFile),   \
 							mth(pioOpenRewrite)
 fobj_iface(pioDrive);
