@@ -2346,15 +2346,16 @@ fio_communicate(int in, int out)
 			pio_dirent_t dirent;
 			int          n;
 
-			for (n = 0; n < PIO_DIR_REMOTE_BATCH; n++)
+			for (n = 0; n < PIO_DIR_REMOTE_BATCH;)
 			{
 				dirent = $(pioDirNext, objs[hdr.handle], .err = &err);
 				if ($haserr(err))
 					break;
-				if (dirent.stat.pst_kind == PIO_KIND_UNKNOWN)
-					break;
 				ft_strbuf_catbytes(&stats, FT_BYTES_FOR(dirent.stat));
 				ft_strbuf_cat_zt(&names, dirent.name);
+				n++;
+				if (dirent.stat.pst_kind == PIO_KIND_UNKNOWN)
+					break;
 			}
 
 			if ($haserr(err))
