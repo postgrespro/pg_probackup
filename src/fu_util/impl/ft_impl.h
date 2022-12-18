@@ -371,6 +371,19 @@ ft_bytes_starts_withc(ft_bytes_t haystack, const char* needle)
 	return ft_bytes_starts_with(haystack, ft_bytesc(needle));
 }
 
+ft_inline bool
+ft_bytes_ends_with(ft_bytes_t haystack, ft_bytes_t needle)
+{
+	return haystack.len >= needle.len &&
+		   memcmp(haystack.ptr + haystack.len - needle.len, needle.ptr, needle.len) == 0;
+}
+
+ft_inline bool
+ft_bytes_ends_withc(ft_bytes_t haystack, const char* needle)
+{
+	return ft_bytes_ends_with(haystack, ft_bytesc(needle));
+}
+
 ft_inline size_t
 ft_bytes_find_cstr(ft_bytes_t haystack, const char* needle)
 {
@@ -474,6 +487,21 @@ ft_str_consume(ft_str_t *str, size_t cut) {
 	ft_dbg_assert(cut <= str->len);
 	str->ptr = str->ptr + cut;
 	str->len -= cut;
+}
+
+ft_inline size_t
+ft_str_spnc(ft_str_t str, const char* chars) {
+	return ft_bytes_spnc(ft_str2bytes(str), chars);
+}
+
+ft_inline size_t
+ft_str_ends_withc(ft_str_t str, const char* needle) {
+	return ft_bytes_ends_withc(ft_str2bytes(str), needle);
+}
+
+ft_inline size_t
+ft_str_find_cstr(ft_str_t haystack, const char *needle) {
+	return ft_bytes_find_cstr(ft_str2bytes(haystack), needle);
 }
 
 ft_inline ft_strbuf_t

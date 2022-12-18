@@ -358,6 +358,8 @@ ft_inline bool      ft_bytes_has_cstr(ft_bytes_t haystack, const char *needle);
 
 ft_inline bool    ft_bytes_starts_with(ft_bytes_t haystack, ft_bytes_t needle);
 ft_inline bool    ft_bytes_starts_withc(ft_bytes_t haystack, const char* needle);
+ft_inline bool    ft_bytes_ends_with(ft_bytes_t haystack, ft_bytes_t needle);
+ft_inline bool    ft_bytes_ends_withc(ft_bytes_t haystack, const char* needle);
 
 ft_inline size_t  ft_bytes_spn(ft_bytes_t bytes, ft_bytes_t chars);
 ft_inline size_t  ft_bytes_notspn(ft_bytes_t bytes, ft_bytes_t chars);
@@ -407,6 +409,12 @@ ft_inline ft_str_t  ft_strdup_bytes(ft_bytes_t bytes);
 /* use only if string was allocated */
 ft_inline void      ft_str_free(ft_str_t *str);
 
+ft_inline ft_str_t  ft_str_steal(ft_str_t *str) {
+	ft_str_t res = *str;
+	*str = ft_str(NULL, 0);
+	return res;
+}
+
 /* print string into ft_malloc-ed buffer */
 extern ft_str_t     ft_asprintf(const char *fmt, ...) ft_gnu_printf(1,2);
 extern ft_str_t     ft_vasprintf(const char *fmt, va_list args) ft_gnu_printf(1,0);
@@ -417,6 +425,10 @@ ft_inline bool          ft_streqc (ft_str_t str, const char* oth);
 ft_inline FT_CMP_RES    ft_strcmpc(ft_str_t str, const char* oth);
 
 ft_inline void			ft_str_consume(ft_str_t *str, size_t cut);
+
+ft_inline size_t  ft_str_spnc(ft_str_t str, const char* chars);
+ft_inline size_t  ft_str_ends_withc(ft_str_t str, const char* needle);
+ft_inline size_t  ft_str_find_cstr(ft_str_t haystack, const char *needle);
 
 /* shift zero-terminated string. Will assert if no zero-byte found and it is not last */
 extern ft_str_t     ft_bytes_shift_zt(ft_bytes_t *bytes);
