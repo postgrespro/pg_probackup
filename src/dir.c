@@ -17,6 +17,10 @@
 #include <dirent.h>
 
 #include "utils/configuration.h"
+#include "catalog/pg_tablespace.h"
+#if PG_VERSION_NUM < 110000
+#include "catalog/catalog.h"
+#endif
 
 /*
  * The contents of these directories are removed or recreated during server
@@ -112,21 +116,17 @@ typedef struct TablespaceCreatedList
 	TablespaceCreatedListCell *tail;
 } TablespaceCreatedList;
 
-typedef struct exclude_cb_ctx {
-    bool	backup_logs;
-	size_t	pref_len;
-	char	exclude_dir_content_pref[MAXPGPATH];
-} exclude_cb_ctx;
-
 static char dir_check_file(pgFile *file, bool backup_logs);
 
+static void dir_list_file_internal(parray *files, pgFile *parent, const char *parent_dir,
+								   bool exclude, bool backup_logs,
+								   int external_dir_num, fio_location location);
 static void opt_path_map(ConfigOption *opt, const char *arg,
 						 TablespaceList *list, const char *type);
 static void cleanup_tablespace(const char *path);
 
 static void control_string_bad_format(ft_bytes_t str);
 
-static bool exclude_files_cb(void *value, void *exclude_args);
 
 static void print_database_map(ft_strbuf_t *buf, parray *database_list);
 
@@ -365,6 +365,44 @@ db_map_entry_free(void *entry)
 	free(entry);
 }
 
+/*
+ * List files and directories in the directory "root" and add
+ * pgFile objects to "files".
+ */
+void
+db_list_dir(parray *files, const char *root, bool exclude,
+			bool backup_logs, int external_dir_num,
+			fio_location location)
+{
+	pgFile	   *file;
+	pioDrive_i drive = pioDriveForLocation(location);
+
+	file = pgFileNew(root, "", true, external_dir_num, drive);
+	if (file == NULL)
+	{
+		/* For external directory this is not ok */
+		if (external_dir_num > 0)
+			elog(ERROR, "External directory is not found: \"%s\"", root);
+		else
+			return;
+	}
+
+	if (file->kind != PIO_KIND_DIRECTORY)
+	{
+		if (external_dir_num > 0)
+			elog(ERROR, " --external-dirs option \"%s\": directory or symbolic link expected",
+					root);
+		else
+			elog(WARNING, "Skip \"%s\": unexpected file format", root);
+		return;
+	}
+
+	dir_list_file_internal(files, file, root, exclude,
+						   backup_logs, external_dir_num, location);
+
+	pgFileFree(file);
+}
+
 #define CHECK_FALSE				0
 #define CHECK_TRUE				1
 #define CHECK_EXCLUDE_FALSE		2
@@ -386,6 +424,7 @@ static char
 dir_check_file(pgFile *file, bool backup_logs)
 {
 	int			i;
+	int 		sscanf_res;
 	bool		in_tablespace = false;
 
 	in_tablespace = path_is_prefix_of_path(PG_TBLSPC_DIR, file->rel_path);
@@ -433,6 +472,54 @@ dir_check_file(pgFile *file, bool backup_logs)
 		}
 	}
 
+	/*
+	 * Do not copy tablespaces twice. It may happen if the tablespace is located
+	 * inside the PGDATA.
+	 */
+	if (file->kind == PIO_KIND_DIRECTORY &&
+		strcmp(file->name, TABLESPACE_VERSION_DIRECTORY) == 0)
+	{
+		Oid			tblspcOid;
+		char		tmp_rel_path[MAXPGPATH];
+
+		/*
+		 * Valid path for the tablespace is
+		 * pg_tblspc/tblsOid/TABLESPACE_VERSION_DIRECTORY
+		 */
+		if (!path_is_prefix_of_path(PG_TBLSPC_DIR, file->rel_path))
+			return CHECK_FALSE;
+		sscanf_res = sscanf(file->rel_path, PG_TBLSPC_DIR "/%u/%s",
+							&tblspcOid, tmp_rel_path);
+		if (sscanf_res == 0)
+			return CHECK_FALSE;
+	}
+
+	if (in_tablespace)
+	{
+		char		tmp_rel_path[MAXPGPATH];
+
+		sscanf_res = sscanf(file->rel_path, PG_TBLSPC_DIR "/%u/%[^/]/%u/",
+							&(file->tblspcOid), tmp_rel_path,
+							&(file->dbOid));
+
+		/*
+		 * We should skip other files and directories rather than
+		 * TABLESPACE_VERSION_DIRECTORY, if this is recursive tablespace.
+		 */
+		if (sscanf_res == 2 && strcmp(tmp_rel_path, TABLESPACE_VERSION_DIRECTORY) != 0)
+			return CHECK_FALSE;
+	}
+	else if (path_is_prefix_of_path("global", file->rel_path))
+	{
+		file->tblspcOid = GLOBALTABLESPACE_OID;
+	}
+	else if (path_is_prefix_of_path("base", file->rel_path))
+	{
+		file->tblspcOid = DEFAULTTABLESPACE_OID;
+
+		sscanf(file->rel_path, "base/%u/", &(file->dbOid));
+	}
+
 	/* Do not backup ptrack_init files */
 	if (file->kind == PIO_KIND_REGULAR && strcmp(file->name, "ptrack_init") == 0)
 		return CHECK_FALSE;
@@ -469,79 +556,118 @@ dir_check_file(pgFile *file, bool backup_logs)
 }
 
 /*
- * Excluding default files from the files list.
- * Input:
- *  parray *files - an array of pgFile* to filter.
- *  croterion_fn - a callback that filters things out
- * Output:
- *  true - if the file must be deleted from the list
- *  false - otherwise
+ * List files in parent->path directory.  If "exclude" is true do not add into
+ * "files" files from pgdata_exclude_files and directories from
+ * pgdata_exclude_dir.
+ *
+ * TODO: should we check for interrupt here ?
  */
+static void
+dir_list_file_internal(parray *files, pgFile *parent, const char *parent_dir,
+					   bool exclude, bool backup_logs,
+					   int external_dir_num, fio_location location)
+{
+	DIR			  *dir;
+	struct dirent *dent;
+	pioDrive_i     drive;
 
-static bool
-exclude_files_cb(void *value, void *exclude_args) {
-    pgFile *file = (pgFile*) value;
-    exclude_cb_ctx *ex_ctx = (exclude_cb_ctx*) exclude_args;
+	if (parent->kind != PIO_KIND_DIRECTORY)
+		elog(ERROR, "\"%s\" is not a directory", parent_dir);
 
-	/*
-	 * Check the file relative path for previously excluded dir prefix. These files
-	 * should not be in the list, only their empty parent directory, see dir_check_file.
-	 *
-	 * Assuming that the excluded dir is ALWAYS followed by its content like this:
-	 * 		pref/dir/
-	 *		pref/dir/file1
-	 *		pref/dir/file2
-	 *		pref/dir/file3
-	 *		...
-	 * we can make prefix checks only for files that subsequently follow the excluded dir
-	 * and avoid unnecessary checks for the rest of the files. So we store the prefix length,
-	 * update it and the prefix itself once we've got a CHECK_EXCLUDE_FALSE status code,
-	 * keep doing prefix checks while there are files in that directory and set prefix length
-	 * to 0 once they are gone.
-	 */
-	if(ex_ctx->pref_len > 0
-		&& strncmp(ex_ctx->exclude_dir_content_pref, file->rel_path, ex_ctx->pref_len) == 0) {
-		return true;
-	} else {
-		memset(ex_ctx->exclude_dir_content_pref, 0, ex_ctx->pref_len);
-		ex_ctx->pref_len = 0;
+	drive = pioDriveForLocation(location);
+
+	/* Open directory and list contents */
+	dir = fio_opendir(location, parent_dir);
+	if (dir == NULL)
+	{
+		if (errno == ENOENT)
+		{
+			/* Maybe the directory was removed */
+			return;
+		}
+		elog(ERROR, "Cannot open directory \"%s\": %s",
+				parent_dir, strerror(errno));
 	}
 
-    int check_res = dir_check_file(file, ex_ctx->backup_logs);
+	errno = 0;
+	while ((dent = fio_readdir(dir)))
+	{
+		pgFile	   *file;
+		char		child[MAXPGPATH];
+		char		rel_child[MAXPGPATH];
+		char		check_res;
 
-	switch(check_res) {
-		case CHECK_FALSE:
-			return true;
-			break;
-		case CHECK_TRUE:;
-			return false;
-			break;
-		case CHECK_EXCLUDE_FALSE:
-			// since the excluded dir always goes before its contents, memorize it
-			// and use it for further files filtering.
-			strcpy(ex_ctx->exclude_dir_content_pref, file->rel_path);
-			ex_ctx->pref_len = strlen(file->rel_path);
-			return false;
-			break;
-		default:
-			// Should not get there normally.
-			assert(false);
-			return false;
-			break;
+		join_path_components(child, parent_dir, dent->d_name);
+		join_path_components(rel_child, parent->rel_path, dent->d_name);
+
+		file = pgFileNew(child, rel_child, true, external_dir_num,
+						 drive);
+		if (file == NULL)
+			continue;
+
+		/* Skip entries point current dir or parent dir */
+		if (file->kind == PIO_KIND_DIRECTORY &&
+			(strcmp(dent->d_name, ".") == 0 || strcmp(dent->d_name, "..") == 0))
+		{
+			pgFileFree(file);
+			continue;
+		}
+
+		/* skip hidden files and directories */
+		if (file->name[0] == '.')
+		{
+			elog(WARNING, "Skip hidden file: '%s'", child);
+			pgFileFree(file);
+			continue;
+		}
+
+		/*
+		 * Add only files, directories and links. Skip sockets and other
+		 * unexpected file formats.
+		 */
+		if (file->kind != PIO_KIND_DIRECTORY && file->kind != PIO_KIND_REGULAR)
+		{
+			elog(WARNING, "Skip '%s': unexpected file format", child);
+			pgFileFree(file);
+			continue;
+		}
+
+		if (exclude)
+		{
+			check_res = dir_check_file(file, backup_logs);
+			if (check_res == CHECK_FALSE)
+			{
+				/* Skip */
+				pgFileFree(file);
+				continue;
+			}
+			else if (check_res == CHECK_EXCLUDE_FALSE)
+			{
+				/* We add the directory itself which content was excluded */
+				parray_append(files, file);
+				continue;
+			}
+		}
+
+		parray_append(files, file);
+
+		/*
+		 * If the entry is a directory call dir_list_file_internal()
+		 * recursively.
+		 */
+		if (file->kind == PIO_KIND_DIRECTORY)
+			dir_list_file_internal(files, file, child, exclude,
+								   backup_logs, external_dir_num, location);
 	}
 
-	// Should not get there as well.
-	return false;
-}
-
-void exclude_files(parray *files, bool backup_logs) {
-    exclude_cb_ctx ctx = {
-		.pref_len = 0,
-        .backup_logs = backup_logs,
-		.exclude_dir_content_pref = "\0",
-    };
-
-    parray_remove_if(files, exclude_files_cb, (void*)&ctx, pgFileFree);
+	if (errno && errno != ENOENT)
+	{
+		int			errno_tmp = errno;
+		fio_closedir(dir);
+		elog(ERROR, "Cannot read directory \"%s\": %s",
+				parent_dir, strerror(errno_tmp));
+	}
+	fio_closedir(dir);
 }
 
 /*

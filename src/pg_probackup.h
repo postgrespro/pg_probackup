@@ -966,6 +966,10 @@ extern ft_str_t pb_control_line_get_str(pb_control_line *pb_line, const char *na
 extern bool pb_control_line_try_int64(pb_control_line *pb_line, const char *name, int64 *value);
 extern bool pb_control_line_try_str(pb_control_line *pb_line, const char *name, ft_str_t *value);
 
+extern void db_list_dir(parray *files, const char *root, bool exclude,
+						bool backup_logs,
+						int external_dir_num, fio_location location);
+
 extern const char *get_tablespace_mapping(const char *dir);
 extern void create_data_directories(parray *dest_files,
 										const char *data_dir,
@@ -1019,7 +1023,6 @@ extern int pgPrefixCompareString(const void *str1, const void *str2);
 extern int pgCompareOid(const void *f1, const void *f2);
 extern void pfilearray_clear_locks(parray *file_list);
 extern bool set_forkname(pgFile *file);
-extern void exclude_files(parray *files, bool backup_logs);
 
 /* in data.c */
 extern bool check_data_file(pgFile *file, const char *from_fullpath, uint32 checksum_version);

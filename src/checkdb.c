@@ -206,8 +206,7 @@ do_block_validation(char *pgdata, uint32 checksum_version)
 	files_list = parray_new();
 
 	/* list files with the logical path. omit $PGDATA */
-	db_list_dir(files_list, pgdata, true, false, 0);
-    exclude_files(files_list, false);
+	db_list_dir(files_list, pgdata, true, false, 0, FIO_DB_HOST);
 
 	/*
 	 * Sort pathname ascending.

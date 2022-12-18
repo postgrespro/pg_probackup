@@ -871,7 +871,7 @@ restore_chain(InstanceState *instanceState,
 		elog(INFO, "Extracting the content of destination directory for incremental restore");
 
 		time(&start_time);
-		db_list_dir(pgdata_files, pgdata_path, false, false, 0);
+		db_list_dir(pgdata_files, pgdata_path, false, false, 0, FIO_DB_HOST);
 
 		/*
 		 * TODO:
@@ -891,7 +891,8 @@ restore_chain(InstanceState *instanceState,
 				char *external_path = parray_get(external_dirs, i);
 				parray	*external_files = parray_new();
 
-				db_list_dir(external_files, external_path, false, false, i+1);
+				db_list_dir(external_files, external_path,
+							false, false, i + 1, FIO_DB_HOST);
 
 				parray_concat(pgdata_files, external_files);
 				parray_free(external_files);

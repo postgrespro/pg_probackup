@@ -275,8 +275,7 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 	join_path_components(external_prefix, current.root_dir, EXTERNAL_DIR);
 
 	/* list files with the logical path. omit $PGDATA */
-	db_list_dir(backup_files_list, instance_config.pgdata, true, backup_logs, 0);
-    exclude_files(backup_files_list, backup_logs);
+	db_list_dir(backup_files_list, instance_config.pgdata, true, backup_logs, 0, FIO_DB_HOST);
 
 	/*
 	 * Get database_map (name to oid) for use in partial restore feature.
@@ -292,9 +291,8 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 	{
 		for (i = 0; i < parray_num(external_dirs); i++)
 		{
-			/* External dirs numeration starts with 1.
-			 * 0 value is not external dir */
-            db_list_dir(backup_files_list, parray_get(external_dirs, i), false, false, i+1);
+			db_list_dir(backup_files_list, parray_get(external_dirs, i),
+						false, false, i + 1, FIO_DB_HOST);
 		}
 	}
 

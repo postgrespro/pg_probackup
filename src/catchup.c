@@ -648,9 +648,8 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 	if (current.backup_mode != BACKUP_MODE_FULL)
 	{
 		dest_filelist = parray_new();
-		db_list_dir(dest_filelist, dest_pgdata, true, false, 0);
+		db_list_dir(dest_filelist, dest_pgdata, true, false, 0, FIO_LOCAL_HOST);
 		filter_filelist(dest_filelist, dest_pgdata, exclude_absolute_paths_list, exclude_relative_paths_list, "Destination");
-        exclude_files(dest_filelist, false);
 
 		// fill dest_redo.lsn and dest_redo.tli
 		get_redo(FIO_LOCAL_HOST, dest_pgdata, &dest_redo);
@@ -720,8 +719,7 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 	source_filelist = parray_new();
 
 	/* list files with the logical path. omit $PGDATA */
-    db_list_dir(source_filelist, source_pgdata, true, false, 0);
-    exclude_files(source_filelist, false);
+	db_list_dir(source_filelist, source_pgdata, true, false, 0, FIO_DB_HOST);
 
 	//REVIEW FIXME. Let's fix that before release.
 	// TODO what if wal is not a dir (symlink to a dir)?

@@ -5,10 +5,6 @@
 #include <signal.h>
 
 #include "file.h"
-#include "catalog/pg_tablespace.h"
-#if PG_VERSION_NUM < 110000
-#include "catalog/catalog.h"
-#endif
 #include "storage/checksum.h"
 
 #define PRINTF_BUF_SIZE  1024
@@ -38,16 +34,6 @@ typedef struct
 	int         bitmapsize;
 	int         path_len;
 } fio_send_request;
-
-typedef struct
-{
-	char path[MAXPGPATH];
-	bool handle_tablespaces;
-	bool follow_symlink;
-	bool backup_logs;
-	bool skip_hidden;
-	int  external_dir_num;
-} fio_list_dir_request;
 
 typedef struct {
     char path[MAXPGPATH];
@@ -114,13 +100,6 @@ struct __attribute__((packed)) fio_req_open_write {
 #undef open
 #undef fopen
 #endif
-
-static void dir_list_file(parray *files, const char *root, bool handle_tablespaces,
-						  bool follow_symlink, bool backup_logs, bool skip_hidden,
-						  int external_dir_num, pioDBDrive_i drive);
-static void dir_list_file_internal(parray *files, pgFile *parent, const char *parent_dir,
-								   bool handle_tablespaces, bool follow_symlink, bool backup_logs,
-								   bool skip_hidden, int external_dir_num, pioDBDrive_i drive);
 
 void
 setMyLocation(ProbackupSubcmd const subcmd)
@@ -1798,14 +1777,6 @@ pgFileGetCRC32(const char *file_path, bool missing_ok)
 }
 #endif /* PG_VERSION_NUM < 120000 */
 
-void db_list_dir(parray *files, const char *root, bool handle_tablespaces,
-					bool backup_logs, int external_dir_num) {
-	pioDrive_i drive = pioDriveForLocation(FIO_DB_HOST);
-	$i(pioListDir, drive, .files = files, .root = root, .handle_tablespaces = handle_tablespaces,
-			.symlink_and_hidden = true, .backup_logs = backup_logs, .skip_hidden = true,
-			.external_dir_num = external_dir_num);
-}
-
 /*
  * WARNING! this function is not paired with fio_remove_dir
  * because there is no such function. Instead, it is paired
@@ -1826,272 +1797,6 @@ fio_remove_dir_impl(int out, char* buf) {
     IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 }
 
-/*
- * List files, symbolic links and directories in the directory "root" and add
- * pgFile objects to "files".  We add "root" to "files" if add_root is true.
- *
- * When follow_symlink is true, symbolic link is ignored and only file or
- * directory linked to will be listed.
- *
- * TODO: make it strictly local
- */
-static void
-dir_list_file(parray *files, const char *root, bool handle_tablespaces, bool follow_symlink,
-			  bool backup_logs, bool skip_hidden, int external_dir_num, pioDBDrive_i drive)
-{
-	pgFile	   *file;
-
-	Assert(!$i(pioIsRemote, drive));
-
-	file = pgFileNew(root, "", follow_symlink, external_dir_num,
-					 $reduce(pioDrive, drive));
-	if (file == NULL)
-	{
-		/* For external directory this is not ok */
-		if (external_dir_num > 0)
-			elog(ERROR, "External directory is not found: \"%s\"", root);
-		else
-			return;
-	}
-
-	if (file->kind != PIO_KIND_DIRECTORY)
-	{
-		if (external_dir_num > 0)
-			elog(ERROR, " --external-dirs option \"%s\": directory or symbolic link expected",
-				 root);
-		else
-			elog(WARNING, "Skip \"%s\": unexpected file format", root);
-		return;
-	}
-
-	dir_list_file_internal(files, file, root, handle_tablespaces, follow_symlink,
-						   backup_logs, skip_hidden, external_dir_num, drive);
-
-	pgFileFree(file);
-}
-
-/*
- * List files in parent->path directory.
- * If "handle_tablespaces" is true, handle recursive tablespaces
- * and the ones located inside pgdata.
- * If "follow_symlink" is true, follow symlinks so that the
- * fio_stat call fetches the info from the file pointed to by the
- * symlink, not from the symlink itself.
- *
- * TODO: should we check for interrupt here ?
- */
-static void
-dir_list_file_internal(parray *files, pgFile *parent, const char *parent_dir,
-					   bool handle_tablespaces, bool follow_symlink, bool backup_logs,
-					   bool skip_hidden, int external_dir_num, pioDBDrive_i drive)
-{
-	DIR			  *dir;
-	struct dirent *dent;
-	bool in_tablespace = false;
-
-	Assert(!$i(pioIsRemote, drive));
-
-	if (parent->kind != PIO_KIND_DIRECTORY)
-		elog(ERROR, "\"%s\" is not a directory", parent_dir);
-
-	in_tablespace = path_is_prefix_of_path(PG_TBLSPC_DIR, parent->rel_path);
-
-	/* Open directory and list contents */
-	dir = opendir(parent_dir);
-	if (dir == NULL)
-	{
-		if (errno == ENOENT)
-		{
-			/* Maybe the directory was removed */
-			return;
-		}
-		elog(ERROR, "Cannot open directory \"%s\": %s",
-			 parent_dir, strerror(errno));
-	}
-
-	errno = 0;
-	while ((dent = readdir(dir)))
-	{
-		pgFile	   *file;
-		char		child[MAXPGPATH];
-		char		rel_child[MAXPGPATH];
-
-		join_path_components(child, parent_dir, dent->d_name);
-		join_path_components(rel_child, parent->rel_path, dent->d_name);
-
-		file = pgFileNew(child, rel_child, follow_symlink,
-						 external_dir_num, $reduce(pioDrive, drive));
-		if (file == NULL)
-			continue;
-
-		/* Skip entries point current dir or parent dir */
-		if (file->kind == PIO_KIND_DIRECTORY &&
-			(strcmp(dent->d_name, ".") == 0 || strcmp(dent->d_name, "..") == 0))
-		{
-			pgFileFree(file);
-			continue;
-		}
-
-		/* skip hidden files and directories */
-		if (skip_hidden && file->name[0] == '.') {
-			elog(WARNING, "Skip hidden file: '%s'", child);
-			pgFileFree(file);
-			continue;
-		}
-
-		/*
-		 * Add only files, directories and links. Skip sockets and other
-		 * unexpected file formats.
-		 */
-		if (file->kind != PIO_KIND_DIRECTORY && file->kind != PIO_KIND_REGULAR)
-		{
-			elog(WARNING, "Skip '%s': unexpected file format", child);
-			pgFileFree(file);
-			continue;
-		}
-
-		if(handle_tablespaces) {
-			/*
-			 * Do not copy tablespaces twice. It may happen if the tablespace is located
-			 * inside the PGDATA.
-			 */
-			if (file->kind == PIO_KIND_DIRECTORY &&
-				strcmp(file->name, TABLESPACE_VERSION_DIRECTORY) == 0)
-			{
-				Oid			tblspcOid;
-				char		tmp_rel_path[MAXPGPATH];
-				int			sscanf_res;
-
-				/*
-				 * Valid path for the tablespace is
-				 * pg_tblspc/tblsOid/TABLESPACE_VERSION_DIRECTORY
-				 */
-				if (!path_is_prefix_of_path(PG_TBLSPC_DIR, file->rel_path))
-					continue;
-				sscanf_res = sscanf(file->rel_path, PG_TBLSPC_DIR "/%u/%s",
-									&tblspcOid, tmp_rel_path);
-				if (sscanf_res == 0)
-					continue;
-			}
-
-			if (in_tablespace) {
-				char        tmp_rel_path[MAXPGPATH];
-				ssize_t      sscanf_res;
-
-				sscanf_res = sscanf(file->rel_path, PG_TBLSPC_DIR "/%u/%[^/]/%u/",
-									&(file->tblspcOid), tmp_rel_path,
-									&(file->dbOid));
-
-				/*
-				 * We should skip other files and directories rather than
-				 * TABLESPACE_VERSION_DIRECTORY, if this is recursive tablespace.
-				 */
-				if (sscanf_res == 2 && strcmp(tmp_rel_path, TABLESPACE_VERSION_DIRECTORY) != 0)
-					continue;
-			} else if (path_is_prefix_of_path("global", file->rel_path)) {
-				file->tblspcOid = GLOBALTABLESPACE_OID;
-			} else if (path_is_prefix_of_path("base", file->rel_path)) {
-				file->tblspcOid = DEFAULTTABLESPACE_OID;
-				sscanf(file->rel_path, "base/%u/", &(file->dbOid));
-			}
-		}
-
-		parray_append(files, file);
-
-		/*
-		 * If the entry is a directory call dir_list_file_internal()
-		 * recursively.
-		 */
-		if (file->kind == PIO_KIND_DIRECTORY)
-			dir_list_file_internal(files, file, child, handle_tablespaces, follow_symlink,
-								   backup_logs, skip_hidden, external_dir_num, drive);
-	}
-
-	if (errno && errno != ENOENT)
-	{
-		int			errno_tmp = errno;
-		closedir(dir);
-		elog(ERROR, "Cannot read directory \"%s\": %s",
-			 parent_dir, strerror(errno_tmp));
-	}
-	closedir(dir);
-}
-
-/*
- * To get the arrays of files we use the same function dir_list_file(),
- * that is used for local backup.
- * After that we iterate over arrays and for every file send at least
- * two messages to main process:
- * 1. rel_path
- * 2. metainformation (size, mtime, etc)
- * 3. link path (optional)
- *
- * TODO: replace FIO_SEND_FILE and FIO_SEND_FILE_EOF with dedicated messages
- */
-static void
-fio_list_dir_impl(int out, char* buf, pioDBDrive_i drive)
-{
-	int i;
-	fio_header hdr;
-	fio_list_dir_request *req = (fio_list_dir_request*) buf;
-	parray *file_files = parray_new();
-
-	/*
-	 * Disable logging into console any messages with exception of ERROR messages,
-	 * because currently we have no mechanism to notify the main process
-	 * about then message been sent.
-	 * TODO: correctly send elog messages from agent to main process.
-	 */
-	instance_config.logger.log_level_console = ERROR;
-
-	dir_list_file(file_files, req->path, req->handle_tablespaces,
-				  req->follow_symlink, req->backup_logs, req->skip_hidden,
-				  req->external_dir_num, drive);
-
-	/* send information about files to the main process */
-	for (i = 0; i < parray_num(file_files); i++)
-	{
-		fio_pgFile  fio_file;
-		pgFile	   *file = (pgFile *) parray_get(file_files, i);
-
-		fio_file.kind = file->kind;
-		fio_file.mode = file->mode;
-		fio_file.size = file->size;
-		fio_file.mtime = file->mtime;
-		fio_file.is_datafile = file->is_datafile;
-		fio_file.tblspcOid = file->tblspcOid;
-		fio_file.dbOid = file->dbOid;
-		fio_file.relOid = file->relOid;
-		fio_file.forkName = file->forkName;
-		fio_file.segno = file->segno;
-		fio_file.external_dir_num = file->external_dir_num;
-
-		if (file->linked)
-			fio_file.linked_len = strlen(file->linked) + 1;
-		else
-			fio_file.linked_len = 0;
-
-		hdr.cop = FIO_SEND_FILE;
-		hdr.size = strlen(file->rel_path) + 1;
-
-		/* send rel_path first */
-		IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
-		IO_CHECK(fio_write_all(out, file->rel_path, hdr.size), hdr.size);
-
-		/* now send file metainformation */
-		IO_CHECK(fio_write_all(out, &fio_file, sizeof(fio_file)), sizeof(fio_file));
-
-		/* If file is a symlink, then send link path */
-		if (file->linked)
-			IO_CHECK(fio_write_all(out, file->linked, fio_file.linked_len), fio_file.linked_len);
-
-		pgFileFree(file);
-	}
-
-	parray_free(file_files);
-	hdr = (fio_header){.cop = FIO_SEND_FILE_EOF};
-	IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
-}
 
 PageState *
 fio_get_checksum_map(fio_location location, const char *fullpath, uint32 checksum_version,
@@ -2514,9 +2219,6 @@ fio_communicate(int in, int out)
 			break;
 		  case FIO_SEEK:   /* Set current position in file */
 			fio_seek_impl(fd[hdr.handle], hdr.arg);
-			break;
-		  case FIO_LIST_DIR:
-			fio_list_dir_impl(out, buf, drive);
 			break;
           case FIO_REMOVE_DIR:
             fio_remove_dir_impl(out, buf);
@@ -3304,16 +3006,6 @@ pioLocalDrive_pioMakeDir(VSelf, path_t path, mode_t mode, bool strict)
 	int rc = dir_create_dir(path, mode, strict);
 	if (rc == 0) return $noerr();
 	return $syserr(errno, "Cannot make dir {path:q}", path(path));
-}
-
-static void
-pioLocalDrive_pioListDir(VSelf, parray *files, const char *root, bool handle_tablespaces,
-                         bool follow_symlink, bool backup_logs, bool skip_hidden,
-                         int external_dir_num) {
-    FOBJ_FUNC_ARP();
-	Self(pioLocalDrive);
-    dir_list_file(files, root, handle_tablespaces, follow_symlink, backup_logs,
-                        skip_hidden, external_dir_num, $bind(pioDBDrive, self));
 }
 
 static pioDirIter_i
@@ -4121,79 +3813,6 @@ pioRemoteDrive_pioMakeDir(VSelf, path_t path, mode_t mode, bool strict)
 		return $noerr();
 	}
 	return $syserr(hdr.arg, "Cannot make dir {path:q}", path(path));
-}
-
-static void
-pioRemoteDrive_pioListDir(VSelf, parray *files, const char *root, bool handle_tablespaces,
-                          bool follow_symlink, bool backup_logs, bool skip_hidden,
-                          int external_dir_num) {
-    FOBJ_FUNC_ARP();
-    fio_header hdr;
-    fio_list_dir_request req;
-    char *buf = pgut_malloc(CHUNK_SIZE);
-
-    /* Send to the agent message with parameters for directory listing */
-	memset(&req, 0, sizeof(req));
-    snprintf(req.path, MAXPGPATH, "%s", root);
-    req.handle_tablespaces = handle_tablespaces;
-    req.follow_symlink = follow_symlink;
-    req.backup_logs = backup_logs;
-	req.skip_hidden = skip_hidden;
-    req.external_dir_num = external_dir_num;
-
-	hdr = (fio_header){.cop = FIO_LIST_DIR, .size=sizeof(req)};
-
-    IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
-    IO_CHECK(fio_write_all(fio_stdout, &req, hdr.size), hdr.size);
-
-    for (;;) {
-        /* receive data */
-        IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
-
-        if (hdr.cop == FIO_SEND_FILE_EOF) {
-            /* the work is done */
-            break;
-        } else if (hdr.cop == FIO_SEND_FILE) {
-            pgFile *file = NULL;
-            fio_pgFile  fio_file;
-
-            /* receive rel_path */
-            IO_CHECK(fio_read_all(fio_stdin, buf, hdr.size), hdr.size);
-            file = pgFileInit(buf);
-
-            /* receive metainformation */
-            IO_CHECK(fio_read_all(fio_stdin, &fio_file, sizeof(fio_file)), sizeof(fio_file));
-
-            file->kind = fio_file.kind;
-            file->mode = fio_file.mode;
-            file->size = fio_file.size;
-            file->mtime = fio_file.mtime;
-            file->is_datafile = fio_file.is_datafile;
-            file->tblspcOid = fio_file.tblspcOid;
-            file->dbOid = fio_file.dbOid;
-            file->relOid = fio_file.relOid;
-            file->forkName = fio_file.forkName;
-            file->segno = fio_file.segno;
-            file->external_dir_num = fio_file.external_dir_num;
-
-            if (fio_file.linked_len > 0) {
-                IO_CHECK(fio_read_all(fio_stdin, buf, fio_file.linked_len), fio_file.linked_len);
-
-                file->linked = pgut_malloc(fio_file.linked_len);
-                snprintf(file->linked, fio_file.linked_len, "%s", buf);
-            }
-
-//			elog(INFO, "Received file: %s, mode: %u, size: %lu, mtime: %lu",
-//				file->rel_path, file->mode, file->size, file->mtime);
-
-            parray_append(files, file);
-        } else {
-            /* TODO: fio_disconnect may get assert fail when running after this */
-            elog(ERROR, "Remote agent returned message of unexpected type: %i", hdr.cop);
-        }
-    }
-
-    pg_free(buf);
 }
 
 static pioDirIter_i
