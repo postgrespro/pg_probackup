@@ -973,7 +973,11 @@ fio_receive_pio_err(fio_header *hdr)
 
 	IO_CHECK(fio_read_all(fio_stdin, err_msg, hdr->size), hdr->size);
 
-	return $syserr(pio_errno, err_msg);
+	if (pio_errno)
+		return $err(SysErr, "(remote) {causeStr}",
+					causeStr(err_msg), errNo(pio_errno));
+
+	return $err(RT, "(remote) {causeStr}", causeStr(err_msg));
 }
 
 static void
