@@ -342,12 +342,8 @@ doIteratePages_impl(pioIteratePages_i drive, struct doIteratePages_params p);
 
 #define mth__pioSetAsync    err_i, (bool, async, true)
 #define mth__pioAsyncRead   size_t, (ft_bytes_t, buf), (err_i*, err)
-#define mth__pioAsyncWrite  size_t, (ft_bytes_t, buf), (err_i*, err)
-#define mth__pioAsyncError  err_i
 fobj_method(pioSetAsync);
 fobj_method(pioAsyncRead);
-fobj_method(pioAsyncWrite);
-fobj_method(pioAsyncError);
 
 // Filter
 typedef struct pioFltTransformResult {
