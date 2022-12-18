@@ -1215,4 +1215,12 @@ extern XLogRecPtr wait_wal_lsn(const char *wal_segment_dir, XLogRecPtr lsn, bool
 extern void wait_wal_and_calculate_stop_lsn(const char *xlog_path, XLogRecPtr stop_lsn, pgBackup *backup);
 extern int64 calculate_datasize_of_filelist(parray *filelist);
 
+
+/*
+ * Slices and arrays for C strings
+ */
+#define FT_SLICE        cstr
+#define FT_SLICE_TYPE   char*
+#include <ft_array.inc.h>
+
 #endif /* PG_PROBACKUP_H */

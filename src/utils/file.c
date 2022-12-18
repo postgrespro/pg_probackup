@@ -3377,39 +3377,106 @@ pioLocalDrive_pioRemoveDir(VSelf, const char *root, bool root_as_well) {
     FOBJ_FUNC_ARP();
     Self(pioLocalDrive);
 	char full_path[MAXPGPATH];
-    /* list files to be deleted */
-    parray* files = parray_new();
-	$(pioListDir, self, .files = files, .root = root, .handle_tablespaces = false,
-			.symlink_and_hidden = false, .backup_logs = false, .skip_hidden = false, .external_dir_num = 0);
+	ft_arr_cstr_t dirs = ft_arr_init();
+	ft_arr_cstr_t files = ft_arr_init();
+	char *dirname;
+	char *filename;
+	DIR* dir;
+	struct dirent *dirent;
+	struct stat st;
+	size_t i;
 
+	/* note: we don't dup root, so will not free it */
+	ft_arr_cstr_push(&dirs, (char*)root);
 
-	// adding the root directory because it must be deleted too
-	if(root_as_well)
-		parray_append(files, pgFileNew(root, "", false, 0, $bind(pioDrive, self)));
+	for (i = 0; i < dirs.len; i++) /* note that dirs.len will grow */
+	{
+		dirname = dirs.ptr[i];
+		dir = opendir(dirname);
 
-    /* delete leaf node first */
-    parray_qsort(files, pgFileCompareRelPathWithExternalDesc);
-    size_t num_files = parray_num(files);
-    for (int i = 0; i < num_files; i++)
-    {
-        pgFile	   *file = (pgFile *) parray_get(files, i);
+		if (dir == NULL)
+		{
+			if (errno == ENOENT)
+			{
+				elog(WARNING, "Dir \"%s\" disappeared", dirname);
+				dirs.ptr[i] = NULL;
+				if (i != 0)
+					ft_free(dirname);
+				continue;
+			}
+			else
+				elog(ERROR, "Cannot open dir \"%s\": %m", dirname);
+		}
 
-        join_path_components(full_path, root, file->rel_path);
+		for(errno=0; (dirent = readdir(dir)) != NULL; errno=0)
+		{
+			if (strcmp(dirent->d_name, ".") == 0 ||
+				strcmp(dirent->d_name, "..") == 0)
+				continue;
 
-        if (interrupted)
-            elog(ERROR, "interrupted during the directory deletion: %s", full_path);
+			join_path_components(full_path, dirname, dirent->d_name);
+			if (stat(full_path, &st))
+			{
+				if (errno == ENOENT)
+				{
+					elog(WARNING, "File \"%s\" disappeared", full_path);
+					continue;
+				}
+				elog(ERROR, "Could not stat \"%s\": %m", full_path);
+			}
 
-        if (progress)
-            elog(INFO, "Progress: (%d/%zd). Delete file \"%s\"",
-                 i + 1, num_files, full_path);
+			if (S_ISDIR(st.st_mode))
+				ft_arr_cstr_push(&dirs, ft_cstrdup(full_path));
+			else
+				ft_arr_cstr_push(&files, ft_cstrdup(dirent->d_name));
+		}
+		if (errno)
+			elog(ERROR, "Could not readdir \"%s\": %m", full_path);
+		closedir(dir);
 
-        err_i err = $(pioRemove, self, full_path, false);
-        if($haserr(err))
-            elog(ERROR, "Cannot remove file or directory \"%s\": %s", full_path, $errmsg(err));
-    }
+		while (files.len > 0)
+		{
+			filename = ft_arr_cstr_pop(&files);
+			join_path_components(full_path, dirname, filename);
+			ft_free(filename);
 
-    parray_walk(files, pgFileFree);
-    parray_free(files);
+			if (progress)
+				elog(INFO, "Progress: delete file \"%s\"", full_path);
+			if (remove_file_or_dir(full_path) != 0)
+			{
+				if (errno == ENOENT)
+					elog(WARNING, "File \"%s\" disappeared", full_path);
+				else
+					elog(ERROR, "Could not remove \"%s\": %m", full_path);
+			}
+		}
+	}
+
+	while (dirs.len > 0)
+	{
+		dirname = ft_arr_cstr_pop(&dirs);
+		if (dirname == NULL)
+			continue;
+
+		if (dirs.len == 0 && !root_as_well)
+			break;
+
+		if (progress)
+			elog(INFO, "Progress: delete dir \"%s\"", full_path);
+		if (remove_file_or_dir(dirname) != 0)
+		{
+			if (errno == ENOENT)
+				elog(WARNING, "Dir \"%s\" disappeared", full_path);
+			else
+				elog(ERROR, "Could not remove \"%s\": %m", full_path);
+		}
+
+		if (dirs.len != 0) /* we didn't dup root, so don't free it */
+			ft_free(dirname);
+	}
+
+	ft_arr_cstr_free(&dirs);
+	ft_arr_cstr_free(&files);
 }
 
 static ft_bytes_t
