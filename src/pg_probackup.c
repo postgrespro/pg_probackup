@@ -474,13 +474,7 @@ pbk_main(int argc, char *argv[])
 		if (!is_absolute_path(backup_path))
 			elog(ERROR, "-B, --backup-path must be an absolute path");
 
-		catalogState = pgut_new0(CatalogState);
-		strncpy(catalogState->catalog_path, backup_path, MAXPGPATH);
-		join_path_components(catalogState->backup_subdir_path,
-							catalogState->catalog_path, BACKUPS_DIR);
-		join_path_components(catalogState->wal_subdir_path,
-							catalogState->catalog_path, WAL_SUBDIR);
-		catalogState->backup_location = pioDriveForLocation(FIO_BACKUP_HOST);
+		catalogState = catalog_new(backup_path);
 	}
 
 	/* backup_path is required for all pg_probackup commands except help, version, checkdb and catchup */

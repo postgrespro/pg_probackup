@@ -818,6 +818,21 @@ pgBackupGetBackupMode(pgBackup *backup, bool show_color)
 		return backupModes[backup->backup_mode];
 }
 
+/* Build `CatalogState' from `backup_path' */
+CatalogState *
+catalog_new(const char *backup_path)
+{
+	CatalogState *catalogState = pgut_new0(CatalogState);
+	strncpy(catalogState->catalog_path, backup_path, MAXPGPATH);
+	join_path_components(catalogState->backup_subdir_path,
+						 catalogState->catalog_path, BACKUPS_DIR);
+	join_path_components(catalogState->wal_subdir_path,
+						 catalogState->catalog_path, WAL_SUBDIR);
+	catalogState->backup_location = pioDriveForLocation(FIO_BACKUP_HOST);
+
+	return catalogState;
+}
+
 /*
  * Create list of instances in given backup catalog.
  *

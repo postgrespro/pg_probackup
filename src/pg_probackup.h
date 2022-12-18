@@ -888,6 +888,7 @@ extern parray* get_history_streaming(ConnectionOptions *conn_opt, TimeLineID tli
 #define PAGE_LSN_FROM_FUTURE (-6)
 
 /* in catalog.c */
+extern CatalogState * catalog_new(const char *backup_path);
 extern pgBackup *read_backup(pioDrive_i drive, const char *root_dir);
 extern pgBackup *readBackupControlFile(pioDrive_i drive, const char *path);
 extern void write_backup(pgBackup *backup, bool strict);
