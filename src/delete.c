@@ -877,7 +877,7 @@ delete_walfiles_in_tli(InstanceState *instanceState, XLogRecPtr keep_lsn, timeli
 		xlogFile *wal_file = (xlogFile *) parray_get(tlinfo->xlog_filelist, i);
 
 		if (purge_all || wal_file->segno < OldestToKeepSegNo)
-			wal_size_actual += wal_file->file.size;
+			wal_size_actual += wal_file->size;
 	}
 
 	/* Report the actual size to delete */
@@ -905,7 +905,7 @@ delete_walfiles_in_tli(InstanceState *instanceState, XLogRecPtr keep_lsn, timeli
 		{
 			char wal_fullpath[MAXPGPATH];
 
-			join_path_components(wal_fullpath, instanceState->instance_wal_subdir_path, wal_file->file.name);
+			join_path_components(wal_fullpath, instanceState->instance_wal_subdir_path, wal_file->name.ptr);
 
 			/* save segment from purging */
 			if (wal_file->keep)

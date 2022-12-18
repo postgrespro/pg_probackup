@@ -2928,10 +2928,6 @@ typedef struct pioRemoteWriteFile {
 								iface(pioWriteCloser, pioDBWriter)
 fobj_klass(pioRemoteWriteFile);
 
-#define FT_SLICE dirent
-#define FT_SLICE_TYPE pio_dirent_t
-#include <ft_array.inc.h>
-
 typedef struct pioRemoteDir
 {
 	ft_str_t path;

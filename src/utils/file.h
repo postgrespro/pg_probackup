@@ -122,6 +122,20 @@ typedef struct pio_dirent {
 	ft_str_t		name;
 } pio_dirent_t;
 
+#define FT_SLICE dirent
+#define FT_SLICE_TYPE pio_dirent_t
+#include <ft_array.inc.h>
+
+#define FT_SORT dirent
+#define FT_SORT_TYPE pio_dirent_t
+#include <ft_sort.inc.h>
+
+ft_inline int
+compare_dirent_by_name(pio_dirent_t d1, pio_dirent_t d2)
+{
+	return ft_strcmp(d1.name, d2.name);
+}
+
 extern fio_location MyLocation;
 
 extern void    setMyLocation(ProbackupSubcmd const subcmd);

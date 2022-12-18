@@ -1506,49 +1506,72 @@ create_backup_dir(pgBackup *backup, const char *backup_instance_path)
 parray *
 catalog_get_timelines(InstanceState *instanceState, InstanceConfig *instance)
 {
+	FOBJ_FUNC_ARP();
 	int i,j,k;
-	parray *xlog_files_list = parray_new();
 	parray *timelineinfos;
 	parray *backups;
 	timelineInfo *tlinfo;
+	ft_arr_dirent_t xlog_files_list = ft_arr_init();
+	pioDirIter_i dir;
+	pio_dirent_t file;
+	err_i  err;
 
 	/* for fancy reporting */
 	char begin_segno_str[MAXFNAMELEN];
 	char end_segno_str[MAXFNAMELEN];
 
+
+	dir = $i(pioOpenDir, instanceState->backup_location,
+			  .path = instanceState->instance_wal_subdir_path,
+			  .err = &err);
+
 	/* read all xlog files that belong to this archive */
-	backup_list_dir(xlog_files_list, instanceState->instance_wal_subdir_path);
-	parray_qsort(xlog_files_list, pgFileCompareName);
+	if (!$isNULL(dir))
+	{
+		while ((file = $i(pioDirNext, dir, .err = &err)).stat.pst_kind)
+		{
+			if (file.stat.pst_kind != PIO_KIND_REGULAR)
+				continue;
+			file.name = ft_strdup(file.name);
+			ft_arr_dirent_push(&xlog_files_list, file);
+		}
+
+		ft_qsort_dirent(xlog_files_list.ptr, xlog_files_list.len, compare_dirent_by_name);
+
+		$i(pioClose, dir);
+	}
+	if ($haserr(err) && getErrno(err) != ENOENT)
+		ft_logerr(FT_FATAL, $errmsg(err), "Reading wal dir");
 
 	timelineinfos = parray_new();
 	tlinfo = NULL;
 
 	/* walk through files and collect info about timelines */
-	for (i = 0; i < parray_num(xlog_files_list); i++)
+	for (i = 0; i < xlog_files_list.len; ft_str_free(&file.name), i++)
 	{
-		pgFile *file = (pgFile *) parray_get(xlog_files_list, i);
 		TimeLineID tli;
 		parray *timelines;
 		xlogFile *wal_file = NULL;
 
+		file = xlog_files_list.ptr[i];
 		/*
 		 * Regular WAL file.
 		 * IsXLogFileName() cannot be used here
 		 */
-		if (strspn(file->name, "0123456789ABCDEF") == XLOG_FNAME_LEN)
+		if (strspn(file.name.ptr, "0123456789ABCDEF") == XLOG_FNAME_LEN)
 		{
 			int result = 0;
 			uint32 log, seg;
 			XLogSegNo segno = 0;
 			char suffix[MAXFNAMELEN];
 
-			result = sscanf(file->name, "%08X%08X%08X.%s",
+			result = sscanf(file.name.ptr, "%08X%08X%08X.%s",
 						&tli, &log, &seg, (char *) &suffix);
 
 			/* sanity */
 			if (result < 3)
 			{
-				elog(WARNING, "unexpected WAL file name \"%s\"", file->name);
+				elog(WARNING, "unexpected WAL file name \"%s\"", file.name.ptr);
 				continue;
 			}
 
@@ -1559,9 +1582,9 @@ catalog_get_timelines(InstanceState *instanceState, InstanceConfig *instance)
 			if (result == 4)
 			{
 				/* backup history file. Currently we don't use them */
-				if (IsBackupHistoryFileName(file->name))
+				if (IsBackupHistoryFileName(file.name.ptr))
 				{
-					elog(VERBOSE, "backup history file \"%s\"", file->name);
+					elog(VERBOSE, "backup history file \"%s\"", file.name.ptr);
 
 					if (!tlinfo || tlinfo->tli != tli)
 					{
@@ -1571,7 +1594,8 @@ catalog_get_timelines(InstanceState *instanceState, InstanceConfig *instance)
 
 					/* append file to xlog file list */
 					wal_file = palloc(sizeof(xlogFile));
-					wal_file->file = *file;
+					wal_file->name = ft_str_steal(&file.name);
+					wal_file->size = file.stat.pst_size;
 					wal_file->segno = segno;
 					wal_file->type = BACKUP_HISTORY_FILE;
 					wal_file->keep = false;
@@ -1579,10 +1603,10 @@ catalog_get_timelines(InstanceState *instanceState, InstanceConfig *instance)
 					continue;
 				}
 				/* partial WAL segment */
-				else if (IsPartialXLogFileName(file->name) ||
-						 IsPartialCompressXLogFileName(file->name))
+				else if (IsPartialXLogFileName(file.name.ptr) ||
+						 IsPartialCompressXLogFileName(file.name))
 				{
-					elog(VERBOSE, "partial WAL file \"%s\"", file->name);
+					elog(VERBOSE, "partial WAL file \"%s\"", file.name.ptr);
 
 					if (!tlinfo || tlinfo->tli != tli)
 					{
@@ -1592,7 +1616,8 @@ catalog_get_timelines(InstanceState *instanceState, InstanceConfig *instance)
 
 					/* append file to xlog file list */
 					wal_file = palloc(sizeof(xlogFile));
-					wal_file->file = *file;
+					wal_file->name = ft_str_steal(&file.name);
+					wal_file->size = file.stat.pst_size;
 					wal_file->segno = segno;
 					wal_file->type = PARTIAL_SEGMENT;
 					wal_file->keep = false;
@@ -1600,10 +1625,10 @@ catalog_get_timelines(InstanceState *instanceState, InstanceConfig *instance)
 					continue;
 				}
 				/* temp WAL segment */
-				else if (IsTempXLogFileName(file->name) ||
-						 IsTempCompressXLogFileName(file->name))
+				else if (IsTempXLogFileName(file.name) ||
+						 IsTempCompressXLogFileName(file.name))
 				{
-					elog(VERBOSE, "temp WAL file \"%s\"", file->name);
+					elog(VERBOSE, "temp WAL file \"%s\"", file.name.ptr);
 
 					if (!tlinfo || tlinfo->tli != tli)
 					{
@@ -1613,7 +1638,8 @@ catalog_get_timelines(InstanceState *instanceState, InstanceConfig *instance)
 
 					/* append file to xlog file list */
 					wal_file = palloc(sizeof(xlogFile));
-					wal_file->file = *file;
+					wal_file->name = ft_str_steal(&file.name);
+					wal_file->size = file.stat.pst_size;
 					wal_file->segno = segno;
 					wal_file->type = TEMP_SEGMENT;
 					wal_file->keep = false;
@@ -1623,7 +1649,7 @@ catalog_get_timelines(InstanceState *instanceState, InstanceConfig *instance)
 				/* we only expect compressed wal files with .gz suffix */
 				else if (strcmp(suffix, "gz") != 0)
 				{
-					elog(WARNING, "unexpected WAL file name \"%s\"", file->name);
+					elog(WARNING, "unexpected WAL file name \"%s\"", file.name.ptr);
 					continue;
 				}
 			}
@@ -1671,22 +1697,23 @@ catalog_get_timelines(InstanceState *instanceState, InstanceConfig *instance)
 			tlinfo->end_segno = segno;
 			/* update counters */
 			tlinfo->n_xlog_files++;
-			tlinfo->size += file->size;
+			tlinfo->size += file.stat.pst_size;
 
 			/* append file to xlog file list */
 			wal_file = palloc(sizeof(xlogFile));
-			wal_file->file = *file;
+			wal_file->name = ft_str_steal(&file.name);
+			wal_file->size = file.stat.pst_size;
 			wal_file->segno = segno;
 			wal_file->type = SEGMENT;
 			wal_file->keep = false;
 			parray_append(tlinfo->xlog_filelist, wal_file);
 		}
 		/* timeline history file */
-		else if (IsTLHistoryFileName(file->name))
+		else if (IsTLHistoryFileName(file.name.ptr))
 		{
 			TimeLineHistoryEntry *tln;
 
-			sscanf(file->name, "%08X.history", &tli);
+			sscanf(file.name.ptr, "%08X.history", &tli);
 			timelines = read_timeline_history(instanceState->instance_wal_subdir_path, tli, true);
 
 			/* History file is empty or corrupted, disregard it */
@@ -1721,7 +1748,7 @@ catalog_get_timelines(InstanceState *instanceState, InstanceConfig *instance)
 			parray_free(timelines);
 		}
 		else
-			elog(WARNING, "unexpected WAL file name \"%s\"", file->name);
+			elog(WARNING, "unexpected WAL file name \"%s\"", file.name.ptr);
 	}
 
 	/* save information about backups belonging to each timeline */

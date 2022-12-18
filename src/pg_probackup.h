@@ -613,7 +613,8 @@ typedef enum xlogFileType
 
 typedef struct xlogFile
 {
-	pgFile       file;
+	ft_str_t     name;
+	int64_t      size;
 	XLogSegNo    segno;
 	xlogFileType type;
 	bool         keep; /* Used to prevent removal of WAL segments
@@ -686,19 +687,19 @@ typedef struct StopBackupCallbackParams
 		XLogFromFileName(fname, tli, logSegNo, wal_segsz_bytes)
 
 #define IsPartialCompressXLogFileName(fname)	\
-	(strlen(fname) == XLOG_FNAME_LEN + strlen(".gz.partial") && \
-	 strspn(fname, "0123456789ABCDEF") == XLOG_FNAME_LEN &&		\
-	 strcmp((fname) + XLOG_FNAME_LEN, ".gz.partial") == 0)
+	((fname).len == XLOG_FNAME_LEN + strlen(".gz.partial") && \
+	 ft_str_spnc((fname), "0123456789ABCDEF") == XLOG_FNAME_LEN &&		\
+	 ft_str_ends_withc((fname), ".gz.partial"))
 
 #define IsTempXLogFileName(fname)	\
-	(strlen(fname) == XLOG_FNAME_LEN + strlen("~tmp") + 6 &&	\
-	 strspn(fname, "0123456789ABCDEF") == XLOG_FNAME_LEN &&		\
-	 strncmp((fname) + XLOG_FNAME_LEN, "~tmp", 4) == 0)
+	((fname).len == XLOG_FNAME_LEN + strlen("~tmp") + 6 &&	\
+	 ft_str_spnc((fname), "0123456789ABCDEF") == XLOG_FNAME_LEN && \
+	 ft_str_find_cstr((fname), "~tmp") == XLOG_FNAME_LEN)
 
 #define IsTempCompressXLogFileName(fname)	\
-	(strlen(fname) == XLOG_FNAME_LEN + strlen(".gz~tmp") + 6 && \
-	 strspn(fname, "0123456789ABCDEF") == XLOG_FNAME_LEN &&		\
-	 strncmp((fname) + XLOG_FNAME_LEN, ".gz~tmp", 7) == 0)
+	((fname).len == XLOG_FNAME_LEN + strlen(".gz~tmp") + 6 && \
+	 ft_str_spnc((fname), "0123456789ABCDEF") == XLOG_FNAME_LEN && \
+	 ft_str_find_cstr((fname), ".gz~tmp") == XLOG_FNAME_LEN)
 
 #define IsSshProtocol() (instance_config.remote.host && strcmp(instance_config.remote.proto, "ssh") == 0)
 
