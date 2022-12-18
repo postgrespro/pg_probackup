@@ -132,6 +132,15 @@ static TablespaceList tablespace_dirs = {NULL, NULL};
 /* Extra directories mapping */
 static TablespaceList external_remap_list = {NULL, NULL};
 
+static void
+pgFileSetStat(pgFile* file, pio_stat_t st)
+{
+	file->size = st.pst_size;
+	file->kind = st.pst_kind;
+	file->mode = st.pst_mode;
+	file->mtime = st.pst_mtime;
+}
+
 pgFile *
 pgFileNew(const char *path, const char *rel_path, bool follow_symlink,
 		  int external_dir_num, pioDrive_i drive)
@@ -152,10 +161,7 @@ pgFileNew(const char *path, const char *rel_path, bool follow_symlink,
 	}
 
 	file = pgFileInit(rel_path);
-	file->size = st.pst_size;
-	file->kind = st.pst_kind;
-	file->mode = st.pst_mode;
-	file->mtime = st.pst_mtime;
+	pgFileSetStat(file, st);
 	file->external_dir_num = external_dir_num;
 
 	return file;
@@ -557,10 +563,10 @@ db_list_dir(parray *files, const char* root,
 
 		join_path_components(child, root, dent.name.ptr);
 
-		file = pgFileNew(child, dent.name.ptr, true, external_dir_num,
-						 drive);
-		if (file == NULL)
-			continue;
+		file = pgFileInit(dent.name.ptr);
+		pgFileSetStat(file, dent.stat);
+		file->external_dir_num = external_dir_num;
+
 		/* pioDirIter will not return other kinds of entries */
 		ft_assert(file->kind == PIO_KIND_REGULAR || file->kind == PIO_KIND_DIRECTORY);
 
