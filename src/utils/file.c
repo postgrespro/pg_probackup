@@ -5869,6 +5869,48 @@ prepare_page(pioLocalPagesIterator *iter, BlockNumber blknum, Page page, PageSta
 	return PageIsOk;
 }
 
+/*
+ * skip_drive
+ *
+ * On Windows, a path may begin with "C:" or "//network/".  Advance over
+ * this and point to the effective start of the path.
+ *
+ * (copied from PostgreSQL's src/port/path.c)
+ */
+#ifdef WIN32
+
+static char *
+skip_drive(const char *path)
+{
+	if (IS_DIR_SEP(path[0]) && IS_DIR_SEP(path[1]))
+	{
+		path += 2;
+		while (*path && !IS_DIR_SEP(*path))
+			path++;
+	}
+	else if (isalpha((unsigned char) path[0]) && path[1] == ':')
+	{
+		path += 2;
+	}
+	return (char *) path;
+}
+#else
+#define skip_drive(path)	(path)
+#endif
+
+bool
+ft_strbuf_cat_path(ft_strbuf_t *buf, ft_str_t path)
+{
+	/* here we repeat join_path_components */
+	if (buf->len > 0 && !IS_DIR_SEP(buf->ptr[buf->len-1]))
+	{
+		if (*(skip_drive(buf->ptr)) != '\0')
+			if (!ft_strbuf_cat1(buf, '/'))
+				return false;
+	}
+
+	return ft_strbuf_cat(buf, path);
+}
 
 fobj_klass_handle(pioLocalPagesIterator);
 fobj_klass_handle(pioRemotePagesIterator);

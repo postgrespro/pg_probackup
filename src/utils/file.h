@@ -414,4 +414,12 @@ extern void init_pio_line_reader(pio_line_reader *r, pioRead_i source, size_t ma
 extern void deinit_pio_line_reader(pio_line_reader *r);
 extern ft_bytes_t pio_line_reader_getline(pio_line_reader *r, err_i *err);
 
+/* append path component */
+extern bool    ft_strbuf_cat_path(ft_strbuf_t *buf, ft_str_t path);
+ft_inline bool
+ft_strbuf_cat_pathc(ft_strbuf_t *buf, const char *path)
+{
+	return ft_strbuf_cat_path(buf, ft_cstr(path));
+}
+
 #endif
