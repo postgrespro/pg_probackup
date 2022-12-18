@@ -92,7 +92,7 @@ static int push_file(WALSegno *xlogfile, const char *archive_status_dir,
 								   bool no_ready_rename, bool is_compress,
 								   int compress_level);
 
-static parray *setup_push_filelist(const char *archive_status_dir,
+static parray *setup_push_filelist(pioDrive_i drive, const char *archive_status_dir,
 								   const char *first_file, int batch_size);
 
 /*
@@ -141,7 +141,8 @@ do_archive_push(InstanceState *instanceState, InstanceConfig *instance, char *pg
 #endif
 
 	/*  Setup filelist and locks */
-	batch_files = setup_push_filelist(archive_status_dir, wal_file_name, batch_size);
+	batch_files = setup_push_filelist(instanceState->database_location,
+									  archive_status_dir, wal_file_name, batch_size);
 
 	n_threads = num_threads;
 	if (num_threads > parray_num(batch_files))
@@ -517,13 +518,15 @@ push_file_internal(const char *wal_file_name, const char *pg_xlog_dir,
  * and pack such files into batch sized array.
  */
 parray *
-setup_push_filelist(const char *archive_status_dir, const char *first_file,
-					int batch_size)
+setup_push_filelist(pioDrive_i drive, const char *archive_status_dir,
+					const char *first_file, int batch_size)
 {
-	int i;
+	FOBJ_FUNC_ARP();
 	WALSegno *xlogfile = NULL;
-	parray  *status_files = NULL;
 	parray  *batch_files = parray_new();
+	pioDirIter_i iter;
+	pio_dirent_t entry;
+	err_i		 err;
 
 	/* guarantee that first filename is in batch list */
 	xlogfile = palloc(sizeof(WALSegno));
@@ -535,18 +538,17 @@ setup_push_filelist(const char *archive_status_dir, const char *first_file,
 		return batch_files;
 
 	/* get list of files from archive_status */
-	status_files = parray_new();
-	db_list_dir(status_files, archive_status_dir, false, false, 0);
-	parray_qsort(status_files, pgFileCompareName);
+	iter = $i(pioOpenDir, drive, archive_status_dir, .err = &err);
+	if ($haserr(err))
+		ft_logerr(FT_FATAL, $errmsg(err), "Reading push filelist");
 
-	for (i = 0; i < parray_num(status_files); i++)
+	while ((entry=$i(pioDirNext, iter, .err=&err)).stat.pst_kind)
 	{
 		int result = 0;
 		char filename[MAXFNAMELEN];
 		char suffix[MAXFNAMELEN];
-		pgFile *file = (pgFile *) parray_get(status_files, i);
 
-		result = sscanf(file->name, "%[^.]%s", (char *) &filename, (char *) &suffix);
+		result = sscanf(entry.name.ptr, "%[^.]%s", (char *) &filename, (char *) &suffix);
 
 		if (result != 2)
 			continue;
@@ -568,9 +570,9 @@ setup_push_filelist(const char *archive_status_dir, const char *first_file,
 			break;
 	}
 
-	/* cleanup */
-	parray_walk(status_files, pgFileFree);
-	parray_free(status_files);
+	$i(pioClose, iter);
+	if ($haserr(err))
+		ft_logerr(FT_FATAL, $errmsg(err), "Reading push filelist");
 
 	return batch_files;
 }
