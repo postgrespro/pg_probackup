@@ -1568,7 +1568,7 @@ read_database_map(pgBackup *backup)
 void
 cleanup_tablespace(const char *path)
 {
-	pioDrive_i drive = pioDriveForLocation(FIO_BACKUP_HOST);
+	pioDrive_i drive = pioDriveForLocation(FIO_DB_HOST);
 	$i(pioRemoveDir, drive, .root = path, .root_as_well = false);
 }
 
