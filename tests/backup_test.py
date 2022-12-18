@@ -1737,22 +1737,10 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 
         os.chmod(full_path, 000)
 
-        try:
+        with self.assertRaisesRegex(ProbackupException, r'ERROR:[^\n]*Cannot open dir'):
             # FULL backup
             self.backup_node(
                 backup_dir, 'node', node, options=['--stream'])
-            # we should die here because exception is what we expect to happen
-            self.assertEqual(
-                1, 0,
-                "Expecting Error because of missing permissions"
-                "\n Output: {0} \n CMD: {1}".format(
-                    repr(self.output), self.cmd))
-        except ProbackupException as e:
-            self.assertIn(
-                'ERROR: Cannot open directory',
-                e.message,
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
-                    repr(e.message), self.cmd))
 
         os.rmdir(full_path)
 
