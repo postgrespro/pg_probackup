@@ -427,8 +427,10 @@ ft_inline FT_CMP_RES    ft_strcmpc(ft_str_t str, const char* oth);
 ft_inline void			ft_str_consume(ft_str_t *str, size_t cut);
 
 ft_inline size_t  ft_str_spnc(ft_str_t str, const char* chars);
-ft_inline size_t  ft_str_ends_withc(ft_str_t str, const char* needle);
+ft_inline bool    ft_str_ends_withc(ft_str_t str, const char* needle);
 ft_inline size_t  ft_str_find_cstr(ft_str_t haystack, const char *needle);
+
+ft_inline void    ft_str_chop1(ft_str_t *str);
 
 /* shift zero-terminated string. Will assert if no zero-byte found and it is not last */
 extern ft_str_t     ft_bytes_shift_zt(ft_bytes_t *bytes);

@@ -494,7 +494,7 @@ ft_str_spnc(ft_str_t str, const char* chars) {
 	return ft_bytes_spnc(ft_str2bytes(str), chars);
 }
 
-ft_inline size_t
+ft_inline bool
 ft_str_ends_withc(ft_str_t str, const char* needle) {
 	return ft_bytes_ends_withc(ft_str2bytes(str), needle);
 }
@@ -502,6 +502,13 @@ ft_str_ends_withc(ft_str_t str, const char* needle) {
 ft_inline size_t
 ft_str_find_cstr(ft_str_t haystack, const char *needle) {
 	return ft_bytes_find_cstr(ft_str2bytes(haystack), needle);
+}
+
+ft_inline void
+ft_str_chop1(ft_str_t *str) {
+	ft_assert(str->len >= 1);
+	str->ptr[str->len-1] = 0;
+	str->len--;
 }
 
 ft_inline ft_strbuf_t
