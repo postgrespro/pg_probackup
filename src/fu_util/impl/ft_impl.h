@@ -570,6 +570,8 @@ ft_strbuf_cat(ft_strbuf_t *buf, ft_str_t s) {
 ft_inline bool
 ft_strbuf_cat_zt(ft_strbuf_t *buf, ft_str_t s) {
 	/* we could actually reuse ft_strbuf_catbytes */
+	if (s.len == 0)
+		return ft_strbuf_cat1(buf, 0);
 	return ft_strbuf_catbytes(buf, ft_bytes(s.ptr, s.len+1));
 }
 
