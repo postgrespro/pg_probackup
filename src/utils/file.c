@@ -1806,13 +1806,6 @@ void db_list_dir(parray *files, const char *root, bool handle_tablespaces,
 			.external_dir_num = external_dir_num);
 }
 
-void backup_list_dir(parray *files, const char *root) {
-	pioDrive_i drive = pioDriveForLocation(FIO_BACKUP_HOST);
-	$i(pioListDir, drive, .files = files, .root = root, .handle_tablespaces = false,
-			.symlink_and_hidden = false, .backup_logs = false, .skip_hidden = false,
-			.external_dir_num = 0);
-}
-
 /*
  * WARNING! this function is not paired with fio_remove_dir
  * because there is no such function. Instead, it is paired

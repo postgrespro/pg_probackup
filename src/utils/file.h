@@ -180,7 +180,6 @@ extern pid_t   fio_check_postmaster(fio_location location, const char *pgdata);
 
 extern void db_list_dir(parray *files, const char *root, bool handle_tablespaces,
 			bool backup_logs, int external_dir_num);
-extern void backup_list_dir(parray *files, const char *root);
 
 extern PageState *fio_get_checksum_map(fio_location location, const char *fullpath, uint32 checksum_version,
 									   int n_blocks, XLogRecPtr dest_stop_lsn, BlockNumber segmentno);
