@@ -2544,6 +2544,138 @@ fio_communicate(int in, int out)
 	}
 }
 
+
+typedef struct pio_recursive_dir {
+	pioDrive_i    drive;
+	ft_arr_cstr_t recurse;
+	ft_str_t      root;
+	ft_str_t      parent;
+	pioDirIter_i  iter;
+	pio_dirent_t  dirent;
+	bool          dont_recurse_current;
+	ft_strbuf_t   namebuf;
+} pioRecursiveDir;
+#define kls__pioRecursiveDir mth(fobjDispose)
+fobj_klass(pioRecursiveDir);
+
+pio_recursive_dir_t*
+pio_recursive_dir_alloc(pioDrive_i drive, path_t root, err_i *err)
+{
+	pioDirIter_i iter;
+	fobj_reset_err(err);
+
+	iter = $i(pioOpenDir, drive, root, err);
+	if ($haserr(*err))
+		return NULL;
+
+	return $alloc(pioRecursiveDir, .drive = drive,
+				  .root = ft_strdupc(root),
+				  .parent = ft_strdupc(""),
+				  .iter = $iref(iter),
+				  .recurse = ft_arr_init(),
+				  .namebuf = ft_strbuf_zero());
+}
+
+static pio_dirent_t
+pio_recursive_dir_next_impl(pio_recursive_dir_t* self, err_i* err)
+{
+	if (self->dirent.stat.pst_kind == PIO_KIND_DIRECTORY &&
+	    !self->dont_recurse_current)
+	{
+		ft_arr_cstr_push(&self->recurse, ft_strdup(self->dirent.name).ptr);
+	}
+
+	ft_strbuf_reset_for_reuse(&self->namebuf);
+	self->dont_recurse_current = false;
+
+	self->dirent = $i(pioDirNext, self->iter, .err = err);
+	if ($haserr(*err))
+		return self->dirent;
+
+	if (self->dirent.stat.pst_kind != PIO_KIND_UNKNOWN)
+	{
+		ft_strbuf_cat(&self->namebuf, self->parent);
+		ft_strbuf_cat_path(&self->namebuf, self->dirent.name);
+		self->dirent.name = ft_strbuf_ref(&self->namebuf);
+		return self->dirent;
+	}
+
+	*err = $i(pioClose, self->iter);
+	$idel(&self->iter);
+	if ($haserr(*err))
+		return self->dirent;
+
+next_dir:
+	if (self->recurse.len == 0)
+		return self->dirent;
+
+	ft_str_free(&self->parent);
+	self->parent = ft_cstr(ft_arr_cstr_pop(&self->recurse));
+
+	ft_strbuf_cat(&self->namebuf, self->root);
+	ft_strbuf_cat_path(&self->namebuf, self->parent);
+
+	self->iter = $i(pioOpenDir, self->drive, .path = self->namebuf.ptr,
+					.err = err);
+	if ($haserr(*err))
+	{
+		/* someone deleted dir under our feet */
+		if (getErrno(*err) == ENOENT)
+		{
+			*err = $noerr();
+			goto next_dir;
+		}
+
+		return self->dirent;
+	}
+
+	$iref(self->iter);
+
+	return pio_recursive_dir_next_impl(self, err);
+}
+
+pio_dirent_t
+pio_recursive_dir_next(pio_recursive_dir_t* self, err_i* err)
+{
+	FOBJ_FUNC_ARP();
+	pio_dirent_t ent;
+	fobj_reset_err(err);
+
+	ent = pio_recursive_dir_next_impl(self, err);
+	$iresult(*err);
+	return ent;
+}
+
+void
+pio_recursive_dir_dont_recurse_current(pio_recursive_dir_t* self)
+{
+	ft_assert(self->dirent.stat.pst_kind == PIO_KIND_DIRECTORY);
+	self->dont_recurse_current = true;
+}
+
+static void
+pioRecursiveDir_fobjDispose(VSelf)
+{
+	Self(pioRecursiveDir);
+
+	if ($notNULL(self->iter))
+		$i(pioClose, self->iter);
+	$idel(&self->iter);
+	ft_str_free(&self->root);
+	ft_str_free(&self->parent);
+	ft_arr_cstr_free(&self->recurse);
+	ft_strbuf_free(&self->namebuf);
+}
+
+void
+pio_recursive_dir_free(pio_recursive_dir_t* self)
+{
+	/* we are releasing bound resources,
+	 * but self will be dealloced in FOBJ's ARP */
+	pioRecursiveDir_fobjDispose(self);
+}
+fobj_klass_handle(pioRecursiveDir);
+
 // CLASSES
 
 typedef struct pioLocalDrive
