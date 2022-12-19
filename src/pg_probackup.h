@@ -1004,8 +1004,7 @@ extern bool dir_is_empty(const char *path, fio_location location);
 extern bool fileExists(const char *path, fio_location location);
 
 extern pgFile *pgFileNew(const char *path, const char *rel_path,
-						 bool follow_symlink, int external_dir_num,
-						 pioDrive_i drive);
+						 bool follow_symlink, bool crc, pioDrive_i drive);
 extern pgFile *pgFileInit(const char *rel_path);
 extern void pgFileFree(void *file);
 

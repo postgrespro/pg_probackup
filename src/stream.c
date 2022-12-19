@@ -659,7 +659,10 @@ add_walsegment_to_filelist(parray *filelist, uint32 timeline, XLogRecPtr xlogpos
     join_path_components(wal_segment_fullpath, basedir, wal_segment_name);
     join_path_components(wal_segment_relpath, PG_XLOG_DIR, wal_segment_name);
 
-    file = pgFileNew(wal_segment_fullpath, wal_segment_relpath, false, 0, drive);
+    file = pgFileNew(wal_segment_fullpath, wal_segment_relpath, false, do_crc, drive);
+    ft_assert(file->size == xlog_seg_size,
+			  "Wal segment file '%s' is of unexpected size %lld",
+			  wal_segment_fullpath, (long long)file->size);
 
     /*
      * Check if file is already in the list
@@ -671,22 +674,15 @@ add_walsegment_to_filelist(parray *filelist, uint32 timeline, XLogRecPtr xlogpos
 
     if (existing_file)
     {
-        if (do_crc)
-            (*existing_file)->crc = pgFileGetCRC32C(wal_segment_fullpath, false);
-        (*existing_file)->write_size = xlog_seg_size;
-        (*existing_file)->uncompressed_size = xlog_seg_size;
+        (*existing_file)->crc = file->crc;
+        (*existing_file)->size = file->size;
+        (*existing_file)->write_size = file->write_size;
+        (*existing_file)->uncompressed_size = file->uncompressed_size;
+
+		pgFileFree(file);
 
         return;
     }
-
-    if (do_crc)
-        file->crc = pgFileGetCRC32C(wal_segment_fullpath, false);
-
-    /* Should we recheck it using stat? */
-    file->write_size = xlog_seg_size;
-    file->uncompressed_size = xlog_seg_size;
-
-    /* append file to filelist */
     parray_append(filelist, file);
 }
 
@@ -708,14 +704,6 @@ add_history_file_to_filelist(parray *filelist, uint32 timeline, char *basedir)
     join_path_components(fullpath, basedir, filename);
     join_path_components(relpath, PG_XLOG_DIR, filename);
 
-    file = pgFileNew(fullpath, relpath, false, 0, drive);
-
-    /* calculate crc */
-    if (do_crc)
-        file->crc = pgFileGetCRC32C(fullpath, false);
-    file->write_size = file->size;
-    file->uncompressed_size = file->size;
-
-    /* append file to filelist */
+    file = pgFileNew(fullpath, relpath, false, do_crc, drive);
     parray_append(filelist, file);
 }

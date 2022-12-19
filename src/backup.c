@@ -1816,15 +1816,7 @@ pg_stop_backup_write_file_helper(pioDrive_i drive, const char *path, const char 
 	 */
 	if (file_list)
 	{
-		file = pgFileNew(full_filename, filename, true, 0, drive);
-
-		if (file->kind == PIO_KIND_REGULAR)
-		{
-			file->crc = pgFileGetCRC32C(full_filename, false);
-
-			file->write_size = file->size;
-			file->uncompressed_size = file->size;
-		}
+		file = pgFileNew(full_filename, filename, true, true, drive);
 		parray_append(file_list, file);
 	}
 }

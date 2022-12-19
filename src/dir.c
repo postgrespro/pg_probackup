@@ -143,7 +143,7 @@ pgFileSetStat(pgFile* file, pio_stat_t st)
 
 pgFile *
 pgFileNew(const char *path, const char *rel_path, bool follow_symlink,
-		  int external_dir_num, pioDrive_i drive)
+		  bool crc, pioDrive_i drive)
 {
 	FOBJ_FUNC_ARP();
 	pio_stat_t		st;
@@ -154,15 +154,25 @@ pgFileNew(const char *path, const char *rel_path, bool follow_symlink,
 	st = $i(pioStat, drive, .path = path, .follow_symlink = follow_symlink,
 			.err = &err);
 	if ($haserr(err)) {
-		/* file not found is not an error case */
-		if (getErrno(err) == ENOENT)
-			return NULL;
 		ft_logerr(FT_FATAL, $errmsg(err), "pgFileNew");
 	}
 
 	file = pgFileInit(rel_path);
 	pgFileSetStat(file, st);
-	file->external_dir_num = external_dir_num;
+	if (file->kind == PIO_KIND_REGULAR)
+	{
+		file->write_size = file->size;
+		file->uncompressed_size = file->size;
+	}
+	if (file->kind == PIO_KIND_REGULAR && crc)
+	{
+		file->crc = $i(pioGetCRC32, drive, .path = path,
+					   .compressed = false, .err = &err);
+		if ($haserr(err)) {
+			pgFileFree(file);
+			ft_logerr(FT_FATAL, $errmsg(err), "pgFileNew");
+		}
+	}
 
 	return file;
 }
@@ -173,8 +183,7 @@ pgFileInit(const char *rel_path)
 	pgFile	   *file;
 	char	   *file_name = NULL;
 
-	file = (pgFile *) pgut_malloc(sizeof(pgFile));
-	MemSet(file, 0, sizeof(pgFile));
+	file = (pgFile *) pgut_malloc0(sizeof(pgFile));
 
 	file->rel_path = pgut_strdup(rel_path);
 	canonicalize_path(file->rel_path);
@@ -1525,11 +1534,7 @@ write_database_map(pgBackup *backup, parray *database_map, parray *backup_files_
 	ft_strbuf_free(&buf);
 
 	/* Add metadata to backup_content.control */
-	file = pgFileNew(database_map_path, DATABASE_MAP, true, 0, drive);
-	file->crc = pgFileGetCRC32C(database_map_path, false);
-	file->write_size = file->size;
-	file->uncompressed_size = file->size;
-
+	file = pgFileNew(database_map_path, DATABASE_MAP, true, true, drive);
 	parray_append(backup_files_list, file);
 }
 
