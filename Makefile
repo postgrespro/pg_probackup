@@ -31,18 +31,16 @@ top_pbk_srcdir := $(dir $(realpath $(firstword $(MAKEFILE_LIST))))
 PROGRAM := pg_probackup
 
 # pg_probackup sources
-OBJS := src/utils/configuration.o src/utils/json.o src/utils/logger.o \
+PGPOBJS := src/utils/configuration.o src/utils/json.o src/utils/logger.o \
 	src/utils/parray.o src/utils/pgut.o src/utils/thread.o src/utils/remote.o src/utils/file.o
-OBJS += src/archive.o src/backup.o src/catalog.o src/checkdb.o src/configure.o src/data.o \
+PGPOBJS += src/archive.o src/backup.o src/catalog.o src/checkdb.o src/configure.o src/data.o \
 	src/delete.o src/dir.o src/help.o src/init.o src/merge.o \
 	src/parsexlog.o src/ptrack.o src/pg_probackup.o src/restore.o src/show.o src/stream.o \
 	src/util.o src/validate.o src/datapagemap.o src/catchup.o \
 	src/compatibility/pg-11.o src/utils/simple_prompt.o
-OBJS += src/compatibility/file_compat.o src/compatibility/receivelog.o \
+PGPOBJS += src/compatibility/file_compat.o src/compatibility/receivelog.o \
 	src/compatibility/streamutil.o \
 	src/compatibility/walmethods.o src/compatibility/file_compat10.o
-# artificial file for `main` function
-OBJS += src/main.o
 
 # sources borrowed from postgresql (paths are relative to pg top dir)
 BORROWED_H_SRC := 
@@ -52,18 +50,21 @@ BORROWED_C_SRC := \
 BORROW_DIR := src/borrowed
 BORROWED_H := $(addprefix $(BORROW_DIR)/, $(notdir $(BORROWED_H_SRC)))
 BORROWED_C := $(addprefix $(BORROW_DIR)/, $(notdir $(BORROWED_C_SRC)))
-OBJS += $(patsubst %.c, %.o, $(BORROWED_C))
+PGPOBJS += $(patsubst %.c, %.o, $(BORROWED_C))
 EXTRA_CLEAN := $(BORROWED_H) $(BORROWED_C) $(BORROW_DIR) borrowed.mk
 
-OBJS += src/fu_util/impl/ft_impl.o src/fu_util/impl/fo_impl.o
+PGPOBJS += src/fu_util/impl/ft_impl.o src/fu_util/impl/fo_impl.o
 
 # off-source build support
 ifneq ($(abspath $(CURDIR))/, $(top_pbk_srcdir))
 VPATH := $(top_pbk_srcdir)
 endif
 
+# artificial file for `main` function
+OBJS += $(PGPOBJS) src/main.o
+
 # standard PGXS stuff
-# all OBJS must be defined above this
+# all PGPOBJS must be defined above this
 ifdef USE_PGXS
 PG_CONFIG = pg_config
 PGXS := $(shell $(PG_CONFIG) --pgxs)
@@ -114,3 +115,4 @@ include $(top_pbk_srcdir)/packaging/Makefile.pkg
 include $(top_pbk_srcdir)/packaging/Makefile.repo
 include $(top_pbk_srcdir)/packaging/Makefile.test
 
+include $(top_pbk_srcdir)/unit/Makefile
