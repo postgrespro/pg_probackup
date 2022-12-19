@@ -19,19 +19,16 @@ int
 do_init(CatalogState *catalogState)
 {
 	pioDrive_i	backup_location = pioDriveForLocation(FIO_BACKUP_HOST);
-	int			results;
+	bool		empty;
 	err_i		err;
 
-	results = pg_check_dir(catalogState->catalog_path);
+	empty = $i(pioIsDirEmpty, backup_location,.path = catalogState->catalog_path,
+			   .err = &err);
 
-	if (results == 4)	/* exists and not empty*/
+	if ($haserr(err))
+		ft_logerr(FT_FATAL, $errmsg(err), "cannot open backup catalog directory");
+	if (!empty)
 		elog(ERROR, "backup catalog already exist and it's not empty");
-	else if (results == -1) /*trouble accessing directory*/
-	{
-		int errno_tmp = errno;
-		elog(ERROR, "cannot open backup catalog directory \"%s\": %s",
-			catalogState->catalog_path, strerror(errno_tmp));
-	}
 
 	/* create backup catalog root directory */
 	err = $i(pioMakeDir, backup_location, .path = catalogState->catalog_path,
