@@ -5971,6 +5971,9 @@ skip_drive(const char *path)
 bool
 ft_strbuf_cat_path(ft_strbuf_t *buf, ft_str_t path)
 {
+	if (path.len == 0)
+		return true;
+
 	/* here we repeat join_path_components */
 	if (buf->len > 0 && !IS_DIR_SEP(buf->ptr[buf->len-1]))
 	{
