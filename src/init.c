@@ -71,6 +71,8 @@ do_add_instance(InstanceState *instanceState, InstanceConfig *instance)
 	struct stat st;
 	CatalogState *catalogState = instanceState->catalog_state;
 	err_i		err;
+	bool		exists;
+	int i;
 
 	/* PGDATA is always required */
 	if (instance->pgdata == NULL)
@@ -84,27 +86,38 @@ do_add_instance(InstanceState *instanceState, InstanceConfig *instance)
 
 	/* Ensure that all root directories already exist */
 	/* TODO maybe call do_init() here instead of error?*/
-	if (access(catalogState->catalog_path, F_OK) != 0)
-		elog(ERROR, "Directory does not exist: '%s'", catalogState->catalog_path);
+	{
+		const char *paths[] = {
+				catalogState->catalog_path,
+				catalogState->backup_subdir_path,
+				catalogState->wal_subdir_path};
+		for (i = 0; i < ft_arrsz(paths); i++)
+		{
+			exists = $i(pioExists, catalogState->backup_location, .path = paths[i],
+							 .expected_kind = PIO_KIND_DIRECTORY, .err = &err);
+			if ($haserr(err))
+				ft_logerr(FT_FATAL, $errmsg(err), "Check instance");
+			if (!exists)
+				elog(ERROR, "Directory does not exist: '%s'", paths);
+		}
+	}
 
-	if (access(catalogState->backup_subdir_path, F_OK) != 0)
-		elog(ERROR, "Directory does not exist: '%s'", catalogState->backup_subdir_path);
-
-	if (access(catalogState->wal_subdir_path, F_OK) != 0)
-		elog(ERROR, "Directory does not exist: '%s'", catalogState->wal_subdir_path);
-
-	if (stat(instanceState->instance_backup_subdir_path, &st) == 0 && S_ISDIR(st.st_mode))
-		elog(ERROR, "Instance '%s' backup directory already exists: '%s'",
-			instanceState->instance_name, instanceState->instance_backup_subdir_path);
-
-	/*
-	 * Create directory for wal files of this specific instance.
-	 * Existence check is extra paranoid because if we don't have such a
-	 * directory in data dir, we shouldn't have it in wal as well.
-	 */
-	if (stat(instanceState->instance_wal_subdir_path, &st) == 0 && S_ISDIR(st.st_mode))
-		elog(ERROR, "Instance '%s' WAL archive directory already exists: '%s'",
-				instanceState->instance_name, instanceState->instance_wal_subdir_path);
+	{
+		const char *paths[][2] = {
+				{"backup", instanceState->instance_backup_subdir_path},
+				{"WAL", instanceState->instance_wal_subdir_path},
+		};
+		for (i = 0; i < ft_arrsz(paths); i++)
+		{
+			exists = !$i(pioIsDirEmpty, catalogState->backup_location, .path = paths[i][1],
+						.err = &err);
+			if ($haserr(err))
+				ft_logerr(FT_FATAL, $errmsg(err), "Check instance");
+			if (exists)
+				elog(ERROR, "Instance '%s' %s directory alredy exists: '%s'",
+					 instanceState->instance_name, paths[i][0], paths[i][1]);
+		}
+	}
 
 	/* Create directory for data files of this specific instance */
 	err = $i(pioMakeDir, backup_location, .path = instanceState->instance_backup_subdir_path,
