@@ -2712,13 +2712,13 @@ typedef struct pioReSeekableReader {
 fobj_klass(pioReSeekableReader);
 
 /* zero tail detector */
-typedef struct pioZeroTail {
-	int64_t	read_size;
-	int64_t	write_size;
-} pioZeroTail;
+typedef struct pioCutZeroTail {
+	uint64_t	read_size;
+	uint64_t	write_size;
+} pioCutZeroTail;
 
-#define kls__pioZeroTail	iface__pioFilter, mth(fobjDispose), iface(pioFilter)
-fobj_klass(pioZeroTail);
+#define kls__pioCutZeroTail	iface__pioFilter, iface(pioFilter)
+fobj_klass(pioCutZeroTail);
 
 /* CRC32 counter */
 typedef struct pioDevNull
@@ -4927,18 +4927,26 @@ pioWriteFilter_fobjRepr(VSelf)
                 (filter,  self->filter.self));
 }
 
-pioZeroTail*
-pioZeroTail_alloc(void) {
-	return $alloc(pioZeroTail, .read_size = 0, .write_size = 0);
+pioCutZeroTail*
+pioCutZeroTail_alloc(void)
+{
+	return $alloc(pioCutZeroTail, .read_size = 0, .write_size = 0);
 }
 
 static pioFltTransformResult
-pioZeroTail_pioFltTransform(VSelf, ft_bytes_t rbuf, ft_bytes_t wbuf, err_i *err) {
-	Self(pioZeroTail);
+pioCutZeroTail_pioFltTransform(VSelf, ft_bytes_t rbuf, ft_bytes_t wbuf, err_i *err)
+{
+	Self(pioCutZeroTail);
 	pioFltTransformResult	tr = {0, 0};
+	size_t wbuf_len = wbuf.len;
+	size_t rbuf_len = rbuf.len;
+	size_t non_zero_len;
+	size_t zeroes_to_fill;
+	size_t to_move;
+	ft_bytes_t copybuf;
 	fobj_reset_err(err);
 
-	size_t non_zero_len = find_zero_tail(rbuf.ptr, rbuf.len);
+	non_zero_len = find_zero_tail(rbuf.ptr, rbuf.len);
 	/*
 	 * It is dirty trick to silence warnings in CFS GC process:
 	 * backup at least cfs header size bytes.
@@ -4951,63 +4959,70 @@ pioZeroTail_pioFltTransform(VSelf, ft_bytes_t rbuf, ft_bytes_t wbuf, err_i *err)
 		non_zero_len -= self->read_size;
 	}
 
-	if(non_zero_len > 0) {
+	if (non_zero_len == 0)
+	{
+		/* pretend we read all buffer */
+		self->read_size += rbuf.len;
+		tr.consumed += rbuf.len;
+		return tr;
+	}
+
+	if (self->read_size > self->write_size)
+	{
 		/*
 		 * Calculating how many zeroes we can actually copy.
 		 * self->read_size - self->write_size always equals the number of zero bytes.
 		 */
-		ssize_t zeroes_to_fill = ft_min(self->read_size - self->write_size, wbuf.len);
+		zeroes_to_fill = ft_min(self->read_size - self->write_size, wbuf.len);
 
 		/* Restoring the zeroes gap */
 		memset(wbuf.ptr, 0, zeroes_to_fill);
 		ft_bytes_consume(&wbuf, zeroes_to_fill);
 		self->write_size += zeroes_to_fill;
-		tr.produced += zeroes_to_fill;
 
 		/*
 		 * At this moment, wbuf.len will be deacreased by zeroes_to_fill, so it
 		 * represents the room left in wbuf.
 		 */
-		if(self->read_size == self->write_size && wbuf.len > 0) {
-			/*
-			 * All zeroes are in buffer at this point so self->read_size == self->write_size
-			 * and all we need to copy is non_zero_len bytes. This can be done in multiple
-			 * calls and the data will not be lost since tr.consumed will be increased only
-			 * by to_copy bytes.
-			 */
-			ft_bytes_t copybuf = ft_bytes_split(&rbuf, ft_min(wbuf.len, non_zero_len));
-			size_t to_move = ft_bytes_move(&wbuf, &copybuf);
-
-			self->write_size += to_move;
-			tr.consumed = to_move + (to_move < non_zero_len ? 0 : rbuf.len);
-			self->read_size += tr.consumed;
-
-			tr.produced += to_move;
-		}
-
-		/*
-		 * In case there are some unwritten zeroes left tr.consumed == 0 here and the next
-		 * time this filter is called we'll read the same data chunk again.
-		 */
-	} else {
-		// There's a zero tail, skip it for now
-		self->read_size += rbuf.len;
-		tr.consumed += rbuf.len;
 	}
 
+	if (self->read_size == self->write_size && wbuf.len > 0) {
+		/*
+		 * All zeroes are in buffer at this point so self->read_size == self->write_size
+		 * and all we need to copy is non_zero_len bytes. This can be done in multiple
+		 * calls and the data will not be lost since tr.consumed will be increased only
+		 * by to_copy bytes.
+		 */
+		copybuf = ft_bytes_split(&rbuf, ft_min(wbuf.len, non_zero_len));
+		to_move = ft_bytes_move(&wbuf, &copybuf);
+
+		self->write_size += to_move;
+		self->read_size += to_move;
+		non_zero_len -= to_move;
+	}
+
+	/*
+	 * If we've wrote all non_zero_len bytes, we can safely pretend we read
+	 * all buffer.
+	 */
+	if (non_zero_len == 0)
+	{
+		self->read_size += rbuf.len;
+		ft_bytes_consume(&rbuf, rbuf.len);
+	}
+
+	tr.consumed = rbuf_len - rbuf.len;
+	tr.produced = wbuf_len - wbuf.len;
 	return tr;
 }
 
 static size_t
-pioZeroTail_pioFltFinish(VSelf, ft_bytes_t wbuf, err_i *err) {
-	Self(pioZeroTail);
+pioCutZeroTail_pioFltFinish(VSelf, ft_bytes_t wbuf, err_i *err)
+{
+	Self(pioCutZeroTail);
 	fobj_reset_err(err);
 
 	return 0;
-}
-
-static void
-pioZeroTail_fobjDispose(VSelf) {
 }
 
 #ifdef HAVE_LIBZ
@@ -6094,7 +6109,7 @@ fobj_klass_handle(pioReadFilter, mth(fobjDispose, fobjRepr));
 fobj_klass_handle(pioDevNull);
 fobj_klass_handle(pioCRC32Counter);
 fobj_klass_handle(pioReSeekableReader);
-fobj_klass_handle(pioZeroTail);
+fobj_klass_handle(pioCutZeroTail);
 
 #ifdef HAVE_LIBZ
 fobj_klass_handle(pioGZCompress, mth(fobjRepr));

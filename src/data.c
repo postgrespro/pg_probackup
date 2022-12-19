@@ -1161,9 +1161,8 @@ backup_non_data_file_internal(const char *from_fullpath,
 	FOBJ_FUNC_ARP();
 	cut_zero_tail = file->forkName == cfm;
 
-	INIT_CRC32C(file->crc);
-
 	/* reset size summary */
+	file->crc = 0;
 	file->read_size = 0;
 	file->write_size = 0;
 	file->uncompressed_size = 0;
@@ -1216,7 +1215,7 @@ send_file(const char *to_fullpath, const char *from_fullpath, bool cut_zero_tail
 	 * will be used.
 	 */
 	pioCRC32Counter *c  = pioCRC32Counter_alloc();
-	pioZeroTail *zt     = pioZeroTail_alloc();
+	pioCutZeroTail *zt  = pioCutZeroTail_alloc();
 	pioFilter_i ztFlt   = bind_pioFilter(zt);
 	pioFilter_i crcFlt  = bind_pioFilter(c);
 	pioFilter_i fltrs[] = { ztFlt, crcFlt };
