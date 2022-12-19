@@ -841,7 +841,7 @@ extern void do_archive_get(InstanceState *instanceState, InstanceConfig *instanc
 
 /* in configure.c */
 extern int config_read_opt(pioDrive_i drive, const char *path, ConfigOption options[], int elevel,
-						   bool strict, bool missing_ok);
+						   bool strict, err_i *err);
 extern void do_show_config(void);
 extern void do_set_config(InstanceState *instanceState);
 extern void init_config(InstanceConfig *config, const char *instance_name);

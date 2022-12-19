@@ -398,6 +398,7 @@ do_validate_all(CatalogState *catalogState, InstanceState *instanceState)
 {
 	corrupted_backup_found = false;
 	skipped_due_to_lock = false;
+	err_i err;
 
 	if (instanceState == NULL)
 	{
@@ -413,6 +414,7 @@ do_validate_all(CatalogState *catalogState, InstanceState *instanceState)
 		errno = 0;
 		while ((dent = readdir(dir)))
 		{
+			FOBJ_LOOP_ARP();
 			char		child[MAXPGPATH];
 			struct stat	st;
 			InstanceState *instanceState;
@@ -437,8 +439,10 @@ do_validate_all(CatalogState *catalogState, InstanceState *instanceState)
 			instanceState = makeInstanceState(catalogState, dent->d_name);
 
 			if (config_read_opt(catalogState->backup_location, instanceState->instance_config_path,
-								instance_options, ERROR, false, true) == 0)
+								instance_options, ERROR, false, &err) == 0)
 			{
+				if ($haserr(err) && getErrno(err) != ENOENT)
+					ft_logerr(FT_FATAL, $errmsg(err), "");
 				elog(WARNING, "Configuration file \"%s\" is empty", instanceState->instance_config_path);
 				corrupted_backup_found = true;
 				continue;

@@ -2620,6 +2620,7 @@ readBackupControlFile(pioDrive_i drive, const char *path)
 	char	   *server_version = NULL;
 	char	   *compress_alg = NULL;
 	int			parsed_options;
+	err_i		err;
 
 	ConfigOption options[] =
 	{
@@ -2658,7 +2659,16 @@ readBackupControlFile(pioDrive_i drive, const char *path)
 
 	pgBackupInit(backup, drive);
 
-	parsed_options = config_read_opt(drive, path, options, WARNING, true, false);
+	parsed_options = config_read_opt(drive, path, options, WARNING, true, &err);
+
+	if (getErrno(err) == ENOENT)
+	{
+		elog(WARNING, "Control file \"%s\" doesn't exist", path);
+		pgBackupFree(backup);
+		return NULL;
+	}
+	else if ($haserr(err))
+		ft_logerr(FT_FATAL, $errmsg(err), "Control file");
 
 	if (parsed_options == 0)
 	{

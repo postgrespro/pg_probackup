@@ -2055,11 +2055,7 @@ fio_communicate(int in, int out)
 					  .binary = hdr.arg != 0, .err = &err);
 			if ($haserr(err))
 			{
-				const char *msg = $errmsg(err);
-				hdr.arg = getErrno(err);
-				hdr.size = strlen(msg) + 1;
-				IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
-				IO_CHECK(fio_write_all(out, msg, hdr.size), hdr.size);
+				fio_send_pio_err(out, err);
 			}
 			else
 			{
@@ -3914,7 +3910,6 @@ pioRemoteDrive_pioRemoveDir(VSelf, const char *root, bool root_as_well) {
 static ft_bytes_t
 pioRemoteDrive_pioReadFile(VSelf, path_t path, bool binary, err_i* err)
 {
-	FOBJ_FUNC_ARP();
 	Self(pioRemoteDrive);
 	ft_bytes_t res;
 
@@ -3934,18 +3929,16 @@ pioRemoteDrive_pioReadFile(VSelf, path_t path, bool binary, err_i* err)
 
 	/* get the response */
 	IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
+	if (hdr.cop == FIO_PIO_ERROR)
+	{
+		*err = fio_receive_pio_err(&hdr);
+		return ft_bytes(NULL, 0);
+	}
+
 	Assert(hdr.cop == FIO_READ_FILE_AT_ONCE);
 
 	res = ft_bytes_alloc(hdr.size);
 	IO_CHECK(fio_read_all(fio_stdin, res.ptr, hdr.size), hdr.size);
-
-	if (hdr.arg != 0)
-	{
-		*err = $syserr((int)hdr.arg, "Could not read remote file {path:q}: {causeStr}",
-					   path(path), causeStr(res.ptr));
-		$iresult(*err);
-		ft_bytes_free(&res);
-	}
 
 	return res;
 }

@@ -566,7 +566,14 @@ main(int argc, char *argv[])
 			backup_subcmd != ARCHIVE_GET_CMD)
 		{
 			config_read_opt(instanceState->backup_location, instanceState->instance_config_path,
-							instance_options, ERROR, true, backup_subcmd == CHECKDB_CMD);
+							instance_options, ERROR, true, &err);
+
+			if (getErrno(err) == ENOENT && backup_subcmd == CHECKDB_CMD)
+			{
+				/* ignore */
+			}
+			else if ($haserr(err))
+				ft_logerr(FT_FATAL, $errmsg(err), "Reading instance control");
 
 			/*
 			 * We can determine our location only after reading the configuration file,

@@ -289,25 +289,19 @@ do_show_config(void)
  */
 int
 config_read_opt(pioDrive_i drive, const char *path, ConfigOption options[], int elevel,
-				bool strict, bool missing_ok)
+				bool strict, err_i *err)
 {
 	int parsed_options = 0;
-	err_i err = $noerr();
 	ft_bytes_t config_file = {0};
+	fobj_reset_err(err);
 
 	if (!options)
 		return parsed_options;
 
 	config_file = $i(pioReadFile, drive, .path = path, .binary = false,
-					 .err = &err);
-	if ($haserr(err))
-	{
-		if (missing_ok && getErrno(err) == ENOENT)
-			return 0;
-
-		ft_logerr(FT_FATAL, $errmsg(err), "could not read file");
+					 .err = err);
+	if ($haserr(*err))
 		return 0;
-	}
 
 	parsed_options = config_parse_opt(config_file, path, options, elevel, strict);
 
@@ -410,6 +404,7 @@ readInstanceConfigFile(InstanceState *instanceState)
 	char	   *log_format_file = NULL;
 	char	   *compress_alg = NULL;
 	int			parsed_options;
+	err_i		err;
 
 	ConfigOption instance_options[] =
 	{
@@ -607,7 +602,15 @@ readInstanceConfigFile(InstanceState *instanceState)
 	init_config(instance, instanceState->instance_name);
 	parsed_options = config_read_opt(instanceState->backup_location,
 									 instanceState->instance_config_path,
-									 instance_options, WARNING, true, true);
+									 instance_options, WARNING, true, &err);
+	if (getErrno(err) == ENOENT)
+	{
+		elog(WARNING, "Control file \"%s\" doesn't exist", instanceState->instance_config_path);
+		pfree(instance);
+		return NULL;
+	}
+	else if ($haserr(err))
+		ft_logerr(FT_FATAL, $errmsg(err), "Control file");
 
 	if (parsed_options == 0)
 	{
