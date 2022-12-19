@@ -68,7 +68,6 @@ int
 do_add_instance(InstanceState *instanceState, InstanceConfig *instance)
 {
 	pioDrive_i	backup_location = pioDriveForLocation(FIO_BACKUP_HOST);
-	struct stat st;
 	CatalogState *catalogState = instanceState->catalog_state;
 	err_i		err;
 	bool		exists;
@@ -98,7 +97,7 @@ do_add_instance(InstanceState *instanceState, InstanceConfig *instance)
 			if ($haserr(err))
 				ft_logerr(FT_FATAL, $errmsg(err), "Check instance");
 			if (!exists)
-				elog(ERROR, "Directory does not exist: '%s'", paths);
+				elog(ERROR, "Directory does not exist: '%s'", paths[i]);
 		}
 	}
 
