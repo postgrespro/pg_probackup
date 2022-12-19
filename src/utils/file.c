@@ -3626,6 +3626,7 @@ pioRemoteDrive_pioOpenRead(VSelf, path_t path, err_i *err)
     fio_header hdr;
     fobj_reset_err(err);
     fobj_t file;
+	fio_ensure_remote();
 
 	handle = find_free_handle();
 
@@ -3683,6 +3684,7 @@ pioRemoteDrive_pioStat(VSelf, path_t path, bool follow_symlink, err_i *err)
             .arg = follow_symlink,
     };
     fobj_reset_err(err);
+	fio_ensure_remote();
 
     IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
     IO_CHECK(fio_write_all(fio_stdout, path, hdr.size), hdr.size);
@@ -3712,6 +3714,7 @@ pioRemoteDrive_pioFilesAreSame(VSelf, path_t file1, path_t file2)
 	ft_strbuf_catc_zt(&buf, file1);
 	ft_strbuf_catc_zt(&buf, file2);
 	hdr.size = buf.len + 1;
+	fio_ensure_remote();
 
 	IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
 	IO_CHECK(fio_write_all(fio_stdout, buf.ptr, buf.len+1), buf.len+1);
@@ -3735,6 +3738,7 @@ pioRemoteDrive_pioRemove(VSelf, path_t path, bool missing_ok)
             .size = strlen(path) + 1,
             .arg = missing_ok ? 1 : 0,
     };
+	fio_ensure_remote();
 
     IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
     IO_CHECK(fio_write_all(fio_stdout, path, hdr.size), hdr.size);
@@ -3761,6 +3765,7 @@ pioRemoteDrive_pioRename(VSelf, path_t old_path, path_t new_path)
             .size = old_path_len + new_path_len,
             .arg = 0,
     };
+	fio_ensure_remote();
 
     IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
     IO_CHECK(fio_write_all(fio_stdout, old_path, old_path_len), old_path_len);
@@ -3784,6 +3789,7 @@ pioRemoteDrive_pioGetCRC32(VSelf, path_t path, bool compressed, err_i *err)
     size_t path_len = strlen(path) + 1;
     pg_crc32 crc = 0;
     fobj_reset_err(err);
+	fio_ensure_remote();
 
     hdr.cop = FIO_GET_CRC32;
     hdr.handle = -1;
@@ -3817,6 +3823,7 @@ pioRemoteDrive_pioMakeDir(VSelf, path_t path, mode_t mode, bool strict)
 		.size = strlen(path) + 1,
 		.arg = mode,
 	};
+	fio_ensure_remote();
 
 	IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
 	IO_CHECK(fio_write_all(fio_stdout, path, hdr.size), hdr.size);
@@ -3841,6 +3848,7 @@ pioRemoteDrive_pioOpenDir(VSelf, path_t path, err_i* err)
 		.size = strlen(path)+1,
 	};
 	fobj_reset_err(err);
+	fio_ensure_remote();
 
 	IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
 	IO_CHECK(fio_write_all(fio_stdout, path, hdr.size), hdr.size);
@@ -3869,6 +3877,7 @@ pioRemoteDrive_pioIsDirEmpty(VSelf, path_t path, err_i* err)
 			.size = strlen(path)+1,
 	};
 	fobj_reset_err(err);
+	fio_ensure_remote();
 
 	IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
 	IO_CHECK(fio_write_all(fio_stdout, path, hdr.size), hdr.size);
@@ -3888,6 +3897,7 @@ pioRemoteDrive_pioRemoveDir(VSelf, const char *root, bool root_as_well) {
     FOBJ_FUNC_ARP();
     fio_header hdr;
     fio_remove_dir_request req;
+	fio_ensure_remote();
 
     /* Send to the agent message with parameters for directory listing */
     snprintf(req.path, MAXPGPATH, "%s", root);
