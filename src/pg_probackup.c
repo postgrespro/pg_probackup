@@ -526,11 +526,9 @@ main(int argc, char *argv[])
 		if (backup_subcmd != INIT_CMD && backup_subcmd != ADD_INSTANCE_CMD &&
 			backup_subcmd != ARCHIVE_GET_CMD)
 		{
-			pio_stat_t st;
-
-			st = $i(pioStat, catalogState->backup_location,
+			bool exists = $i(pioExists, catalogState->backup_location,
 					.path = instanceState->instance_backup_subdir_path,
-					.follow_symlink = true,
+					.expected_kind = PIO_KIND_DIRECTORY,
 					.err = &err);
 
 			if ($haserr(err))
@@ -542,12 +540,8 @@ main(int argc, char *argv[])
 				elog(ERROR, "Instance '%s' does not exist in this backup catalog",
 							instance_name);
 			}
-			else
-			{
-				/* Ensure that backup_path is a path to a directory */
-				if (st.pst_kind != PIO_KIND_DIRECTORY)
-					elog(ERROR, "-B, --backup-path must be a path to directory");
-			}
+			if (!exists)
+				elog(ERROR, "-B, --backup-path must be a path to directory");
 		}
 	}
 
