@@ -60,6 +60,7 @@ typedef enum
 	FIO_ITERATE_PAGES,
 	FIO_ITERATE_DATA,
 	FIO_ITERATE_EOF,
+	PIO_GET_CRC32,
 	PIO_OPEN_REWRITE,
 	PIO_OPEN_WRITE,
 	PIO_WRITE_ASYNC,
@@ -281,7 +282,7 @@ fobj_iface(pioPagesIterator);
 #define mth__pioExists 		bool, (path_t, path), (pio_file_kind_e, expected_kind, PIO_KIND_REGULAR),	\
 									(err_i *, err)
 #define mth__pioGetCRC32 	pg_crc32, (path_t, path), (bool, compressed, false), \
-									  (err_i *, err)
+									  (bool, truncated, false), (err_i *, err)
 /* Compare, that filename1 and filename2 is the same file */
 #define mth__pioFilesAreSame bool, (path_t, file1), (path_t, file2)
 #define mth__pioIsRemote 	bool

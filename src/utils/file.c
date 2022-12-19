@@ -1791,6 +1791,20 @@ fio_communicate(int in, int out)
 				crc = pgFileGetCRC32C(buf, (hdr.arg & GET_CRC32_MISSING_OK) != 0);
 			IO_CHECK(fio_write_all(out, &crc, sizeof(crc)), sizeof(crc));
 			break;
+		  case PIO_GET_CRC32:
+			crc = $i(pioGetCRC32, drive, .path = buf,
+					 .compressed = (hdr.arg & GET_CRC32_DECOMPRESS) != 0,
+					 .truncated = (hdr.arg & GET_CRC32_TRUNCATED) != 0,
+					 .err = &err);
+			if ($haserr(err))
+				fio_send_pio_err(out, err);
+			else
+			{
+				hdr.size = 0;
+				hdr.arg = crc;
+				IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
+			}
+			break;
 		  case FIO_GET_CHECKSUM_MAP:
 			fio_get_checksum_map_impl(buf, out);
 			break;
@@ -2659,15 +2673,41 @@ pioLocalDrive_pioRename(VSelf, path_t old_path, path_t new_path)
 }
 
 static pg_crc32
-pioLocalDrive_pioGetCRC32(VSelf, path_t path, bool compressed, err_i *err)
+pioLocalDrive_pioGetCRC32(VSelf, path_t path,
+						  bool compressed, bool truncated,
+						  err_i *err)
 {
+	FOBJ_FUNC_ARP();
+	Self(pioLocalDrive);
     fobj_reset_err(err);
-    elog(VERBOSE, "Local Drive calculate crc32 for '%s', compressed=%d",
-         path, compressed);
-    if (compressed)
-        return pgFileGetCRC32Cgz(path, false);
-    else
-        return pgFileGetCRC32C(path, false);
+	pioReadStream_i  file;
+	pioRead_i        read;
+	pioCRC32Counter* crc;
+
+	elog(VERBOSE, "Local Drive calculate crc32 for '%s', compressed=%d, truncated=%d",
+		 path, compressed, truncated);
+
+	file = $(pioOpenReadStream, self, .path = path, .err = err);
+	if ($haserr(*err))
+	{
+		$iresult(*err);
+		return 0;
+	}
+
+	read = $reduce(pioRead, file);
+	if (compressed)
+		read = pioWrapReadFilter(read, pioGZDecompressFilter(false),
+								 CHUNK_SIZE);
+	if (truncated)
+		read = pioWrapReadFilter(read, $bind(pioFilter, pioCutZeroTail_alloc()),
+								 CHUNK_SIZE);
+	crc = pioCRC32Counter_alloc();
+	read = pioWrapReadFilter(read, $bind(pioFilter, crc), CHUNK_SIZE);
+	*err = pioCopy(pioDevNull_alloc(), read);
+	$iresult(*err);
+	$i(pioClose, file); // ignore error
+
+	return pioCRC32Counter_getCRC32(crc);
 }
 
 static bool
@@ -3443,29 +3483,38 @@ pioRemoteDrive_pioRename(VSelf, path_t old_path, path_t new_path)
 }
 
 static pg_crc32
-pioRemoteDrive_pioGetCRC32(VSelf, path_t path, bool compressed, err_i *err)
+pioRemoteDrive_pioGetCRC32(VSelf, path_t path,
+						   bool compressed, bool truncated,
+						   err_i *err)
 {
     fio_header hdr;
     size_t path_len = strlen(path) + 1;
-    pg_crc32 crc = 0;
     fobj_reset_err(err);
 	fio_ensure_remote();
 
-    hdr.cop = FIO_GET_CRC32;
+    hdr.cop = PIO_GET_CRC32;
     hdr.handle = -1;
     hdr.size = path_len;
     hdr.arg = 0;
 
     if (compressed)
         hdr.arg = GET_CRC32_DECOMPRESS;
+    if (truncated)
+		hdr.arg |= GET_CRC32_TRUNCATED;
     elog(VERBOSE, "Remote Drive calculate crc32 for '%s', hdr.arg=%d",
          path, compressed);
 
     IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
     IO_CHECK(fio_write_all(fio_stdout, path, path_len), path_len);
-    IO_CHECK(fio_read_all(fio_stdin, &crc, sizeof(crc)), sizeof(crc));
+    IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
 
-    return crc;
+	if (hdr.cop == FIO_PIO_ERROR)
+	{
+		*err = fio_receive_pio_err(&hdr);
+		return 0;
+	}
+
+    return hdr.arg;
 }
 
 static bool
