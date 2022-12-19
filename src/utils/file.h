@@ -20,6 +20,10 @@
 #define DIR_PERMISSION		(0700)
 #define FILE_PERMISSION		(0600)
 
+/* define it now to avoid ugly mess of includes */
+struct pgFile;
+typedef struct pgFile pgFile;
+
 typedef enum
 {
 	/* message for compatibility check */
@@ -402,6 +406,7 @@ extern pioFilter_i	pioGZCompressFilter(int level);
 extern pioFilter_i	pioGZDecompressFilter(bool ignoreTruncate);
 extern pioWrapRead_i pioGZDecompressWrapper(bool ignoreTruncate);
 #endif
+extern pioFilter_i pioCRC32Filter(void);
 
 typedef struct pioCRC32Counter pioCRC32Counter;
 #define kls__pioCRC32Counter iface__pioFilter, mth(pioFltInPlace), iface(pioFilter)
@@ -409,6 +414,9 @@ fobj_klass(pioCRC32Counter);
 extern pioCRC32Counter* pioCRC32Counter_alloc(void);
 extern pg_crc32 pioCRC32Counter_getCRC32(pioCRC32Counter* flt);
 extern int64_t pioCRC32Counter_getSize(pioCRC32Counter* flt);
+
+typedef struct pioZeroTail pioZeroTail;
+extern pioZeroTail* pioZeroTail_alloc(void);
 
 extern pioWriteFlush_i pioDevNull_alloc(void);
 

@@ -71,6 +71,8 @@ static size_t restore_data_file_internal(pioReader_i in, pioDBWriter_i out, pgFi
 										 datapagemap_t *map, PageState *checksum_map, int checksum_version,
 										 datapagemap_t *lsn_map, BackupPageHeader2 *headers);
 
+static err_i send_file(const char *to_fullpath, const char *from_path, bool cut_zero_tail, pgFile *file);
+
 #ifdef HAVE_LIBZ
 /* Implementation of zlib compression method */
 static int32
@@ -1153,11 +1155,10 @@ backup_non_data_file_internal(const char *from_fullpath,
 							const char *to_fullpath, pgFile *file,
 							bool missing_ok)
 {
-	FILE	*out = NULL;
-	char	*errmsg = NULL;
-	int 	rc;
 	bool	cut_zero_tail;
+	err_i	err;
 
+	FOBJ_FUNC_ARP();
 	cut_zero_tail = file->forkName == cfm;
 
 	INIT_CRC32C(file->crc);
@@ -1167,57 +1168,79 @@ backup_non_data_file_internal(const char *from_fullpath,
 	file->write_size = 0;
 	file->uncompressed_size = 0;
 
-	/* open backup file for write  */
-	out = fopen(to_fullpath, PG_BINARY_W);
-	if (out == NULL)
-		elog(ERROR, "Cannot open destination file \"%s\": %s",
-			 to_fullpath, strerror(errno));
-
-	/* update file permission */
-	if (chmod(to_fullpath, file->mode) == -1)
-		elog(ERROR, "Cannot change mode of \"%s\": %s", to_fullpath,
-			 strerror(errno));
-
-	/* backup remote file  */
-	if (fio_is_remote(FIO_DB_HOST))
-		rc = fio_send_file(from_fullpath, out, cut_zero_tail, file, &errmsg);
-	else
-		rc = fio_send_file_local(from_fullpath, out, cut_zero_tail, file, &errmsg);
+	/* backup non-data file  */
+	err = send_file(to_fullpath, from_fullpath, cut_zero_tail, file);
 
 	/* handle errors */
-	if (rc == FILE_MISSING)
-	{
-		/* maybe deleted, it's not error in case of backup */
-		if (missing_ok)
-		{
-			elog(LOG, "File \"%s\" is not found", from_fullpath);
-			file->write_size = FILE_NOT_FOUND;
-			goto cleanup;
-		}
-		else
-			elog(ERROR, "File \"%s\" is not found", from_fullpath);
-	}
-	else if (rc == WRITE_FAILED)
-		elog(ERROR, "Cannot write to \"%s\": %s", to_fullpath, strerror(errno));
-	else if (rc != SEND_OK)
-	{
-		if (errmsg)
-			elog(ERROR, "%s", errmsg);
-		else
-			elog(ERROR, "Cannot access remote file \"%s\"", from_fullpath);
+	if($haserr(err)) {
+		if(getErrno(err) == ENOENT) {
+			if(missing_ok) {
+				elog(LOG, "File \"%s\" is not found", from_fullpath);
+				file->write_size = FILE_NOT_FOUND;
+				return;
+			} else
+				elog(ERROR, "File \"%s\" is not found", from_fullpath);
+		} else
+			elog(ERROR, "An error occured while copying %s: %s",
+						from_fullpath, $errmsg(err));
 	}
 
 	file->uncompressed_size = file->read_size;
+}
+
+static err_i
+send_file(const char *to_fullpath, const char *from_fullpath, bool cut_zero_tail, pgFile *file) {
+	FOBJ_FUNC_ARP();
+	err_i err = $noerr();
+	pioReadStream_i in;
+	pioWriteCloser_i out;
+	pioDrive_i backup_drive = pioDriveForLocation(FIO_BACKUP_HOST);
+	pioDrive_i db_drive = pioDriveForLocation(FIO_DB_HOST);
+
+	/* open to_fullpath */
+	out = $i(pioOpenRewrite, backup_drive, .path = to_fullpath,
+				.permissions = file->mode, .err = &err);
+
+	if($haserr(err))
+		elog(ERROR, "Cannot open destination file \"%s\": %s",
+					to_fullpath, $errmsg(err));
+
+	/* open from_fullpath */
+	in = $i(pioOpenReadStream, db_drive, .path = from_fullpath, .err = &err);
+
+	if($haserr(err))
+		goto cleanup;
+
+	/*
+	 * Copy content and calc CRC as it gets copied. Optionally pioZeroTail
+	 * will be used.
+	 */
+	pioCRC32Counter *c  = pioCRC32Counter_alloc();
+	pioZeroTail *zt     = pioZeroTail_alloc();
+	pioFilter_i ztFlt   = bind_pioFilter(zt);
+	pioFilter_i crcFlt  = bind_pioFilter(c);
+	pioFilter_i fltrs[] = { ztFlt, crcFlt };
+
+	err = pioCopyWithFilters($reduce(pioWriteFlush, out), $reduce(pioRead, in),
+							  cut_zero_tail ? fltrs : &fltrs[1],
+							  cut_zero_tail ? 2 : 1,
+							  NULL);
+
+	if($haserr(err))
+		goto cleanup;
+
+	if (file) {
+		file->crc = pioCRC32Counter_getCRC32(c);
+		file->read_size = pioCRC32Counter_getSize(c);
+		file->write_size = pioCRC32Counter_getSize(c);
+	}
 
 cleanup:
-	if (errmsg != NULL)
-		pg_free(errmsg);
+	$i(pioClose, in);
+	$i(pioClose, out);
 
-	/* finish CRC calculation and store into pgFile */
-	FIN_CRC32C(file->crc);
-
-	if (out && fclose(out))
-		elog(ERROR, "Cannot close the file \"%s\": %s", to_fullpath, strerror(errno));
+	// has $noerr() by default
+	return $iresult(err);
 }
 
 /*
