@@ -43,7 +43,7 @@ clean_basic_suite()
 #define FNAMES "abcdefghijklmnopqrstuvwxyz0123456789"
 
 static int rand_init=0;
-char *
+ft_str_t
 random_path(void)
 {
 	char name[MAXPGPATH];
@@ -65,7 +65,7 @@ random_path(void)
 	}
 	name[i] = 0;
 
-	return strdup(name);
+	return ft_strdupc(name);
 }
 
 char *

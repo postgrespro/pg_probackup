@@ -14,33 +14,34 @@ static void
 test_do_init()
 {
 	FOBJ_FUNC_ARP();
-	char *backup_path = random_path();
+	ft_str_t		backup_path = random_path();
+	CatalogState   *catalogState = catalog_new(backup_path.ptr);
+	int				rc;
 
-	CatalogState *catalogState = catalog_new(backup_path);
+	rc = do_init(catalogState);
 
-	int rc = do_init(catalogState);
 	CU_ASSERT(rc == 0);
 }
 
 static void
 test_do_add_instance()
 {
-	//FOBJ_FUNC_ARP();
+	FOBJ_FUNC_ARP();
 	int rc;
-	char *backup_path = random_path();
+	ft_str_t backup_path = random_path();
 	char *instance_name = random_name();
-	char *server_path = random_path();
-	init_fake_server(server_path);
+	ft_str_t server_path = random_path();
+	init_fake_server(server_path.ptr);
 
-	CatalogState *catalogState = catalog_new(backup_path);
+	CatalogState *catalogState = catalog_new(backup_path.ptr);
 	catalogState->backup_location = drive;
 	rc = do_init(catalogState);
 	CU_ASSERT(rc == 0);
 
-	//CU_ASSERT_FATAL(pio_exists_d(drive, backup_path));
+	//CU_ASSERT(pio_exists_d(drive, backup_path.ptr));
 
 	init_config(&instance_config, instance_name);
-	instance_config.pgdata = server_path;
+	instance_config.pgdata = server_path.ptr;
 	InstanceState *instanceState = makeInstanceState(catalogState, instance_name);
 	instanceState->database_location = drive;
 	rc = do_add_instance(instanceState, &instance_config);

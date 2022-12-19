@@ -17,7 +17,7 @@ extern int should_be_remote;
 
 void init_test_drives(void);
 int USE_LOCAL(void);
-char *random_path(void);
+ft_str_t random_path(void);
 char *random_name(void);
 void pbk_add_tests(int (*init)(void), const char *sub_name, PBK_test_description *tests);
 void pio_write(pioDrive_i drive, path_t name, const char *data);
