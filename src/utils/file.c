@@ -1066,17 +1066,6 @@ fio_send_file_content_impl(int fd, int out, const char* path)
 
 		/* send chunk */
 		non_zero_len = find_zero_tail(buf, read_len);
-		/*
-		 * It is dirty trick to silence warnings in CFS GC process:
-		 * backup at least cfs header size bytes.
-		 */
-		if (read_size + non_zero_len < PAGE_ZEROSEARCH_FINE_GRANULARITY &&
-			read_size + read_len > 0)
-		{
-			non_zero_len = Min(PAGE_ZEROSEARCH_FINE_GRANULARITY,
-							   read_size + read_len);
-			non_zero_len -= read_size;
-		}
 
 		if (non_zero_len > 0)
 		{
