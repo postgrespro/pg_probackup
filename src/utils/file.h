@@ -413,6 +413,8 @@ extern int64_t pioCRC32Counter_getSize(pioCRC32Counter* flt);
 
 typedef struct pioCutZeroTail pioCutZeroTail;
 extern pioCutZeroTail* pioCutZeroTail_alloc(void);
+extern int64_t pioCutZeroTail_getReadSize(pioCutZeroTail* flt);
+extern int64_t pioCutZeroTail_getWriteSize(pioCutZeroTail* flt);
 
 extern pioWriteFlush_i pioDevNull_alloc(void);
 

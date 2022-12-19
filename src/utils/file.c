@@ -5025,6 +5025,18 @@ pioCutZeroTail_pioFltFinish(VSelf, ft_bytes_t wbuf, err_i *err)
 	return 0;
 }
 
+int64_t
+pioCutZeroTail_getReadSize(pioCutZeroTail* flt)
+{
+	return (int64_t)flt->read_size;
+}
+
+int64_t
+pioCutZeroTail_getWriteSize(pioCutZeroTail* flt)
+{
+	return (int64_t)flt->write_size;
+}
+
 #ifdef HAVE_LIBZ
 #define MAX_WBITS            15 /* 32K LZ77 window */
 #define DEF_MEM_LEVEL        8

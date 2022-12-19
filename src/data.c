@@ -1183,8 +1183,6 @@ backup_non_data_file_internal(const char *from_fullpath,
 			elog(ERROR, "An error occured while copying %s: %s",
 						from_fullpath, $errmsg(err));
 	}
-
-	file->uncompressed_size = file->read_size;
 }
 
 static err_i
@@ -1232,6 +1230,10 @@ send_file(const char *to_fullpath, const char *from_fullpath, bool cut_zero_tail
 		file->crc = pioCRC32Counter_getCRC32(c);
 		file->read_size = pioCRC32Counter_getSize(c);
 		file->write_size = pioCRC32Counter_getSize(c);
+		if (cut_zero_tail)
+			file->uncompressed_size = pioCutZeroTail_getReadSize(zt);
+		else
+			file->uncompressed_size = file->read_size;
 	}
 
 cleanup:
