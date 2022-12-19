@@ -1142,11 +1142,6 @@ extern parray * pg_ptrack_get_pagemapset(PGconn *backup_conn, const char *ptrack
 extern FILE* open_local_file_rw(const char *to_fullpath, char **out_buf, uint32 buf_size);
 
 /* FIO */
-extern int fio_send_file(const char *from_fullpath, FILE* out, bool cut_zero_tail,
-														pgFile *file, char **errormsg);
-extern int fio_send_file_local(const char *from_fullpath, FILE* out, bool cut_zero_tail,
-						 pgFile *file, char **errormsg);
-
 extern bool pgut_rmtree(const char *path, bool rmtopdir, bool strict);
 
 extern void pgut_setenv(const char *key, const char *val);
