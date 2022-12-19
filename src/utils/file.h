@@ -280,7 +280,7 @@ fobj_iface(pioPagesIterator);
 #define mth__pioRename 		err_i, (path_t, old_path), (path_t, new_path)
 #define mth__pioExists 		bool, (path_t, path), (pio_file_kind_e, expected_kind, PIO_KIND_REGULAR),	\
 									(err_i *, err)
-#define mth__pioGetCRC32 	pg_crc32, (path_t, path), (bool, compressed), \
+#define mth__pioGetCRC32 	pg_crc32, (path_t, path), (bool, compressed, false), \
 									  (err_i *, err)
 /* Compare, that filename1 and filename2 is the same file */
 #define mth__pioFilesAreSame bool, (path_t, file1), (path_t, file2)

@@ -22,6 +22,7 @@ static bool skipped_due_to_lock = false;
 
 typedef struct
 {
+	pioDrive_i  drive;
 	const char *base_path;
 	parray		*files;
 	bool		corrupted;
@@ -143,6 +144,7 @@ pgBackupValidate(pgBackup *backup, pgRestoreParams *params)
 	{
 		validate_files_arg *arg = &(threads_args[i]);
 
+		arg->drive = backup->backup_location;
 		arg->base_path = backup->database_dir;
 		arg->files = files;
 		arg->corrupted = false;
@@ -230,14 +232,18 @@ pgBackupValidate(pgBackup *backup, pgRestoreParams *params)
 static void *
 pgBackupValidateFiles(void *arg)
 {
+	FOBJ_FUNC_ARP();
 	int			i;
 	validate_files_arg *arguments = (validate_files_arg *)arg;
 	int			num_files = parray_num(arguments->files);
 	pg_crc32	crc;
+	pioDrive_i  drive = arguments->drive;
+	err_i		err;
 
 	for (i = 0; i < num_files; i++)
 	{
-		struct stat st;
+		FOBJ_LOOP_ARP();
+		pio_stat_t st;
 		pgFile	   *file = (pgFile *) parray_get(arguments->files, i);
 		char        file_fullpath[MAXPGPATH];
 
@@ -302,9 +308,11 @@ pgBackupValidateFiles(void *arg)
 			join_path_components(file_fullpath, arguments->base_path, file->rel_path);
 
 		/* TODO: it is redundant to check file existence using stat */
-		if (stat(file_fullpath, &st) == -1)
+		st = $i(pioStat, drive, .path = file_fullpath, .follow_symlink = false,
+				.err = &err);
+		if ($haserr(err))
 		{
-			if (errno == ENOENT)
+			if (getErrno(err) == ENOENT)
 				elog(WARNING, "Backup file \"%s\" is not found", file_fullpath);
 			else
 				elog(WARNING, "Cannot stat backup file \"%s\": %s",
@@ -313,10 +321,10 @@ pgBackupValidateFiles(void *arg)
 			break;
 		}
 
-		if (file->write_size != st.st_size)
+		if (file->write_size != st.pst_size)
 		{
 			elog(WARNING, "Invalid size of backup file \"%s\" : %lld. Expected %lld",
-				 file_fullpath, (long long) st.st_size, (long long)file->write_size);
+				 file_fullpath, (long long) st.pst_size, (long long)file->write_size);
 			arguments->corrupted = true;
 			break;
 		}
@@ -349,15 +357,25 @@ pgBackupValidateFiles(void *arg)
 			else
 #if PG_VERSION_NUM >= 120000
 			{
-				Assert(arguments->backup_version >= 20025);
-				crc = pgFileGetCRC32C(file_fullpath, false);
+				ft_assert(arguments->backup_version >= 20025);
+				crc = $i(pioGetCRC32, drive, .path = file_fullpath,
+						 .err = &err);
 			}
 #else /* PG_VERSION_NUM < 120000 */
 				if (arguments->backup_version <= 20021 || arguments->backup_version >= 20025)
-					crc = pgFileGetCRC32C(file_fullpath, false);
+					crc = $i(pioGetCRC32, drive, .path = file_fullpath, .err = &err);
 				else
+				{
+					ft_assert(!$i(pioIsRemote, drive));
 					crc = pgFileGetCRC32(file_fullpath, false);
+				}
 #endif /* PG_VERSION_NUM < 120000 */
+			if ($haserr(err))
+			{
+				ft_logerr(FT_WARNING, $errmsg(err), "Backup file CRC");
+				arguments->corrupted = true;
+				break;
+			}
 
 			if (crc != file->crc)
 			{
@@ -719,11 +737,13 @@ do_validate_instance(InstanceState *instanceState)
 bool
 validate_tablespace_map(pgBackup *backup, bool no_validate)
 {
+	FOBJ_FUNC_ARP();
 	char        map_path[MAXPGPATH];
 	pgFile     *dummy = NULL;
 	pgFile    **tablespace_map = NULL;
 	pg_crc32    crc;
 	parray     *files = get_backup_filelist(backup, true);
+	err_i		err;
 
 	parray_qsort(files, pgFileCompareRelPathWithExternal);
 	join_path_components(map_path, backup->database_dir, PG_TABLESPACE_MAP_FILE);
@@ -750,14 +770,21 @@ validate_tablespace_map(pgBackup *backup, bool no_validate)
 	{
 #if PG_VERSION_NUM >= 120000
 		Assert(parse_program_version(backup->program_version) >= 20025);
-		crc = pgFileGetCRC32C(map_path, false);
+		crc = $i(pioGetCRC32, backup->backup_location, .path = map_path,
+				 .err = &err);
 #else /* PG_VERSION_NUM < 120000 */
 		if (parse_program_version(backup->program_version) <= 20021
 				|| parse_program_version(backup->program_version) >= 20025)
-			crc = pgFileGetCRC32C(map_path, false);
+			crc = $i(pioGetCRC32, backup->backup_location, .path = map_path,
+					 .err = &err);
 		else
+		{
+			ft_assert(!$i(pioIsRemote, drive));
 			crc = pgFileGetCRC32(map_path, false);
+		}
 #endif /* PG_VERSION_NUM < 120000 */
+		if ($haserr(err))
+			ft_logerr(FT_FATAL, $errmsg(err), "Tablespace map file CRC");
 
 		if ((*tablespace_map)->crc != crc)
 			elog(ERROR, "Invalid CRC of tablespace map file \"%s\" : %X. Expected %X, "
