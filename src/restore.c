@@ -1273,8 +1273,9 @@ restore_files(void *arg)
 		{
 			/* Destination file is non-data file */
 			arguments->restored_bytes += restore_non_data_file(arguments->parent_chain,
-										arguments->dest_backup, dest_file, out, to_fullpath,
-										already_exists);
+										arguments->dest_backup, dest_file,
+										$reduce(pioDrive, db_drive), out,
+										to_fullpath, already_exists);
 		}
 
 done:

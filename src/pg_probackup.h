@@ -1042,8 +1042,8 @@ extern void backup_non_data_file(pioDrive_i from, pioDrive_i to,
 extern size_t restore_data_file(parray *parent_chain, pgFile *dest_file, pioDBWriter_i out,
 								const char *to_fullpath, bool use_bitmap, PageState *checksum_map,
 								XLogRecPtr shift_lsn, datapagemap_t *lsn_map, bool use_headers);
-extern size_t restore_non_data_file(parray *parent_chain, pgBackup *dest_backup,
-									pgFile *dest_file, pioDBWriter_i out, const char *to_fullpath,
+extern size_t restore_non_data_file(parray *parent_chain, pgBackup *dest_backup, pgFile *dest_file,
+									pioDrive_i out_drive, pioDBWriter_i out, const char *to_fullpath,
 									bool already_exists);
 extern bool create_empty_file(const char *to_root, fio_location to_location, pgFile *file);
 

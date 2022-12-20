@@ -1026,8 +1026,8 @@ restore_data_file_internal(pioReader_i in, pioDBWriter_i out, pgFile *file, uint
 }
 
 size_t
-restore_non_data_file(parray *parent_chain, pgBackup *dest_backup,
-					  pgFile *dest_file, pioDBWriter_i out, const char *to_fullpath,
+restore_non_data_file(parray *parent_chain, pgBackup *dest_backup, pgFile *dest_file,
+					  pioDrive_i out_drive, pioDBWriter_i out, const char *to_fullpath,
 					  bool already_exists)
 {
 	char		from_root[MAXPGPATH];
@@ -1113,11 +1113,16 @@ restore_non_data_file(parray *parent_chain, pgBackup *dest_backup,
 	{
 		/* compare checksums of already existing file and backup file */
 		pg_crc32 file_crc;
-		if (tmp_file->forkName == cfm &&
-			    tmp_file->uncompressed_size > tmp_file->write_size)
-			file_crc = fio_get_crc32_truncated(FIO_DB_HOST, to_fullpath, false);
-		else
-			file_crc = fio_get_crc32(FIO_DB_HOST, to_fullpath, false, false);
+		bool truncated;
+
+		truncated = tmp_file->forkName == cfm &&
+				    tmp_file->uncompressed_size > tmp_file->write_size;
+
+		file_crc = $i(pioGetCRC32, out_drive, .path = to_fullpath,
+					  .truncated = truncated, .err = &err);
+
+		if ($haserr(err))
+			ft_logerr(FT_FATAL, $errmsg(err), "Non-data file CRC32");
 
 		if (file_crc == tmp_file->crc)
 		{
