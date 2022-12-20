@@ -407,6 +407,7 @@ validate_wal(pgBackup *backup, const char *archivedir,
 	char		last_timestamp[100],
 				target_timestamp[100];
 	bool		all_wal = false;
+	err_i		err;
 
 	if (!XRecOffIsValid(backup->start_lsn))
 		elog(ERROR, "Invalid start_lsn value %X/%X of backup %s",
@@ -458,8 +459,10 @@ validate_wal(pgBackup *backup, const char *archivedir,
 	 * If recovery target is provided, ensure that archive files exist in
 	 * archive directory.
 	 */
-	if (dir_is_empty(archivedir, FIO_LOCAL_HOST))
+	if ($i(pioIsDirEmpty, backup->backup_location, .path = archivedir, .err = &err))
 		elog(ERROR, "WAL archive is empty. You cannot restore backup to a recovery target without WAL archive.");
+	else if ($haserr(err))
+		ft_logerr(FT_FATAL, $errmsg(err), "Check WAL archive dir");
 
 	/*
 	 * Check if we have in archive all files needed to restore backup

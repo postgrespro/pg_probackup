@@ -1152,8 +1152,7 @@ reorder_external_dirs(pgBackup *to_backup, parray *to_external,
 		{
 			char old_path[MAXPGPATH];
 			makeExternalDirPathByNum(old_path, externaldir_template, i + 1);
-            pioDrive_i drive = pioDriveForLocation(FIO_LOCAL_HOST);
-            $i(pioRemoveDir, drive, .root = old_path, .root_as_well = true);
+            $i(pioRemoveDir, to_backup->backup_location, .root = old_path, .root_as_well = true);
 		}
 		else if (from_num != i + 1)
 		{
