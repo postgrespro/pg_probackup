@@ -37,17 +37,14 @@ typedef enum
 	FIO_STAT,
 	FIO_SEND,
 	FIO_PAGE,
-	FIO_GET_CRC32,
 	/* used for incremental restore */
 	FIO_GET_CHECKSUM_MAP,
 	FIO_GET_LSN_MAP,
 	FIO_ERROR,
-	FIO_SEND_FILE,
 	FIO_SEND_FILE_EOF,
 	/* messages for closing connection */
 	FIO_DISCONNECT,
 	FIO_DISCONNECTED,
-	FIO_LIST_DIR,
     FIO_REMOVE_DIR,
 	FIO_CHECK_POSTMASTER,
 	FIO_READLINK,
@@ -159,12 +156,6 @@ extern void    fio_get_agent_version(int* protocol, char* payload_buf, size_t pa
 
 /* pathname-style functions */
 extern int     fio_sync(fio_location location, const char* path);
-extern pg_crc32
-fio_get_crc32(fio_location location, const char *file_path,
-			  bool decompress, bool missing_ok);
-extern pg_crc32
-fio_get_crc32_truncated(fio_location location, const char *file_path,
-			  bool missing_ok);
 
 extern int     fio_symlink(fio_location location, const char* target, const char* link_path, bool overwrite);
 extern int     fio_remove(fio_location location, const char* path, bool missing_ok);
@@ -177,12 +168,9 @@ struct datapagemap; /* defined in datapagemap.h */
 extern struct datapagemap *fio_get_lsn_map(fio_location location, const char *fullpath, uint32 checksum_version,
 									  int n_blocks, XLogRecPtr horizonLsn, BlockNumber segmentno);
 
-extern pg_crc32 pgFileGetCRC32C(const char *file_path, bool missing_ok);
-extern pg_crc32 pgFileGetCRC32CTruncated(const char *file_path, bool missing_ok);
 #if PG_VERSION_NUM < 120000
 extern pg_crc32 pgFileGetCRC32(const char *file_path, bool missing_ok);
 #endif
-extern pg_crc32 pgFileGetCRC32Cgz(const char *file_path, bool missing_ok);
 
 extern pio_file_kind_e pio_statmode2file_kind(mode_t mode, const char* path);
 extern pio_file_kind_e pio_str2file_kind(const char* str, const char* path);

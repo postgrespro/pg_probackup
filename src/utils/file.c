@@ -677,69 +677,8 @@ fio_sync(fio_location location, const char* path)
 
 enum {
 	GET_CRC32_DECOMPRESS = 1,
-	GET_CRC32_MISSING_OK = 2,
-	GET_CRC32_TRUNCATED  = 4
+	GET_CRC32_TRUNCATED  = 2
 };
-
-/* Get crc32 of file */
-static pg_crc32
-fio_get_crc32_ex(fio_location location, const char *file_path,
-			  bool decompress, bool missing_ok, bool truncated)
-{
-	if (decompress && truncated)
-		elog(ERROR, "Could not calculate CRC for compressed truncated file");
-
-	if (fio_is_remote(location))
-	{
-		fio_header hdr;
-		size_t path_len = strlen(file_path) + 1;
-		pg_crc32 crc = 0;
-		hdr.cop = FIO_GET_CRC32;
-		hdr.handle = -1;
-		hdr.size = path_len;
-		hdr.arg = 0;
-
-		if (decompress)
-			hdr.arg = GET_CRC32_DECOMPRESS;
-		if (missing_ok)
-			hdr.arg |= GET_CRC32_MISSING_OK;
-		if (truncated)
-			hdr.arg |= GET_CRC32_TRUNCATED;
-
-		IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
-		IO_CHECK(fio_write_all(fio_stdout, file_path, path_len), path_len);
-		IO_CHECK(fio_read_all(fio_stdin, &crc, sizeof(crc)), sizeof(crc));
-
-		return crc;
-	}
-	else
-	{
-		if (decompress)
-			return pgFileGetCRC32Cgz(file_path, missing_ok);
-		else if (truncated)
-			return pgFileGetCRC32CTruncated(file_path, missing_ok);
-		else
-			return pgFileGetCRC32C(file_path, missing_ok);
-	}
-}
-
-/*
- * Remove file or directory
- * if missing_ok, then ignore ENOENT error
- */
-pg_crc32
-fio_get_crc32(fio_location location, const char *file_path,
-			  bool decompress, bool missing_ok)
-{
-	return fio_get_crc32_ex(location, file_path, decompress, missing_ok, false);
-}
-
-pg_crc32
-fio_get_crc32_truncated(fio_location location, const char *file_path,
-						bool missing_ok)
-{
-	return fio_get_crc32_ex(location, file_path, false, missing_ok, true);
-}
 
 /* Remove file */
 int
@@ -937,13 +876,6 @@ fio_iterate_pages_impl(pioDBDrive_i drive, int out, const char *path,
 	ft_strbuf_free(&req);
 }
 
-typedef struct send_file_state {
-	bool		calc_crc;
-	uint32_t	crc;
-	int64_t		read_size;
-	int64_t		write_size;
-} send_file_state;
-
 /* find page border of all-zero tail */
 static size_t
 find_zero_tail(char *buf, size_t len)
@@ -993,26 +925,6 @@ find_zero_tail(char *buf, size_t len)
 	return len;
 }
 
-static void
-fio_send_file_crc(send_file_state* st, char *buf, size_t len)
-{
-	int64_t 	write_size;
-
-	if (!st->calc_crc)
-		return;
-
-	write_size = st->write_size;
-	while (st->read_size > write_size)
-	{
-		size_t	crc_len = Min(st->read_size - write_size, sizeof(zerobuf));
-		COMP_CRC32C(st->crc, zerobuf, crc_len);
-		write_size += crc_len;
-	}
-
-	if (len > 0)
-		COMP_CRC32C(st->crc, buf, len);
-}
-
 /* Send open file content
  * On error we return FIO_ERROR message with following codes
  *  FIO_ERROR:
@@ -1032,7 +944,6 @@ fio_send_file_content_impl(int fd, int out, const char* path)
 	char *buf = pgut_malloc(CHUNK_SIZE);
 	size_t read_len = 0;
 	char *errormsg = NULL;
-	int64_t read_size = 0;
 	int64_t non_zero_len;
 
 	/* copy content */
@@ -1083,8 +994,6 @@ fio_send_file_content_impl(int fd, int out, const char* path)
 			hdr.arg = read_len - non_zero_len;
 			IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
 		}
-
-		read_size += read_len;
 	}
 
 	/* we are done, send eof */
@@ -1093,196 +1002,6 @@ fio_send_file_content_impl(int fd, int out, const char* path)
 
 	free(buf);
 	return true;
-}
-
-/*
- * Read the local file to compute its CRC.
- * We cannot make decision about file decompression because
- * user may ask to backup already compressed files and we should be
- * obvious about it.
- */
-pg_crc32
-pgFileGetCRC32C(const char *file_path, bool missing_ok)
-{
-	FILE	   *fp;
-	pg_crc32	crc = 0;
-	char	   *buf;
-	size_t		len = 0;
-
-	INIT_CRC32C(crc);
-
-	/* open file in binary read mode */
-	fp = fopen(file_path, PG_BINARY_R);
-	if (fp == NULL)
-	{
-		if (missing_ok && errno == ENOENT)
-		{
-			FIN_CRC32C(crc);
-			return crc;
-		}
-
-		elog(ERROR, "Cannot open file \"%s\": %s",
-			 file_path, strerror(errno));
-	}
-
-	/* disable stdio buffering */
-	setvbuf(fp, NULL, _IONBF, BUFSIZ);
-	buf = pgut_malloc(STDIO_BUFSIZE);
-
-	/* calc CRC of file */
-	do
-	{
-		if (interrupted)
-			elog(ERROR, "interrupted during CRC calculation");
-
-		len = fread(buf, 1, STDIO_BUFSIZE, fp);
-
-		if (ferror(fp))
-			elog(ERROR, "Cannot read \"%s\": %s", file_path, strerror(errno));
-
-		COMP_CRC32C(crc, buf, len);
-	}
-	while (!feof(fp));
-
-	FIN_CRC32C(crc);
-	fclose(fp);
-	pg_free(buf);
-
-	return crc;
-}
-
-/*
- * Read the local file to compute CRC for it extened to real_size.
- */
-pg_crc32
-pgFileGetCRC32CTruncated(const char *file_path, bool missing_ok)
-{
-	FILE	   *fp;
-	char	   *buf;
-	size_t		len = 0;
-	size_t		non_zero_len;
-	send_file_state st = {true, 0, 0, 0};
-
-	INIT_CRC32C(st.crc);
-
-	/* open file in binary read mode */
-	fp = fopen(file_path, PG_BINARY_R);
-	if (fp == NULL)
-	{
-		if (missing_ok && errno == ENOENT)
-		{
-			FIN_CRC32C(st.crc);
-			return st.crc;
-		}
-
-		elog(ERROR, "Cannot open file \"%s\": %s",
-			 file_path, strerror(errno));
-	}
-
-	/* disable stdio buffering */
-	setvbuf(fp, NULL, _IONBF, BUFSIZ);
-	buf = pgut_malloc(CHUNK_SIZE);
-
-	/* calc CRC of file */
-	do
-	{
-		if (interrupted)
-			elog(ERROR, "interrupted during CRC calculation");
-
-		len = fread(buf, 1, STDIO_BUFSIZE, fp);
-
-		if (ferror(fp))
-			elog(ERROR, "Cannot read \"%s\": %s", file_path, strerror(errno));
-
-		non_zero_len = find_zero_tail(buf, len);
-		/* same trick as in fio_send_file */
-		if (st.read_size + non_zero_len < PAGE_ZEROSEARCH_FINE_GRANULARITY &&
-			st.read_size + len > 0)
-		{
-			non_zero_len = Min(PAGE_ZEROSEARCH_FINE_GRANULARITY,
-							   st.read_size + len);
-			non_zero_len -= st.read_size;
-		}
-		if (non_zero_len)
-		{
-			fio_send_file_crc(&st, buf, non_zero_len);
-			st.write_size += st.read_size + non_zero_len;
-		}
-		st.read_size += len;
-
-	} while (!feof(fp));
-
-	FIN_CRC32C(st.crc);
-	fclose(fp);
-	pg_free(buf);
-
-	return st.crc;
-}
-
-/*
- * Read the local file to compute its CRC.
- * We cannot make decision about file decompression because
- * user may ask to backup already compressed files and we should be
- * obvious about it.
- */
-pg_crc32
-pgFileGetCRC32Cgz(const char *file_path, bool missing_ok)
-{
-	gzFile fp;
-	pg_crc32 crc = 0;
-	int len = 0;
-	int err;
-	char *buf;
-
-	INIT_CRC32C(crc);
-
-	/* open file in binary read mode */
-	fp = gzopen(file_path, PG_BINARY_R);
-	if (fp == NULL)
-	{
-		if (missing_ok && errno == ENOENT)
-		{
-			FIN_CRC32C(crc);
-			return crc;
-		}
-
-		elog(ERROR, "Cannot open file \"%s\": %s",
-			 file_path, strerror(errno));
-	}
-
-	buf = pgut_malloc(STDIO_BUFSIZE);
-
-	/* calc CRC of file */
-	for (;;)
-	{
-		if (interrupted)
-			elog(ERROR, "interrupted during CRC calculation");
-
-		len = gzread(fp, buf, STDIO_BUFSIZE);
-
-		if (len <= 0)
-		{
-			/* we either run into eof or error */
-			if (gzeof(fp))
-				break;
-			else
-			{
-				const char *err_str = NULL;
-
-				err_str = gzerror(fp, &err);
-				elog(ERROR, "Cannot read from compressed file %s", err_str);
-			}
-		}
-
-		/* update CRC */
-		COMP_CRC32C(crc, buf, len);
-	}
-
-	FIN_CRC32C(crc);
-	gzclose(fp);
-	pg_free(buf);
-
-	return crc;
 }
 
 #if PG_VERSION_NUM < 120000
@@ -1778,18 +1497,6 @@ fio_communicate(int in, int out)
 			close(tmp_fd);
 
 			IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
-			break;
-		  case FIO_GET_CRC32:
-			Assert((hdr.arg & GET_CRC32_TRUNCATED) == 0 ||
-				   (hdr.arg & (GET_CRC32_TRUNCATED|GET_CRC32_DECOMPRESS)) == GET_CRC32_TRUNCATED);
-			/* calculate crc32 for a file */
-			if ((hdr.arg & GET_CRC32_DECOMPRESS))
-				crc = pgFileGetCRC32Cgz(buf, (hdr.arg & GET_CRC32_MISSING_OK) != 0);
-			else if ((hdr.arg & GET_CRC32_TRUNCATED))
-				crc = pgFileGetCRC32CTruncated(buf, (hdr.arg & GET_CRC32_MISSING_OK) != 0);
-			else
-				crc = pgFileGetCRC32C(buf, (hdr.arg & GET_CRC32_MISSING_OK) != 0);
-			IO_CHECK(fio_write_all(out, &crc, sizeof(crc)), sizeof(crc));
 			break;
 		  case PIO_GET_CRC32:
 			crc = $i(pioGetCRC32, drive, .path = buf,
