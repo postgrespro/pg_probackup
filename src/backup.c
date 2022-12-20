@@ -441,6 +441,7 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 		backup_files_arg *arg = &(threads_args[i]);
 
 		arg->nodeInfo = nodeInfo;
+		arg->instanceState = instanceState;
 		arg->from_root = instance_config.pgdata;
 		arg->to_root = current.database_dir;
 		arg->external_prefix = external_prefix;
@@ -517,7 +518,8 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 			elog(ERROR, "Failed to find file \"%s\" in backup filelist.",
 							XLOG_CONTROL_FILE);
 
-		set_min_recovery_point(pg_control, current.database_dir, current.stop_lsn);
+		set_min_recovery_point(instanceState->database_location, instanceState->backup_location,
+							   pg_control, current.database_dir, current.stop_lsn);
 	}
 
 	/* close and sync page header map */
@@ -804,7 +806,7 @@ do_backup(InstanceState *instanceState, pgSetBackupParams *set_backup_params,
 	 * instance we opened connection to. And that target backup database PGDATA
 	 * belogns to the same instance.
 	 */
-	check_system_identifiers(backup_conn, instance_config.pgdata);
+	check_system_identifiers(instanceState->database_location, backup_conn, instance_config.pgdata);
 
 	/* below perform checks specific for backup command */
 	if (!RetrieveWalSegSize(backup_conn))
@@ -974,12 +976,12 @@ check_server_version(PGconn *conn, PGNodeInfo *nodeInfo)
  * All system identifiers must be equal.
  */
 void
-check_system_identifiers(PGconn *conn, const char *pgdata)
+check_system_identifiers(pioDrive_i drive, PGconn *conn, const char *pgdata)
 {
 	uint64		system_id_conn;
 	uint64		system_id_pgdata;
 
-	system_id_pgdata = get_system_identifier(FIO_DB_HOST, pgdata, false);
+	system_id_pgdata = get_system_identifier(drive, pgdata, false);
 	system_id_conn = get_remote_system_identifier(conn);
 
 	/* for checkdb check only system_id_pgdata and system_id_conn */
@@ -1951,6 +1953,8 @@ backup_files(void *arg)
 
 	backup_files_arg *arguments = (backup_files_arg *) arg;
 	int 		n_backup_files_list = parray_num(arguments->files_list);
+	pioDrive_i  db_drive = arguments->instanceState->database_location;
+	pioDrive_i  backup_drive = arguments->instanceState->backup_location;
 
 	prev_time = current.start_time;
 
@@ -2047,7 +2051,8 @@ backup_files(void *arg)
 		}
 		else
 		{
-			backup_non_data_file(file, prev_file, from_fullpath, to_fullpath,
+			backup_non_data_file(db_drive, backup_drive,
+								 file, prev_file, from_fullpath, to_fullpath,
 								 current.backup_mode, current.parent_backup, true);
 		}
 

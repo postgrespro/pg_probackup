@@ -542,6 +542,7 @@ typedef struct pgSetBackupParams
 typedef struct
 {
 	PGNodeInfo *nodeInfo;
+	struct InstanceState *instanceState;
 
 	const char *from_root;
 	const char *to_root;
@@ -773,7 +774,7 @@ extern char** commands_args;
 /* in backup.c */
 extern int do_backup(InstanceState *instanceState, pgSetBackupParams *set_backup_params,
 					 bool no_validate, bool no_sync, bool backup_logs, time_t start_time);
-extern void do_checkdb(bool need_amcheck, ConnectionOptions conn_opt,
+extern void do_checkdb(pioDrive_i drive, bool need_amcheck, ConnectionOptions conn_opt,
 				  char *pgdata);
 extern BackupMode parse_backup_mode(const char *value);
 extern const char *deparse_backup_mode(BackupMode mode);
@@ -811,8 +812,6 @@ extern void reset_backup_id(pgBackup *backup);
 extern parray *get_backup_filelist(pgBackup *backup, bool strict);
 extern parray *read_timeline_history(const char *arclog_path, TimeLineID targetTLI, bool strict);
 extern bool tliIsPartOfHistory(const parray *timelines, TimeLineID tli);
-extern DestDirIncrCompatibility check_incremental_compatibility(const char *pgdata, uint64 system_identifier,
-																IncrRestoreMode incremental_mode);
 
 /* in remote.c */
 extern void check_remote_agent_compatibility(int agent_version,
@@ -1034,14 +1033,11 @@ extern void backup_data_file(pgFile *file, const char *from_fullpath, const char
 							 XLogRecPtr prev_backup_start_lsn, BackupMode backup_mode,
 							 CompressAlg calg, int clevel, uint32 checksum_version,
 							 HeaderMap *hdr_map, bool missing_ok);
-extern void backup_non_data_file(pgFile *file, pgFile *prev_file,
+extern void backup_non_data_file(pioDrive_i from, pioDrive_i to,
+								 pgFile *file, pgFile *prev_file,
 								 const char *from_fullpath, const char *to_fullpath,
 								 BackupMode backup_mode, time_t parent_backup_time,
 								 bool missing_ok);
-extern void backup_non_data_file_internal(const char *from_fullpath,
-										  fio_location from_location,
-										  const char *to_fullpath, pgFile *file,
-										  bool missing_ok);
 
 extern size_t restore_data_file(parray *parent_chain, pgFile *dest_file, pioDBWriter_i out,
 								const char *to_fullpath, bool use_bitmap, PageState *checksum_map,
@@ -1090,17 +1086,17 @@ extern XLogRecPtr get_next_record_lsn(const char *archivedir, XLogSegNo	segno, T
 
 /* in util.c */
 extern TimeLineID get_current_timeline(PGconn *conn);
-extern TimeLineID get_current_timeline_from_control(fio_location location, const char *pgdata_path);
 extern XLogRecPtr get_checkpoint_location(PGconn *conn);
-extern uint64 get_system_identifier(fio_location location, const char *pgdata_path, bool safe);
+extern uint64 get_system_identifier(pioDrive_i drive, const char *pgdata_path, bool safe);
 extern uint64 get_remote_system_identifier(PGconn *conn);
-extern pg_crc32c get_pgcontrol_checksum(const char *pgdata_path);
-extern uint32 get_xlog_seg_size(const char *pgdata_path);
-extern void get_redo(fio_location location, const char *pgdata_path, RedoParams *redo);
-extern void set_min_recovery_point(pgFile *file, const char *backup_path,
+extern pg_crc32c get_pgcontrol_checksum(pioDrive_i drive, const char *pgdata_path);
+extern uint32 get_xlog_seg_size(pioDrive_i drive, const char *pgdata_path);
+extern void get_redo(pioDrive_i drive, const char *pgdata_path, RedoParams *redo);
+extern void set_min_recovery_point(pioDrive_i drive_from, pioDrive_i drive_to,
+		                           pgFile *file, const char *backup_path,
 								   XLogRecPtr stop_backup_lsn);
-extern void copy_pgcontrol_file(fio_location from_location, const char *from_fullpath,
-					fio_location to_location, const char *to_fullpath, pgFile *file);
+extern void copy_pgcontrol_file(pioDrive_i drive_from, const char *from_fullpath,
+					pioDrive_i drive_to, const char *to_fullpath, pgFile *file);
 
 extern void time2iso(char *buf, size_t len, time_t time, bool utc);
 extern const char *status2str(BackupStatus status);
@@ -1122,7 +1118,7 @@ extern void pretty_size(int64 size, char *buf, size_t len);
 extern void pretty_time_interval(double time, char *buf, size_t len);
 
 extern PGconn *pgdata_basic_setup(ConnectionOptions conn_opt, PGNodeInfo *nodeInfo);
-extern void check_system_identifiers(PGconn *conn, const char *pgdata);
+extern void check_system_identifiers(pioDrive_i drive, PGconn *conn, const char *pgdata);
 extern void parse_filelist_filenames(parray *files, const char *root);
 
 /* in ptrack.c */

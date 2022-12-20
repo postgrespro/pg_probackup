@@ -64,7 +64,8 @@ do_init(CatalogState *catalogState)
 int
 do_add_instance(InstanceState *instanceState, InstanceConfig *instance)
 {
-	pioDrive_i	backup_location = pioDriveForLocation(FIO_BACKUP_HOST);
+	pioDrive_i	backup_location = instanceState->backup_location;
+	pioDrive_i	db_location = instanceState->database_location;
 	CatalogState *catalogState = instanceState->catalog_state;
 	err_i		err;
 	bool		exists;
@@ -76,9 +77,9 @@ do_add_instance(InstanceState *instanceState, InstanceConfig *instance)
 						 "(-D, --pgdata)");
 
 	/* Read system_identifier from PGDATA */
-	instance->system_identifier = get_system_identifier(FIO_DB_HOST, instance->pgdata, false);
+	instance->system_identifier = get_system_identifier(db_location, instance->pgdata, false);
 	/* Starting from PostgreSQL 11 read WAL segment size from PGDATA */
-	instance->xlog_seg_size = get_xlog_seg_size(instance->pgdata);
+	instance->xlog_seg_size = get_xlog_seg_size(db_location, instance->pgdata);
 
 	/* Ensure that all root directories already exist */
 	/* TODO maybe call do_init() here instead of error?*/
@@ -89,7 +90,7 @@ do_add_instance(InstanceState *instanceState, InstanceConfig *instance)
 				catalogState->wal_subdir_path};
 		for (i = 0; i < ft_arrsz(paths); i++)
 		{
-			exists = $i(pioExists, catalogState->backup_location, .path = paths[i],
+			exists = $i(pioExists, backup_location, .path = paths[i],
 							 .expected_kind = PIO_KIND_DIRECTORY, .err = &err);
 			if ($haserr(err))
 				ft_logerr(FT_FATAL, $errmsg(err), "Check instance");
@@ -105,7 +106,7 @@ do_add_instance(InstanceState *instanceState, InstanceConfig *instance)
 		};
 		for (i = 0; i < ft_arrsz(paths); i++)
 		{
-			exists = !$i(pioIsDirEmpty, catalogState->backup_location, .path = paths[i][1],
+			exists = !$i(pioIsDirEmpty, backup_location, .path = paths[i][1],
 						.err = &err);
 			if ($haserr(err))
 				ft_logerr(FT_FATAL, $errmsg(err), "Check instance");

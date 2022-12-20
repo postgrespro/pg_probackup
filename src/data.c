@@ -71,7 +71,13 @@ static size_t restore_data_file_internal(pioReader_i in, pioDBWriter_i out, pgFi
 										 datapagemap_t *map, PageState *checksum_map, int checksum_version,
 										 datapagemap_t *lsn_map, BackupPageHeader2 *headers);
 
-static err_i send_file(const char *to_fullpath, const char *from_path, bool cut_zero_tail, pgFile *file);
+static void backup_non_data_file_internal(pioDrive_i drive_from, pioDrive_i drive_to,
+										  const char *from_fullpath,
+										  const char *to_fullpath, pgFile *file,
+										  bool missing_ok);
+
+static err_i send_file(pioDrive_i drive_from, pioDrive_i drive_to,
+					   const char *to_fullpath, const char *from_path, bool cut_zero_tail, pgFile *file);
 
 #ifdef HAVE_LIBZ
 /* Implementation of zlib compression method */
@@ -543,16 +549,19 @@ cleanup:
  * and make a decision about copying or skiping the file.
  */
 void
-backup_non_data_file(pgFile *file, pgFile *prev_file,
+backup_non_data_file(pioDrive_i drive_from, pioDrive_i drive_to,
+					 pgFile *file, pgFile *prev_file,
 					 const char *from_fullpath, const char *to_fullpath,
 					 BackupMode backup_mode, time_t parent_backup_time,
 					 bool missing_ok)
 {
+	FOBJ_FUNC_ARP();
+	err_i err;
 	/* special treatment for global/pg_control */
 	if (file->external_dir_num == 0 && strcmp(file->rel_path, XLOG_CONTROL_FILE) == 0)
 	{
-		copy_pgcontrol_file(FIO_DB_HOST, from_fullpath,
-							FIO_BACKUP_HOST, to_fullpath, file);
+		copy_pgcontrol_file(drive_from, from_fullpath,
+							drive_to, to_fullpath, file);
 		return;
 	}
 
@@ -568,10 +577,18 @@ backup_non_data_file(pgFile *file, pgFile *prev_file,
 		 * file could be deleted under our feets.
 		 * But then backup_non_data_file_internal will handle it safely
 		 */
-		if (file->forkName != cfm)
-			file->crc = fio_get_crc32(FIO_DB_HOST, from_fullpath, false, true);
-		else
-			file->crc = fio_get_crc32_truncated(FIO_DB_HOST, from_fullpath, true);
+		file->crc = $i(pioGetCRC32, drive_from, .path = from_fullpath,
+					   .truncated = file->forkName == cfm, .err = &err);
+		if (getErrno(err) == ENOENT)
+		{
+			elog(LOG, "File \"%s\" is not found", from_fullpath);
+			file->crc = 0;
+			file->read_size = 0;
+			file->write_size = 0;
+			file->uncompressed_size = 0;
+			file->write_size = FILE_NOT_FOUND;
+			return;
+		}
 
 		/* ...and checksum is the same... */
 		if (EQ_CRC32C(file->crc, prev_file->crc))
@@ -581,7 +598,7 @@ backup_non_data_file(pgFile *file, pgFile *prev_file,
 		}
 	}
 
-	backup_non_data_file_internal(from_fullpath, FIO_DB_HOST,
+	backup_non_data_file_internal(drive_from, drive_to, from_fullpath,
 								  to_fullpath, file, missing_ok);
 }
 
@@ -1150,8 +1167,8 @@ restore_non_data_file(parray *parent_chain, pgBackup *dest_backup,
  * TODO: optimize remote copying
  */
 void
-backup_non_data_file_internal(const char *from_fullpath,
-							fio_location from_location,
+backup_non_data_file_internal(pioDrive_i drive_from, pioDrive_i drive_to,
+							const char *from_fullpath,
 							const char *to_fullpath, pgFile *file,
 							bool missing_ok)
 {
@@ -1168,7 +1185,7 @@ backup_non_data_file_internal(const char *from_fullpath,
 	file->uncompressed_size = 0;
 
 	/* backup non-data file  */
-	err = send_file(to_fullpath, from_fullpath, cut_zero_tail, file);
+	err = send_file(drive_from, drive_to, to_fullpath, from_fullpath, cut_zero_tail, file);
 
 	/* handle errors */
 	if($haserr(err)) {
@@ -1186,13 +1203,11 @@ backup_non_data_file_internal(const char *from_fullpath,
 }
 
 static err_i
-send_file(const char *to_fullpath, const char *from_fullpath, bool cut_zero_tail, pgFile *file) {
+send_file(pioDrive_i db_drive, pioDrive_i backup_drive, const char *to_fullpath, const char *from_fullpath, bool cut_zero_tail, pgFile *file) {
 	FOBJ_FUNC_ARP();
 	err_i err = $noerr();
 	pioReadStream_i in;
 	pioWriteCloser_i out;
-	pioDrive_i backup_drive = pioDriveForLocation(FIO_BACKUP_HOST);
-	pioDrive_i db_drive = pioDriveForLocation(FIO_DB_HOST);
 
 	/* open to_fullpath */
 	out = $i(pioOpenRewrite, backup_drive, .path = to_fullpath,

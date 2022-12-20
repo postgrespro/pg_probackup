@@ -875,7 +875,7 @@ main(int argc, char *argv[])
 		if (wal_file_path == NULL)
 		{
 			/* 1st case */
-			system_id = get_system_identifier(FIO_DB_HOST, current_dir, false);
+			system_id = get_system_identifier(instanceState->database_location, current_dir, false);
 			join_path_components(archive_push_xlog_dir, current_dir, XLOGDIR);
 		}
 		else
@@ -895,7 +895,7 @@ main(int argc, char *argv[])
 				   .file1 = stripped_wal_file_path, .file2 = archive_push_xlog_dir))
 			{
 				/* 2nd case */
-				system_id = get_system_identifier(FIO_DB_HOST, instance_config.pgdata, false);
+				system_id = get_system_identifier(instanceState->database_location, instance_config.pgdata, false);
 				/* archive_push_xlog_dir already have right value */
 			}
 			else
@@ -905,7 +905,7 @@ main(int argc, char *argv[])
 				else
 					elog(ERROR, "Value specified to --wal_file_path is too long");
 
-				system_id = get_system_identifier(FIO_DB_HOST, current_dir, true);
+				system_id = get_system_identifier(instanceState->database_location, current_dir, true);
 				/* 3rd case if control file present -- i.e. system_id != 0 */
 
 				if (system_id == 0)
@@ -1051,7 +1051,7 @@ main(int argc, char *argv[])
 			do_set_backup(instanceState, current.backup_id, set_backup_params);
 			break;
 		case CHECKDB_CMD:
-			do_checkdb(need_amcheck,
+			do_checkdb(pioDriveForLocation(FIO_DB_HOST), need_amcheck,
 					   instance_config.conn_opt, instance_config.pgdata);
 			break;
 		case NO_CMD:

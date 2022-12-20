@@ -733,7 +733,7 @@ do_amcheck(ConnectionOptions conn_opt, PGconn *conn)
 
 /* Entry point of pg_probackup CHECKDB subcommand */
 void
-do_checkdb(bool need_amcheck,
+do_checkdb(pioDrive_i drive, bool need_amcheck,
 		   ConnectionOptions conn_opt, char *pgdata)
 {
 	PGNodeInfo nodeInfo;
@@ -755,7 +755,7 @@ do_checkdb(bool need_amcheck,
 		cur_conn = pgdata_basic_setup(conn_opt, &nodeInfo);
 
 		/* ensure that conn credentials and pgdata are consistent */
-		check_system_identifiers(cur_conn, pgdata);
+		check_system_identifiers(drive, cur_conn, pgdata);
 
 		/*
 		 * we don't need this connection anymore.

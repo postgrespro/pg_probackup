@@ -15,6 +15,7 @@
 
 typedef struct
 {
+	InstanceState *state;
 	parray		*merge_filelist;
 	parray		*parent_chain;
 
@@ -1347,7 +1348,8 @@ merge_non_data_file(parray *parent_chain, pgBackup *full_backup,
 	}
 
 	/* Copy file to FULL backup directory into temp file */
-	backup_non_data_file(tmp_file, NULL, from_fullpath,
+	backup_non_data_file(full_backup->backup_location, dest_backup->backup_location,
+						 tmp_file, NULL, from_fullpath,
 						 to_fullpath_tmp, BACKUP_MODE_FULL, 0, false);
 
 	/* sync temp file to disk */

@@ -31,6 +31,13 @@ static const char *statusName[] =
 	"CORRUPT"
 };
 
+static err_i
+get_control_file(pioDrive_i drive, path_t pgdata_path, path_t file,
+				 ControlFileData *control, bool safe);
+
+static TimeLineID
+get_current_timeline_from_control(pioDrive_i drive, const char *pgdata_path);
+
 const char *
 base36enc_to(long unsigned int value, char buf[static base36bufsize])
 {
@@ -84,15 +91,12 @@ checkControlFile(ControlFileData *ControlFile)
  * Write ControlFile to pg_control
  */
 static void
-writeControlFile(fio_location location, const char *path, ControlFileData *ControlFile)
+writeControlFile(pioDrive_i drive, const char *path, ControlFileData *ControlFile)
 {
 	char       *buffer = NULL;
-	pioDrive_i	drive;
 	err_i 		err;
 
 	int			ControlFileSize = PG_CONTROL_FILE_SIZE;
-
-	drive = pioDriveForLocation(location);
 
 	/* copy controlFileSize */
 	buffer = pg_malloc0(ControlFileSize);
@@ -114,36 +118,37 @@ writeControlFile(fio_location location, const char *path, ControlFileData *Contr
 TimeLineID
 get_current_timeline(PGconn *conn)
 {
-
 	PGresult   *res;
 	TimeLineID tli = 0;
 	char	   *val;
+	bool       ok = false;
+	pioDrive_i drive;
 
 	res = pgut_execute_extended(conn,
 				   "SELECT timeline_id FROM pg_catalog.pg_control_checkpoint()", 0, NULL, true, true);
 
 	if (PQresultStatus(res) == PGRES_TUPLES_OK)
-		val = PQgetvalue(res, 0, 0);
-	else
-		return get_current_timeline_from_control(FIO_DB_HOST, instance_config.pgdata);
-
-	if (!parse_uint32(val, &tli, 0))
 	{
-		PQclear(res);
-		elog(WARNING, "Invalid value of timeline_id %s", val);
-
-		/* TODO 3.0 remove it and just error out */
-		return get_current_timeline_from_control(FIO_DB_HOST, instance_config.pgdata);
+		val = PQgetvalue(res, 0, 0);
+		ok = parse_uint32(val, &tli, 0);
+		if (!ok)
+			/* TODO 3.0 just error out */
+			elog(WARNING, "Invalid value of timeline_id %s", val);
 	}
+	PQclear(res);
 
-	return tli;
+	if (ok)
+		return tli;
+
+	/* or get timeline from control data */
+	drive = pioDriveForLocation(FIO_DB_HOST);
+	return get_current_timeline_from_control(drive, instance_config.pgdata);
 }
 
 static err_i
-get_control_file(fio_location location, path_t pgdata_path, path_t file,
+get_control_file(pioDrive_i drive, path_t pgdata_path, path_t file,
 				 ControlFileData *control, bool safe)
 {
-	pioDrive_i	drive;
 	char		fullpath[MAXPGPATH];
 	ft_bytes_t	bytes;
 	err_i		err;
@@ -152,7 +157,6 @@ get_control_file(fio_location location, path_t pgdata_path, path_t file,
 
 	join_path_components(fullpath, pgdata_path, file);
 
-	drive = pioDriveForLocation(location);
 	bytes = $i(pioReadFile, drive, .path = fullpath, .err = &err);
 	if ($haserr(err) && safe)
 	{
@@ -178,14 +182,14 @@ get_control_file(fio_location location, path_t pgdata_path, path_t file,
 }
 
 /* Get timeline from pg_control file */
-TimeLineID
-get_current_timeline_from_control(fio_location location, const char *pgdata_path)
+static TimeLineID
+get_current_timeline_from_control(pioDrive_i drive, const char *pgdata_path)
 {
 	FOBJ_FUNC_ARP();
 	ControlFileData ControlFile;
 	err_i			err;
 
-	err = get_control_file(location, pgdata_path, XLOG_CONTROL_FILE,
+	err = get_control_file(drive, pgdata_path, XLOG_CONTROL_FILE,
 						   &ControlFile, false);
 	if ($haserr(err))
 		ft_logerr(FT_FATAL, $errmsg(err), "Getting current timeline");
@@ -216,13 +220,13 @@ get_checkpoint_location(PGconn *conn)
 }
 
 uint64
-get_system_identifier(fio_location location, const char *pgdata_path, bool safe)
+get_system_identifier(pioDrive_i drive, const char *pgdata_path, bool safe)
 {
 	FOBJ_FUNC_ARP();
 	ControlFileData ControlFile;
 	err_i			err;
 
-	err = get_control_file(location, pgdata_path, XLOG_CONTROL_FILE,
+	err = get_control_file(drive, pgdata_path, XLOG_CONTROL_FILE,
 						   &ControlFile, safe);
 	if ($haserr(err))
 		ft_logerr(FT_FATAL, $errmsg(err), "Getting system identifier");
@@ -252,14 +256,14 @@ get_remote_system_identifier(PGconn *conn)
 }
 
 uint32
-get_xlog_seg_size(const char *pgdata_path)
+get_xlog_seg_size(pioDrive_i drive, const char *pgdata_path)
 {
 #if PG_VERSION_NUM >= 110000
 	FOBJ_FUNC_ARP();
 	ControlFileData ControlFile;
 	err_i			err;
 
-	err = get_control_file(FIO_DB_HOST, pgdata_path, XLOG_CONTROL_FILE,
+	err = get_control_file(drive, pgdata_path, XLOG_CONTROL_FILE,
 						   &ControlFile, false);
 	if ($haserr(err))
 		ft_logerr(FT_FATAL, $errmsg(err), "Trying to fetch segment size");
@@ -271,13 +275,13 @@ get_xlog_seg_size(const char *pgdata_path)
 }
 
 pg_crc32c
-get_pgcontrol_checksum(const char *pgdata_path)
+get_pgcontrol_checksum(pioDrive_i drive, const char *pgdata_path)
 {
 	FOBJ_FUNC_ARP();
 	ControlFileData ControlFile;
 	err_i			err;
 
-	err = get_control_file(FIO_BACKUP_HOST, pgdata_path, XLOG_CONTROL_FILE,
+	err = get_control_file(drive, pgdata_path, XLOG_CONTROL_FILE,
 						   &ControlFile, false);
 	if ($haserr(err))
 		ft_logerr(FT_FATAL, $errmsg(err), "Getting pgcontrol checksum");
@@ -286,13 +290,13 @@ get_pgcontrol_checksum(const char *pgdata_path)
 }
 
 void
-get_redo(fio_location location, const char *pgdata_path, RedoParams *redo)
+get_redo(pioDrive_i drive, const char *pgdata_path, RedoParams *redo)
 {
 	FOBJ_FUNC_ARP();
 	ControlFileData ControlFile;
 	err_i			err;
 
-	err = get_control_file(location, pgdata_path, XLOG_CONTROL_FILE,
+	err = get_control_file(drive, pgdata_path, XLOG_CONTROL_FILE,
 						   &ControlFile, false);
 	if ($haserr(err))
 		ft_logerr(FT_FATAL, $errmsg(err), "Fetching redo lsn");
@@ -322,7 +326,8 @@ get_redo(fio_location location, const char *pgdata_path, RedoParams *redo)
  * 'as-is' is not to be trusted.
  */
 void
-set_min_recovery_point(pgFile *file, const char *backup_path,
+set_min_recovery_point(pioDrive_i drive_from, pioDrive_i drive_to,
+					   pgFile *file, const char *backup_path,
 					   XLogRecPtr stop_backup_lsn)
 {
 	FOBJ_FUNC_ARP();
@@ -330,7 +335,7 @@ set_min_recovery_point(pgFile *file, const char *backup_path,
 	char			fullpath[MAXPGPATH];
 	err_i			err;
 
-	err = get_control_file(FIO_DB_HOST, instance_config.pgdata, XLOG_CONTROL_FILE,
+	err = get_control_file(drive_from, instance_config.pgdata, XLOG_CONTROL_FILE,
 						   &ControlFile, false);
 	if ($haserr(err))
 		ft_logerr(FT_FATAL, $errmsg(err), "Set min recovery point");
@@ -353,7 +358,7 @@ set_min_recovery_point(pgFile *file, const char *backup_path,
 
 	/* overwrite pg_control */
 	join_path_components(fullpath, backup_path, XLOG_CONTROL_FILE);
-	writeControlFile(FIO_LOCAL_HOST, fullpath, &ControlFile);
+	writeControlFile(drive_to, fullpath, &ControlFile);
 
 	/* Update pg_control checksum in backup_list */
 	file->crc = ControlFile.crc;
@@ -363,14 +368,14 @@ set_min_recovery_point(pgFile *file, const char *backup_path,
  * Copy pg_control file to backup. We do not apply compression to this file.
  */
 void
-copy_pgcontrol_file(fio_location from_location, const char *from_fullpath,
-					fio_location to_location, const char *to_fullpath, pgFile *file)
+copy_pgcontrol_file(pioDrive_i drive_from, const char *from_fullpath,
+					pioDrive_i drive_to, const char *to_fullpath, pgFile *file)
 {
 	FOBJ_FUNC_ARP();
 	ControlFileData ControlFile;
 	err_i			err;
 
-	err = get_control_file(from_location, from_fullpath, "",
+	err = get_control_file(drive_from, from_fullpath, "",
 						   &ControlFile, false);
 	if ($haserr(err))
 		ft_logerr(FT_FATAL, $errmsg(err), "Fetching control file");
@@ -380,7 +385,7 @@ copy_pgcontrol_file(fio_location from_location, const char *from_fullpath,
 	file->write_size = PG_CONTROL_FILE_SIZE;
 	file->uncompressed_size = PG_CONTROL_FILE_SIZE;
 
-	writeControlFile(to_location, to_fullpath, &ControlFile);
+	writeControlFile(drive_to, to_fullpath, &ControlFile);
 }
 
 /*

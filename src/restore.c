@@ -68,6 +68,10 @@ static void restore_chain(InstanceState *instanceState,
 						  const char *pgdata_path, bool no_sync, bool cleanup_pgdata,
 						  bool backup_has_tblspc);
 
+static DestDirIncrCompatibility check_incremental_compatibility(pioDrive_i dbdrive,
+																const char *pgdata,
+																uint64 system_identifier,
+																IncrRestoreMode incremental_mode);
 /*
  * Iterate over backup list to find all ancestors of the broken parent_backup
  * and update their status to BACKUP_STATUS_ORPHAN
@@ -154,7 +158,8 @@ do_restore_or_validate(InstanceState *instanceState, time_t target_backup_id, pg
 				elog(INFO, "Running incremental restore into nonempty directory: \"%s\"",
 					 instance_config.pgdata);
 
-				rc = check_incremental_compatibility(instance_config.pgdata,
+				rc = check_incremental_compatibility(instanceState->database_location,
+													 instance_config.pgdata,
 													 instance_config.system_identifier,
 													 params->incremental_mode);
 				if (rc == POSTMASTER_IS_RUNNING)
@@ -480,7 +485,7 @@ do_restore_or_validate(InstanceState *instanceState, time_t target_backup_id, pg
 	{
 		RedoParams redo;
 		parray	  *timelines = NULL;
-		get_redo(FIO_DB_HOST, instance_config.pgdata, &redo);
+		get_redo(instanceState->database_location, instance_config.pgdata, &redo);
 
 		if (redo.checksum_version == 0)
 			elog(ERROR, "Incremental restore in 'lsn' mode require "
@@ -2085,7 +2090,8 @@ get_dbOid_exclude_list(pgBackup *backup, parray *datname_list,
  * TODO: add PG_CONTROL_IS_MISSING
  */
 DestDirIncrCompatibility
-check_incremental_compatibility(const char *pgdata, uint64 system_identifier,
+check_incremental_compatibility(pioDrive_i dbdrive, const char *pgdata,
+								uint64 system_identifier,
 								IncrRestoreMode incremental_mode)
 {
 	uint64	system_id_pgdata;
@@ -2129,9 +2135,9 @@ check_incremental_compatibility(const char *pgdata, uint64 system_identifier,
 	 */
 	elog(LOG, "Trying to read pg_control file in destination directory");
 
-	system_id_pgdata = get_system_identifier(FIO_DB_HOST, pgdata, false);
+	system_id_pgdata = get_system_identifier(dbdrive, pgdata, false);
 
-	if (system_id_pgdata == instance_config.system_identifier)
+	if (system_id_pgdata == system_identifier)
 		system_id_match = true;
 	else
 		elog(WARNING, "Backup catalog was initialized for system id %llu, "
@@ -2145,10 +2151,9 @@ check_incremental_compatibility(const char *pgdata, uint64 system_identifier,
 	if (incremental_mode == INCR_LSN)
 	{
 		err_i err = $noerr();
-		pioDrive_i drive = pioDriveForLocation(FIO_DB_HOST);
 
 		join_path_components(backup_label, pgdata, "backup_label");
-		if($i(pioExists, drive, .path = backup_label, .err = &err))
+		if($i(pioExists, dbdrive, .path = backup_label, .err = &err))
 		{
 			elog(WARNING, "Destination directory contains \"backup_control\" file. "
 				"This does NOT mean that you should delete this file and retry, only that "

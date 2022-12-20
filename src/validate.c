@@ -22,7 +22,7 @@ static bool skipped_due_to_lock = false;
 
 typedef struct
 {
-	pioDrive_i  drive;
+	pioDrive_i  backup_drive;
 	const char *base_path;
 	parray		*files;
 	bool		corrupted;
@@ -144,7 +144,7 @@ pgBackupValidate(pgBackup *backup, pgRestoreParams *params)
 	{
 		validate_files_arg *arg = &(threads_args[i]);
 
-		arg->drive = backup->backup_location;
+		arg->backup_drive = backup->backup_location;
 		arg->base_path = backup->database_dir;
 		arg->files = files;
 		arg->corrupted = false;
@@ -237,7 +237,7 @@ pgBackupValidateFiles(void *arg)
 	validate_files_arg *arguments = (validate_files_arg *)arg;
 	int			num_files = parray_num(arguments->files);
 	pg_crc32	crc;
-	pioDrive_i  drive = arguments->drive;
+	pioDrive_i  backup_drive = arguments->backup_drive;
 	err_i		err;
 
 	for (i = 0; i < num_files; i++)
@@ -308,7 +308,7 @@ pgBackupValidateFiles(void *arg)
 			join_path_components(file_fullpath, arguments->base_path, file->rel_path);
 
 		/* TODO: it is redundant to check file existence using stat */
-		st = $i(pioStat, drive, .path = file_fullpath, .follow_symlink = false,
+		st = $i(pioStat, backup_drive, .path = file_fullpath, .follow_symlink = false,
 				.err = &err);
 		if ($haserr(err))
 		{
@@ -353,12 +353,12 @@ pgBackupValidateFiles(void *arg)
 			if (arguments->backup_version >= 20025 &&
 				strcmp(file->rel_path, XLOG_CONTROL_FILE) == 0 &&
 				file->external_dir_num == 0)
-				crc = get_pgcontrol_checksum(arguments->base_path);
+				crc = get_pgcontrol_checksum(backup_drive, arguments->base_path);
 			else
 #if PG_VERSION_NUM >= 120000
 			{
 				ft_assert(arguments->backup_version >= 20025);
-				crc = $i(pioGetCRC32, drive, .path = file_fullpath,
+				crc = $i(pioGetCRC32, backup_drive, .path = file_fullpath,
 						 .err = &err);
 			}
 #else /* PG_VERSION_NUM < 120000 */

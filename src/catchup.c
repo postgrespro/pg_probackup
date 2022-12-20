@@ -26,8 +26,9 @@
 /*
  * Catchup routines
  */
-static PGconn *catchup_init_state(PGNodeInfo *source_node_info, const char *source_pgdata, const char *dest_pgdata);
-static void catchup_preflight_checks(PGNodeInfo *source_node_info, PGconn *source_conn, const char *source_pgdata, 
+static PGconn *catchup_init_state(pioDrive_i src_drive, PGNodeInfo *source_node_info, const char *source_pgdata, const char *dest_pgdata);
+static void catchup_preflight_checks(pioDrive_i source_drive, pioDrive_i dest_drive,
+									 PGNodeInfo *source_node_info, PGconn *source_conn, const char *source_pgdata,
 					const char *dest_pgdata);
 static void catchup_check_tablespaces_existance_in_tbsmapping(PGconn *conn);
 static parray* catchup_get_tli_history(ConnectionOptions *conn_opt, TimeLineID tli);
@@ -38,7 +39,7 @@ static parray* catchup_get_tli_history(ConnectionOptions *conn_opt, TimeLineID t
  * Prepare for work: fill some globals, open connection to source database
  */
 static PGconn *
-catchup_init_state(PGNodeInfo	*source_node_info, const char *source_pgdata, const char *dest_pgdata)
+catchup_init_state(pioDrive_i src_drive, PGNodeInfo *source_node_info, const char *source_pgdata, const char *dest_pgdata)
 {
 	PGconn		*source_conn;
 
@@ -46,8 +47,8 @@ catchup_init_state(PGNodeInfo	*source_node_info, const char *source_pgdata, cons
 	pgNodeInit(source_node_info);
 
 	/* Get WAL segments size and system ID of source PG instance */
-	instance_config.xlog_seg_size = get_xlog_seg_size(source_pgdata);
-	instance_config.system_identifier = get_system_identifier(FIO_DB_HOST, source_pgdata, false);
+	instance_config.xlog_seg_size = get_xlog_seg_size(src_drive, source_pgdata);
+	instance_config.system_identifier = get_system_identifier(src_drive, source_pgdata, false);
 	current.start_time = time(NULL);
 
 	strlcpy(current.program_version, PROGRAM_VERSION, sizeof(current.program_version));
@@ -83,7 +84,8 @@ catchup_init_state(PGNodeInfo	*source_node_info, const char *source_pgdata, cons
  * this function is for checks, that can be performed without modification of data on disk
  */
 static void
-catchup_preflight_checks(PGNodeInfo *source_node_info, PGconn *source_conn,
+catchup_preflight_checks(pioDrive_i source_drive, pioDrive_i dest_drive,
+						 PGNodeInfo *source_node_info, PGconn *source_conn,
 		const char *source_pgdata, const char *dest_pgdata)
 {
 	/*  TODO
@@ -156,7 +158,7 @@ catchup_preflight_checks(PGNodeInfo *source_node_info, PGconn *source_conn,
 		uint64	source_conn_id, source_id, dest_id;
 
 		source_conn_id = get_remote_system_identifier(source_conn);
-		source_id = get_system_identifier(FIO_DB_HOST, source_pgdata, false); /* same as instance_config.system_identifier */
+		source_id = get_system_identifier(source_drive, source_pgdata, false); /* same as instance_config.system_identifier */
 
 		if (source_conn_id != source_id)
 			elog(ERROR, "Database identifiers mismatch: we connected to DB id %llu, but in \"%s\" we found id %llu",
@@ -164,7 +166,7 @@ catchup_preflight_checks(PGNodeInfo *source_node_info, PGconn *source_conn,
 
 		if (current.backup_mode != BACKUP_MODE_FULL)
 		{
-			dest_id = get_system_identifier(FIO_LOCAL_HOST, dest_pgdata, false);
+			dest_id = get_system_identifier(dest_drive, dest_pgdata, false);
 			if (source_conn_id != dest_id)
 			elog(ERROR, "Database identifiers mismatch: we connected to DB id %llu, but in \"%s\" we found id %llu",
 				(long long)source_conn_id, dest_pgdata, (long long)dest_id);
@@ -192,7 +194,7 @@ catchup_preflight_checks(PGNodeInfo *source_node_info, PGconn *source_conn,
 		RedoParams	dest_redo = { 0, InvalidXLogRecPtr, 0 };
 
 		/* fill dest_redo.lsn and dest_redo.tli */
-		get_redo(FIO_LOCAL_HOST, dest_pgdata, &dest_redo);
+		get_redo(dest_drive, dest_pgdata, &dest_redo);
 		elog(LOG, "source.tli = %X, dest_redo.lsn = %X/%X, dest_redo.tli = %X",
 			current.tli, (uint32) (dest_redo.lsn >> 32), (uint32) dest_redo.lsn, dest_redo.tli);
 
@@ -363,6 +365,8 @@ typedef struct
 static void *
 catchup_thread_runner(void *arg)
 {
+	pioDrive_i  drive_from = pioDriveForLocation(FIO_DB_HOST);
+	pioDrive_i  drive_to = pioDriveForLocation(FIO_BACKUP_HOST);
 	int			i;
 	char		from_fullpath[MAXPGPATH];
 	char		to_fullpath[MAXPGPATH];
@@ -428,7 +432,8 @@ catchup_thread_runner(void *arg)
 		}
 		else
 		{
-			backup_non_data_file(file, dest_file, from_fullpath, to_fullpath,
+			backup_non_data_file(drive_from, drive_to,
+								 file, dest_file, from_fullpath, to_fullpath,
 								 arguments->backup_mode, current.parent_backup, true);
 		}
 
@@ -613,6 +618,7 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 	parray *exclude_absolute_paths_list, parray *exclude_relative_paths_list)
 {
 	pioDrive_i local_location = pioDriveForLocation(FIO_LOCAL_HOST);
+	pioDrive_i db_location = pioDriveForLocation(FIO_DB_HOST);
 	PGconn		*source_conn = NULL;
 	PGNodeInfo	source_node_info;
 	parray	*source_filelist = NULL;
@@ -634,8 +640,9 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 	err_i		err = $noerr();
 
 
-	source_conn = catchup_init_state(&source_node_info, source_pgdata, dest_pgdata);
-	catchup_preflight_checks(&source_node_info, source_conn, source_pgdata, dest_pgdata);
+	source_conn = catchup_init_state(db_location, &source_node_info, source_pgdata, dest_pgdata);
+	catchup_preflight_checks(db_location, local_location,
+			&source_node_info, source_conn, source_pgdata, dest_pgdata);
 
 	/* we need to sort --exclude_path's for future searching */
 	if (exclude_absolute_paths_list != NULL)
@@ -652,7 +659,7 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 		filter_filelist(dest_filelist, dest_pgdata, exclude_absolute_paths_list, exclude_relative_paths_list, "Destination");
 
 		// fill dest_redo.lsn and dest_redo.tli
-		get_redo(FIO_LOCAL_HOST, dest_pgdata, &dest_redo);
+		get_redo(local_location, dest_pgdata, &dest_redo);
 		elog(INFO, "syncLSN = %X/%X", (uint32) (dest_redo.lsn >> 32), (uint32) dest_redo.lsn);
 
 		/*
@@ -990,8 +997,8 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 		char	to_fullpath[MAXPGPATH];
 		join_path_components(from_fullpath, source_pgdata, source_pg_control_file->rel_path);
 		join_path_components(to_fullpath, dest_pgdata, source_pg_control_file->rel_path);
-		copy_pgcontrol_file(FIO_DB_HOST, from_fullpath,
-				FIO_LOCAL_HOST, to_fullpath, source_pg_control_file);
+		copy_pgcontrol_file(db_location, from_fullpath,
+				local_location, to_fullpath, source_pg_control_file);
 		transfered_datafiles_bytes += source_pg_control_file->size;
 	}
 
@@ -1084,7 +1091,8 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 	 * In case of backup from replica we must fix minRecPoint
 	 */
 	if (current.from_replica)
-		set_min_recovery_point(source_pg_control_file, dest_pgdata, current.stop_lsn);
+		set_min_recovery_point(db_location, local_location,
+							   source_pg_control_file, dest_pgdata, current.stop_lsn);
 
 	/* close ssh session in main thread */
 	fio_disconnect();

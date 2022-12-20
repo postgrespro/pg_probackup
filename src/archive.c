@@ -643,7 +643,7 @@ do_archive_get(InstanceState *instanceState, InstanceConfig *instance, const cha
 	num_threads = n_actual_threads;
 
 	elog(VERBOSE, "Obtaining XLOG_SEG_SIZE from pg_control file");
-	instance->xlog_seg_size = get_xlog_seg_size(current_dir);
+	instance->xlog_seg_size = get_xlog_seg_size(instanceState->database_location, current_dir);
 
 	/* Prefetch optimization kicks in only if simple XLOG segments is requested
 	 * and batching is enabled.
