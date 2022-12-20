@@ -1909,8 +1909,9 @@ copy_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
 BackupPageHeader2*
 get_data_file_headers(HeaderMap *hdr_map, pgFile *file, uint32 backup_version, bool strict)
 {
+	FOBJ_FUNC_ARP();
+	pioDrive_i drive = pioDriveForLocation(FIO_BACKUP_HOST);
 	bool     success = false;
-	FILE    *in = NULL;
 	size_t   read_len = 0;
 	pg_crc32 hdr_crc;
 	BackupPageHeader2 *headers = NULL;
@@ -1918,6 +1919,9 @@ get_data_file_headers(HeaderMap *hdr_map, pgFile *file, uint32 backup_version, b
 	int     z_len = 0;
 	char   *zheaders = NULL;
 	const char *errormsg = NULL;
+	pioReader_i	reader = {0};
+	size_t		rc;
+	err_i		err = $noerr();
 
 	if (backup_version < 20400)
 		return NULL;
@@ -1926,17 +1930,15 @@ get_data_file_headers(HeaderMap *hdr_map, pgFile *file, uint32 backup_version, b
 		return NULL;
 
 	/* TODO: consider to make this descriptor thread-specific */
-	in = fopen(hdr_map->path, PG_BINARY_R);
-
-	if (!in)
+	reader = $i(pioOpenRead, drive, .path = hdr_map->path, &err);
+	if ($haserr(err))
 	{
 		elog(strict ? ERROR : WARNING, "Cannot open header file \"%s\": %s", hdr_map->path, strerror(errno));
 		return NULL;
 	}
-	/* disable buffering for header file */
-	setvbuf(in, NULL, _IONBF, 0);
 
-	if (fseeko(in, file->hdr_off, SEEK_SET))
+	err = $i(pioSeek, reader, file->hdr_off);
+	if ($haserr(err))
 	{
 		elog(strict ? ERROR : WARNING, "Cannot seek to position %llu in page header map \"%s\": %s",
 			file->hdr_off, hdr_map->path, strerror(errno));
@@ -1953,7 +1955,8 @@ get_data_file_headers(HeaderMap *hdr_map, pgFile *file, uint32 backup_version, b
 	zheaders = pgut_malloc(file->hdr_size);
 	memset(zheaders, 0, file->hdr_size);
 
-	if (fread(zheaders, 1, file->hdr_size, in) != file->hdr_size)
+	rc = $i(pioRead, reader, .buf = ft_bytes(zheaders, file->hdr_size), .err = &err);
+	if ($haserr(err) || rc != file->hdr_size)
 	{
 		elog(strict ? ERROR : WARNING, "Cannot read header file at offset: %llu len: %i \"%s\": %s",
 			file->hdr_off, file->hdr_size, hdr_map->path, strerror(errno));
@@ -1996,8 +1999,12 @@ get_data_file_headers(HeaderMap *hdr_map, pgFile *file, uint32 backup_version, b
 cleanup:
 
 	pg_free(zheaders);
-	if (in && fclose(in))
-		elog(ERROR, "Cannot close file \"%s\"", hdr_map->path);
+	if ($notNULL(reader))
+	{
+		err = $i(pioClose,reader);
+		if ($haserr(err))
+			elog(ERROR, "Cannot close file \"%s\"", hdr_map->path);
+	}
 
 	if (!success)
 	{
@@ -2014,7 +2021,7 @@ void
 write_page_headers(BackupPageHeader2 *headers, pgFile *file, HeaderMap *hdr_map, bool is_merge)
 {
 	FOBJ_FUNC_ARP();
-	pioDBDrive_i	drive = pioDBDriveForLocation(FIO_BACKUP_HOST);
+	pioDrive_i	drive = pioDriveForLocation(FIO_BACKUP_HOST);
 	err_i	err = $noerr();
 	size_t  read_len = 0;
 	/* header compression */
