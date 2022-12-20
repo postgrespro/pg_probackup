@@ -41,6 +41,8 @@ OBJS += src/archive.o src/backup.o src/catalog.o src/checkdb.o src/configure.o s
 OBJS += src/compatibility/file_compat.o src/compatibility/receivelog.o \
 	src/compatibility/streamutil.o \
 	src/compatibility/walmethods.o src/compatibility/file_compat10.o
+# artificial file for `main` function
+OBJS += src/main.o
 
 # sources borrowed from postgresql (paths are relative to pg top dir)
 BORROWED_H_SRC := 

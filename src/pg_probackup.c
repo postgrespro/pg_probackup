@@ -287,7 +287,7 @@ static ConfigOption cmd_options[] =
  * Entry point of pg_probackup command.
  */
 int
-main(int argc, char *argv[])
+pbk_main(int argc, char *argv[])
 {
 	char	   *command = NULL;
 	ProbackupSubcmd backup_subcmd = NO_CMD;

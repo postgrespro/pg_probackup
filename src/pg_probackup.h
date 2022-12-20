@@ -10,6 +10,9 @@
 #ifndef PG_PROBACKUP_H
 #define PG_PROBACKUP_H
 
+/* real main */
+extern int pbk_main(int argc, char** argv);
+
 #include <fo_obj.h>
 
 #include "postgres_fe.h"
