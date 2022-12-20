@@ -296,6 +296,8 @@ lock_backup(pgBackup *backup, bool strict, bool exclusive)
 int
 grab_excl_lock_file(const char *root_dir, const char *backup_id, bool strict)
 {
+	FOBJ_FUNC_ARP();
+	pioDrive_i	drive = pioDriveForLocation(FIO_BACKUP_HOST);
 	char		lock_file[MAXPGPATH];
 	FILE	   *fp = NULL;
 	char		buffer[256];
@@ -308,6 +310,12 @@ grab_excl_lock_file(const char *root_dir, const char *backup_id, bool strict)
 		GELF_FAILED_WRITE = 1,
 		GELF_FAILED_CLOSE = 2,
 	} failed_action = 0;
+
+	if ($i(pioIsRemote, drive))
+	{
+		elog(INFO, "Skipping exclusive lock on remote drive");
+		return LOCK_OK;
+	}
 
 	join_path_components(lock_file, root_dir, BACKUP_LOCK_FILE);
 
@@ -659,9 +667,17 @@ read_shared_lock_file(const char *lock_file)
 static void
 write_shared_lock_file(const char *lock_file, ft_arr_pid_t pids)
 {
+	FOBJ_FUNC_ARP();
+	pioDrive_i	drive = pioDriveForLocation(FIO_BACKUP_HOST);
 	FILE   *fp_out = NULL;
 	char	lock_file_tmp[MAXPGPATH];
 	ssize_t	i;
+
+	if ($i(pioIsRemote, drive))
+	{
+		elog(INFO, "Skipping write lock on remote drive");
+		return;
+	}
 
 	snprintf(lock_file_tmp, MAXPGPATH, "%s%s", lock_file, "tmp");
 
