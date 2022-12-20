@@ -324,6 +324,11 @@ fobj_iface(pioDBDrive);
 extern pioDrive_i pioDriveForLocation(fio_location location);
 extern pioDBDrive_i pioDBDriveForLocation(fio_location location);
 
+extern pg_crc32
+pio_helper_pioGetCRC32(pioOpenReadStream_i self, path_t path,
+					   bool compressed, bool truncated, err_i *err);
+
+
 struct doIteratePages_params {
 	path_t from_fullpath;
 	pgFile *file;

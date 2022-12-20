@@ -2379,22 +2379,20 @@ pioLocalDrive_pioRename(VSelf, path_t old_path, path_t new_path)
     return $noerr();
 }
 
-static pg_crc32
-pioLocalDrive_pioGetCRC32(VSelf, path_t path,
-						  bool compressed, bool truncated,
-						  err_i *err)
+pg_crc32
+pio_helper_pioGetCRC32(pioOpenReadStream_i self, path_t path,
+				       bool compressed, bool truncated, err_i *err)
 {
 	FOBJ_FUNC_ARP();
-	Self(pioLocalDrive);
-    fobj_reset_err(err);
+	fobj_reset_err(err);
 	pioReadStream_i  file;
 	pioRead_i        read;
 	pioCRC32Counter* crc;
 
-	elog(VERBOSE, "Local Drive calculate crc32 for '%s', compressed=%d, truncated=%d",
+	elog(VERBOSE, "Calculate crc32 for '%s', compressed=%d, truncated=%d",
 		 path, compressed, truncated);
 
-	file = $(pioOpenReadStream, self, .path = path, .err = err);
+	file = $i(pioOpenReadStream, self, .path = path, .err = err);
 	if ($haserr(*err))
 	{
 		$iresult(*err);
@@ -2415,6 +2413,16 @@ pioLocalDrive_pioGetCRC32(VSelf, path_t path,
 	$i(pioClose, file); // ignore error
 
 	return pioCRC32Counter_getCRC32(crc);
+}
+
+static pg_crc32
+pioLocalDrive_pioGetCRC32(VSelf, path_t path,
+						  bool compressed, bool truncated,
+						  err_i *err)
+{
+	Self(pioLocalDrive);
+	return pio_helper_pioGetCRC32($bind(pioOpenReadStream, self),
+								  path, compressed, truncated, err);
 }
 
 static bool
