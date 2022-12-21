@@ -101,7 +101,7 @@ def is_enterprise():
     )
     return b'postgrespro.ru' in p.communicate()[0]
 
- 
+
 def is_nls_enabled():
     cmd = [os.environ['PG_CONFIG'], '--configure']
 
@@ -536,7 +536,7 @@ class ProbackupTest(object):
                 node, {}, 'postgresql.conf', ['wal_keep_segments'])
 
         return node
-    
+
     def simple_bootstrap(self, node, role) -> None:
 
         node.safe_psql(
@@ -935,6 +935,9 @@ class ProbackupTest(object):
                 )
 
     def run_pb(self, command, asynchronous=False, gdb=False, old_binary=False, return_id=True, env=None):
+        s3_type = os.environ['PROBACKUP_S3_TYPE_FULL_TEST']
+        if s3_type:
+            command.append(f"s3={s3_type}")
         if not self.probackup_old_path and old_binary:
             print('PGPROBACKUPBIN_OLD is not set')
             exit(1)
