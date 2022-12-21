@@ -71,7 +71,8 @@ static PQExpBufferData show_buf;
 static bool first_instance = true;
 static int32 json_level = 0;
 
-static const char* lc_env_locale;
+static const char* lc_env_locale_numeric;
+static const char* lc_env_locale_time;
 typedef enum {
 	LOCALE_C,	// Used for formatting output to unify the dot-based floating point representation
 	LOCALE_ENV	// Default environment locale
@@ -81,11 +82,14 @@ typedef enum {
 static locale_t env_locale, c_locale;
 #endif
 void memorize_environment_locale() {
-	lc_env_locale = (const char *)getenv("LC_NUMERIC");
-	lc_env_locale = lc_env_locale != NULL ? lc_env_locale : "C";
+	lc_env_locale_numeric = (const char *)getenv("LC_NUMERIC");
+	lc_env_locale_numeric = lc_env_locale_numeric != NULL ? lc_env_locale_numeric : "C";
+	lc_env_locale_time = (const char *)getenv("LC_TIME");
+	lc_env_locale_time = lc_env_locale_time != NULL ? lc_env_locale_time : "C";
 #ifdef HAVE_USELOCALE
-	env_locale = newlocale(LC_NUMERIC_MASK, lc_env_locale, (locale_t)0);
-	c_locale = newlocale(LC_NUMERIC_MASK, "C", (locale_t)0);
+	env_locale = newlocale(LC_NUMERIC_MASK, lc_env_locale_numeric, (locale_t)0);
+	env_locale = newlocale(LC_TIME_MASK, lc_env_locale_time, env_locale);
+	c_locale = newlocale(LC_NUMERIC_MASK|LC_TIME_MASK, "C", (locale_t)0);
 #else
 #ifdef HAVE__CONFIGTHREADLOCALE
 	_configthreadlocale(_ENABLE_PER_THREAD_LOCALE);
@@ -104,7 +108,8 @@ static void set_output_numeric_locale(output_numeric_locale loc) {
 #ifdef HAVE_USELOCALE
 	uselocale(loc == LOCALE_C ? c_locale : env_locale);
 #else
-	setlocale(LC_NUMERIC, loc == LOCALE_C ? "C" : lc_env_locale);
+	setlocale(LC_NUMERIC, loc == LOCALE_C ? "C" : lc_env_locale_numeric);
+	setlocale(LC_TIME, loc == LOCALE_C ? "C" : lc_env_locale_time);
 #endif
 }
 
