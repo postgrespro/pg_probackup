@@ -317,6 +317,7 @@ pbk_main(int argc, char *argv[])
 	// Setting C locale for numeric values in order to impose dot-based floating-point representation
 	memorize_environment_locale();
 	setlocale(LC_NUMERIC, "C");
+	setlocale(LC_TIME, "C");
 
 	/* Get current time */
 	current_time = time(NULL);
