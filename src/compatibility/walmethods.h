@@ -38,7 +38,7 @@ struct WalWriteMethod
 	 * automatically renamed in close(). If pad_to_size is specified, the file
 	 * will be padded with NUL up to that size, if supported by the Walmethod.
 	 */
-	Walfile		(*open_for_write) (const char *pathname, const char *temp_suffix, size_t pad_to_size);
+	Walfile		(*open_for_write) (const char *pathname);
 
 	/*
 	 * Close an open Walfile, using one or more methods for handling automatic
@@ -56,7 +56,7 @@ struct WalWriteMethod
 	 * Return the name of the current file to work on in pg_malloc()'d string,
 	 * without the base directory.  This is useful for logging.
 	 */
-	char	   *(*get_file_name) (const char *pathname, const char *temp_suffix);
+	char	   *(*get_file_name) (const char *pathname);
 
 	/* Return the level of compression */
 	int			(*compression) (void);
@@ -95,7 +95,7 @@ struct WalWriteMethod
  *						   not all those required for pg_receivewal)
  */
 WalWriteMethod *CreateWalDirectoryMethod(const char *basedir,
-										 int compression, bool sync);
+										 int compression, bool sync, pioDrive_i drive);
 
 /* Cleanup routines for previously-created methods */
 void		FreeWalDirectoryMethod(void);

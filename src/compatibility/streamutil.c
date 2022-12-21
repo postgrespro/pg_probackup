@@ -12,6 +12,7 @@
  *-------------------------------------------------------------------------
  */
 
+#include "pg_probackup.h"
 #include "postgres_fe.h"
 
 #include <sys/time.h>

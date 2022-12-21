@@ -33,10 +33,6 @@ typedef struct StreamCtl
 	char	   *sysidentifier;	/* Validate this system identifier and
 								 * timeline */
 	int			standby_message_timeout;	/* Send status messages this often */
-	bool		synchronous;	/* Flush immediately WAL data on write */
-	bool		mark_done;		/* Mark segment as done in generated archive */
-	bool		do_sync;		/* Flush to disk to ensure consistent state of
-								 * data */
 
 	stream_stop_callback stream_stop;	/* Stop streaming when returns true */
 
@@ -44,7 +40,6 @@ typedef struct StreamCtl
 								 * and check stream_stop() when there is any */
 
 	WalWriteMethod *walmethod;	/* How to write the WAL */
-	char	   *partial_suffix; /* Suffix appended to partially received files */
 	char	   *replication_slot;	/* Replication slot to use, or NULL */
 } StreamCtl;
 

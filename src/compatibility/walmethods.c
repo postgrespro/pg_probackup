@@ -52,6 +52,7 @@ typedef struct DirectoryMethodData
 	bool		sync;
 	const char *lasterrstring;	/* if set, takes precedence over lasterrno */
 	int			lasterrno;
+	pioDrive_i drive;
 } DirectoryMethodData;
 static DirectoryMethodData *dir_data = NULL;
 
@@ -60,11 +61,11 @@ static DirectoryMethodData *dir_data = NULL;
  */
 typedef struct DirectoryMethodFile
 {
-	int			fd;
+	pioWriteCloser_i fd;
 	off_t		currpos;
 	char	   *pathname;
 	char	   *fullpath;
-	char	   *temp_suffix;
+	//char	   *temp_suffix;/* todo: remove temp_suffix - S3 not support rename, pioOpenRewrite ust temp files fot local file operations */
 #ifdef HAVE_LIBZ
 	gzFile		gzfp;
 #endif
@@ -84,31 +85,33 @@ dir_getlasterror(void)
 }
 
 static char *
-dir_get_file_name(const char *pathname, const char *temp_suffix)
+dir_get_file_name(const char *pathname)
 {
 	char	   *filename = pg_malloc0(MAXPGPATH * sizeof(char));
 
-	snprintf(filename, MAXPGPATH, "%s%s%s",
-			 pathname, dir_data->compression > 0 ? ".gz" : "",
-			 temp_suffix ? temp_suffix : "");
+	snprintf(filename, MAXPGPATH, "%s%s",
+			 pathname, dir_data->compression > 0 ? ".gz" : "");
 
 	return filename;
 }
 
 static Walfile
-dir_open_for_write(const char *pathname, const char *temp_suffix, size_t pad_to_size)
+dir_open_for_write(const char *pathname)
 {
+	FOBJ_FUNC_ARP();
 	char		tmppath[MAXPGPATH];
 	char	   *filename;
-	int			fd;
+	pioWriteCloser_i	fd;
 	DirectoryMethodFile *f;
+	err_i err = $noerr();
+
 #ifdef HAVE_LIBZ
 	gzFile		gzfp = NULL;
 #endif
 
 	dir_clear_error();
 
-	filename = dir_get_file_name(pathname, temp_suffix);
+	filename = dir_get_file_name(pathname);
 	snprintf(tmppath, sizeof(tmppath), "%s/%s",
 			 dir_data->basedir, filename);
 	pg_free(filename);
@@ -119,16 +122,17 @@ dir_open_for_write(const char *pathname, const char *temp_suffix, size_t pad_to_
 	 * does not do any system calls to fsync() to make changes permanent on
 	 * disk.
 	 */
-	fd = open(tmppath, O_WRONLY | O_CREAT | PG_BINARY, pg_file_create_mode);
-	if (fd < 0)
+	fd = $i(pioOpenRewrite, dir_data->drive, tmppath, O_WRONLY | O_CREAT | PG_BINARY, .err = &err);
+	if ($haserr(err))
 	{
-		dir_data->lasterrno = errno;
+		dir_data->lasterrno = getErrno(err);
 		return NULL;
 	}
 
 #ifdef HAVE_LIBZ
 	if (dir_data->compression > 0)
 	{
+		/* vvs
 		gzfp = gzdopen(fd, "wb");
 		if (gzfp == NULL)
 		{
@@ -144,35 +148,9 @@ dir_open_for_write(const char *pathname, const char *temp_suffix, size_t pad_to_
 			gzclose(gzfp);
 			return NULL;
 		}
+		*/
 	}
 #endif
-
-	/* Do pre-padding on non-compressed files */
-	if (pad_to_size && dir_data->compression == 0)
-	{
-		PGAlignedXLogBlock zerobuf;
-		int			bytes;
-
-		memset(zerobuf.data, 0, XLOG_BLCKSZ);
-		for (bytes = 0; bytes < pad_to_size; bytes += XLOG_BLCKSZ)
-		{
-			errno = 0;
-			if (write(fd, zerobuf.data, XLOG_BLCKSZ) != XLOG_BLCKSZ)
-			{
-				/* If write didn't set errno, assume problem is no disk space */
-				dir_data->lasterrno = errno ? errno : ENOSPC;
-				close(fd);
-				return NULL;
-			}
-		}
-
-		if (lseek(fd, 0, SEEK_SET) != 0)
-		{
-			dir_data->lasterrno = errno;
-			close(fd);
-			return NULL;
-		}
-	}
 
 	/*
 	 * fsync WAL file and containing directory, to ensure the file is
@@ -182,6 +160,15 @@ dir_open_for_write(const char *pathname, const char *temp_suffix, size_t pad_to_
 	 */
 	if (dir_data->sync)
 	{
+		err = $i(pioWriteFinish, fd);
+
+        if ($haserr(err))
+        {
+			dir_data->lasterrno =getErrno(err);
+            $i(pioClose, fd);
+            return NULL;
+        }
+		/* vvs
 		if (fsync_fname_compat(tmppath, false) != 0 ||
 			fsync_parent_path_compat(tmppath) != 0)
 		{
@@ -194,6 +181,7 @@ dir_open_for_write(const char *pathname, const char *temp_suffix, size_t pad_to_
 				close(fd);
 			return NULL;
 		}
+		*/
 	}
 
 	f = pg_malloc0(sizeof(DirectoryMethodFile));
@@ -205,8 +193,6 @@ dir_open_for_write(const char *pathname, const char *temp_suffix, size_t pad_to_
 	f->currpos = 0;
 	f->pathname = pg_strdup(pathname);
 	f->fullpath = pg_strdup(tmppath);
-	if (temp_suffix)
-		f->temp_suffix = pg_strdup(temp_suffix);
 
 	return f;
 }
@@ -214,33 +200,40 @@ dir_open_for_write(const char *pathname, const char *temp_suffix, size_t pad_to_
 static ssize_t
 dir_write(Walfile f, const void *buf, size_t count)
 {
-	ssize_t		r;
+	FOBJ_FUNC_ARP();
+	ssize_t		r = 0;
 	DirectoryMethodFile *df = (DirectoryMethodFile *) f;
 
 	Assert(f != NULL);
 	dir_clear_error();
 
+	ft_bytes_t fBuf;
+	err_i err = $noerr();
 #ifdef HAVE_LIBZ
 	if (dir_data->compression > 0)
 	{
+		/* vvs
 		errno = 0;
 		r = (ssize_t) gzwrite(df->gzfp, buf, count);
 		if (r != count)
 		{
-			/* If write didn't set errno, assume problem is no disk space */
 			dir_data->lasterrno = errno ? errno : ENOSPC;
 		}
+		*/
 	}
 	else
 #endif
 	{
 		errno = 0;
-		r = write(df->fd, buf, count);
-		if (r != count)
+		fBuf = ft_bytes((void *)buf, count);
+		err = $i(pioWrite, df->fd, fBuf);
+		if ($haserr(err))
 		{
-			/* If write didn't set errno, assume problem is no disk space */
-			dir_data->lasterrno = errno ? errno : ENOSPC;
+			dir_data->lasterrno = getErrno(err) ? getErrno(err) : ENOSPC;
 		}
+		else r = count;
+
+
 	}
 	if (r > 0)
 		df->currpos += r;
@@ -260,10 +253,11 @@ dir_get_current_pos(Walfile f)
 static int
 dir_close(Walfile f, WalCloseMethod method)
 {
-	int			r;
+	int			r = 0;
 	DirectoryMethodFile *df = (DirectoryMethodFile *) f;
 	char		tmppath[MAXPGPATH];
 	char		tmppath2[MAXPGPATH];
+	err_i err = $noerr();
 
 	Assert(f != NULL);
 	dir_clear_error();
@@ -276,66 +270,31 @@ dir_close(Walfile f, WalCloseMethod method)
 	}
 	else
 #endif
-		r = close(df->fd);
-
-	if (r == 0)
+		err = $i(pioClose, df->fd, dir_data->sync);
+	if ($haserr(err))
 	{
-		/* Build path to the current version of the file */
-		if (method == CLOSE_NORMAL && df->temp_suffix)
-		{
-			char	   *filename;
-			char	   *filename2;
+		dir_data->lasterrno = getErrno(err);
+		r = -1;
+	}
+	else if (method == CLOSE_UNLINK)
+	{
+		char *filename;
 
-			/*
-			 * If we have a temp prefix, normal operation is to rename the
-			 * file.
-			 */
-			filename = dir_get_file_name(df->pathname, df->temp_suffix);
-			snprintf(tmppath, sizeof(tmppath), "%s/%s",
-					 dir_data->basedir, filename);
-			pg_free(filename);
-
-			/* permanent name, so no need for the prefix */
-			filename2 = dir_get_file_name(df->pathname, NULL);
-			snprintf(tmppath2, sizeof(tmppath2), "%s/%s",
-					 dir_data->basedir, filename2);
-			pg_free(filename2);
-			r = durable_rename_compat(tmppath, tmppath2);
-		}
-		else if (method == CLOSE_UNLINK)
-		{
-			char	   *filename;
-
-			/* Unlink the file once it's closed */
-			filename = dir_get_file_name(df->pathname, df->temp_suffix);
-			snprintf(tmppath, sizeof(tmppath), "%s/%s",
-					 dir_data->basedir, filename);
-			pg_free(filename);
-			r = unlink(tmppath);
-		}
-		else
-		{
-			/*
-			 * Else either CLOSE_NORMAL and no temp suffix, or
-			 * CLOSE_NO_RENAME. In this case, fsync the file and containing
-			 * directory if sync mode is requested.
-			 */
-			if (dir_data->sync)
-			{
-				r = fsync_fname_compat(df->fullpath, false);
-				if (r == 0)
-					r = fsync_parent_path_compat(df->fullpath);
-			}
-		}
+		/* Unlink the file once it's closed */
+		filename = dir_get_file_name(df->pathname);
+		snprintf(tmppath, sizeof(tmppath), "%s/%s",
+				 dir_data->basedir, filename);
+		pg_free(filename);
+		err = $i(pioRemove, dir_data->drive, tmppath);
 	}
 
-	if (r != 0)
-		dir_data->lasterrno = errno;
+	if ($haserr(err)){
+		dir_data->lasterrno = getErrno(err);
+		r = -1;
+	}
 
 	pg_free(df->pathname);
 	pg_free(df->fullpath);
-	if (df->temp_suffix)
-		pg_free(df->temp_suffix);
 	pg_free(df);
 
 	return r;
@@ -344,8 +303,7 @@ dir_close(Walfile f, WalCloseMethod method)
 static int
 dir_sync(Walfile f)
 {
-	int			r;
-
+	err_i err = $noerr();
 	Assert(f != NULL);
 	dir_clear_error();
 
@@ -363,28 +321,33 @@ dir_sync(Walfile f)
 	}
 #endif
 
-	r = fsync(((DirectoryMethodFile *) f)->fd);
-	if (r < 0)
-		dir_data->lasterrno = errno;
-	return r;
+	err = $i(pioWriteFinish, ((DirectoryMethodFile *) f)->fd);
+	if ($haserr(err))
+	{
+		dir_data->lasterrno = getErrno(err);
+		return -1;
+	}
+	return 0;
 }
 
 static ssize_t
 dir_get_file_size(const char *pathname)
 {
-	struct stat statbuf;
+	pio_stat_t statbuf;
 	char		tmppath[MAXPGPATH];
+	err_i err = $noerr();
 
 	snprintf(tmppath, sizeof(tmppath), "%s/%s",
 			 dir_data->basedir, pathname);
 
-	if (stat(tmppath, &statbuf) != 0)
+	statbuf = $i(pioStat, dir_data->drive, .err = &err);
+	if ($haserr(err))
 	{
-		dir_data->lasterrno = errno;
+		dir_data->lasterrno = getErrno(err);
 		return -1;
 	}
 
-	return statbuf.st_size;
+	return statbuf.pst_size;
 }
 
 static int
@@ -397,18 +360,23 @@ static bool
 dir_existsfile(const char *pathname)
 {
 	char		tmppath[MAXPGPATH];
-	int			fd;
+	bool ret;
+
+	err_i err = $noerr();
 
 	dir_clear_error();
 
 	snprintf(tmppath, sizeof(tmppath), "%s/%s",
 			 dir_data->basedir, pathname);
 
-	fd = open(tmppath, O_RDONLY | PG_BINARY, 0);
-	if (fd < 0)
-		return false;
-	close(fd);
-	return true;
+	ret = $i(pioExists, dir_data->drive, .path = tmppath, .err = &err);
+	if ($haserr(err))
+	{
+		dir_data->lasterrno = getErrno(err);
+	}
+
+	return ret;
+
 }
 
 static bool
@@ -422,18 +390,20 @@ dir_finish(void)
 		 * Files are fsynced when they are closed, but we need to fsync the
 		 * directory entry here as well.
 		 */
+		/* vvs temp
 		if (fsync_fname_compat(dir_data->basedir, true) != 0)
 		{
 			dir_data->lasterrno = errno;
 			return false;
 		}
+		*/
 	}
 	return true;
 }
 
 
 WalWriteMethod *
-CreateWalDirectoryMethod(const char *basedir, int compression, bool sync)
+CreateWalDirectoryMethod(const char *basedir, int compression, bool sync, pioDrive_i drive)
 {
 	WalWriteMethod *method;
 
@@ -454,6 +424,7 @@ CreateWalDirectoryMethod(const char *basedir, int compression, bool sync)
 	dir_data->compression = compression;
 	dir_data->basedir = pg_strdup(basedir);
 	dir_data->sync = sync;
+	dir_data->drive = drive;
 
 	return method;
 }

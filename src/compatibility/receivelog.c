@@ -74,7 +74,7 @@ mark_file_as_archived(StreamCtl *stream, const char *fname)
 	snprintf(tmppath, sizeof(tmppath), "archive_status/%s.done",
 			 fname);
 
-	f = stream->walmethod->open_for_write(tmppath, NULL, 0);
+	f = stream->walmethod->open_for_write(tmppath);
 	if (f == NULL)
 	{
 		elog(ERROR, "could not create archive status file \"%s\": %s",
@@ -113,8 +113,7 @@ open_walfile(StreamCtl *stream, XLogRecPtr startpoint)
 	XLogFileName(current_walfile_name, stream->timeline, segno, WalSegSz);
 
 	/* Note that this considers the compression used if necessary */
-	fn = stream->walmethod->get_file_name(current_walfile_name,
-										  stream->partial_suffix);
+	fn = stream->walmethod->get_file_name(current_walfile_name);
 
 	/*
 	 * When streaming to files, if an existing file exists we verify that it's
@@ -140,7 +139,7 @@ open_walfile(StreamCtl *stream, XLogRecPtr startpoint)
 		if (size == WalSegSz)
 		{
 			/* Already padded file. Open it for use */
-			f = stream->walmethod->open_for_write(current_walfile_name, stream->partial_suffix, 0);
+			f = stream->walmethod->open_for_write(current_walfile_name);
 			if (f == NULL)
 			{
 				elog(ERROR, "could not open existing write-ahead log file \"%s\": %s",
@@ -153,7 +152,7 @@ open_walfile(StreamCtl *stream, XLogRecPtr startpoint)
 			if (stream->walmethod->sync(f) != 0)
 			{
 				elog(ERROR, "could not fsync existing write-ahead log file \"%s\": %s",
-							 fn, stream->walmethod->getlasterror());//FATAL
+							 fn, stream->walmethod->getlasterror());
 				stream->walmethod->close(f, CLOSE_UNLINK);
 				exit(1);
 			}
@@ -179,8 +178,7 @@ open_walfile(StreamCtl *stream, XLogRecPtr startpoint)
 
 	/* No file existed, so create one */
 
-	f = stream->walmethod->open_for_write(current_walfile_name,
-										  stream->partial_suffix, WalSegSz);
+	f = stream->walmethod->open_for_write(current_walfile_name);
 	if (f == NULL)
 	{
 		elog(ERROR, "could not open write-ahead log file \"%s\": %s",
@@ -218,20 +216,32 @@ close_walfile(StreamCtl *stream, XLogRecPtr pos)
 
 		return false;
 	}
-
-	if (stream->partial_suffix)
+	/*
+	 * Pad file to WalSegSz size by zero bytes
+	*/
+	if (currpos < WalSegSz)
 	{
-		if (currpos == WalSegSz)
-			r = stream->walmethod->close(walfile, CLOSE_NORMAL);
-		else
+		char *tempbuf = pgut_malloc0(XLOG_BLCKSZ);
+		int needWrite = WalSegSz - currpos;
+		int cnt;
+		while (needWrite > 0)
 		{
-			elog(INFO, "not renaming \"%s%s\", segment is not complete",
-						current_walfile_name, stream->partial_suffix);
-			r = stream->walmethod->close(walfile, CLOSE_NO_RENAME);
+
+			cnt = needWrite > XLOG_BLCKSZ ? XLOG_BLCKSZ : needWrite;
+			if (stream->walmethod->write(walfile, tempbuf, cnt) != cnt)
+			{
+				elog(ERROR, "failed to append file \"%s\": %s",
+					 current_walfile_name, stream->walmethod->getlasterror());
+				stream->walmethod->close(walfile, CLOSE_NORMAL);
+				walfile = NULL;
+				pgut_free(tempbuf);
+				return false;
+			}
+			needWrite -= cnt;
 		}
+		pgut_free(tempbuf);
 	}
-	else
-		r = stream->walmethod->close(walfile, CLOSE_NORMAL);
+	r = stream->walmethod->close(walfile, CLOSE_NORMAL);
 
 	walfile = NULL;
 
@@ -240,19 +250,6 @@ close_walfile(StreamCtl *stream, XLogRecPtr pos)
 		elog(ERROR, "could not close file \"%s\": %s",
 					 current_walfile_name, stream->walmethod->getlasterror());
 		return false;
-	}
-
-	/*
-	 * Mark file as archived if requested by the caller - pg_basebackup needs
-	 * to do so as files can otherwise get archived again after promotion of a
-	 * new node. This is in line with walreceiver.c always doing a
-	 * XLogArchiveForceDone() after a complete segment.
-	 */
-	if (currpos == WalSegSz && stream->mark_done)
-	{
-		/* writes error message if failed */
-		if (!mark_file_as_archived(stream, current_walfile_name))
-			return false;
 	}
 
 	lastFlushPosition = pos;
@@ -299,7 +296,7 @@ writeTimeLineHistoryFile(StreamCtl *stream, char *filename, char *content)
 		return false;
 	}
 
-	f = stream->walmethod->open_for_write(histfname, ".tmp", 0);
+	f = stream->walmethod->open_for_write(histfname);
 	if (f == NULL)
 	{
 		pg_log_error("could not create timeline history file \"%s\": %s",
@@ -325,14 +322,6 @@ writeTimeLineHistoryFile(StreamCtl *stream, char *filename, char *content)
 		pg_log_error("could not close file \"%s\": %s",
 					 histfname, stream->walmethod->getlasterror());
 		return false;
-	}
-
-	/* Maintain archive_status, check close_walfile() for details. */
-	if (stream->mark_done)
-	{
-		/* writes error message if failed */
-		if (!mark_file_as_archived(stream, histfname))
-			return false;
 	}
 
 	return true;
@@ -490,10 +479,6 @@ ReceiveXlogStream(PGconn *conn, StreamCtl *stream)
 	}
 	else
 	{
-		if (stream->synchronous)
-			reportFlushPosition = true;
-		else
-			reportFlushPosition = false;
 		slotcmd[0] = 0;
 	}
 
@@ -776,29 +761,6 @@ HandleCopyStream(PGconn *conn, StreamCtl *stream,
 			goto error;
 
 		now = feGetCurrentTimestamp();
-
-		/*
-		 * If synchronous option is true, issue sync command as soon as there
-		 * are WAL data which has not been flushed yet.
-		 */
-		if (stream->synchronous && lastFlushPosition < blockpos && walfile != NULL)
-		{
-			if (stream->walmethod->sync(walfile) != 0)
-			{
-				pg_log_fatal("could not fsync file \"%s\": %s",
-							 current_walfile_name, stream->walmethod->getlasterror());
-				exit(1);
-			}
-			lastFlushPosition = blockpos;
-
-			/*
-			 * Send feedback so that the server sees the latest WAL locations
-			 * immediately.
-			 */
-			if (!sendFeedback(conn, blockpos, now, false))
-				goto error;
-			last_status = now;
-		}
 
 		/*
 		 * Potentially send a status message to the primary
