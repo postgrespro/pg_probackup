@@ -961,11 +961,7 @@ pbk_main(int argc, char *argv[])
 						   wal_file_path, wal_file_name, batch_size, !no_validate_wal);
 			break;
 		case ADD_INSTANCE_CMD:
-		{
-			int err = 0;
-			err = do_add_instance(instanceState, &instance_config);
-			return err;
-		}
+			return do_add_instance(instanceState, &instance_config);
 		case DELETE_INSTANCE_CMD:
 			return do_delete_instance(instanceState);
 		case INIT_CMD:
