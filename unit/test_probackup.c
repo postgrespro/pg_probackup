@@ -43,7 +43,7 @@ test_do_add_instance()
 	init_config(&instance_config, instance_name);
 	instance_config.pgdata = server_path.ptr;
 	InstanceState *instanceState = makeInstanceState(catalogState, instance_name);
-	instanceState->database_location = drive;
+	instanceState->database_location = $reduce(pioDrive, dbdrive);
 	rc = do_add_instance(instanceState, &instance_config);
 	CU_ASSERT(rc == 0);
 
