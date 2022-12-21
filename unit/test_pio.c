@@ -381,9 +381,7 @@ test_pioListDirMTimeAndSize()
 
 		if (entry.stat.pst_kind == PIO_KIND_UNKNOWN) break;
 
-		printf("XXX mtime=%ld, size=%ld created=%ld diff=%d\n", entry.stat.pst_mtime, entry.stat.pst_size, created, (int)created-(int)entry.stat.pst_mtime);
 		CU_ASSERT(entry.stat.pst_mtime == created);
-		//CU_ASSERT(entry.stat.pst_mtime == (created+3600*3));
 		CU_ASSERT(entry.stat.pst_size == strlen(TEST_STR));
 
 		for(i = 0; i < NUM_EXPECTED; ++i)
