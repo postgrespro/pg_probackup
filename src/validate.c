@@ -363,10 +363,10 @@ pgBackupValidateFiles(void *arg)
 			}
 #else /* PG_VERSION_NUM < 120000 */
 				if (arguments->backup_version <= 20021 || arguments->backup_version >= 20025)
-					crc = $i(pioGetCRC32, drive, .path = file_fullpath, .err = &err);
+					crc = $i(pioGetCRC32, backup_drive, .path = file_fullpath, .err = &err);
 				else
 				{
-					ft_assert(!$i(pioIsRemote, drive));
+					ft_assert(!$i(pioIsRemote, backup_drive));
 					crc = pgFileGetCRC32(file_fullpath, false);
 				}
 #endif /* PG_VERSION_NUM < 120000 */
@@ -779,7 +779,7 @@ validate_tablespace_map(pgBackup *backup, bool no_validate)
 					 .err = &err);
 		else
 		{
-			ft_assert(!$i(pioIsRemote, drive));
+			ft_assert(!$i(pioIsRemote, backup->backup_location));
 			crc = pgFileGetCRC32(map_path, false);
 		}
 #endif /* PG_VERSION_NUM < 120000 */
