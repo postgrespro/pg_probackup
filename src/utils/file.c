@@ -1814,8 +1814,8 @@ typedef struct pio_recursive_dir {
 #define kls__pioRecursiveDir mth(fobjDispose)
 fobj_klass(pioRecursiveDir);
 
-pio_recursive_dir_t*
-pio_recursive_dir_alloc(pioDrive_i drive, path_t root, err_i *err)
+pioRecursiveDir*
+pioRecursiveDir_alloc(pioDrive_i drive, path_t root, err_i *err)
 {
 	pioDirIter_i iter;
 	fobj_reset_err(err);
@@ -1833,7 +1833,7 @@ pio_recursive_dir_alloc(pioDrive_i drive, path_t root, err_i *err)
 }
 
 static pio_dirent_t
-pio_recursive_dir_next_impl(pio_recursive_dir_t* self, err_i* err)
+pio_recursive_dir_next_impl(pioRecursiveDir* self, err_i* err)
 {
 	if (self->dirent.stat.pst_kind == PIO_KIND_DIRECTORY &&
 	    !self->dont_recurse_current)
@@ -1891,22 +1891,22 @@ next_dir:
 }
 
 pio_dirent_t
-pio_recursive_dir_next(pio_recursive_dir_t* self, err_i* err)
+pioRecursiveDir_next(pioRecursiveDir* dir, err_i* err)
 {
 	FOBJ_FUNC_ARP();
 	pio_dirent_t ent;
 	fobj_reset_err(err);
 
-	ent = pio_recursive_dir_next_impl(self, err);
+	ent = pio_recursive_dir_next_impl(dir, err);
 	$iresult(*err);
 	return ent;
 }
 
 void
-pio_recursive_dir_dont_recurse_current(pio_recursive_dir_t* self)
+pioRecursiveDir_dont_recurse_current(pioRecursiveDir* dir)
 {
-	ft_assert(self->dirent.stat.pst_kind == PIO_KIND_DIRECTORY);
-	self->dont_recurse_current = true;
+	ft_assert(dir->dirent.stat.pst_kind == PIO_KIND_DIRECTORY);
+	dir->dont_recurse_current = true;
 }
 
 static void
@@ -1924,11 +1924,11 @@ pioRecursiveDir_fobjDispose(VSelf)
 }
 
 void
-pio_recursive_dir_free(pio_recursive_dir_t* self)
+pioRecursiveDir_close(pioRecursiveDir* dir)
 {
 	/* we are releasing bound resources,
 	 * but self will be dealloced in FOBJ's ARP */
-	pioRecursiveDir_fobjDispose(self);
+	pioRecursiveDir_fobjDispose(dir);
 }
 fobj_klass_handle(pioRecursiveDir);
 

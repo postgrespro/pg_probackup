@@ -430,11 +430,11 @@ extern void init_pio_line_reader(pio_line_reader *r, pioRead_i source, size_t ma
 extern void deinit_pio_line_reader(pio_line_reader *r);
 extern ft_bytes_t pio_line_reader_getline(pio_line_reader *r, err_i *err);
 
-typedef struct pio_recursive_dir pio_recursive_dir_t;
-extern pio_recursive_dir_t* pio_recursive_dir_alloc(pioDrive_i drive, path_t root, err_i *err);
-extern pio_dirent_t pio_recursive_dir_next(pio_recursive_dir_t* dir, err_i* err);
-extern void pio_recursive_dir_dont_recurse_current(pio_recursive_dir_t* dir);
-extern void pio_recursive_dir_free(pio_recursive_dir_t* dir);
+typedef struct pio_recursive_dir pioRecursiveDir;
+extern pioRecursiveDir* pioRecursiveDir_alloc(pioDrive_i drive, path_t root, err_i *err);
+extern pio_dirent_t pioRecursiveDir_next(pioRecursiveDir* dir, err_i* err);
+extern void pioRecursiveDir_dont_recurse_current(pioRecursiveDir* dir);
+extern void pioRecursiveDir_close(pioRecursiveDir* dir);
 
 /* append path component */
 extern bool    ft_strbuf_cat_path(ft_strbuf_t *buf, ft_str_t path);

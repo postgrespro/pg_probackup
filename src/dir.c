@@ -541,13 +541,13 @@ db_list_dir(parray *files, const char* root,
 	FOBJ_FUNC_ARP();
 	pio_dirent_t   dent;
 	pioDrive_i     drive;
-	pio_recursive_dir_t* dir;
+	pioRecursiveDir* dir;
 	err_i 		   err;
 
 	drive = pioDriveForLocation(location);
 
 	/* Open directory and list contents */
-	dir = pio_recursive_dir_alloc(drive, root, &err);
+	dir = pioRecursiveDir_alloc(drive, root, &err);
 	if (dir == NULL)
 	{
 		if (getErrno(err) == ENOENT && external_dir_num == 0)
@@ -564,7 +564,7 @@ db_list_dir(parray *files, const char* root,
 		ft_logerr(FT_FATAL, $errmsg(err), "Listing directory");
 	}
 
-	while ((dent = pio_recursive_dir_next(dir, &err)).stat.pst_kind)
+	while ((dent = pioRecursiveDir_next(dir, &err)).stat.pst_kind)
 	{
 		pgFile	   *file;
 		char		child[MAXPGPATH];
@@ -586,14 +586,14 @@ db_list_dir(parray *files, const char* root,
 			{
 				/* Skip */
 				if (file->kind == PIO_KIND_DIRECTORY)
-					pio_recursive_dir_dont_recurse_current(dir);
+					pioRecursiveDir_dont_recurse_current(dir);
 				pgFileFree(file);
 				continue;
 			}
 			else if (check_res == CHECK_EXCLUDE_FALSE)
 			{
 				ft_assert(file->kind == PIO_KIND_DIRECTORY);
-				pio_recursive_dir_dont_recurse_current(dir);
+				pioRecursiveDir_dont_recurse_current(dir);
 				/* We add the directory itself which content was excluded */
 				parray_append(files, file);
 				continue;
@@ -603,7 +603,7 @@ db_list_dir(parray *files, const char* root,
 		parray_append(files, file);
 	}
 
-	pio_recursive_dir_free(dir);
+	pioRecursiveDir_close(dir);
 	if ($haserr(err))
 		ft_logerr(FT_FATAL, $errmsg(err), "Listing directory \"%s\"", root);
 }
