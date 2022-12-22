@@ -841,55 +841,41 @@ catalog_new(const char *backup_path)
 parray *
 catalog_get_instance_list(CatalogState *catalogState)
 {
-	DIR		   *dir;
-	struct dirent *dent;
+	FOBJ_FUNC_ARP();
+	pioDirIter_i  data_dir;
+	pio_dirent_t  ent;
+	err_i 		err = $noerr();
 	parray		*instances;
 
 	instances = parray_new();
 
 	/* open directory and list contents */
-	dir = opendir(catalogState->backup_subdir_path);
-	if (dir == NULL)
-		elog(ERROR, "Cannot open directory \"%s\": %s",
-			 catalogState->backup_subdir_path, strerror(errno));
+	data_dir = $i(pioOpenDir, catalogState->backup_location,
+				  catalogState->backup_subdir_path, .err = &err);
+	if ($haserr(err))
+		ft_logerr(FT_FATAL, $errmsg(err), "Failed to get backup list");
 
-	while (errno = 0, (dent = readdir(dir)) != NULL)
+	while ((ent = $i(pioDirNext, data_dir, .err=&err)).stat.pst_kind)
 	{
-		char		child[MAXPGPATH];
-		struct stat	st;
 		InstanceState *instanceState = NULL;
 
-		/* skip entries point current dir or parent dir */
-		if (strcmp(dent->d_name, ".") == 0 ||
-			strcmp(dent->d_name, "..") == 0)
+		if (ent.stat.pst_kind != PIO_KIND_DIRECTORY)
 			continue;
 
-		join_path_components(child, catalogState->backup_subdir_path, dent->d_name);
-
-		if (lstat(child, &st) == -1)
-			elog(ERROR, "Cannot stat file \"%s\": %s",
-					child, strerror(errno));
-
-		if (!S_ISDIR(st.st_mode))
-			continue;
-
-		instanceState = makeInstanceState(catalogState, dent->d_name);
+		instanceState = makeInstanceState(catalogState, ent.name.ptr);
 
 		instanceState->config = readInstanceConfigFile(instanceState);
 		parray_append(instances, instanceState);
 	}
 
+	$i(pioClose, data_dir); // ignore error
+
+	if ($haserr(err))
+		ft_logerr(FT_FATAL, $errmsg(err), "Read backup root directory");
+
 	/* TODO 3.0: switch to ERROR */
 	if (parray_num(instances) == 0)
 		elog(WARNING, "This backup catalog contains no backup instances. Backup instance can be added via 'add-instance' command.");
-
-	if (errno)
-		elog(ERROR, "Cannot read directory \"%s\": %s",
-				catalogState->backup_subdir_path, strerror(errno));
-
-	if (closedir(dir))
-		elog(ERROR, "Cannot close directory \"%s\": %s",
-				catalogState->backup_subdir_path, strerror(errno));
 
 	return instances;
 }
