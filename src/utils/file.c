@@ -746,28 +746,64 @@ fio_mkdir_impl(const char* path, int mode, bool strict, int out)
 static void
 fio_send_pio_err(int out, err_i err)
 {
-	const char *err_msg = $errmsg(err);
-	fio_header hdr = {.cop = FIO_PIO_ERROR, .size = strlen(err_msg) + 1, .arg = getErrno(err)};
+	ft_strbuf_t load = ft_strbuf_zero();
+	ft_source_position_t src = $errsrc(err);
+	fio_header hdr = {
+			.cop = FIO_PIO_ERROR,
+			.arg = (getErrno(err) & 0xff) | (src.line << 8),
+	};
+
+
+	ft_strbuf_catc_zt(&load, $errkind(err));
+	ft_strbuf_catc_zt(&load, $errmsg(err));
+	ft_strbuf_catc_zt(&load, src.file);
+	ft_strbuf_catc_zt(&load, src.func);
+
+	hdr.size = load.len;
 
 	IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
-	IO_CHECK(fio_write_all(out, err_msg, hdr.size), hdr.size);
+	IO_CHECK(fio_write_all(out, load.ptr, load.len), load.len);
 
-	/* We also need to send source location and all the KVs */
+	/* We also need to send all the KVs */
+	ft_strbuf_free(&load);
 }
 
 static err_i
 fio_receive_pio_err(fio_header *hdr)
 {
-	int pio_errno = hdr->arg;
-	char *err_msg = pg_malloc(hdr->size);
+	int pio_errno = hdr->arg & 0xff;
+	ft_bytes_t  load = ft_bytes_alloc(hdr->size);
+	ft_bytes_t  parse;
+	ft_strbuf_t rmsg = ft_strbuf_init_str(ft_cstr("(remote) "));
+	ft_str_t    kind;
+	ft_str_t    msg;
+	ft_str_t    file;
+	int         line = hdr->arg >> 8;
+	ft_str_t    func;
+	fobj_err_kv_t kvs[] = {{.key="errNo", .val=ft_mka_i(pio_errno)}};
+	err_i 		err;
 
-	IO_CHECK(fio_read_all(fio_stdin, err_msg, hdr->size), hdr->size);
+	IO_CHECK(fio_read_all(fio_stdin, load.ptr, load.len), load.len);
+	parse = load;
+	kind = ft_bytes_shift_zt(&parse);
+	msg = ft_bytes_shift_zt(&parse);
+	file = ft_bytes_shift_zt(&parse);
+	func = ft_bytes_shift_zt(&parse);
+	ft_strbuf_cat(&rmsg, msg);
 
-	if (pio_errno)
-		return $err(SysErr, "(remote) {causeStr}",
-					causeStr(err_msg), errNo(pio_errno));
+	err = fobj__alloc_err(kind.ptr,
+					(ft_source_position_t){
+						.file = file.ptr,
+						.line = line,
+						.func = func.ptr,
+					},
+					rmsg.ptr,
+					kvs, pio_errno ? 1 : 0);
 
-	return $err(RT, "(remote) {causeStr}", causeStr(err_msg));
+	ft_bytes_free(&load);
+	ft_strbuf_free(&rmsg);
+
+	return err;
 }
 
 static void
