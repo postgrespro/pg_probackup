@@ -1944,13 +1944,13 @@ typedef struct pioFile
 #define kls__pioFile	mth(fobjDispose)
 fobj_klass(pioFile);
 
-typedef struct pioLocalFile
+typedef struct pioLocalReadFile
 {
     pioFile	p;
     int		fd;
-} pioLocalFile;
-#define kls__pioLocalFile	iface__pioReader, iface(pioReader, pioReadStream)
-fobj_klass(pioLocalFile);
+} pioLocalReadFile;
+#define kls__pioLocalReadFile	iface__pioReader, iface(pioReader, pioReadStream)
+fobj_klass(pioLocalReadFile);
 
 typedef struct pioLocalWriteFile
 {
@@ -2167,7 +2167,7 @@ pioLocalDrive_pioOpenRead(VSelf, path_t path, err_i *err)
         return (pioReader_i){NULL};
     }
 
-    file = $alloc(pioLocalFile, .fd = fd,
+    file = $alloc(pioLocalReadFile, .fd = fd,
                   .p = { .path = ft_cstrdup(path) } );
     return $bind(pioReader, file);
 }
@@ -2798,9 +2798,9 @@ cleanup:
 
 /* LOCAL FILE */
 static void
-pioLocalFile_fobjDispose(VSelf)
+pioLocalReadFile_fobjDispose(VSelf)
 {
-	Self(pioLocalFile);
+	Self(pioLocalReadFile);
 	if (!self->p.closed)
 	{
 		close(self->fd);
@@ -2810,9 +2810,9 @@ pioLocalFile_fobjDispose(VSelf)
 }
 
 static err_i
-pioLocalFile_pioClose(VSelf)
+pioLocalReadFile_pioClose(VSelf)
 {
-    Self(pioLocalFile);
+    Self(pioLocalReadFile);
     err_i	err = $noerr();
     int r;
 
@@ -2828,9 +2828,9 @@ pioLocalFile_pioClose(VSelf)
 }
 
 static size_t
-pioLocalFile_pioRead(VSelf, ft_bytes_t buf, err_i *err)
+pioLocalReadFile_pioRead(VSelf, ft_bytes_t buf, err_i *err)
 {
-    Self(pioLocalFile);
+    Self(pioLocalReadFile);
     ssize_t r;
     fobj_reset_err(err);
 
@@ -2847,9 +2847,9 @@ pioLocalFile_pioRead(VSelf, ft_bytes_t buf, err_i *err)
 }
 
 static err_i
-pioLocalFile_pioSeek(VSelf, uint64_t offs)
+pioLocalReadFile_pioSeek(VSelf, uint64_t offs)
 {
-	Self(pioLocalFile);
+	Self(pioLocalReadFile);
 
 	ft_assert(self->fd >= 0, "Closed file abused \"%s\"", self->p.path);
 
@@ -2862,10 +2862,10 @@ pioLocalFile_pioSeek(VSelf, uint64_t offs)
 }
 
 static fobjStr*
-pioLocalFile_fobjRepr(VSelf)
+pioLocalReadFile_fobjRepr(VSelf)
 {
-    Self(pioLocalFile);
-    return $fmt("pioLocalFile({path:q}, fd:{fd}",
+    Self(pioLocalReadFile);
+    return $fmt("pioLocalReadFile({path:q}, fd:{fd}",
                 (path, $S(self->p.path)), (fd, $I(self->fd)));
 }
 
@@ -5625,7 +5625,7 @@ fobj_klass_handle(pioRemotePagesIterator);
 fobj_klass_handle(pioFile);
 fobj_klass_handle(pioLocalDrive);
 fobj_klass_handle(pioRemoteDrive);
-fobj_klass_handle(pioLocalFile, inherits(pioFile), mth(fobjDispose, fobjRepr));
+fobj_klass_handle(pioLocalReadFile, inherits(pioFile), mth(fobjDispose, fobjRepr));
 fobj_klass_handle(pioRemoteFile, inherits(pioFile), mth(fobjDispose, fobjRepr));
 fobj_klass_handle(pioLocalWriteFile);
 fobj_klass_handle(pioRemoteWriteFile);
