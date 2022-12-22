@@ -1051,40 +1051,20 @@ restore_chain(InstanceState *instanceState,
 		elog(WARNING, "Restored files are not synced to disk");
 	else
 	{
+		pioDBDrive_i dbdrive = $bind(pioDBDrive, instanceState->database_location.self);
 		elog(INFO, "Syncing restored files to disk");
 		time(&start_time);
 
-		for (i = 0; i < parray_num(dest_files); i++)
+		err = $i(pioSyncTree, dbdrive, .root = pgdata_path);
+		if ($haserr(err))
+			ft_logerr(FT_FATAL, $errmsg(err), "Syncing pgdata");
+
+		for (i = 0; i < parray_num(external_dirs); i++)
 		{
-			char		to_fullpath[MAXPGPATH];
-			pgFile	   *dest_file = (pgFile *) parray_get(dest_files, i);
-
-			if (dest_file->kind == PIO_KIND_DIRECTORY)
-				continue;
-
-			/* skip external files if ordered to do so */
-			if (dest_file->external_dir_num > 0 &&
-				params->skip_external_dirs)
-				continue;
-
-			/* construct fullpath */
-			if (dest_file->external_dir_num == 0)
-			{
-				if (strcmp(PG_TABLESPACE_MAP_FILE, dest_file->rel_path) == 0)
-					continue;
-				if (strcmp(DATABASE_MAP, dest_file->rel_path) == 0)
-					continue;
-				join_path_components(to_fullpath, pgdata_path, dest_file->rel_path);
-			}
-			else
-			{
-				char *external_path = parray_get(external_dirs, dest_file->external_dir_num - 1);
-				join_path_components(to_fullpath, external_path, dest_file->rel_path);
-			}
-
-			/* TODO: write test for case: file to be synced is missing */
-			if (fio_sync(FIO_DB_HOST, to_fullpath) != 0)
-				elog(ERROR, "Failed to sync file \"%s\": %s", to_fullpath, strerror(errno));
+			char *external_path = parray_get(external_dirs, i);
+			err = $i(pioSyncTree, dbdrive, .root = external_path);
+			if ($haserr(err))
+				ft_logerr(FT_FATAL, $errmsg(err), "Syncin external dir %d", i);
 		}
 
 		time(&end_time);
