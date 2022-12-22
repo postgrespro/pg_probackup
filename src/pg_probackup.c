@@ -677,6 +677,7 @@ main(int argc, char *argv[])
 	if (instance_config.pgdata != NULL)
 		canonicalize_path(instance_config.pgdata);
 	if (instance_config.pgdata != NULL &&
+	    backup_subcmd != ARCHIVE_GET_CMD &&
 		!is_absolute_path(instance_config.pgdata))
 		elog(ERROR, "-D, --pgdata must be an absolute path");
 
