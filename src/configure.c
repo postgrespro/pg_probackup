@@ -359,6 +359,8 @@ do_set_config(InstanceState *instanceState)
 
 	if ($haserr(err))
 		ft_logerr(FT_FATAL, $errmsg(err), "Writting configuration file");
+
+	ft_strbuf_free(&buf);
 }
 
 void

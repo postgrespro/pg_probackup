@@ -745,6 +745,7 @@ validate_tablespace_map(pgBackup *backup, bool no_validate)
 	if (!tablespace_map)
 	{
 		elog(LOG, "there is no file tablespace_map");
+		pgFileFree(dummy);
 		parray_walk(files, pgFileFree);
 		parray_free(files);
 		return false;

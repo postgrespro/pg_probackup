@@ -1426,7 +1426,6 @@ validate_file_pages(pgFile *file, const char *fullpath, XLogRecPtr stop_lsn,
 	FOBJ_FUNC_ARP();
 	bool		is_valid = true;
 	pg_crc32	crc;
-	BackupPageHeader2 *headers = NULL;
 	pioDrive_i  drive;
 	err_i 		err;
 
@@ -1564,7 +1563,7 @@ validate_file_pages(pgFile *file, const char *fullpath, XLogRecPtr stop_lsn,
 		is_valid = false;
 	}
 
-	pg_free(headers);
+	pg_free(iter.headers);
 
 	return is_valid;
 }
