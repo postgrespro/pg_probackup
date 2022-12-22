@@ -5207,9 +5207,8 @@ typedef struct pioLocalPagesIterator
 	bool		just_validate;
 	int			segno;
 	datapagemap_t map;
-	FILE		*in;
-	void		*buf;
-	const char	*from_fullpath;
+	pioReader_i in;
+	char*		from_fullpath;
 	/* prev_backup_start_lsn */
 	XLogRecPtr	start_lsn;
 
@@ -5351,54 +5350,40 @@ pioLocalDrive_pioIteratePages(VSelf, path_t path,
 							  int segno, datapagemap_t pagemap,
 							  XLogRecPtr start_lsn,
 							  CompressAlg calg, int clevel,
-							  uint32 checksum_version, bool just_validate, err_i *err)
+							  uint32 checksum_version, bool just_validate,
+							  err_i *err)
 {
 	Self(pioLocalDrive);
 	fobj_t	iter = {0};
 	BlockNumber n_blocks;
-	FILE   *in;
-	void   *buf;
-	size_t  bufsz;
-	int		fd;
-	struct stat st;
+	pioReader_i in;
+	pio_stat_t  st;
 
 	fobj_reset_err(err);
 
-	in = fopen(path, PG_BINARY_R);
-	if (!in)
-	{
-		pioPagesIterator_i ret = {0};
-		*err = $syserr(errno, "Cannot iterate pages");
-		return ret;
-	}
-
-	fd = fileno(in);
-	if (fstat(fd, &st) == -1)
-	{
-		fclose(in);
-		*err = $syserr(errno, "Cannot stat datafile");
+	in = $(pioOpenRead, self, path, .err = err);
+	if ($haserr(*err))
 		return $null(pioPagesIterator);
-	}
 
-	bufsz = pagemap.bitmapsize > 0 ? SMALL_CHUNK_SIZE : MEDIUM_CHUNK_SIZE;
-	buf = ft_malloc(bufsz);
-	setvbuf(in, buf, _IOFBF, bufsz);
+	/* we know it is pioLocalReadFile which implements pioFileStat */
+	st = $(pioFileStat, in.self, .err = err);
+	if ($haserr(*err))
+		return $null(pioPagesIterator);
 
 	/*
 	 * Compute expected number of blocks in the file.
 	 * NOTE This is a normal situation, if the file size has changed
 	 * since the moment we computed it.
 	 */
-	n_blocks = ft_div_i64u32_to_i32(st.st_size, BLCKSZ);
+	n_blocks = ft_div_i64u32_to_i32(st.pst_size, BLCKSZ);
 
 	iter = $alloc(pioLocalPagesIterator,
 				  .segno = segno,
 				  .n_blocks = n_blocks,
 				  .just_validate = just_validate,
-				  .from_fullpath = path,
+				  .from_fullpath = ft_cstrdup(path),
 				  .map = pagemap,
-				  .in = in,
-				  .buf = buf,
+				  .in = $iref(in),
 				  .start_lsn = start_lsn,
 				  .calg = calg,
 				  .clevel = clevel,
@@ -5412,14 +5397,15 @@ pioLocalPagesIterator_fobjDispose(VSelf)
 {
 	Self(pioLocalPagesIterator);
 
-	if (self->buf) ft_free(self->buf);
-	if (self->in) fclose(self->in);
+	$idel(&self->in);
+	ft_free(self->from_fullpath);
 }
 
 static int32 prepare_page(pioLocalPagesIterator *iter,
 						  BlockNumber blknum,
 						  Page page,
-						  PageState *page_st);
+						  PageState *page_st,
+						  err_i *err);
 
 static err_i
 pioLocalPagesIterator_pioNextPage(VSelf, PageIteratorValue *value)
@@ -5430,6 +5416,7 @@ pioLocalPagesIterator_pioNextPage(VSelf, PageIteratorValue *value)
 	BlockNumber blknum;
 	BlockNumber n_blocks;
 	int rc = PageIsOk;
+	err_i	err;
 
 	blknum = self->blknum;
 	value->compressed_size = 0;
@@ -5447,7 +5434,10 @@ pioLocalPagesIterator_pioNextPage(VSelf, PageIteratorValue *value)
 	value->blknum = blknum;
 	self->blknum = blknum+1;
 
-	rc = prepare_page(self, blknum, page_buf, &value->state);
+	rc = prepare_page(self, blknum, page_buf, &value->state, &err);
+	if ($haserr(err))
+		return $iresult(err);
+
 	value->page_result = rc;
 	if (rc == PageIsTruncated)
 		goto re_stat;
@@ -5466,12 +5456,12 @@ re_stat:
 		 * prepare_page found file is shorter than expected.
 		 * Lets re-investigate its length.
 		 */
-		struct stat st;
-		int fd = fileno(self->in);
-		if (fstat(fd, &st) < 0)
-			return $syserr(errno, "Re-stat-ting file {path}",
-						   path(self->from_fullpath));
-		n_blocks = ft_div_i64u32_to_i32(st.st_size, BLCKSZ);
+		pio_stat_t  st;
+		/* abuse we know self->in is pioLocalReadFile */
+		st = $(pioFileStat, self->in.self, .err = &err);
+		if ($haserr(err))
+			return $iresult(err);
+		n_blocks = ft_div_i64u32_to_i32(st.pst_size, BLCKSZ);
 		/* we should not "forget" already produced pages */
 		if (n_blocks < self->lastblkn)
 			n_blocks = self->lastblkn;
@@ -5508,13 +5498,16 @@ pioLocalPagesIterator_pioFinalPageN(VSelf)
  *                                      return it to the caller
  */
 static int32
-prepare_page(pioLocalPagesIterator *iter, BlockNumber blknum, Page page, PageState *page_st)
+prepare_page(pioLocalPagesIterator *iter, BlockNumber blknum, Page page,
+			 PageState *page_st, err_i *err)
 {
 	int			try_again = PAGE_READ_ATTEMPTS;
 	bool		page_is_valid = false;
 	const char *from_fullpath = iter->from_fullpath;
 	BlockNumber absolute_blknum = iter->segno * RELSEG_SIZE + blknum;
-	int rc = 0;
+	int         rc = 0;
+	size_t		read_len;
+	fobj_reset_err(err);
 
 	/* check for interrupt */
 	if (interrupted || thread_interrupted)
@@ -5527,15 +5520,13 @@ prepare_page(pioLocalPagesIterator *iter, BlockNumber blknum, Page page, PageSta
 	 */
 	while (!page_is_valid && try_again--)
 	{
-		int read_len = fseeko(iter->in, (off_t)blknum * BLCKSZ, SEEK_SET);
-		if (read_len == 0) /* seek is successful */
-		{
-			/* read the block */
-			read_len = fread(page, 1, BLCKSZ, iter->in);
-			if (read_len == 0 && ferror(iter->in))
-				read_len = -1;
-		}
+		*err = $i(pioSeek, iter->in, (uint64_t)blknum * BLCKSZ);
+		if ($haserr(*err))
+			return PageIsCorrupted;
 
+		read_len = $i(pioRead, iter->in, ft_bytes(page, BLCKSZ), .err = err);
+		if ($haserr(*err))
+			return PageIsCorrupted;
 		/* The block could have been truncated. It is fine. */
 		if (read_len == 0)
 		{
@@ -5543,13 +5534,10 @@ prepare_page(pioLocalPagesIterator *iter, BlockNumber blknum, Page page, PageSta
 						  "block truncated", blknum, from_fullpath);
 			return PageIsTruncated;
 		}
-		else if (read_len < 0)
-			elog(ERROR, "Cannot read block %u of \"%s\": %s",
-				 blknum, from_fullpath, strerror(errno));
 		else if (read_len != BLCKSZ)
 			elog(WARNING, "Cannot read block %u of \"%s\": "
-						  "read %i of %d, try again",
-				 blknum, from_fullpath, read_len, BLCKSZ);
+						  "read %lld of %d, try again",
+				 blknum, from_fullpath, (long long)read_len, BLCKSZ);
 		else
 		{
 			/* We have BLCKSZ of raw data, validate it */
@@ -5583,8 +5571,6 @@ prepare_page(pioLocalPagesIterator *iter, BlockNumber blknum, Page page, PageSta
 					Assert(false);
 			}
 		}
-		/* avoid re-reading once buffered data, flushing on further attempts, see PBCKP-150 */
-		fflush(iter->in);
 	}
 
 	/*

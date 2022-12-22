@@ -1710,7 +1710,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         os.chmod(full_path, 000)
 
         with self.assertRaisesRegex(ProbackupException,
-                                    r"ERROR: [^\n]*Cannot iterate pages: Permission denied"):
+                                    r"ERROR: [^\n]*: Permission denied"):
             # FULL backup
             self.backup_node(
                 backup_dir, 'node', node, options=['--stream'])
