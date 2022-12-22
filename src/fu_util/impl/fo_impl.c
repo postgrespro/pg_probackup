@@ -1132,6 +1132,39 @@ fobj__make_err(const char *type,
     return bind_err(err);
 }
 
+err_i
+fobj__alloc_err(const char *type,
+			   ft_source_position_t src,
+			   const char *msg,
+			   fobj_err_kv_t *kvs,
+			   size_t kvn) {
+	fobjErr*        err;
+	fobj_err_kv_t*  kv;
+
+	src.func = ft_cstrdup(src.func);
+	src.file = ft_cstrdup(src.file);
+	err = fobj_alloc_sized(fobjErr,
+						   ft_mul_size(sizeof(*kvs), kvn+1),
+						   .type = ft_cstrdup(type),
+						   .message = ft_cstrdup(msg),
+						   .src = src,
+						   .free_type_and_src = true,
+						   );
+	memcpy(err->kv, kvs, sizeof(*kvs)*kvn);
+	/* search for suffix */
+	for (kv = err->kv; kv->key; kv++) {
+		switch (ft_arg_type(kv->val)) {
+			case 'o':
+				$ref(ft_arg_o(kv->val));
+				break;
+			case 's':
+				kv->val.v.s = kv->val.v.s ? ft_cstrdup(kv->val.v.s) : NULL;
+				break;
+		}
+	}
+	return bind_err(err);
+}
+
 static void
 fobjErr__fobjErr_marker_DONT_IMPLEMENT_ME(VSelf) {
 }
@@ -1150,6 +1183,12 @@ fobjErr_fobjDispose(VSelf) {
                 break;
         }
     }
+	if (self->free_type_and_src)
+	{
+		ft_free((void*)self->type);
+		ft_free((void*)self->src.file);
+		ft_free((void*)self->src.func);
+	}
 	ft_free((void*)self->message);
     $del(&self->sibling);
 }

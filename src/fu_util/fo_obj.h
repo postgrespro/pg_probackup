@@ -564,6 +564,10 @@ fobj_error_cstr_key(__msgSuffix);
  * $haserr(err) - true if $notNULL(err)
  */
 #define $haserr(err)        $notNULL(err)
+/*
+ * $err_has_kind(kind, err)
+ */
+#define $err_has_kind(kind, err)        fobj_err_has_kind(kind, err)
 
 /*
  * $syserr(errno)
@@ -586,7 +590,7 @@ ft_inline const char*   getErrnoStr(err_i err);
 /*
  * Get error type
  */
-#define $errtype(err)       fobj_errtype(err)
+#define $errkind(err)       fobj_errkind(err)
 
 /*
  * Get error message

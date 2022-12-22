@@ -124,6 +124,7 @@ struct fobjErr {
     const char*     message;
     ft_source_position_t src;
     fobjErr*        sibling; /* sibling error */
+	bool			free_type_and_src;
     fobj_err_kv_t   kv[];
 };
 
@@ -176,6 +177,14 @@ extern err_i fobj__make_err(const char *type,
                                 const char *msg,
                                 fobj_err_kv_t *kvs,
                                 size_t kvn);
+extern err_i fobj__alloc_err(const char *type,
+								ft_source_position_t src,
+								const char *msg,
+								fobj_err_kv_t *kvs,
+								size_t kvn);
+
+#define fobj_err_has_kind(kind, err) \
+	(!$noerr(err) && strcmp(fobj_error_kind_##kind(), $errkind(err)) == 0)
 
 #define fobj__err_transform_kv_do(v) \
     fobj__err_mkkv_##v
@@ -196,7 +205,7 @@ getErrnoStr(err_i err) {
 }
 
 ft_inline const char*
-fobj_errtype(err_i err) {
+fobj_errkind(err_i err) {
     fobjErr*    self = (fobjErr*)(err.self);
     ft_assert(fobj_real_klass_of(self) == fobjErr__kh());                                               \
     return self->type ? self->type : "RT";
