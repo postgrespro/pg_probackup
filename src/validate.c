@@ -414,6 +414,7 @@ pgBackupValidateFiles(void *arg)
 int
 do_validate_all(CatalogState *catalogState, InstanceState *instanceState)
 {
+	FOBJ_FUNC_ARP();
 	corrupted_backup_found = false;
 	skipped_due_to_lock = false;
 	err_i err;
@@ -421,40 +422,24 @@ do_validate_all(CatalogState *catalogState, InstanceState *instanceState)
 	if (instanceState == NULL)
 	{
 		/* Show list of instances */
-		DIR		   *dir;
-		struct dirent *dent;
+		pioDirIter_i  data_dir;
+		pio_dirent_t  ent;
 
 		/* open directory and list contents */
-		dir = opendir(catalogState->backup_subdir_path);
-		if (dir == NULL)
-			elog(ERROR, "cannot open directory \"%s\": %s", catalogState->backup_subdir_path, strerror(errno));
+		data_dir = $i(pioOpenDir, catalogState->backup_location,
+					  catalogState->backup_subdir_path, .err = &err);
+		if ($haserr(err))
+			ft_logerr(FT_FATAL, $errmsg(err), "Failed to get backup list");
 
-		errno = 0;
-		while ((dent = readdir(dir)))
+		while ((ent = $i(pioDirNext, data_dir, .err=&err)).stat.pst_kind)
 		{
 			FOBJ_LOOP_ARP();
-			char		child[MAXPGPATH];
-			struct stat	st;
-			InstanceState *instanceState;
-			
+			InstanceState *instanceState = NULL;
 
-			/* skip entries point current dir or parent dir */
-			if (strcmp(dent->d_name, ".") == 0 ||
-				strcmp(dent->d_name, "..") == 0)
+			if (ent.stat.pst_kind != PIO_KIND_DIRECTORY)
 				continue;
 
-			join_path_components(child, catalogState->backup_subdir_path, dent->d_name);
-
-			if (lstat(child, &st) == -1)
-				elog(ERROR, "cannot stat file \"%s\": %s", child, strerror(errno));
-
-			if (!S_ISDIR(st.st_mode))
-				continue;
-
-			/*
-			 * Initialize instance configuration.
-			 */
-			instanceState = makeInstanceState(catalogState, dent->d_name);
+			instanceState = makeInstanceState(catalogState, ent.name.ptr);
 
 			if (config_read_opt(catalogState->backup_location, instanceState->instance_config_path,
 								instance_options, ERROR, false, &err) == 0)
@@ -469,6 +454,12 @@ do_validate_all(CatalogState *catalogState, InstanceState *instanceState)
 			do_validate_instance(instanceState);
 			pgut_free(instanceState);
 		}
+
+		$i(pioClose, data_dir); // ignore error
+
+		if ($haserr(err))
+			ft_logerr(FT_FATAL, $errmsg(err), "Read backup root directory");
+
 	}
 	else
 	{
