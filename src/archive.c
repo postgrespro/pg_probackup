@@ -420,10 +420,21 @@ push_file_internal(const char *wal_file_name, const char *pg_xlog_dir,
 
         crc32_dst = $i(pioGetCRC32, backup_drive, to_fullpath,
                        .compressed = is_compress, .err = &err);
-        if ($haserr(err))
-			return $iresult(err);
-
-        if (crc32_src == crc32_dst)
+        if ($err_has_kind(GZ, err) && overwrite)
+        {
+            elog(LOG, "WAL file already exists and looks like it is damaged, overwriting: %s",
+                 $errmsg(err));
+        }
+        else if ($err_has_kind(GZ, err))
+        {
+            return $iresult($err(RT, "WAL file already exists and looks like it is damaged: {cause}",
+                                 cause(err.self)));
+        }
+        else if ($haserr(err))
+        {
+            return $iresult(err);
+        }
+        else if (crc32_src == crc32_dst)
         {
             elog(LOG, "WAL file already exists in archive with the same "
                       "checksum, skip pushing: \"%s\"", from_fullpath);

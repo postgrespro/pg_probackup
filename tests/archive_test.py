@@ -387,9 +387,14 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             'pg_probackup archive-push WAL file',
             log_content)
 
-        self.assertIn(
-            'WAL file already exists in archive with different checksum',
-            log_content)
+        if self.archive_compress:
+            self.assertIn(
+                'WAL file already exists and looks like it is damaged',
+                log_content)
+        else:
+            self.assertIn(
+                'WAL file already exists in archive with different checksum',
+                log_content)
 
         self.assertNotIn(
             'pg_probackup archive-push completed successfully', log_content)
@@ -466,12 +471,15 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             'DETAIL:  The failed archive command was:', log_content)
         self.assertIn(
             'pg_probackup archive-push WAL file', log_content)
-        self.assertNotIn(
-            'WAL file already exists in archive with '
-            'different checksum, overwriting', log_content)
-        self.assertIn(
-            'WAL file already exists in archive with '
-            'different checksum', log_content)
+        self.assertNotIn('overwriting', log_content)
+        if self.archive_compress:
+            self.assertIn(
+                'WAL file already exists and looks like '
+                'it is damaged', log_content)
+        else:
+            self.assertIn(
+                'WAL file already exists in archive with '
+                'different checksum', log_content)
 
         self.assertNotIn(
             'pg_probackup archive-push completed successfully', log_content)
@@ -487,9 +495,14 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
                 'pg_probackup archive-push completed successfully' in log_content,
                 'Expecting messages about successfull execution archive_command')
 
-        self.assertIn(
-            'WAL file already exists in archive with '
-            'different checksum, overwriting', log_content)
+        if self.archive_compress:
+            self.assertIn(
+                'WAL file already exists and looks like '
+                'it is damaged, overwriting', log_content)
+        else:
+            self.assertIn(
+                'WAL file already exists in archive with '
+                'different checksum, overwriting', log_content)
 
     @unittest.skip("should be redone with file locking")
     def test_archive_push_part_file_exists_not_stale(self):
