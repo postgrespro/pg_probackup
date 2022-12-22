@@ -1759,6 +1759,20 @@ fio_communicate(int in, int out)
 			}
 			break;
 		}
+		case PIO_SYNC_TREE:
+		{
+			err = $i(pioSyncTree, drive, buf);
+			if ($haserr(err))
+				fio_send_pio_err(out, err);
+			else
+			{
+				hdr.size = 0;
+				hdr.arg = 0;
+
+				IO_CHECK(fio_write_all(out, &hdr, sizeof(hdr)), sizeof(hdr));
+			}
+			break;
+		}
 		case PIO_CLOSE:
 		{
 			ft_assert(hdr.handle >= 0);
@@ -2714,6 +2728,98 @@ pioLocalDrive_pioWriteFile(VSelf, path_t path, ft_bytes_t content, bool binary)
 	return $iresult(err);
 }
 
+static err_i
+pioLocalDrive_pioSyncTree(VSelf, path_t root)
+{
+	FOBJ_FUNC_ARP();
+	Self(pioLocalDrive);
+	pioRecursiveDir* walker;
+	err_i 			 err;
+	pio_dirent_t     dirent;
+	ft_strbuf_t      pathbuf = ft_strbuf_zero();
+	ft_arr_str_t     dirs = ft_arr_init();
+	ft_str_t         dir;
+	int              fd;
+
+	walker = pioRecursiveDir_alloc($bind(pioDrive, self), root, &err);
+	if ($haserr(err))
+		return $iresult($err(RT, "pioSyncTree: {cause}", cause(err.self)));
+
+	while ((dirent = pioRecursiveDir_next(walker, &err)).stat.pst_kind)
+	{
+		if (dirent.stat.pst_kind == PIO_KIND_DIRECTORY)
+		{
+			ft_arr_str_push(&dirs, ft_strdup(dirent.name));
+			continue;
+		}
+		ft_assert(dirent.stat.pst_kind == PIO_KIND_REGULAR);
+
+		ft_strbuf_reset_for_reuse(&pathbuf);
+		ft_strbuf_catc(&pathbuf, root);
+		ft_strbuf_cat_path(&pathbuf, dirent.name);
+
+		/* TODO: use fsync_fname_compat when it will return err_i */
+		fd = open(pathbuf.ptr, O_RDWR, PG_BINARY);
+		if (fd < 0)
+		{
+			if (errno == EACCES)
+				continue;
+			err = $syserr(errno, "Couldn't open for sync {path:q}", path(pathbuf.ptr));
+			goto cleanup;
+		}
+		if (fsync(fd) < 0)
+		{
+			err = $syserr(errno, "Couldn't fsync {path:q}", path(pathbuf.ptr));
+			close(fd);
+			goto cleanup;
+		}
+		(void)close(fd);
+	}
+	pioRecursiveDir_close(walker);
+	if ($haserr(err))
+		goto cleanup;
+
+	/* in reverse order therefore innermost directories first */
+	while (dirs.len > 0)
+	{
+		dir = ft_arr_str_pop(&dirs);
+
+		ft_strbuf_reset_for_reuse(&pathbuf);
+		ft_strbuf_catc(&pathbuf, root);
+		ft_strbuf_cat_path(&pathbuf, dir);
+
+		ft_str_free(&dir);
+
+		/* TODO: use fsync_fname_compat when it will return err_i */
+		fd = open(pathbuf.ptr, O_RDONLY, PG_BINARY);
+		if (fd < 0)
+		{
+			if (errno == EACCES || errno == EISDIR)
+				continue;
+			err = $syserr(errno, "Couldn't open for sync {path:q}", path(pathbuf.ptr));
+			goto cleanup;
+		}
+		if (fsync(fd) < 0 && !(errno == EBADF || errno == EINVAL))
+		{
+			err = $syserr(errno, "Couldn't fsync {path:q}", path(pathbuf.ptr));
+			close(fd);
+			goto cleanup;
+		}
+		(void)close(fd);
+	}
+
+cleanup:
+	while (dirs.len > 0)
+	{
+		dir = ft_arr_str_pop(&dirs);
+		ft_str_free(&dir);
+	}
+	ft_strbuf_free(&pathbuf);
+	ft_arr_str_free(&dirs);
+
+	return $iresult(err);
+}
+
 /* LOCAL FILE */
 static void
 pioLocalFile_fobjDispose(VSelf)
@@ -3426,6 +3532,24 @@ pioRemoteDrive_pioWriteFile(VSelf, path_t path, ft_bytes_t content, bool binary)
 		return $iresult(err);
 	}
 
+	return $noerr();
+}
+
+static err_i
+pioRemoteDrive_pioSyncTree(VSelf, path_t root)
+{
+	Self(pioRemoteDrive);
+	fio_header	hdr = {
+			.cop = PIO_SYNC_TREE,
+			.size = strlen(root)+1,
+	};
+	IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
+	IO_CHECK(fio_write_all(fio_stdout, root, hdr.size), hdr.size);
+
+	IO_CHECK(fio_read_all(fio_stdin, &hdr, sizeof(hdr)), sizeof(hdr));
+	if (hdr.cop == FIO_PIO_ERROR)
+		return fio_receive_pio_err(&hdr);
+	ft_assert(hdr.cop == PIO_SYNC_TREE);
 	return $noerr();
 }
 

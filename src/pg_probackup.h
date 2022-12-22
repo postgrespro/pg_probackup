@@ -1220,4 +1220,8 @@ extern int64 calculate_datasize_of_filelist(parray *filelist);
 #define FT_SLICE_TYPE   char*
 #include <ft_array.inc.h>
 
+#define FT_SLICE        str
+#define FT_SLICE_TYPE   ft_str_t
+#include <ft_array.inc.h>
+
 #endif /* PG_PROBACKUP_H */

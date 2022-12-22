@@ -68,6 +68,7 @@ typedef enum
 	PIO_DIR_OPEN,
 	PIO_DIR_NEXT,
 	PIO_IS_DIR_EMPTY,
+	PIO_SYNC_TREE,
 	PIO_CLOSE,
 	PIO_DISPOSE,
 } fio_operations;
@@ -285,6 +286,9 @@ fobj_iface(pioPagesIterator);
 #define mth__pioWriteFile	err_i, (path_t, path), (ft_bytes_t, content), \
                                    (bool, binary, true)
 
+/* Sync whole directories tree starting with root */
+#define mth__pioSyncTree    err_i, (path_t, root)
+
 #define mth__pioIteratePages pioPagesIterator_i, (path_t, path), \
 		(int, segno), (datapagemap_t, pagemap), (XLogRecPtr, start_lsn), \
 		(CompressAlg, calg), (int, clevel), \
@@ -308,6 +312,7 @@ fobj_method(pioRemoveDir);
 fobj_method(pioReadFile);
 fobj_method(pioWriteFile);
 fobj_method(pioIteratePages);
+fobj_method(pioSyncTree);
 
 #define iface__pioDrive 	mth(pioOpenRead, pioOpenReadStream), \
 							mth(pioStat, pioRemove), \
@@ -318,7 +323,7 @@ fobj_method(pioIteratePages);
 fobj_iface(pioDrive);
 
 #define iface__pioDBDrive	iface__pioDrive, mth(pioIteratePages, pioOpenWrite), \
-                            mth(pioRename)
+                            mth(pioRename, pioSyncTree)
 fobj_iface(pioDBDrive);
 
 extern pioDrive_i pioDriveForLocation(fio_location location);
