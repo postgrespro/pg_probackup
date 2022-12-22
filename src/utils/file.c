@@ -1944,6 +1944,10 @@ typedef struct pioFile
 #define kls__pioFile	mth(fobjDispose)
 fobj_klass(pioFile);
 
+/* define it because pioLocalPagesIterator wants stat from local file */
+#define mth__pioFileStat	pio_stat_t, (err_i*, err)
+fobj_method(pioFileStat);
+
 typedef struct pioLocalReadFile
 {
 	ft_str_t   path;
@@ -1952,7 +1956,8 @@ typedef struct pioLocalReadFile
 	ft_bytes_t buf;
 	ft_bytes_t remain;
 } pioLocalReadFile;
-#define kls__pioLocalReadFile	iface__pioReader, iface(pioReader, pioReadStream)
+#define kls__pioLocalReadFile	iface__pioReader, iface(pioReader, pioReadStream), \
+								mth(pioFileStat)
 fobj_klass(pioLocalReadFile);
 
 typedef struct pioLocalWriteFile
@@ -2900,6 +2905,28 @@ pioLocalReadFile_pioSeek(VSelf, uint64_t offs)
 	ft_assert(pos == offs);
 	self->off = offs;
 	return $noerr();
+}
+
+static pio_stat_t
+pioLocalReadFile_pioFileStat(VSelf, err_i *err)
+{
+	Self(pioLocalReadFile);
+	struct stat	st = {0};
+	pio_stat_t pst = {0};
+	int	r;
+	fobj_reset_err(err);
+
+	r = fstat(self->fd, &st);
+	if (r < 0)
+		*err = $syserr(errno, "Cannot stat file {path:q}", path(self->path.ptr));
+	else
+	{
+		pst.pst_kind = pio_statmode2file_kind(st.st_mode, self->path.ptr);
+		pst.pst_mode = pio_limit_mode(st.st_mode);
+		pst.pst_size = st.st_size;
+		pst.pst_mtime = st.st_mtime;
+	}
+	return pst;
 }
 
 static fobjStr*
