@@ -1946,8 +1946,11 @@ fobj_klass(pioFile);
 
 typedef struct pioLocalReadFile
 {
-    pioFile	p;
-    int		fd;
+	ft_str_t   path;
+	int		   fd;
+	uint64_t   off;
+	ft_bytes_t buf;
+	ft_bytes_t remain;
 } pioLocalReadFile;
 #define kls__pioLocalReadFile	iface__pioReader, iface(pioReader, pioReadStream)
 fobj_klass(pioLocalReadFile);
@@ -2167,8 +2170,10 @@ pioLocalDrive_pioOpenRead(VSelf, path_t path, err_i *err)
         return (pioReader_i){NULL};
     }
 
-    file = $alloc(pioLocalReadFile, .fd = fd,
-                  .p = { .path = ft_cstrdup(path) } );
+    file = $alloc(pioLocalReadFile,
+				  .fd = fd,
+				  .path = ft_strdupc(path),
+				  .buf = ft_bytes_alloc(CHUNK_SIZE));
     return $bind(pioReader, file);
 }
 
@@ -2801,12 +2806,13 @@ static void
 pioLocalReadFile_fobjDispose(VSelf)
 {
 	Self(pioLocalReadFile);
-	if (!self->p.closed)
+	if (self->fd >= 0)
 	{
 		close(self->fd);
 		self->fd = -1;
-		self->p.closed = true;
 	}
+	ft_str_free(&self->path);
+	ft_bytes_free(&self->buf);
 }
 
 static err_i
@@ -2816,48 +2822,83 @@ pioLocalReadFile_pioClose(VSelf)
     err_i	err = $noerr();
     int r;
 
-    ft_assert(self->fd >= 0, "Closed file abused \"%s\"", self->p.path);
+    ft_assert(self->fd >= 0, "Closed file abused \"%s\"", self->path.ptr);
 
     r = close(self->fd);
-    if (r < 0 && $isNULL(err))
+    if (r < 0)
         err = $syserr(errno, "Cannot close file {path:q}",
-					  path(self->p.path));
+					  path(self->path.ptr));
     self->fd = -1;
-    self->p.closed = true;
     return err;
 }
 
 static size_t
 pioLocalReadFile_pioRead(VSelf, ft_bytes_t buf, err_i *err)
 {
-    Self(pioLocalReadFile);
-    ssize_t r;
-    fobj_reset_err(err);
+	Self(pioLocalReadFile);
+	size_t     buflen = buf.len;
+	ft_bytes_t to_read;
+	ssize_t    r;
+	fobj_reset_err(err);
 
-    ft_assert(self->fd >= 0, "Closed file abused \"%s\"", self->p.path);
+	ft_assert(self->fd >= 0, "Closed file abused \"%s\"", self->path.ptr);
 
-    r = read(self->fd, buf.ptr, buf.len);
-    if (r < 0)
-    {
-        *err = $syserr(errno, "Cannot read from {path:q}",
-					   path(self->p.path));
-        return 0;
-    }
-    return r;
+	ft_bytes_move(&buf, &self->remain);
+
+	while (buf.len && $noerr(*err))
+	{
+		ft_assert(self->remain.len == 0);
+
+		to_read = buf.len >= self->buf.len/2 ? buf : self->buf;
+
+		r = read(self->fd, to_read.ptr, to_read.len);
+		if (r < 0)
+			*err = $syserr(errno, "Cannot read from {path:q}",
+						   path(self->path.ptr));
+		else if (r == 0)
+			break;
+
+		if (to_read.ptr == buf.ptr)
+			ft_bytes_consume(&buf, r);
+		else
+		{
+			self->remain = ft_bytes(self->buf.ptr, r);
+			ft_bytes_move(&buf, &self->remain);
+		}
+	}
+
+	self->off += buflen - buf.len;
+	return buflen - buf.len;
 }
 
 static err_i
 pioLocalReadFile_pioSeek(VSelf, uint64_t offs)
 {
 	Self(pioLocalReadFile);
+	uint64_t	delta;
+	off_t		pos;
 
-	ft_assert(self->fd >= 0, "Closed file abused \"%s\"", self->p.path);
+	ft_assert(self->fd >= 0, "Closed file abused \"%s\"", self->path.ptr);
 
-	off_t pos = lseek(self->fd, offs, SEEK_SET);
+	delta = offs - self->off; /* yep, wrapping. but we are check for >= */
+	if (offs >= self->off && delta <= self->remain.len)
+	{
+		ft_bytes_consume(&self->remain, delta);
+		self->off = offs;
+		return $noerr();
+	}
+	/*
+	 * Drop buffer if we seek too far or if we seek back.
+	 * Seek back is used to re-read data from disk, so no buffer allowed.
+	 */
+	self->remain = ft_bytes(NULL, 0);
 
+	pos = lseek(self->fd, offs, SEEK_SET);
 	if (pos == (off_t)-1)
-		return $syserr(errno, "Can not seek to {offs} in file {path:q}", offs(offs), path(self->p.path));
+		return $syserr(errno, "Can not seek to {offs} in file {path:q}", offs(offs), path(self->path.ptr));
+
 	ft_assert(pos == offs);
+	self->off = offs;
 	return $noerr();
 }
 
@@ -2866,7 +2907,7 @@ pioLocalReadFile_fobjRepr(VSelf)
 {
     Self(pioLocalReadFile);
     return $fmt("pioLocalReadFile({path:q}, fd:{fd}",
-                (path, $S(self->p.path)), (fd, $I(self->fd)));
+                (path, $S(self->path.ptr)), (fd, $I(self->fd)));
 }
 
 static err_i
@@ -5625,7 +5666,7 @@ fobj_klass_handle(pioRemotePagesIterator);
 fobj_klass_handle(pioFile);
 fobj_klass_handle(pioLocalDrive);
 fobj_klass_handle(pioRemoteDrive);
-fobj_klass_handle(pioLocalReadFile, inherits(pioFile), mth(fobjDispose, fobjRepr));
+fobj_klass_handle(pioLocalReadFile, mth(fobjDispose, fobjRepr));
 fobj_klass_handle(pioRemoteFile, inherits(pioFile), mth(fobjDispose, fobjRepr));
 fobj_klass_handle(pioLocalWriteFile);
 fobj_klass_handle(pioRemoteWriteFile);
