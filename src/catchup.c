@@ -532,39 +532,17 @@ catchup_multithreaded_copy(int num_threads,
 static void
 catchup_sync_destination_files(const char* pgdata_path, fio_location location, parray *filelist, pgFile *pg_control_file)
 {
-	char    fullpath[MAXPGPATH];
 	time_t	start_time, end_time;
 	char	pretty_time[20];
-	int	i;
+	pioDBDrive_i drive = pioDBDriveForLocation(location);
+	err_i   err;
 
 	elog(INFO, "Syncing copied files to disk");
 	time(&start_time);
 
-	for (i = 0; i < parray_num(filelist); i++)
-	{
-		pgFile *file = (pgFile *) parray_get(filelist, i);
-
-		/* TODO: sync directory ?
-		 * - at first glance we can rely on fs journaling,
-		 *   which is enabled by default on most platforms
-		 * - but PG itself is not relying on fs, its durable_sync
-		 *   includes directory sync
-		 */
-		if (file->kind == PIO_KIND_DIRECTORY || file->excluded)
-			continue;
-
-		Assert(file->external_dir_num == 0);
-		join_path_components(fullpath, pgdata_path, file->rel_path);
-		if (fio_sync(location, fullpath) != 0)
-			elog(ERROR, "Cannot sync file \"%s\": %s", fullpath, strerror(errno));
-	}
-
-	/*
-	 * sync pg_control file
-	 */
-	join_path_components(fullpath, pgdata_path, pg_control_file->rel_path);
-	if (fio_sync(location, fullpath) != 0)
-		elog(ERROR, "Cannot sync file \"%s\": %s", fullpath, strerror(errno));
+	err = $i(pioSyncTree, drive, pgdata_path);
+	if ($haserr(err))
+		ft_logerr(FT_FATAL, $errmsg(err), "Syncing files");
 
 	time(&end_time);
 	pretty_time_interval(difftime(end_time, start_time),
