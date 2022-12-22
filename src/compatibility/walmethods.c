@@ -65,7 +65,6 @@ typedef struct DirectoryMethodFile
 	off_t		currpos;
 	char	   *pathname;
 	char	   *fullpath;
-	//char	   *temp_suffix;/* todo: remove temp_suffix - S3 not support rename, pioOpenRewrite ust temp files fot local file operations */
 #ifdef HAVE_LIBZ
 	gzFile		gzfp;
 #endif
@@ -96,7 +95,7 @@ dir_get_file_name(const char *pathname)
 }
 
 static Walfile
-dir_open_for_write(const char *pathname)
+dir_open_for_write(const char *pathname, bool use_temp)
 {
 	FOBJ_FUNC_ARP();
 	char		tmppath[MAXPGPATH];
@@ -122,7 +121,7 @@ dir_open_for_write(const char *pathname)
 	 * does not do any system calls to fsync() to make changes permanent on
 	 * disk.
 	 */
-	fd = $i(pioOpenRewrite, dir_data->drive, tmppath, O_WRONLY | O_CREAT | PG_BINARY, .err = &err);
+	fd = $i(pioOpenRewrite, dir_data->drive, tmppath, .err = &err, .use_temp = use_temp);
 	if ($haserr(err))
 	{
 		dir_data->lasterrno = getErrno(err);
@@ -189,7 +188,7 @@ dir_open_for_write(const char *pathname)
 	if (dir_data->compression > 0)
 		f->gzfp = gzfp;
 #endif
-	f->fd = fd;
+	f->fd = $iref(fd);
 	f->currpos = 0;
 	f->pathname = pg_strdup(pathname);
 	f->fullpath = pg_strdup(tmppath);
@@ -256,7 +255,6 @@ dir_close(Walfile f, WalCloseMethod method)
 	int			r = 0;
 	DirectoryMethodFile *df = (DirectoryMethodFile *) f;
 	char		tmppath[MAXPGPATH];
-	char		tmppath2[MAXPGPATH];
 	err_i err = $noerr();
 
 	Assert(f != NULL);
@@ -270,7 +268,7 @@ dir_close(Walfile f, WalCloseMethod method)
 	}
 	else
 #endif
-		err = $i(pioClose, df->fd, dir_data->sync);
+		err = $i(pioClose, df->fd);
 	if ($haserr(err))
 	{
 		dir_data->lasterrno = getErrno(err);
@@ -295,6 +293,7 @@ dir_close(Walfile f, WalCloseMethod method)
 
 	pg_free(df->pathname);
 	pg_free(df->fullpath);
+	$idel(&df->fd);
 	pg_free(df);
 
 	return r;

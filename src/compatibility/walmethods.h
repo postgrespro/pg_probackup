@@ -38,7 +38,7 @@ struct WalWriteMethod
 	 * automatically renamed in close(). If pad_to_size is specified, the file
 	 * will be padded with NUL up to that size, if supported by the Walmethod.
 	 */
-	Walfile		(*open_for_write) (const char *pathname);
+	Walfile		(*open_for_write) (const char *pathname, bool use_temp);
 
 	/*
 	 * Close an open Walfile, using one or more methods for handling automatic

@@ -198,6 +198,7 @@ CreateReplicationSlot_compat(PGconn *conn, const char *slot_name, const char *pl
 static void *
 StreamLog(void *arg)
 {
+	FOBJ_FUNC_ARP();
 	StreamThreadArg *stream_arg = (StreamThreadArg *) arg;
 
 	/*

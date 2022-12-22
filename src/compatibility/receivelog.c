@@ -65,32 +65,6 @@ static long CalculateCopyStreamSleeptime(TimestampTz now, int standby_message_ti
 static bool ReadEndOfStreamingResult(PGresult *res, XLogRecPtr *startpos,
 									 uint32 *timeline);
 
-static bool
-mark_file_as_archived(StreamCtl *stream, const char *fname)
-{
-	Walfile    *f;
-	static char tmppath[MAXPGPATH];
-
-	snprintf(tmppath, sizeof(tmppath), "archive_status/%s.done",
-			 fname);
-
-	f = stream->walmethod->open_for_write(tmppath);
-	if (f == NULL)
-	{
-		elog(ERROR, "could not create archive status file \"%s\": %s",
-					 tmppath, stream->walmethod->getlasterror());
-		return false;
-	}
-
-	if (stream->walmethod->close(f, CLOSE_NORMAL) != 0)
-	{
-		elog(ERROR, "could not close archive status file \"%s\": %s",
-					 tmppath, stream->walmethod->getlasterror());
-		return false;
-	}
-
-	return true;
-}
 
 /*
  * Open a new WAL file in the specified directory.
@@ -139,7 +113,7 @@ open_walfile(StreamCtl *stream, XLogRecPtr startpoint)
 		if (size == WalSegSz)
 		{
 			/* Already padded file. Open it for use */
-			f = stream->walmethod->open_for_write(current_walfile_name);
+			f = stream->walmethod->open_for_write(current_walfile_name, false);
 			if (f == NULL)
 			{
 				elog(ERROR, "could not open existing write-ahead log file \"%s\": %s",
@@ -178,7 +152,7 @@ open_walfile(StreamCtl *stream, XLogRecPtr startpoint)
 
 	/* No file existed, so create one */
 
-	f = stream->walmethod->open_for_write(current_walfile_name);
+	f = stream->walmethod->open_for_write(current_walfile_name, false);
 	if (f == NULL)
 	{
 		elog(ERROR, "could not open write-ahead log file \"%s\": %s",
@@ -296,7 +270,7 @@ writeTimeLineHistoryFile(StreamCtl *stream, char *filename, char *content)
 		return false;
 	}
 
-	f = stream->walmethod->open_for_write(histfname);
+	f = stream->walmethod->open_for_write(histfname, true);
 	if (f == NULL)
 	{
 		pg_log_error("could not create timeline history file \"%s\": %s",
