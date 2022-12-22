@@ -1327,6 +1327,16 @@ wait_wal_lsn(const char *wal_segment_dir, XLogRecPtr target_lsn, bool is_start_l
 			}
 			else
 				elog(LOG, "Found WAL segment: %s", wal_segment_path);
+
+
+			/* Check current file for stream. It may be not exist in S3 */
+			if (!file_exists && segment_only && is_start_lsn && in_stream_dir && try_count > 1)
+			{
+				if( isStreamProccessed(wal_segment))
+					return InvalidXLogRecPtr;
+
+			}
+
 		}
 
 		if (file_exists)

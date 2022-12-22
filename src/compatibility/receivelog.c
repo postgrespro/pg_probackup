@@ -1222,3 +1222,9 @@ CalculateCopyStreamSleeptime(TimestampTz now, int standby_message_timeout,
 
 	return sleeptime;
 }
+
+
+bool isStreamProccessed(char *seg_filename)
+{
+	return still_sending && !strcmp(current_walfile_name, seg_filename);
+}

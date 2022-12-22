@@ -85,6 +85,7 @@ struct WalWriteMethod
 
 	/* Return a text for the last error in this Walfile */
 	const char *(*getlasterror) (void);
+
 };
 
 /*
