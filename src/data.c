@@ -1769,7 +1769,7 @@ send_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
 			if($isNULL(out))
 			{
 				out = $i(pioOpenRewrite, backup_location, to_fullpath,
-						 .use_temp = false, .sync = true, .err = &err);
+						 .use_temp = false, .err = &err);
 				if ($haserr(err))
 					return $iresult(err);
 				crc32 = pioCRC32Counter_alloc();

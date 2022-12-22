@@ -106,6 +106,8 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 	time_t		start_time, end_time;
 	char		pretty_time[20];
 	char		pretty_bytes[20];
+
+	pioSyncTree_i syncer;
 	err_i		err = $noerr();
 
 
@@ -554,37 +556,23 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 	/* Sync all copied files unless '--no-sync' flag is used */
 	if (no_sync)
 		elog(WARNING, "Backup files are not synced to disk");
-	else
+	else if ($implements(pioSyncTree, current.backup_location.self, &syncer))
 	{
+		char    external_dst[MAXPGPATH];
 		elog(INFO, "Syncing backup files to disk");
 		time(&start_time);
 
-		for (i = 0; i < parray_num(backup_files_list); i++)
+		err = $i(pioSyncTree, syncer, current.database_dir);
+		if ($haserr(err))
+			ft_logerr(FT_FATAL, $errmsg(err), "Syncing backup's database_dir");
+
+		for (i = 1; i <= parray_num(external_dirs); i++)
 		{
-			char    to_fullpath[MAXPGPATH];
-			pgFile *file = (pgFile *) parray_get(backup_files_list, i);
-
-			/* TODO: sync directory ? */
-			if (file->kind == PIO_KIND_DIRECTORY)
-				continue;
-
-			if (file->write_size <= 0)
-				continue;
-
-			/* construct fullpath */
-			if (file->external_dir_num == 0)
-				join_path_components(to_fullpath, current.database_dir, file->rel_path);
-			else
-			{
-				char 	external_dst[MAXPGPATH];
-
-				makeExternalDirPathByNum(external_dst, external_prefix,
-										 file->external_dir_num);
-				join_path_components(to_fullpath, external_dst, file->rel_path);
-			}
-
-			if (fio_sync(FIO_BACKUP_HOST, to_fullpath) != 0)
-				elog(ERROR, "Cannot sync file \"%s\": %s", to_fullpath, strerror(errno));
+			makeExternalDirPathByNum(external_dst, external_prefix, i);
+			err = $i(pioSyncTree, syncer, external_dst);
+			if ($haserr(err))
+				ft_logerr(FT_FATAL, $errmsg(err),
+						  "Syncing backup's external dir %d", i);
 		}
 
 		time(&end_time);
