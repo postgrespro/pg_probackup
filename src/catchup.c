@@ -434,7 +434,8 @@ catchup_thread_runner(void *arg)
 		{
 			backup_non_data_file(drive_from, drive_to,
 								 file, dest_file, from_fullpath, to_fullpath,
-								 arguments->backup_mode, current.parent_backup, true);
+								 arguments->backup_mode, current.parent_backup,
+								 true, false);
 		}
 
 		/* file went missing during catchup */

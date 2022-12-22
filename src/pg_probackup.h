@@ -1036,12 +1036,12 @@ extern void catchup_data_file(pgFile *file, const char *from_fullpath, const cha
 extern void backup_data_file(pgFile *file, const char *from_fullpath, const char *to_fullpath,
 							 XLogRecPtr prev_backup_start_lsn, BackupMode backup_mode,
 							 CompressAlg calg, int clevel, uint32 checksum_version,
-							 HeaderMap *hdr_map, bool missing_ok);
+							 HeaderMap *hdr_map, bool missing_ok, bool sync);
 extern void backup_non_data_file(pioDrive_i from, pioDrive_i to,
 								 pgFile *file, pgFile *prev_file,
 								 const char *from_fullpath, const char *to_fullpath,
 								 BackupMode backup_mode, time_t parent_backup_time,
-								 bool missing_ok);
+								 bool missing_ok, bool sync);
 
 extern size_t restore_data_file(parray *parent_chain, pgFile *dest_file, pioDBWriter_i out,
 								const char *to_fullpath, bool use_bitmap, PageState *checksum_map,

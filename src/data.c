@@ -60,7 +60,7 @@ typedef struct backup_page_iterator {
 static err_i send_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
 					  XLogRecPtr prev_backup_start_lsn, CompressAlg calg, int clevel,
 					  uint32 checksum_version,
-					  BackupPageHeader2 **headers, BackupMode backup_mode);
+					  BackupPageHeader2 **headers, BackupMode backup_mode, bool sync);
 
 static err_i copy_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
 					  XLogRecPtr sync_lsn, uint32 checksum_version,
@@ -74,10 +74,11 @@ static size_t restore_data_file_internal(pioReader_i in, pioDBWriter_i out, pgFi
 static void backup_non_data_file_internal(pioDrive_i drive_from, pioDrive_i drive_to,
 										  const char *from_fullpath,
 										  const char *to_fullpath, pgFile *file,
-										  bool missing_ok);
+										  bool missing_ok, bool sync);
 
 static err_i send_file(pioDrive_i drive_from, pioDrive_i drive_to,
-					   const char *to_fullpath, const char *from_path, bool cut_zero_tail, pgFile *file);
+					   const char *to_fullpath, const char *from_path,
+					   bool cut_zero_tail, pgFile *file, bool sync);
 
 #ifdef HAVE_LIBZ
 /* Implementation of zlib compression method */
@@ -381,7 +382,7 @@ void
 backup_data_file(pgFile *file, const char *from_fullpath, const char *to_fullpath,
 				 XLogRecPtr prev_backup_start_lsn, BackupMode backup_mode,
 				 CompressAlg calg, int clevel, uint32 checksum_version,
-				 HeaderMap *hdr_map, bool is_merge)
+				 HeaderMap *hdr_map, bool is_merge, bool sync)
 {
 	/* page headers */
 	BackupPageHeader2 *headers = NULL;
@@ -438,7 +439,7 @@ backup_data_file(pgFile *file, const char *from_fullpath, const char *to_fullpat
 	/* TODO: stop handling errors internally */
 	err = send_pages(to_fullpath, from_fullpath, file, start_lsn,
 					   calg, clevel, checksum_version,
-					   &headers, backup_mode);
+					   &headers, backup_mode, sync);
 
 	if ($haserr(err))
 	{
@@ -553,7 +554,7 @@ backup_non_data_file(pioDrive_i drive_from, pioDrive_i drive_to,
 					 pgFile *file, pgFile *prev_file,
 					 const char *from_fullpath, const char *to_fullpath,
 					 BackupMode backup_mode, time_t parent_backup_time,
-					 bool missing_ok)
+					 bool missing_ok, bool sync)
 {
 	FOBJ_FUNC_ARP();
 	err_i err;
@@ -599,7 +600,7 @@ backup_non_data_file(pioDrive_i drive_from, pioDrive_i drive_to,
 	}
 
 	backup_non_data_file_internal(drive_from, drive_to, from_fullpath,
-								  to_fullpath, file, missing_ok);
+								  to_fullpath, file, missing_ok, sync);
 }
 
 /*
@@ -1175,7 +1176,7 @@ void
 backup_non_data_file_internal(pioDrive_i drive_from, pioDrive_i drive_to,
 							const char *from_fullpath,
 							const char *to_fullpath, pgFile *file,
-							bool missing_ok)
+							bool missing_ok, bool sync)
 {
 	bool	cut_zero_tail;
 	err_i	err;
@@ -1190,7 +1191,8 @@ backup_non_data_file_internal(pioDrive_i drive_from, pioDrive_i drive_to,
 	file->uncompressed_size = 0;
 
 	/* backup non-data file  */
-	err = send_file(drive_from, drive_to, to_fullpath, from_fullpath, cut_zero_tail, file);
+	err = send_file(drive_from, drive_to, to_fullpath, from_fullpath,
+					cut_zero_tail, file, sync);
 
 	/* handle errors */
 	if($haserr(err)) {
@@ -1208,7 +1210,7 @@ backup_non_data_file_internal(pioDrive_i drive_from, pioDrive_i drive_to,
 }
 
 static err_i
-send_file(pioDrive_i db_drive, pioDrive_i backup_drive, const char *to_fullpath, const char *from_fullpath, bool cut_zero_tail, pgFile *file) {
+send_file(pioDrive_i db_drive, pioDrive_i backup_drive, const char *to_fullpath, const char *from_fullpath, bool cut_zero_tail, pgFile *file, bool sync) {
 	FOBJ_FUNC_ARP();
 	err_i err = $noerr();
 	pioReadStream_i in;
@@ -1216,7 +1218,7 @@ send_file(pioDrive_i db_drive, pioDrive_i backup_drive, const char *to_fullpath,
 
 	/* open to_fullpath */
 	out = $i(pioOpenRewrite, backup_drive, .path = to_fullpath,
-				.permissions = file->mode, .err = &err);
+				.permissions = file->mode, .sync = sync, .err = &err);
 
 	if($haserr(err))
 		elog(ERROR, "Cannot open destination file \"%s\": %s",
@@ -1737,7 +1739,7 @@ static err_i
 send_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
 		   XLogRecPtr prev_backup_start_lsn, CompressAlg calg, int clevel,
 		   uint32 checksum_version, BackupPageHeader2 **headers,
-		   BackupMode backup_mode)
+		   BackupMode backup_mode, bool sync)
 {
 	FOBJ_FUNC_ARP();
 	pioDrive_i backup_location = pioDriveForLocation(FIO_BACKUP_HOST);
@@ -1769,7 +1771,7 @@ send_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
 			if($isNULL(out))
 			{
 				out = $i(pioOpenRewrite, backup_location, to_fullpath,
-						 .use_temp = false, .err = &err);
+						 .sync = sync, .err = &err);
 				if ($haserr(err))
 					return $iresult(err);
 				crc32 = pioCRC32Counter_alloc();

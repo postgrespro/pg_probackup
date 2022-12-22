@@ -2035,13 +2035,14 @@ backup_files(void *arg)
 							 instance_config.compress_alg,
 							 instance_config.compress_level,
 							 arguments->nodeInfo->checksum_version,
-							 arguments->hdr_map, false);
+							 arguments->hdr_map, false, false);
 		}
 		else
 		{
 			backup_non_data_file(db_drive, backup_drive,
 								 file, prev_file, from_fullpath, to_fullpath,
-								 current.backup_mode, current.parent_backup, true);
+								 current.backup_mode, current.parent_backup,
+								 true, false);
 		}
 
 		if (file->write_size == FILE_NOT_FOUND)

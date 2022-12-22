@@ -1180,7 +1180,6 @@ merge_data_file(parray *parent_chain, pgBackup *full_backup,
 {
 	char    to_fullpath[MAXPGPATH];
 	char    to_fullpath_tmp1[MAXPGPATH]; /* used for restore */
-	char    to_fullpath_tmp2[MAXPGPATH]; /* used for backup */
 	pioDBDrive_i drive = pioDBDriveForLocation(FIO_BACKUP_HOST);
 	pioDBWriter_i out;
 	err_i	err;
@@ -1193,7 +1192,6 @@ merge_data_file(parray *parent_chain, pgBackup *full_backup,
 	/* set fullpath of destination file and temp files */
 	join_path_components(to_fullpath, full_database_dir, tmp_file->rel_path);
 	snprintf(to_fullpath_tmp1, MAXPGPATH, "%s_tmp1", to_fullpath);
-	snprintf(to_fullpath_tmp2, MAXPGPATH, "%s_tmp2", to_fullpath);
 
 	/* open temp file */
 	out = $i(pioOpenWrite, drive, to_fullpath_tmp1, .err = &err);
@@ -1218,11 +1216,11 @@ merge_data_file(parray *parent_chain, pgBackup *full_backup,
 	 * 2 backups of old versions, where n_blocks is missing.
 	 */
 
-	backup_data_file(tmp_file, to_fullpath_tmp1, to_fullpath_tmp2,
+	backup_data_file(tmp_file, to_fullpath_tmp1, to_fullpath,
 				 InvalidXLogRecPtr, BACKUP_MODE_FULL,
 				 dest_backup->compress_alg, dest_backup->compress_level,
 				 dest_backup->checksum_version,
-				 &(full_backup->hdr_map), true);
+				 &(full_backup->hdr_map), true, !no_sync);
 
 	/* drop restored temp file */
 	if (unlink(to_fullpath_tmp1) == -1)
@@ -1244,16 +1242,6 @@ merge_data_file(parray *parent_chain, pgBackup *full_backup,
 	if (tmp_file->write_size == 0)
 		return;
 
-	/* sync second temp file to disk */
-	if (!no_sync && fio_sync(FIO_BACKUP_HOST, to_fullpath_tmp2) != 0)
-		elog(ERROR, "Cannot sync merge temp file \"%s\": %s",
-			to_fullpath_tmp2, strerror(errno));
-
-	/* Do atomic rename from second temp file to destination file */
-	if (rename(to_fullpath_tmp2, to_fullpath) == -1)
-			elog(ERROR, "Could not rename file \"%s\" to \"%s\": %s",
-				 to_fullpath_tmp2, to_fullpath, strerror(errno));
-
 	/* drop temp file */
 	unlink(to_fullpath_tmp1);
 }
@@ -1271,7 +1259,6 @@ merge_non_data_file(parray *parent_chain, pgBackup *full_backup,
 {
 	int		i;
 	char	to_fullpath[MAXPGPATH];
-	char	to_fullpath_tmp[MAXPGPATH]; /* used for backup */
 	char	from_fullpath[MAXPGPATH];
 	pgBackup *from_backup = NULL;
 	pgFile *from_file = NULL;
@@ -1286,8 +1273,6 @@ merge_non_data_file(parray *parent_chain, pgBackup *full_backup,
 	}
 	else
 		join_path_components(to_fullpath, full_database_dir, dest_file->rel_path);
-
-	snprintf(to_fullpath_tmp, MAXPGPATH, "%s_tmp", to_fullpath);
 
 	/*
 	 * Iterate over parent chain starting from direct parent of destination
@@ -1349,18 +1334,7 @@ merge_non_data_file(parray *parent_chain, pgBackup *full_backup,
 	/* Copy file to FULL backup directory into temp file */
 	backup_non_data_file(full_backup->backup_location, dest_backup->backup_location,
 						 tmp_file, NULL, from_fullpath,
-						 to_fullpath_tmp, BACKUP_MODE_FULL, 0, false);
-
-	/* sync temp file to disk */
-	if (!no_sync && fio_sync(FIO_BACKUP_HOST, to_fullpath_tmp) != 0)
-		elog(ERROR, "Cannot sync merge temp file \"%s\": %s",
-			to_fullpath_tmp, strerror(errno));
-
-	/* Do atomic rename from second temp file to destination file */
-	if (rename(to_fullpath_tmp, to_fullpath) == -1)
-			elog(ERROR, "Could not rename file \"%s\" to \"%s\": %s",
-				to_fullpath_tmp, to_fullpath, strerror(errno));
-
+						 to_fullpath, BACKUP_MODE_FULL, 0, false, !no_sync);
 }
 
 /*
