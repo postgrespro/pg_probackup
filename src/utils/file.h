@@ -27,7 +27,6 @@ typedef enum
 	FIO_OPEN,
 	FIO_CLOSE,
 	FIO_WRITE,
-	FIO_SYNC,
 	FIO_RENAME,
 	FIO_SYMLINK,
 	FIO_REMOVE,
@@ -156,8 +155,6 @@ extern void    fio_error(int rc, int size, const char* file, int line);
 extern void    fio_get_agent_version(int* protocol, char* payload_buf, size_t payload_buf_size);
 
 /* pathname-style functions */
-extern int     fio_sync(fio_location location, const char* path);
-
 extern int     fio_symlink(fio_location location, const char* target, const char* link_path, bool overwrite);
 extern int     fio_remove(fio_location location, const char* path, bool missing_ok);
 extern ssize_t fio_readlink(fio_location location, const char *path, char *value, size_t valsiz);
