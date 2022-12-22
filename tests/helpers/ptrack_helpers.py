@@ -1961,6 +1961,7 @@ class GDBobj:
     def __init__(self, cmd, env, attach=False):
         self.verbose = env.verbose
         self.output = ''
+        self._did_quit = False
 
         # Check gdb flag is set up
         if not env.gdb:
@@ -2019,6 +2020,13 @@ class GDBobj:
             else:
                 break
 
+    def __del__(self):
+        if not self._did_quit:
+            try:
+                self.quit()
+            except subprocess.TimeoutExpired:
+                self.kill()
+
     def get_line(self):
         line = self.proc.stdout.readline()
         self.output += line
@@ -2026,7 +2034,9 @@ class GDBobj:
 
     def kill(self):
         self.proc.kill()
-        self.proc.wait()
+        self.proc.wait(3)
+        self.proc.stdin.close()
+        self.proc.stdout.close()
 
     def set_breakpoint(self, location):
 
@@ -2154,7 +2164,12 @@ class GDBobj:
         return False
 
     def quit(self):
-        self.proc.terminate()
+        if not self._did_quit:
+            self._did_quit = True
+            self.proc.terminate()
+            self.proc.wait(3)
+            self.proc.stdin.close()
+            self.proc.stdout.close()
 
     # use for breakpoint, run, continue
     def _execute(self, cmd, running=True):
