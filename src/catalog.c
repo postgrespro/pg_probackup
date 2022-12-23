@@ -63,13 +63,20 @@ timelineInfoNew(TimeLineID tli)
 	return tlinfo;
 }
 
+static void
+xlogFile_free(xlogFile* fl)
+{
+	ft_str_free(&fl->name);
+	ft_free(fl);
+}
+
 /* free timelineInfo object */
 void
 timelineInfoFree(void *tliInfo)
 {
 	timelineInfo *tli = (timelineInfo *) tliInfo;
 
-	parray_walk(tli->xlog_filelist, pgFileFree);
+	parray_walk(tli->xlog_filelist, xlogFile_free);
 	parray_free(tli->xlog_filelist);
 
 	if (tli->backups)
@@ -1668,7 +1675,7 @@ catalog_get_timelines(InstanceState *instanceState, InstanceConfig *instance)
 					}
 
 					/* append file to xlog file list */
-					wal_file = palloc(sizeof(xlogFile));
+					wal_file = ft_calloc(sizeof(xlogFile));
 					wal_file->name = ft_str_steal(&file.name);
 					wal_file->size = file.stat.pst_size;
 					wal_file->segno = segno;
@@ -1690,7 +1697,7 @@ catalog_get_timelines(InstanceState *instanceState, InstanceConfig *instance)
 					}
 
 					/* append file to xlog file list */
-					wal_file = palloc(sizeof(xlogFile));
+					wal_file = ft_calloc(sizeof(xlogFile));
 					wal_file->name = ft_str_steal(&file.name);
 					wal_file->size = file.stat.pst_size;
 					wal_file->segno = segno;
@@ -1712,7 +1719,7 @@ catalog_get_timelines(InstanceState *instanceState, InstanceConfig *instance)
 					}
 
 					/* append file to xlog file list */
-					wal_file = palloc(sizeof(xlogFile));
+					wal_file = ft_calloc(sizeof(xlogFile));
 					wal_file->name = ft_str_steal(&file.name);
 					wal_file->size = file.stat.pst_size;
 					wal_file->segno = segno;
@@ -1775,7 +1782,7 @@ catalog_get_timelines(InstanceState *instanceState, InstanceConfig *instance)
 			tlinfo->size += file.stat.pst_size;
 
 			/* append file to xlog file list */
-			wal_file = palloc(sizeof(xlogFile));
+			wal_file = ft_calloc(sizeof(xlogFile));
 			wal_file->name = ft_str_steal(&file.name);
 			wal_file->size = file.stat.pst_size;
 			wal_file->segno = segno;
