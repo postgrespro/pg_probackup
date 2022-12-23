@@ -227,7 +227,7 @@ do_block_validation(char *pgdata, uint32 checksum_version)
 	}
 
 	/* Sort by size for load balancing */
-	parray_qsort(files_list, pgFileCompareSize);
+	parray_qsort(files_list, pgFileCompareSizeDesc);
 
 	/* init thread args with own file lists */
 	threads = (pthread_t *) palloc(sizeof(pthread_t) * num_threads);

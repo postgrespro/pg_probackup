@@ -313,24 +313,17 @@ pgFileCompareLinked(const void *f1, const void *f2)
 
 /* Compare two pgFile with their size */
 int
-pgFileCompareSize(const void *f1, const void *f2)
+pgFileCompareSizeDesc(const void *f1, const void *f2)
 {
 	pgFile *f1p = *(pgFile **)f1;
 	pgFile *f2p = *(pgFile **)f2;
 
-	if (f1p->size > f2p->size)
+	if (f1p->size < f2p->size)
 		return 1;
-	else if (f1p->size < f2p->size)
+	else if (f1p->size > f2p->size)
 		return -1;
 	else
 		return 0;
-}
-
-/* Compare two pgFile with their size in descending order */
-int
-pgFileCompareSizeDesc(const void *f1, const void *f2)
-{
-	return -1 * pgFileCompareSize(f1, f2);
 }
 
 int

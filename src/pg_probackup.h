@@ -1018,7 +1018,6 @@ extern int pgFileCompareRelPathWithString(const void *f1, const void *f2);
 extern int pgFileCompareRelPathWithExternal(const void *f1, const void *f2);
 extern int pgFileCompareRelPathWithExternalDesc(const void *f1, const void *f2);
 extern int pgFileCompareLinked(const void *f1, const void *f2);
-extern int pgFileCompareSize(const void *f1, const void *f2);
 extern int pgFileCompareSizeDesc(const void *f1, const void *f2);
 extern int pgCompareString(const void *str1, const void *str2);
 extern int pgPrefixCompareString(const void *str1, const void *str2);
