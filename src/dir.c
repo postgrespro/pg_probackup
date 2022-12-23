@@ -563,6 +563,10 @@ db_list_dir(parray *files, const char* root,
 			/* XXX: why the hell it is "ok" for non-external directories? */
 			return;
 		}
+		if (getErrno(err) == ENOENT && external_dir_num != 0)
+		{
+			ft_logerr(FT_FATAL, $errmsg(err), "External directory is not found");
+		}
 		if (getErrno(err) == ENOTDIR && external_dir_num != 0)
 		{
 			elog(ERROR, " --external-dirs option \"%s\": directory or symbolic link expected",
