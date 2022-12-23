@@ -111,7 +111,7 @@ do_add_instance(InstanceState *instanceState, InstanceConfig *instance)
 			if ($haserr(err))
 				ft_logerr(FT_FATAL, $errmsg(err), "Check instance");
 			if (exists)
-				elog(ERROR, "Instance '%s' %s directory alredy exists: '%s'",
+				elog(ERROR, "Instance '%s' %s directory already exists: '%s'",
 					 instanceState->instance_name, paths[i][0], paths[i][1]);
 		}
 	}

@@ -2477,7 +2477,7 @@ pioLocalDrive_pioIsDirEmpty(VSelf, path_t path, err_i* err)
 		return false;
 	}
 
-	while ((dent = readdir(dir)) != NULL)
+	for (errno=0;(dent = readdir(dir)) != NULL;errno=0)
 	{
 		if (strcmp(dent->d_name, ".") == 0)
 			continue;

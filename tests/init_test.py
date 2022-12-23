@@ -115,35 +115,14 @@ class InitTest(ProbackupTest, unittest.TestCase):
         dir_backups = os.path.join(backup_dir, 'backups', 'node')
         dir_wal = os.path.join(backup_dir, 'wal', 'node')
 
-        try:
-            self.add_instance(backup_dir, 'node', node)
-            # we should die here because exception is what we expect to happen
-            self.assertEqual(
-                1, 0,
-                "Expecting Error because page backup should not be possible "
-                "\n Output: {0} \n CMD: {1}".format(
-                    repr(self.output), self.cmd))
-        except ProbackupException as e:
-            self.assertIn(
-                "ERROR: Instance 'node' WAL archive directory already exists: ",
-                e.message,
-                "\n Unexpected Error Message: {0}\n CMD: {1}".format(
-                    repr(e.message), self.cmd))
+        with open(os.path.join(dir_wal, "0000"), 'w'):
+            pass
 
-        try:
+        with self.assertRaisesRegex(ProbackupException, r"'node'.*WAL.*already exists"):
             self.add_instance(backup_dir, 'node', node)
-            # we should die here because exception is what we expect to happen
-            self.assertEqual(
-                1, 0,
-                "Expecting Error because page backup should not be possible "
-                "\n Output: {0} \n CMD: {1}".format(
-                    repr(self.output), self.cmd))
-        except ProbackupException as e:
-            self.assertIn(
-                "ERROR: Instance 'node' WAL archive directory already exists: ",
-                e.message,
-                "\n Unexpected Error Message: {0}\n CMD: {1}".format(
-                    repr(e.message), self.cmd))
+
+        with self.assertRaisesRegex(ProbackupException, r"'node'.*WAL.*already exists"):
+            self.add_instance(backup_dir, 'node', node)
 
     def test_init_backup_catalog_no_access(self):
         """ Test pg_probackup init -B backup_dir to a dir with no read access. """
@@ -153,7 +132,7 @@ class InitTest(ProbackupTest, unittest.TestCase):
         os.makedirs(no_access_dir)
         os.chmod(no_access_dir, stat.S_IREAD)
 
-        expected = 'ERROR: cannot open backup catalog directory "{0}": Permission denied'.format(backup_dir)
+        expected = 'ERROR: cannot open backup catalog directory.*{0}.*Permission denied'.format(backup_dir)
         with self.assertRaisesRegex(ProbackupException, expected):
             self.init_pb(backup_dir)
 

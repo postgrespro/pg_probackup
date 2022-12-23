@@ -532,11 +532,11 @@ pbk_main(int argc, char *argv[])
 					instanceState->instance_backup_subdir_path);
 
 				// TODO: redundant message, should we get rid of it?
-				elog(ERROR, "Instance '%s' does not exist in this backup catalog",
-							instance_name);
+				elog(ERROR, "-B, --backup-path must be a path to directory");
 			}
 			if (!exists)
-				elog(ERROR, "-B, --backup-path must be a path to directory");
+				elog(ERROR, "Instance '%s' does not exist in this backup catalog",
+					 instance_name);
 		}
 	}
 
