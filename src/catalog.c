@@ -76,7 +76,7 @@ timelineInfoFree(void *tliInfo)
 {
 	timelineInfo *tli = (timelineInfo *) tliInfo;
 
-	parray_walk(tli->xlog_filelist, xlogFile_free);
+	parray_walk(tli->xlog_filelist, (void(*)(void*))xlogFile_free);
 	parray_free(tli->xlog_filelist);
 
 	if (tli->backups)
