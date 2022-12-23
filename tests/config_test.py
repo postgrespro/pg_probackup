@@ -34,21 +34,9 @@ class ConfigTest(ProbackupTest, unittest.TestCase):
 
         os.unlink(os.path.join(backup_dir, 'backups','node', 'pg_probackup.conf'))
 
-        try:
+        with self.assertRaisesRegex(ProbackupException, r'ERROR: Reading instance control.*No such file'):
             self.backup_node(
                 backup_dir, 'node', node, backup_type='page')
-            self.assertEqual(
-                    1, 0,
-                    "Expecting Error because pg_probackup.conf is missing. "
-                    ".\n Output: {0} \n CMD: {1}".format(
-                        repr(self.output), self.cmd))
-        except ProbackupException as e:
-            self.assertIn(
-                'ERROR: could not open file "{0}": '
-                'No such file or directory'.format(conf_file),
-                e.message,
-                "\n Unexpected Error Message: {0}\n CMD: {1}".format(
-                    repr(e.message), self.cmd))
 
     # @unittest.expectedFailure
     # @unittest.skip("skip")
