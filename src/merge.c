@@ -598,6 +598,8 @@ merge_chain(InstanceState *instanceState,
 		else
 			write_backup_status(backup, BACKUP_STATUS_MERGING, true);
 	}
+	/* attempt to speedup headers reading at least for dest backup */
+	parray_qsort(dest_backup->files, pgFileCompareByHdrOff);
 
 	/* Construct path to database dir: /backup_dir/instance_name/FULL/database */
 	join_path_components(full_database_dir, full_backup->root_dir, DATABASE_DIR);
@@ -924,6 +926,8 @@ merge_files(void *arg)
 	int		i;
 	merge_files_arg *arguments = (merge_files_arg *) arg;
 	size_t n_files = parray_num(arguments->dest_backup->files);
+
+	header_map_cache_init();
 
 	for (i = 0; i < n_files; i++)
 	{

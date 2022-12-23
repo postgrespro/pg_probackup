@@ -1024,6 +1024,7 @@ extern int pgFileCompareRelPathWithExternal(const void *f1, const void *f2);
 extern int pgFileCompareRelPathWithExternalDesc(const void *f1, const void *f2);
 extern int pgFileCompareLinked(const void *f1, const void *f2);
 extern int pgFileCompareSizeDesc(const void *f1, const void *f2);
+extern int pgFileCompareByHdrOff(const void *f1, const void *f2);
 extern int pgCompareString(const void *str1, const void *str2);
 extern int pgPrefixCompareString(const void *str1, const void *str2);
 extern int pgCompareOid(const void *f1, const void *f2);
@@ -1065,6 +1066,7 @@ extern datapagemap_t *get_lsn_map(const char *fullpath, uint32 checksum_version,
 extern bool validate_file_pages(pgFile *file, const char *fullpath, XLogRecPtr stop_lsn,
 							    uint32 checksum_version, uint32 backup_version, HeaderMap *hdr_map);
 
+extern void header_map_cache_init(void);
 extern BackupPageHeader2* get_data_file_headers(HeaderMap *hdr_map, pgFile *file, uint32 backup_version, bool strict);
 extern void write_page_headers(BackupPageHeader2 *headers, pgFile *file, HeaderMap *hdr_map, bool is_merge);
 extern void init_header_map(pgBackup *backup);

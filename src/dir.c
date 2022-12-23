@@ -326,6 +326,20 @@ pgFileCompareSizeDesc(const void *f1, const void *f2)
 		return 0;
 }
 
+/*
+ * Compare files by offset in headers file.
+ * It really matters during restore.
+ */
+int
+pgFileCompareByHdrOff(const void *f1, const void *f2)
+{
+	pgFile *f1p = *(pgFile **)f1;
+	pgFile *f2p = *(pgFile **)f2;
+
+	return f1p->hdr_off < f2p->hdr_off ? -1 :
+	       f1p->hdr_off > f2p->hdr_off;
+}
+
 int
 pgCompareString(const void *str1, const void *str2)
 {

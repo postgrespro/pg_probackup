@@ -987,6 +987,8 @@ restore_chain(InstanceState *instanceState,
 	time(&start_time);
 	thread_interrupted = false;
 
+	parray_qsort(dest_files, pgFileCompareByHdrOff);
+
 	/* Restore files into target directory */
 	for (i = 0; i < num_threads; i++)
 	{
@@ -1112,6 +1114,8 @@ restore_files(void *arg)
 	pioDBDrive_i  db_drive;
 
 	restore_files_arg *arguments = (restore_files_arg *) arg;
+
+	header_map_cache_init();
 
 	n_files = parray_num(arguments->dest_files);
 

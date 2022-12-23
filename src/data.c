@@ -1894,6 +1894,81 @@ copy_pages(const char *to_fullpath, const char *from_fullpath, pgFile *file,
 	return $noerr();
 }
 
+typedef struct header_map_cache_item header_map_cache_item_t;
+struct header_map_cache_item {
+	ft_str_t    path;
+	pioReader_i fl;
+	err_i		err;
+
+	header_map_cache_item_t* next;
+};
+
+typedef struct HeaderMapCache {
+	header_map_cache_item_t *first;
+} HeaderMapCache;
+#define kls__HeaderMapCache mth(fobjDispose)
+fobj_klass(HeaderMapCache);
+
+static __thread HeaderMapCache *header_map_cache = NULL;
+
+/*
+ * Header_map_cache_init initializes header_map open files cache.
+ * It allocates object that will reside in AutoReleasePool.
+ * Therefore it should be called in threads top level function. */
+void
+header_map_cache_init(void)
+{
+	header_map_cache = $alloc(HeaderMapCache);
+}
+
+static pioReadSeek_i
+header_map_cache_open(pioDrive_i drive, path_t path, err_i* err)
+{
+	ft_str_t    pth = ft_cstr(path);
+	header_map_cache_item_t **item;
+	ft_assert(header_map_cache != NULL);
+
+	item = &header_map_cache->first;
+	while (*item)
+	{
+		if (ft_streq((*item)->path, pth))
+			break;
+		item = &(*item)->next;
+	}
+	if ((*item) == NULL)
+	{
+		*item = ft_calloc(sizeof(header_map_cache_item_t));
+		(*item)->path = ft_strdup(pth);
+		(*item)->fl = $iref($i(pioOpenRead, drive, .path = path,
+							   .err = &(*item)->err));
+		(*item)->err = $iref((*item)->err);
+	}
+	*err = (*item)->err;
+	return $reduce(pioReadSeek, (*item)->fl);
+}
+
+static void
+HeaderMapCache_fobjDispose(VSelf)
+{
+	Self(HeaderMapCache);
+	header_map_cache_item_t *it;
+	ft_assert(header_map_cache == self);
+	header_map_cache = NULL;
+
+	while (self->first)
+	{
+		it = self->first;
+		self->first = it->next;
+		ft_str_free(&it->path);
+		$i(pioClose, it->fl);
+		$idel(&it->fl);
+		$idel(&it->err);
+		ft_free(it);
+	}
+}
+
+fobj_klass_handle(HeaderMapCache);
+
 /*
  * Attempt to open header file, read content and return as
  * array of headers.
@@ -1915,7 +1990,7 @@ get_data_file_headers(HeaderMap *hdr_map, pgFile *file, uint32 backup_version, b
 	int     z_len = 0;
 	char   *zheaders = NULL;
 	const char *errormsg = NULL;
-	pioReader_i	reader = {0};
+	pioReadSeek_i	reader = {0};
 	size_t		rc;
 	err_i		err = $noerr();
 
@@ -1926,7 +2001,7 @@ get_data_file_headers(HeaderMap *hdr_map, pgFile *file, uint32 backup_version, b
 		return NULL;
 
 	/* TODO: consider to make this descriptor thread-specific */
-	reader = $i(pioOpenRead, drive, .path = hdr_map->path, &err);
+	reader = header_map_cache_open(drive, hdr_map->path, &err);
 	if ($haserr(err))
 	{
 		elog(strict ? ERROR : WARNING, "Cannot open header file \"%s\": %s", hdr_map->path, strerror(errno));
@@ -1995,13 +2070,6 @@ get_data_file_headers(HeaderMap *hdr_map, pgFile *file, uint32 backup_version, b
 cleanup:
 
 	pg_free(zheaders);
-	if ($notNULL(reader))
-	{
-		err = $i(pioClose,reader);
-		if ($haserr(err))
-			elog(ERROR, "Cannot close file \"%s\"", hdr_map->path);
-	}
-
 	if (!success)
 	{
 		pg_free(headers);

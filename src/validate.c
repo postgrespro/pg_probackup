@@ -126,6 +126,8 @@ pgBackupValidate(pgBackup *backup, pgRestoreParams *params)
 		return;
 	}
 
+	parray_qsort(files, pgFileCompareByHdrOff);
+
 //	if (params && params->partial_db_list)
 //		dbOid_exclude_list = get_dbOid_exclude_list(backup, files, params->partial_db_list,
 //														params->partial_restore_type);
@@ -239,6 +241,8 @@ pgBackupValidateFiles(void *arg)
 	pg_crc32	crc;
 	pioDrive_i  backup_drive = arguments->backup_drive;
 	err_i		err;
+
+	header_map_cache_init();
 
 	for (i = 0; i < num_files; i++)
 	{
