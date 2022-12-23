@@ -29,7 +29,9 @@ typedef bool (*stream_stop_callback) (XLogRecPtr segendpos, uint32 timeline, boo
 typedef struct StreamCtl
 {
 	XLogRecPtr	startpos;		/* Start position for streaming */
-	TimeLineID	timeline;		/* Timeline to stream data from */
+	volatile XLogRecPtr	currentpos;		/* current position */
+	volatile XLogRecPtr	prevpos;		/* current position */
+	volatile TimeLineID	timeline;		/* Timeline to stream data from */
 	char	   *sysidentifier;	/* Validate this system identifier and
 								 * timeline */
 	int			standby_message_timeout;	/* Send status messages this often */

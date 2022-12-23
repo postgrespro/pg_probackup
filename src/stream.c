@@ -37,6 +37,8 @@ static uint32 stream_stop_timeout = 0;
 /* Time in which we started to wait for streaming end */
 static time_t stream_stop_begin = 0;
 
+static StreamCtl stream_ctl = {0};
+
 /*
  * We need to wait end of WAL streaming before execute pg_stop_backup().
  */
@@ -234,32 +236,28 @@ StreamLog(void *arg)
 			  stream_arg->starttli);
 
 	{
-		StreamCtl	ctl;
+		stream_ctl.startpos = stream_arg->startpos;
+		stream_ctl.timeline = stream_arg->starttli;
+		stream_ctl.sysidentifier = NULL;
+		stream_ctl.stream_stop = stop_streaming;
+		stream_ctl.standby_message_timeout = standby_message_timeout;
 
-		MemSet(&ctl, 0, sizeof(ctl));
-
-		ctl.startpos = stream_arg->startpos;
-		ctl.timeline = stream_arg->starttli;
-		ctl.sysidentifier = NULL;
-		ctl.stream_stop = stop_streaming;
-		ctl.standby_message_timeout = standby_message_timeout;
-
-		ctl.walmethod = CreateWalDirectoryMethod(
+		stream_ctl.walmethod = CreateWalDirectoryMethod(
 			stream_arg->basedir,
 			0,
 			false,
 			pioDriveForLocation(FIO_BACKUP_HOST));
 
-		ctl.replication_slot = replication_slot;
-		ctl.stop_socket = PGINVALID_SOCKET;
+		stream_ctl.replication_slot = replication_slot;
+		stream_ctl.stop_socket = PGINVALID_SOCKET;
 
-		if (ReceiveXlogStream(stream_arg->conn, &ctl) == false)
+		if (ReceiveXlogStream(stream_arg->conn, &stream_ctl) == false)
 		{
 			interrupted = true;
 			elog(ERROR, "Problem in receivexlog");
 		}
 
-		if (!ctl.walmethod->finish())
+		if (!stream_ctl.walmethod->finish())
 		{
 			interrupted = true;
 			elog(ERROR, "Could not finish writing WAL files: %s",
@@ -703,4 +701,12 @@ add_history_file_to_filelist(parray *filelist, uint32 timeline, char *basedir)
 
     file = pgFileNew(fullpath, relpath, false, do_crc, drive);
     parray_append(filelist, file);
+}
+
+void
+getCurrentStreamPosition(TimeLineID *timeline, XLogRecPtr *ptr, XLogRecPtr *prev)
+{
+	*ptr = stream_ctl.currentpos;
+	*prev = stream_ctl.prevpos;
+	*timeline = stream_ctl.timeline;
 }

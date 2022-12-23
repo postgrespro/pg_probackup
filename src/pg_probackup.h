@@ -1221,7 +1221,7 @@ extern XLogRecPtr wait_wal_lsn(const char *wal_segment_dir, XLogRecPtr lsn, bool
 extern void wait_wal_and_calculate_stop_lsn(const char *xlog_path, XLogRecPtr stop_lsn, pgBackup *backup);
 extern int64 calculate_datasize_of_filelist(parray *filelist);
 
-extern bool isStreamProccessed(char *seg_filename); /* Checks, that this file is stream processing. File name without path. */
+extern void getCurrentStreamPosition(TimeLineID *timeline, XLogRecPtr *ptr, XLogRecPtr *prev);
 
 /*
  * Slices and arrays for C strings

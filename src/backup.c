@@ -1304,6 +1304,50 @@ wait_wal_lsn(const char *wal_segment_dir, XLogRecPtr target_lsn, bool is_start_l
 		elog(LOG, "Looking for LSN %X/%X in segment: %s",
 			 (uint32) (target_lsn >> 32), (uint32) target_lsn, wal_segment);
 
+	if (in_stream_dir && !in_prev_segment)
+	{
+		/* separate simple loop for streaming */
+		for (;;)
+		{
+			TimeLineID curtli;
+			XLogRecPtr curptr;
+			XLogRecPtr prevptr;
+
+			getCurrentStreamPosition(&curtli, &curptr, &prevptr);
+			if (curtli > tli || (curtli == tli && curptr > target_lsn))
+				return target_lsn;
+
+			sleep(1);
+			if (interrupted || thread_interrupted)
+				elog(ERROR, "Interrupted during waiting for WAL streaming");
+			try_count++;
+
+			/* Inform user if WAL segment is absent in first attempt */
+			if (try_count == 1)
+			{
+				if (segment_only)
+					elog(INFO, "Wait for WAL segment %s to be %s",
+						 wal_segment_path, wal_delivery_str);
+				else
+					elog(INFO, "Wait for LSN %X/%X in %s WAL segment %s",
+						 (uint32) (target_lsn >> 32), (uint32) target_lsn,
+						 wal_delivery_str, wal_segment_path);
+			}
+
+			if (current.from_replica &&
+				(XRecOffIsNull(target_lsn) || try_count > timeout / 2))
+			{
+				if (!XLogRecPtrIsInvalid(prevptr))
+				{
+					/* LSN of the prior record was found */
+					elog(LOG, "Abuse prior LSN from stream: %X/%X",
+						 (uint32) (prevptr >> 32), (uint32) prevptr);
+					return prevptr;
+				}
+			}
+		}
+	}
+
 #ifdef HAVE_LIBZ
 	snprintf(gz_wal_segment_path, sizeof(gz_wal_segment_path), "%s.gz",
 			 wal_segment_path);
@@ -1327,16 +1371,6 @@ wait_wal_lsn(const char *wal_segment_dir, XLogRecPtr target_lsn, bool is_start_l
 			}
 			else
 				elog(LOG, "Found WAL segment: %s", wal_segment_path);
-
-
-			/* Check current file for stream. It may be not exist in S3 */
-			if (!file_exists && segment_only && is_start_lsn && in_stream_dir && try_count > 1)
-			{
-				if( isStreamProccessed(wal_segment))
-					return InvalidXLogRecPtr;
-
-			}
-
 		}
 
 		if (file_exists)

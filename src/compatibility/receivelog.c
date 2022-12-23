@@ -495,6 +495,8 @@ ReceiveXlogStream(PGconn *conn, StreamCtl *stream)
 	 * responsibility that that's sane.
 	 */
 	lastFlushPosition = stream->startpos;
+	stream->currentpos = 0;
+	stream->prevpos = 0;
 
 	while (1)
 	{
@@ -779,7 +781,10 @@ HandleCopyStream(PGconn *conn, StreamCtl *stream,
 			}
 			else if (copybuf[0] == 'w')
 			{
-				if (!ProcessXLogDataMsg(conn, stream, copybuf, r, &blockpos))
+				bool ok = ProcessXLogDataMsg(conn, stream, copybuf, r, &blockpos);
+				stream->prevpos = stream->currentpos;
+				stream->currentpos = blockpos;
+				if (!ok)
 					goto error;
 
 				/*
@@ -1221,10 +1226,4 @@ CalculateCopyStreamSleeptime(TimestampTz now, int standby_message_timeout,
 		sleeptime = -1;
 
 	return sleeptime;
-}
-
-
-bool isStreamProccessed(char *seg_filename)
-{
-	return still_sending && !strcmp(current_walfile_name, seg_filename);
 }
