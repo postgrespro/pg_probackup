@@ -1137,6 +1137,9 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         gdb.run_until_break()
 
         gdb._execute('thread apply all bt')
+        gdb.remove_all_breakpoints()
+
+        gdb.set_breakpoint('pioRemoveDir__do')
 
         gdb.continue_execution_until_break(20)
 
