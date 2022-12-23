@@ -1216,14 +1216,13 @@ send_file(pioDrive_i db_drive, pioDrive_i backup_drive, const char *to_fullpath,
 				.permissions = file->mode, .sync = sync, .err = &err);
 
 	if($haserr(err))
-		elog(ERROR, "Cannot open destination file \"%s\": %s",
-					to_fullpath, $errmsg(err));
+		return $iresult(err);
 
 	/* open from_fullpath */
 	in = $i(pioOpenReadStream, db_drive, .path = from_fullpath, .err = &err);
 
 	if($haserr(err))
-		goto cleanup;
+		return $iresult(err);
 
 	/*
 	 * Copy content and calc CRC as it gets copied. Optionally pioZeroTail
@@ -1241,7 +1240,7 @@ send_file(pioDrive_i db_drive, pioDrive_i backup_drive, const char *to_fullpath,
 							  NULL);
 
 	if($haserr(err))
-		goto cleanup;
+		return $iresult(err);
 
 	if (file) {
 		file->crc = pioCRC32Counter_getCRC32(c);
@@ -1253,11 +1252,9 @@ send_file(pioDrive_i db_drive, pioDrive_i backup_drive, const char *to_fullpath,
 			file->uncompressed_size = file->read_size;
 	}
 
-cleanup:
 	$i(pioClose, in);
-	$i(pioClose, out);
+	err = $i(pioClose, out);
 
-	// has $noerr() by default
 	return $iresult(err);
 }
 
