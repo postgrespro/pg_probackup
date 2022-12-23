@@ -123,7 +123,7 @@ class SimpleAuthTest(ProbackupTest, unittest.TestCase):
                     '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                         repr(e.message), self.cmd))
 
-        if self.get_vestion(node) < self.version_to_num('15.0'):
+        if self.get_version(node) < self.version_to_num('15.0'):
             node.safe_psql(
                 "postgres",
                 "GRANT EXECUTE ON FUNCTION pg_stop_backup() TO backup; "
