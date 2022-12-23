@@ -283,7 +283,7 @@ dir_close(Walfile f, WalCloseMethod method)
 		snprintf(tmppath, sizeof(tmppath), "%s/%s",
 				 dir_data->basedir, filename);
 		pg_free(filename);
-		err = $i(pioRemove, dir_data->drive, tmppath);
+		err = $i(pioRemove, dir_data->drive, tmppath, .missing_ok = false);
 	}
 
 	if ($haserr(err)){
@@ -339,7 +339,8 @@ dir_get_file_size(const char *pathname)
 	snprintf(tmppath, sizeof(tmppath), "%s/%s",
 			 dir_data->basedir, pathname);
 
-	statbuf = $i(pioStat, dir_data->drive, .err = &err);
+	statbuf = $i(pioStat, dir_data->drive, .path = pathname,
+				 .follow_symlink = false, .err = &err);
 	if ($haserr(err))
 	{
 		dir_data->lasterrno = getErrno(err);
