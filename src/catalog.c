@@ -1174,6 +1174,64 @@ get_backup_filelist(pgBackup *backup, bool strict)
 	return files;
 }
 
+static uint32_t
+pgFileHashRelPathWithExternal(pgFile* file)
+{
+	uint32_t hash = ft_small_cstr_hash(file->rel_path);
+	hash = ft_mix32(hash ^ file->external_dir_num);
+	return hash ? hash : 1;
+}
+
+parray *
+make_filelist_hashtable(parray* files)
+{
+	parray* buckets;
+	size_t  nbuckets;
+	pgFile* file;
+	size_t  i;
+	size_t  pos;
+
+	if (parray_num(files) == 0)
+		return NULL;
+
+	buckets = parray_new();
+	nbuckets = ft_nextpow2(parray_num(files)) / 2;
+	nbuckets = ft_max(ft_min(nbuckets, UINT32_MAX/2+1), 1);
+	parray_set(buckets, nbuckets-1, NULL); /* ensure size will be == nbuckets */
+
+	for (i = 0; i < parray_num(files); i++)
+	{
+		file = (pgFile*)parray_get(files, i);
+		file->hash = pgFileHashRelPathWithExternal(file);
+		pos = file->hash & (nbuckets - 1);
+		file->next = parray_get(buckets, pos);
+		parray_set(buckets, pos, file);
+	}
+
+	return buckets;
+}
+
+pgFile*
+search_file_in_hashtable(parray* buckets, pgFile* file)
+{
+	pgFile* ent;
+	size_t  pos;
+
+	if (!file->hash)
+		file->hash = pgFileHashRelPathWithExternal(file);
+
+	pos = file->hash & (parray_num(buckets)-1);
+	ent = (pgFile*) parray_get(buckets, pos);
+	while (ent != NULL)
+	{
+		if (ent->hash == file->hash &&
+			pgFileCompareRelPathWithExternal(&file, &ent) == 0)
+			return ent;
+		ent = ent->next;
+	}
+	return NULL;
+}
+
 /*
  * Lock list of backups. Function goes in backward direction.
  */

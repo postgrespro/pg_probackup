@@ -641,7 +641,6 @@ restore_data_file(parray *parent_chain, pgFile *dest_file, pioDBWriter_i out,
 		char     from_fullpath[MAXPGPATH];
 		pioReader_i in;
 
-		pgFile **res_file = NULL;
 		pgFile  *tmp_file = NULL;
 
 		/* page headers */
@@ -655,8 +654,7 @@ restore_data_file(parray *parent_chain, pgFile *dest_file, pioDBWriter_i out,
 			backup_seq--;
 
 		/* lookup file in intermediate backup */
-		res_file = parray_bsearch(backup->files, dest_file, pgFileCompareRelPathWithExternal);
-		tmp_file = (res_file) ? *res_file : NULL;
+		tmp_file = search_file_in_hashtable(backup->hashtable, dest_file);
 
 		/* Destination file is not exists yet at this moment */
 		if (tmp_file == NULL)
@@ -1057,11 +1055,8 @@ restore_non_data_file(parray *parent_chain, pgBackup *dest_backup, pgFile *dest_
 		tmp_backup = dest_backup->parent_backup_link;
 		while (tmp_backup)
 		{
-			pgFile	**res_file = NULL;
-
 			/* lookup file in intermediate backup */
-			res_file =  parray_bsearch(tmp_backup->files, dest_file, pgFileCompareRelPathWithExternal);
-			tmp_file = (res_file) ? *res_file : NULL;
+			tmp_file = search_file_in_hashtable(tmp_backup->hashtable, dest_file);
 
 			/*
 			 * It should not be possible not to find destination file in intermediate

@@ -772,6 +772,7 @@ restore_chain(InstanceState *instanceState,
 		 * using bsearch.
 		 */
 		parray_qsort(backup->files, pgFileCompareRelPathWithExternal);
+		backup->hashtable = make_filelist_hashtable(backup->files);
 	}
 
 	/* If dest backup version is older than 2.4.0, then bitmap optimization
@@ -920,7 +921,7 @@ restore_chain(InstanceState *instanceState,
 			bool     redundant = true;
 			pgFile	*file = (pgFile *) parray_get(pgdata_files, i);
 
-			if (parray_bsearch(dest_backup->files, file, pgFileCompareRelPathWithExternal))
+			if (search_file_in_hashtable(dest_backup->hashtable, file))
 				redundant = false;
 
 			/* pg_filenode.map are always restored, because it's crc cannot be trusted */
@@ -1092,6 +1093,7 @@ restore_chain(InstanceState *instanceState,
 
 		parray_walk(backup->files, pgFileFree);
 		parray_free(backup->files);
+		parray_free(backup->hashtable);
 	}
 }
 

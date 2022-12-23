@@ -27,6 +27,7 @@
 
 /* list of files contained in backup */
 parray *backup_files_list = NULL;
+parray *backup_files_hash = NULL;
 
 /* We need critical section for datapagemap_add() in case of using threads */
 static pthread_mutex_t backup_pagemap_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -95,6 +96,7 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 
 	pgBackup   *prev_backup = NULL;
 	parray	   *prev_backup_filelist = NULL;
+	parray	   *prev_backup_hashtable = NULL;
 	parray	   *backup_list = NULL;
 	parray	   *external_dirs = NULL;
 	parray	   *database_map = NULL;
@@ -329,6 +331,8 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 	/* Extract information about files in backup_list parsing their names:*/
 	parse_filelist_filenames(backup_files_list, instance_config.pgdata);
 
+	backup_files_hash = make_filelist_hashtable(backup_files_list);
+
 	elog(INFO, "Current Start LSN: %X/%X, TLI: %X",
 			(uint32) (current.start_lsn >> 32), (uint32) (current.start_lsn),
 			current.tli);
@@ -424,7 +428,7 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 	parray_qsort(backup_files_list, pgFileCompareSizeDesc);
 	/* Sort the array for binary search */
 	if (prev_backup_filelist)
-		parray_qsort(prev_backup_filelist, pgFileCompareRelPathWithExternal);
+		prev_backup_hashtable = make_filelist_hashtable(prev_backup_filelist);
 
 	/* write initial backup_content.control file and update backup.control  */
 	write_backup_filelist(&current, backup_files_list,
@@ -449,7 +453,7 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 		arg->external_prefix = external_prefix;
 		arg->external_dirs = external_dirs;
 		arg->files_list = backup_files_list;
-		arg->prev_filelist = prev_backup_filelist;
+		arg->prev_filehash = prev_backup_hashtable;
 		arg->prev_start_lsn = prev_backup_start_lsn;
 		arg->hdr_map = &(current.hdr_map);
 		arg->thread_num = i+1;
@@ -492,6 +496,7 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 	{
 		parray_walk(prev_backup_filelist, pgFileFree);
 		parray_free(prev_backup_filelist);
+		parray_free(prev_backup_hashtable);
 	}
 
 	/* Notify end of backup */
@@ -609,7 +614,9 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 
 	parray_walk(backup_files_list, pgFileFree);
 	parray_free(backup_files_list);
+	parray_free(backup_files_hash);
 	backup_files_list = NULL;
+	backup_files_hash = NULL;
 }
 
 /*
@@ -2015,14 +2022,13 @@ backup_files(void *arg)
 		/* Check that file exist in previous backup */
 		if (current.backup_mode != BACKUP_MODE_FULL)
 		{
-			pgFile	**prev_file_tmp = NULL;
-			prev_file_tmp = (pgFile **) parray_bsearch(arguments->prev_filelist,
-											file, pgFileCompareRelPathWithExternal);
+			pgFile	*prev_file_tmp = NULL;
+			prev_file_tmp = search_file_in_hashtable(arguments->prev_filehash, file);
 			if (prev_file_tmp)
 			{
 				/* File exists in previous backup */
 				file->exists_in_prev = true;
-				prev_file = *prev_file_tmp;
+				prev_file = prev_file_tmp;
 			}
 		}
 
@@ -2209,8 +2215,8 @@ process_block_change(ForkNumber forknum, RelFileNode rnode, BlockNumber blkno)
 	char	   *rel_path;
 	BlockNumber blkno_inseg;
 	int			segno;
-	pgFile	  **file_item;
-	pgFile		f;
+	pgFile	   *file_item;
+	pgFile		f = {0};
 
 	segno = blkno / RELSEG_SIZE;
 	blkno_inseg = blkno % RELSEG_SIZE;
@@ -2224,8 +2230,7 @@ process_block_change(ForkNumber forknum, RelFileNode rnode, BlockNumber blkno)
 	f.external_dir_num = 0;
 
 	/* backup_files_list should be sorted before */
-	file_item = (pgFile **) parray_bsearch(backup_files_list, &f,
-										   pgFileCompareRelPathWithExternal);
+	file_item = search_file_in_hashtable(backup_files_hash, &f);
 
 	/*
 	 * If we don't have any record of this file in the file map, it means
@@ -2239,7 +2244,7 @@ process_block_change(ForkNumber forknum, RelFileNode rnode, BlockNumber blkno)
 		if (num_threads > 1)
 			pthread_lock(&backup_pagemap_mutex);
 
-		datapagemap_add(&(*file_item)->pagemap, blkno_inseg);
+		datapagemap_add(&file_item->pagemap, blkno_inseg);
 
 		if (num_threads > 1)
 			pthread_mutex_unlock(&backup_pagemap_mutex);

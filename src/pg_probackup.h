@@ -249,6 +249,10 @@ typedef struct pgFile
 	pg_off_t hdr_off;       /* offset in header map */
 	int      hdr_size;      /* length of headers */
 	bool	excluded;	/* excluded via --exclude-path option */
+
+	/* hash table entry fields */
+	uint32_t		hash;
+	struct pgFile*  next;
 } pgFile;
 
 typedef struct page_map_entry
@@ -471,6 +475,7 @@ struct pgBackup
 									   backup_path/instance_name/backup_id/database */
 	parray			*files;			/* list of files belonging to this backup
 									 * must be populated explicitly */
+	parray			*hashtable;		/* hash table for faster file search */
 	char			*note;
 
 	pg_crc32         content_crc;
@@ -552,7 +557,7 @@ typedef struct
 	const char *external_prefix;
 
 	parray	   *files_list;
-	parray	   *prev_filelist;
+	parray	   *prev_filehash;
 	parray	   *external_dirs;
 	XLogRecPtr	prev_start_lsn;
 
@@ -1024,6 +1029,9 @@ extern int pgPrefixCompareString(const void *str1, const void *str2);
 extern int pgCompareOid(const void *f1, const void *f2);
 extern void pfilearray_clear_locks(parray *file_list);
 extern bool set_forkname(pgFile *file);
+
+extern parray* make_filelist_hashtable(parray* files);
+extern pgFile* search_file_in_hashtable(parray* buckets, pgFile* file);
 
 /* in data.c */
 extern bool check_data_file(pgFile *file, const char *from_fullpath, uint32 checksum_version);

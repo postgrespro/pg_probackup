@@ -582,6 +582,7 @@ merge_chain(InstanceState *instanceState,
 
 		backup->files = get_backup_filelist(backup, true);
 		parray_qsort(backup->files, pgFileCompareRelPathWithExternal);
+		backup->hashtable = make_filelist_hashtable(backup->files);
 
 		/* Set MERGING status for every member of the chain */
 		if (backup->backup_mode == BACKUP_MODE_FULL)
@@ -908,6 +909,7 @@ merge_rename:
 		{
 			parray_walk(backup->files, pgFileFree);
 			parray_free(backup->files);
+			parray_free(backup->hashtable);
 		}
 	}
 }
@@ -1005,14 +1007,12 @@ merge_files(void *arg)
 
 			for (i = parray_num(arguments->parent_chain) - 1; i >= 0; i--)
 			{
-				pgFile	   **res_file = NULL;
 				pgFile	   *file = NULL;
 
 				pgBackup   *backup = (pgBackup *) parray_get(arguments->parent_chain, i);
 
 				/* lookup file in intermediate backup */
-				res_file =  parray_bsearch(backup->files, dest_file, pgFileCompareRelPathWithExternal);
-				file = (res_file) ? *res_file : NULL;
+				file = search_file_in_hashtable(backup->hashtable, dest_file);
 
 				/* Destination file is not exists yet,
 				 * in-place merge is impossible
@@ -1043,11 +1043,8 @@ merge_files(void *arg)
 		 */
 		if (in_place)
 		{
-			pgFile	   **res_file = NULL;
 			pgFile	   *file = NULL;
-			res_file = parray_bsearch(arguments->full_backup->files, dest_file,
-										pgFileCompareRelPathWithExternal);
-			file = (res_file) ? *res_file : NULL;
+			file = search_file_in_hashtable(arguments->full_backup->hashtable, dest_file);
 
 			/* If file didn`t changed in any way, then in-place merge is possible */
 			if (file &&
@@ -1283,12 +1280,10 @@ merge_non_data_file(parray *parent_chain, pgBackup *full_backup,
 	 */
 	for (i = 0; i < parray_num(parent_chain); i++)
 	{
-		pgFile	   **res_file = NULL;
 		from_backup = (pgBackup *) parray_get(parent_chain, i);
 
 		/* lookup file in intermediate backup */
-		res_file =  parray_bsearch(from_backup->files, dest_file, pgFileCompareRelPathWithExternal);
-		from_file = (res_file) ? *res_file : NULL;
+		from_file = search_file_in_hashtable(from_backup->hashtable, dest_file);
 
 		/*
 		 * It should not be possible not to find source file in intermediate
