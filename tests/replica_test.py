@@ -864,13 +864,13 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             # pgproee -- 0/4000078
             self.assertRegex(
                 e.message,
-                r'LOG: Looking for LSN (0/4000060|0/4000078) in segment: 000000010000000000000004',
+                r'LOG: Looking for LSN (0/4000060|0/4000078|0/4000070) in segment: 000000010000000000000004',
                 "\n Unexpected Error Message: {0}\n CMD: {1}".format(
                     repr(e.message), self.cmd))
 
             self.assertRegex(
                 e.message,
-                r'INFO: Wait for LSN (0/4000060|0/4000078) in archived WAL segment',
+                r'INFO: Wait for LSN (0/4000060|0/4000078|0/4000070) in archived WAL segment',
                 "\n Unexpected Error Message: {0}\n CMD: {1}".format(
                     repr(e.message), self.cmd))
 
