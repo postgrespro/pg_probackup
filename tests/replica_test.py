@@ -841,44 +841,34 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         self.backup_node(
             backup_dir, 'node', replica, replica.data_dir,
             options=[
-                '--archive-timeout=30',
-                '--log-level-console=LOG',
+                '--archive-timeout=10',
                 '--no-validate'],
             return_id=False)
 
-        try:
+        with self.assertRaises(ProbackupException) as ctx:
             self.backup_node(
                 backup_dir, 'node', replica, replica.data_dir,
                 options=[
-                    '--archive-timeout=30',
+                    '--archive-timeout=10',
                     '--log-level-console=LOG',
                     '--no-validate'])
-            # we should die here because exception is what we expect to happen
-            self.assertEqual(
-                1, 0,
-                "Expecting Error because of archive timeout. "
-                "\n Output: {0} \n CMD: {1}".format(
-                    repr(self.output), self.cmd))
-        except ProbackupException as e:
-            # vanilla -- 0/4000060
-            # pgproee -- 0/4000078
-            self.assertRegex(
-                e.message,
-                r'LOG: Looking for LSN (0/4000060|0/4000078|0/4000070) in segment: 000000010000000000000004',
-                "\n Unexpected Error Message: {0}\n CMD: {1}".format(
-                    repr(e.message), self.cmd))
+        e = ctx.exception
+        # vanilla -- 0/4000060
+        # pgproee -- 0/4000078
+        self.assertRegex(
+            e.message,
+            r'LOG: Looking for LSN (0/4000060|0/4000078|0/4000070) in segment: 000000010000000000000004',
+            "\n CMD: {0}".format(self.cmd))
 
-            self.assertRegex(
-                e.message,
-                r'INFO: Wait for LSN (0/4000060|0/4000078|0/4000070) in archived WAL segment',
-                "\n Unexpected Error Message: {0}\n CMD: {1}".format(
-                    repr(e.message), self.cmd))
+        self.assertRegex(
+            e.message,
+            r'INFO: Wait for LSN (0/4000060|0/4000078|0/4000070) in archived WAL segment',
+            "\n CMD: {0}".format(self.cmd))
 
-            self.assertIn(
-                'ERROR: WAL segment 000000010000000000000004 could not be archived in 30 seconds',
-                e.message,
-                "\n Unexpected Error Message: {0}\n CMD: {1}".format(
-                    repr(e.message), self.cmd))
+        self.assertRegex(
+            e.message,
+            r'ERROR: WAL segment 000000010000000000000004 could not be archived in \d+ seconds',
+            "\n CMD: {0}".format(self.cmd))
 
     # @unittest.skip("skip")
     def test_replica_toast(self):
