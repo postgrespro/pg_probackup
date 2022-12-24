@@ -1,4 +1,5 @@
 import os
+import threading
 import unittest
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException, idx_ptrack
 from datetime import datetime, timedelta
@@ -258,9 +259,12 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
 
         self.wait_until_replica_catch_with_master(master, replica)
 
+        tm = threading.Timer(5, call_repeat, [1000, master.execute, 'select txid_current()'])
+        tm.start()
         backup_id = self.backup_node(
             backup_dir, 'replica', replica,
             options=['--archive-timeout=60'])
+        tm.join()
 
         self.validate_pb(backup_dir, 'replica')
         self.assertEqual(
@@ -287,12 +291,12 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         master.pgbench_init(scale=5)
 
         pgbench = master.pgbench(
-            options=['-T', '30', '-c', '2', '--no-vacuum'])
+            options=['-T', '10', '-c', '2', '--no-vacuum'])
 
         backup_id = self.backup_node(
             backup_dir, 'replica',
             replica, backup_type='page',
-            options=['--archive-timeout=60'])
+            options=['--archive-timeout=10'])
 
         pgbench.wait()
 
@@ -1555,6 +1559,9 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         self.set_auto_conf(node_restored, {'port': node_restored.port})
         node_restored.slow_start(replica=True)
 
+def call_repeat(times, func, *args):
+    for i in range(times):
+        func(*args)
 # TODO:
 # null offset STOP LSN and latest record in previous segment is conrecord (manual only)
 # archiving from promoted delayed replica
