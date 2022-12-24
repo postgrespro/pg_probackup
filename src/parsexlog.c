@@ -540,10 +540,6 @@ read_recovery_info(const char *archivedir, TimeLineID tli, uint32 wal_seg_size,
 		elog(ERROR, "Invalid start_lsn value %X/%X",
 			 (uint32) (start_lsn >> 32), (uint32) (start_lsn));
 
-	if (!XRecOffIsValid(stop_lsn))
-		elog(ERROR, "Invalid stop_lsn value %X/%X",
-			 (uint32) (stop_lsn >> 32), (uint32) (stop_lsn));
-
 	xlogreader = InitXLogPageRead(&reader_data, archivedir, tli, wal_seg_size,
 								  false, true, true);
 
@@ -581,16 +577,16 @@ read_recovery_info(const char *archivedir, TimeLineID tli, uint32 wal_seg_size,
 						 (uint32) (errptr >> 32), (uint32) (errptr));
 			}
 
-			/* for compatibility with Pg < 13 */
-			curpoint = InvalidXLogRecPtr;
-
-			if (getRecordTimestamp(xlogreader, &last_time))
+			if (curpoint < endpoint && getRecordTimestamp(xlogreader, &last_time))
 			{
 				*recovery_time = timestamptz_to_time_t(last_time);
 
 				/* Found timestamp in WAL record 'record' */
 				res = true;
 			}
+
+			/* for compatibility with Pg < 13 */
+			curpoint = InvalidXLogRecPtr;
 		} while (xlogreader->EndRecPtr < endpoint);
 
 		if (res)
