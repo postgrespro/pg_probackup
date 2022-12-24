@@ -3,7 +3,6 @@ import os
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 import locale
 
-
 class OptionTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
@@ -220,12 +219,28 @@ class OptionTest(ProbackupTest, unittest.TestCase):
     def test_help_6(self):
         """help options"""
         if ProbackupTest.enable_nls:
-            self.test_env['LC_ALL'] = 'ru_RU.utf-8'
-            with open(os.path.join(self.dir_path, "expected/option_help_ru.out"), "rb") as help_out:
-                self.assertEqual(
-                    self.run_pb(["--help"]),
-                    help_out.read().decode("utf-8")
-                )
+            if check_locale('ru_RU.utf-8'):
+                self.test_env['LC_ALL'] = 'ru_RU.utf-8'
+                with open(os.path.join(self.dir_path, "expected/option_help_ru.out"), "rb") as help_out:
+                    self.assertEqual(
+                        self.run_pb(["--help"]),
+                        help_out.read().decode("utf-8")
+                    )
+            else:
+                self.skipTest(
+                    "Locale ru_RU.utf-8 doesn't work. You need install ru_RU.utf-8 locale for this test")
         else:
             self.skipTest(
                 'You need configure PostgreSQL with --enabled-nls option for this test')
+
+
+def check_locale(locale_name):
+   ret=True
+   old_locale = locale.setlocale(locale.LC_CTYPE,"")
+   try:
+      locale.setlocale(locale.LC_CTYPE, locale_name)
+   except locale.Error:
+      ret=False
+   finally:
+      locale.setlocale(locale.LC_CTYPE, old_locale)
+   return ret
