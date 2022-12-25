@@ -1753,7 +1753,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             ptrack_enable=self.ptrack,
             initdb_params=['--data-checksums'],
-            pg_options={'archive_timeout': '30s'})
+            pg_options={'archive_timeout': '10s'})
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
@@ -2080,14 +2080,14 @@ class BackupTest(ProbackupTest, unittest.TestCase):
             ptrack_enable=self.ptrack,
             initdb_params=['--data-checksums'],
             pg_options={
-                'archive_timeout': '30s',
+                'archive_timeout': '10s',
                 'archive_mode': 'always',
-                'checkpoint_timeout': '60s',
+                'checkpoint_timeout': '30s',
                 'wal_level': 'logical'})
 
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
-        self.set_config(backup_dir, 'node', options=['--archive-timeout=60s'])
+        self.set_config(backup_dir, 'node', options=['--archive-timeout=30s'])
         self.set_archiving(backup_dir, 'node', node)
         node.slow_start()
 
@@ -2186,7 +2186,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'replica', replica)
         self.set_config(
             backup_dir, 'replica',
-            options=['--archive-timeout=120s', '--log-level-console=LOG'])
+            options=['--archive-timeout=60s', '--log-level-console=LOG'])
         self.set_archiving(backup_dir, 'replica', replica, replica=True)
         self.set_auto_conf(replica, {'hot_standby': 'on'})
 
@@ -2218,7 +2218,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.switch_wal_segment(node)
         self.backup_node(
             backup_dir, 'replica', replica, backup_type='page',
-            datname='backupdb', options=['-U', 'backup', '--archive-timeout=30s'])
+            datname='backupdb', options=['-U', 'backup', '--archive-timeout=20s'])
 
         self.backup_node(
             backup_dir, 'replica', replica, backup_type='page',
