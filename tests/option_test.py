@@ -220,10 +220,11 @@ class OptionTest(ProbackupTest, unittest.TestCase):
         """help options"""
         if ProbackupTest.enable_nls:
             if check_locale('ru_RU.utf-8'):
-                self.test_env['LC_ALL'] = 'ru_RU.utf-8'
+                env = self.test_env.copy()
+                env['LC_MESSAGES'] = 'ru_RU.utf-8'
                 with open(os.path.join(self.dir_path, "expected/option_help_ru.out"), "rb") as help_out:
                     self.assertEqual(
-                        self.run_pb(["--help"]),
+                        self.run_pb(["--help"], env=env),
                         help_out.read().decode("utf-8")
                     )
             else:
