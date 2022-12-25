@@ -134,9 +134,6 @@ typedef struct
 	 */
 	bool		got_target;
 
-	/* Should we read record, located at endpoint position */
-	bool        inclusive_endpoint;
-
 	/*
 	 * Return value from the thread.
 	 * 0 means there is no error, 1 - there is an error.
@@ -167,8 +164,7 @@ static bool RunXLogThreads(const char *archivedir,
 						   XLogRecPtr startpoint, XLogRecPtr endpoint,
 						   bool consistent_read,
 						   xlog_record_function process_record,
-						   XLogRecTarget *last_rec,
-						   bool inclusive_endpoint);
+						   XLogRecTarget *last_rec);
 //static XLogReaderState *InitXLogThreadRead(xlog_thread_arg *arg);
 static bool SwitchThreadToNextWal(XLogReaderState *xlogreader,
 								  xlog_thread_arg *arg);
@@ -250,7 +246,7 @@ extractPageMap(const char *archivedir, uint32 wal_seg_size,
 		extract_isok = RunXLogThreads(archivedir, 0, InvalidTransactionId,
 									  InvalidXLogRecPtr, end_tli, wal_seg_size,
 									  startpoint, endpoint, false, extractPageInfo,
-									  NULL, true);
+									  NULL);
 	else
 	{
 		/* We have to process WAL located on several different xlog intervals,
@@ -329,22 +325,12 @@ extractPageMap(const char *archivedir, uint32 wal_seg_size,
 
 		for (i = parray_num(interval_list) - 1; i >= 0; i--)
 		{
-			bool         inclusive_endpoint;
 			lsnInterval *tmp_interval = (lsnInterval *) parray_get(interval_list, i);
-
-			/* In case of replica promotion, endpoints of intermediate
-			 * timelines can be unreachable.
-			 */
-			inclusive_endpoint = false;
-
-			/* ... but not the end timeline */
-			if (tmp_interval->tli == end_tli)
-				inclusive_endpoint = true;
 
 			extract_isok = RunXLogThreads(archivedir, 0, InvalidTransactionId,
 									  InvalidXLogRecPtr, tmp_interval->tli, wal_seg_size,
 									  tmp_interval->begin_lsn, tmp_interval->end_lsn,
-									  false, extractPageInfo, NULL, inclusive_endpoint);
+									  false, extractPageInfo, NULL);
 			if (!extract_isok)
 				break;
 
@@ -373,7 +359,7 @@ validate_backup_wal_from_start_to_stop(pgBackup *backup,
 	got_endpoint = RunXLogThreads(archivedir, 0, InvalidTransactionId,
 								  InvalidXLogRecPtr, tli, xlog_seg_size,
 								  backup->start_lsn, backup->stop_lsn,
-								  false, NULL, NULL, true);
+								  false, NULL, NULL);
 
 	if (!got_endpoint)
 	{
@@ -414,7 +400,7 @@ validate_wal(pgBackup *backup, const char *archivedir,
 			 (uint32) (backup->start_lsn >> 32), (uint32) (backup->start_lsn),
 			 backup_id_of(backup));
 
-	if (!XRecOffIsValid(backup->stop_lsn))
+	if (!XRecEndLooksGood(backup->stop_lsn, wal_seg_size))
 		elog(ERROR, "Invalid stop_lsn value %X/%X of backup %s",
 			 (uint32) (backup->stop_lsn >> 32), (uint32) (backup->stop_lsn),
 			 backup_id_of(backup));
@@ -448,7 +434,7 @@ validate_wal(pgBackup *backup, const char *archivedir,
 	 * recovery target time or xid.
 	 */
 	if (!TransactionIdIsValid(target_xid) && target_time == 0 &&
-		!XRecOffIsValid(target_lsn))
+		XLogRecPtrIsInvalid(target_lsn))
 	{
 		/* Recovery target is not given so exit */
 		elog(INFO, "Backup %s WAL segments are valid", backup_id_of(backup));
@@ -479,13 +465,13 @@ validate_wal(pgBackup *backup, const char *archivedir,
 
 	if ((TransactionIdIsValid(target_xid) && target_xid == last_rec.rec_xid)
 		|| (target_time != 0 && backup->recovery_time >= target_time)
-		|| (XRecOffIsValid(target_lsn) && last_rec.rec_lsn >= target_lsn))
+		|| (!XLogRecPtrIsInvalid(target_lsn) && last_rec.rec_lsn >= target_lsn))
 		all_wal = true;
 
 	all_wal = all_wal ||
 		RunXLogThreads(archivedir, target_time, target_xid, target_lsn,
 					   tli, wal_seg_size, backup->stop_lsn,
-					   InvalidXLogRecPtr, true, validateXLogRecord, &last_rec, true);
+					   InvalidXLogRecPtr, true, validateXLogRecord, &last_rec);
 	if (last_rec.rec_time > 0)
 		time2iso(last_timestamp, lengthof(last_timestamp),
 				 timestamptz_to_time_t(last_rec.rec_time), false);
@@ -513,7 +499,7 @@ validate_wal(pgBackup *backup, const char *archivedir,
 		else if (target_time != 0)
 			elog(ERROR, "Not enough WAL records to time %s",
 					target_timestamp);
-		else if (XRecOffIsValid(target_lsn))
+		else if (!XLogRecPtrIsInvalid(target_lsn))
 			elog(ERROR, "Not enough WAL records to lsn %X/%X",
 					(uint32) (target_lsn >> 32), (uint32) (target_lsn));
 	}
@@ -540,23 +526,43 @@ read_recovery_info(const char *archivedir, TimeLineID tli, uint32 wal_seg_size,
 		elog(ERROR, "Invalid start_lsn value %X/%X",
 			 (uint32) (start_lsn >> 32), (uint32) (start_lsn));
 
+	if (!XRecEndLooksGood(stop_lsn, wal_seg_size))
+		elog(ERROR, "Invalid stop_lsn value %X/%X",
+			 (uint32) (stop_lsn >> 32), (uint32) (stop_lsn));
+
 	xlogreader = InitXLogPageRead(&reader_data, archivedir, tli, wal_seg_size,
 								  false, true, true);
 
 	/* Read records from stop_lsn down to start_lsn */
 	do
 	{
+		XLogRecPtr trypoint;
 		XLogRecPtr curpoint;
 		XLogRecPtr prevpoint = 0;
 		XLogRecord *record;
 		TimestampTz last_time = 0;
 		char	   *errormsg;
 
-		curpoint = startpoint;
-		if (curpoint < start_lsn)
-			curpoint = start_lsn;
+		trypoint = startpoint;
+		if (trypoint < start_lsn)
+			trypoint = start_lsn;
 
-		curpoint = XLogFindNextRecord(xlogreader, curpoint);
+		curpoint = XLogFindNextRecord(xlogreader, trypoint);
+
+		if (XLogRecPtrIsInvalid(curpoint))
+		{
+			if (trypoint == start_lsn)
+			{
+				elog(ERROR, "There is no valid log between %X/%X and %X/%X",
+					 (uint32_t)(start_lsn>>32), (uint32_t)start_lsn,
+					 (uint32_t)(stop_lsn>>32), (uint32_t)stop_lsn);
+				break;
+			}
+			endpoint = startpoint;
+			startpoint--;
+			startpoint = startpoint - (startpoint % STEPBACK_CHUNK);
+			continue;
+		}
 
 		do {
 			record = WalReadRecord(xlogreader, curpoint, &errormsg);
@@ -595,213 +601,12 @@ read_recovery_info(const char *archivedir, TimeLineID tli, uint32 wal_seg_size,
 		/* Goto previous megabyte */
 		endpoint = startpoint;
 		startpoint = prevpoint - (prevpoint % STEPBACK_CHUNK);
-		if (startpoint < start_lsn)
-			startpoint = start_lsn;
 	} while (endpoint > start_lsn);
 
 	/* Didn't find timestamp from WAL records between start_lsn and stop_lsn */
 	res = false;
 
 cleanup:
-	CleanupXLogPageRead(xlogreader);
-	XLogReaderFree(xlogreader);
-
-	return res;
-}
-
-/*
- * Check if there is a WAL segment file in 'archivedir' which contains
- * 'target_lsn'.
- */
-bool
-wal_contains_lsn(const char *archivedir, XLogRecPtr target_lsn,
-				 TimeLineID target_tli, uint32 wal_seg_size)
-{
-	XLogReaderState *xlogreader;
-	XLogReaderData reader_data;
-	char	   *errormsg;
-	bool		res;
-
-	if (!XRecOffIsValid(target_lsn))
-		elog(ERROR, "Invalid target_lsn value %X/%X",
-			 (uint32) (target_lsn >> 32), (uint32) (target_lsn));
-
-	xlogreader = InitXLogPageRead(&reader_data, archivedir, target_tli,
-								  wal_seg_size, false, false, true);
-
-	if (xlogreader == NULL)
-			elog(ERROR, "Out of memory");
-
-	xlogreader->system_identifier = instance_config.system_identifier;
-
-#if PG_VERSION_NUM >= 130000
-	if (XLogRecPtrIsInvalid(target_lsn))
-		target_lsn = SizeOfXLogShortPHD;
-	XLogBeginRead(xlogreader, target_lsn);
-#endif
-
-	res = WalReadRecord(xlogreader, target_lsn, &errormsg) != NULL;
-	/* Didn't find 'target_lsn' and there is no error, return false */
-
-	if (errormsg)
-		elog(WARNING, "Could not read WAL record at %X/%X: %s",
-				(uint32) (target_lsn >> 32), (uint32) (target_lsn), errormsg);
-
-	CleanupXLogPageRead(xlogreader);
-	XLogReaderFree(xlogreader);
-
-	return res;
-}
-
-/*
- * Get LSN of a first record within the WAL segment with number 'segno'.
- */
-XLogRecPtr
-get_first_record_lsn(const char *archivedir, XLogSegNo	segno,
-					 TimeLineID tli, uint32 wal_seg_size, int timeout)
-{
-	XLogReaderState *xlogreader;
-	XLogReaderData   reader_data;
-	XLogRecPtr       record = InvalidXLogRecPtr;
-	XLogRecPtr       startpoint;
-	char             wal_segment[MAXFNAMELEN];
-	int              attempts = 0;
-
-	if (segno <= 1)
-		elog(ERROR, "Invalid WAL segment number " UINT64_FORMAT, segno);
-
-	GetXLogFileName(wal_segment, tli, segno, instance_config.xlog_seg_size);
-
-	xlogreader = InitXLogPageRead(&reader_data, archivedir, tli, wal_seg_size,
-								  false, false, true);
-	if (xlogreader == NULL)
-			elog(ERROR, "Out of memory");
-	xlogreader->system_identifier = instance_config.system_identifier;
-
-	/* Set startpoint to 0 in segno */
-	GetXLogRecPtr(segno, 0, wal_seg_size, startpoint);
-
-#if PG_VERSION_NUM >= 130000
-	if (XLogRecPtrIsInvalid(startpoint))
-		startpoint = SizeOfXLogShortPHD;
-	XLogBeginRead(xlogreader, startpoint);
-#endif
-
-	while (attempts <= timeout)
-	{
-		record = XLogFindNextRecord(xlogreader, startpoint);
-
-		if (XLogRecPtrIsInvalid(record))
-			record = InvalidXLogRecPtr;
-		else
-		{
-			elog(LOG, "First record in WAL segment \"%s\": %X/%X", wal_segment,
-					(uint32) (record >> 32), (uint32) (record));
-			break;
-		}
-
-		attempts++;
-		sleep(1);
-	}
-
-	/* cleanup */
-	CleanupXLogPageRead(xlogreader);
-	XLogReaderFree(xlogreader);
-
-	return record;
-}
-
-
-/*
- * Get LSN of the record next after target lsn.
- */
-XLogRecPtr
-get_next_record_lsn(const char *archivedir, XLogSegNo	segno,
-					 TimeLineID tli, uint32 wal_seg_size, int timeout,
-					 XLogRecPtr target)
-{
-	XLogReaderState *xlogreader;
-	XLogReaderData   reader_data;
-	XLogRecPtr       startpoint, found;
-	XLogRecPtr       res = InvalidXLogRecPtr;
-	char             wal_segment[MAXFNAMELEN];
-	int              attempts = 0;
-
-	if (segno <= 1)
-		elog(ERROR, "Invalid WAL segment number " UINT64_FORMAT, segno);
-
-	GetXLogFileName(wal_segment, tli, segno, instance_config.xlog_seg_size);
-
-	xlogreader = InitXLogPageRead(&reader_data, archivedir, tli, wal_seg_size,
-								  false, false, true);
-	if (xlogreader == NULL)
-			elog(ERROR, "Out of memory");
-	xlogreader->system_identifier = instance_config.system_identifier;
-
-	/* Set startpoint to 0 in segno */
-	GetXLogRecPtr(segno, 0, wal_seg_size, startpoint);
-
-#if PG_VERSION_NUM >= 130000
-	if (XLogRecPtrIsInvalid(startpoint))
-		startpoint = SizeOfXLogShortPHD;
-	XLogBeginRead(xlogreader, startpoint);
-#endif
-
-	found = XLogFindNextRecord(xlogreader, startpoint);
-
-	if (XLogRecPtrIsInvalid(found))
-	{
-		if (xlogreader->errormsg_buf[0] != '\0')
-			elog(WARNING, "Could not read WAL record at %X/%X: %s",
-				 (uint32) (startpoint >> 32), (uint32) (startpoint),
-				 xlogreader->errormsg_buf);
-		else
-			elog(WARNING, "Could not read WAL record at %X/%X",
-				 (uint32) (startpoint >> 32), (uint32) (startpoint));
-		PrintXLogCorruptionMsg(&reader_data, ERROR);
-	}
-	startpoint = found;
-
-	while (attempts <= timeout)
-	{
-		XLogRecord *record;
-		char	   *errormsg;
-
-		if (interrupted)
-			elog(ERROR, "Interrupted during WAL reading");
-
-		record = WalReadRecord(xlogreader, startpoint, &errormsg);
-
-		if (record == NULL)
-		{
-			XLogRecPtr	errptr;
-
-			errptr = XLogRecPtrIsInvalid(startpoint) ? xlogreader->EndRecPtr :
-				startpoint;
-
-			if (errormsg)
-				elog(WARNING, "Could not read WAL record at %X/%X: %s",
-					 (uint32) (errptr >> 32), (uint32) (errptr),
-					 errormsg);
-			else
-				elog(WARNING, "Could not read WAL record at %X/%X",
-					 (uint32) (errptr >> 32), (uint32) (errptr));
-			PrintXLogCorruptionMsg(&reader_data, ERROR);
-		}
-
-		if (xlogreader->ReadRecPtr >= target)
-		{
-			elog(LOG, "Record %X/%X is next after target LSN %X/%X",
-				(uint32) (xlogreader->ReadRecPtr >> 32), (uint32) (xlogreader->ReadRecPtr),
-				(uint32) (target >> 32), (uint32) (target));
-			res = xlogreader->ReadRecPtr;
-			break;
-		}
-		else
-			startpoint = InvalidXLogRecPtr;
-	}
-
-	/* cleanup */
 	CleanupXLogPageRead(xlogreader);
 	XLogReaderFree(xlogreader);
 
@@ -822,8 +627,7 @@ get_next_record_lsn(const char *archivedir, XLogSegNo	segno,
  */
 XLogRecPtr
 get_prior_record_lsn(const char *archivedir, XLogRecPtr start_lsn,
-				 XLogRecPtr stop_lsn, TimeLineID tli, bool seek_prev_segment,
-				 uint32 wal_seg_size)
+				 XLogRecPtr stop_lsn, TimeLineID tli, uint32 wal_seg_size)
 {
 	XLogReaderState *xlogreader;
 	XLogReaderData reader_data;
@@ -837,7 +641,7 @@ get_prior_record_lsn(const char *archivedir, XLogRecPtr start_lsn,
 	if (segno <= 1)
 		elog(ERROR, "Invalid WAL segment number " UINT64_FORMAT, segno);
 
-	if (seek_prev_segment)
+	if (stop_lsn % wal_seg_size == 0)
 		segno = segno - 1;
 
 	xlogreader = InitXLogPageRead(&reader_data, archivedir, tli, wal_seg_size,
@@ -852,26 +656,15 @@ get_prior_record_lsn(const char *archivedir, XLogRecPtr start_lsn,
 	 * Calculate startpoint. Decide: we should use 'start_lsn' or offset 0.
 	 */
 	GetXLogSegNo(start_lsn, start_segno, wal_seg_size);
-	if (start_segno == segno)
-	{
-		startpoint = start_lsn;
-#if PG_VERSION_NUM >= 130000
-		if (XLogRecPtrIsInvalid(startpoint))
-			startpoint = SizeOfXLogShortPHD;
-		XLogBeginRead(xlogreader, startpoint);
-#endif
-	}
-	else
+
+	for (;;)
 	{
 		XLogRecPtr	found;
 
-		GetXLogRecPtr(segno, 0, wal_seg_size, startpoint);
-
-#if PG_VERSION_NUM >= 130000
-		if (XLogRecPtrIsInvalid(startpoint))
-			startpoint = SizeOfXLogShortPHD;
-		XLogBeginRead(xlogreader, startpoint);
-#endif
+		if (start_segno == segno)
+			startpoint = start_lsn;
+		else
+			GetXLogRecPtr(segno, 0, wal_seg_size, startpoint);
 
 		found = XLogFindNextRecord(xlogreader, startpoint);
 
@@ -884,9 +677,28 @@ get_prior_record_lsn(const char *archivedir, XLogRecPtr start_lsn,
 			else
 				elog(WARNING, "Could not read WAL record at %X/%X",
 					 (uint32) (startpoint >> 32), (uint32) (startpoint));
+			if (segno > start_segno)
+			{
+				segno--;
+				continue;
+			}
 			PrintXLogCorruptionMsg(&reader_data, ERROR);
 		}
 		startpoint = found;
+		break;
+	}
+
+	/* This check doesn't make much value. But let it be. */
+	if (start_segno == segno &&
+		XRecPtrLooksGood(start_lsn, wal_seg_size) &&
+		startpoint != start_lsn)
+	{
+		elog(ERROR, "Start lsn %X/%X wasn't found despite it looks good."
+					"Got lsn %X/%X instead. "
+					"(in archive dir %s)",
+			 (uint32_t)(start_lsn>>32), (uint32_t)start_lsn,
+			 (uint32_t)(startpoint>>32), (uint32_t)startpoint,
+			 archivedir);
 	}
 
 	while (true)
@@ -1176,7 +988,7 @@ RunXLogThreads(const char *archivedir, time_t target_time,
 			   TransactionId target_xid, XLogRecPtr target_lsn, TimeLineID tli,
 			   uint32 segment_size, XLogRecPtr startpoint, XLogRecPtr endpoint,
 			   bool consistent_read, xlog_record_function process_record,
-			   XLogRecTarget *last_rec, bool inclusive_endpoint)
+			   XLogRecTarget *last_rec)
 {
 	pthread_t  *threads;
 	xlog_thread_arg *thread_args;
@@ -1185,7 +997,8 @@ RunXLogThreads(const char *archivedir, time_t target_time,
 	XLogSegNo	endSegNo = 0;
 	bool		result = true;
 
-	if (!XRecOffIsValid(startpoint) && !XRecOffIsNull(startpoint))
+	/* we actually can start from record end */
+	if (!XRecEndLooksGood(startpoint, segment_size))
 		elog(ERROR, "Invalid startpoint value %X/%X",
 			 (uint32) (startpoint >> 32), (uint32) (startpoint));
 
@@ -1197,19 +1010,12 @@ RunXLogThreads(const char *archivedir, time_t target_time,
 
 	if (!XLogRecPtrIsInvalid(endpoint))
 	{
-//		if (XRecOffIsNull(endpoint) && !inclusive_endpoint)
-		if (XRecOffIsNull(endpoint))
-		{
-			GetXLogSegNo(endpoint, endSegNo, segment_size);
+		GetXLogSegNo(endpoint, endSegNo, segment_size);
+		if (endpoint % segment_size == 0)
 			endSegNo--;
-		}
-		else if (!XRecOffIsValid(endpoint))
-		{
+		else if (!XRecEndLooksGood(endpoint, segment_size))
 			elog(ERROR, "Invalid endpoint value %X/%X",
 				(uint32) (endpoint >> 32), (uint32) (endpoint));
-		}
-		else
-			GetXLogSegNo(endpoint, endSegNo, segment_size);
 	}
 
 	/* Initialize static variables for workers */
@@ -1244,7 +1050,6 @@ RunXLogThreads(const char *archivedir, time_t target_time,
 		arg->startpoint = startpoint;
 		arg->endpoint = endpoint;
 		arg->endSegNo = endSegNo;
-		arg->inclusive_endpoint = inclusive_endpoint;
 		arg->got_target = false;
 		/* By default there is some error */
 		arg->ret = 1;
@@ -1355,12 +1160,6 @@ XLogThreadWorker(void *arg)
 	if (xlogreader == NULL)
 		elog(ERROR, "Thread [%d]: out of memory", reader_data->thread_num);
 	xlogreader->system_identifier = instance_config.system_identifier;
-
-#if PG_VERSION_NUM >= 130000
-	if (XLogRecPtrIsInvalid(thread_arg->startpoint))
-		thread_arg->startpoint = SizeOfXLogShortPHD;
-	XLogBeginRead(xlogreader, thread_arg->startpoint);
-#endif
 
 	found = XLogFindNextRecord(xlogreader, thread_arg->startpoint);
 
@@ -1479,10 +1278,9 @@ XLogThreadWorker(void *arg)
 					 (uint32) (errptr >> 32), (uint32) (errptr));
 
 			/* In we failed to read record located at endpoint position,
-			 * and endpoint is not inclusive, do not consider this as an error.
+			 * do not consider this as an error.
 			 */
-			if (!thread_arg->inclusive_endpoint &&
-				errptr == thread_arg->endpoint)
+			if (errptr == thread_arg->endpoint)
 			{
 				elog(LOG, "Thread [%d]: Endpoint %X/%X is not inclusive, switch to the next timeline",
 					reader_data->thread_num,
@@ -1852,7 +1650,7 @@ validateXLogRecord(XLogReaderState *record, XLogReaderData *reader_data,
 			 timestamptz_to_time_t(reader_data->cur_rec.rec_time) >= wal_target_time)
 		*stop_reading = true;
 	/* Check target lsn */
-	else if (XRecOffIsValid(wal_target_lsn) &&
+	else if (!XLogRecPtrIsInvalid(wal_target_lsn) &&
 			 reader_data->cur_rec.rec_lsn >= wal_target_lsn)
 		*stop_reading = true;
 }
@@ -1911,7 +1709,7 @@ bool validate_wal_segment(TimeLineID tli, XLogSegNo segno, const char *prefetch_
 
 	rc = RunXLogThreads(prefetch_dir, 0, InvalidTransactionId,
 						InvalidXLogRecPtr, tli, wal_seg_size,
-						startpoint, endpoint, false, NULL, NULL, true);
+						startpoint, endpoint, false, NULL, NULL);
 
 	num_threads = tmp_num_threads;
 

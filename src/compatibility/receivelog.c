@@ -496,7 +496,6 @@ ReceiveXlogStream(PGconn *conn, StreamCtl *stream)
 	 */
 	lastFlushPosition = stream->startpos;
 	stream->currentpos = 0;
-	stream->prevpos = 0;
 
 	while (1)
 	{
@@ -781,11 +780,10 @@ HandleCopyStream(PGconn *conn, StreamCtl *stream,
 			}
 			else if (copybuf[0] == 'w')
 			{
-				bool ok = ProcessXLogDataMsg(conn, stream, copybuf, r, &blockpos);
-				stream->prevpos = stream->currentpos;
-				stream->currentpos = blockpos;
-				if (!ok)
+				if (!ProcessXLogDataMsg(conn, stream, copybuf, r, &blockpos))
 					goto error;
+
+				stream->currentpos = blockpos;
 
 				/*
 				 * Check if we should continue streaming, or abort at this

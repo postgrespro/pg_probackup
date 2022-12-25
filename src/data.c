@@ -1541,6 +1541,7 @@ validate_file_pages(pgFile *file, const char *fullpath, XLogRecPtr stop_lsn,
 							checksum_version ? "correct" : "not enabled",
 							(uint32) (page_st.lsn >> 32), (uint32) page_st.lsn,
 							(uint32) (stop_lsn >> 32), (uint32) stop_lsn);
+				is_valid = false;
 				break;
 		}
 	}

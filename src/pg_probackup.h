@@ -125,6 +125,32 @@ extern const char  *PROGRAM_EMAIL;
 #define XRecOffIsNull(xlrp) \
 		((xlrp) % XLOG_BLCKSZ == 0)
 
+ft_inline bool
+XRecPtrLooksGood(XLogRecPtr xlrp, uint64_t segsize)
+{
+	uint64_t off = xlrp % segsize;
+
+	/*
+	 * record start is good if
+	 * - if it points after page header
+	 * -- but remember: first segments' page's header is longer
+	 */
+	return (off >= SizeOfXLogLongPHD && XRecOffIsValid(off));
+}
+
+ft_inline bool
+XRecEndLooksGood(XLogRecPtr xlrp, uint64_t segsize)
+{
+	uint64_t off = xlrp % segsize;
+
+	/*
+	 * record end is good if
+	 * - it points to valid record start
+	 * - or it points to block/segment start (actually, end of previous)
+	 */
+	return XRecOffIsNull(off) || XRecPtrLooksGood(xlrp, segsize);
+}
+
 /* log(2**64) / log(36) = 12.38 => max 13 char + '\0' */
 #define base36bufsize 14
 
@@ -1086,16 +1112,8 @@ extern bool read_recovery_info(const char *archivedir, TimeLineID tli,
 							   uint32 seg_size,
 							   XLogRecPtr start_lsn, XLogRecPtr stop_lsn,
 							   time_t *recovery_time);
-extern bool wal_contains_lsn(const char *archivedir, XLogRecPtr target_lsn,
-							 TimeLineID target_tli, uint32 seg_size);
 extern XLogRecPtr get_prior_record_lsn(const char *archivedir, XLogRecPtr start_lsn,
-								   XLogRecPtr stop_lsn, TimeLineID tli,
-								   bool seek_prev_segment, uint32 seg_size);
-
-extern XLogRecPtr get_first_record_lsn(const char *archivedir, XLogRecPtr start_lsn,
-									   TimeLineID tli, uint32 wal_seg_size, int timeout);
-extern XLogRecPtr get_next_record_lsn(const char *archivedir, XLogSegNo	segno, TimeLineID tli,
-									  uint32 wal_seg_size, int timeout, XLogRecPtr target);
+								   XLogRecPtr stop_lsn, TimeLineID tli, uint32 seg_size);
 
 /* in util.c */
 extern TimeLineID get_current_timeline(PGconn *conn);
@@ -1181,7 +1199,9 @@ extern void start_WAL_streaming(PGconn *backup_conn, char *stream_dst_path,
 							   ConnectionOptions *conn_opt,
 							   XLogRecPtr startpos, TimeLineID starttli,
 							   bool is_backup);
-extern int wait_WAL_streaming_end(parray *backup_files_list);
+extern void wait_WAL_streaming_starts(void);
+extern int wait_WAL_streaming_end(parray *backup_files_list, const char* xlog_path,
+								  XLogRecPtr stop_lsn, pgBackup* backup);
 extern parray* parse_tli_history_buffer(char *history, TimeLineID tli);
 
 /* external variables and functions, implemented in backup.c */
@@ -1216,12 +1236,8 @@ extern void pg_stop_backup_consume(PGconn *conn, int server_version,
 extern void pg_stop_backup_write_file_helper(pioDrive_i drive, const char *path, const char *filename, const char *error_msg_filename,
 		ft_str_t data, parray *file_list);
 extern XLogRecPtr wait_wal_lsn(const char *wal_segment_dir, XLogRecPtr lsn, bool is_start_lsn, TimeLineID tli,
-								bool in_prev_segment, bool segment_only,
-								int timeout_elevel, bool in_stream_dir);
-extern void wait_wal_and_calculate_stop_lsn(const char *xlog_path, XLogRecPtr stop_lsn, pgBackup *backup);
+								bool segment_only, int timeout_elevel);
 extern int64 calculate_datasize_of_filelist(parray *filelist);
-
-extern void getCurrentStreamPosition(TimeLineID *timeline, XLogRecPtr *ptr, XLogRecPtr *prev);
 
 /*
  * Slices and arrays for C strings

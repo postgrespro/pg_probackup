@@ -610,20 +610,88 @@ start_WAL_streaming(PGconn *backup_conn, char *stream_dst_path, ConnectionOption
 	pthread_create(&stream_thread, NULL, StreamLog, &stream_thread_arg);
 }
 
+void
+wait_WAL_streaming_starts(void)
+{
+	int timeout;
+	int try_count;
+
+	if (instance_config.archive_timeout > 0)
+		timeout = instance_config.archive_timeout;
+	else
+		timeout = ARCHIVE_TIMEOUT_DEFAULT;
+
+	for (try_count = 0; try_count < timeout; try_count++)
+	{
+		if (stream_ctl.currentpos)
+			break;
+
+		/* Inform user if WAL streaming didn't start at first attempt */
+		if (try_count == 1)
+			elog(INFO, "Wait for WAL streaming to start");
+
+		if (interrupted || thread_interrupted)
+			elog(ERROR, "Interrupted during waiting for WAL streaming");
+
+		sleep(1);
+	}
+}
+
 /*
  * Wait for the completion of stream
  * append list of streamed xlog files
  * into backup_files_list (if it is not NULL)
  */
 int
-wait_WAL_streaming_end(parray *backup_files_list)
+wait_WAL_streaming_end(parray *backup_files_list, const char* xlog_path,
+					   XLogRecPtr stop_lsn, pgBackup* backup)
 {
+	XLogRecPtr	prev;
+
+	stop_backup_lsn = stop_lsn;
+
     pthread_join(stream_thread, NULL);
 
     if(backup_files_list != NULL)
         parray_concat(backup_files_list, xlog_files_list);
     parray_free(xlog_files_list);
-    return stream_thread_arg.ret;
+    if (!stream_thread_arg.ret)
+	{
+		elog(INFO, "stop_stream_lsn %X/%X currentpos %X/%X",
+			 (uint32_t)(stop_stream_lsn>>32), (uint32_t)stop_stream_lsn,
+			 (uint32_t)(stream_ctl.currentpos>>32), (uint32_t)stream_ctl.currentpos
+			 );
+	}
+
+	if (stream_thread_arg.ret)
+		return stream_thread_arg.ret;
+
+	/*
+	 * Actually we don't need to check for stop_lsn since we already
+	 * know streamer stopped after stop_lsn.
+	 * Just do it for sanity.
+	 */
+	prev = get_prior_record_lsn(xlog_path,
+								backup->start_lsn,
+								stop_lsn, backup->tli,
+								instance_config.xlog_seg_size);
+
+	if (!XLogRecPtrIsInvalid(prev))
+	{
+		/* LSN of the prior record was found */
+		elog(LOG, "Found prior LSN: %X/%X",
+			 (uint32) (prev >> 32), (uint32) prev);
+		/* so write stop_lsn */
+		backup->stop_lsn = stop_lsn;
+	}
+
+	if (XLogRecPtrIsInvalid(backup->stop_lsn))
+	{
+		elog(ERROR, "Couldn't find stop_lsn for stop_stream_lsn %X/%X",
+			 (uint32) (stop_stream_lsn>>32), (uint32) stop_stream_lsn);
+	}
+
+	return stream_thread_arg.ret;
 }
 
 /* Append streamed WAL segment to filelist  */
@@ -701,12 +769,4 @@ add_history_file_to_filelist(parray *filelist, uint32 timeline, char *basedir)
 
     file = pgFileNew(fullpath, relpath, false, do_crc, drive);
     parray_append(filelist, file);
-}
-
-void
-getCurrentStreamPosition(TimeLineID *timeline, XLogRecPtr *ptr, XLogRecPtr *prev)
-{
-	*ptr = stream_ctl.currentpos;
-	*prev = stream_ctl.prevpos;
-	*timeline = stream_ctl.timeline;
 }
