@@ -135,9 +135,9 @@ class OptionTest(ProbackupTest, unittest.TestCase):
             self.assertEqual(1, 0, "Expecting Error because of garbage in pg_probackup.conf.\n Output: {0} \n CMD: {1}".format(
                 repr(self.output), self.cmd))
         except ProbackupException as e:
-            self.assertIn(
-                'ERROR: Syntax error in " = INFINITE',
+            self.assertRegex(
                 e.message,
+                'ERROR: Syntax error .* INFINITE',
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
 
         self.clean_pb(backup_dir)
