@@ -3872,6 +3872,8 @@ pioRemoteDrive_pioOpenRewrite(VSelf, path_t path, int permissions,
 	fobj_t		fl;
 	int         handle = find_free_handle();
 
+	fobj_reset_err(err);
+
 	fio_header hdr = {
 			.cop    = PIO_OPEN_REWRITE,
 			.handle = handle,
