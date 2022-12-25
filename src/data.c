@@ -1345,7 +1345,7 @@ validate_one_page(Page page, BlockNumber absolute_blkno,
 	if (stop_lsn > 0)
 	{
 		/* Get lsn from page header. Ensure that page is from our time. */
-		if (page_st->lsn >= stop_lsn)
+		if (page_st->lsn > stop_lsn)
 			return PAGE_LSN_FROM_FUTURE;
 	}
 
