@@ -18,8 +18,8 @@
 #include "utils/file.h"
 #include "utils/configuration.h"
 
-static pgBackup* get_closest_backup(timelineInfo *tlinfo);
-static pgBackup* get_oldest_backup(timelineInfo *tlinfo);
+static pgBackup* get_closest_backup(timelineInfo *tlinfo, uint32_t xlog_seg_size);
+static pgBackup* get_oldest_backup(timelineInfo *tlinfo, uint32_t xlog_seg_size);
 static const char *backupModes[] = {"", "PAGE", "PTRACK", "DELTA", "FULL"};
 static err_i create_backup_dir(pgBackup *backup, const char *backup_instance_path);
 
@@ -1857,8 +1857,8 @@ catalog_get_timelines(InstanceState *instanceState, InstanceConfig *instance)
 	{
 		timelineInfo *tlinfo = parray_get(timelineinfos, i);
 
-		tlinfo->oldest_backup = get_oldest_backup(tlinfo);
-		tlinfo->closest_backup = get_closest_backup(tlinfo);
+		tlinfo->oldest_backup = get_oldest_backup(tlinfo, instance->xlog_seg_size);
+		tlinfo->closest_backup = get_closest_backup(tlinfo, instance->xlog_seg_size);
 	}
 
 	/* determine which WAL segments must be kept because of wal retention */
@@ -2222,7 +2222,7 @@ catalog_get_timelines(InstanceState *instanceState, InstanceConfig *instance)
  * timeline is unreachable. Return NULL.
  */
 pgBackup*
-get_closest_backup(timelineInfo *tlinfo)
+get_closest_backup(timelineInfo *tlinfo, uint32 xlog_seg_size)
 {
 	pgBackup *closest_backup = NULL;
 	int i;
@@ -2245,7 +2245,7 @@ get_closest_backup(timelineInfo *tlinfo)
 				 * should be considered.
 				 */
 				if (!XLogRecPtrIsInvalid(backup->stop_lsn) &&
-					XRecOffIsValid(backup->stop_lsn) &&
+					XRecEndLooksGood(backup->stop_lsn, xlog_seg_size) &&
 					backup->stop_lsn <= tlinfo->switchpoint &&
 					(backup->status == BACKUP_STATUS_OK ||
 					backup->status == BACKUP_STATUS_DONE))
@@ -2273,7 +2273,7 @@ get_closest_backup(timelineInfo *tlinfo)
  * there is no backups on this timeline. Return NULL.
  */
 pgBackup*
-get_oldest_backup(timelineInfo *tlinfo)
+get_oldest_backup(timelineInfo *tlinfo, uint32_t xlog_seg_size)
 {
 	pgBackup *oldest_backup = NULL;
 	int i;
@@ -2287,7 +2287,7 @@ get_oldest_backup(timelineInfo *tlinfo)
 
 			/* Backups with invalid START LSN can be safely skipped */
 			if (XLogRecPtrIsInvalid(backup->start_lsn) ||
-				!XRecOffIsValid(backup->start_lsn))
+				!XRecPtrLooksGood(backup->start_lsn, xlog_seg_size))
 				continue;
 
 			/*

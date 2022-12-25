@@ -1048,8 +1048,26 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 		pg_free(stop_backup_query_text);
 	}
 
+	/* wait for end of wal streaming and calculate wal size transfered */
 	if (!dry_run)
-		wait_wal_and_calculate_stop_lsn(dest_xlog_path, stop_backup_result.lsn, &current);
+	{
+		parray *wal_files_list = NULL;
+		wal_files_list = parray_new();
+
+		if (wait_WAL_streaming_end(wal_files_list, dest_xlog_path,
+								   stop_backup_result.lsn, &current))
+			elog(ERROR, "WAL streaming failed");
+
+		for (i = 0; i < parray_num(wal_files_list); i++)
+		{
+			pgFile *file = (pgFile *) parray_get(wal_files_list, i);
+			transfered_walfiles_bytes += file->size;
+		}
+
+		parray_walk(wal_files_list, pgFileFree);
+		parray_free(wal_files_list);
+		wal_files_list = NULL;
+	}
 
 	/* Write backup_label */
 	Assert(stop_backup_result.backup_label_content.len != 0);
@@ -1074,26 +1092,6 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 		 */
 	}
 	ft_str_free(&stop_backup_result.tablespace_map_content);
-
-	/* wait for end of wal streaming and calculate wal size transfered */
-	if (!dry_run)
-	{
-		parray *wal_files_list = NULL;
-		wal_files_list = parray_new();
-
-		if (wait_WAL_streaming_end(wal_files_list))
-			elog(ERROR, "WAL streaming failed");
-
-		for (i = 0; i < parray_num(wal_files_list); i++)
-		{
-			pgFile *file = (pgFile *) parray_get(wal_files_list, i);
-			transfered_walfiles_bytes += file->size;
-		}
-
-		parray_walk(wal_files_list, pgFileFree);
-		parray_free(wal_files_list);
-		wal_files_list = NULL;
-	}
 
 	/*
 	 * In case of backup from replica we must fix minRecPoint

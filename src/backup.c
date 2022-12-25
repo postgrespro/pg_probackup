@@ -248,7 +248,7 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 		 * Because WAL streaming will start after pg_start_backup() in stream
 		 * mode.
 		 */
-		wait_wal_lsn(instanceState->instance_wal_subdir_path, current.start_lsn, true, current.tli, false, true, ERROR, false);
+		wait_wal_lsn(instanceState->instance_wal_subdir_path, current.start_lsn, true, current.tli, true, ERROR);
 	}
 
 	/* start stream replication */
@@ -271,7 +271,7 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 		 * PAGE backup in stream mode is waited twice, first for
 		 * segment in WAL archive and then for streamed segment
 		 */
-		wait_wal_lsn(stream_xlog_path, current.start_lsn, true, current.tli, false, true, ERROR, true);
+		wait_WAL_streaming_starts();
 	}
 
 	/* initialize backup's file list */
@@ -1241,17 +1241,8 @@ pg_is_superuser(PGconn *conn)
  * streamed in 'archive_dir' or 'pg_wal' directory.
  *
  * If flag 'is_start_lsn' is set then issue warning for first-time users.
- * If flag 'in_prev_segment' is set, look for LSN in previous segment,
- *  with EndRecPtr >= Target LSN. It should be used only for solving
- *  invalid XRecOff problem.
  * If flag 'segment_only' is set, then, instead of waiting for LSN, wait for segment,
  *  containing that LSN.
- * If flags 'in_prev_segment' and 'segment_only' are both set, then wait for
- *  previous segment.
- *
- * Flag 'in_stream_dir' determine whether we looking for WAL in 'pg_wal' directory or
- * in archive. Do note, that we cannot rely sorely on global variable 'stream_wal' (current.stream) because,
- * for example, PAGE backup must(!) look for start_lsn in archive regardless of wal_mode.
  *
  * 'timeout_elevel' determine the elevel for timeout elog message. If elevel lighter than
  * ERROR is used, then return InvalidXLogRecPtr. TODO: return something more concrete, for example 1.
@@ -1261,16 +1252,15 @@ pg_is_superuser(PGconn *conn)
  */
 XLogRecPtr
 wait_wal_lsn(const char *wal_segment_dir, XLogRecPtr target_lsn, bool is_start_lsn, TimeLineID tli,
-			 bool in_prev_segment, bool segment_only,
-			 int timeout_elevel, bool in_stream_dir)
+			 bool segment_only, int timeout_elevel)
 {
 	XLogSegNo	targetSegNo;
 	char		wal_segment_path[MAXPGPATH],
 				wal_segment[MAXFNAMELEN];
+	char*		try_segment_path = NULL;
 	bool		file_exists = false;
 	uint32		try_count = 0,
 				timeout;
-	char		*wal_delivery_str = in_stream_dir ? "streamed":"archived";
 
 #ifdef HAVE_LIBZ
 	char		gz_wal_segment_path[MAXPGPATH];
@@ -1278,7 +1268,7 @@ wait_wal_lsn(const char *wal_segment_dir, XLogRecPtr target_lsn, bool is_start_l
 
 	/* Compute the name of the WAL file containing requested LSN */
 	GetXLogSegNo(target_lsn, targetSegNo, instance_config.xlog_seg_size);
-	if (in_prev_segment)
+	if (target_lsn % instance_config.xlog_seg_size == 0)
 		targetSegNo--;
 	GetXLogFileName(wal_segment, tli, targetSegNo,
 					instance_config.xlog_seg_size);
@@ -1304,50 +1294,6 @@ wait_wal_lsn(const char *wal_segment_dir, XLogRecPtr target_lsn, bool is_start_l
 		elog(LOG, "Looking for LSN %X/%X in segment: %s",
 			 (uint32) (target_lsn >> 32), (uint32) target_lsn, wal_segment);
 
-	if (in_stream_dir && !in_prev_segment)
-	{
-		/* separate simple loop for streaming */
-		for (;;)
-		{
-			TimeLineID curtli;
-			XLogRecPtr curptr;
-			XLogRecPtr prevptr;
-
-			getCurrentStreamPosition(&curtli, &curptr, &prevptr);
-			if (curtli > tli || (curtli == tli && curptr > target_lsn))
-				return target_lsn;
-
-			sleep(1);
-			if (interrupted || thread_interrupted)
-				elog(ERROR, "Interrupted during waiting for WAL streaming");
-			try_count++;
-
-			/* Inform user if WAL segment is absent in first attempt */
-			if (try_count == 1)
-			{
-				if (segment_only)
-					elog(INFO, "Wait for WAL segment %s to be %s",
-						 wal_segment_path, wal_delivery_str);
-				else
-					elog(INFO, "Wait for LSN %X/%X in %s WAL segment %s",
-						 (uint32) (target_lsn >> 32), (uint32) target_lsn,
-						 wal_delivery_str, wal_segment_path);
-			}
-
-			if (current.from_replica &&
-				(XRecOffIsNull(target_lsn) || try_count > timeout / 2))
-			{
-				if (!XLogRecPtrIsInvalid(prevptr))
-				{
-					/* LSN of the prior record was found */
-					elog(LOG, "Abuse prior LSN from stream: %X/%X",
-						 (uint32) (prevptr >> 32), (uint32) prevptr);
-					return prevptr;
-				}
-			}
-		}
-	}
-
 #ifdef HAVE_LIBZ
 	snprintf(gz_wal_segment_path, sizeof(gz_wal_segment_path), "%s.gz",
 			 wal_segment_path);
@@ -1366,11 +1312,17 @@ wait_wal_lsn(const char *wal_segment_dir, XLogRecPtr target_lsn, bool is_start_l
 #ifdef HAVE_LIBZ
 				file_exists = fileExists(gz_wal_segment_path, FIO_BACKUP_HOST);
 				if (file_exists)
-					elog(LOG, "Found compressed WAL segment: %s", wal_segment_path);
+				{
+					elog(LOG, "Found compressed WAL segment: %s", gz_wal_segment_path);
+					try_segment_path = gz_wal_segment_path;
+				}
 #endif
 			}
 			else
+			{
 				elog(LOG, "Found WAL segment: %s", wal_segment_path);
+				try_segment_path = wal_segment_path;
+			}
 		}
 
 		if (file_exists)
@@ -1378,18 +1330,6 @@ wait_wal_lsn(const char *wal_segment_dir, XLogRecPtr target_lsn, bool is_start_l
 			/* Do not check for target LSN */
 			if (segment_only)
 				return InvalidXLogRecPtr;
-
-			/*
-			 * A WAL segment found. Look for target LSN in it.
-			 */
-			if (!XRecOffIsNull(target_lsn) &&
-				  wal_contains_lsn(wal_segment_dir, target_lsn, tli,
-									instance_config.xlog_seg_size))
-				/* Target LSN was found */
-			{
-				elog(LOG, "Found LSN: %X/%X", (uint32) (target_lsn >> 32), (uint32) target_lsn);
-				return target_lsn;
-			}
 
 			/*
 			 * If we failed to get target LSN in a reasonable time, try
@@ -1405,39 +1345,42 @@ wait_wal_lsn(const char *wal_segment_dir, XLogRecPtr target_lsn, bool is_start_l
 			 * 2. Replica returened endpoint LSN with NullXRecOff. We want to look
 			 *  for previous record which endpoint points greater or equal LSN in previous WAL segment.
 			 */
-			if (current.from_replica &&
-				(XRecOffIsNull(target_lsn) || try_count > timeout / 2))
+			XLogRecPtr	prev;
+
+			prev = get_prior_record_lsn(wal_segment_dir, current.start_lsn, target_lsn, tli,
+										instance_config.xlog_seg_size);
+
+			if (!XLogRecPtrIsInvalid(prev))
 			{
-				XLogRecPtr	res;
-
-				res = get_prior_record_lsn(wal_segment_dir, current.start_lsn, target_lsn, tli,
-										in_prev_segment, instance_config.xlog_seg_size);
-
-				if (!XLogRecPtrIsInvalid(res))
-				{
-					/* LSN of the prior record was found */
-					elog(LOG, "Found prior LSN: %X/%X",
-						 (uint32) (res >> 32), (uint32) res);
-					return res;
-				}
+				/* LSN of the prior record was found */
+				elog(LOG, "Found prior LSN: %X/%X",
+					 (uint32) (prev >> 32), (uint32) prev);
+				return target_lsn;
 			}
+			elog(ERROR, "Attempt %d: prior lsn is not found in %s", try_count+1,
+				 try_segment_path);
+		}
+		else
+		{
+			elog(LOG, "Attempt %d: file %s is not found", try_count+1,
+				 wal_segment_path);
 		}
 
 		sleep(1);
 		if (interrupted || thread_interrupted)
-			elog(ERROR, "Interrupted during waiting for WAL %s", in_stream_dir ? "streaming" : "archiving");
+			elog(ERROR, "Interrupted during waiting for WAL archiving");
 		try_count++;
 
 		/* Inform user if WAL segment is absent in first attempt */
 		if (try_count == 1)
 		{
 			if (segment_only)
-				elog(INFO, "Wait for WAL segment %s to be %s",
-					 wal_segment_path, wal_delivery_str);
+				elog(INFO, "Wait for WAL segment %s to be archived",
+					 wal_segment_path);
 			else
-				elog(INFO, "Wait for LSN %X/%X in %s WAL segment %s",
+				elog(INFO, "Wait for LSN %X/%X in archived WAL segment %s",
 					 (uint32) (target_lsn >> 32), (uint32) target_lsn,
-					 wal_delivery_str, wal_segment_path);
+					 wal_segment_path);
 		}
 
 		if (!current.stream && is_start_lsn && try_count == 30)
@@ -1448,156 +1391,20 @@ wait_wal_lsn(const char *wal_segment_dir, XLogRecPtr target_lsn, bool is_start_l
 		if (timeout > 0 && try_count > timeout)
 		{
 			if (file_exists)
-				elog(timeout_elevel, "WAL segment %s was %s, "
-					 "but target LSN %X/%X could not be %s in %d seconds",
-					 wal_segment, wal_delivery_str,
+				elog(timeout_elevel, "WAL segment %s was archived, "
+					 "but target LSN %X/%X could not be archived in %d seconds",
+					 wal_segment,
 					 (uint32) (target_lsn >> 32), (uint32) target_lsn,
-					 wal_delivery_str, timeout);
+					 timeout);
 			/* If WAL segment doesn't exist or we wait for previous segment */
 			else
 				elog(timeout_elevel,
-					 "WAL segment %s could not be %s in %d seconds",
-					 wal_segment, wal_delivery_str, timeout);
+					 "WAL segment %s could not be archived in %d seconds",
+					 wal_segment, timeout);
 
 			return InvalidXLogRecPtr;
 		}
 	}
-}
-
-/*
- * Check stop_lsn (returned from pg_stop_backup()) and update backup->stop_lsn
- */
-void
-wait_wal_and_calculate_stop_lsn(const char *xlog_path, XLogRecPtr stop_lsn, pgBackup *backup)
-{
-	bool	 stop_lsn_exists = false;
-
-	/* It is ok for replica to return invalid STOP LSN
-	 * UPD: Apparently it is ok even for a master.
-	 */
-	if (!XRecOffIsValid(stop_lsn))
-	{
-		XLogSegNo	segno = 0;
-		XLogRecPtr	lsn_tmp = InvalidXLogRecPtr;
-
-		/*
-		 * Even though the value is invalid, it's expected postgres behaviour
-		 * and we're trying to fix it below.
-		 */
-		elog(LOG, "Invalid offset in stop_lsn value %X/%X, trying to fix",
-			 (uint32) (stop_lsn >> 32), (uint32) (stop_lsn));
-
-		/*
-		 * Note: even with gdb it is very hard to produce automated tests for
-		 * contrecord + invalid LSN, so emulate it for manual testing.
-		 */
-		//lsn = lsn - XLOG_SEG_SIZE;
-		//elog(WARNING, "New Invalid stop_backup_lsn value %X/%X",
-		//	 (uint32) (stop_lsn >> 32), (uint32) (stop_lsn));
-
-		GetXLogSegNo(stop_lsn, segno, instance_config.xlog_seg_size);
-
-		/*
-		 * Note, that there is no guarantee that corresponding WAL file even exists.
-		 * Replica may return LSN from future and keep staying in present.
-		 * Or it can return invalid LSN.
-		 *
-		 * That's bad, since we want to get real LSN to save it in backup label file
-		 * and to use it in WAL validation.
-		 *
-		 * So we try to do the following:
-		 * 1. Wait 'archive_timeout' seconds for segment containing stop_lsn and
-		 *	  look for the first valid record in it.
-		 * 	  It solves the problem of occasional invalid LSN on write-busy system.
-		 * 2. Failing that, look for record in previous segment with endpoint
-		 *	  equal or greater than stop_lsn. It may(!) solve the problem of invalid LSN
-		 *	  on write-idle system. If that fails too, error out.
-		 */
-
-		/* stop_lsn is pointing to a 0 byte of xlog segment */
-		if (stop_lsn % instance_config.xlog_seg_size == 0)
-		{
-			/* Wait for segment with current stop_lsn, it is ok for it to never arrive */
-			wait_wal_lsn(xlog_path, stop_lsn, false, backup->tli,
-						 false, true, WARNING, backup->stream);
-
-			/* Get the first record in segment with current stop_lsn */
-			lsn_tmp = get_first_record_lsn(xlog_path, segno, backup->tli,
-									       instance_config.xlog_seg_size,
-									       instance_config.archive_timeout);
-
-			/* Check that returned LSN is valid and greater than stop_lsn */
-			if (XLogRecPtrIsInvalid(lsn_tmp) ||
-				!XRecOffIsValid(lsn_tmp) ||
-				lsn_tmp < stop_lsn)
-			{
-				/* Backup from master should error out here */
-				if (!backup->from_replica)
-					elog(ERROR, "Failed to get next WAL record after %X/%X",
-								(uint32) (stop_lsn >> 32),
-								(uint32) (stop_lsn));
-
-				/* No luck, falling back to looking up for previous record */
-				elog(WARNING, "Failed to get next WAL record after %X/%X, "
-							"looking for previous WAL record",
-							(uint32) (stop_lsn >> 32),
-							(uint32) (stop_lsn));
-
-				/* Despite looking for previous record there is not guarantee of success
-				 * because previous record can be the contrecord.
-				 */
-				lsn_tmp = wait_wal_lsn(xlog_path, stop_lsn, false, backup->tli,
-									   true, false, ERROR, backup->stream);
-
-				/* sanity */
-				if (!XRecOffIsValid(lsn_tmp) || XLogRecPtrIsInvalid(lsn_tmp))
-					elog(ERROR, "Failed to get WAL record prior to %X/%X",
-								(uint32) (stop_lsn >> 32),
-								(uint32) (stop_lsn));
-			}
-		}
-		/* stop lsn is aligned to xlog block size, just find next lsn */
-		else if (stop_lsn % XLOG_BLCKSZ == 0)
-		{
-			/* Wait for segment with current stop_lsn */
-			wait_wal_lsn(xlog_path, stop_lsn, false, backup->tli,
-						 false, true, ERROR, backup->stream);
-
-			/* Get the next closest record in segment with current stop_lsn */
-			lsn_tmp = get_next_record_lsn(xlog_path, segno, backup->tli,
-									       instance_config.xlog_seg_size,
-									       instance_config.archive_timeout,
-									       stop_lsn);
-
-			/* sanity */
-			if (!XRecOffIsValid(lsn_tmp) || XLogRecPtrIsInvalid(lsn_tmp))
-				elog(ERROR, "Failed to get WAL record next to %X/%X",
-							(uint32) (stop_lsn >> 32),
-							(uint32) (stop_lsn));
-		}
-		/* PostgreSQL returned something very illegal as STOP_LSN, error out */
-		else
-			elog(ERROR, "Invalid stop_backup_lsn value %X/%X",
-				 (uint32) (stop_lsn >> 32), (uint32) (stop_lsn));
-
-		/* Setting stop_backup_lsn will set stop point for streaming */
-		stop_backup_lsn = lsn_tmp;
-		stop_lsn_exists = true;
-	}
-
-	elog(INFO, "stop_lsn: %X/%X",
-		(uint32) (stop_lsn >> 32), (uint32) (stop_lsn));
-
-	/*
-	 * Wait for stop_lsn to be archived or streamed.
-	 * If replica returned valid STOP_LSN of not actually existing record,
-	 * look for previous record with endpoint >= STOP_LSN.
-	 */
-	if (!stop_lsn_exists)
-		stop_backup_lsn = wait_wal_lsn(xlog_path, stop_lsn, false, backup->tli,
-									false, false, ERROR, backup->stream);
-
-	backup->stop_lsn = stop_backup_lsn;
 }
 
 /* Remove annoying NOTICE messages generated by backend */
@@ -1901,11 +1708,26 @@ pg_stop_backup(InstanceState *instanceState, pgBackup *backup, PGconn *pg_startb
 	{
 		join_path_components(stream_xlog_path, backup->database_dir, PG_XLOG_DIR);
 		xlog_path = stream_xlog_path;
+		/* This function will also add list of xlog files
+		 * to the passed filelist */
+		if(wait_WAL_streaming_end(backup_files_list, xlog_path,
+								  stop_backup_result.lsn, backup))
+			elog(ERROR, "WAL streaming failed");
+		elog(INFO, "backup->stop_lsn %X/%X",
+			 (uint32_t)(backup->stop_lsn>>32), (uint32_t)backup->stop_lsn);
+
 	}
 	else
+	{
 		xlog_path = instanceState->instance_wal_subdir_path;
 
-	wait_wal_and_calculate_stop_lsn(xlog_path, stop_backup_result.lsn, backup);
+		backup->stop_lsn = wait_wal_lsn(xlog_path, stop_backup_result.lsn, false, backup->tli,
+										false, ERROR);
+		if (XLogRecPtrIsInvalid(backup->stop_lsn))
+			elog(ERROR, "We couldn't wait for %llX",
+				 (long long)stop_backup_result.lsn);
+		ft_assert(backup->stop_lsn == stop_backup_result.lsn);
+	}
 
 	/* Write backup_label and tablespace_map */
 	Assert(stop_backup_result.backup_label_content.len != 0);
@@ -1924,14 +1746,6 @@ pg_stop_backup(InstanceState *instanceState, pgBackup *backup, PGconn *pg_startb
 			stop_backup_result.tablespace_map_content, backup_files_list);
 	}
 	ft_str_free(&stop_backup_result.tablespace_map_content);
-
-	if (backup->stream)
-	{
-		/* This function will also add list of xlog files
-		 * to the passed filelist */
-		if(wait_WAL_streaming_end(backup_files_list))
-			elog(ERROR, "WAL streaming failed");
-	}
 
 	backup->recovery_xid = stop_backup_result.snapshot_xid;
 

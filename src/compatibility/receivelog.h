@@ -30,8 +30,7 @@ typedef struct StreamCtl
 {
 	XLogRecPtr	startpos;		/* Start position for streaming */
 	volatile XLogRecPtr	currentpos;		/* current position */
-	volatile XLogRecPtr	prevpos;		/* current position */
-	volatile TimeLineID	timeline;		/* Timeline to stream data from */
+	TimeLineID	timeline;		/* Timeline to stream data from */
 	char	   *sysidentifier;	/* Validate this system identifier and
 								 * timeline */
 	int			standby_message_timeout;	/* Send status messages this often */

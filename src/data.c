@@ -1345,7 +1345,7 @@ validate_one_page(Page page, BlockNumber absolute_blkno,
 	if (stop_lsn > 0)
 	{
 		/* Get lsn from page header. Ensure that page is from our time. */
-		if (page_st->lsn > stop_lsn)
+		if (page_st->lsn >= stop_lsn)
 			return PAGE_LSN_FROM_FUTURE;
 	}
 
@@ -1541,6 +1541,7 @@ validate_file_pages(pgFile *file, const char *fullpath, XLogRecPtr stop_lsn,
 							checksum_version ? "correct" : "not enabled",
 							(uint32) (page_st.lsn >> 32), (uint32) page_st.lsn,
 							(uint32) (stop_lsn >> 32), (uint32) stop_lsn);
+				is_valid = false;
 				break;
 		}
 	}
