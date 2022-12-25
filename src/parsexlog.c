@@ -663,8 +663,8 @@ get_prior_record_lsn(const char *archivedir, XLogRecPtr start_lsn,
 
 		if (start_segno == segno)
 			startpoint = start_lsn;
-
-		GetXLogRecPtr(segno, 0, wal_seg_size, startpoint);
+		else
+			GetXLogRecPtr(segno, 0, wal_seg_size, startpoint);
 
 		found = XLogFindNextRecord(xlogreader, startpoint);
 
@@ -688,13 +688,16 @@ get_prior_record_lsn(const char *archivedir, XLogRecPtr start_lsn,
 		break;
 	}
 
+	/* This check doesn't make much value. But let it be. */
 	if (start_segno == segno &&
 		XRecPtrLooksGood(start_lsn, wal_seg_size) &&
 		startpoint != start_lsn)
 	{
-		elog(ERROR, "Start lsn %X/%X wasn't found despite it looks good "
+		elog(ERROR, "Start lsn %X/%X wasn't found despite it looks good."
+					"Got lsn %X/%X instead. "
 					"(in archive dir %s)",
 			 (uint32_t)(start_lsn>>32), (uint32_t)start_lsn,
+			 (uint32_t)(startpoint>>32), (uint32_t)startpoint,
 			 archivedir);
 	}
 
