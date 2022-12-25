@@ -611,24 +611,8 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             return_id=False)
 
         self.assertIn(
-            'LOG: Invalid offset in stop_lsn value 0/4000000',
-            output)
-
-        self.assertIn(
-            'WARNING: WAL segment 000000010000000000000004 could not be streamed in 30 seconds',
-            output)
-
-        self.assertIn(
-            'WARNING: Failed to get next WAL record after 0/4000000, looking for previous WAL record',
-            output)
-
-        self.assertIn(
-            'LOG: Looking for LSN 0/4000000 in segment: 000000010000000000000003',
-            output)
-
-        self.assertIn(
             'has endpoint 0/4000000 which is '
-            'equal or greater than requested LSN 0/4000000',
+            'equal or greater than requested LSN',
             output)
 
         self.assertIn(
@@ -715,19 +699,16 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             log_content = f.read()
 
         self.assertIn(
-            'LOG: Invalid offset in stop_lsn value 0/4000000',
+            'has endpoint 0/4000000 which is '
+            'equal or greater than requested LSN',
             log_content)
 
         self.assertIn(
-            'LOG: Looking for segment: 000000010000000000000004',
+            'LOG: Found prior LSN:',
             log_content)
 
         self.assertIn(
-            'LOG: First record in WAL segment "000000010000000000000004": 0/4000028',
-            log_content)
-
-        self.assertIn(
-            'INFO: stop_lsn: 0/4000000',
+            'INFO: backup->stop_lsn 0/4000000',
             log_content)
 
         self.assertTrue(self.show_pb(backup_dir, 'replica')[0]['status'] == 'DONE')
@@ -783,18 +764,6 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             return_id=False)
 
         self.assertIn(
-            'LOG: Invalid offset in stop_lsn value 0/4000000',
-            output)
-
-        self.assertIn(
-            'WARNING: WAL segment 000000010000000000000004 could not be archived in 30 seconds',
-            output)
-
-        self.assertIn(
-            'WARNING: Failed to get next WAL record after 0/4000000, looking for previous WAL record',
-            output)
-
-        self.assertIn(
             'LOG: Looking for LSN 0/4000000 in segment: 000000010000000000000003',
             output)
 
@@ -806,8 +775,6 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         self.assertIn(
             'LOG: Found prior LSN:',
             output)
-
-        print(output)
 
     # @unittest.skip("skip")
     def test_archive_replica_not_null_offset(self):
@@ -849,29 +816,22 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
                 '--no-validate'],
             return_id=False)
 
-        with self.assertRaises(ProbackupException) as ctx:
-            self.backup_node(
-                backup_dir, 'node', replica, replica.data_dir,
-                options=[
-                    '--archive-timeout=10',
-                    '--log-level-console=LOG',
-                    '--no-validate'])
-        e = ctx.exception
-        # vanilla -- 0/4000060
-        # pgproee -- 0/4000078
+        output = self.backup_node(
+            backup_dir, 'node', replica, replica.data_dir,
+            options=[
+                '--archive-timeout=10',
+                '--log-level-console=LOG',
+                '--no-validate'],
+            return_id=False)
+
         self.assertRegex(
-            e.message,
-            r'LOG: Looking for LSN (0/4000060|0/4000078|0/4000070) in segment: 000000010000000000000004',
+            output,
+            r'LOG: Record \S+ has endpoint 0/4000000 which is equal.*0/4000000',
             "\n CMD: {0}".format(self.cmd))
 
         self.assertRegex(
-            e.message,
-            r'INFO: Wait for LSN (0/4000060|0/4000078|0/4000070) in archived WAL segment',
-            "\n CMD: {0}".format(self.cmd))
-
-        self.assertRegex(
-            e.message,
-            r'ERROR: WAL segment 000000010000000000000004 could not be archived in \d+ seconds',
+            output,
+            r'INFO: Backup \w+ completed\s*\Z',
             "\n CMD: {0}".format(self.cmd))
 
     # @unittest.skip("skip")
@@ -941,10 +901,6 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             return_id=False)
 
         pgdata = self.pgdata_content(replica.data_dir)
-
-        self.assertIn(
-            'WARNING: Could not read WAL record at',
-            output)
 
         self.assertIn(
             'LOG: Found prior LSN:',
