@@ -245,7 +245,7 @@ extractPageMap(const char *archivedir, uint32 wal_seg_size,
 		/* easy case */
 		extract_isok = RunXLogThreads(archivedir, 0, InvalidTransactionId,
 									  InvalidXLogRecPtr, end_tli, wal_seg_size,
-									  startpoint, endpoint, false, extractPageInfo,
+									  startpoint, endpoint, true, extractPageInfo,
 									  NULL);
 	else
 	{
@@ -330,7 +330,7 @@ extractPageMap(const char *archivedir, uint32 wal_seg_size,
 			extract_isok = RunXLogThreads(archivedir, 0, InvalidTransactionId,
 									  InvalidXLogRecPtr, tmp_interval->tli, wal_seg_size,
 									  tmp_interval->begin_lsn, tmp_interval->end_lsn,
-									  false, extractPageInfo, NULL);
+									  true, extractPageInfo, NULL);
 			if (!extract_isok)
 				break;
 
@@ -359,7 +359,7 @@ validate_backup_wal_from_start_to_stop(pgBackup *backup,
 	got_endpoint = RunXLogThreads(archivedir, 0, InvalidTransactionId,
 								  InvalidXLogRecPtr, tli, xlog_seg_size,
 								  backup->start_lsn, backup->stop_lsn,
-								  false, NULL, NULL);
+								  true, NULL, NULL);
 
 	if (!got_endpoint)
 	{
@@ -1158,6 +1158,11 @@ XLogThreadWorker(void *arg)
 		elog(ERROR, "Thread [%d]: out of memory", reader_data->thread_num);
 	xlogreader->system_identifier = instance_config.system_identifier;
 
+	elog(LOG, "Thread [%d]: Starting LSN: %X/%X , end: %X/%X",
+		 reader_data->thread_num,
+		 (uint32) (thread_arg->startpoint >> 32), (uint32) (thread_arg->startpoint),
+		 (uint32) (thread_arg->endpoint >> 32), (uint32) (thread_arg->endpoint));
+
 	found = XLogFindNextRecord(xlogreader, thread_arg->startpoint);
 
 	/*
@@ -1186,11 +1191,6 @@ XLogThreadWorker(void *arg)
 	}
 
 	thread_arg->startpoint = found;
-
-	elog(VERBOSE, "Thread [%d]: Starting LSN: %X/%X",
-		 reader_data->thread_num,
-		 (uint32) (thread_arg->startpoint >> 32),
-		 (uint32) (thread_arg->startpoint));
 
 	while (need_read)
 	{
