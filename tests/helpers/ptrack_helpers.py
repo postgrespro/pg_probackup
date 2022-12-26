@@ -1,18 +1,14 @@
 # you need os for unittest to work
 import os
-import gc
 import threading
 import unittest
-from sys import exit, argv, version_info
+from sys import exit, argv
 import signal
 import subprocess
 import shutil
-import six
 import testgres
 import hashlib
-import re
 import getpass
-import select
 from time import sleep
 import re
 import json
@@ -143,6 +139,7 @@ class ProbackupException(Exception):
     def __str__(self):
         return '\n ERROR: {0}\n CMD: {1}'.format(repr(self.message), self.cmd)
 
+
 class PostgresNodeExtended(testgres.PostgresNode):
 
     def __init__(self, base_dir=None, *args, **kwargs):
@@ -227,6 +224,7 @@ class PostgresNodeExtended(testgres.PostgresNode):
         con.close()
         return sum.hexdigest()
 
+
 class ProbackupTest(object):
     # Class attributes
     enterprise = is_enterprise()
@@ -238,8 +236,13 @@ class ProbackupTest(object):
         self.nodes_to_cleanup = []
 
         if isinstance(self, unittest.TestCase):
-            self.module_name = self.id().split('.')[1]
-            self.fname = self.id().split('.')[3]
+            try:
+                self.module_name = self.id().split('.')[-2]
+                self.fname = self.id().split('.')[-1]
+            except IndexError:
+                print("Couldn't get module name and function name from self.id(): `{}`".format(self.id()))
+                self.module_name = self.module_name if self.module_name else str(self).split('(')[1].split('.')[1]
+                self.fname = str(self).split('(')[0]
 
         if '-v' in argv or '--verbose' in argv:
             self.verbose = True
