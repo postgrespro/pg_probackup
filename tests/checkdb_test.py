@@ -537,8 +537,13 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
                     repr(e.message), self.cmd))
 
             self.assertIn(
-                "Amcheck failed in database 'postgres' for index: 'public.bttest_unique_idx': ERROR:  index \"bttest_unique_idx\" is corrupted. There are tuples violating UNIQUE constraint",
+                "Amcheck failed in database 'postgres' for index: 'public.bttest_unique_idx'",
                 e.message)
+
+            self.assertRegex(
+                e.message,
+                r"ERROR:[^\n]*(violating UNIQUE constraint|uniqueness is violated)"
+            )
 
         # Clean after yourself
         node.stop()
