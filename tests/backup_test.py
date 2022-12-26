@@ -2203,9 +2203,10 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         # self.switch_wal_segment(node)
         # self.switch_wal_segment(node)
 
-        self.backup_node(
-            backup_dir, 'replica', replica,
-            datname='backupdb', options=['-U', 'backup'])
+        with self.switch_wal_after(node, 10):
+            self.backup_node(
+                backup_dir, 'replica', replica,
+                datname='backupdb', options=['-U', 'backup'])
 
         # stream full backup from replica
         self.backup_node(
@@ -2215,30 +2216,30 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 #        self.switch_wal_segment(node)
 
         # PAGE backup from replica
-        self.switch_wal_segment(node)
-        self.backup_node(
-            backup_dir, 'replica', replica, backup_type='page',
-            datname='backupdb', options=['-U', 'backup', '--archive-timeout=20s'])
+        with self.switch_wal_after(node, 10):
+            self.backup_node(
+                backup_dir, 'replica', replica, backup_type='page',
+                datname='backupdb', options=['-U', 'backup', '--archive-timeout=20s'])
 
         self.backup_node(
             backup_dir, 'replica', replica, backup_type='page',
             datname='backupdb', options=['--stream', '-U', 'backup'])
 
         # DELTA backup from replica
-        self.switch_wal_segment(node)
-        self.backup_node(
-            backup_dir, 'replica', replica, backup_type='delta',
-            datname='backupdb', options=['-U', 'backup'])
+        with self.switch_wal_after(node, 10):
+            self.backup_node(
+                backup_dir, 'replica', replica, backup_type='delta',
+                datname='backupdb', options=['-U', 'backup'])
         self.backup_node(
             backup_dir, 'replica', replica, backup_type='delta',
             datname='backupdb', options=['--stream', '-U', 'backup'])
 
         # PTRACK backup from replica
         if self.ptrack:
-            self.switch_wal_segment(node)
-            self.backup_node(
-                backup_dir, 'replica', replica, backup_type='ptrack',
-                datname='backupdb', options=['-U', 'backup'])
+            with self.switch_wal_after(node, 10):
+                self.backup_node(
+                    backup_dir, 'replica', replica, backup_type='ptrack',
+                    datname='backupdb', options=['-U', 'backup'])
             self.backup_node(
                 backup_dir, 'replica', replica, backup_type='ptrack',
                 datname='backupdb', options=['--stream', '-U', 'backup'])

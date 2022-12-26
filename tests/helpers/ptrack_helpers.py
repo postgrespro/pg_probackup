@@ -1,6 +1,7 @@
 # you need os for unittest to work
 import os
 import gc
+import threading
 import unittest
 from sys import exit, argv, version_info
 import signal
@@ -16,6 +17,7 @@ from time import sleep
 import re
 import json
 import random
+import contextlib
 
 idx_ptrack = {
     't_heap': {
@@ -1653,7 +1655,7 @@ class ProbackupTest(object):
             num = num * 100 + int(re.sub(r"[^\d]", "", part))
         return num
 
-    def switch_wal_segment(self, node):
+    def switch_wal_segment(self, node, sleep_seconds=1):
         """
         Execute pg_switch_wal() in given node
 
@@ -1661,11 +1663,24 @@ class ProbackupTest(object):
             node: an instance of PostgresNode or NodeConnection class
         """
         if isinstance(node, testgres.PostgresNode):
-            node.safe_psql('postgres', 'select pg_switch_wal()')
+            with node.connect('postgres') as con:
+                con.execute('select txid_current()')
+                con.execute('select pg_switch_wal()')
         else:
             node.execute('select pg_switch_wal()')
 
-        sleep(1)
+        if sleep_seconds > 0:
+            sleep(sleep_seconds)
+
+    @contextlib.contextmanager
+    def switch_wal_after(self, node, seconds):
+        tm = threading.Timer(seconds, self.switch_wal_segment, [node, 0])
+        tm.start()
+        try:
+            yield
+        finally:
+            tm.cancel()
+            tm.join()
 
     def wait_until_replica_catch_with_master(self, master, replica):
 
