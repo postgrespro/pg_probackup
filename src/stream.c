@@ -26,7 +26,8 @@
 static int	standby_message_timeout = 10 * 1000;
 
 /* stop_backup_lsn is set by pg_stop_backup() to stop streaming */
-XLogRecPtr stop_backup_lsn = InvalidXLogRecPtr;
+/* TODO: use atomic */
+static volatile XLogRecPtr stop_backup_lsn = InvalidXLogRecPtr;
 static XLogRecPtr stop_stream_lsn = InvalidXLogRecPtr;
 
 /*
