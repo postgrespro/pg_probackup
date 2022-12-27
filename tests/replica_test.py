@@ -752,16 +752,16 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         replica.slow_start(replica=True)
 
         self.switch_wal_segment(master)
-        self.switch_wal_segment(master)
 
-        # take backup from replica
-        output = self.backup_node(
-            backup_dir, 'node', replica, replica.data_dir,
-            options=[
-                '--archive-timeout=30',
-                '--log-level-console=LOG',
-                '--no-validate'],
-            return_id=False)
+        with self.switch_wal_after(master, 10):
+            # take backup from replica
+            output = self.backup_node(
+                backup_dir, 'node', replica, replica.data_dir,
+                options=[
+                    '--archive-timeout=30',
+                    '--log-level-console=LOG',
+                    '--no-validate'],
+                return_id=False)
 
         self.assertIn(
             'LOG: Looking for LSN 0/4000000 in segment: 000000010000000000000003',

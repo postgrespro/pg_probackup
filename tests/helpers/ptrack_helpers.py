@@ -1677,8 +1677,8 @@ class ProbackupTest(object):
             sleep(sleep_seconds)
 
     @contextlib.contextmanager
-    def switch_wal_after(self, node, seconds):
-        tm = threading.Timer(seconds, self.switch_wal_segment, [node, 0, True])
+    def switch_wal_after(self, node, seconds, and_tx=True):
+        tm = threading.Timer(seconds, self.switch_wal_segment, [node, 0, and_tx])
         tm.start()
         try:
             yield
