@@ -10,6 +10,7 @@ import testgres
 import hashlib
 import getpass
 from time import sleep
+from time import time
 import re
 import json
 import random
@@ -130,6 +131,23 @@ def base36enc(number):
 
     return sign + base36
 
+def tail_file(file, linetimeout=10, totaltimeout = 60):
+    start = time()
+    with open(file, 'r') as f:
+        waits = 0
+        while waits < linetimeout:
+            line = f.readline()
+            if line == '':
+                waits += 1
+                sleep(1)
+                continue
+            waits = 0
+            yield line
+            if time() - start > totaltimeout:
+                raise TimeoutError("total timeout tailing %s"%(file,))
+        else:
+            return # ok
+        raise TimeoutError("line timeout tailing %s"%(file,))
 
 class ProbackupException(Exception):
     def __init__(self, message, cmd):

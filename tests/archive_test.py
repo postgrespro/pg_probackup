@@ -3,6 +3,7 @@ import shutil
 import gzip
 import unittest
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException, GdbException
+from .helpers.ptrack_helpers import tail_file
 from datetime import datetime, timedelta
 import subprocess
 from sys import exit
@@ -2204,7 +2205,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
         self.backup_node(backup_dir, 'node', node, options=['--stream'])
 
-        node.pgbench_init(scale=50)
+        node.pgbench_init(scale=20)
 
         replica = self.make_simple_node(
             base_dir=os.path.join(self.module_name, self.fname, 'replica'))
@@ -2251,7 +2252,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
         # generate WAL, copy it into prefetch directory, then corrupt
         # some segment
-        node.pgbench_init(scale=20)
+        node.pgbench_init(scale=5)
         sleep(20)
 
         # now copy WAL files into prefetch directory and corrupt some of them
@@ -2304,18 +2305,20 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         os.remove(os.path.join(replica.logs_dir, 'postgresql.log'))
         replica.slow_start(replica=True)
 
-        sleep(60)
+        prefetch_line = 'Prefetched WAL segment {0} is invalid, cannot use it'.format(filename)
+        has_prefetch_line = False
+        restored_line = 'LOG:  restored log file "{0}" from archive'.format(filename)
+        has_restored_line = False
+        for line in tail_file(os.path.join(replica.logs_dir, 'postgresql.log')):
+            if not has_prefetch_line:
+                has_prefetch_line = prefetch_line in line
+            if not has_restored_line:
+                has_restored_line = restored_line in line
+            if has_prefetch_line and has_restored_line:
+                break
 
-        with open(os.path.join(replica.logs_dir, 'postgresql.log'), 'r') as f:
-            postgres_log_content = f.read()
-
-        self.assertIn(
-            'Prefetched WAL segment {0} is invalid, cannot use it'.format(filename),
-            postgres_log_content)
-
-        self.assertIn(
-            'LOG:  restored log file "{0}" from archive'.format(filename),
-            postgres_log_content)
+        self.assertTrue(has_prefetch_line)
+        self.assertTrue(has_restored_line)
 
     # @unittest.skip("skip")
     def test_archive_show_partial_files_handling(self):
