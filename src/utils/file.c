@@ -2850,7 +2850,7 @@ pioLocalReadFile_pioRead(VSelf, ft_bytes_t buf, err_i *err)
 
 	ft_bytes_move(&buf, &self->remain);
 
-	while (buf.len && $noerr(*err))
+	while (buf.len)
 	{
 		ft_assert(self->remain.len == 0);
 
@@ -2860,7 +2860,7 @@ pioLocalReadFile_pioRead(VSelf, ft_bytes_t buf, err_i *err)
 		if (r < 0)
 			*err = $syserr(errno, "Cannot read from {path:q}",
 						   path(self->path.ptr));
-		else if (r == 0)
+		if (r <= 0)
 			break;
 
 		if (to_read.ptr == buf.ptr)
