@@ -1658,7 +1658,7 @@ class ProbackupTest(object):
             num = num * 100 + int(re.sub(r"[^\d]", "", part))
         return num
 
-    def switch_wal_segment(self, node, sleep_seconds=1):
+    def switch_wal_segment(self, node, sleep_seconds=1, and_tx=False):
         """
         Execute pg_switch_wal() in given node
 
@@ -1667,7 +1667,8 @@ class ProbackupTest(object):
         """
         if isinstance(node, testgres.PostgresNode):
             with node.connect('postgres') as con:
-                con.execute('select txid_current()')
+                if and_tx:
+                    con.execute('select txid_current()')
                 con.execute('select pg_switch_wal()')
         else:
             node.execute('select pg_switch_wal()')
@@ -1677,7 +1678,7 @@ class ProbackupTest(object):
 
     @contextlib.contextmanager
     def switch_wal_after(self, node, seconds):
-        tm = threading.Timer(seconds, self.switch_wal_segment, [node, 0])
+        tm = threading.Timer(seconds, self.switch_wal_segment, [node, 0, True])
         tm.start()
         try:
             yield
