@@ -2070,6 +2070,7 @@ class GDBobj:
         return line
 
     def kill(self):
+        self._did_quit = True
         self.proc.kill()
         self.proc.wait(3)
         self.proc.stdin.close()
