@@ -1929,6 +1929,13 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         with open(os.path.join(replica.logs_dir, 'postgresql.log'), 'r') as f:
             replica_log_content = f.read()
 
+        # PBCKP-423 - need to clean ptrack warning
+        ptrack_is_not = 'Ptrack 1.X is not supported anymore'
+        if ptrack_is_not in replica_log_content:
+            lines = [line for line in replica_log_content.splitlines()
+                          if ptrack_is_not not in line]
+            replica_log_content = "".join(lines)
+
         # make sure that .partial file is not compressed
         self.assertNotIn('.partial.gz', replica_log_content)
         # make sure that .history file is not compressed
