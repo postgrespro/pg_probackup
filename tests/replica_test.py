@@ -786,6 +786,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             set_replication=True,
             initdb_params=['--data-checksums'],
             pg_options={
+                'archive_timeout' : '10s',
                 'checkpoint_timeout': '1h',
                 'wal_level': 'replica'})
 
@@ -812,14 +813,14 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         self.backup_node(
             backup_dir, 'node', replica, replica.data_dir,
             options=[
-                '--archive-timeout=10',
+                '--archive-timeout=30',
                 '--no-validate'],
             return_id=False)
 
         output = self.backup_node(
             backup_dir, 'node', replica, replica.data_dir,
             options=[
-                '--archive-timeout=10',
+                '--archive-timeout=30',
                 '--log-level-console=LOG',
                 '--no-validate'],
             return_id=False)
