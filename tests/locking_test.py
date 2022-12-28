@@ -2,19 +2,20 @@ import unittest
 import os
 from time import sleep
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
+from .helpers.ptrack_helpers import test_needs_gdb
 
 
 class LockingTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure
+    @test_needs_gdb
     def test_locking_running_validate_1(self):
         """
         make node, take full backup, stop it in the middle
         run validate, expect it to successfully executed,
         concurrent RUNNING backup with pid file and active process is legal
         """
-        self._check_gdb_flag_or_skip_test()
 
         node = self.make_simple_node(
             base_dir=os.path.join(self.module_name, self.fname, 'node'),
@@ -61,6 +62,7 @@ class LockingTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         gdb.kill()
 
+    @test_needs_gdb
     def test_locking_running_validate_2(self):
         """
         make node, take full backup, stop it in the middle,
@@ -69,7 +71,6 @@ class LockingTest(ProbackupTest, unittest.TestCase):
         RUNNING backup with pid file AND without active pid is legal,
         but his status must be changed to ERROR and pid file is deleted
         """
-        self._check_gdb_flag_or_skip_test()
 
         node = self.make_simple_node(
             base_dir=os.path.join(self.module_name, self.fname, 'node'),
@@ -130,6 +131,7 @@ class LockingTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         gdb.kill()
 
+    @test_needs_gdb
     def test_locking_running_validate_2_specific_id(self):
         """
         make node, take full backup, stop it in the middle,
@@ -139,7 +141,6 @@ class LockingTest(ProbackupTest, unittest.TestCase):
         RUNNING backup with pid file AND without active pid is legal,
         but his status must be changed to ERROR and pid file is deleted
         """
-        self._check_gdb_flag_or_skip_test()
 
         node = self.make_simple_node(
             base_dir=os.path.join(self.module_name, self.fname, 'node'),
@@ -229,6 +230,7 @@ class LockingTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         gdb.kill()
 
+    @test_needs_gdb
     def test_locking_running_3(self):
         """
         make node, take full backup, stop it in the middle,
@@ -237,7 +239,6 @@ class LockingTest(ProbackupTest, unittest.TestCase):
         RUNNING backup without pid file AND without active pid is legal,
         his status must be changed to ERROR
         """
-        self._check_gdb_flag_or_skip_test()
 
         node = self.make_simple_node(
             base_dir=os.path.join(self.module_name, self.fname, 'node'),
@@ -299,6 +300,7 @@ class LockingTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         gdb.kill()
 
+    @test_needs_gdb
     def test_locking_restore_locked(self):
         """
         make node, take full backup, take two page backups,
@@ -307,7 +309,6 @@ class LockingTest(ProbackupTest, unittest.TestCase):
         Expect restore to sucseed because read-only locks
         do not conflict
         """
-        self._check_gdb_flag_or_skip_test()
 
         node = self.make_simple_node(
             base_dir=os.path.join(self.module_name, self.fname, 'node'),
@@ -341,6 +342,7 @@ class LockingTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         gdb.kill()
 
+    @test_needs_gdb
     def test_concurrent_delete_and_restore(self):
         """
         make node, take full backup, take page backup,
@@ -349,7 +351,6 @@ class LockingTest(ProbackupTest, unittest.TestCase):
         Expect restore to fail because validation of
         intermediate backup is impossible
         """
-        self._check_gdb_flag_or_skip_test()
 
         node = self.make_simple_node(
             base_dir=os.path.join(self.module_name, self.fname, 'node'),
@@ -398,13 +399,13 @@ class LockingTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         gdb.kill()
 
+    @test_needs_gdb
     def test_locking_concurrent_validate_and_backup(self):
         """
         make node, take full backup, launch validate
         and stop it in the middle, take page backup.
         Expect PAGE backup to be successfully executed
         """
-        self._check_gdb_flag_or_skip_test()
 
         node = self.make_simple_node(
             base_dir=os.path.join(self.module_name, self.fname, 'node'),
@@ -434,13 +435,13 @@ class LockingTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         gdb.kill()
 
+    @test_needs_gdb
     def test_locking_concurren_restore_and_delete(self):
         """
         make node, take full backup, launch restore
         and stop it in the middle, delete full backup.
         Expect it to fail.
         """
-        self._check_gdb_flag_or_skip_test()
 
         node = self.make_simple_node(
             base_dir=os.path.join(self.module_name, self.fname, 'node'),
@@ -572,11 +573,11 @@ class LockingTest(ProbackupTest, unittest.TestCase):
 #        p1.wait()
 #        p2.wait()
 
+    @test_needs_gdb
     def test_shared_lock(self):
         """
         Make sure that shared lock leaves no files with pids
         """
-        self._check_gdb_flag_or_skip_test()
 
         node = self.make_simple_node(
             base_dir=os.path.join(self.module_name, self.fname, 'node'),

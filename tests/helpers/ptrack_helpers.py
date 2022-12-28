@@ -1,5 +1,6 @@
 # you need os for unittest to work
 import os
+import sys
 import threading
 import unittest
 from sys import exit, argv
@@ -292,8 +293,7 @@ class ProbackupTest(object):
         self.test_env['LC_MESSAGES'] = 'C'
         self.test_env['LC_TIME'] = 'C'
 
-        self.gdb = 'PGPROBACKUP_GDB' in self.test_env and \
-              self.test_env['PGPROBACKUP_GDB'] == 'ON'
+        self._set_gdb()
 
         self.paranoia = 'PG_PROBACKUP_PARANOIA' in self.test_env and \
             self.test_env['PG_PROBACKUP_PARANOIA'] == 'ON'
@@ -421,6 +421,20 @@ class ProbackupTest(object):
                     self.ptrack = True
 
         os.environ["PGAPPNAME"] = "pg_probackup"
+
+    def _set_gdb(self):
+        self._gdb_enabled = self.test_env.get('PGPROBACKUP_GDB') == 'ON'
+        self._gdb_ok = self._gdb_enabled
+        if not self._gdb_enabled or sys.platform != 'linux':
+            return
+        try:
+            with open('/proc/sys/kernel/yama/ptrace_scope') as f:
+                ptrace = f.read()
+        except FileNotFoundError:
+            self._gdb_ptrace_ok = True
+            return
+        self._gdb_ptrace_ok = int(ptrace) == 0
+        self._gdb_ok = self._gdb_ok and self._gdb_ptrace_ok
 
     def is_test_result_ok(test_case):
         # sources of solution:
@@ -1979,12 +1993,26 @@ class ProbackupTest(object):
         return GDBobj([str(pid)], self, attach=True)
 
     def _check_gdb_flag_or_skip_test(self):
-        if not self.gdb:
+        if not self._gdb_enabled:
             self.skipTest(
                 "Specify PGPROBACKUP_GDB and build without "
                 "optimizations for run this test"
             )
+        if self._gdb_ok:
+            return
+        if not self._gdb_ptrace_ok:
+            self.fail("set /proc/sys/kernel/yama/ptrace_scope to 0"
+                      " to run GDB tests")
+        else:
+            self.fail("use of gdb is not possible")
 
+def test_needs_gdb(func):
+    def wrapped(self):
+        self._gdb_decorated = True
+        self._check_gdb_flag_or_skip_test()
+        func(self)
+    wrapped.__doc__ = func.__doc__
+    return wrapped
 
 class GdbException(Exception):
     def __init__(self, message="False"):
@@ -2001,10 +2029,13 @@ class GDBobj:
         self._did_quit = False
 
         # Check gdb flag is set up
-        if not env.gdb:
-            raise GdbException("No `PGPROBACKUP_GDB=on` is set, "
-                               "test should call ProbackupTest::check_gdb_flag_or_skip_test() on its start "
-                               "and be skipped")
+        if not getattr(env, "_gdb_decorated", False):
+            raise GdbException("Test should be marked with @test_needs_gdb")
+        if not env._gdb_enabled:
+            raise GdbException("No `PGPROBACKUP_GDB=on` is set.")
+        if not env._gdb_ok:
+            raise GdbException("No gdb usage possible.")
+
         # Check gdb presense
         try:
             gdb_version, _ = subprocess.Popen(

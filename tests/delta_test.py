@@ -1,6 +1,7 @@
 import os
 import unittest
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
+from .helpers.ptrack_helpers import test_needs_gdb
 from datetime import datetime, timedelta
 from testgres import QueryException
 import subprocess
@@ -438,12 +439,12 @@ class DeltaTest(ProbackupTest, unittest.TestCase):
             self.compare_pgdata(pgdata, pgdata_restored)
 
     # @unittest.skip("skip")
+    @test_needs_gdb
     def test_delta_vacuum_full(self):
         """
         make node, make full and delta stream backups,
         restore them and check data correctness
         """
-        self._check_gdb_flag_or_skip_test()
 
         backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(

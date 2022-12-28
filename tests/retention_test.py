@@ -2,6 +2,7 @@ import os
 import unittest
 from datetime import datetime, timedelta
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
+from .helpers.ptrack_helpers import test_needs_gdb
 from time import sleep
 from distutils.dir_util import copy_tree
 
@@ -1437,6 +1438,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         # self.change_backup_status(backup_dir, 'node', backup_id_b, 'ERROR')
 
     # @unittest.skip("skip")
+    @test_needs_gdb
     def test_window_error_backups_1(self):
         """
         DELTA
@@ -1444,7 +1446,6 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         FULL
         -------window
         """
-        self._check_gdb_flag_or_skip_test()
 
         node = self.make_simple_node(
             base_dir=os.path.join(self.module_name, self.fname, 'node'),
@@ -1483,6 +1484,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(len(self.show_pb(backup_dir, 'node')), 4)
 
     # @unittest.skip("skip")
+    @test_needs_gdb
     def test_window_error_backups_2(self):
         """
         DELTA
@@ -1490,7 +1492,6 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
         FULL
         -------window
         """
-        self._check_gdb_flag_or_skip_test()
 
         node = self.make_simple_node(
             base_dir=os.path.join(self.module_name, self.fname, 'node'),
@@ -1524,9 +1525,9 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         self.assertEqual(len(self.show_pb(backup_dir, 'node')), 3)
 
+    @test_needs_gdb
     def test_retention_redundancy_overlapping_chains(self):
         """"""
-        self._check_gdb_flag_or_skip_test()
 
         node = self.make_simple_node(
             base_dir=os.path.join(self.module_name, self.fname, 'node'),
@@ -1566,9 +1567,9 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         self.validate_pb(backup_dir, 'node')
 
+    @test_needs_gdb
     def test_retention_redundancy_overlapping_chains_1(self):
         """"""
-        self._check_gdb_flag_or_skip_test()
 
         node = self.make_simple_node(
             base_dir=os.path.join(self.module_name, self.fname, 'node'),
@@ -1662,11 +1663,11 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
                 e.message)
 
     # @unittest.skip("skip")
+    @test_needs_gdb
     def test_failed_merge_redundancy_retention(self):
         """
         Check that retention purge works correctly with MERGING backups
         """
-        self._check_gdb_flag_or_skip_test()
 
         backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
@@ -2440,11 +2441,11 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
         self.validate_pb(backup_dir, 'node')
 
+    @test_needs_gdb
     def test_concurrent_running_full_backup(self):
         """
         https://github.com/postgrespro/pg_probackup/issues/328
         """
-        self._check_gdb_flag_or_skip_test()
 
         backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(

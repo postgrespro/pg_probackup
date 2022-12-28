@@ -3,7 +3,7 @@ import shutil
 import gzip
 import unittest
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException, GdbException
-from .helpers.ptrack_helpers import tail_file
+from .helpers.ptrack_helpers import tail_file, test_needs_gdb
 from datetime import datetime, timedelta
 import subprocess
 from sys import exit
@@ -205,12 +205,12 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             'data after restore not equal to original data')
 
     # @unittest.skip("skip")
+    @test_needs_gdb
     def test_pgpro434_3(self):
         """
         Check pg_stop_backup_timeout, needed backup_timeout
         Fixed in commit d84d79668b0c139 and assert fixed by ptrack 1.7
         """
-        self._check_gdb_flag_or_skip_test()
 
         backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
@@ -262,12 +262,12 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             'PostgreSQL crashed because of a failed assert')
 
     # @unittest.skip("skip")
+    @test_needs_gdb
     def test_pgpro434_4(self):
         """
         Check pg_stop_backup_timeout, libpq-timeout requested.
         Fixed in commit d84d79668b0c139 and assert fixed by ptrack 1.7
         """
-        self._check_gdb_flag_or_skip_test()
 
         backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(

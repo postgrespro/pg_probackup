@@ -1,6 +1,7 @@
 import os
 import unittest
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
+from .helpers.ptrack_helpers import test_needs_gdb
 import subprocess
 import sys
 from time import sleep
@@ -2242,9 +2243,9 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.compare_pgdata(pgdata, pgdata_restored)
 
     # @unittest.skip("skip")
+    @test_needs_gdb
     def test_restore_concurrent_drop_table(self):
         """"""
-        self._check_gdb_flag_or_skip_test()
 
         backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
@@ -3568,9 +3569,9 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.assertTrue(os.path.exists(auto_path))
 
     # @unittest.skip("skip")
+    @test_needs_gdb
     def test_concurrent_restore(self):
         """"""
-        self._check_gdb_flag_or_skip_test()
 
         backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
