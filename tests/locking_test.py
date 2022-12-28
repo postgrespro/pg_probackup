@@ -2,14 +2,14 @@ import unittest
 import os
 from time import sleep
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
-from .helpers.ptrack_helpers import test_needs_gdb
+from .helpers.ptrack_helpers import needs_gdb
 
 
 class LockingTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure
-    @test_needs_gdb
+    @needs_gdb
     def test_locking_running_validate_1(self):
         """
         make node, take full backup, stop it in the middle
@@ -62,7 +62,7 @@ class LockingTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         gdb.kill()
 
-    @test_needs_gdb
+    @needs_gdb
     def test_locking_running_validate_2(self):
         """
         make node, take full backup, stop it in the middle,
@@ -131,7 +131,7 @@ class LockingTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         gdb.kill()
 
-    @test_needs_gdb
+    @needs_gdb
     def test_locking_running_validate_2_specific_id(self):
         """
         make node, take full backup, stop it in the middle,
@@ -230,7 +230,7 @@ class LockingTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         gdb.kill()
 
-    @test_needs_gdb
+    @needs_gdb
     def test_locking_running_3(self):
         """
         make node, take full backup, stop it in the middle,
@@ -300,7 +300,7 @@ class LockingTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         gdb.kill()
 
-    @test_needs_gdb
+    @needs_gdb
     def test_locking_restore_locked(self):
         """
         make node, take full backup, take two page backups,
@@ -342,7 +342,7 @@ class LockingTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         gdb.kill()
 
-    @test_needs_gdb
+    @needs_gdb
     def test_concurrent_delete_and_restore(self):
         """
         make node, take full backup, take page backup,
@@ -399,7 +399,7 @@ class LockingTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         gdb.kill()
 
-    @test_needs_gdb
+    @needs_gdb
     def test_locking_concurrent_validate_and_backup(self):
         """
         make node, take full backup, launch validate
@@ -435,7 +435,7 @@ class LockingTest(ProbackupTest, unittest.TestCase):
         # Clean after yourself
         gdb.kill()
 
-    @test_needs_gdb
+    @needs_gdb
     def test_locking_concurren_restore_and_delete(self):
         """
         make node, take full backup, launch restore
@@ -573,7 +573,7 @@ class LockingTest(ProbackupTest, unittest.TestCase):
 #        p1.wait()
 #        p2.wait()
 
-    @test_needs_gdb
+    @needs_gdb
     def test_shared_lock(self):
         """
         Make sure that shared lock leaves no files with pids

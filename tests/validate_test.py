@@ -1,7 +1,7 @@
 import os
 import unittest
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
-from .helpers.ptrack_helpers import test_needs_gdb
+from .helpers.ptrack_helpers import needs_gdb
 from datetime import datetime, timedelta
 from pathlib import Path
 import subprocess
@@ -1047,7 +1047,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
             'Backup STATUS should be "OK"')
 
     # @unittest.skip("skip")
-    @test_needs_gdb
+    @needs_gdb
     def test_validate_instance_with_several_corrupt_backups_interrupt(self):
         """
         check that interrupt during validation is handled correctly
@@ -3429,7 +3429,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
                     repr(e.message), self.cmd))
 
     # @unittest.skip("skip")
-    @test_needs_gdb
+    @needs_gdb
     def test_validation_after_backup(self):
         """"""
 

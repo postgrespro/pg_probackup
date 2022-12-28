@@ -3,7 +3,7 @@
 import unittest
 import os
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
-from .helpers.ptrack_helpers import test_needs_gdb
+from .helpers.ptrack_helpers import needs_gdb
 from testgres import QueryException
 import shutil
 from datetime import datetime, timedelta
@@ -915,7 +915,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         node_restored.slow_start()
 
     # @unittest.skip("skip")
-    @test_needs_gdb
+    @needs_gdb
     def test_continue_failed_merge(self):
         """
         Check that failed MERGE can be continued
@@ -989,7 +989,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         self.restore_node(backup_dir, 'node', node)
 
     # @unittest.skip("skip")
-    @test_needs_gdb
+    @needs_gdb
     def test_continue_failed_merge_with_corrupted_delta_backup(self):
         """
         Fail merge via gdb, corrupt DELTA backup, try to continue merge
@@ -1084,7 +1084,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
-    @test_needs_gdb
+    @needs_gdb
     def test_continue_failed_merge_2(self):
         """
         Check that failed MERGE on delete can be continued
@@ -1157,7 +1157,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         # Try to continue failed MERGE
         self.merge_backup(backup_dir, "node", backup_id)
 
-    @test_needs_gdb
+    @needs_gdb
     def test_continue_failed_merge_3(self):
         """
         Check that failed MERGE cannot be continued if intermediate
@@ -1339,7 +1339,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         self.assertEqual(
             'STREAM', self.show_pb(backup_dir, 'node', backup_id)['wal'])
 
-    @test_needs_gdb
+    @needs_gdb
     def test_crash_after_opening_backup_control_1(self):
         """
         check that crashing after opening backup.control
@@ -1389,7 +1389,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
             'MERGING', self.show_pb(backup_dir, 'node')[1]['status'])
 
     # @unittest.skip("skip")
-    @test_needs_gdb
+    @needs_gdb
     def test_crash_after_opening_backup_control_2(self):
         """
         check that crashing after opening backup_content.control
@@ -1479,7 +1479,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         self.compare_pgdata(pgdata, pgdata_restored)
 
     # @unittest.skip("skip")
-    @test_needs_gdb
+    @needs_gdb
     def test_losing_file_after_failed_merge(self):
         """
         check that crashing after opening backup_content.control
@@ -1568,7 +1568,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         pgdata_restored = self.pgdata_content(node.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
 
-    @test_needs_gdb
+    @needs_gdb
     def test_failed_merge_after_delete(self):
         """
         """
@@ -1649,7 +1649,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
-    @test_needs_gdb
+    @needs_gdb
     def test_failed_merge_after_delete_1(self):
         """
         """
@@ -1725,7 +1725,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
-    @test_needs_gdb
+    @needs_gdb
     def test_failed_merge_after_delete_2(self):
         """
         """
@@ -1789,7 +1789,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 
-    @test_needs_gdb
+    @needs_gdb
     def test_failed_merge_after_delete_3(self):
         """
         """
@@ -2200,7 +2200,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         with open(logfile, 'r') as f:
                 logfile_content = f.read()
 
-    @test_needs_gdb
+    @needs_gdb
     def test_idempotent_merge(self):
         """
         """
@@ -2484,7 +2484,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure
-    @test_needs_gdb
+    @needs_gdb
     def test_merge_page_header_map_retry(self):
         """
         page header map cannot be trusted when
@@ -2530,7 +2530,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
         self.compare_pgdata(pgdata, pgdata_restored)
 
     # @unittest.skip("skip")
-    @test_needs_gdb
+    @needs_gdb
     def test_missing_data_file(self):
         """
         """
@@ -2587,7 +2587,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
             logfile_content)
 
     # @unittest.skip("skip")
-    @test_needs_gdb
+    @needs_gdb
     def test_missing_non_data_file(self):
         """
         """
@@ -2643,7 +2643,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
             'MERGING', self.show_pb(backup_dir, 'node')[1]['status'])
 
     # @unittest.skip("skip")
-    @test_needs_gdb
+    @needs_gdb
     def test_merge_remote_mode(self):
         """
         """

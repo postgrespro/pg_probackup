@@ -1,7 +1,7 @@
 import unittest
 import os
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
-from .helpers.ptrack_helpers import test_needs_gdb
+from .helpers.ptrack_helpers import needs_gdb
 import datetime
 
 class LogTest(ProbackupTest, unittest.TestCase):
@@ -9,7 +9,7 @@ class LogTest(ProbackupTest, unittest.TestCase):
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     # PGPRO-2154
-    @test_needs_gdb
+    @needs_gdb
     def test_log_rotation(self):
         """
         """

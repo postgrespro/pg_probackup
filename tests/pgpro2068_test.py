@@ -1,7 +1,7 @@
 import os
 import unittest
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException, idx_ptrack
-from .helpers.ptrack_helpers import test_needs_gdb
+from .helpers.ptrack_helpers import needs_gdb
 from datetime import datetime, timedelta
 import subprocess
 from time import sleep
@@ -12,7 +12,7 @@ from testgres import ProcessType
 
 class BugTest(ProbackupTest, unittest.TestCase):
 
-    @test_needs_gdb
+    @needs_gdb
     def test_minrecpoint_on_replica(self):
         """
         https://jira.postgrespro.ru/browse/PGPRO-2068

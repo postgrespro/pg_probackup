@@ -1,7 +1,7 @@
 import os
 import unittest
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException, idx_ptrack
-from .helpers.ptrack_helpers import test_needs_gdb
+from .helpers.ptrack_helpers import needs_gdb
 from datetime import datetime, timedelta
 import subprocess
 from testgres import QueryException, StartNodeException
@@ -17,7 +17,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             self.skipTest('You need PostgreSQL >= 11 for this test')
 
     # @unittest.skip("skip")
-    @test_needs_gdb
+    @needs_gdb
     def test_drop_rel_during_backup_ptrack(self):
         """
         drop relation during ptrack backup
@@ -746,7 +746,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             self.compare_pgdata(pgdata, pgdata_restored)
 
     # @unittest.skip("skip")
-    @test_needs_gdb
+    @needs_gdb
     def test_ptrack_vacuum_full_1(self):
         """make node, make full and ptrack stream backups,
           restore them and check data correctness"""
@@ -910,7 +910,7 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
         node_restored.slow_start()
 
     # @unittest.skip("skip")
-    @test_needs_gdb
+    @needs_gdb
     def test_ptrack_get_block(self):
         """
         make node, make full and ptrack stream backups,

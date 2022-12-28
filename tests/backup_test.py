@@ -3,7 +3,7 @@ import os
 import re
 from time import sleep, time
 from .helpers.ptrack_helpers import base36enc, ProbackupTest, ProbackupException
-from .helpers.ptrack_helpers import test_needs_gdb
+from .helpers.ptrack_helpers import needs_gdb
 import shutil
 from distutils.dir_util import copy_tree
 from testgres import ProcessType, QueryException
@@ -1091,7 +1091,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                     repr(e.message), self.cmd))
 
     # @unittest.skip("skip")
-    @test_needs_gdb
+    @needs_gdb
     def test_drop_rel_during_full_backup(self):
         """"""
 
@@ -1234,7 +1234,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.compare_pgdata(pgdata, pgdata_restored)
 
     # @unittest.skip("skip")
-    @test_needs_gdb
+    @needs_gdb
     def test_drop_rel_during_backup_delta(self):
         """"""
 
@@ -1301,7 +1301,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.compare_pgdata(pgdata, pgdata_restored)
 
     # @unittest.skip("skip")
-    @test_needs_gdb
+    @needs_gdb
     def test_drop_rel_during_backup_page(self):
         """"""
 
@@ -1420,7 +1420,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
             options=['--stream', '--slot=slot_1', '--temp-slot'])
 
     # @unittest.skip("skip")
-    @test_needs_gdb
+    @needs_gdb
     def test_backup_concurrent_drop_table(self):
         """"""
 
@@ -1548,7 +1548,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.compare_pgdata(pgdata, pgdata_restored)
 
     # @unittest.skip("skip")
-    @test_needs_gdb
+    @needs_gdb
     def test_sigint_handling(self):
         """"""
 
@@ -1585,7 +1585,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
             'Backup STATUS should be "ERROR"')
 
     # @unittest.skip("skip")
-    @test_needs_gdb
+    @needs_gdb
     def test_sigterm_handling(self):
         """"""
 
@@ -1621,7 +1621,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
             'Backup STATUS should be "ERROR"')
 
     # @unittest.skip("skip")
-    @test_needs_gdb
+    @needs_gdb
     def test_sigquit_handling(self):
         """"""
 
@@ -2725,7 +2725,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
             'select 1')
 
     # @unittest.skip("skip")
-    @test_needs_gdb
+    @needs_gdb
     def test_missing_wal_segment(self):
         """"""
 
@@ -3057,7 +3057,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         self.backup_node(backup_dir, 'node', node, backup_type='page')
 
     # @unittest.skip("skip")
-    @test_needs_gdb
+    @needs_gdb
     def test_backup_atexit(self):
         """"""
 

@@ -2006,7 +2006,7 @@ class ProbackupTest(object):
         else:
             self.fail("use of gdb is not possible")
 
-def test_needs_gdb(func):
+def needs_gdb(func):
     def wrapped(self):
         self._gdb_decorated = True
         self._check_gdb_flag_or_skip_test()
@@ -2030,7 +2030,7 @@ class GDBobj:
 
         # Check gdb flag is set up
         if not getattr(env, "_gdb_decorated", False):
-            raise GdbException("Test should be marked with @test_needs_gdb")
+            raise GdbException("Test should be marked with @needs_gdb")
         if not env._gdb_enabled:
             raise GdbException("No `PGPROBACKUP_GDB=on` is set.")
         if not env._gdb_ok:

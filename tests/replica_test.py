@@ -2,7 +2,7 @@ import os
 import threading
 import unittest
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException, idx_ptrack
-from .helpers.ptrack_helpers import test_needs_gdb
+from .helpers.ptrack_helpers import needs_gdb
 from datetime import datetime, timedelta
 import subprocess
 import time
@@ -477,7 +477,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         pgbench.wait()
 
     # @unittest.skip("skip")
-    @test_needs_gdb
+    @needs_gdb
     def test_replica_promote(self):
         """
         start backup from replica, during backup promote replica
@@ -562,7 +562,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             log_content)
 
     # @unittest.skip("skip")
-    @test_needs_gdb
+    @needs_gdb
     def test_replica_stop_lsn_null_offset(self):
         """
         """
@@ -624,7 +624,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         gdb_checkpointer.kill()
 
     # @unittest.skip("skip")
-    @test_needs_gdb
+    @needs_gdb
     def test_replica_stop_lsn_null_offset_next_record(self):
         """
         """
@@ -715,7 +715,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         self.assertTrue(self.show_pb(backup_dir, 'replica')[0]['status'] == 'DONE')
 
     # @unittest.skip("skip")
-    @test_needs_gdb
+    @needs_gdb
     def test_archive_replica_null_offset(self):
         """
         """
@@ -837,7 +837,7 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
             "\n CMD: {0}".format(self.cmd))
 
     # @unittest.skip("skip")
-    @test_needs_gdb
+    @needs_gdb
     def test_replica_toast(self):
         """
         make archive master, take full and page archive backups from master,

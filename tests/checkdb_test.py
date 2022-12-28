@@ -1,7 +1,7 @@
 import os
 import unittest
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
-from .helpers.ptrack_helpers import test_needs_gdb
+from .helpers.ptrack_helpers import needs_gdb
 from datetime import datetime, timedelta
 import subprocess
 from testgres import QueryException
@@ -13,7 +13,7 @@ import time
 class CheckdbTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
-    @test_needs_gdb
+    @needs_gdb
     def test_checkdb_amcheck_only_sanity(self):
         """"""
 
@@ -550,7 +550,7 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
         node.stop()
 
     # @unittest.skip("skip")
-    @test_needs_gdb
+    @needs_gdb
     def test_checkdb_sigint_handling(self):
         """"""
 
