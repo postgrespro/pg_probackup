@@ -3135,6 +3135,11 @@ pioLocalDir_pioDirNext(VSelf, err_i* err)
 
 		join_path_components(path, self->path.ptr, ent->d_name);
 		entry.stat = $i(pioStat, localDrive, path, true, .err = err);
+		if (getErrno(*err) == ENOENT)
+		{	/* skip just deleted file */
+			fobj_reset_err(err); // will be released within outter ARP.
+			continue;
+		}
 		if ($haserr(*err))
 			return entry;
 
