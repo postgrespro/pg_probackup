@@ -86,7 +86,7 @@ class BugTest(ProbackupTest, unittest.TestCase):
         gdb_checkpointer = self.gdb_attach(checkpointer_pid)
         gdb_checkpointer._execute('handle SIGINT noprint nostop pass')
         gdb_checkpointer._execute('handle SIGUSR1 noprint nostop pass')
-        gdb_checkpointer.set_breakpoint('RemoveOldXlogFiles')
+        gdb_checkpointer.set_breakpoint('UpdateLastRemovedPtr')
         gdb_checkpointer.continue_execution_until_break()
 
         # break recovery on UpdateControlFile
