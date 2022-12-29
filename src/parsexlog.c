@@ -900,6 +900,8 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 		memcpy(readBuf, reader_data->page_buf, XLOG_BLCKSZ);
 #if PG_VERSION_NUM < 130000
 		*pageTLI = reader_data->tli;
+#else
+		xlogreader->seg.ws_tli = reader_data->tli;
 #endif
 		return XLOG_BLCKSZ;
 	}
@@ -931,6 +933,8 @@ SimpleXLogPageRead(XLogReaderState *xlogreader, XLogRecPtr targetPagePtr,
 	reader_data->prev_page_off = targetPageOff;
 #if PG_VERSION_NUM < 130000
 	*pageTLI = reader_data->tli;
+#else
+	xlogreader->seg.ws_tli = reader_data->tli;
 #endif
 	return XLOG_BLCKSZ;
 }
