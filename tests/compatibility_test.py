@@ -14,12 +14,7 @@ def check_ssh_agent_path_exists():
     return 'PGPROBACKUP_SSH_AGENT_PATH' in os.environ
 
 
-class CompatibilityTest(ProbackupTest, unittest.TestCase):
-
-    def setUp(self):
-        self.fname = self.id().split('.')[3]
-
-    # @unittest.expectedFailure
+class CrossCompatibilityTest(ProbackupTest, unittest.TestCase):
     @unittest.skipUnless(check_manual_tests_enabled(), 'skip manual test')
     @unittest.skipUnless(check_ssh_agent_path_exists(), 'skip no ssh agent path exist')
     # @unittest.skip("skip")
@@ -85,6 +80,14 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
             # here's substitution of --remoge-path pg_probackup agent compiled with another postgres version
             options=['-d', 'postgres', '-p', str(src_pg.port), '--stream', '--remote-path=' + pgprobackup_ssh_agent_path]
             )
+
+
+class CompatibilityTest(ProbackupTest, unittest.TestCase):
+
+    def setUp(self):
+        super().setUp()
+        if not self.probackup_old_path:
+            self.skipTest('PGPROBACKUPBIN_OLD is not set')
 
     # @unittest.expectedFailure
     # @unittest.skip("skip")
