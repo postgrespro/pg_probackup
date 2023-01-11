@@ -777,6 +777,11 @@ typedef struct StopBackupCallbackParams
 	 strspn(fname, "0123456789ABCDEF") == XLOG_FNAME_LEN &&		\
 	 strcmp((fname) + XLOG_FNAME_LEN, ".part") == 0)
 
+#define IsTempPartialXLogFileName(fname)	\
+	(strlen(fname) == XLOG_FNAME_LEN + strlen(".partial.part") &&	\
+	 strspn(fname, "0123456789ABCDEF") == XLOG_FNAME_LEN &&		\
+	 strcmp((fname) + XLOG_FNAME_LEN, ".partial.part") == 0)
+
 #define IsTempCompressXLogFileName(fname)	\
 	(strlen(fname) == XLOG_FNAME_LEN + strlen(".gz.part") && \
 	 strspn(fname, "0123456789ABCDEF") == XLOG_FNAME_LEN &&		\

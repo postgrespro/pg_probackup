@@ -1623,7 +1623,8 @@ catalog_get_timelines(InstanceState *instanceState, InstanceConfig *instance)
 				}
 				/* temp WAL segment */
 				else if (IsTempXLogFileName(file->name) ||
-						 IsTempCompressXLogFileName(file->name))
+						 IsTempCompressXLogFileName(file->name) ||
+						 IsTempPartialXLogFileName(file->name))
 				{
 					elog(VERBOSE, "temp WAL file \"%s\"", file->name);
 
