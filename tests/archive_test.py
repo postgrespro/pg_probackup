@@ -2013,7 +2013,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         self.backup_node(backup_dir, 'node', node)
 
         with open(os.path.join(node.logs_dir, 'postgresql.log'), 'r') as f:
-            postgres_log_content = f.read()
+            postgres_log_content = cleanup_ptrack(f.read())
 
         # print(postgres_log_content)
         # make sure that .backup file is not compressed
@@ -2056,7 +2056,7 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         replica.stop()
         log.wait_shutdown()
 
-        self.assertNotIn('WARNING', log.content)
+        self.assertNotIn('WARNING', cleanup_ptrack(log.content))
 
         output = self.show_archive(
             backup_dir, 'node', as_json=False, as_text=True,
@@ -2661,6 +2661,17 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         self.assertIn(
             'WARNING: History file is corrupted or missing: "{0}"'.format(os.path.join(wal_dir, '00000004.history')),
             log_content)
+
+
+def cleanup_ptrack(log_content):
+    # PBCKP-423 - need to clean ptrack warning
+    ptrack_is_not = 'Ptrack 1.X is not supported anymore'
+    if ptrack_is_not in log_content:
+        lines = [line for line in log_content.splitlines()
+                 if ptrack_is_not not in line]
+        log_content = "".join(lines)
+    return log_content
+
 
 # TODO test with multiple not archived segments.
 # TODO corrupted file in archive.
