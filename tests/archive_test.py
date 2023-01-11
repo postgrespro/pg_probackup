@@ -3,6 +3,7 @@ import shutil
 import gzip
 import unittest
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException, GdbException
+from .helpers.data_helpers import tail_file
 from datetime import datetime, timedelta
 import subprocess
 from sys import exit
@@ -383,26 +384,31 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         self.switch_wal_segment(node)
         sleep(1)
 
-        with open(log_file, 'r') as f:
-            log_content = f.read()
+        log = tail_file(log_file, linetimeout=30, totaltimeout=120,
+                        collect=True)
+        log.wait(contains = 'The failed archive command was')
+
         self.assertIn(
             'LOG:  archive command failed with exit code 1',
-            log_content)
+            log.content)
 
         self.assertIn(
             'DETAIL:  The failed archive command was:',
-            log_content)
+            log.content)
 
         self.assertIn(
             'pg_probackup archive-push WAL file',
-            log_content)
+            log.content)
 
         self.assertIn(
             'WAL file already exists in archive with different checksum',
-            log_content)
+            log.content)
 
         self.assertNotIn(
-            'pg_probackup archive-push completed successfully', log_content)
+            'pg_probackup archive-push completed successfully', log.content)
+
+        # btw check that console coloring codes are not slipped into log file
+        self.assertNotIn('[0m', log.content)
 
         if self.get_version(node) < 100000:
             wal_src = os.path.join(
@@ -419,19 +425,9 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
             shutil.copyfile(wal_src, file)
 
         self.switch_wal_segment(node)
-        sleep(5)
 
-        with open(log_file, 'r') as f:
-            log_content = f.read()
-
-        self.assertIn(
-            'pg_probackup archive-push completed successfully',
-            log_content)
-
-        # btw check that console coloring codes are not slipped into log file
-        self.assertNotIn('[0m', log_content)
-
-        print(log_content)
+        log.stop_collect()
+        log.wait(contains = 'pg_probackup archive-push completed successfully')
 
     # @unittest.skip("skip")
     def test_archive_push_file_exists_overwrite(self):
@@ -471,39 +467,35 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         self.switch_wal_segment(node)
         sleep(1)
 
-        with open(log_file, 'r') as f:
-            log_content = f.read()
+        log = tail_file(log_file, linetimeout=30, collect=True)
+        log.wait(contains = 'The failed archive command was')
 
         self.assertIn(
-            'LOG:  archive command failed with exit code 1', log_content)
+            'LOG:  archive command failed with exit code 1', log.content)
         self.assertIn(
-            'DETAIL:  The failed archive command was:', log_content)
+            'DETAIL:  The failed archive command was:', log.content)
         self.assertIn(
-            'pg_probackup archive-push WAL file', log_content)
+            'pg_probackup archive-push WAL file', log.content)
         self.assertNotIn(
             'WAL file already exists in archive with '
-            'different checksum, overwriting', log_content)
+            'different checksum, overwriting', log.content)
         self.assertIn(
             'WAL file already exists in archive with '
-            'different checksum', log_content)
+            'different checksum', log.content)
 
         self.assertNotIn(
-            'pg_probackup archive-push completed successfully', log_content)
+            'pg_probackup archive-push completed successfully', log.content)
 
         self.set_archiving(backup_dir, 'node', node, overwrite=True)
         node.reload()
         self.switch_wal_segment(node)
-        sleep(5)
 
-        with open(log_file, 'r') as f:
-            log_content = f.read()
-            self.assertTrue(
-                'pg_probackup archive-push completed successfully' in log_content,
-                'Expecting messages about successfull execution archive_command')
+        log.drop_content()
+        log.wait(contains = 'pg_probackup archive-push completed successfully')
 
         self.assertIn(
             'WAL file already exists in archive with '
-            'different checksum, overwriting', log_content)
+            'different checksum, overwriting', log.content)
 
     # @unittest.skip("skip")
     def test_archive_push_partial_file_exists(self):
@@ -2049,14 +2041,22 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         replica.promote()
         replica.pgbench_init(scale=10)
 
-        with open(os.path.join(replica.logs_dir, 'postgresql.log'), 'r') as f:
-            replica_log_content = f.read()
+        log = tail_file(os.path.join(replica.logs_dir, 'postgresql.log'),
+                        collect=True)
+        log.wait(regex=r"pushing file.*history")
+        log.wait(contains='archive-push completed successfully')
+        log.wait(regex=r"pushing file.*partial")
+        log.wait(contains='archive-push completed successfully')
 
         # make sure that .partial file is not compressed
-        self.assertNotIn('.partial.gz', replica_log_content)
+        self.assertNotIn('.partial.gz', log.content)
         # make sure that .history file is not compressed
-        self.assertNotIn('.history.gz', replica_log_content)
-        self.assertNotIn('WARNING', replica_log_content)
+        self.assertNotIn('.history.gz', log.content)
+
+        replica.stop()
+        log.wait_shutdown()
+
+        self.assertNotIn('WARNING', log.content)
 
         output = self.show_archive(
             backup_dir, 'node', as_json=False, as_text=True,
@@ -2440,18 +2440,11 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         os.remove(os.path.join(replica.logs_dir, 'postgresql.log'))
         replica.slow_start(replica=True)
 
-        sleep(60)
-
-        with open(os.path.join(replica.logs_dir, 'postgresql.log'), 'r') as f:
-            postgres_log_content = f.read()
-
-        self.assertIn(
-            'Prefetched WAL segment {0} is invalid, cannot use it'.format(filename),
-            postgres_log_content)
-
-        self.assertIn(
-            'LOG:  restored log file "{0}" from archive'.format(filename),
-            postgres_log_content)
+        prefetch_line = 'Prefetched WAL segment {0} is invalid, cannot use it'.format(filename)
+        restored_line = 'LOG:  restored log file "{0}" from archive'.format(filename)
+        tailer = tail_file(os.path.join(replica.logs_dir, 'postgresql.log'))
+        tailer.wait(contains=prefetch_line)
+        tailer.wait(contains=restored_line)
 
     # @unittest.skip("skip")
     def test_archive_show_partial_files_handling(self):

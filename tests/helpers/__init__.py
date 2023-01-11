@@ -1,4 +1,4 @@
-__all__ = ['ptrack_helpers', 'cfs_helpers', 'expected_errors']
+__all__ = ['ptrack_helpers', 'cfs_helpers', 'data_helpers']
 
 import unittest
 
