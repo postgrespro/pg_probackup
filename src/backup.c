@@ -2233,11 +2233,24 @@ backup_cfs_segment(int i, pgFile *file, backup_files_arg *arguments) {
 	elog(LOG, "backup CFS segment %s, data_file=%s, cfm_file=%s, data_bck_file=%s, cfm_bck_file=%s",
 		 data_file->name, data_file->name, cfm_file->name, data_bck_file == NULL? "NULL": data_bck_file->name, cfm_bck_file == NULL? "NULL": cfm_bck_file->name);
 
-	/* storing cfs in order data_bck_file -> cfm_bck -> data_file -> map */
-	if (cfm_bck_file)
-		process_file(i, cfm_bck_file, arguments);
+	/* storing cfs segment. processing corner case [PBCKP-287] stage 1.
+	 * - when we do have data_bck_file we should skip both data_bck_file and cfm_bck_file if exists.
+	 *   they are removed by cfs_recover() during postgres start.
+	 */
 	if (data_bck_file)
-		process_file(i, data_bck_file, arguments);
+	{
+		if (cfm_bck_file)
+			cfm_bck_file->write_size = FILE_NOT_FOUND;
+		data_bck_file->write_size = FILE_NOT_FOUND;
+	}
+	/* else we store cfm_bck_file. processing corner case [PBCKP-287] stage 2.
+	 * - when we do have cfm_bck_file only we should store it.
+	 *   it will replace cfm_file after postgres start.
+	 */
+	else if (cfm_bck_file)
+		process_file(i, cfm_bck_file, arguments);
+
+	/* storing cfs segment in order cfm_file -> datafile to guarantee their consistency */
 	process_file(i, cfm_file, arguments);
 	process_file(i, data_file, arguments);
 	elog(LOG, "Backup CFS segment %s done", data_file->name);
