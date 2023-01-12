@@ -431,16 +431,10 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
             "FROM generate_series(0,256) i".format('t1', tblspace_name)
         )
 
-        try:
-            backup_id_full = self.backup_node(
-                self.backup_dir, 'node', self.node, backup_type='full')
-        except ProbackupException as e:
-            self.fail(
-                "ERROR: Full backup failed.\n {0} \n {1}".format(
-                    repr(self.cmd),
-                    repr(e.message)
-                )
-            )
+        self.node.safe_psql("postgres", "checkpoint")
+
+        backup_id_full = self.backup_node(
+            self.backup_dir, 'node', self.node, backup_type='full')
 
         self.assertTrue(
             find_by_extensions(
@@ -449,16 +443,8 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
             "ERROR: .cfm files not found in backup dir"
         )
 
-        try:
-            backup_id = self.backup_node(
-                self.backup_dir, 'node', self.node, backup_type='page')
-        except ProbackupException as e:
-            self.fail(
-                "ERROR: Incremental backup failed.\n {0} \n {1}".format(
-                    repr(self.cmd),
-                    repr(e.message)
-                )
-            )
+        backup_id = self.backup_node(
+            self.backup_dir, 'node', self.node, backup_type='page')
 
         show_backup = self.show_pb(self.backup_dir, 'node', backup_id)
         self.assertEqual(
@@ -1046,7 +1032,6 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
         )
 
     # --- Make backup with not valid data(broken .cfm) --- #
-    @unittest.expectedFailure
     # @unittest.skip("skip")
     @unittest.skipUnless(ProbackupTest.enterprise, 'skip')
     def test_delete_random_cfm_file_from_tablespace_dir(self):

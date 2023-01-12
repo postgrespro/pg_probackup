@@ -65,8 +65,7 @@ static bool pg_is_in_recovery(PGconn *conn);
 static bool pg_is_superuser(PGconn *conn);
 static void check_server_version(PGconn *conn, PGNodeInfo *nodeInfo);
 static void confirm_block_size(PGconn *conn, const char *name, int blcksz);
-static size_t rewind_and_mark_cfs_datafiles(parray *files, const char *root, char *relative, size_t i);
-static void group_cfs_segments(parray *files, size_t first, size_t last);
+static void rewind_and_mark_cfs_datafiles(parray *files, const char *root, char *relative, size_t i);
 static bool remove_excluded_files_criterion(void *value, void *exclude_args);
 static void backup_cfs_segment(int i, pgFile *file, backup_files_arg *arguments);
 static void process_file(int i, pgFile *file, backup_files_arg *arguments);
@@ -2228,7 +2227,11 @@ backup_cfs_segment(int i, pgFile *file, backup_files_arg *arguments) {
 			cfm_bck_file = data_file;
 	}
 	data_file = file;
-	Assert(cfm_file); /* ensure we always have cfm exist */
+	if (data_file->relOid >= FirstNormalObjectId && cfm_file == NULL)
+	{
+		elog(ERROR, "'CFS' file '%s' have to have '%s.cfm' companion file",
+			 data_file->rel_path, data_file->name);
+	}
 
 	elog(LOG, "backup CFS segment %s, data_file=%s, cfm_file=%s, data_bck_file=%s, cfm_bck_file=%s",
 		 data_file->name, data_file->name, cfm_file->name, data_bck_file == NULL? "NULL": data_bck_file->name, cfm_bck_file == NULL? "NULL": cfm_bck_file->name);
@@ -2251,7 +2254,10 @@ backup_cfs_segment(int i, pgFile *file, backup_files_arg *arguments) {
 		process_file(i, cfm_bck_file, arguments);
 
 	/* storing cfs segment in order cfm_file -> datafile to guarantee their consistency */
-	process_file(i, cfm_file, arguments);
+	/* cfm_file could be NULL for system tables. But we don't clear is_cfs flag
+	 * for compatibility with older pg_probackup. */
+	if (cfm_file)
+		process_file(i, cfm_file, arguments);
 	process_file(i, data_file, arguments);
 	elog(LOG, "Backup CFS segment %s done", data_file->name);
 }
@@ -2299,9 +2305,7 @@ parse_filelist_filenames(parray *files, const char *root)
 					strncmp(tmp_rel_path, TABLESPACE_VERSION_DIRECTORY,
 							strlen(TABLESPACE_VERSION_DIRECTORY)) == 0) {
 					/* rewind index to the beginning of cfs tablespace */
-					size_t start = rewind_and_mark_cfs_datafiles(files, root, file->rel_path, i);
-					/* group every  to cfs segments chains */
-					group_cfs_segments(files, start, i);
+					rewind_and_mark_cfs_datafiles(files, root, file->rel_path, i);
 				}
 			}
 		}
@@ -2349,57 +2353,11 @@ remove_excluded_files_criterion(void *value, void *exclude_args) {
 	return file->remove_from_list;
 }
 
-/*
- * For every cfs segment do group its files to linked list, datafile on the head.
- * All non data files of segment moved to linked list and marked to skip in backup processing threads.
- * @param first - first index of cfs tablespace files
- * @param last  - last index of cfs tablespace files
- */
-void group_cfs_segments(parray *files, size_t first, size_t last) {/* grouping cfs files by relOid.segno, removing leafs of group */
-
-	for (;first <= last; first++)
-	{
-		pgFile	*file = parray_get(files, first);
-
-		if (file->is_cfs)
-		{
-			pgFile	*cfs_file = file;
-			size_t	 counter = first + 1;
-			pgFile	*chain_file = parray_get(files, counter);
-
-			bool has_cfm = false; /* flag for later assertion the cfm file also exist */
-
-			elog(LOG, "Preprocessing cfs file %s, %u.%d", cfs_file->name, cfs_file->relOid, cfs_file->segno);
-
-			elog(LOG, "Checking file %s, %u.%d as cfs chain", chain_file->name, chain_file->relOid, chain_file->segno);
-
-			/* scanning cfs segment files */
-			while (cfs_file->relOid == chain_file->relOid &&
-					cfs_file->segno == chain_file->segno)
-			{
-				elog(LOG, "Grouping cfs chain file %s, %d.%d", chain_file->name, chain_file->relOid, chain_file->segno);
-				chain_file->skip_cfs_nested = true;
-				cfs_file->cfs_chain = chain_file; /* adding to cfs group */
-				cfs_file = chain_file;
-
-				/* next file */
-				counter++;
-				chain_file = parray_get(files, counter);
-				elog(LOG, "Checking file %s, %u.%d as cfs chain", chain_file->name, chain_file->relOid, chain_file->segno);
-			}
-
-			/* assertion - we always have cfs data + cfs map files */
-			cfs_file = file;
-			for (; cfs_file; cfs_file = cfs_file->cfs_chain) {
-				elog(LOG, "searching cfm in %s, chain is %s", cfs_file->name, cfs_file->cfs_chain == NULL? "NULL": cfs_file->cfs_chain->name);
-				has_cfm = cfs_file->forkName == cfm;
-			}
-			Assert(has_cfm);
-
-			/* shifting to last cfs segment file */
-			first = counter-1;
-		}
-	}
+static uint32_t
+hash_rel_seg(pgFile* file)
+{
+	uint32 hash = hash_mix32_2(file->relOid, file->segno);
+	return hash_mix32_2(hash, 0xcf5);
 }
 
 /* If file is equal to pg_compression, then we consider this tablespace as
@@ -2416,13 +2374,24 @@ void group_cfs_segments(parray *files, size_t first, size_t last) {/* grouping c
  *
  * @returns index of first tablespace entry, i.e tblspcOid/TABLESPACE_VERSION_DIRECTORY
  */
-static size_t
+static void
 rewind_and_mark_cfs_datafiles(parray *files, const char *root, char *relative, size_t i)
 {
 	int			len;
 	int			p;
+	int			j;
 	pgFile	   *prev_file;
+	pgFile	   *tmp_file;
 	char	   *cfs_tblspc_path;
+	uint32_t    h;
+
+	/* hash table for cfm files */
+#define HASHN 128
+	parray	   *hashtab[HASHN] = {NULL};
+	parray     *bucket;
+	for (p = 0; p < HASHN; p++)
+		hashtab[p] = parray_new();
+
 
 	cfs_tblspc_path = strdup(relative);
 	if(!cfs_tblspc_path)
@@ -2437,23 +2406,60 @@ rewind_and_mark_cfs_datafiles(parray *files, const char *root, char *relative, s
 
 		elog(LOG, "Checking file in cfs tablespace %s", prev_file->rel_path);
 
-		if (strstr(prev_file->rel_path, cfs_tblspc_path) != NULL)
-		{
-			if (S_ISREG(prev_file->mode) && prev_file->is_datafile)
-			{
-				elog(LOG, "Setting 'is_cfs' on file %s, name %s",
-					prev_file->rel_path, prev_file->name);
-				prev_file->is_cfs = true;
-			}
-		}
-		else
+		if (strstr(prev_file->rel_path, cfs_tblspc_path) == NULL)
 		{
 			elog(LOG, "Breaking on %s", prev_file->rel_path);
 			break;
 		}
+
+		if (!S_ISREG(prev_file->mode))
+			continue;
+
+		h = hash_rel_seg(prev_file);
+		bucket = hashtab[h % HASHN];
+
+		if (prev_file->forkName == cfm || prev_file->forkName == cfm_bck ||
+			prev_file->forkName == cfs_bck)
+		{
+			parray_append(bucket, prev_file);
+		}
+		else if (prev_file->is_datafile && prev_file->forkName == none)
+		{
+			elog(LOG, "Processing 'cfs' file %s", prev_file->rel_path);
+			/* have to mark as is_cfs even for system-tables for compatibility
+			 * with older pg_probackup */
+			prev_file->is_cfs = true;
+			prev_file->cfs_chain = NULL;
+			for (j = 0; j < parray_num(bucket); j++)
+			{
+				tmp_file = parray_get(bucket, j);
+				elog(LOG, "Linking 'cfs' file '%s' to '%s'",
+					 tmp_file->rel_path, prev_file->rel_path);
+				if (tmp_file->relOid == prev_file->relOid &&
+					tmp_file->segno == prev_file->segno)
+				{
+					tmp_file->cfs_chain = prev_file->cfs_chain;
+					prev_file->cfs_chain = tmp_file;
+					parray_remove(bucket, j);
+					j--;
+				}
+			}
+		}
 	}
+
+	for (p = 0; p < HASHN; p++)
+	{
+		bucket = hashtab[p];
+		for (j = 0; j < parray_num(bucket); j++)
+		{
+			tmp_file = parray_get(bucket, j);
+			elog(WARNING, "Orphaned cfs related file '%s'", tmp_file->rel_path);
+		}
+		parray_free(bucket);
+		hashtab[p] = NULL;
+	}
+#undef HASHN
 	free(cfs_tblspc_path);
-	return p+1;
 }
 
 /*
