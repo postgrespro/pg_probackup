@@ -1875,7 +1875,7 @@ class ProbackupTest(object):
 
         # Compare directories
         restored_dirs = set(restored_pgdata['dirs'])
-        original_dirs = set(restored_pgdata['dirs'])
+        original_dirs = set(original_pgdata['dirs'])
 
         for directory in sorted(restored_dirs - original_dirs):
             fail = True
@@ -1903,7 +1903,7 @@ class ProbackupTest(object):
                     restored.mode)
 
         restored_files = set(restored_pgdata['files'])
-        original_files = set(restored_pgdata['files'])
+        original_files = set(original_pgdata['files'])
 
         for file in sorted(restored_files - original_files):
             # File is present in RESTORED PGDATA
