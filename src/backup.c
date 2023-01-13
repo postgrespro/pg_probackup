@@ -13,6 +13,9 @@
 #if PG_VERSION_NUM < 110000
 #include "catalog/catalog.h"
 #endif
+#if PG_VERSION_NUM < 120000
+#include "access/transam.h"
+#endif
 #include "catalog/pg_tablespace.h"
 #include "pgtar.h"
 #include "streamutil.h"
