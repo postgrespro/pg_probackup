@@ -1186,8 +1186,8 @@ opt_datname_exclude_list(ConfigOption *opt, const char *arg)
 void
 opt_datname_include_list(ConfigOption *opt, const char *arg)
 {
-	if (strcmp(arg, "tempate0") == 0 ||
-		strcmp(arg, "tempate1") == 0)
+	if (strcmp(arg, "template0") == 0 ||
+		strcmp(arg, "template1") == 0)
 		elog(ERROR, "Databases 'template0' and 'template1' cannot be used for partial restore or validation");
 
 	opt_parser_add_to_parray_helper(&datname_include_list, arg);
