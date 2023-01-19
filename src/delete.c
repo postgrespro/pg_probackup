@@ -552,7 +552,12 @@ do_retention_merge(InstanceState *instanceState, parray *backup_list,
 
 			/* Try to remove merged incremental backup from both keep and purge lists */
 			parray_rm(to_purge_list, tmp_backup, pgBackupCompareId);
-			parray_set(to_keep_list, i, NULL);
+			for (i = 0; i < parray_num(to_keep_list); i++)
+				if (parray_get(to_keep_list, i) == tmp_backup)
+				{
+					parray_set(to_keep_list, i, NULL);
+					break;
+				}
 		}
 		if (!no_validate)
 			pgBackupValidate(full_backup, NULL);
