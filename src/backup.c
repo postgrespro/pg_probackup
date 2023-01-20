@@ -2424,6 +2424,7 @@ rewind_and_mark_cfs_datafiles(parray *files, const char *root, char *relative, s
 		if (prev_file->forkName == cfm || prev_file->forkName == cfm_bck ||
 			prev_file->forkName == cfs_bck)
 		{
+			prev_file->skip_cfs_nested = true;
 			parray_append(bucket, prev_file);
 		}
 		else if (prev_file->is_datafile && prev_file->forkName == none)
