@@ -675,7 +675,7 @@ option_get_value(ConfigOption *opt)
 		if (opt->type == 'i')
 			convert_from_base_unit(*((int32 *) opt->var),
 								   opt->flags & OPTION_UNIT, &value, &unit);
-		else if (opt->type == 'i')
+		else if (opt->type == 'I')
 			convert_from_base_unit(*((int64 *) opt->var),
 								   opt->flags & OPTION_UNIT, &value, &unit);
 		else if (opt->type == 'u')
