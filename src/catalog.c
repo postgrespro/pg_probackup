@@ -1142,7 +1142,10 @@ get_backup_filelist(pgBackup *backup, bool strict)
 		if (!file->is_datafile || file->is_cfs)
 			file->size = file->uncompressed_size;
 
-		if (file->external_dir_num == 0 && S_ISREG(file->mode))
+		if (file->external_dir_num == 0 &&
+				(file->dbOid != 0 ||
+				 path_is_prefix_of_path("global", file->rel_path)) &&
+				S_ISREG(file->mode))
 		{
 			bool is_datafile = file->is_datafile;
 			set_forkname(file);
