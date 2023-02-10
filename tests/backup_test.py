@@ -3573,3 +3573,36 @@ class BackupTest(ProbackupTest, unittest.TestCase):
             show_backup2 = self.show_pb(backup_dir2, 'node2')[3]
             self.assertEqual(show_backup1['id'], show_backup2['id'])
 
+    def test_regress_issue_585(self):
+        """https://github.com/postgrespro/pg_probackup/issues/585"""
+        node = self.make_simple_node(
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        node.slow_start()
+
+        # create couple of files that looks like db files
+        with open(os.path.join(node.data_dir, 'pg_multixact/offsets/1000'),'wb') as f:
+            pass
+        with open(os.path.join(node.data_dir, 'pg_multixact/members/1000'),'wb') as f:
+            pass
+
+        self.backup_node(
+            backup_dir, 'node', node, backup_type='full',
+            options=['--stream'])
+
+        output = self.backup_node(
+            backup_dir, 'node', node, backup_type='delta',
+            options=['--stream'],
+            return_id=False,
+        )
+        self.assertNotRegex(output, r'WARNING: [^\n]* was stored as .* but looks like')
+
+        node.cleanup()
+
+        output = self.restore_node(backup_dir, 'node', node)
+        self.assertNotRegex(output, r'WARNING: [^\n]* was stored as .* but looks like')
