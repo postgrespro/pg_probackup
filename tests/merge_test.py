@@ -2734,5 +2734,46 @@ class MergeTest(ProbackupTest, unittest.TestCase):
             'postgres',
             'select 1')
 
+    def test_unfinished_merge(self):
+        """ Test when parent has unfinished merge with a different backup. """
+        self._check_gdb_flag_or_skip_test()
+        cases = [('fail_merged', 'write_backup_filelist', ['MERGED', 'MERGING', 'OK']),
+                 ('fail_merging', 'pgBackupWriteControl', ['MERGING', 'OK', 'OK'])]
+
+        for name, terminate_at, states in cases:
+            node_name = 'node_' + name
+            backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, name)
+            node = self.make_simple_node(
+                base_dir=os.path.join(self.module_name, self.fname, node_name),
+                set_replication=True,
+                initdb_params=['--data-checksums'])
+
+            self.init_pb(backup_dir)
+            self.add_instance(backup_dir, node_name, node)
+            self.set_archiving(backup_dir, node_name, node)
+            node.slow_start()
+
+            full_id=self.backup_node(backup_dir, node_name, node, options=['--stream'])
+
+            backup_id = self.backup_node(backup_dir, node_name, node, backup_type='delta')
+            second_backup_id = self.backup_node(backup_dir, node_name, node, backup_type='delta')
+
+            gdb = self.merge_backup(backup_dir, node_name, backup_id, gdb=True)
+            gdb.set_breakpoint(terminate_at)
+            gdb.run_until_break()
+
+            gdb.remove_all_breakpoints()
+            gdb._execute('signal SIGINT')
+            gdb.continue_execution_until_error()
+
+            print(self.show_pb(backup_dir, node_name, as_json=False, as_text=True))
+
+            for expected, real in zip(states, self.show_pb(backup_dir, node_name), strict=True):
+                self.assertEqual(expected, real['status'])
+
+            with self.assertRaisesRegex(ProbackupException,
+                                        f"Full backup {full_id} has unfinished merge with backup {backup_id}"):
+                self.merge_backup(backup_dir, node_name, second_backup_id, gdb=False)
+
 # 1. Need new test with corrupted FULL backup
 # 2. different compression levels

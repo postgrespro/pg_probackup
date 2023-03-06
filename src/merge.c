@@ -337,7 +337,7 @@ do_merge(InstanceState *instanceState, time_t backup_id, bool no_validate, bool 
 		else
 		{
 			if ((full_backup->status == BACKUP_STATUS_MERGED ||
-				full_backup->status == BACKUP_STATUS_MERGED) &&
+				full_backup->status == BACKUP_STATUS_MERGING) &&
 				dest_backup->start_time != full_backup->merge_dest_backup)
 			{
 				elog(ERROR, "Full backup %s has unfinished merge with backup %s",
