@@ -90,27 +90,34 @@ def dir_files(base_dir):
     return out_list
 
 
+def is_pgpro():
+    # pg_config --help
+    cmd = [os.environ['PG_CONFIG'], '--help']
+
+    result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+    return b'postgrespro' in result.stdout
+
+
 def is_enterprise():
     # pg_config --help
     cmd = [os.environ['PG_CONFIG'], '--help']
 
-    p = subprocess.Popen(
-        cmd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE
-    )
-    return b'postgrespro.ru' in p.communicate()[0]
+    p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+    # PostgresPro std or ent
+    if b'postgrespro' in p.stdout:
+        cmd = [os.environ['PG_CONFIG'], '--pgpro-edition']
+        p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
 
- 
+        return b'enterprise' in p.stdout
+    else: # PostgreSQL
+        return False
+
+
 def is_nls_enabled():
     cmd = [os.environ['PG_CONFIG'], '--configure']
 
-    p = subprocess.Popen(
-        cmd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE
-    )
-    return b'enable-nls' in p.communicate()[0]
+    result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+    return b'enable-nls' in result.stdout
 
 
 def base36enc(number):
@@ -229,6 +236,7 @@ class ProbackupTest(object):
     # Class attributes
     enterprise = is_enterprise()
     enable_nls = is_nls_enabled()
+    pgpro = is_pgpro()
 
     def __init__(self, *args, **kwargs):
         super(ProbackupTest, self).__init__(*args, **kwargs)
