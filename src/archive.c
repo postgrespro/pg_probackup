@@ -13,14 +13,6 @@
 #include "utils/thread.h"
 #include "instr_time.h"
 
-static int push_file_internal_uncompressed(const char *wal_file_name, const char *pg_xlog_dir,
-								  const char *archive_dir, bool overwrite, bool no_sync,
-								  uint32 archive_timeout);
-#ifdef HAVE_LIBZ
-static int push_file_internal_gz(const char *wal_file_name, const char *pg_xlog_dir,
-									 const char *archive_dir, bool overwrite, bool no_sync,
-									 int compress_level, uint32 archive_timeout);
-#endif
 static void *push_files(void *arg);
 static void *get_files(void *arg);
 static bool get_wal_file(const char *filename, const char *from_path, const char *to_path,
@@ -91,7 +83,18 @@ typedef struct WALSegno
 {
 	char        name[MAXFNAMELEN];
 	volatile    pg_atomic_flag lock;
+	volatile	pg_atomic_uint32 done;
+	struct WALSegno* prev;
 } WALSegno;
+
+static int push_file_internal_uncompressed(WALSegno *wal_file_name, const char *pg_xlog_dir,
+								  const char *archive_dir, bool overwrite, bool no_sync,
+								  uint32 archive_timeout);
+#ifdef HAVE_LIBZ
+static int push_file_internal_gz(WALSegno *wal_file_name, const char *pg_xlog_dir,
+									 const char *archive_dir, bool overwrite, bool no_sync,
+									 int compress_level, uint32 archive_timeout);
+#endif
 
 static int push_file(WALSegno *xlogfile, const char *archive_status_dir,
 								   const char *pg_xlog_dir, const char *archive_dir,
@@ -337,15 +340,17 @@ push_file(WALSegno *xlogfile, const char *archive_status_dir,
 
 	/* If compression is not required, then just copy it as is */
 	if (!is_compress)
-		rc = push_file_internal_uncompressed(xlogfile->name, pg_xlog_dir,
+		rc = push_file_internal_uncompressed(xlogfile, pg_xlog_dir,
 											 archive_dir, overwrite, no_sync,
 											 archive_timeout);
 #ifdef HAVE_LIBZ
 	else
-		rc = push_file_internal_gz(xlogfile->name, pg_xlog_dir, archive_dir,
+		rc = push_file_internal_gz(xlogfile, pg_xlog_dir, archive_dir,
 								   overwrite, no_sync, compress_level,
 								   archive_timeout);
 #endif
+
+	pg_atomic_write_u32(&xlogfile->done, 1);
 
 	/* take '--no-ready-rename' flag into account */
 	if (!no_ready_rename && archive_status_dir != NULL)
@@ -381,13 +386,14 @@ push_file(WALSegno *xlogfile, const char *archive_status_dir,
  *      has the same checksum
  */
 int
-push_file_internal_uncompressed(const char *wal_file_name, const char *pg_xlog_dir,
+push_file_internal_uncompressed(WALSegno *wal_file, const char *pg_xlog_dir,
 								const char *archive_dir, bool overwrite, bool no_sync,
 								uint32 archive_timeout)
 {
 	FILE	   *in = NULL;
 	int			out = -1;
 	char       *buf = pgut_malloc(OUT_BUF_SIZE); /* 1MB buffer */
+	const char *wal_file_name = wal_file->name;
 	char		from_fullpath[MAXPGPATH];
 	char		to_fullpath[MAXPGPATH];
 	/* partial handling */
@@ -409,7 +415,10 @@ push_file_internal_uncompressed(const char *wal_file_name, const char *pg_xlog_d
 	/* Open source file for read */
 	in = fopen(from_fullpath, PG_BINARY_R);
 	if (in == NULL)
+	{
+		pg_atomic_write_u32(&wal_file->done, 1);
 		elog(ERROR, "Cannot open source file \"%s\": %s", from_fullpath, strerror(errno));
+	}
 
 	/* disable stdio buffering for input file */
 	setvbuf(in, NULL, _IONBF, BUFSIZ);
@@ -422,8 +431,11 @@ push_file_internal_uncompressed(const char *wal_file_name, const char *pg_xlog_d
 	if (out < 0)
 	{
 		if (errno != EEXIST)
+		{
+			pg_atomic_write_u32(&wal_file->done, 1);
 			elog(ERROR, "Failed to open temp WAL file \"%s\": %s",
 					to_fullpath_part, strerror(errno));
+		}
 		/* Already existing destination temp file is not an error condition */
 	}
 	else
@@ -453,15 +465,21 @@ push_file_internal_uncompressed(const char *wal_file_name, const char *pg_xlog_d
 				if (out < 0)
 				{
 					if (errno != EEXIST)
+					{
+						pg_atomic_write_u32(&wal_file->done, 1);
 						elog(ERROR, "Failed to open temp WAL file \"%s\": %s",
 										to_fullpath_part, strerror(errno));
+					}
 				}
 				else
 					/* Successfully created partial file */
 					break;
 			}
 			else
+			{
+				pg_atomic_write_u32(&wal_file->done, 1);
 				elog(ERROR, "Cannot stat temp WAL file \"%s\": %s", to_fullpath_part, strerror(errno));
+			}
 		}
 
 		/* first round */
@@ -492,8 +510,11 @@ push_file_internal_uncompressed(const char *wal_file_name, const char *pg_xlog_d
 	if (out < 0)
 	{
 		if (!partial_is_stale)
+		{
+			pg_atomic_write_u32(&wal_file->done, 1);
 			elog(ERROR, "Failed to open temp WAL file \"%s\" in %i seconds",
 					to_fullpath_part, archive_timeout);
+		}
 
 		/* Partial segment is considered stale, so reuse it */
 		elog(LOG, "Reusing stale temp WAL file \"%s\"", to_fullpath_part);
@@ -501,7 +522,10 @@ push_file_internal_uncompressed(const char *wal_file_name, const char *pg_xlog_d
 
 		out = fio_open(to_fullpath_part, O_RDWR | O_CREAT | O_EXCL | PG_BINARY, FIO_BACKUP_HOST);
 		if (out < 0)
+		{
+			pg_atomic_write_u32(&wal_file->done, 1);
 			elog(ERROR, "Cannot open temp WAL file \"%s\": %s", to_fullpath_part, strerror(errno));
+		}
 	}
 
 part_opened:
@@ -536,6 +560,7 @@ part_opened:
 				 * so we must unlink partial file and exit with error.
 				 */
 				fio_unlink(to_fullpath_part, FIO_BACKUP_HOST);
+				pg_atomic_write_u32(&wal_file->done, 1);
 				elog(ERROR, "WAL file already exists in archive with "
 						"different checksum: \"%s\"", to_fullpath);
 			}
@@ -553,6 +578,7 @@ part_opened:
 		if (ferror(in))
 		{
 			fio_unlink(to_fullpath_part, FIO_BACKUP_HOST);
+			pg_atomic_write_u32(&wal_file->done, 1);
 			elog(ERROR, "Cannot read source file \"%s\": %s",
 						from_fullpath, strerror(errno));
 		}
@@ -560,6 +586,7 @@ part_opened:
 		if (read_len > 0 && fio_write_async(out, buf, read_len) != read_len)
 		{
 			fio_unlink(to_fullpath_part, FIO_BACKUP_HOST);
+			pg_atomic_write_u32(&wal_file->done, 1);
 			elog(ERROR, "Cannot write to destination temp file \"%s\": %s",
 						to_fullpath_part, strerror(errno));
 		}
@@ -575,14 +602,29 @@ part_opened:
 	if (fio_check_error_fd(out, &errmsg))
 	{
 		fio_unlink(to_fullpath_part, FIO_BACKUP_HOST);
+		pg_atomic_write_u32(&wal_file->done, 1);
 		elog(ERROR, "Cannot write to the remote file \"%s\": %s",
 					to_fullpath_part, errmsg);
+	}
+
+	if (wal_file->prev != NULL)
+	{
+		while (!pg_atomic_read_u32(&wal_file->prev->done))
+		{
+			if (thread_interrupted || interrupted)
+			{
+				pg_atomic_write_u32(&wal_file->done, 1);
+				elog(ERROR, "terminated while waiting for prev file");
+			}
+			usleep(250);
+		}
 	}
 
 	/* close temp file */
 	if (fio_close(out) != 0)
 	{
 		fio_unlink(to_fullpath_part, FIO_BACKUP_HOST);
+		pg_atomic_write_u32(&wal_file->done, 1);
 		elog(ERROR, "Cannot close temp WAL file \"%s\": %s",
 					to_fullpath_part, strerror(errno));
 	}
@@ -591,8 +633,11 @@ part_opened:
 	if (!no_sync)
 	{
 		if (fio_sync(to_fullpath_part, FIO_BACKUP_HOST) != 0)
+		{
+			pg_atomic_write_u32(&wal_file->done, 1);
 			elog(ERROR, "Failed to sync file \"%s\": %s",
 						to_fullpath_part, strerror(errno));
+		}
 	}
 
 	elog(LOG, "Rename \"%s\" to \"%s\"", to_fullpath_part, to_fullpath);
@@ -603,6 +648,7 @@ part_opened:
 	if (fio_rename(to_fullpath_part, to_fullpath, FIO_BACKUP_HOST) < 0)
 	{
 		fio_unlink(to_fullpath_part, FIO_BACKUP_HOST);
+		pg_atomic_write_u32(&wal_file->done, 1);
 		elog(ERROR, "Cannot rename file \"%s\" to \"%s\": %s",
 					to_fullpath_part, to_fullpath, strerror(errno));
 	}
@@ -620,13 +666,14 @@ part_opened:
  *      has the same checksum
  */
 int
-push_file_internal_gz(const char *wal_file_name, const char *pg_xlog_dir,
+push_file_internal_gz(WALSegno *wal_file, const char *pg_xlog_dir,
 					  const char *archive_dir, bool overwrite, bool no_sync,
 					  int compress_level, uint32 archive_timeout)
 {
 	FILE	   *in = NULL;
 	gzFile		out = NULL;
 	char       *buf = pgut_malloc(OUT_BUF_SIZE);
+	const char *wal_file_name = wal_file->name;
 	char		from_fullpath[MAXPGPATH];
 	char		to_fullpath[MAXPGPATH];
 	char		to_fullpath_gz[MAXPGPATH];
@@ -656,8 +703,11 @@ push_file_internal_gz(const char *wal_file_name, const char *pg_xlog_dir,
 	/* Open source file for read */
 	in = fopen(from_fullpath, PG_BINARY_R);
 	if (in == NULL)
+	{
+		pg_atomic_write_u32(&wal_file->done, 1);
 		elog(ERROR, "Cannot open source WAL file \"%s\": %s",
 				from_fullpath, strerror(errno));
+	}
 
 	/* disable stdio buffering for input file */
 	setvbuf(in, NULL, _IONBF, BUFSIZ);
@@ -667,8 +717,11 @@ push_file_internal_gz(const char *wal_file_name, const char *pg_xlog_dir,
 	if (out == NULL)
 	{
 		if (errno != EEXIST)
+		{
+			pg_atomic_write_u32(&wal_file->done, 1);
 			elog(ERROR, "Cannot open temp WAL file \"%s\": %s",
 					to_fullpath_gz_part, strerror(errno));
+		}
 		/* Already existing destination temp file is not an error condition */
 	}
 	else
@@ -698,16 +751,22 @@ push_file_internal_gz(const char *wal_file_name, const char *pg_xlog_dir,
 				if (out == NULL)
 				{
 					if (errno != EEXIST)
+					{
+						pg_atomic_write_u32(&wal_file->done, 1);
 						elog(ERROR, "Failed to open temp WAL file \"%s\": %s",
 									to_fullpath_gz_part, strerror(errno));
+					}
 				}
 				else
 					/* Successfully created partial file */
 					break;
 			}
 			else
+			{
+				pg_atomic_write_u32(&wal_file->done, 1);
 				elog(ERROR, "Cannot stat temp WAL file \"%s\": %s",
 							to_fullpath_gz_part, strerror(errno));
+			}
 		}
 
 		/* first round */
@@ -738,8 +797,11 @@ push_file_internal_gz(const char *wal_file_name, const char *pg_xlog_dir,
 	if (out == NULL)
 	{
 		if (!partial_is_stale)
+		{
+			pg_atomic_write_u32(&wal_file->done, 1);
 			elog(ERROR, "Failed to open temp WAL file \"%s\" in %i seconds",
 					to_fullpath_gz_part, archive_timeout);
+		}
 
 		/* Partial segment is considered stale, so reuse it */
 		elog(LOG, "Reusing stale temp WAL file \"%s\"", to_fullpath_gz_part);
@@ -747,8 +809,11 @@ push_file_internal_gz(const char *wal_file_name, const char *pg_xlog_dir,
 
 		out = fio_gzopen(to_fullpath_gz_part, PG_BINARY_W, compress_level, FIO_BACKUP_HOST);
 		if (out == NULL)
+		{
+			pg_atomic_write_u32(&wal_file->done, 1);
 			elog(ERROR, "Cannot open temp WAL file \"%s\": %s",
 					to_fullpath_gz_part, strerror(errno));
+		}
 	}
 
 part_opened:
@@ -784,6 +849,7 @@ part_opened:
 				 * so we must unlink partial file and exit with error.
 				 */
 				fio_unlink(to_fullpath_gz_part, FIO_BACKUP_HOST);
+				pg_atomic_write_u32(&wal_file->done, 1);
 				elog(ERROR, "WAL file already exists in archive with "
 						"different checksum: \"%s\"", to_fullpath_gz);
 			}
@@ -801,6 +867,7 @@ part_opened:
 		if (ferror(in))
 		{
 			fio_unlink(to_fullpath_gz_part, FIO_BACKUP_HOST);
+			pg_atomic_write_u32(&wal_file->done, 1);
 			elog(ERROR, "Cannot read from source file \"%s\": %s",
 					from_fullpath, strerror(errno));
 		}
@@ -808,6 +875,7 @@ part_opened:
 		if (read_len > 0 && fio_gzwrite(out, buf, read_len) != read_len)
 		{
 			fio_unlink(to_fullpath_gz_part, FIO_BACKUP_HOST);
+			pg_atomic_write_u32(&wal_file->done, 1);
 			elog(ERROR, "Cannot write to compressed temp WAL file \"%s\": %s",
 					to_fullpath_gz_part, get_gz_error(out, errno));
 		}
@@ -823,14 +891,29 @@ part_opened:
 	if (fio_check_error_fd_gz(out, &errmsg))
 	{
 		fio_unlink(to_fullpath_gz_part, FIO_BACKUP_HOST);
+		pg_atomic_write_u32(&wal_file->done, 1);
 		elog(ERROR, "Cannot write to the remote compressed file \"%s\": %s",
 					to_fullpath_gz_part, errmsg);
+	}
+
+	if (wal_file->prev != NULL)
+	{
+		while (!pg_atomic_read_u32(&wal_file->prev->done))
+		{
+			if (thread_interrupted || interrupted)
+			{
+				pg_atomic_write_u32(&wal_file->done, 1);
+				elog(ERROR, "terminated while waiting for prev file");
+			}
+			usleep(250);
+		}
 	}
 
 	/* close temp file, TODO: make it synchronous */
 	if (fio_gzclose(out) != 0)
 	{
 		fio_unlink(to_fullpath_gz_part, FIO_BACKUP_HOST);
+		pg_atomic_write_u32(&wal_file->done, 1);
 		elog(ERROR, "Cannot close compressed temp WAL file \"%s\": %s",
 				to_fullpath_gz_part, strerror(errno));
 	}
@@ -839,8 +922,11 @@ part_opened:
 	if (!no_sync)
 	{
 		if (fio_sync(to_fullpath_gz_part, FIO_BACKUP_HOST) != 0)
+		{
+			pg_atomic_write_u32(&wal_file->done, 1);
 			elog(ERROR, "Failed to sync file \"%s\": %s",
 					to_fullpath_gz_part, strerror(errno));
+		}
 	}
 
 	elog(LOG, "Rename \"%s\" to \"%s\"",
@@ -852,6 +938,7 @@ part_opened:
 	if (fio_rename(to_fullpath_gz_part, to_fullpath_gz, FIO_BACKUP_HOST) < 0)
 	{
 		fio_unlink(to_fullpath_gz_part, FIO_BACKUP_HOST);
+		pg_atomic_write_u32(&wal_file->done, 1);
 		elog(ERROR, "Cannot rename file \"%s\" to \"%s\": %s",
 				to_fullpath_gz_part, to_fullpath_gz, strerror(errno));
 	}
@@ -905,6 +992,15 @@ get_gz_error(gzFile gzf, int errnum)
 //	}
 //}
 
+static int
+walSegnoCompareName(const void *f1, const void *f2)
+{
+	WALSegno *w1 = *(WALSegno**)f1;
+	WALSegno *w2 = *(WALSegno**)f2;
+
+	return strcmp(w1->name, w2->name);
+}
+
 /* Look for files with '.ready' suffix in archive_status directory
  * and pack such files into batch sized array.
  */
@@ -912,14 +1008,15 @@ parray *
 setup_push_filelist(const char *archive_status_dir, const char *first_file,
 					int batch_size)
 {
-	int i;
 	WALSegno *xlogfile = NULL;
 	parray  *status_files = NULL;
 	parray  *batch_files = parray_new();
+	size_t	i;
 
 	/* guarantee that first filename is in batch list */
-	xlogfile = palloc(sizeof(WALSegno));
+	xlogfile = palloc0(sizeof(WALSegno));
 	pg_atomic_init_flag(&xlogfile->lock);
+	pg_atomic_init_u32(&xlogfile->done, 0);
 	snprintf(xlogfile->name, MAXFNAMELEN, "%s", first_file);
 	parray_append(batch_files, xlogfile);
 
@@ -950,14 +1047,22 @@ setup_push_filelist(const char *archive_status_dir, const char *first_file,
 		if (strcmp(filename, first_file) == 0)
 			continue;
 
-		xlogfile = palloc(sizeof(WALSegno));
+		xlogfile = palloc0(sizeof(WALSegno));
 		pg_atomic_init_flag(&xlogfile->lock);
+		pg_atomic_init_u32(&xlogfile->done, 0);
 
 		snprintf(xlogfile->name, MAXFNAMELEN, "%s", filename);
 		parray_append(batch_files, xlogfile);
 
 		if (parray_num(batch_files) >= batch_size)
 			break;
+	}
+
+	parray_qsort(batch_files, walSegnoCompareName);
+	for (i = 1; i < parray_num(batch_files); i++)
+	{
+		xlogfile = (WALSegno*) parray_get(batch_files, i);
+		xlogfile->prev = (WALSegno*) parray_get(batch_files, i-1);
 	}
 
 	/* cleanup */
