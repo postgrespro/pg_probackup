@@ -887,7 +887,7 @@ merge_rename:
 		pfree(threads);
 	}
 
-	if (result_filelist && parray_num(result_filelist) > 0)
+	if (result_filelist)
 	{
 		parray_walk(result_filelist, pgFileFree);
 		parray_free(result_filelist);
@@ -1067,7 +1067,7 @@ merge_files(void *arg)
 					tmp_file->hdr_crc = file->hdr_crc;
 				}
 				else
-					tmp_file->uncompressed_size = tmp_file->uncompressed_size;
+					tmp_file->uncompressed_size = file->uncompressed_size;
 
 				/* Copy header metadata from old map into a new one */
 				tmp_file->n_headers = file->n_headers;

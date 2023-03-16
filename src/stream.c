@@ -648,7 +648,7 @@ start_WAL_streaming(PGconn *backup_conn, char *stream_dst_path, ConnectionOption
 	//TODO Add a comment about this calculation
 	stream_stop_timeout = stream_stop_timeout + stream_stop_timeout * 0.1;
 
-	strncpy(stream_thread_arg.basedir, stream_dst_path, sizeof(stream_thread_arg.basedir));
+	strlcpy(stream_thread_arg.basedir, stream_dst_path, sizeof(stream_thread_arg.basedir));
 
 	/*
 	 * Connect in replication mode to the server.

@@ -158,7 +158,13 @@ void do_retention(InstanceState *instanceState, bool no_validate, bool no_sync)
 			/* Retention is disabled but we still can cleanup wal */
 			elog(WARNING, "Retention policy is not set");
 			if (!delete_wal)
+			{
+				parray_walk(backup_list, pgBackupFree);
+				parray_free(backup_list);
+				parray_free(to_keep_list);
+				parray_free(to_purge_list);
 				return;
+			}
 		}
 		else
 			/* At least one retention policy is active */
@@ -1047,6 +1053,8 @@ do_delete_status(InstanceState *instanceState, InstanceConfig *instance_config, 
 	if (parray_num(backup_list) == 0)
 	{
 		elog(WARNING, "Instance '%s' has no backups", instanceState->instance_name);
+		parray_free(delete_list);
+		parray_free(backup_list);
 		return;
 	}
 

@@ -452,7 +452,7 @@ print_backup_json_object(PQExpBuffer buf, pgBackup *backup)
 		appendPQExpBuffer(buf, INT64_FORMAT, backup->uncompressed_bytes);
 	}
 
-	if (backup->uncompressed_bytes >= 0)
+	if (backup->pgdata_bytes >= 0)
 	{
 		json_add_key(buf, "pgdata-bytes", json_level);
 		appendPQExpBuffer(buf, INT64_FORMAT, backup->pgdata_bytes);
@@ -514,6 +514,8 @@ show_backup(InstanceState *instanceState, time_t requested_backup_id)
 		elog(INFO, "Requested backup \"%s\" is not found.",
 			 /* We do not need free base36enc's result, we exit anyway */
 			 base36enc(requested_backup_id));
+		parray_walk(backups, pgBackupFree);
+		parray_free(backups);
 		/* This is not error */
 		return 0;
 	}

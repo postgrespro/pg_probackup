@@ -891,7 +891,7 @@ catalog_get_instance_list(CatalogState *catalogState)
 
 		instanceState = pgut_new(InstanceState);
 
-		strncpy(instanceState->instance_name, dent->d_name, MAXPGPATH);
+		strlcpy(instanceState->instance_name, dent->d_name, MAXPGPATH);
 		join_path_components(instanceState->instance_backup_subdir_path,
 							catalogState->backup_subdir_path, instanceState->instance_name);
 		join_path_components(instanceState->instance_wal_subdir_path,
@@ -2245,6 +2245,12 @@ do_set_backup(InstanceState *instanceState, time_t backup_id,
 
 	if (set_backup_params->note)
 		add_note(target_backup, set_backup_params->note);
+	/* Cleanup */
+	if (backup_list)
+	{
+		parray_walk(backup_list, pgBackupFree);
+		parray_free(backup_list);
+	}
 }
 
 /*
@@ -2310,6 +2316,7 @@ add_note(pgBackup *target_backup, char *note)
 {
 
 	char *note_string;
+	char *p;
 
 	/* unset note */
 	if (pg_strcasecmp(note, "none") == 0)
@@ -2326,8 +2333,8 @@ add_note(pgBackup *target_backup, char *note)
 		 * we save only "aaa"
 		 * Example: tests.set_backup.SetBackupTest.test_add_note_newlines
 		 */
-		note_string = pgut_malloc(MAX_NOTE_SIZE);
-		sscanf(note, "%[^\n]", note_string);
+		p = strchr(note, '\n');
+		note_string = pgut_strndup(note, p ? (p-note) : MAX_NOTE_SIZE);
 
 		target_backup->note = note_string;
 		elog(INFO, "Adding note to backup %s: '%s'",

@@ -1177,7 +1177,8 @@ parse_time(const char *value, time_t *result, bool utc_default)
 	char 	   *local_tz = getenv("TZ");
 
 	/* tmp = replace( value, !isalnum, ' ' ) */
-	tmp = pgut_malloc(strlen(value) + + 1);
+	tmp = pgut_malloc(strlen(value) + 1);
+	if(!tmp) return false;
 	len = 0;
 	fields_num = 1;
 
@@ -1205,7 +1206,10 @@ parse_time(const char *value, time_t *result, bool utc_default)
 			errno = 0;
 			hr = strtol(value + 1, &cp, 10);
 			if ((value + 1) == cp || errno == ERANGE)
+			{
+				pfree(tmp);
 				return false;
+			}
 
 			/* explicit delimiter? */
 			if (*cp == ':')
@@ -1213,13 +1217,19 @@ parse_time(const char *value, time_t *result, bool utc_default)
 				errno = 0;
 				min = strtol(cp + 1, &cp, 10);
 				if (errno == ERANGE)
+				{
+					pfree(tmp);
 					return false;
+				}
 				if (*cp == ':')
 				{
 					errno = 0;
 					sec = strtol(cp + 1, &cp, 10);
 					if (errno == ERANGE)
+					{
+						pfree(tmp);
 						return false;
+					}
 				}
 			}
 			/* otherwise, might have run things together... */
@@ -1234,11 +1244,20 @@ parse_time(const char *value, time_t *result, bool utc_default)
 
 			/* Range-check the values; see notes in datatype/timestamp.h */
 			if (hr < 0 || hr > MAX_TZDISP_HOUR)
+			{
+				pfree(tmp);
 				return false;
+			}
 			if (min < 0 || min >= MINS_PER_HOUR)
+			{
+				pfree(tmp);
 				return false;
+			}
 			if (sec < 0 || sec >= SECS_PER_MINUTE)
+			{
+				pfree(tmp);
 				return false;
+			}
 
 			tz = (hr * MINS_PER_HOUR + min) * SECS_PER_MINUTE + sec;
 			if (*value == '-')
@@ -1251,7 +1270,10 @@ parse_time(const char *value, time_t *result, bool utc_default)
 		}
 		/* wrong format */
 		else if (!IsSpace(*value))
+		{
+			pfree(tmp);
 			return false;
+		}
 		else
 			value++;
 	}
@@ -1268,7 +1290,7 @@ parse_time(const char *value, time_t *result, bool utc_default)
 	i = sscanf(tmp, "%04d %02d %02d %02d %02d %02d%1s",
 		&tm.tm_year, &tm.tm_mon, &tm.tm_mday,
 		&tm.tm_hour, &tm.tm_min, &tm.tm_sec, junk);
-	free(tmp);
+	pfree(tmp);
 
 	if (i < 3 || i > 6)
 		return false;

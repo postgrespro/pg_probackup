@@ -151,7 +151,7 @@ dir_create_dir(const char *dir, mode_t mode, bool strict)
 {
 	char		parent[MAXPGPATH];
 
-	strncpy(parent, dir, MAXPGPATH);
+	strlcpy(parent, dir, MAXPGPATH);
 	get_parent_directory(parent);
 
 	/* Create parent first */
@@ -964,7 +964,7 @@ create_data_directories(parray *dest_files, const char *data_dir, const char *ba
 		if (links)
 		{
 			/* get parent dir of rel_path */
-			strncpy(parent_dir, dir->rel_path, MAXPGPATH);
+			strlcpy(parent_dir, dir->rel_path, MAXPGPATH);
 			get_parent_directory(parent_dir);
 
 			/* check if directory is actually link to tablespace */

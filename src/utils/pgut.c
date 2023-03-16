@@ -1215,13 +1215,16 @@ pgut_pgfnames(const char *path, bool strict)
 		}
 	}
 
+	filenames[numnames] = NULL;
+
 	if (errno)
 	{
 		elog(strict ? ERROR : WARNING, "could not read directory \"%s\": %m", path);
+		pgut_pgfnames_cleanup(filenames);		
+		closedir(dir);
 		return NULL;
 	}
 
-	filenames[numnames] = NULL;
 
 	if (closedir(dir))
 	{
