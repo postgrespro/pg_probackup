@@ -33,7 +33,9 @@ class OptionTest(ProbackupTest, unittest.TestCase):
                 repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertIn(
-                'ERROR: required parameter not specified: BACKUP_PATH (-B, --backup-path)',
+                'ERROR: No backup catalog path specified.\n' + \
+                'Please specify it either using environment variable BACKUP_PATH or\n' + \
+                'command line option --backup-path (-B)',
                 e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
 
@@ -54,7 +56,7 @@ class OptionTest(ProbackupTest, unittest.TestCase):
                 repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertIn(
-                'ERROR: required parameter not specified: --instance',
+                'ERROR: Required parameter not specified: --instance',
                 e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
 
@@ -65,7 +67,7 @@ class OptionTest(ProbackupTest, unittest.TestCase):
                 repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertIn(
-                'ERROR: required parameter not specified: BACKUP_MODE (-b, --backup-mode)',
+                'ERROR: No backup mode specified.\nPlease specify it either using environment variable BACKUP_MODE or\ncommand line option --backup-mode (-b)',
                 e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
 
@@ -76,7 +78,7 @@ class OptionTest(ProbackupTest, unittest.TestCase):
                 repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertIn(
-                'ERROR: invalid backup-mode "bad"',
+                'ERROR: Invalid backup-mode "bad"',
                 e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
 
@@ -102,7 +104,7 @@ class OptionTest(ProbackupTest, unittest.TestCase):
                 repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertIn(
-                "option requires an argument -- 'i'",
+                "Option '-i' requires an argument",
                 e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
 
@@ -114,13 +116,8 @@ class OptionTest(ProbackupTest, unittest.TestCase):
             base_dir=os.path.join(self.module_name, self.fname, 'node'))
 
         output = self.init_pb(backup_dir)
-        self.assertIn(
-            "INFO: Backup catalog",
-            output)
+        self.assertIn(f"INFO: Backup catalog '{backup_dir}' successfully initialized", output)
 
-        self.assertIn(
-            "successfully inited",
-            output)
         self.add_instance(backup_dir, 'node', node)
 
         node.slow_start()

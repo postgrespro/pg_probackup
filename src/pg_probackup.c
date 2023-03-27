@@ -491,7 +491,10 @@ main(int argc, char *argv[])
 		backup_subcmd != HELP_CMD &&
 		backup_subcmd != VERSION_CMD &&
 		backup_subcmd != CATCHUP_CMD)
-		elog(ERROR, "required parameter not specified: BACKUP_PATH (-B, --backup-path)");
+		elog(ERROR,
+			 "No backup catalog path specified.\n"
+			 "Please specify it either using environment variable BACKUP_PATH or\n"
+			 "command line option --backup-path (-B)");
 
 	/* ===== catalogState (END) ======*/
 
@@ -505,7 +508,7 @@ main(int argc, char *argv[])
 	{
 		if (backup_subcmd != INIT_CMD && backup_subcmd != SHOW_CMD &&
 			backup_subcmd != VALIDATE_CMD && backup_subcmd != CHECKDB_CMD && backup_subcmd != CATCHUP_CMD)
-			elog(ERROR, "required parameter not specified: --instance");
+			elog(ERROR, "Required parameter not specified: --instance");
 	}
 	else
 	{
@@ -618,7 +621,7 @@ main(int argc, char *argv[])
 		backup_path != NULL &&
 		instance_name == NULL &&
 		instance_config.pgdata == NULL)
-			elog(ERROR, "required parameter not specified: --instance");
+			elog(ERROR, "Required parameter not specified: --instance");
 
 	/* Check checkdb command options consistency */
 	if (backup_subcmd == CHECKDB_CMD &&
@@ -831,14 +834,16 @@ main(int argc, char *argv[])
 		if (catchup_destination_pgdata == NULL)
 			elog(ERROR, "You must specify \"--destination-pgdata\" option with the \"%s\" command", get_subcmd_name(backup_subcmd));
 		if (current.backup_mode == BACKUP_MODE_INVALID)
-			elog(ERROR, "Required parameter not specified: BACKUP_MODE (-b, --backup-mode)");
+			elog(ERROR, "No backup mode specified.\n"
+				 "Please specify it either using environment variable BACKUP_MODE or\n"
+				 "command line option --backup-mode (-b)");
 		if (current.backup_mode != BACKUP_MODE_FULL && current.backup_mode != BACKUP_MODE_DIFF_PTRACK && current.backup_mode != BACKUP_MODE_DIFF_DELTA)
 			elog(ERROR, "Only \"FULL\", \"PTRACK\" and \"DELTA\" modes are supported with the \"%s\" command", get_subcmd_name(backup_subcmd));
 		if (!stream_wal)
 			elog(INFO, "--stream is required, forcing stream mode");
 		current.stream = stream_wal = true;
 		if (instance_config.external_dir_str)
-			elog(ERROR, "external directories not supported fom \"%s\" command", get_subcmd_name(backup_subcmd));
+			elog(ERROR, "External directories not supported fom \"%s\" command", get_subcmd_name(backup_subcmd));
 		// TODO check instance_config.conn_opt
 	}
 
@@ -985,8 +990,9 @@ main(int argc, char *argv[])
 
 				/* sanity */
 				if (current.backup_mode == BACKUP_MODE_INVALID)
-					elog(ERROR, "required parameter not specified: BACKUP_MODE "
-						 "(-b, --backup-mode)");
+					elog(ERROR, "No backup mode specified.\n"
+						 "Please specify it either using environment variable BACKUP_MODE or\n"
+						 "command line option --backup-mode (-b)");
 
 				return do_backup(instanceState, set_backup_params,
 								 no_validate, no_sync, backup_logs, start_time);

@@ -2995,7 +2995,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
                     self.output, self.cmd))
         except ProbackupException as e:
             self.assertIn(
-                'ERROR: field "dbOid" is not found in the line 42 of '
+                'ERROR: Field "dbOid" is not found in the line 42 of '
                 'the file backup_content.control', e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
@@ -3011,7 +3011,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
                     self.output, self.cmd))
         except ProbackupException as e:
             self.assertIn(
-                'ERROR: field "dbOid" is not found in the line 42 of '
+                'ERROR: Field "dbOid" is not found in the line 42 of '
                 'the file backup_content.control', e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))

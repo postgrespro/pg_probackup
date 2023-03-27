@@ -56,7 +56,8 @@ class InitTest(ProbackupTest, unittest.TestCase):
                 repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertIn(
-                "ERROR: Required parameter not specified: PGDATA (-D, --pgdata)",
+                "ERROR: No postgres data directory specified.\n"
+                "Please specify it either using environment variable PGDATA or\ncommand line option --pgdata (-D)",
                 e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(e.message, self.cmd))
 

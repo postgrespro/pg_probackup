@@ -84,7 +84,7 @@ backup_stopbackup_callback(bool fatal, void *userdata)
 	 */
 	if (backup_in_progress)
 	{
-		elog(WARNING, "backup in progress, stop backup");
+		elog(WARNING, "A backup is in progress, stopping it.");
 		/* don't care about stop_lsn in case of error */
 		pg_stop_backup_send(st->conn, st->server_version, current.from_replica, exclusive_backup, NULL);
 	}
@@ -711,8 +711,9 @@ do_backup(InstanceState *instanceState, pgSetBackupParams *set_backup_params,
 	char		pretty_bytes[20];
 
 	if (!instance_config.pgdata)
-		elog(ERROR, "required parameter not specified: PGDATA "
-						 "(-D, --pgdata)");
+		elog(ERROR, "No postgres data directory specified.\n"
+			 "Please specify it either using environment variable PGDATA or\n"
+			 "command line option --pgdata (-D)");
 
 	/* Initialize PGInfonode */
 	pgNodeInit(&nodeInfo);
@@ -936,12 +937,12 @@ check_server_version(PGconn *conn, PGNodeInfo *nodeInfo)
 
 	if (nodeInfo->server_version < 90500)
 		elog(ERROR,
-			 "server version is %s, must be %s or higher",
+			 "Server version is %s, must be %s or higher",
 			 nodeInfo->server_version_str, "9.5");
 
 	if (current.from_replica && nodeInfo->server_version < 90600)
 		elog(ERROR,
-			 "server version is %s, must be %s or higher for backup from replica",
+			 "Server version is %s, must be %s or higher for backup from replica",
 			 nodeInfo->server_version_str, "9.6");
 
 	if (nodeInfo->pgpro_support)
@@ -1050,7 +1051,7 @@ confirm_block_size(PGconn *conn, const char *name, int blcksz)
 
 	res = pgut_execute(conn, "SELECT pg_catalog.current_setting($1)", 1, &name);
 	if (PQntuples(res) != 1 || PQnfields(res) != 1)
-		elog(ERROR, "cannot get %s: %s", name, PQerrorMessage(conn));
+		elog(ERROR, "Cannot get %s: %s", name, PQerrorMessage(conn));
 
 	block_size = strtol(PQgetvalue(res, 0, 0), &endp, 10);
 	if ((endp && *endp) || block_size != blcksz)
@@ -1439,7 +1440,7 @@ wait_wal_lsn(const char *wal_segment_dir, XLogRecPtr target_lsn, bool is_start_l
 		}
 
 		if (!current.stream && is_start_lsn && try_count == 30)
-			elog(WARNING, "By default pg_probackup assume WAL delivery method to be ARCHIVE. "
+			elog(WARNING, "By default pg_probackup assumes that WAL delivery method to be ARCHIVE. "
 				 "If continuous archiving is not set up, use '--stream' option to make autonomous backup. "
 				 "Otherwise check that continuous archiving works correctly.");
 
@@ -1775,9 +1776,9 @@ pg_stop_backup_consume(PGconn *conn, int server_version,
 			{
 				pgut_cancel(conn);
 #if PG_VERSION_NUM >= 150000
-				elog(ERROR, "interrupted during waiting for pg_backup_stop");
+				elog(ERROR, "Interrupted during waiting for pg_backup_stop");
 #else
-				elog(ERROR, "interrupted during waiting for pg_stop_backup");
+				elog(ERROR, "Interrupted during waiting for pg_stop_backup");
 #endif
 			}
 
@@ -1823,7 +1824,7 @@ pg_stop_backup_consume(PGconn *conn, int server_version,
 			case PGRES_TUPLES_OK:
 				break;
 			default:
-				elog(ERROR, "query failed: %s query was: %s",
+				elog(ERROR, "Query failed: %s query was: %s",
 					 PQerrorMessage(conn), query_text);
 		}
 		backup_in_progress = false;
@@ -1834,13 +1835,13 @@ pg_stop_backup_consume(PGconn *conn, int server_version,
 	/* get&check recovery_xid */
 	if (sscanf(PQgetvalue(query_result, 0, recovery_xid_colno), XID_FMT, &result->snapshot_xid) != 1)
 		elog(ERROR,
-			 "result of txid_snapshot_xmax() is invalid: %s",
+			 "Result of txid_snapshot_xmax() is invalid: %s",
 			 PQgetvalue(query_result, 0, recovery_xid_colno));
 
 	/* get&check recovery_time */
 	if (!parse_time(PQgetvalue(query_result, 0, recovery_time_colno), &result->invocation_time, true))
 		elog(ERROR,
-			 "result of current_timestamp is invalid: %s",
+			 "Result of current_timestamp is invalid: %s",
 			 PQgetvalue(query_result, 0, recovery_time_colno));
 
 	/* get stop_backup_lsn */
@@ -1898,13 +1899,13 @@ pg_stop_backup_write_file_helper(const char *path, const char *filename, const c
 	join_path_components(full_filename, path, filename);
 	fp = fio_fopen(full_filename, PG_BINARY_W, FIO_BACKUP_HOST);
 	if (fp == NULL)
-		elog(ERROR, "can't open %s file \"%s\": %s",
+		elog(ERROR, "Can't open %s file \"%s\": %s",
 			 error_msg_filename, full_filename, strerror(errno));
 
 	if (fio_fwrite(fp, data, len) != len ||
 		fio_fflush(fp) != 0 ||
 		fio_fclose(fp))
-		elog(ERROR, "can't write %s file \"%s\": %s",
+		elog(ERROR, "Can't write %s file \"%s\": %s",
 			 error_msg_filename, full_filename, strerror(errno));
 
 	/*
@@ -1943,7 +1944,7 @@ pg_stop_backup(InstanceState *instanceState, pgBackup *backup, PGconn *pg_startb
 
 	/* Remove it ? */
 	if (!backup_in_progress)
-		elog(ERROR, "backup is not in progress");
+		elog(ERROR, "Backup is not in progress");
 
 	pg_silent_client_messages(pg_startbackup_conn);
 
@@ -2098,7 +2099,7 @@ backup_files(void *arg)
 
 		/* check for interrupt */
 		if (interrupted || thread_interrupted)
-			elog(ERROR, "interrupted during backup");
+			elog(ERROR, "Interrupted during backup");
 
 		elog(progress ? INFO : LOG, "Progress: (%d/%d). Process file \"%s\"",
 			 i + 1, n_backup_files_list, file->rel_path);

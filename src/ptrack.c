@@ -214,7 +214,7 @@ pg_ptrack_get_pagemapset(PGconn *backup_conn, const char *ptrack_schema,
 	pfree(params[0]);
 
 	if (PQnfields(res) != 2)
-		elog(ERROR, "cannot get ptrack pagemapset");
+		elog(ERROR, "Cannot get ptrack pagemapset");
 
 	/* sanity ? */
 

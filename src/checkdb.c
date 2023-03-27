@@ -145,7 +145,7 @@ check_files(void *arg)
 
 		/* check for interrupt */
 		if (interrupted || thread_interrupted)
-			elog(ERROR, "interrupted during checkdb");
+			elog(ERROR, "Interrupted during checkdb");
 
 		/* No need to check directories */
 		if (S_ISDIR(file->mode))
@@ -750,7 +750,7 @@ do_checkdb(bool need_amcheck,
 	if (!skip_block_validation)
 	{
 		if (!pgdata)
-			elog(ERROR, "required parameter not specified: PGDATA "
+			elog(ERROR, "Required parameter not specified: PGDATA "
 						 "(-D, --pgdata)");
 
 		/* get node info */

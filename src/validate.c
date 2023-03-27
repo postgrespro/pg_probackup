@@ -394,7 +394,7 @@ do_validate_all(CatalogState *catalogState, InstanceState *instanceState)
 		/* open directory and list contents */
 		dir = opendir(catalogState->backup_subdir_path);
 		if (dir == NULL)
-			elog(ERROR, "cannot open directory \"%s\": %s", catalogState->backup_subdir_path, strerror(errno));
+			elog(ERROR, "Cannot open directory \"%s\": %s", catalogState->backup_subdir_path, strerror(errno));
 
 		errno = 0;
 		while ((dent = readdir(dir)))
@@ -412,7 +412,7 @@ do_validate_all(CatalogState *catalogState, InstanceState *instanceState)
 			join_path_components(child, catalogState->backup_subdir_path, dent->d_name);
 
 			if (lstat(child, &st) == -1)
-				elog(ERROR, "cannot stat file \"%s\": %s", child, strerror(errno));
+				elog(ERROR, "Cannot stat file \"%s\": %s", child, strerror(errno));
 
 			if (!S_ISDIR(st.st_mode))
 				continue;

@@ -2926,9 +2926,9 @@ class BackupTest(ProbackupTest, unittest.TestCase):
             gdb.output)
 
         self.assertIn(
-            'WARNING: backup in progress, stop backup',
+            'WARNING: A backup is in progress, stopping it',
             gdb.output)
-        
+
         # TODO: check the same for PAGE backup
 
     # @unittest.skip("skip")
@@ -3316,7 +3316,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
             log_content = f.read()
             #print(log_content)
             self.assertIn(
-                'WARNING: backup in progress, stop backup',
+                'WARNING: A backup is in progress, stopping it.',
                 log_content)
 
             if self.get_version(node) < 150000:
@@ -3327,7 +3327,7 @@ class BackupTest(ProbackupTest, unittest.TestCase):
                 self.assertIn(
                     'FROM pg_catalog.pg_backup_stop',
                     log_content)
-            
+
             self.assertIn(
                 'setting its status to ERROR',
                 log_content)

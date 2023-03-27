@@ -79,10 +79,10 @@ do_merge(InstanceState *instanceState, time_t backup_id, bool no_validate, bool 
 	int			i;
 
 	if (backup_id == INVALID_BACKUP_ID)
-		elog(ERROR, "required parameter is not specified: --backup-id");
+		elog(ERROR, "Required parameter is not specified: --backup-id");
 
 	if (instanceState == NULL)
-		elog(ERROR, "required parameter is not specified: --instance");
+		elog(ERROR, "Required parameter is not specified: --instance");
 
 	elog(INFO, "Merge started");
 

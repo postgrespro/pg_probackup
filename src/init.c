@@ -24,11 +24,11 @@ do_init(CatalogState *catalogState)
 	results = pg_check_dir(catalogState->catalog_path);
 
 	if (results == 4)	/* exists and not empty*/
-		elog(ERROR, "backup catalog already exist and it's not empty");
+		elog(ERROR, "The backup catalog already exists and is not empty");
 	else if (results == -1) /*trouble accessing directory*/
 	{
 		int errno_tmp = errno;
-		elog(ERROR, "cannot open backup catalog directory \"%s\": %s",
+		elog(ERROR, "Cannot open backup catalog directory \"%s\": %s",
 			catalogState->catalog_path, strerror(errno_tmp));
 	}
 
@@ -41,7 +41,7 @@ do_init(CatalogState *catalogState)
 	/* create backup catalog wal directory */
 	dir_create_dir(catalogState->wal_subdir_path, DIR_PERMISSION, false);
 
-	elog(INFO, "Backup catalog '%s' successfully inited", catalogState->catalog_path);
+	elog(INFO, "Backup catalog '%s' successfully initialized", catalogState->catalog_path);
 	return 0;
 }
 
@@ -53,8 +53,9 @@ do_add_instance(InstanceState *instanceState, InstanceConfig *instance)
 
 	/* PGDATA is always required */
 	if (instance->pgdata == NULL)
-		elog(ERROR, "Required parameter not specified: PGDATA "
-						 "(-D, --pgdata)");
+		elog(ERROR, "No postgres data directory specified.\n"
+			 "Please specify it either using environment variable PGDATA or\n"
+			 "command line option --pgdata (-D)");
 
 	/* Read system_identifier from PGDATA */
 	instance->system_identifier = get_system_identifier(instance->pgdata, FIO_DB_HOST, false);
@@ -121,6 +122,6 @@ do_add_instance(InstanceState *instanceState, InstanceConfig *instance)
 	/* pgdata was set through command line */
 	do_set_config(instanceState, true);
 
-	elog(INFO, "Instance '%s' successfully inited", instanceState->instance_name);
+	elog(INFO, "Instance '%s' successfully initialized", instanceState->instance_name);
 	return 0;
 }

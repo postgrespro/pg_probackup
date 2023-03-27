@@ -117,13 +117,13 @@ class SimpleAuthTest(ProbackupTest, unittest.TestCase):
         except ProbackupException as e:
             if self.get_version(node) < 150000:
                 self.assertIn(
-                    "ERROR: query failed: ERROR:  permission denied "
+                    "ERROR: Query failed: ERROR:  permission denied "
                     "for function pg_stop_backup", e.message,
                     '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                         repr(e.message), self.cmd))
             else:
                 self.assertIn(
-                    "ERROR: query failed: ERROR:  permission denied "
+                    "ERROR: Query failed: ERROR:  permission denied "
                     "for function pg_backup_stop", e.message,
                     '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                         repr(e.message), self.cmd))

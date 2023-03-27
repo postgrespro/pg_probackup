@@ -92,7 +92,7 @@ fetchFile(PGconn *conn, const char *filename, size_t *filesize)
 
 	/* sanity check the result set */
 	if (PQntuples(res) != 1 || PQgetisnull(res, 0, 0))
-		elog(ERROR, "unexpected result set while fetching remote file \"%s\"",
+		elog(ERROR, "Unexpected result set while fetching remote file \"%s\"",
 			 filename);
 
 	/* Read result to local variables */

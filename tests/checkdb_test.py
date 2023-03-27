@@ -131,7 +131,7 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
                     repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertIn(
-                "ERROR: required parameter not specified: --instance",
+                "ERROR: Required parameter not specified: --instance",
                 e.message,
                 "\n Unexpected Error Message: {0}\n CMD: {1}".format(
                     repr(e.message), self.cmd))
@@ -397,7 +397,7 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
                     repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertIn(
-                "ERROR: required parameter not specified: PGDATA (-D, --pgdata)",
+                "ERROR: Required parameter not specified: PGDATA (-D, --pgdata)",
                 e.message,
                 "\n Unexpected Error Message: {0}\n CMD: {1}".format(
                     repr(e.message), self.cmd))

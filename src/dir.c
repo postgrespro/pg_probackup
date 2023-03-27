@@ -182,7 +182,7 @@ pgFileNew(const char *path, const char *rel_path, bool follow_symlink,
 		/* file not found is not an error case */
 		if (errno == ENOENT)
 			return NULL;
-		elog(ERROR, "cannot stat file \"%s\": %s", path,
+		elog(ERROR, "Cannot stat file \"%s\": %s", path,
 			strerror(errno));
 	}
 
@@ -787,14 +787,14 @@ opt_path_map(ConfigOption *opt, const char *arg, TablespaceList *list,
 	for (arg_ptr = arg; *arg_ptr; arg_ptr++)
 	{
 		if (dst_ptr - dst >= MAXPGPATH)
-			elog(ERROR, "directory name too long");
+			elog(ERROR, "Directory name too long");
 
 		if (*arg_ptr == '\\' && *(arg_ptr + 1) == '=')
 			;					/* skip backslash escaping = */
 		else if (*arg_ptr == '=' && (arg_ptr == arg || *(arg_ptr - 1) != '\\'))
 		{
 			if (*cell->new_dir)
-				elog(ERROR, "multiple \"=\" signs in %s mapping\n", type);
+				elog(ERROR, "Multiple \"=\" signs in %s mapping\n", type);
 			else
 				dst = dst_ptr = cell->new_dir;
 		}
@@ -803,7 +803,7 @@ opt_path_map(ConfigOption *opt, const char *arg, TablespaceList *list,
 	}
 
 	if (!*cell->old_dir || !*cell->new_dir)
-		elog(ERROR, "invalid %s mapping format \"%s\", "
+		elog(ERROR, "Invalid %s mapping format \"%s\", "
 			 "must be \"OLDDIR=NEWDIR\"", type, arg);
 	canonicalize_path(cell->old_dir);
 	canonicalize_path(cell->new_dir);
@@ -815,11 +815,11 @@ opt_path_map(ConfigOption *opt, const char *arg, TablespaceList *list,
 	 * consistent with the new_dir check.
 	 */
 	if (!is_absolute_path(cell->old_dir))
-		elog(ERROR, "old directory is not an absolute path in %s mapping: %s\n",
+		elog(ERROR, "Old directory is not an absolute path in %s mapping: %s\n",
 			 type, cell->old_dir);
 
 	if (!is_absolute_path(cell->new_dir))
-		elog(ERROR, "new directory is not an absolute path in %s mapping: %s\n",
+		elog(ERROR, "New directory is not an absolute path in %s mapping: %s\n",
 			 type, cell->new_dir);
 
 	if (list->tail)
@@ -1046,7 +1046,7 @@ read_tablespace_map(parray *links, const char *backup_dir)
 		int         i = 0;
 
 		if (sscanf(buf, "%s %n", link_name, &n) != 1)
-			elog(ERROR, "invalid format found in \"%s\"", map_path);
+			elog(ERROR, "Invalid format found in \"%s\"", map_path);
 
 		path = buf + n;
 
@@ -1438,7 +1438,7 @@ get_control_value_str(const char *str, const char *name,
 				{
 					/* verify if value_str not exceeds value_str_size limits */
 					if (value_str - value_str_start >= value_str_size - 1) {
-						elog(ERROR, "field \"%s\" is out of range in the line %s of the file %s",
+						elog(ERROR, "Field \"%s\" is out of range in the line %s of the file %s",
 							 name, str, DATABASE_FILE_LIST);
 					}
 					*value_str = *buf;
@@ -1463,7 +1463,7 @@ get_control_value_str(const char *str, const char *name,
 
 	/* Did not find target field */
 	if (is_mandatory)
-		elog(ERROR, "field \"%s\" is not found in the line %s of the file %s",
+		elog(ERROR, "Field \"%s\" is not found in the line %s of the file %s",
 			 name, str, DATABASE_FILE_LIST);
 	return false;
 }
@@ -1490,7 +1490,7 @@ dir_is_empty(const char *path, fio_location location)
 		/* Directory in path doesn't exist */
 		if (errno == ENOENT)
 			return true;
-		elog(ERROR, "cannot open directory \"%s\": %s", path, strerror(errno));
+		elog(ERROR, "Cannot open directory \"%s\": %s", path, strerror(errno));
 	}
 
 	errno = 0;
@@ -1506,7 +1506,7 @@ dir_is_empty(const char *path, fio_location location)
 		return false;
 	}
 	if (errno)
-		elog(ERROR, "cannot read directory \"%s\": %s", path, strerror(errno));
+		elog(ERROR, "Cannot read directory \"%s\": %s", path, strerror(errno));
 
 	fio_closedir(dir);
 

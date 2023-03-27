@@ -443,7 +443,7 @@ class CompressionTest(ProbackupTest, unittest.TestCase):
         except ProbackupException as e:
             self.assertEqual(
                 e.message,
-                'ERROR: invalid compress algorithm value "bla-blah"\n',
+                'ERROR: Invalid compress algorithm value "bla-blah"\n',
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
 

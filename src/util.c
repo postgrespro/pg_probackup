@@ -74,7 +74,7 @@ checkControlFile(ControlFileData *ControlFile)
 
 	if ((ControlFile->pg_control_version % 65536 == 0 || ControlFile->pg_control_version % 65536 > 10000) &&
 			ControlFile->pg_control_version / 65536 != 0)
-		elog(ERROR, "possible byte ordering mismatch\n"
+		elog(ERROR, "Possible byte ordering mismatch\n"
 			 "The byte ordering used to store the pg_control file might not match the one\n"
 			 "used by this program. In that case the results below would be incorrect, and\n"
 			 "the PostgreSQL installation would be incompatible with this data directory.");
@@ -93,7 +93,7 @@ digestControlFile(ControlFileData *ControlFile, char *src, size_t size)
 #endif
 
 	if (size != ControlFileSize)
-		elog(ERROR, "unexpected control file size %d, expected %d",
+		elog(ERROR, "Unexpected control file size %d, expected %d",
 			 (int) size, ControlFileSize);
 
 	memcpy(ControlFile, src, sizeof(ControlFileData));

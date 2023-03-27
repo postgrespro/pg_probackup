@@ -131,13 +131,14 @@ do_restore_or_validate(InstanceState *instanceState, time_t target_backup_id, pg
 	XLogRecPtr  shift_lsn = InvalidXLogRecPtr;
 
 	if (instanceState == NULL)
-		elog(ERROR, "required parameter not specified: --instance");
+		elog(ERROR, "Required parameter not specified: --instance");
 
 	if (params->is_restore)
 	{
 		if (instance_config.pgdata == NULL)
-			elog(ERROR,
-				"required parameter not specified: PGDATA (-D, --pgdata)");
+			elog(ERROR, "No postgres data directory specified.\n"
+				 "Please specify it either using environment variable PGDATA or\n"
+				 "command line option --pgdata (-D)");
 
 		/* Check if restore destination empty */
 		if (!dir_is_empty(instance_config.pgdata, FIO_DB_HOST))
@@ -290,7 +291,7 @@ do_restore_or_validate(InstanceState *instanceState, time_t target_backup_id, pg
 				if (!satisfy_timeline(timelines, current_backup->tli, current_backup->stop_lsn))
 				{
 					if (target_backup_id != INVALID_BACKUP_ID)
-						elog(ERROR, "target backup %s does not satisfy target timeline",
+						elog(ERROR, "Target backup %s does not satisfy target timeline",
 							 base36enc(target_backup_id));
 					else
 						/* Try to find another backup that satisfies target timeline */
@@ -776,7 +777,7 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 		use_bitmap = false;
 
 		if (params->incremental_mode != INCR_NONE)
-			elog(ERROR, "incremental restore is not possible for backups older than 2.3.0 version");
+			elog(ERROR, "Incremental restore is not possible for backups older than 2.3.0 version");
 	}
 
 	/* There is no point in bitmap restore, when restoring a single FULL backup,
@@ -1479,7 +1480,7 @@ update_recovery_options_before_v12(InstanceState *instanceState, pgBackup *backu
 
 	fp = fio_fopen(path, "w", FIO_DB_HOST);
 	if (fp == NULL)
-		elog(ERROR, "cannot open file \"%s\": %s", path,
+		elog(ERROR, "Cannot open file \"%s\": %s", path,
 			strerror(errno));
 
 	if (fio_chmod(path, FILE_PERMISSION, FIO_DB_HOST) == -1)
@@ -1499,7 +1500,7 @@ update_recovery_options_before_v12(InstanceState *instanceState, pgBackup *backu
 
 	if (fio_fflush(fp) != 0 ||
 		fio_fclose(fp))
-		elog(ERROR, "cannot write file \"%s\": %s", path,
+		elog(ERROR, "Cannot write file \"%s\": %s", path,
 			 strerror(errno));
 }
 #endif
@@ -1538,7 +1539,7 @@ update_recovery_options(InstanceState *instanceState, pgBackup *backup,
 	{
 		/* file not found is not an error case */
 		if (errno != ENOENT)
-			elog(ERROR, "cannot stat file \"%s\": %s", postgres_auto_path,
+			elog(ERROR, "Cannot stat file \"%s\": %s", postgres_auto_path,
 				 strerror(errno));
 		st.st_size = 0;
 	}
@@ -1548,13 +1549,13 @@ update_recovery_options(InstanceState *instanceState, pgBackup *backup,
 	{
 		fp = fio_open_stream(postgres_auto_path, FIO_DB_HOST);
 		if (fp == NULL)
-			elog(ERROR, "cannot open \"%s\": %s", postgres_auto_path, strerror(errno));
+			elog(ERROR, "Cannot open \"%s\": %s", postgres_auto_path, strerror(errno));
 	}
 
 	sprintf(postgres_auto_path_tmp, "%s.tmp", postgres_auto_path);
 	fp_tmp = fio_fopen(postgres_auto_path_tmp, "w", FIO_DB_HOST);
 	if (fp_tmp == NULL)
-		elog(ERROR, "cannot open \"%s\": %s", postgres_auto_path_tmp, strerror(errno));
+		elog(ERROR, "Cannot open \"%s\": %s", postgres_auto_path_tmp, strerror(errno));
 
 	while (fp && fgets(line, lengthof(line), fp))
 	{
@@ -1612,7 +1613,7 @@ update_recovery_options(InstanceState *instanceState, pgBackup *backup,
 	{
 		fp = fio_fopen(postgres_auto_path, "a", FIO_DB_HOST);
 		if (fp == NULL)
-			elog(ERROR, "cannot open file \"%s\": %s", postgres_auto_path,
+			elog(ERROR, "Cannot open file \"%s\": %s", postgres_auto_path,
 				strerror(errno));
 
 		fio_fprintf(fp, "\n# recovery settings added by pg_probackup restore of backup %s at '%s'\n",
@@ -1626,7 +1627,7 @@ update_recovery_options(InstanceState *instanceState, pgBackup *backup,
 
 		if (fio_fflush(fp) != 0 ||
 			fio_fclose(fp))
-			elog(ERROR, "cannot write file \"%s\": %s", postgres_auto_path,
+			elog(ERROR, "Cannot write file \"%s\": %s", postgres_auto_path,
 				strerror(errno));
 
 		/*
@@ -1646,12 +1647,12 @@ update_recovery_options(InstanceState *instanceState, pgBackup *backup,
 
 			fp = fio_fopen(path, PG_BINARY_W, FIO_DB_HOST);
 			if (fp == NULL)
-				elog(ERROR, "cannot open file \"%s\": %s", path,
+				elog(ERROR, "Cannot open file \"%s\": %s", path,
 					strerror(errno));
 
 			if (fio_fflush(fp) != 0 ||
 				fio_fclose(fp))
-				elog(ERROR, "cannot write file \"%s\": %s", path,
+				elog(ERROR, "Cannot write file \"%s\": %s", path,
 					strerror(errno));
 		}
 
@@ -1662,12 +1663,12 @@ update_recovery_options(InstanceState *instanceState, pgBackup *backup,
 
 			fp = fio_fopen(path, PG_BINARY_W, FIO_DB_HOST);
 			if (fp == NULL)
-				elog(ERROR, "cannot open file \"%s\": %s", path,
+				elog(ERROR, "Cannot open file \"%s\": %s", path,
 					strerror(errno));
 
 			if (fio_fflush(fp) != 0 ||
 				fio_fclose(fp))
-				elog(ERROR, "cannot write file \"%s\": %s", path,
+				elog(ERROR, "Cannot write file \"%s\": %s", path,
 					strerror(errno));
 		}
 	}
@@ -1704,12 +1705,12 @@ read_timeline_history(const char *arclog_path, TimeLineID targetTLI, bool strict
 		if (fd == NULL)
 		{
 			if (errno != ENOENT)
-				elog(ERROR, "could not open file \"%s\": %s", path,
+				elog(ERROR, "Could not open file \"%s\": %s", path,
 					strerror(errno));
 
 			/* There is no history file for target timeline */
 			if (strict)
-				elog(ERROR, "recovery target timeline %u does not exist",
+				elog(ERROR, "Recovery target timeline %u does not exist",
 					 targetTLI);
 			else
 				return NULL;
@@ -1743,12 +1744,12 @@ read_timeline_history(const char *arclog_path, TimeLineID targetTLI, bool strict
 		{
 			/* expect a numeric timeline ID as first field of line */
 			elog(ERROR,
-				 "syntax error in history file: %s. Expected a numeric timeline ID.",
+				 "Syntax error in history file: %s. Expected a numeric timeline ID.",
 				   fline);
 		}
 		if (nfields != 3)
 			elog(ERROR,
-				 "syntax error in history file: %s. Expected a transaction log switchpoint location.",
+				 "Syntax error in history file: %s. Expected a transaction log switchpoint location.",
 				   fline);
 
 		if (last_timeline && tli <= last_timeline->tli)

@@ -521,11 +521,17 @@ config_get_opt(int argc, char **argv, ConfigOption cmd_options[],
 
 	optstring = longopts_to_optstring(longopts, cmd_len + len);
 
+	opterr = 0;
 	/* Assign named options */
 	while ((c = getopt_long(argc, argv, optstring, longopts, &optindex)) != -1)
 	{
 		ConfigOption *opt;
 
+		if (c == '?')
+		{
+			elog(ERROR, "Option '%s' requires an argument. Try \"%s --help\" for more information.",
+				 argv[optind-1], PROGRAM_NAME);
+		}
 		opt = option_find(c, cmd_options);
 		if (opt == NULL)
 			opt = option_find(c, options);
@@ -1439,16 +1445,16 @@ parse_lsn(const char *value, XLogRecPtr *result)
 
 	len1 = strspn(value, "0123456789abcdefABCDEF");
 	if (len1 < 1 || len1 > MAXPG_LSNCOMPONENT || value[len1] != '/')
-		elog(ERROR, "invalid LSN \"%s\"", value);
+		elog(ERROR, "Invalid LSN \"%s\"", value);
 	len2 = strspn(value + len1 + 1, "0123456789abcdefABCDEF");
 	if (len2 < 1 || len2 > MAXPG_LSNCOMPONENT || value[len1 + 1 + len2] != '\0')
-		elog(ERROR, "invalid LSN \"%s\"", value);
+		elog(ERROR, "Invalid LSN \"%s\"", value);
 
 	if (sscanf(value, "%X/%X", &xlogid, &xrecoff) == 2)
 		*result = (XLogRecPtr) ((uint64) xlogid << 32) | xrecoff;
 	else
 	{
-		elog(ERROR, "invalid LSN \"%s\"", value);
+		elog(ERROR, "Invalid LSN \"%s\"", value);
 		return false;
 	}
 

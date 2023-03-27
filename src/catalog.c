@@ -1055,7 +1055,7 @@ get_backup_filelist(pgBackup *backup, bool strict)
 
 	fp = fio_open_stream(backup_filelist_path, FIO_BACKUP_HOST);
 	if (fp == NULL)
-		elog(ERROR, "cannot open \"%s\": %s", backup_filelist_path, strerror(errno));
+		elog(ERROR, "Cannot open \"%s\": %s", backup_filelist_path, strerror(errno));
 
 	/* enable stdio buffering for local file */
 	if (!fio_is_remote(FIO_BACKUP_HOST))
@@ -2841,7 +2841,7 @@ parse_backup_mode(const char *value)
 		return BACKUP_MODE_DIFF_DELTA;
 
 	/* Backup mode is invalid, so leave with an error */
-	elog(ERROR, "invalid backup-mode \"%s\"", value);
+	elog(ERROR, "Invalid backup-mode \"%s\"", value);
 	return BACKUP_MODE_INVALID;
 }
 
@@ -2876,7 +2876,7 @@ parse_compress_alg(const char *arg)
 	len = strlen(arg);
 
 	if (len == 0)
-		elog(ERROR, "compress algorithm is empty");
+		elog(ERROR, "Compress algorithm is empty");
 
 	if (pg_strncasecmp("zlib", arg, len) == 0)
 		return ZLIB_COMPRESS;
@@ -2885,7 +2885,7 @@ parse_compress_alg(const char *arg)
 	else if (pg_strncasecmp("none", arg, len) == 0)
 		return NONE_COMPRESS;
 	else
-		elog(ERROR, "invalid compress algorithm value \"%s\"", arg);
+		elog(ERROR, "Invalid compress algorithm value \"%s\"", arg);
 
 	return NOT_DEFINED_COMPRESS;
 }

@@ -614,7 +614,7 @@ part_opened:
 			if (thread_interrupted || interrupted)
 			{
 				pg_atomic_write_u32(&wal_file->done, 1);
-				elog(ERROR, "terminated while waiting for prev file");
+				elog(ERROR, "Terminated while waiting for prev file");
 			}
 			usleep(250);
 		}
@@ -903,7 +903,7 @@ part_opened:
 			if (thread_interrupted || interrupted)
 			{
 				pg_atomic_write_u32(&wal_file->done, 1);
-				elog(ERROR, "terminated while waiting for prev file");
+				elog(ERROR, "Terminated while waiting for prev file");
 			}
 			usleep(250);
 		}
