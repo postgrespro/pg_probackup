@@ -115,7 +115,7 @@ extern int usleep(unsigned int usec);
 #define ARG_SIZE_HINT static
 #endif
 
-static inline uint32_t hash_mix32_2(uint32_t a, uint32_t b)
+static inline uint32 hash_mix32_2(uint32 a, uint32 b)
 {
 	b ^= (a<<7)|(a>>25);
 	a *= 0xdeadbeef;

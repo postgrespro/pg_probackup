@@ -2357,7 +2357,7 @@ remove_excluded_files_criterion(void *value, void *exclude_args) {
 	return file->remove_from_list;
 }
 
-static uint32_t
+static uint32
 hash_rel_seg(pgFile* file)
 {
 	uint32 hash = hash_mix32_2(file->relOid, file->segno);
@@ -2387,7 +2387,7 @@ rewind_and_mark_cfs_datafiles(parray *files, const char *root, char *relative, s
 	pgFile	   *prev_file;
 	pgFile	   *tmp_file;
 	char	   *cfs_tblspc_path;
-	uint32_t    h;
+	uint32		h;
 
 	/* hash table for cfm files */
 #define HASHN 128
