@@ -2721,7 +2721,7 @@ fio_send_file_write(FILE* out, send_file_state* st, char *buf, size_t len)
 	if (st->read_size > st->write_size &&
 		_chsize_s(fileno(out), st->read_size) != 0)
 	{
-		elog(WARNING, "Could not change file size to %lld: %m", st->read_size)
+		elog(WARNING, "Could not change file size to %lld: %m", st->read_size);
 		return false;
 	}
 #endif
