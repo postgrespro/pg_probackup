@@ -2717,11 +2717,21 @@ fio_send_file_write(FILE* out, send_file_state* st, char *buf, size_t len)
 	if (len == 0)
 		return true;
 
+#ifndef WIN32
 	if (st->read_size > st->write_size &&
 		fseeko(out, st->read_size, SEEK_SET) != 0)
 	{
 		return false;
 	}
+#else
+	while (st->read_size > st->write_size)
+	{
+		size_t wr = st->read_size - st->write_size;
+		wr = Min(wr, sizeof(zerobuf));
+		fwrite(zerobuf, 1, wr, out);
+		st->write_size += wr;
+	}
+#endif
 
 	if (fwrite(buf, 1, len, out) != len)
 	{
