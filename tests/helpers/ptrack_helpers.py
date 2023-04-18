@@ -982,7 +982,8 @@ class ProbackupTest(object):
                 else:
                     return self.output
         except subprocess.CalledProcessError as e:
-            raise ProbackupException(e.output.decode('utf-8'), self.cmd)
+            raise ProbackupException(e.output.decode('utf-8').replace("\r",""),
+                                     self.cmd)
 
     def run_binary(self, command, asynchronous=False, env=None):
 
