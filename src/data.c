@@ -815,6 +815,8 @@ backup_non_data_file(pgFile *file, pgFile *prev_file,
 		if (EQ_TRADITIONAL_CRC32(file->crc, prev_file->crc))
 		{
 			file->write_size = BYTES_INVALID;
+			/* get full size from previous backup for unchanged file */
+			file->uncompressed_size = prev_file->uncompressed_size;
 			return; /* ...skip copying file. */
 		}
 	}
