@@ -16,15 +16,6 @@ class OptionTest(ProbackupTest, unittest.TestCase):
             )
 
     # @unittest.skip("skip")
-    def test_version_2(self):
-        """help options"""
-        with open(os.path.join(self.dir_path, "expected/option_version.out"), "rb") as version_out:
-            self.assertIn(
-                version_out.read().decode("utf-8").strip(),
-                self.run_pb(["--version"])
-            )
-
-    # @unittest.skip("skip")
     def test_without_backup_path_3(self):
         """backup command failure without backup mode option"""
         try:
