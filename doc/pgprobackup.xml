@@ -5850,6 +5850,34 @@ pg_probackup catchup -b <replaceable>catchup_mode</replaceable>
       </variablelist>
       </para>
     </refsect3>
+
+    <refsect3 id="pbk-test-options">
+      <title>Testing and Debugging Options</title>
+      <para>
+        This section describes options useful only in a test or development environment.
+      </para>
+      <para>
+        <variablelist>
+          <varlistentry>
+          <term><option>--destroy-all-other-dbs</option></term>
+          <listitem>
+            <para>
+              By default, <application>pg_probackup</application> exits with an
+              error if an attempt is made to perform a partial incremental restore
+              since this destroys databases not included in the restore set. This
+              flag allows you to suppress the error and proceed with the partial
+              incremental restore (e.g., to keep a development database snapshot
+              up-to-date with a production one). This option can be used with the
+              <xref linkend="pbk-restore"/> command.
+            </para>
+            <important>
+              <para>Never use this flag in a production cluster.</para>
+            </important>
+          </listitem>
+          </varlistentry>
+        </variablelist>
+      </para>
+    </refsect3>
  </refsect2>
  </refsect1>
 
