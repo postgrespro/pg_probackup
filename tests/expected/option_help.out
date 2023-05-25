@@ -92,6 +92,7 @@ pg_probackup - utility to manage backup/recovery of PostgreSQL database.
                  [-X WALDIR | --waldir=WALDIR]
                  [-I | --incremental-mode=none|checksum|lsn]
                  [--db-include | --db-exclude]
+                 [--destroy-all-other-dbs]
                  [--remote-proto] [--remote-host]
                  [--remote-port] [--remote-path] [--remote-user]
                  [--ssh-options]

@@ -124,6 +124,7 @@ static parray *datname_include_list = NULL;
 static parray *exclude_absolute_paths_list = NULL;
 static parray *exclude_relative_paths_list = NULL;
 static char* gl_waldir_path = NULL;
+static bool	allow_partial_incremental = false;
 
 /* checkdb options */
 bool need_amcheck = false;
@@ -242,6 +243,7 @@ static ConfigOption cmd_options[] =
 	{ 's', 'S', "primary-slot-name",&replication_slot,	SOURCE_CMD_STRICT },
 	{ 'f', 'I', "incremental-mode", opt_incr_restore_mode,	SOURCE_CMD_STRICT },
 	{ 's', 'X', "waldir",		&gl_waldir_path,	SOURCE_CMD_STRICT },
+	{ 'b', 242, "destroy-all-other-dbs", &allow_partial_incremental, SOURCE_CMD_STRICT },
 	/* checkdb options */
 	{ 'b', 195, "amcheck",			&need_amcheck,		SOURCE_CMD_STRICT },
 	{ 'b', 196, "heapallindexed",	&heapallindexed,	SOURCE_CMD_STRICT },
@@ -764,6 +766,7 @@ main(int argc, char *argv[])
 		restore_params->partial_restore_type = NONE;
 		restore_params->primary_conninfo = primary_conninfo;
 		restore_params->incremental_mode = incremental_mode;
+		restore_params->allow_partial_incremental = allow_partial_incremental;
 
 		/* handle partial restore parameters */
 		if (datname_exclude_list && datname_include_list)

@@ -150,6 +150,7 @@ do_restore_or_validate(InstanceState *instanceState, time_t target_backup_id, pg
 			if (params->incremental_mode != INCR_NONE)
 			{
 				DestDirIncrCompatibility rc;
+				const char *message = NULL;
 				bool ok_to_go = true;
 
 				elog(INFO, "Running incremental restore into nonempty directory: \"%s\"",
@@ -157,12 +158,15 @@ do_restore_or_validate(InstanceState *instanceState, time_t target_backup_id, pg
 
 				rc = check_incremental_compatibility(instance_config.pgdata,
 													 instance_config.system_identifier,
-													 params->incremental_mode);
+													 params->incremental_mode,
+													 params->partial_db_list,
+													 params->allow_partial_incremental);
 				if (rc == POSTMASTER_IS_RUNNING)
 				{
 					/* Even with force flag it is unwise to run
 					 * incremental restore over running instance
 					 */
+					message = "Postmaster is running.";
 					ok_to_go = false;
 				}
 				else if (rc == SYSTEM_ID_MISMATCH)
@@ -174,7 +178,10 @@ do_restore_or_validate(InstanceState *instanceState, time_t target_backup_id, pg
 					if (params->incremental_mode != INCR_NONE && params->force)
 						cleanup_pgdata = true;
 					else
+					{
+						message = "System ID mismatch.";
 						ok_to_go = false;
+					}
 				}
 				else if (rc == BACKUP_LABEL_EXISTS)
 				{
@@ -187,7 +194,10 @@ do_restore_or_validate(InstanceState *instanceState, time_t target_backup_id, pg
 					 * to calculate switchpoint.
 					 */
 					if (params->incremental_mode == INCR_LSN)
+					{
+						message = "Backup label exists. Cannot use incremental restore in LSN mode.";
 						ok_to_go = false;
+					}
 				}
 				else if (rc == DEST_IS_NOT_OK)
 				{
@@ -196,11 +206,16 @@ do_restore_or_validate(InstanceState *instanceState, time_t target_backup_id, pg
 					 * so we cannot be sure that postmaster is running or not.
 					 * It is better to just error out.
 					 */
+					message = "We cannot be sure about the database state.";
+					ok_to_go = false;
+				} else if (rc == PARTIAL_INCREMENTAL_FORBIDDEN)
+				{
+					message = "Partial incremental restore into non-empty PGDATA is forbidden.";
 					ok_to_go = false;
 				}
 
 				if (!ok_to_go)
-					elog(ERROR, "Incremental restore is not allowed");
+					elog(ERROR, "Incremental restore is not allowed: %s", message);
 			}
 			else
 				elog(ERROR, "Restore destination is not empty: \"%s\"",
@@ -2142,7 +2157,9 @@ get_dbOid_exclude_list(pgBackup *backup, parray *datname_list,
  */
 DestDirIncrCompatibility
 check_incremental_compatibility(const char *pgdata, uint64 system_identifier,
-								IncrRestoreMode incremental_mode)
+								IncrRestoreMode incremental_mode,
+								parray *partial_db_list,
+								bool allow_partial_incremental)
 {
 	uint64	system_id_pgdata;
 	bool    system_id_match = false;
@@ -2226,6 +2243,8 @@ check_incremental_compatibility(const char *pgdata, uint64 system_identifier,
 	if (backup_label_exists)
 		return BACKUP_LABEL_EXISTS;
 
+	if (partial_db_list && !allow_partial_incremental)
+		return PARTIAL_INCREMENTAL_FORBIDDEN;
 	/* some other error condition */
 	if (!success)
 		return DEST_IS_NOT_OK;

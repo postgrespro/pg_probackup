@@ -175,6 +175,7 @@ help_pg_probackup(void)
 	printf(_("                 [-X WALDIR | --waldir=WALDIR]\n"));
 	printf(_("                 [-I | --incremental-mode=none|checksum|lsn]\n"));
 	printf(_("                 [--db-include | --db-exclude]\n"));
+	printf(_("                 [--destroy-all-other-dbs]\n"));
 	printf(_("                 [--remote-proto] [--remote-host]\n"));
 	printf(_("                 [--remote-port] [--remote-path] [--remote-user]\n"));
 	printf(_("                 [--ssh-options]\n"));
@@ -450,6 +451,7 @@ help_restore(void)
 	printf(_("                 [-X WALDIR | --waldir=WALDIR]\n"));
 	printf(_("                 [-I | --incremental-mode=none|checksum|lsn]\n"));
 	printf(_("                 [--db-include dbname | --db-exclude dbname]\n"));
+	printf(_("                 [--destroy-all-other-dbs]\n"));
 	printf(_("                 [--recovery-target-time=time|--recovery-target-xid=xid\n"));
 	printf(_("                  |--recovery-target-lsn=lsn [--recovery-target-inclusive=boolean]]\n"));
 	printf(_("                 [--recovery-target-timeline=timeline]\n"));
@@ -497,6 +499,9 @@ help_restore(void)
 	printf(_("\n  Partial restore options:\n"));
 	printf(_("      --db-include dbname          restore only specified databases\n"));
 	printf(_("      --db-exclude dbname          do not restore specified databases\n"));
+	printf(_("      --destroy-all-other-dbs\n"));
+	printf(_("                                   allows to do partial restore that is prohibited by default,\n"));
+	printf(_("                                   because it might remove all other databases.\n"));
 
 	printf(_("\n  Recovery options:\n"));
 	printf(_("      --recovery-target-time=time  time stamp up to which recovery will proceed\n"));

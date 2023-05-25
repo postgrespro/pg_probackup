@@ -1962,7 +1962,9 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
             node2, options=[
                 "--db-exclude=db1",
                 "--db-exclude=db5",
-                "-I", "checksum"])
+                "-I", "checksum",
+                "--destroy-all-other-dbs",
+            ])
 
         pgdata2 = self.pgdata_content(node2.data_dir)
 
@@ -2068,7 +2070,9 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
             node2, options=[
                 "--db-exclude=db1",
                 "--db-exclude=db5",
-                "-I", "lsn"])
+                "-I", "lsn",
+                "--destroy-all-other-dbs",
+            ])
 
         pgdata2 = self.pgdata_content(node2.data_dir)
 
@@ -2188,7 +2192,8 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
                     "--db-exclude=db1",
                     "--db-exclude=db5",
                     "-T", "{0}={1}".format(
-                        node_tablespace, node2_tablespace)])
+                        node_tablespace, node2_tablespace),
+                    "--destroy-all-other-dbs"])
                         # we should die here because exception is what we expect to happen
             self.assertEqual(
                 1, 0,
@@ -2209,7 +2214,9 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
                 "--db-exclude=db1",
                 "--db-exclude=db5",
                 "-T", "{0}={1}".format(
-                    node_tablespace, node2_tablespace)])
+                    node_tablespace, node2_tablespace),
+                "--destroy-all-other-dbs",
+            ])
 
         pgdata2 = self.pgdata_content(node2.data_dir)
 
@@ -2240,6 +2247,127 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
             output = f.read()
 
         self.assertNotIn('PANIC', output)
+
+    def test_incremental_partial_restore_deny(self):
+        """
+        Do now allow partial incremental restore into non-empty PGDATA
+        becase we can't limit WAL replay to a single database.
+        """
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        for i in range(1, 3):
+            node.safe_psql('postgres', f'CREATE database db{i}')
+
+        # FULL backup
+        backup_id = self.backup_node(backup_dir, 'node', node)
+        pgdata = self.pgdata_content(node.data_dir)
+
+        try:
+            self.restore_node(backup_dir, 'node', node, options=["--db-include=db1", '-I', 'LSN'])
+            self.fail("incremental partial restore is not allowed")
+        except ProbackupException as e:
+            self.assertIn("Incremental restore is not allowed: Postmaster is running.", e.message)
+
+        node.safe_psql('db2', 'create table x (id int)')
+        node.safe_psql('db2', 'insert into x values (42)')
+
+        node.stop()
+
+        try:
+            self.restore_node(backup_dir, 'node', node, options=["--db-include=db1", '-I', 'LSN'])
+            self.fail("because incremental partial restore is not allowed")
+        except ProbackupException as e:
+            self.assertIn("Incremental restore is not allowed: Partial incremental restore into non-empty PGDATA is forbidden", e.message)
+
+        node.slow_start()
+        value = node.execute('db2', 'select * from x')[0][0]
+        self.assertEqual(42, value)
+
+    def test_deny_incremental_partial_restore_exclude_tablespace_checksum(self):
+        """
+        Do now allow partial incremental restore into non-empty PGDATA
+        becase we can't limit WAL replay to a single database.
+        (case of tablespaces)
+        """
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        self.create_tblspace_in_node(node, 'somedata')
+
+        node_tablespace = self.get_tblspace_path(node, 'somedata')
+
+        tbl_oid = node.safe_psql(
+            'postgres',
+            "SELECT oid "
+            "FROM pg_tablespace "
+            "WHERE spcname = 'somedata'").rstrip()
+
+        for i in range(1, 10, 1):
+            node.safe_psql(
+                'postgres',
+                'CREATE database db{0} tablespace somedata'.format(i))
+
+        db_list_raw = node.safe_psql(
+            'postgres',
+            'SELECT to_json(a) '
+            'FROM (SELECT oid, datname FROM pg_database) a').rstrip()
+
+        db_list_splitted = db_list_raw.splitlines()
+
+        db_list = {}
+        for line in db_list_splitted:
+            line = json.loads(line)
+            db_list[line['datname']] = line['oid']
+
+        # FULL backup
+        backup_id = self.backup_node(backup_dir, 'node', node)
+
+        # node2
+        node2 = self.make_simple_node('node2')
+        node2.cleanup()
+        node2_tablespace = self.get_tblspace_path(node2, 'somedata')
+
+        # in node2 restore full backup
+        self.restore_node(
+            backup_dir, 'node',
+            node2, options=[
+                "-T", f"{node_tablespace}={node2_tablespace}"])
+
+        # partial incremental restore into node2
+        try:
+            self.restore_node(backup_dir, 'node', node2,
+                              options=["-I", "checksum",
+                                       "--db-exclude=db1",
+                                       "--db-exclude=db5",
+                                       "-T", f"{node_tablespace}={node2_tablespace}"])
+            self.fail("remapped tablespace contain old data")
+        except ProbackupException as e:
+            pass
+
+        try:
+            self.restore_node(backup_dir, 'node', node2,
+                              options=[
+                                  "-I", "checksum", "--force",
+                                  "--db-exclude=db1", "--db-exclude=db5",
+                                  "-T", f"{node_tablespace}={node2_tablespace}"])
+            self.fail("incremental partial restore is not allowed")
+        except ProbackupException as e:
+            self.assertIn("Incremental restore is not allowed: Partial incremental restore into non-empty PGDATA is forbidden", e.message)
 
     def test_incremental_pg_filenode_map(self):
         """
