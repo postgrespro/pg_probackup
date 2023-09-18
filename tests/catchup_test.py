@@ -1585,3 +1585,42 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
 
         # Cleanup
         src_pg.stop()
+
+    def test_pgdata_is_ignored(self):
+        """ In catchup we still allow PGDATA to be set either from command line
+        or from the env var. This test that PGDATA is actually ignored and
+        --source-pgadta is used instead
+        """
+        node = self.make_simple_node('node',
+            set_replication = True
+            )
+        node.slow_start()
+
+        # do full catchup
+        dest = self.make_empty_node('dst')
+        self.catchup_node(
+            backup_mode = 'FULL',
+            source_pgdata = node.data_dir,
+            destination_node = dest,
+            options = ['-d', 'postgres', '-p', str(node.port), '--stream', '--pgdata=xxx']
+            )
+
+        self.compare_pgdata(
+            self.pgdata_content(node.data_dir),
+            self.pgdata_content(dest.data_dir)
+            )
+
+        os.environ['PGDATA']='xxx'
+
+        dest2 = self.make_empty_node('dst')
+        self.catchup_node(
+            backup_mode = 'FULL',
+            source_pgdata = node.data_dir,
+            destination_node = dest2,
+            options = ['-d', 'postgres', '-p', str(node.port), '--stream']
+            )
+
+        self.compare_pgdata(
+            self.pgdata_content(node.data_dir),
+            self.pgdata_content(dest2.data_dir)
+            )
