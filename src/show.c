@@ -137,7 +137,7 @@ do_show(CatalogState *catalogState, InstanceState *instanceState,
 		show_instance_start();
 		for (i = 0; i < parray_num(instances); i++)
 		{
-			InstanceState *instanceState = parray_get(instances, i);
+			instanceState = parray_get(instances, i);
 
 			if (interrupted)
 				elog(ERROR, "Interrupted during show");
@@ -202,22 +202,22 @@ pretty_size(int64 size, char *buf, size_t len)
 		return;
 	}
 
-	if (Abs(size) < limit)
+	if (size < limit)
 		snprintf(buf, len, "%dB", (int) size);
 	else
 	{
 		size >>= 9;
-		if (Abs(size) < limit2)
+		if (size < limit2)
 				snprintf(buf, len, "%dkB", (int) half_rounded(size));
 		else
 		{
 			size >>= 10;
-			if (Abs(size) < limit2)
+			if (size < limit2)
 				snprintf(buf, len, "%dMB", (int) half_rounded(size));
 			else
 			{
 				size >>= 10;
-				if (Abs(size) < limit2)
+				if (size < limit2)
 					snprintf(buf, len, "%dGB", (int) half_rounded(size));
 				else
 				{

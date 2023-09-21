@@ -142,7 +142,7 @@ page_may_be_compressed(Page page, CompressAlg alg, uint32 backup_version)
 	phdr = (PageHeader) page;
 
 	/* First check if page header is valid (it seems to be fast enough check) */
-	if (!(PageGetPageSize(phdr) == BLCKSZ &&
+	if (!(PageGetPageSize(page) == BLCKSZ &&
 	//	  PageGetPageLayoutVersion(phdr) == PG_PAGE_LAYOUT_VERSION &&
 		  (phdr->pd_flags & ~PD_VALID_FLAG_BITS) == 0 &&
 		  phdr->pd_lower >= SizeOfPageHeaderData &&
@@ -181,7 +181,7 @@ parse_page(Page page, XLogRecPtr *lsn)
 	/* Get lsn from page header */
 	*lsn = PageXLogRecPtrGet(phdr->pd_lsn);
 
-	if (PageGetPageSize(phdr) == BLCKSZ &&
+	if (PageGetPageSize(page) == BLCKSZ &&
 	//	PageGetPageLayoutVersion(phdr) == PG_PAGE_LAYOUT_VERSION &&
 		(phdr->pd_flags & ~PD_VALID_FLAG_BITS) == 0 &&
 		phdr->pd_lower >= SizeOfPageHeaderData &&
@@ -203,10 +203,10 @@ get_header_errormsg(Page page, char **errormsg)
 	PageHeader  phdr = (PageHeader) page;
 	*errormsg = pgut_malloc(ERRMSG_MAX_LEN);
 
-	if (PageGetPageSize(phdr) != BLCKSZ)
+	if (PageGetPageSize(page) != BLCKSZ)
 		snprintf(*errormsg, ERRMSG_MAX_LEN, "page header invalid, "
 				"page size %lu is not equal to block size %u",
-				PageGetPageSize(phdr), BLCKSZ);
+				PageGetPageSize(page), BLCKSZ);
 
 	else if (phdr->pd_lower < SizeOfPageHeaderData)
 		snprintf(*errormsg, ERRMSG_MAX_LEN, "page header invalid, "

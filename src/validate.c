@@ -401,8 +401,6 @@ do_validate_all(CatalogState *catalogState, InstanceState *instanceState)
 		{
 			char		child[MAXPGPATH];
 			struct stat	st;
-			InstanceState *instanceState;
-			
 
 			/* skip entries point current dir or parent dir */
 			if (strcmp(dent->d_name, ".") == 0 ||
@@ -420,7 +418,7 @@ do_validate_all(CatalogState *catalogState, InstanceState *instanceState)
 			/*
 			 * Initialize instance configuration.
 			 */
-			instanceState = pgut_new(InstanceState);
+			instanceState = pgut_new(InstanceState); /* memory leak */
 			strncpy(instanceState->instance_name, dent->d_name, MAXPGPATH);
 
 			join_path_components(instanceState->instance_backup_subdir_path,

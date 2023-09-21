@@ -1175,7 +1175,6 @@ check_tablespace_mapping(pgBackup *backup, bool incremental, bool force, bool pg
 	{
 		pgFile	   *link = (pgFile *) parray_get(links, i);
 		const char *linked_path = link->linked;
-		TablespaceListCell *cell;
 		bool remapped = false;
 
 		for (cell = tablespace_dirs.head; cell; cell = cell->next)
