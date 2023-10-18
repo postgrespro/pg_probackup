@@ -569,10 +569,9 @@ pg_probackup add-instance -B <replaceable>backup_dir</replaceable> -D <replaceab
       the backup catalog. The
       <filename>backups/<replaceable>instance_name</replaceable></filename> directory contains
       the <filename>pg_probackup.conf</filename> configuration file that controls
-      <application>pg_probackup</application> settings for this backup instance. If you run this
-      command with the
-      <link linkend="pbk-remote-server-opts">remote_options</link>, the specified
-      parameters will be added to <filename>pg_probackup.conf</filename>.
+      <application>pg_probackup</application> settings for this backup instance. To add
+      <link linkend="pbk-remote-server-opts">remote_options</link> to the configuration file, use the
+        <xref linkend="pbk-set-config"/>  command.
     </para>
     <para>
       For details on how to fine-tune <application>pg_probackup</application> configuration, see
