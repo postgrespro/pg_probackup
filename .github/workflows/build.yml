@@ -72,8 +72,7 @@ jobs:
       - name: Install Testgres
         run: |
           git clone -b no-port-for --single-branch --depth 1 https://github.com/postgrespro/testgres.git
-          cd testgres
-          python setup.py install
+          pip3 install psycopg2 ./testgres
 
       # Grant the Github runner user full control of the workspace for initdb to successfully process the data folder
       - name: Test Probackup
