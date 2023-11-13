@@ -110,6 +110,8 @@ extern const char  *PROGRAM_EMAIL;
 /* 64-bit xid support for PGPRO_EE */
 #ifndef PGPRO_EE
 #define XID_FMT "%u"
+#elif !defined(XID_FMT)
+#define XID_FMT UINT64_FORMAT
 #endif
 
 #ifndef STDIN_FILENO
