@@ -423,8 +423,12 @@ class ProbackupTest(object):
                 result = test_case.defaultTestResult()  # These two methods have no side effects
                 test_case._feedErrorsToResult(result, test_case._outcome.errors)
             else:
-                # Python 3.11+
+                # Python 3.11+ and pytest 5.3.5+
                 result = test_case._outcome.result
+                if not hasattr(result, 'errors'):
+                    result.errors = []
+                if not hasattr(result, 'failures'):
+                    result.failures = []
         else:  # Python 2.7, 3.0-3.3
             result = getattr(test_case, '_outcomeForDoCleanups', test_case._resultForDoCleanups)
 
