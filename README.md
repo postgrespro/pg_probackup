@@ -69,68 +69,8 @@ For detailed release plans check [Milestones](https://github.com/postgrespro/pg_
 Installers are available in release **assets**. [Latests](https://github.com/postgrespro/pg_probackup/releases/latest).
 
 ### Linux Installation
-#### pg_probackup for vanilla PostgreSQL
-```shell
-#DEB Ubuntu|Debian Packages
-sudo sh -c 'echo "deb [arch=amd64] https://repo.postgrespro.ru/pg_probackup/deb/ $(lsb_release -cs) main-$(lsb_release -cs)" > /etc/apt/sources.list.d/pg_probackup.list'
-sudo wget -O - https://repo.postgrespro.ru/pg_probackup/keys/GPG-KEY-PG_PROBACKUP | sudo apt-key add - && sudo apt-get update
-sudo apt-get install pg-probackup-{16,15,14,13,12,11}
-sudo apt-get install pg-probackup-{16,15,14,13,12,11}-dbg
 
-#DEB-SRC Packages
-sudo sh -c 'echo "deb-src [arch=amd64] https://repo.postgrespro.ru/pg_probackup/deb/ $(lsb_release -cs) main-$(lsb_release -cs)" >>\
-  /etc/apt/sources.list.d/pg_probackup.list' && sudo apt-get update
-sudo apt-get source pg-probackup-{16,15,14,13,12,11,10}
-
-#DEB Astra Linix Orel
-sudo sh -c 'echo "deb [arch=amd64] https://repo.postgrespro.ru/pg_probackup/deb/ stretch main-stretch" > /etc/apt/sources.list.d/pg_probackup.list'
-sudo wget -O - https://repo.postgrespro.ru/pg_probackup/keys/GPG-KEY-PG_PROBACKUP | sudo apt-key add - && sudo apt-get update
-sudo apt-get install pg-probackup-{16,15,14,13,12,11}{-dbg,}
-
-#RPM Centos Packages
-rpm -ivh https://repo.postgrespro.ru/pg_probackup/keys/pg_probackup-repo-centos.noarch.rpm
-yum install pg_probackup-{16,15,14,13,12,11}
-yum install pg_probackup-{16,15,14,13,12,11}-debuginfo
-
-#RPM RHEL Packages
-rpm -ivh https://repo.postgrespro.ru/pg_probackup/keys/pg_probackup-repo-rhel.noarch.rpm
-yum install pg_probackup-{16,15,14,13,12,11}
-yum install pg_probackup-{16,15,14,13,12,11}-debuginfo
-
-#RPM Oracle Linux Packages
-rpm -ivh https://repo.postgrespro.ru/pg_probackup/keys/pg_probackup-repo-oraclelinux.noarch.rpm
-yum install pg_probackup-{16,15,14,13,12,11}
-yum install pg_probackup-{16,15,14,13,12,11}-debuginfo
-
-#SRPM Centos|RHEL|OracleLinux Packages
-yumdownloader --source pg_probackup-{16,15,14,13,12,11}
-
-#RPM SUSE|SLES Packages
-zypper install --allow-unsigned-rpm -y https://repo.postgrespro.ru/pg_probackup/keys/pg_probackup-repo-suse.noarch.rpm
-zypper --gpg-auto-import-keys install -y pg_probackup-{16,15,14,13,12,11}
-zypper install pg_probackup-{16,15,14,13,12,11}-debuginfo
-
-#SRPM SUSE|SLES Packages
-zypper si pg_probackup-{16,15,14,13,12,11}
-
-#RPM ALT Linux 8
-sudo sh -c 'echo "rpm https://repo.postgrespro.ru/pg_probackup/rpm/latest/altlinux-p8 x86_64 vanilla" > /etc/apt/sources.list.d/pg_probackup.list'
-sudo apt-get update
-sudo apt-get install pg_probackup-{16,15,14,13,12,11}
-sudo apt-get install pg_probackup-{16,15,14,13,12,11}-debuginfo
-
-#RPM ALT Linux 9
-sudo sh -c 'echo "rpm https://repo.postgrespro.ru/pg_probackup/rpm/latest/altlinux-p9 x86_64 vanilla" > /etc/apt/sources.list.d/pg_probackup.list'
-sudo apt-get update
-sudo apt-get install pg_probackup-{16,15,14,13,12,11}
-sudo apt-get install pg_probackup-{16,15,14,13,12,11}-debuginfo
-
-#RPM ALT Linux 10
-sudo sh -c 'echo "rpm https://repo.postgrespro.ru/pg_probackup/rpm/latest/altlinux-p10 x86_64 vanilla" > /etc/apt/sources.list.d/pg_probackup.list'
-sudo apt-get update
-sudo apt-get install pg_probackup-{16,15,14,13,12,11}
-sudo apt-get install pg_probackup-{16,15,14,13,12,11}-debuginfo
-```
+See the [Installation](https://postgrespro.github.io/pg_probackup/#pbk-install) section in the documentation.
 
 Once you have `pg_probackup` installed, complete [the setup](https://postgrespro.github.io/pg_probackup/#pbk-install-and-setup).
 

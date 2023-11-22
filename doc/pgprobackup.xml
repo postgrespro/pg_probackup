@@ -172,7 +172,10 @@ doc/src/sgml/pgprobackup.sgml
   <para><link linkend="pbk-overview">Overview</link></para>
  </listitem>
  <listitem>
-  <para><link linkend="pbk-install-and-setup">Installation and Setup</link></para>
+  <para><link linkend="pbk-install">Installation</link></para>
+ </listitem>
+ <listitem>
+  <para><link linkend="pbk-setup">Setup</link></para>
  </listitem>
  <listitem>
   <para><link linkend="pbk-reference">Command-Line Reference</link></para>
@@ -451,8 +454,215 @@ doc/src/sgml/pgprobackup.sgml
  </refsect2>
 </refsect1>
 
-<refsect1 id="pbk-install-and-setup">
-  <title>Installation and Setup</title>
+<refsect1 id="pbk-install">
+  <title>Installation</title>
+  <refsect2 id="pbk-install-deb">
+  <title>Installation on Debian family systems (Debian, Ubuntu etc.)</title>
+  <para>
+    You may need to use <application>apt-get</application> instead of <application>apt</application> on older systems in the commands below.
+  </para>
+  <orderedlist>
+    <listitem>
+      Add the <application>pg_probackup</application> repository GPG key
+      <programlisting>
+sudo apt install gpg wget
+wget -O - https://repo.postgrespro.ru/pg_probackup/keys/GPG-KEY-PG_PROBACKUP | \
+sudo apt-key add -
+</programlisting>
+    </listitem>
+    <listitem>
+      Setup the binary package repository
+      <programlisting>
+. /etc/os-release
+echo "deb [arch=amd64] https://repo.postgrespro.ru/pg_probackup/deb $VERSION_CODENAME main-$VERSION_CODENAME" | \
+sudo tee /etc/apt/sources.list.d/pg_probackup.list
+</programlisting>
+    </listitem>
+    <listitem>
+      Optionally setup the source package repository for rebuilding the binaries
+      <programlisting>
+echo "deb-src [arch=amd64] https://repo.postgrespro.ru/pg_probackup/deb $VERSION_CODENAME main-$VERSION_CODENAME" | \
+sudo tee -a /etc/apt/sources.list.d/pg_probackup.list
+</programlisting>
+    </listitem>
+    <listitem>
+      List the available <application>pg_probackup</application> packages
+      <itemizedlist>
+        <listitem>
+          Using <application>apt</application>:
+          <programlisting>
+sudo apt update
+apt search pg_probackup
+</programlisting>
+        </listitem>
+        <listitem>
+          Using <application>apt-get</application>:
+          <programlisting>
+sudo apt-get update
+apt-cache search pg_probackup
+</programlisting>
+        </listitem>
+      </itemizedlist>
+    </listitem>
+    <listitem>
+      Install or upgrade a <application>pg_probackup</application> version of your choice
+      <programlisting>
+sudo apt install pg-probackup-15
+</programlisting>
+    </listitem>
+    <listitem>
+      Optionally install the debug package
+      <programlisting>
+sudo apt install pg-probackup-15-dbg
+</programlisting>
+    </listitem>
+    <listitem>
+      Optionally install the source package (provided you have set up the source package repository as described above)
+      <programlisting>
+sudo apt install dpkg-dev
+sudo apt source pg-probackup-15
+</programlisting>
+    </listitem>
+  </orderedlist>
+  </refsect2>
+  <refsect2 id="pbk-install-rhel">
+  <title>Installation on Red Hat family systems (CentOS, Oracle Linux etc.)</title>
+  <para>
+    You may need to use <application>yum</application> instead of <application>dnf</application> on older systems in the commands below.
+  </para>
+  <orderedlist>
+    <listitem>
+      Install the <application>pg_probackup</application> repository
+      <programlisting>
+dnf install https://repo.postgrespro.ru/pg_probackup/keys/pg_probackup-repo-centos.noarch.rpm
+</programlisting>
+    </listitem>
+    <listitem>
+      List the available <application>pg_probackup</application> packages
+      <programlisting>
+dnf search pg_probackup
+</programlisting>
+    </listitem>
+    <listitem>
+      Install or upgrade a <application>pg_probackup</application> version of your choice
+      <programlisting>
+dnf install pg_probackup-15
+</programlisting>
+    </listitem>
+    <listitem>
+      Optionally install the debug package
+      <programlisting>
+dnf install pg_probackup-15-debuginfo
+</programlisting>
+    </listitem>
+    <listitem>
+      Optionally install the source package for rebuilding the binaries
+      <itemizedlist>
+        <listitem>
+          Using <application>dnf</application>:
+          <programlisting>
+dnf install 'dnf-command(download)'
+dnf download --source pg_probackup-15
+</programlisting>
+        </listitem>
+        <listitem>
+          Using <application>yum</application>:
+          <programlisting>
+yumdownloader --source pg_probackup-15
+</programlisting>
+        </listitem>
+      </itemizedlist>
+    </listitem>
+  </orderedlist>
+  </refsect2>
+  <refsect2 id="pbk-install-alt">
+  <title>Installation on ALT Linux</title>
+  <para>
+    You may need to use <application>yum</application> instead of <application>dnf</application> on older systems in the commands below.
+  </para>
+  <orderedlist>
+    <listitem>
+      Setup the repository
+      <itemizedlist>
+        <listitem>
+          On ALT Linux 10:
+          <programlisting>
+. /etc/os-release
+echo "rpm http://repo.postgrespro.ru/pg_probackup/rpm/latest/altlinux-p$VERSION_ID x86_64 vanilla" | \
+sudo tee /etc/apt/sources.list.d/pg_probackup.list
+</programlisting>
+        </listitem>
+        <listitem>
+          On ALT Linux 8 and 9:
+          <programlisting>
+. /etc/os-release
+echo "rpm http://repo.postgrespro.ru/pg_probackup/rpm/latest/altlinux-$VERSION_ID x86_64 vanilla" | \
+sudo tee /etc/apt/sources.list.d/pg_probackup.list
+</programlisting>
+        </listitem>
+      </itemizedlist>
+    </listitem>
+    <listitem>
+      List the available <application>pg_probackup</application> packages
+      <programlisting>
+sudo apt-get update
+apt-cache search pg_probackup
+</programlisting>
+    </listitem>
+    <listitem>
+      Install or upgrade a <application>pg_probackup</application> version of your choice
+      <programlisting>
+sudo apt-get install pg_probackup-15
+</programlisting>
+    </listitem>
+    <listitem>
+      Optionally install the debug package
+      <programlisting>
+sudo apt-get install pg_probackup-15-debuginfo
+</programlisting>
+    </listitem>
+  </orderedlist>
+  </refsect2>
+  <refsect2 id="pbk-install-suse">
+  <title>Installation on SUSE Linux</title>
+  <orderedlist>
+    <listitem>
+      Add the pg_probackup repository GPG key
+      <programlisting>
+zypper in -y gpg wget
+wget -O GPG-KEY-PG_PROBACKUP https://repo.postgrespro.ru/pg_probackup/keys/GPG-KEY-PG_PROBACKUP
+rpm --import GPG-KEY-PG_PROBACKUP
+</programlisting>
+    </listitem>
+    <listitem>
+      Setup the repository
+      <programlisting>
+zypper in https://repo.postgrespro.ru/pg_probackup/keys/pg_probackup-repo-suse.noarch.rpm
+</programlisting>
+    </listitem>
+    <listitem>
+      List the available <application>pg_probackup</application> packages
+      <programlisting>
+zypper se pg_probackup
+</programlisting>
+    </listitem>
+    <listitem>
+      Install or upgrade a <application>pg_probackup</application> version of your choice
+      <programlisting>
+zypper in pg_probackup-15
+</programlisting>
+    </listitem>
+    <listitem>
+      Optionally install the source package for rebuilding the binaries
+      <programlisting>
+zypper si pg_probackup-15
+</programlisting>
+    </listitem>
+  </orderedlist>
+  </refsect2>
+</refsect1>
+<refsect1 id="pbk-setup">
+  <title>Setup</title>
   <para>
     Once you have <application>pg_probackup</application> installed, complete the following
     setup:
@@ -1986,8 +2196,7 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
         <para>
           On your backup host, configure <application>pg_probackup</application> as explained in
           the section
-          <link linkend="pbk-install-and-setup">Installation and
-          Setup</link>. For the
+          <link linkend="pbk-setup">Setup</link>. For the
           <xref linkend="pbk-add-instance"/> and
           <xref linkend="pbk-set-config"/> commands, make
           sure to specify <link linkend="pbk-remote-server-opts">remote
