@@ -577,9 +577,6 @@ yumdownloader --source pg_probackup-15
   </refsect2>
   <refsect2 id="pbk-install-alt">
   <title>Installation on ALT Linux</title>
-  <para>
-    You may need to use <application>yum</application> instead of <application>dnf</application> on older systems in the commands below.
-  </para>
   <orderedlist>
     <listitem>
       Setup the repository
