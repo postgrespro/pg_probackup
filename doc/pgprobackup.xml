@@ -164,7 +164,7 @@ doc/src/sgml/pgprobackup.sgml
    recovery of <productname>PostgreSQL</productname> database clusters.
    It is designed to perform periodic backups of the <productname>PostgreSQL</productname> 
    instance that enable you to restore the server in case of a failure.
-   <application>pg_probackup</application> supports PostgreSQL 10 or higher.
+   <application>pg_probackup</application> supports PostgreSQL 11 or higher.
   </para>
 
 <itemizedlist spacing="compact">
@@ -416,7 +416,7 @@ doc/src/sgml/pgprobackup.sgml
       </listitem>
       <listitem>
         <para>
-          On Unix systems, for <productname>PostgreSQL</productname> 10,
+          On Unix systems, for <productname>PostgreSQL</productname> 11,
           a backup can be made only by the same OS user that has started the <productname>PostgreSQL</productname>
           server. For example, if <productname>PostgreSQL</productname> server is started by
           user <literal>postgres</literal>, the <literal>backup</literal> command must also be run
@@ -819,7 +819,7 @@ pg_probackup add-instance -B <replaceable>backup_dir</replaceable> -D <replaceab
       connection</emphasis> to the <productname>PostgreSQL</productname> server:
     </para>
     <para>
-      For <productname>PostgreSQL</productname> versions 10 &mdash; 14:
+      For <productname>PostgreSQL</productname> versions 11 &mdash; 14:
     </para>
     <programlisting>
 BEGIN;
@@ -1807,7 +1807,7 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
      <ulink url="https://postgrespro.com/docs/postgresql/current/runtime-config-replication.html#GUC-PRIMARY-CONNINFO">primary_conninfo</ulink>
      parameter; you have to add the password manually or use
      the <literal>--primary-conninfo</literal> option, if required.
-     For <productname>PostgreSQL</productname> 11 or lower,
+     For <productname>PostgreSQL</productname> 11,
      recovery settings are written into the <filename>recovery.conf</filename>
      file. Starting from <productname>PostgreSQL</productname> 12,
      <application>pg_probackup</application> writes these settings into

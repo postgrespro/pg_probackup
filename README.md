@@ -94,7 +94,7 @@ cd <path_to_PostgreSQL_source_tree> && git clone https://github.com/postgrespro/
 ### Windows
 
 Currently pg_probackup can be build using only MSVC 2013.
-Build PostgreSQL using [pgwininstall](https://github.com/postgrespro/pgwininstall) or [PostgreSQL instruction](https://www.postgresql.org/docs/10/install-windows-full.html) with MSVC 2013.
+Build PostgreSQL using [pgwininstall](https://github.com/postgrespro/pgwininstall) or [PostgreSQL instruction](https://www.postgresql.org/docs/current/install-windows-full.html) with MSVC 2013.
 If zlib support is needed, src/tools/msvc/config.pl must contain path to directory with compiled zlib. [Example](https://gist.githubusercontent.com/gsmol/80989f976ce9584824ae3b1bfb00bd87/raw/240032950d4ac4801a79625dd00c8f5d4ed1180c/gistfile1.txt)
 
 ```shell
