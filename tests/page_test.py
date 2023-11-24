@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 import subprocess
 import gzip
 import shutil
+import time
 
 class PageTest(ProbackupTest, unittest.TestCase):
 
@@ -893,7 +894,7 @@ class PageTest(ProbackupTest, unittest.TestCase):
             "create table t_heap as select i as id, "
             "md5(i::text) as text, "
             "md5(repeat(i::text,10))::tsvector as tsvector "
-            "from generate_series(0,1000) i;")
+            "from generate_series(0,10000) i;")
 
         alien_node.safe_psql(
             "postgres",
@@ -905,7 +906,7 @@ class PageTest(ProbackupTest, unittest.TestCase):
             "create table t_heap_alien as select i as id, "
             "md5(i::text) as text, "
             "md5(repeat(i::text,10))::tsvector as tsvector "
-            "from generate_series(0,100000) i;")
+            "from generate_series(0,10000) i;")
 
         # copy latest wal segment
         wals_dir = os.path.join(backup_dir, 'wal', 'alien_node')
@@ -916,9 +917,9 @@ class PageTest(ProbackupTest, unittest.TestCase):
         file = os.path.join(wals_dir, filename)
         file_destination = os.path.join(
             os.path.join(backup_dir, 'wal', 'node'), filename)
-#        file = os.path.join(wals_dir, '000000010000000000000004')
-        print(file)
-        print(file_destination)
+        start = time.time()
+        while not os.path.exists(file_destination) and time.time() - start < 20:
+            time.sleep(0.1)
         os.remove(file_destination)
         os.rename(file, file_destination)
 

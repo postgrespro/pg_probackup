@@ -1970,6 +1970,14 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
       for communication between the hosts.
      </para>
     </note>
+    <note>
+      <para>
+       In addition to SSH connection, <application>pg_probackup</application> uses
+       a regular connection to the database to manage the remote operation.
+       See <xref linkend="pbk-configuring-the-database-cluster"/> for details of how to set up
+       a database connection.
+      </para>
+     </note>
     <para>
       The typical workflow is as follows:
     </para>
