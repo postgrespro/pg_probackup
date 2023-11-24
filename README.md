@@ -72,7 +72,7 @@ Installers are available in release **assets**. [Latests](https://github.com/pos
 
 See the [Installation](https://postgrespro.github.io/pg_probackup/#pbk-install) section in the documentation.
 
-Once you have `pg_probackup` installed, complete [the setup](https://postgrespro.github.io/pg_probackup/#pbk-install-and-setup).
+Once you have `pg_probackup` installed, complete [the setup](https://postgrespro.github.io/pg_probackup/#pbk-setup).
 
 For users of Postgres Pro products, commercial editions of pg_probackup are available for installation from the corresponding Postgres Pro product repository.
 
