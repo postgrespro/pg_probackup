@@ -164,7 +164,7 @@ doc/src/sgml/pgprobackup.sgml
    recovery of <productname>PostgreSQL</productname> database clusters.
    It is designed to perform periodic backups of the <productname>PostgreSQL</productname> 
    instance that enable you to restore the server in case of a failure.
-   <application>pg_probackup</application> supports PostgreSQL 9.5 or higher.
+   <application>pg_probackup</application> supports PostgreSQL 11 or higher.
   </para>
 
 <itemizedlist spacing="compact">
@@ -172,7 +172,10 @@ doc/src/sgml/pgprobackup.sgml
   <para><link linkend="pbk-overview">Overview</link></para>
  </listitem>
  <listitem>
-  <para><link linkend="pbk-install-and-setup">Installation and Setup</link></para>
+  <para><link linkend="pbk-install">Installation</link></para>
+ </listitem>
+ <listitem>
+  <para><link linkend="pbk-setup">Setup</link></para>
  </listitem>
  <listitem>
   <para><link linkend="pbk-reference">Command-Line Reference</link></para>
@@ -413,7 +416,7 @@ doc/src/sgml/pgprobackup.sgml
       </listitem>
       <listitem>
         <para>
-          On Unix systems, for <productname>PostgreSQL</productname> 10 or lower,
+          On Unix systems, for <productname>PostgreSQL</productname> 11,
           a backup can be made only by the same OS user that has started the <productname>PostgreSQL</productname>
           server. For example, if <productname>PostgreSQL</productname> server is started by
           user <literal>postgres</literal>, the <literal>backup</literal> command must also be run
@@ -451,8 +454,212 @@ doc/src/sgml/pgprobackup.sgml
  </refsect2>
 </refsect1>
 
-<refsect1 id="pbk-install-and-setup">
-  <title>Installation and Setup</title>
+<refsect1 id="pbk-install">
+  <title>Installation</title>
+  <refsect2 id="pbk-install-deb">
+  <title>Installation on Debian family systems (Debian, Ubuntu etc.)</title>
+  <para>
+    You may need to use <application>apt-get</application> instead of <application>apt</application> on older systems in the commands below.
+  </para>
+  <orderedlist>
+    <listitem>
+      Add the <application>pg_probackup</application> repository GPG key
+      <programlisting>
+sudo apt install gpg wget
+wget -qO - https://repo.postgrespro.ru/pg_probackup/keys/GPG-KEY-PG_PROBACKUP | \
+sudo tee /etc/apt/trusted.gpg.d/pg_probackup.asc
+</programlisting>
+    </listitem>
+    <listitem>
+      Setup the binary package repository
+      <programlisting>
+. /etc/os-release
+echo "deb [arch=amd64] https://repo.postgrespro.ru/pg_probackup/deb $VERSION_CODENAME main-$VERSION_CODENAME" | \
+sudo tee /etc/apt/sources.list.d/pg_probackup.list
+</programlisting>
+    </listitem>
+    <listitem>
+      Optionally setup the source package repository for rebuilding the binaries
+      <programlisting>
+echo "deb-src [arch=amd64] https://repo.postgrespro.ru/pg_probackup/deb $VERSION_CODENAME main-$VERSION_CODENAME" | \
+sudo tee -a /etc/apt/sources.list.d/pg_probackup.list
+</programlisting>
+    </listitem>
+    <listitem>
+      List the available <application>pg_probackup</application> packages
+      <itemizedlist>
+        <listitem>
+          Using <application>apt</application>:
+          <programlisting>
+sudo apt update
+apt search pg_probackup
+</programlisting>
+        </listitem>
+        <listitem>
+          Using <application>apt-get</application>:
+          <programlisting>
+sudo apt-get update
+apt-cache search pg_probackup
+</programlisting>
+        </listitem>
+      </itemizedlist>
+    </listitem>
+    <listitem>
+      Install or upgrade a <application>pg_probackup</application> version of your choice
+      <programlisting>
+sudo apt install pg-probackup-15
+</programlisting>
+    </listitem>
+    <listitem>
+      Optionally install the debug package
+      <programlisting>
+sudo apt install pg-probackup-15-dbg
+</programlisting>
+    </listitem>
+    <listitem>
+      Optionally install the source package (provided you have set up the source package repository as described above)
+      <programlisting>
+sudo apt install dpkg-dev
+sudo apt source pg-probackup-15
+</programlisting>
+    </listitem>
+  </orderedlist>
+  </refsect2>
+  <refsect2 id="pbk-install-rhel">
+  <title>Installation on Red Hat family systems (CentOS, Oracle Linux etc.)</title>
+  <para>
+    You may need to use <application>yum</application> instead of <application>dnf</application> on older systems in the commands below.
+  </para>
+  <orderedlist>
+    <listitem>
+      Install the <application>pg_probackup</application> repository
+      <programlisting>
+dnf install https://repo.postgrespro.ru/pg_probackup/keys/pg_probackup-repo-centos.noarch.rpm
+</programlisting>
+    </listitem>
+    <listitem>
+      List the available <application>pg_probackup</application> packages
+      <programlisting>
+dnf search pg_probackup
+</programlisting>
+    </listitem>
+    <listitem>
+      Install or upgrade a <application>pg_probackup</application> version of your choice
+      <programlisting>
+dnf install pg_probackup-15
+</programlisting>
+    </listitem>
+    <listitem>
+      Optionally install the debug package
+      <programlisting>
+dnf install pg_probackup-15-debuginfo
+</programlisting>
+    </listitem>
+    <listitem>
+      Optionally install the source package for rebuilding the binaries
+      <itemizedlist>
+        <listitem>
+          Using <application>dnf</application>:
+          <programlisting>
+dnf install 'dnf-command(download)'
+dnf download --source pg_probackup-15
+</programlisting>
+        </listitem>
+        <listitem>
+          Using <application>yum</application>:
+          <programlisting>
+yumdownloader --source pg_probackup-15
+</programlisting>
+        </listitem>
+      </itemizedlist>
+    </listitem>
+  </orderedlist>
+  </refsect2>
+  <refsect2 id="pbk-install-alt">
+  <title>Installation on ALT Linux</title>
+  <orderedlist>
+    <listitem>
+      Setup the repository
+      <itemizedlist>
+        <listitem>
+          On ALT Linux 10:
+          <programlisting>
+. /etc/os-release
+echo "rpm http://repo.postgrespro.ru/pg_probackup/rpm/latest/altlinux-p$VERSION_ID x86_64 vanilla" | \
+sudo tee /etc/apt/sources.list.d/pg_probackup.list
+</programlisting>
+        </listitem>
+        <listitem>
+          On ALT Linux 8 and 9:
+          <programlisting>
+. /etc/os-release
+echo "rpm http://repo.postgrespro.ru/pg_probackup/rpm/latest/altlinux-$VERSION_ID x86_64 vanilla" | \
+sudo tee /etc/apt/sources.list.d/pg_probackup.list
+</programlisting>
+        </listitem>
+      </itemizedlist>
+    </listitem>
+    <listitem>
+      List the available <application>pg_probackup</application> packages
+      <programlisting>
+sudo apt-get update
+apt-cache search pg_probackup
+</programlisting>
+    </listitem>
+    <listitem>
+      Install or upgrade a <application>pg_probackup</application> version of your choice
+      <programlisting>
+sudo apt-get install pg_probackup-15
+</programlisting>
+    </listitem>
+    <listitem>
+      Optionally install the debug package
+      <programlisting>
+sudo apt-get install pg_probackup-15-debuginfo
+</programlisting>
+    </listitem>
+  </orderedlist>
+  </refsect2>
+  <refsect2 id="pbk-install-suse">
+  <title>Installation on SUSE Linux</title>
+  <orderedlist>
+    <listitem>
+      Add the pg_probackup repository GPG key
+      <programlisting>
+zypper in -y gpg wget
+wget -O GPG-KEY-PG_PROBACKUP https://repo.postgrespro.ru/pg_probackup/keys/GPG-KEY-PG_PROBACKUP
+rpm --import GPG-KEY-PG_PROBACKUP
+</programlisting>
+    </listitem>
+    <listitem>
+      Setup the repository
+      <programlisting>
+zypper in https://repo.postgrespro.ru/pg_probackup/keys/pg_probackup-repo-suse.noarch.rpm
+</programlisting>
+    </listitem>
+    <listitem>
+      List the available <application>pg_probackup</application> packages
+      <programlisting>
+zypper se pg_probackup
+</programlisting>
+    </listitem>
+    <listitem>
+      Install or upgrade a <application>pg_probackup</application> version of your choice
+      <programlisting>
+zypper in pg_probackup-15
+</programlisting>
+    </listitem>
+    <listitem>
+      Optionally install the source package for rebuilding the binaries
+      <programlisting>
+zypper si pg_probackup-15
+</programlisting>
+    </listitem>
+  </orderedlist>
+  </refsect2>
+</refsect1>
+<refsect1 id="pbk-setup">
+  <title>Setup</title>
   <para>
     Once you have <application>pg_probackup</application> installed, complete the following
     setup:
@@ -612,47 +819,7 @@ pg_probackup add-instance -B <replaceable>backup_dir</replaceable> -D <replaceab
       connection</emphasis> to the <productname>PostgreSQL</productname> server:
     </para>
     <para>
-      For <productname>PostgreSQL</productname> 9.5:
-    </para>
-    <programlisting>
-BEGIN;
-CREATE ROLE backup WITH LOGIN;
-GRANT USAGE ON SCHEMA pg_catalog TO backup;
-GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup;
-GRANT EXECUTE ON FUNCTION pg_catalog.set_config(text, text, boolean) TO backup;
-GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup;
-GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean) TO backup;
-GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup() TO backup;
-GRANT EXECUTE ON FUNCTION pg_catalog.pg_create_restore_point(text) TO backup;
-GRANT EXECUTE ON FUNCTION pg_catalog.pg_switch_xlog() TO backup;
-GRANT EXECUTE ON FUNCTION pg_catalog.txid_current() TO backup;
-GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup;
-GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;
-COMMIT;
-</programlisting>
-    <para>
-      For <productname>PostgreSQL</productname> 9.6:
-    </para>
-    <programlisting>
-BEGIN;
-CREATE ROLE backup WITH LOGIN;
-GRANT USAGE ON SCHEMA pg_catalog TO backup;
-GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup;
-GRANT EXECUTE ON FUNCTION pg_catalog.set_config(text, text, boolean) TO backup;
-GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup;
-GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean, boolean) TO backup;
-GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup(boolean) TO backup;
-GRANT EXECUTE ON FUNCTION pg_catalog.pg_create_restore_point(text) TO backup;
-GRANT EXECUTE ON FUNCTION pg_catalog.pg_switch_xlog() TO backup;
-GRANT EXECUTE ON FUNCTION pg_catalog.pg_last_xlog_replay_location() TO backup;
-GRANT EXECUTE ON FUNCTION pg_catalog.txid_current() TO backup;
-GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup;
-GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;
-GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_checkpoint() TO backup;
-COMMIT;
-</programlisting>
-    <para>
-      For <productname>PostgreSQL</productname> versions 10 &mdash; 14:
+      For <productname>PostgreSQL</productname> versions 11 &mdash; 14:
     </para>
     <programlisting>
 BEGIN;
@@ -900,7 +1067,7 @@ archive_command = '"<replaceable>install_dir</replaceable>/pg_probackup" archive
   <refsect2 id="pbk-setting-up-backup-from-standby">
     <title>Setting up Backup from Standby</title>
     <para>
-      For <productname>PostgreSQL</productname> 9.6 or higher, <application>pg_probackup</application> can take backups from
+      <application>pg_probackup</application> can take backups from
       a standby server. This requires the following additional setup:
     </para>
     <itemizedlist spacing="compact">
@@ -1640,7 +1807,7 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
      <ulink url="https://postgrespro.com/docs/postgresql/current/runtime-config-replication.html#GUC-PRIMARY-CONNINFO">primary_conninfo</ulink>
      parameter; you have to add the password manually or use
      the <literal>--primary-conninfo</literal> option, if required.
-     For <productname>PostgreSQL</productname> 11 or lower,
+     For <productname>PostgreSQL</productname> 11,
      recovery settings are written into the <filename>recovery.conf</filename>
      file. Starting from <productname>PostgreSQL</productname> 12,
      <application>pg_probackup</application> writes these settings into
@@ -1986,8 +2153,7 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
         <para>
           On your backup host, configure <application>pg_probackup</application> as explained in
           the section
-          <link linkend="pbk-install-and-setup">Installation and
-          Setup</link>. For the
+          <link linkend="pbk-setup">Setup</link>. For the
           <xref linkend="pbk-add-instance"/> and
           <xref linkend="pbk-set-config"/> commands, make
           sure to specify <link linkend="pbk-remote-server-opts">remote
@@ -4804,8 +4970,7 @@ pg_probackup catchup -b <replaceable>catchup_mode</replaceable>
       <listitem>
       <para>
         Specifies the LSN of the write-ahead log location up to which
-        recovery will proceed. Can be used only when restoring
-        a database cluster of major version 10 or higher.
+        recovery will proceed.
       </para>
       </listitem>
       </varlistentry>
@@ -5767,124 +5932,6 @@ pg_probackup catchup -b <replaceable>catchup_mode</replaceable>
       </variablelist>
       </para>
     </refsect3>
-    <refsect3 id="pbk-replica-options">
-      <title>Replica Options</title>
-      <para>
-        This section describes the options related to taking a backup
-        from standby.
-      </para>
-      <note>
-        <para>
-          Starting from <application>pg_probackup</application> 2.0.24, backups can be
-          taken from standby without connecting to the master server,
-          so these options are no longer required. In lower versions,
-          <application>pg_probackup</application> had to connect to the master to determine
-          recovery time — the earliest moment for which you can
-          restore a consistent state of the database cluster.
-        </para>
-      </note>
-      <para>
-      <variablelist>
-      <varlistentry>
-<term><option>--master-db=<replaceable>dbname</replaceable></option></term>
-      <listitem>
-      <para>
-        Deprecated. Specifies the name of the database on the master
-        server to connect to. The connection is used only for managing
-        the backup process, so you can connect to any existing
-        database. Can be set in the <filename>pg_probackup.conf</filename> using the
-        <xref linkend="pbk-set-config"/> command.
-      </para>
-      <para>
-       Default: <literal>postgres</literal>, the default <productname>PostgreSQL</productname> database
-      </para>
-      </listitem>
-      </varlistentry>
-
-      <varlistentry>
-<term><option>--master-host=<replaceable>host</replaceable></option></term>
-      <listitem>
-      <para>
-        Deprecated. Specifies the host name of the system on which the
-        master server is running.
-      </para>
-      </listitem>
-      </varlistentry>
-
-      <varlistentry>
-<term><option>--master-port=<replaceable>port</replaceable></option></term>
-      <listitem>
-      <para>
-        Deprecated. Specifies the TCP port or the local Unix domain
-        socket file extension on which the master server is listening
-        for connections.
-      </para>
-      <para>
-       Default: <literal>5432</literal>, the <productname>PostgreSQL</productname> default port
-      </para>
-      </listitem>
-      </varlistentry>
-
-      <varlistentry>
-<term><option>--master-user=<replaceable>username</replaceable></option></term>
-      <listitem>
-      <para>
-        Deprecated. User name to connect as.
-      </para>
-      <para>
-       Default: <literal>postgres</literal>,
-       the <productname>PostgreSQL</productname> default user name
-      </para>
-      </listitem>
-      </varlistentry>
-
-      <varlistentry>
-<term><option>--replica-timeout=<replaceable>timeout</replaceable></option></term>
-<term><option></option></term>
-      <listitem>
-      <para>
-        Deprecated. Wait time for WAL segment streaming via
-        replication, in seconds. By default, <application>pg_probackup</application> waits 300
-        seconds. You can also define this parameter in the
-        <filename>pg_probackup.conf</filename> configuration file using the
-        <xref linkend="pbk-set-config"/> command.
-      </para>
-      <para>
-       Default: <literal>300 sec</literal>
-      </para>
-      </listitem>
-      </varlistentry>
-      </variablelist>
-      </para>
-    </refsect3>
-
-    <refsect3 id="pbk-test-options">
-      <title>Testing and Debugging Options</title>
-      <para>
-        This section describes options useful only in a test or development environment.
-      </para>
-      <para>
-        <variablelist>
-          <varlistentry>
-          <term><option>--destroy-all-other-dbs</option></term>
-          <listitem>
-            <para>
-              By default, <application>pg_probackup</application> exits with an
-              error if an attempt is made to perform a partial incremental restore
-              since this destroys databases not included in the restore set. This
-              flag allows you to suppress the error and proceed with the partial
-              incremental restore (e.g., to keep a development database snapshot
-              up-to-date with a production one). This option can be used with the
-              <xref linkend="pbk-restore"/> command.
-            </para>
-            <important>
-              <para>Never use this flag in a production cluster.</para>
-            </important>
-          </listitem>
-          </varlistentry>
-        </variablelist>
-      </para>
-    </refsect3>
  </refsect2>
  </refsect1>
 
@@ -6096,8 +6143,6 @@ xlog-seg-size = 16777216
 pgdatabase = backupdb
 pghost = postgres_host
 pguser = backup
-# Replica parameters
-replica-timeout = 5min
 # Archive parameters
 archive-timeout = 5min
 # Logging parameters

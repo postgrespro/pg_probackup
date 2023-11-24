@@ -119,7 +119,8 @@ body {
 }
 
 .book code, kbd, pre, samp {
-	font-family: monospace,monospace;	
+	font-family: monospace,monospace;
+	font-size: 90%;
 }
 
 .book .txtCommentsWrap {
