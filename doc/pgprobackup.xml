@@ -466,7 +466,7 @@ doc/src/sgml/pgprobackup.sgml
       Add the <application>pg_probackup</application> repository GPG key
       <programlisting>
 sudo apt install gpg wget
-wget -qO - https://repo.postgrespro.ru/pg_probackup/keys/GPG-KEY-PG_PROBACKUP | \
+wget -qO - https://repo.postgrespro.ru/pg_probackup/keys/GPG-KEY-PG-PROBACKUP | \
 sudo tee /etc/apt/trusted.gpg.d/pg_probackup.asc
 </programlisting>
     </listitem>
