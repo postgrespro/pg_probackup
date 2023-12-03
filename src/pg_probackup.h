@@ -91,6 +91,7 @@ extern const char  *PROGRAM_EMAIL;
 #define DATABASE_MAP			"database_map"
 #define HEADER_MAP  			"page_header_map"
 #define HEADER_MAP_TMP  		"page_header_map_tmp"
+#define XLOG_CONTROL_BAK_FILE	XLOG_CONTROL_FILE".pbk.bak"
 
 /* default replication slot names */
 #define DEFAULT_TEMP_SLOT_NAME	 "pg_probackup_slot";
@@ -1209,6 +1210,8 @@ extern uint32 get_xlog_seg_size(const char *pgdata_path);
 extern void get_redo(const char *pgdata_path, fio_location pgdata_location, RedoParams *redo);
 extern void set_min_recovery_point(pgFile *file, const char *backup_path,
 								   XLogRecPtr stop_backup_lsn);
+extern void get_control_file_or_back_file(const char *pgdata_path, fio_location location,
+										  ControlFileData *control);
 extern void copy_pgcontrol_file(const char *from_fullpath, fio_location from_location,
 					const char *to_fullpath, fio_location to_location, pgFile *file);
 

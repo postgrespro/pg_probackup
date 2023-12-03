@@ -3,11 +3,11 @@ import unittest
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 import subprocess
 import sys
-from time import sleep
 from datetime import datetime, timedelta, timezone
 import hashlib
 import shutil
 import json
+import stat
 from shutil import copyfile
 from testgres import QueryException, StartNodeException
 from stat import S_ISDIR
@@ -3709,66 +3709,6 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.compare_pgdata(pgdata1, pgdata2)
         self.compare_pgdata(pgdata2, pgdata3)
 
-    # skip this test until https://github.com/postgrespro/pg_probackup/pull/399
-    @unittest.skip("skip")
-    def test_restore_issue_313(self):
-        """
-        Check that partially restored PostgreSQL instance cannot be started
-        """
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
-            set_replication=True,
-            initdb_params=['--data-checksums'])
-
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
-        self.set_archiving(backup_dir, 'node', node)
-        node.slow_start()
-
-        # FULL backup
-        backup_id = self.backup_node(backup_dir, 'node', node)
-        node.cleanup()
-
-        count = 0
-        filelist =  self.get_backup_filelist(backup_dir, 'node', backup_id)
-        for file in filelist:
-            # count only nondata files
-            if int(filelist[file]['is_datafile']) == 0 and int(filelist[file]['size']) > 0:
-                count += 1
-
-        node_restored = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
-        node_restored.cleanup()
-        self.restore_node(backup_dir, 'node', node_restored)
-
-        gdb = self.restore_node(backup_dir, 'node', node, gdb=True, options=['--progress'])
-        gdb.verbose = False
-        gdb.set_breakpoint('restore_non_data_file')
-        gdb.run_until_break()
-        gdb.continue_execution_until_break(count - 2)
-        gdb.quit()
-
-        # emulate the user or HA taking care of PG configuration
-        for fname in os.listdir(node_restored.data_dir):
-            if fname.endswith('.conf'):
-                os.rename(
-                    os.path.join(node_restored.data_dir, fname),
-                    os.path.join(node.data_dir, fname))
-
-        try:
-            node.slow_start()
-            # we should die here because exception is what we expect to happen
-            self.assertEqual(
-                1, 0,
-                "Expecting Error because backup is not fully restored")
-        except StartNodeException as e:
-            self.assertIn(
-                'Cannot start node',
-                e.message,
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
-                    repr(e.message), self.cmd))
-
     # @unittest.skip("skip")
     def test_restore_with_waldir(self):
         """recovery using tablespace-mapping option and page backup"""
@@ -3833,8 +3773,6 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'node', node)
         self.set_archiving(backup_dir, 'node', node)
         node.slow_start()
-
-
         node.pgbench_init(scale=2)
 
         before1 = node.table_checksum("pgbench_branches")
@@ -3849,8 +3787,6 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
                 backup_dir, 'node', node, options=["-j", "4"]),
             '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                 repr(self.output), self.cmd))
-
-
 
         node.slow_start()
         pgbench = node.pgbench(
@@ -3925,3 +3861,72 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             # check for the current updates
             after = node.table_checksum("pgbench_branches")
             self.assertEqual(before1, after)
+
+    def test_restore_issue_313(self):
+        """
+        Check that partially restored PostgreSQL instance cannot be started
+        """
+        self._check_gdb_flag_or_skip_test
+        node = self.make_simple_node('node',
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+        # FULL backup
+        backup_id = self.backup_node(backup_dir, 'node', node)
+        node.cleanup()
+
+        count = 0
+        filelist = self.get_backup_filelist(backup_dir, 'node', backup_id)
+        for file in filelist:
+            # count only nondata files
+            if int(filelist[file]['is_datafile']) == 0 and \
+                    not stat.S_ISDIR(int(filelist[file]['mode'])) and \
+                    not filelist[file]['size'] == '0' and \
+                    file != 'database_map':
+                count += 1
+
+        node_restored = self.make_simple_node('node_restored')
+        node_restored.cleanup()
+        self.restore_node(backup_dir, 'node', node_restored)
+
+        gdb = self.restore_node(backup_dir, 'node', node, gdb=True, options=['--progress'])
+        gdb.verbose = False
+        gdb.set_breakpoint('restore_non_data_file')
+        gdb.run_until_break()
+        gdb.continue_execution_until_break(count - 1)
+        gdb.quit()
+
+        # emulate the user or HA taking care of PG configuration
+        for fname in os.listdir(node_restored.data_dir):
+            if fname.endswith('.conf'):
+                os.rename(
+                    os.path.join(node_restored.data_dir, fname),
+                    os.path.join(node.data_dir, fname))
+
+        try:
+            node.slow_start()
+            # we should die here because exception is what we expect to happen
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because backup is not fully restored")
+        except StartNodeException as e:
+            self.assertIn(
+                'Cannot start node',
+                e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        with open(os.path.join(node.logs_dir, 'postgresql.log'), 'r') as f:
+            if self.pg_config_version >= 120000:
+                self.assertIn(
+                    "PANIC:  could not read file \"global/pg_control\"",
+                    f.read())
+            else:
+                self.assertIn(
+                    "PANIC:  could not read from control file",
+                    f.read())

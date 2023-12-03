@@ -39,6 +39,8 @@ typedef struct
 	int			ret;
 } restore_files_arg;
 
+static bool control_downloaded = false;
+static ControlFileData instance_control;
 
 static void
 print_recovery_settings(InstanceState *instanceState, FILE *fp, pgBackup *backup,
@@ -501,6 +503,9 @@ do_restore_or_validate(InstanceState *instanceState, time_t target_backup_id, pg
 		if (redo.checksum_version == 0)
 			elog(ERROR, "Incremental restore in 'lsn' mode require "
 				"data_checksums to be enabled in destination data directory");
+		if (!control_downloaded)
+					get_control_file_or_back_file(instance_config.pgdata, FIO_DB_HOST,
+										  &instance_control);
 
 		timelines = read_timeline_history(instanceState->instance_wal_subdir_path,
 										  redo.tli, false);
@@ -719,6 +724,10 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 	parray      *pgdata_files = NULL;
 	parray		*dest_files = NULL;
 	parray		*external_dirs = NULL;
+	pgFile	*dest_pg_control_file = NULL;
+	char	dest_pg_control_fullpath[MAXPGPATH];
+	char	dest_pg_control_bak_fullpath[MAXPGPATH];
+
 	/* arrays with meta info for multi threaded backup */
 	pthread_t  *threads;
 	restore_files_arg *threads_args;
@@ -922,6 +931,11 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 				pg_strcasecmp(file->name, RELMAPPER_FILENAME) == 0)
 				redundant = true;
 
+			/* global/pg_control.pbk.bak are always keeped, because it's needed for restart failed incremental restore */
+			if (file->external_dir_num == 0 &&
+				pg_strcasecmp(file->rel_path, XLOG_CONTROL_BAK_FILE) == 0)
+				redundant = false;
+
 			/* do not delete the useful internal directories */
 			if (S_ISDIR(file->mode) && !redundant)
 				continue;
@@ -974,6 +988,42 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 		dest_bytes = dest_backup->pgdata_bytes;
 
 	pretty_size(dest_bytes, pretty_dest_bytes, lengthof(pretty_dest_bytes));
+		/*
+	 * [Issue #313]
+	 * find pg_control file (in already sorted earlier dest_files, see parray_qsort(backup->files...))
+	 * and exclude it from list for future special processing
+	 */
+	{
+		int control_file_elem_index;
+		pgFile search_key;
+		MemSet(&search_key, 0, sizeof(pgFile));
+		/* pgFileCompareRelPathWithExternal uses only .rel_path and .external_dir_num for comparision */
+		search_key.rel_path = XLOG_CONTROL_FILE;
+		search_key.external_dir_num = 0;
+		control_file_elem_index = parray_bsearch_index(dest_files, &search_key, pgFileCompareRelPathWithExternal);
+
+		if (control_file_elem_index < 0)
+			elog(ERROR, "File \"%s\" not found in backup %s", XLOG_CONTROL_FILE, base36enc(dest_backup->start_time));
+		dest_pg_control_file = (pgFile *) parray_get(dest_files, control_file_elem_index);
+		parray_remove(dest_files, control_file_elem_index);
+
+		join_path_components(dest_pg_control_fullpath, pgdata_path, XLOG_CONTROL_FILE);
+		join_path_components(dest_pg_control_bak_fullpath, pgdata_path, XLOG_CONTROL_BAK_FILE);
+		/*
+		 * rename (if it exist) dest control file before restoring
+		 * if it doesn't exist, that mean, that we already restoring in a previously failed
+		 * pgdata, where XLOG_CONTROL_BAK_FILE exist
+		 */
+		if (params->incremental_mode != INCR_NONE)
+		{
+			if (fio_access(dest_pg_control_fullpath,F_OK,FIO_DB_HOST) == 0){
+				if (fio_rename(dest_pg_control_fullpath, dest_pg_control_bak_fullpath, FIO_DB_HOST) < 0)
+					elog(WARNING, "Cannot rename file \"%s\" to \"%s\": %s",
+					dest_pg_control_fullpath, dest_pg_control_bak_fullpath, strerror(errno));
+			}
+		}
+	}
+
 	elog(INFO, "Start restoring backup files. PGDATA size: %s", pretty_dest_bytes);
 	time(&start_time);
 	thread_interrupted = false;
@@ -1012,6 +1062,32 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 			restore_isok = false;
 
 		total_bytes += threads_args[i].restored_bytes;
+	}
+
+	/* [Issue #313] copy pg_control at very end */
+	if (restore_isok)
+	{
+		FILE *out = NULL;
+		elog(progress ? INFO : LOG, "Progress: Restore file \"%s\"",
+			 dest_pg_control_file->rel_path);
+
+		out = fio_fopen(dest_pg_control_fullpath, PG_BINARY_R "+", FIO_DB_HOST);
+
+		total_bytes += restore_non_data_file(parent_chain,
+										dest_backup,
+										dest_pg_control_file,
+										out,
+										dest_pg_control_fullpath, false);
+		fio_fclose(out);
+		/* Now backup control file can be deleted */
+		if (params->incremental_mode != INCR_NONE)
+		{
+			pgFile *dst_control;
+			dst_control = pgFileNew(dest_pg_control_bak_fullpath, XLOG_CONTROL_BAK_FILE,
+			true,0, FIO_BACKUP_HOST);
+			fio_delete(dst_control->mode, dest_pg_control_bak_fullpath, FIO_LOCAL_HOST);
+			pgFileFree(dst_control);
+		}
 	}
 
 	time(&end_time);
@@ -1097,6 +1173,8 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 		parray_walk(pgdata_files, pgFileFree);
 		parray_free(pgdata_files);
 	}
+
+	if(dest_pg_control_file) pgFileFree(dest_pg_control_file);
 
 	for (i = parray_num(parent_chain) - 1; i >= 0; i--)
 	{
@@ -2230,7 +2308,10 @@ check_incremental_compatibility(const char *pgdata, uint64 system_identifier,
 	 */
 	elog(LOG, "Trying to read pg_control file in destination directory");
 
-	system_id_pgdata = get_system_identifier(pgdata, FIO_DB_HOST, false);
+	get_control_file_or_back_file(pgdata, FIO_DB_HOST, &instance_control);
+	control_downloaded = true;
+
+	system_id_pgdata = instance_control.system_identifier;
 
 	if (system_id_pgdata == instance_config.system_identifier)
 		system_id_match = true;
