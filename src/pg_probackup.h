@@ -564,6 +564,7 @@ typedef struct pgRecoveryTarget
 	const char	   *target_stop;
 	const char	   *target_name;
 	const char	   *target_action;
+	const char	   *target_tli_string; /* timeline number, "current"  or "latest" from recovery_target_timeline option*/
 } pgRecoveryTarget;
 
 /* Options needed for restore and validate commands */
@@ -893,7 +894,7 @@ extern bool satisfy_recovery_target(const pgBackup *backup,
 									const pgRecoveryTarget *rt);
 extern pgRecoveryTarget *parseRecoveryTargetOptions(
 	const char *target_time, const char *target_xid,
-	const char *target_inclusive, TimeLineID target_tli, const char* target_lsn,
+	const char *target_inclusive, const char *target_tli_string, const char* target_lsn,
 	const char *target_stop, const char *target_name,
 	const char *target_action);
 

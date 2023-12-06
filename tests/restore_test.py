@@ -1916,7 +1916,9 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         with open(recovery_conf, 'r') as f:
             self.assertIn("recovery_target = 'immediate'", f.read())
 
-    # @unittest.skip("skip")
+    # Skipped, because default recovery_target_timeline is 'current'
+    # Before PBCKP-598 the --recovery-target=latest' option did not work and this test allways passed
+    @unittest.skip("skip")
     def test_restore_target_latest_archive(self):
         """
         make sure that recovery_target 'latest'
@@ -3818,3 +3820,108 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
             wal_path=os.path.join(node.data_dir, "pg_xlog")
 
         self.assertEqual(os.path.islink(wal_path), True)
+
+    # @unittest.skip("skip")
+    def test_restore_to_latest_timeline(self):
+        """recovery to latest timeline"""
+        node = self.make_simple_node(
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
+            initdb_params=['--data-checksums'])
+
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+
+        node.pgbench_init(scale=2)
+
+        before1 = node.table_checksum("pgbench_branches")
+        backup_id = self.backup_node(backup_dir, 'node', node)
+
+        node.stop()
+        node.cleanup()
+
+        self.assertIn(
+            "INFO: Restore of backup {0} completed.".format(backup_id),
+            self.restore_node(
+                backup_dir, 'node', node, options=["-j", "4"]),
+            '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                repr(self.output), self.cmd))
+
+
+
+        node.slow_start()
+        pgbench = node.pgbench(
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            options=['-T', '10', '-c', '2', '--no-vacuum'])
+        pgbench.wait()
+        pgbench.stdout.close()
+
+        before2 = node.table_checksum("pgbench_branches")
+        self.backup_node(backup_dir, 'node', node)
+
+        node.stop()
+        node.cleanup()
+        # restore from first backup
+        restore_result = self.restore_node(backup_dir, 'node', node,
+                options=[
+                    "-j", "4", "--recovery-target-timeline=latest", "-i", backup_id]
+            )
+        self.assertIn(
+            "INFO: Restore of backup {0} completed.".format(backup_id), restore_result,
+            '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                repr(self.output), self.cmd))
+
+        # check recovery_target_timeline option in the recovery_conf
+        recovery_target_timeline = self.get_recovery_conf(node)["recovery_target_timeline"]
+        self.assertEqual(recovery_target_timeline, "latest")
+        # check recovery-target=latest option for compatibility with previous versions
+        node.cleanup()
+        restore_result = self.restore_node(backup_dir, 'node', node,
+                options=[
+                    "-j", "4", "--recovery-target=latest", "-i", backup_id]
+            )
+        self.assertIn(
+            "INFO: Restore of backup {0} completed.".format(backup_id), restore_result,
+            '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                repr(self.output), self.cmd))
+
+        # check recovery_target_timeline option in the recovery_conf
+        recovery_target_timeline = self.get_recovery_conf(node)["recovery_target_timeline"]
+        self.assertEqual(recovery_target_timeline, "latest")
+
+        # start postgres and promote wal files to latest timeline
+        node.slow_start()
+
+        # check for the latest updates
+        after = node.table_checksum("pgbench_branches")
+        self.assertEqual(before2, after)
+
+        # checking recovery_target_timeline=current is the default option
+        if self.pg_config_version >= self.version_to_num('12.0'):
+            node.stop()
+            node.cleanup()
+
+            # restore from first backup
+            restore_result = self.restore_node(backup_dir, 'node', node,
+                    options=[
+                        "-j", "4", "-i", backup_id]
+                )
+
+            self.assertIn(
+                "INFO: Restore of backup {0} completed.".format(backup_id), restore_result,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(self.output), self.cmd))
+
+            # check recovery_target_timeline option in the recovery_conf
+            recovery_target_timeline = self.get_recovery_conf(node)["recovery_target_timeline"]
+            self.assertEqual(recovery_target_timeline, "current")
+
+            # start postgres with current timeline
+            node.slow_start()
+
+            # check for the current updates
+            after = node.table_checksum("pgbench_branches")
+            self.assertEqual(before1, after)

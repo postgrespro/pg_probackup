@@ -1332,8 +1332,10 @@ create_recovery_conf(InstanceState *instanceState, time_t backup_id,
 	}
 
 	/* restore-target='latest' support */
-	target_latest = rt->target_stop != NULL &&
-		strcmp(rt->target_stop, "latest") == 0;
+	target_latest = (rt->target_tli_string != NULL &&
+					 strcmp(rt->target_tli_string, "latest") == 0) ||
+					(rt->target_stop != NULL &&
+					 strcmp(rt->target_stop, "latest") == 0);
 
 	target_immediate = rt->target_stop != NULL &&
 		strcmp(rt->target_stop, "immediate") == 0;
@@ -1359,6 +1361,13 @@ create_recovery_conf(InstanceState *instanceState, time_t backup_id,
 		rt->xid_string || rt->lsn_string || rt->target_name ||
 		target_immediate || target_latest || restore_command_provided)
 		params->recovery_settings_mode = PITR_REQUESTED;
+	/*
+	 * The recovery-target-timeline option can be 'latest' for streaming backups.
+	 * This operation requires a WAL archive for PITR.
+	*/
+	if (rt->target_tli && backup->stream && params->recovery_settings_mode != PITR_REQUESTED)
+		elog(WARNING, "The '--recovery-target-timeline' option applied for STREAM backup. "
+		"The timeline number will be ignored.");
 
 	elog(LOG, "----------------------------------------");
 
@@ -1438,14 +1447,20 @@ print_recovery_settings(InstanceState *instanceState, FILE *fp, pgBackup *backup
 		fio_fprintf(fp, "recovery_target_timeline = '%u'\n", rt->target_tli);
 	else
 	{
+		if (rt->target_tli_string)
+			fio_fprintf(fp, "recovery_target_timeline = '%s'\n", rt->target_tli_string);
+		else if (rt->target_stop && (strcmp(rt->target_stop, "latest") == 0))
+			fio_fprintf(fp, "recovery_target_timeline = 'latest'\n");
 #if PG_VERSION_NUM >= 120000
-
+		else
+		{
 			/*
 			 * In PG12 default recovery target timeline was changed to 'latest', which
 			 * is extremely risky. Explicitly preserve old behavior of recovering to current
 			 * timneline for PG12.
 			 */
 			fio_fprintf(fp, "recovery_target_timeline = 'current'\n");
+		}
 #endif
 	}
 
@@ -1877,7 +1892,7 @@ pgRecoveryTarget *
 parseRecoveryTargetOptions(const char *target_time,
 					const char *target_xid,
 					const char *target_inclusive,
-					TimeLineID	target_tli,
+					const char *target_tli_string,
 					const char *target_lsn,
 					const char *target_stop,
 					const char *target_name,
@@ -1950,7 +1965,20 @@ parseRecoveryTargetOptions(const char *target_time,
 				 target_inclusive);
 	}
 
-	rt->target_tli = target_tli;
+	rt->target_tli_string = target_tli_string;
+	rt->target_tli = 0;
+	/* target_tli can contains timeline number, "current"  or "latest" */
+	if(target_tli_string && strcmp(target_tli_string, "current") != 0 && strcmp(target_tli_string, "latest") != 0)
+	{
+		errno = 0;
+		rt->target_tli = strtoul(target_tli_string, NULL, 10);
+		if (errno == EINVAL || errno == ERANGE || !rt->target_tli)
+		{
+			elog(ERROR, "Invalid value for '--recovery-target-timeline' option '%s'",
+				 target_tli_string);
+		}
+	}
+
 	if (target_stop)
 	{
 		if ((strcmp(target_stop, "immediate") != 0)
