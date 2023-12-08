@@ -483,7 +483,7 @@ doc/src/sgml/pgprobackup.sgml
       </listitem>
       <listitem>
         <para>
-          <literal>backup</literal> — user on
+          <literal>backup_user</literal> — user on
           <literal>backup_host</literal> running all <application>pg_probackup</application>
           operations.
         </para>
@@ -1472,12 +1472,12 @@ GRANT SELECT ON TABLE pg_catalog.pg_database TO backup;
   <refsect2 id="pbk-configuring-the-remote-mode">
     <title>Configuring the Remote Mode</title>
     <para>
-      <application>pg_probackup</application> supports the remote mode that allows to perform
-      backup, restore and WAL archiving operations remotely. In this
-      mode, the backup catalog is stored on a local system, while
-      <productname>PostgreSQL</productname> instance to backup and/or to restore is located on a
-      remote system. Currently the only supported remote protocol is
-      SSH.
+      <application>pg_probackup</application> supports the remote mode that
+      allows to perform backup, restore and WAL archiving operations remotely.
+      In this mode, the backup catalog is stored on a local system, while
+      <productname>PostgreSQL</productname> instance to backup and/or to restore
+      is located on a remote system. Currently the only supported remote
+      protocol is SSH.
     </para>
     <refsect3 id="pbk-setup-ssh">
       <title>Set up SSH</title>
@@ -1490,19 +1490,19 @@ GRANT SELECT ON TABLE pg_catalog.pg_database TO backup;
           <para>
             Install <application>pg_probackup</application> on both systems:
             <literal>backup_host</literal> and
-            <literal>db_host</literal>.
+            <literal>postgres_host</literal>.
           </para>
         </listitem>
         <listitem>
           <para>
             For communication between the hosts set up a passwordless
-            SSH connection between <literal>backup</literal> user on
-            <literal>backup_host</literal> and
+            SSH connection between the <literal>backup_user</literal> user on
+            <literal>backup_host</literal> and the
             <literal>postgres</literal> user on
-            <literal>db_host</literal>:
+            <literal>postgres_host</literal>:
           </para>
           <programlisting>
-[backup@backup_host] ssh-copy-id postgres@db_host
+[backup_user@backup_host] ssh-copy-id postgres@postgres_host
 </programlisting>
           <para>
             Where:
@@ -1516,13 +1516,13 @@ GRANT SELECT ON TABLE pg_catalog.pg_database TO backup;
             </listitem>
             <listitem>
               <para>
-                <literal>db_host</literal> is the system with <productname>PostgreSQL</productname>
+                <literal>postgres_host</literal> is the system with the <productname>PostgreSQL</productname>
                 cluster.
               </para>
             </listitem>
             <listitem>
               <para>
-                <literal>backup</literal> is the OS user on
+                <literal>backup_user</literal> is the OS user on
                 <literal>backup_host</literal> used to run <application>pg_probackup</application>.
               </para>
             </listitem>
@@ -1544,18 +1544,19 @@ GRANT SELECT ON TABLE pg_catalog.pg_database TO backup;
             <link linkend="pbk-setting-up-continuous-wal-archiving">continuous
             WAL archiving</link>, set up a passwordless SSH
             connection between the <literal>postgres</literal> user on
-            <literal>db_host</literal> and the <literal>backup</literal>
+            <literal>postgres_host</literal> and the <literal>backup</literal>
             user on <literal>backup_host</literal>:
           </para>
           <programlisting>
-[postgres@db_host] ssh-copy-id backup@backup_host
+[postgres@postgres_host] ssh-copy-id backup_user@backup_host
 </programlisting>
         </listitem>
         <listitem>
           <para>
             Make sure <application>pg_probackup</application> on <literal>postgres_host</literal>
             can be located when a connection via SSH is made. For example, for <application>Bash</application>, you can
-            modify <literal>PATH</literal> in <filename>~/.bashrc</filename> of the <literal>backup</literal> user.
+            modify <literal>PATH</literal> in <filename>~/.bashrc</filename> of the <literal>postgres</literal> user
+            (above the line in <filename>bashrc</filename> which exits the script for non-interactive shells).
             Alternatively, for <application>pg_probackup</application> commands, specify the path to the directory
             containing the <application>pg_probackup</application> binary on <literal>postgres_host</literal> via
             the <link linkend="pbk-remote-server-opts">--remote-path</link> option.
@@ -1611,10 +1612,10 @@ GRANT SELECT ON TABLE pg_catalog.pg_database TO backup;
           <para>
             The main process is usually started on
             <replaceable>backup_host</replaceable> and connects to
-            <replaceable>db_host</replaceable>, but in case of
+            <replaceable>postgres_host</replaceable>, but in case of
             <command>archive-push</command> and
             <command>archive-get</command> commands the main process
-            is started on <replaceable>db_host</replaceable> and connects to
+            is started on <replaceable>postgres_host</replaceable> and connects to
             <replaceable>backup_host</replaceable>.
           </para>
         </listitem>
@@ -1635,7 +1636,7 @@ GRANT SELECT ON TABLE pg_catalog.pg_database TO backup;
         <listitem>
           <para>
             Compression is always done on
-            <replaceable>db_host</replaceable>, while decompression is always done on
+            <replaceable>postgres_host</replaceable>, while decompression is always done on
             <replaceable>backup_host</replaceable>.
           </para>
         </listitem>
