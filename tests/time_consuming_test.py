@@ -5,7 +5,7 @@ import subprocess
 from time import sleep
 
 
-class TimeConsumingTests(ProbackupTest, unittest.TestCase):
+class TimeConsumingTests(ProbackupTest):
     def test_pbckp150(self):
         """
         https://jira.postgrespro.ru/browse/PBCKP-150
@@ -19,11 +19,9 @@ class TimeConsumingTests(ProbackupTest, unittest.TestCase):
         if not self.ptrack:
             self.skipTest('Skipped because ptrack support is disabled')
 
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
+        node = self.pg_node.make_simple('node',
             set_replication=True,
             ptrack_enable=self.ptrack,
-            initdb_params=['--data-checksums'],
             pg_options={
                 'max_connections': 100,
                 'log_statement': 'none',
@@ -32,14 +30,13 @@ class TimeConsumingTests(ProbackupTest, unittest.TestCase):
                 'ptrack.map_size': 1})
 
         if node.major_version >= 13:
-            self.set_auto_conf(node, {'wal_keep_size': '16000MB'})
+            node.set_auto_conf({'wal_keep_size': '16000MB'})
         else:
-            self.set_auto_conf(node, {'wal_keep_segments': '1000'})
+            node.set_auto_conf({'wal_keep_segments': '1000'})
 
         # init probackup and add an instance
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
+        self.pb.init()
+        self.pb.add_instance('node', node)
 
         # run the node and init ptrack
         node.slow_start()
@@ -48,8 +45,8 @@ class TimeConsumingTests(ProbackupTest, unittest.TestCase):
         node.pgbench_init(scale=5)
 
         # FULL backup followed by PTRACK backup
-        self.backup_node(backup_dir, 'node', node, options=['--stream'])
-        self.backup_node(backup_dir, 'node', node, backup_type='ptrack', options=['--stream'])
+        self.pb.backup_node('node', node, options=['--stream'])
+        self.pb.backup_node('node', node, backup_type='ptrack', options=['--stream'])
 
         # run ordinary pgbench scenario to imitate some activity and another pgbench for vacuuming in parallel
         nBenchDuration = 30
@@ -61,7 +58,7 @@ class TimeConsumingTests(ProbackupTest, unittest.TestCase):
         # several PTRACK backups
         for i in range(nBenchDuration):
             print("[{}] backing up PTRACK diff...".format(i+1))
-            self.backup_node(backup_dir, 'node', node, backup_type='ptrack', options=['--stream', '--log-level-console', 'VERBOSE'])
+            self.pb.backup_node('node', node, backup_type='ptrack', options=['--stream', '--log-level-console', 'VERBOSE'])
             sleep(0.1)
             # if the activity pgbench has finished, stop backing up
             if pgbench.poll() is not None:
@@ -72,6 +69,6 @@ class TimeConsumingTests(ProbackupTest, unittest.TestCase):
         pgbench.wait()
         pgbenchval.wait()
 
-        backups = self.show_pb(backup_dir, 'node')
+        backups = self.pb.show('node')
         for b in backups:
             self.assertEqual("OK", b['status'])

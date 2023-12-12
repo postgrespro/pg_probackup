@@ -1,4 +1,4 @@
-__all__ = ['ptrack_helpers', 'cfs_helpers', 'data_helpers']
+__all__ = ['ptrack_helpers', 'data_helpers', 'fs_backup', 'init_helpers']
 
 import unittest
 

@@ -45,12 +45,21 @@ Run long (time consuming) tests:
  export PG_PROBACKUP_LONG=ON
 
 Usage:
- sudo echo 0 > /proc/sys/kernel/yama/ptrace_scope
+
+ sudo sysctl kernel.yama.ptrace_scope=0                                           # only active until the next reboot
+or
+ sudo sed -i 's/ptrace_scope = 1/ptrace_scope = 0/' /etc/sysctl.d/10-ptrace.conf  # set permanently, needs a reboot to take effect
+                                                                                  # see https://www.kernel.org/doc/Documentation/security/Yama.txt for possible implications of setting this parameter permanently
  pip install testgres
  export PG_CONFIG=/path/to/pg_config
  python -m unittest [-v] tests[.specific_module][.class.test]
 ```
-
+# Environment variables
+| Variable | Possible values | Required | Default value | Description |
+| - | - | - | - | - |
+| KEEP_LOGS | Any | No | Not set | If this variable is set to '1', 'y' or 'Y' then test logs are kept after the successful execution of a test, otherwise test logs are deleted upon the successful execution of a test |
+| PROBACKUP_S3_TYPE_FULL_TEST | Not set, minio, VK | No | Not set | If set, specifies the type of the S3 storage for the tests, otherwise signifies to the tests that the storage is not an S3 one |
+| PGPROBACKUP_TMP_DIR | File path | No | tmp_dirs | The root of the temporary directory hierarchy where tests store data and logs. Relative paths start from the `tests` directory. |
 # Troubleshooting FAQ
 
 ## Python tests failure

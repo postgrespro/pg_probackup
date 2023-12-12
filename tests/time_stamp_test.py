@@ -1,96 +1,78 @@
 import os
 import unittest
-from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
+from .helpers.ptrack_helpers import ProbackupTest
 import subprocess
 from time import sleep
 
 
-class TimeStamp(ProbackupTest, unittest.TestCase):
+class TimeStamp(ProbackupTest):
 
     def test_start_time_format(self):
         """Test backup ID changing after start-time editing in backup.control.
         We should convert local time in UTC format"""
         # Create simple node
-        node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(self.module_name, self.fname),
-            set_replication=True,
-            initdb_params=['--data-checksums'])
+        node = self.pg_node.make_simple('node',
+            set_replication=True)
 
-
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
-        self.set_archiving(backup_dir, 'node', node)
+        backup_dir = self.backup_dir
+        self.pb.init()
+        self.pb.add_instance('node', node)
+        self.pb.set_archiving('node', node)
         node.start()
 
-        backup_id = self.backup_node(backup_dir, 'node', node, options=['--stream', '-j 2'])
-        show_backup = self.show_pb(backup_dir, 'node')
+        backup_id = self.pb.backup_node('node', node, options=['--stream', '-j 2'])
+        show_backup = self.pb.show('node')
 
-        i = 0
-        while i < 2:
-            with open(os.path.join(backup_dir, "backups", "node", backup_id, "backup.control"), "r+") as f:
-                output = ""
-                for line in f:
-                    if line.startswith('start-time') is True:
-                        if i == 0:
-                            output = output + str(line[:-5])+'+00\''+'\n'
-                        else:
-                            output = output + str(line[:-5]) + '\'' + '\n'
+        for i in range(2):
+            with self.modify_backup_control(backup_dir, 'node', backup_id) as cf:
+                lines = cf.data.splitlines(keepends=True)
+                for j, line in enumerate(lines):
+                    if not line.startswith('start-time'):
+                        continue
+                    if i == 0:
+                        lines[j] = line[:-5] + "+00'\n"
                     else:
-                        output = output + str(line)
-                f.close()
-
-            with open(os.path.join(backup_dir, "backups", "node", backup_id, "backup.control"), "w") as fw:
-                fw.write(output)
-                fw.flush()
-            show_backup = show_backup + self.show_pb(backup_dir, 'node')
-            i += 1
+                        lines[j] = line[:-5] + "'\n"
+                cf.data = "".join(lines)
+            show_backup = show_backup + self.pb.show('node')
 
         print(show_backup[1]['id'])
         print(show_backup[2]['id'])
 
         self.assertTrue(show_backup[1]['id'] == show_backup[2]['id'], "ERROR: Localtime format using instead of UTC")
 
-        output = self.show_pb(backup_dir, as_json=False, as_text=True)
+        output = self.pb.show(as_json=False, as_text=True)
         self.assertNotIn("backup ID in control file", output)
 
         node.stop()
 
     def test_server_date_style(self):
         """Issue #112"""
-        node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(self.module_name, self.fname),
+        node = self.pg_node.make_simple('node',
             set_replication=True,
-            initdb_params=['--data-checksums'],
             pg_options={"datestyle": "GERMAN, DMY"})
 
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
+        self.pb.init()
+        self.pb.add_instance('node', node)
         node.start()
 
-        self.backup_node(
-            backup_dir, 'node', node, options=['--stream', '-j 2'])
+        self.pb.backup_node('node', node, options=['--stream', '-j 2'])
         
     def test_handling_of_TZ_env_variable(self):
         """Issue #284"""
-        node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(self.module_name, self.fname),
-            set_replication=True,
-            initdb_params=['--data-checksums'])
+        node = self.pg_node.make_simple('node',
+            set_replication=True)
 
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
+        self.pb.init()
+        self.pb.add_instance('node', node)
         node.start()
 
         my_env = os.environ.copy()
         my_env["TZ"] = "America/Detroit"
 
-        self.backup_node(
-            backup_dir, 'node', node, options=['--stream', '-j 2'], env=my_env)
+        self.pb.backup_node('node', node, options=['--stream', '-j 2'], env=my_env)
 
-        output = self.show_pb(backup_dir, 'node', as_json=False, as_text=True, env=my_env)
+        output = self.pb.show('node', as_json=False, as_text=True, env=my_env)
 
         self.assertNotIn("backup ID in control file", output)
 
@@ -98,14 +80,11 @@ class TimeStamp(ProbackupTest, unittest.TestCase):
     # @unittest.expectedFailure
     def test_dst_timezone_handling(self):
         """for manual testing"""
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
-            initdb_params=['--data-checksums'])
+        node = self.pg_node.make_simple('node')
 
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
-        self.set_archiving(backup_dir, 'node', node)
+        self.pb.init()
+        self.pb.add_instance('node', node)
+        self.pb.set_archiving('node', node)
         node.slow_start()
 
         print(subprocess.Popen(
@@ -124,7 +103,7 @@ class TimeStamp(ProbackupTest, unittest.TestCase):
             stderr=subprocess.PIPE).communicate()
 
         # FULL
-        output = self.backup_node(backup_dir, 'node', node, return_id=False)
+        output = self.pb.backup_node('node', node, return_id=False)
         self.assertNotIn("backup ID in control file", output)
 
         # move to dst
@@ -134,8 +113,7 @@ class TimeStamp(ProbackupTest, unittest.TestCase):
             stderr=subprocess.PIPE).communicate()
 
         # DELTA
-        output = self.backup_node(
-            backup_dir, 'node', node, backup_type='delta', return_id=False)
+        output = self.pb.backup_node('node', node, backup_type='delta', return_id=False)
         self.assertNotIn("backup ID in control file", output)
 
         subprocess.Popen(
@@ -144,9 +122,9 @@ class TimeStamp(ProbackupTest, unittest.TestCase):
             stderr=subprocess.PIPE).communicate()
 
         # DELTA
-        self.backup_node(backup_dir, 'node', node, backup_type='delta')
+        self.pb.backup_node('node', node, backup_type='delta')
 
-        output = self.show_pb(backup_dir, as_json=False, as_text=True)
+        output = self.pb.show(as_json=False, as_text=True)
         self.assertNotIn("backup ID in control file", output)
 
         subprocess.Popen(
@@ -156,9 +134,9 @@ class TimeStamp(ProbackupTest, unittest.TestCase):
 
         sleep(10)
 
-        self.backup_node(backup_dir, 'node', node, backup_type='delta')
+        self.pb.backup_node('node', node, backup_type='delta')
 
-        output = self.show_pb(backup_dir, as_json=False, as_text=True)
+        output = self.pb.show(as_json=False, as_text=True)
         self.assertNotIn("backup ID in control file", output)
 
         subprocess.Popen(
@@ -169,14 +147,11 @@ class TimeStamp(ProbackupTest, unittest.TestCase):
     @unittest.skip("skip")
     def test_dst_timezone_handling_backward_compatibilty(self):
         """for manual testing"""
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
-            initdb_params=['--data-checksums'])
+        node = self.pg_node.make_simple('node')
 
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
-        self.set_archiving(backup_dir, 'node', node)
+        self.pb.init()
+        self.pb.add_instance('node', node)
+        self.pb.set_archiving('node', node)
         node.slow_start()
 
         subprocess.Popen(
@@ -195,7 +170,7 @@ class TimeStamp(ProbackupTest, unittest.TestCase):
             stderr=subprocess.PIPE).communicate()
 
         # FULL
-        self.backup_node(backup_dir, 'node', node, old_binary=True, return_id=False)
+        self.pb.backup_node('node', node, old_binary=True, return_id=False)
 
         # move to dst
         subprocess.Popen(
@@ -204,8 +179,7 @@ class TimeStamp(ProbackupTest, unittest.TestCase):
             stderr=subprocess.PIPE).communicate()
 
         # DELTA
-        output = self.backup_node(
-            backup_dir, 'node', node, backup_type='delta', old_binary=True, return_id=False)
+        output = self.pb.backup_node('node', node, backup_type='delta', old_binary=True, return_id=False)
 
         subprocess.Popen(
             ['sudo', 'timedatectl', 'set-time', '2020-12-01 12:00:00'],
@@ -213,9 +187,9 @@ class TimeStamp(ProbackupTest, unittest.TestCase):
             stderr=subprocess.PIPE).communicate()
 
         # DELTA
-        self.backup_node(backup_dir, 'node', node, backup_type='delta')
+        self.pb.backup_node('node', node, backup_type='delta')
 
-        output = self.show_pb(backup_dir, as_json=False, as_text=True)
+        output = self.pb.show(as_json=False, as_text=True)
         self.assertNotIn("backup ID in control file", output)
 
         subprocess.Popen(
@@ -225,9 +199,9 @@ class TimeStamp(ProbackupTest, unittest.TestCase):
 
         sleep(10)
 
-        self.backup_node(backup_dir, 'node', node, backup_type='delta')
+        self.pb.backup_node('node', node, backup_type='delta')
 
-        output = self.show_pb(backup_dir, as_json=False, as_text=True)
+        output = self.pb.show(as_json=False, as_text=True)
         self.assertNotIn("backup ID in control file", output)
 
         subprocess.Popen(

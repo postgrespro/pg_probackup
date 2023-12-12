@@ -1,19 +1,16 @@
 import os
 import unittest
-from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
+from .helpers.ptrack_helpers import ProbackupTest
 
-class CVE_2018_1058(ProbackupTest, unittest.TestCase):
+class CVE_2018_1058(ProbackupTest):
 
     # @unittest.skip("skip")
     def test_basic_default_search_path(self):
         """"""
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
-            set_replication=True)
+        node = self.pg_node.make_simple('node', checksum=False, set_replication=True)
 
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
+        self.pb.init()
+        self.pb.add_instance('node', node)
         node.slow_start()
 
         node.safe_psql(
@@ -26,19 +23,16 @@ class CVE_2018_1058(ProbackupTest, unittest.TestCase):
             "END "
             "$$ LANGUAGE plpgsql")
 
-        self.backup_node(backup_dir, 'node', node, backup_type='full', options=['--stream'])
+        self.pb.backup_node('node', node, backup_type='full', options=['--stream'])
 
     # @unittest.skip("skip")
     def test_basic_backup_modified_search_path(self):
         """"""
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
-            set_replication=True)
-        self.set_auto_conf(node, options={'search_path': 'public,pg_catalog'})
+        node = self.pg_node.make_simple('node', checksum=False, set_replication=True)
+        node.set_auto_conf(options={'search_path': 'public,pg_catalog'})
 
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
+        self.pb.init()
+        self.pb.add_instance('node', node)
         node.slow_start()
 
         node.safe_psql(
@@ -62,7 +56,7 @@ class CVE_2018_1058(ProbackupTest, unittest.TestCase):
             "$$ LANGUAGE plpgsql; "
             "CREATE VIEW public.pg_proc AS SELECT proname FROM public.pg_proc()")
 
-        self.backup_node(backup_dir, 'node', node, backup_type='full', options=['--stream'])
+        self.pb.backup_node('node', node, backup_type='full', options=['--stream'])
 
         log_file = os.path.join(node.logs_dir, 'postgresql.log')
         with open(log_file, 'r') as f:
@@ -73,10 +67,8 @@ class CVE_2018_1058(ProbackupTest, unittest.TestCase):
     # @unittest.skip("skip")
     def test_basic_checkdb_modified_search_path(self):
         """"""
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
-            initdb_params=['--data-checksums'])
-        self.set_auto_conf(node, options={'search_path': 'public,pg_catalog'})
+        node = self.pg_node.make_simple('node')
+        node.set_auto_conf(options={'search_path': 'public,pg_catalog'})
         node.slow_start()
 
         node.safe_psql(
@@ -110,20 +102,11 @@ class CVE_2018_1058(ProbackupTest, unittest.TestCase):
             "CREATE VIEW public.pg_namespace AS SELECT * FROM public.pg_namespace();"
             )
 
-        try:
-            self.checkdb_node(
+        self.pb.checkdb_node(
                 options=[
                     '--amcheck',
                     '--skip-block-validation',
-                    '-d', 'postgres', '-p', str(node.port)])
-            self.assertEqual(
-                1, 0,
-                "Expecting Error because amcheck{,_next} not installed\n"
-                " Output: {0} \n CMD: {1}".format(
-                    repr(self.output), self.cmd))
-        except ProbackupException as e:
-            self.assertIn(
-                "WARNING: Extension 'amcheck' or 'amcheck_next' are not installed in database postgres",
-                e.message,
-                "\n Unexpected Error Message: {0}\n CMD: {1}".format(
-                    repr(e.message), self.cmd))
+                    '-d', 'postgres', '-p', str(node.port)],
+                expect_error="because amcheck{,_next} not installed")
+        self.assertMessage(contains=
+                "WARNING: Extension 'amcheck' or 'amcheck_next' are not installed in database postgres")
