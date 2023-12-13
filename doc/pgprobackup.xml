@@ -2434,7 +2434,8 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
       <para>
        In addition to SSH connection, <application>pg_probackup</application> uses
        a regular connection to the database to manage the remote operation.
-       See <xref linkend="pbk-configuring-the-database-cluster"/> for details of how to set up
+       See the section <link linkend="pbk-configuring-the-database-cluster">Configuring
+       the Database Cluster</link> for details of how to set up
        a database connection.
       </para>
      </note>
@@ -3941,7 +3942,7 @@ pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replace
 
     <para>
      To prepare for cloning/synchronizing a <productname>PostgreSQL</productname> instance,
-     set up the source instance server as follows:
+     set up the source server as follows:
       <itemizedlist>
         <listitem>
           <para>
@@ -3964,7 +3965,7 @@ pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replace
 
     <para>
       Before cloning/synchronizing a <productname>PostgreSQL</productname> instance, ensure that the source
-      instance server is running and accepting connections. To clone/sync a <productname>PostgreSQL</productname> instance,
+      server is running and accepting connections. To clone/sync a <productname>PostgreSQL</productname> instance,
       on the server with the destination instance, you can run
       the <xref linkend="pbk-catchup"/> command as follows:
     </para>
@@ -4007,7 +4008,7 @@ pg_probackup catchup -b <replaceable>catchup_mode</replaceable> --source-pgdata=
       By specifying the <option>--stream</option> option, you can set
       <link linkend="pbk-stream-mode">STREAM</link> WAL delivery mode
       of copying, which will include all the necessary WAL files by streaming them from
-      the instance server via replication protocol.
+      the server via replication protocol.
     </para>
     <para>
       You can use <link linkend="pbk-connection-opts">connection_options</link> to specify
@@ -4998,7 +4999,7 @@ pg_probackup catchup -b <replaceable>catchup_mode</replaceable>
       <para>
         Copies the instance in <link linkend="pbk-stream-mode">STREAM</link> WAL delivery mode,
         including all the necessary WAL files by streaming them from
-        the instance server via replication protocol.
+        the server via replication protocol.
       </para>
       </listitem>
       </varlistentry>
