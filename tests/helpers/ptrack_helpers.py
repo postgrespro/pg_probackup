@@ -97,7 +97,7 @@ elif os.environ.get('PROBACKUP_S3_TYPE_FULL_TEST'):
     root = os.path.realpath(os.path.join(os.path.dirname(__file__), '../..'))
     if root not in sys.path:
         sys.path.append(root)
-    from s3.test_utils.s3_backup import S3TestBackupDir
+    from ..test_utils.s3_backup import S3TestBackupDir
     fs_backup_class = S3TestBackupDir
 
 
