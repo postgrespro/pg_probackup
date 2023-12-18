@@ -519,23 +519,23 @@ doc/src/sgml/pgprobackup.sgml
       <title>Steps to perform:</title>
       <procedure>
       <step>
-        <title>Install <application>pg_probackup</application> on both <literal>backup_host</literal> and <literal>postgres_host</literal>.</title>
+        <para>Install <application>pg_probackup</application> on both <literal>backup_host</literal> and <literal>postgres_host</literal>.</para>
       </step>
       <step id="pbk-quickstart-setup-ssh">
-        <title><link linkend="pbk-setup-ssh">Set up an SSH connection</link> from <literal>backup_host</literal> to <literal>postgres_host</literal>.</title>
+        <para><link linkend="pbk-setup-ssh">Set up an SSH connection</link> from <literal>backup_host</literal> to <literal>postgres_host</literal>.</para>
       </step>
       <step id="pbk-setup-postgresql-cluster">
-        <title><link linkend="pbk-configuring-the-database-cluster">Configure</link> your database cluster for <link linkend="pbk-setting-up-stream-backups">STREAM backups</link>.</title>
+        <para><link linkend="pbk-configuring-the-database-cluster">Configure</link> your database cluster for <link linkend="pbk-setting-up-stream-backups">STREAM backups</link>.</para>
       </step>
       <step id="pbk-init-the-backup-catalog">
-        <title>Initialize the backup catalog:</title>
+        <para>Initialize the backup catalog:</para>
         <programlisting>
 backup_user@backup_host:~$ pg_probackup-16 init -B /mnt/backups
 INFO: Backup catalog '/mnt/backups' successfully initialized
 </programlisting>
       </step>
       <step id="pbk-add-instance-to-backup-catalog">
-        <title>Add a backup instance called <literal>mydb</literal> to the backup catalog:</title>
+        <para>Add a backup instance called <literal>mydb</literal> to the backup catalog:</para>
         <programlisting>
 backup_user@backup_host:~$ pg_probackup-16 add-instance \
     -B /mnt/backups \
@@ -547,7 +547,7 @@ INFO: Instance 'mydb' successfully initialized
 </programlisting>
       </step>
       <step id="pbk-make-full-backup">
-        <title>Make a FULL backup:</title>
+        <para>Make a FULL backup:</para>
         <programlisting>
 backup_user@backup_host:~$ pg_probackup-16 backup \
     -B /mnt/backups \
@@ -579,7 +579,7 @@ INFO: Backup S6OBFN completed
 </programlisting>
       </step>
       <step id="pbk-list-backups">
-        <title>List the backups of the instance:</title>
+        <para>List the backups of the instance:</para>
         <programlisting>
 backup_user@backup_host:~$ pg_probackup-16 show -B /mnt/backups --instance=mydb
 ================================================================================================================================
@@ -589,7 +589,7 @@ backup_user@backup_host:~$ pg_probackup-16 show -B /mnt/backups --instance=mydb
 </programlisting>
       </step>
       <step id="pbk-make-incremental-backup-in-delta-mode">
-        <title>Make an incremental backup in the DELTA mode:</title>
+        <para>Make an incremental backup in the DELTA mode:</para>
         <programlisting>
 backup_user@backup_host:~$ pg_probackup-16 backup \
     -B /mnt/backups \
@@ -623,8 +623,8 @@ INFO: Backup S6OBLG completed
 </programlisting>
       </step>
       <step id="pbk-save-config-parameters">
-        <title>Add or modify some parameters in the <application>pg_probackup</application>
-        configuration file, so that you do not have to specify them each time on the command line:</title>
+        <para>Add or modify some parameters in the <application>pg_probackup</application>
+        configuration file, so that you do not have to specify them each time on the command line:</para>
         <programlisting>
 backup_user@backup_host:~$ pg_probackup-16 set-config \
     -B /mnt/backups \
@@ -636,7 +636,7 @@ backup_user@backup_host:~$ pg_probackup-16 set-config \
 </programlisting>
       </step>
       <step id="pbk-print-instance-config">
-        <title>Check the configuration of the instance:</title>
+        <para>Check the configuration of the instance:</para>
         <programlisting>
 backup_user@backup_host:~$ pg_probackup-16 show-config -B /mnt/backups --instance=mydb
 # Backup instance information
@@ -676,8 +676,8 @@ remote-user = postgres
         </para>
       </step>
       <step id="pbk-make-another-incremental-backup-in-delta-mode-using-saved-parameters">
-        <title>Make another incremental backup in the DELTA mode, omitting
-        the parameters stored in the configuration file earlier:</title>
+        <para>Make another incremental backup in the DELTA mode, omitting
+        the parameters stored in the configuration file earlier:</para>
         <programlisting>
 backup_user@backup_host:~$ pg_probackup-16 backup -B /mnt/backups --instance=mydb -b delta --stream
 INFO: Backup start, pg_probackup version: 2.5.13, instance: mydb, backup ID: S6OBQO, backup mode: DELTA, wal mode: STREAM, remote: true, compress-algorithm: none, compress-level: 1
@@ -703,7 +703,7 @@ INFO: Backup S6OBQO completed
 </programlisting>
       </step>
       <step id="pbk-list-backups-again">
-        <title>List the backups of the instance again:</title>
+        <para>List the backups of the instance again:</para>
         <programlisting>
 backup_user@backup_host:~$ pg_probackup-16 show -B /mnt/backups --instance=mydb
 ==================================================================================================================================
