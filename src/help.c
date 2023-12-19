@@ -983,6 +983,30 @@ help_add_instance(void)
 	printf(_("      --remote-user=username       user name for ssh connection (default: current user)\n"));
 	printf(_("      --ssh-options=ssh_options    additional ssh options (default: none)\n"));
 	printf(_("                                   (example: --ssh-options='-c cipher_spec -F configfile')\n\n"));
+
+	printf(_("\n  Logging options:\n"));
+	printf(_("      --log-level-console=log-level-console\n"));
+	printf(_("                                   level for console logging (default: info)\n"));
+	printf(_("                                   available options: 'off', 'error', 'warning', 'info', 'log', 'verbose'\n"));
+	printf(_("      --log-level-file=log-level-file\n"));
+	printf(_("                                   level for file logging (default: off)\n"));
+	printf(_("                                   available options: 'off', 'error', 'warning', 'info', 'log', 'verbose'\n"));
+	printf(_("      --log-format-file=log-format-file\n"));
+	printf(_("                                   defines the format of log files (default: plain)\n"));
+	printf(_("                                   available options: 'plain', 'json'\n"));
+	printf(_("      --log-filename=log-filename\n"));
+	printf(_("                                   filename for file logging (default: 'pg_probackup.log')\n"));
+	printf(_("                                   support strftime format (example: pg_probackup-%%Y-%%m-%%d_%%H%%M%%S.log)\n"));
+	printf(_("      --error-log-filename=error-log-filename\n"));
+	printf(_("                                   filename for error logging (default: none)\n"));
+	printf(_("      --log-directory=log-directory\n"));
+	printf(_("                                   directory for file logging (default: BACKUP_PATH/log)\n"));
+	printf(_("      --log-rotation-size=log-rotation-size\n"));
+	printf(_("                                   rotate logfile if its size exceeds this value; 0 disables; (default: 0)\n"));
+	printf(_("                                   available units: 'kB', 'MB', 'GB', 'TB' (default: kB)\n"));
+	printf(_("      --log-rotation-age=log-rotation-age\n"));
+	printf(_("                                   rotate logfile if its age exceeds this value; 0 disables; (default: 0)\n"));
+	printf(_("                                   available units: 'ms', 's', 'min', 'h', 'd' (default: min)\n"));
 }
 
 static void
@@ -1030,6 +1054,30 @@ help_archive_push(void)
 	printf(_("      --compress-level=compress-level\n"));
 	printf(_("                                   level of compression [0-9] (default: 1)\n"));
 
+	printf(_("\n  Logging options:\n"));
+	printf(_("      --log-level-console=log-level-console\n"));
+	printf(_("                                   level for console logging (default: info)\n"));
+	printf(_("                                   available options: 'off', 'error', 'warning', 'info', 'log', 'verbose'\n"));
+	printf(_("      --log-level-file=log-level-file\n"));
+	printf(_("                                   level for file logging (default: off)\n"));
+	printf(_("                                   available options: 'off', 'error', 'warning', 'info', 'log', 'verbose'\n"));
+	printf(_("      --log-format-file=log-format-file\n"));
+	printf(_("                                   defines the format of log files (default: plain)\n"));
+	printf(_("                                   available options: 'plain', 'json'\n"));
+	printf(_("      --log-filename=log-filename\n"));
+	printf(_("                                   filename for file logging (default: 'pg_probackup.log')\n"));
+	printf(_("                                   support strftime format (example: pg_probackup-%%Y-%%m-%%d_%%H%%M%%S.log)\n"));
+	printf(_("      --error-log-filename=error-log-filename\n"));
+	printf(_("                                   filename for error logging (default: none)\n"));
+	printf(_("      --log-directory=log-directory\n"));
+	printf(_("                                   directory for file logging (default: BACKUP_PATH/log)\n"));
+	printf(_("      --log-rotation-size=log-rotation-size\n"));
+	printf(_("                                   rotate logfile if its size exceeds this value; 0 disables; (default: 0)\n"));
+	printf(_("                                   available units: 'kB', 'MB', 'GB', 'TB' (default: kB)\n"));
+	printf(_("      --log-rotation-age=log-rotation-age\n"));
+	printf(_("                                   rotate logfile if its age exceeds this value; 0 disables; (default: 0)\n"));
+	printf(_("                                   available units: 'ms', 's', 'min', 'h', 'd' (default: min)\n"));
+
 	printf(_("\n  Remote options:\n"));
 	printf(_("      --remote-proto=protocol      remote protocol to use\n"));
 	printf(_("                                   available options: 'ssh', 'none' (default: ssh)\n"));
@@ -1064,6 +1112,30 @@ help_archive_get(void)
 	printf(_("      --batch-size=NUM             number of files to be prefetched\n"));
 	printf(_("      --prefetch-dir=path          location of the store area for prefetched WAL files\n"));
 	printf(_("      --no-validate-wal            skip validation of prefetched WAL file before using it\n"));
+
+	printf(_("\n  Logging options:\n"));
+	printf(_("      --log-level-console=log-level-console\n"));
+	printf(_("                                   level for console logging (default: info)\n"));
+	printf(_("                                   available options: 'off', 'error', 'warning', 'info', 'log', 'verbose'\n"));
+	printf(_("      --log-level-file=log-level-file\n"));
+	printf(_("                                   level for file logging (default: off)\n"));
+	printf(_("                                   available options: 'off', 'error', 'warning', 'info', 'log', 'verbose'\n"));
+	printf(_("      --log-format-file=log-format-file\n"));
+	printf(_("                                   defines the format of log files (default: plain)\n"));
+	printf(_("                                   available options: 'plain', 'json'\n"));
+	printf(_("      --log-filename=log-filename\n"));
+	printf(_("                                   filename for file logging (default: 'pg_probackup.log')\n"));
+	printf(_("                                   support strftime format (example: pg_probackup-%%Y-%%m-%%d_%%H%%M%%S.log)\n"));
+	printf(_("      --error-log-filename=error-log-filename\n"));
+	printf(_("                                   filename for error logging (default: none)\n"));
+	printf(_("      --log-directory=log-directory\n"));
+	printf(_("                                   directory for file logging (default: BACKUP_PATH/log)\n"));
+	printf(_("      --log-rotation-size=log-rotation-size\n"));
+	printf(_("                                   rotate logfile if its size exceeds this value; 0 disables; (default: 0)\n"));
+	printf(_("                                   available units: 'kB', 'MB', 'GB', 'TB' (default: kB)\n"));
+	printf(_("      --log-rotation-age=log-rotation-age\n"));
+	printf(_("                                   rotate logfile if its age exceeds this value; 0 disables; (default: 0)\n"));
+	printf(_("                                   available units: 'ms', 's', 'min', 'h', 'd' (default: min)\n"));
 
 	printf(_("\n  Remote options:\n"));
 	printf(_("      --remote-proto=protocol      remote protocol to use\n"));
@@ -1130,6 +1202,30 @@ help_catchup(void)
 	printf(_("  -p, --pgport=PORT                database server port (default: 5432)\n"));
 	printf(_("  -w, --no-password                never prompt for password\n"));
 	printf(_("  -W, --password                   force password prompt\n\n"));
+
+	printf(_("\n  Logging options:\n"));
+	printf(_("      --log-level-console=log-level-console\n"));
+	printf(_("                                   level for console logging (default: info)\n"));
+	printf(_("                                   available options: 'off', 'error', 'warning', 'info', 'log', 'verbose'\n"));
+	printf(_("      --log-level-file=log-level-file\n"));
+	printf(_("                                   level for file logging (default: off)\n"));
+	printf(_("                                   available options: 'off', 'error', 'warning', 'info', 'log', 'verbose'\n"));
+	printf(_("      --log-format-file=log-format-file\n"));
+	printf(_("                                   defines the format of log files (default: plain)\n"));
+	printf(_("                                   available options: 'plain', 'json'\n"));
+	printf(_("      --log-filename=log-filename\n"));
+	printf(_("                                   filename for file logging (default: 'pg_probackup.log')\n"));
+	printf(_("                                   support strftime format (example: pg_probackup-%%Y-%%m-%%d_%%H%%M%%S.log)\n"));
+	printf(_("      --error-log-filename=error-log-filename\n"));
+	printf(_("                                   filename for error logging (default: none)\n"));
+	printf(_("      --log-directory=log-directory\n"));
+	printf(_("                                   directory for file logging (default: BACKUP_PATH/log)\n"));
+	printf(_("      --log-rotation-size=log-rotation-size\n"));
+	printf(_("                                   rotate logfile if its size exceeds this value; 0 disables; (default: 0)\n"));
+	printf(_("                                   available units: 'kB', 'MB', 'GB', 'TB' (default: kB)\n"));
+	printf(_("      --log-rotation-age=log-rotation-age\n"));
+	printf(_("                                   rotate logfile if its age exceeds this value; 0 disables; (default: 0)\n"));
+	printf(_("                                   available units: 'ms', 's', 'min', 'h', 'd' (default: min)\n"));
 
 	printf(_("\n  Remote options:\n"));
 	printf(_("      --remote-proto=protocol      remote protocol to use\n"));
