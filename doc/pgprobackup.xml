@@ -472,7 +472,7 @@ doc/src/sgml/pgprobackup.sgml
       </listitem>
       <listitem>
         <para>
-          <literal>backupdb</literal> — database used used to connect to the
+          <literal>backupdb</literal> — database used to connect to the
           <productname>PostgreSQL</productname> cluster.
         </para>
       </listitem>
@@ -1473,7 +1473,7 @@ GRANT SELECT ON TABLE pg_catalog.pg_database TO backup;
     <title>Configuring the Remote Mode</title>
     <para>
       <application>pg_probackup</application> supports the remote mode that
-      allows to perform backup, restore and WAL archiving operations remotely.
+      allows you to perform backup, restore and WAL archiving operations remotely.
       In this mode, the backup catalog is stored on a local system, while
       <productname>PostgreSQL</productname> instance to backup and/or to restore
       is located on a remote system. Currently the only supported remote
@@ -1556,7 +1556,7 @@ GRANT SELECT ON TABLE pg_catalog.pg_database TO backup;
             Make sure <application>pg_probackup</application> on <literal>postgres_host</literal>
             can be located when a connection via SSH is made. For example, for <application>Bash</application>, you can
             modify <literal>PATH</literal> in <filename>~/.bashrc</filename> of the <literal>postgres</literal> user
-            (above the line in <filename>bashrc</filename> which exits the script for non-interactive shells).
+            (above the line in <filename>bashrc</filename> that exits the script for non-interactive shells).
             Alternatively, for <application>pg_probackup</application> commands, specify the path to the directory
             containing the <application>pg_probackup</application> binary on <literal>postgres_host</literal> via
             the <link linkend="pbk-remote-server-opts">--remote-path</link> option.
@@ -2188,7 +2188,7 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
       <listitem>
         <para>
           LSN — read the <replaceable>pg_control</replaceable> in the
-          data directory to obtain redo LSN and redo TLI, which allows
+          data directory to obtain redo LSN and redo TLI, which allows you
           to determine a point in history(shiftpoint), where data directory
           state shifted from target backup chain history. If shiftpoint is not within
           reach of backup chain history, then restore is aborted.
@@ -2417,7 +2417,7 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
   <refsect2 id="pbk-remote-backup">
     <title>Using <application>pg_probackup</application> in the Remote Mode</title>
     <para>
-      <application>pg_probackup</application> supports the remote mode that allows to perform
+      <application>pg_probackup</application> supports the remote mode that allows you to perform
       <literal>backup</literal> and <literal>restore</literal>
       operations remotely via SSH. In this mode, the backup catalog is
       stored on a local system, while <productname>PostgreSQL</productname> instance to be backed
@@ -3782,7 +3782,7 @@ pg_probackup merge -B <replaceable>backup_dir</replaceable> --instance <replacea
       between them. Once the merge is complete, the full backup takes in all
       the merged data, and the incremental backups are removed as redundant.
       Thus, the merge operation is virtually equivalent to retaking a full
-      backup and removing all the outdated backups, but it allows to save much
+      backup and removing all the outdated backups, but it allows you to save much
       time, especially for large data volumes, as well as I/O and network
       traffic if you are using <application>pg_probackup</application> in the
       <link linkend="pbk-remote-backup">remote</link> mode.
