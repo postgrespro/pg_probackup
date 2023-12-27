@@ -565,7 +565,7 @@ INFO: Wait for WAL segment /mnt/backups/backups/mydb/S6OBFN/database/pg_wal/0000
 INFO: PGDATA size: 29MB
 INFO: Current Start LSN: 0/2000060, TLI: 1
 INFO: Start transferring data files
-INFO: Data files are transferred, time elapsed: 1s
+INFO: Data files are transferred, time elapsed: 0
 INFO: wait for pg_stop_backup()
 INFO: pg_stop backup() successfully executed
 INFO: stop_lsn: 0/2003CB0
@@ -689,7 +689,7 @@ INFO: PGDATA size: 29MB
 INFO: Current Start LSN: 0/6000028, TLI: 1
 INFO: Parent Start LSN: 0/4000028, TLI: 1
 INFO: Start transferring data files
-INFO: Data files are transferred, time elapsed: 1s
+INFO: Data files are transferred, time elapsed: 0
 INFO: wait for pg_stop_backup()
 INFO: pg_stop backup() successfully executed
 INFO: stop_lsn: 0/6000168
@@ -713,6 +713,27 @@ backup_user@backup_host:~$ pg_probackup-16 show -B /mnt/backups --instance=mydb
  mydb      16       S6OBLG  2024-01-03 07:03:18+00  DELTA  STREAM    1/1   10s  127kB  32MB    1.00  0/4000028  0/4000168  OK
  mydb      16       S6OBFN  2024-01-03 06:59:49+00  FULL   STREAM    1/0   10s   29MB  16MB    1.00  0/2000060  0/2003CB0  OK
 </programlisting>
+      </step>
+      <step id="pbk-quickstart-restore">
+        <para>Restore the data from the latest available backup to an arbitrary location:</para>
+        <programlisting>
+backup_user@backup_host:~$ pg_probackup-16 restore -B /mnt/backups -D /var/lib/postgresql/16/staging --instance=mydb
+INFO: Validating parents for backup S6OBQO
+INFO: Validating backup S6OBFN
+INFO: Backup S6OBFN data files are valid
+INFO: Validating backup S6OBLG
+INFO: Backup S6OBLG data files are valid
+INFO: Validating backup S6OBQO
+INFO: Backup S6OBQO data files are valid
+INFO: Backup S6OBQO WAL segments are valid
+INFO: Backup S6OBQO is valid.
+INFO: Restoring the database from backup at 2024-01-03 07:06:24+00
+INFO: Start restoring backup files. PGDATA size: 61MB
+INFO: Backup files are restored. Transfered bytes: 61MB, time elapsed: 1s
+INFO: Restore incremental ratio (less is better): 100% (61MB/61MB)
+INFO: Syncing restored files to disk
+INFO: Restored backup files are synced, time elapsed: 0
+INFO: Restore of backup S6OBQO completed.
       </step>
     </procedure>
     </refsect2>
