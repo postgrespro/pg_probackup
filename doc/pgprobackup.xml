@@ -519,7 +519,7 @@ doc/src/sgml/pgprobackup.sgml
       <title>Steps to perform:</title>
       <procedure>
       <step>
-        <para>Install <application>pg_probackup</application> on both <literal>backup_host</literal> and <literal>postgres_host</literal>.</para>
+        <para><link linkend="pbk-install">Install</link> <application>pg_probackup</application> on both <literal>backup_host</literal> and <literal>postgres_host</literal>.</para>
       </step>
       <step id="pbk-quickstart-setup-ssh">
         <para><link linkend="pbk-setup-ssh">Set up an SSH connection</link> from <literal>backup_host</literal> to <literal>postgres_host</literal>.</para>
@@ -734,6 +734,7 @@ INFO: Restore incremental ratio (less is better): 100% (61MB/61MB)
 INFO: Syncing restored files to disk
 INFO: Restored backup files are synced, time elapsed: 0
 INFO: Restore of backup S6OBQO completed.
+</programlisting>
       </step>
     </procedure>
     </refsect2>
