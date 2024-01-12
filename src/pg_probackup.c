@@ -164,6 +164,7 @@ bool no_validate_wal = false;
 /* show options */
 ShowFormat show_format = SHOW_PLAIN;
 bool show_archive = false;
+static bool show_default_units = false;
 
 /* set-backup options */
 int64 ttl = -1;
@@ -275,6 +276,8 @@ static ConfigOption cmd_options[] =
 	/* show options */
 	{ 'f', 165, "format",			opt_show_format,	SOURCE_CMD_STRICT },
 	{ 'b', 166, "archive",			&show_archive,		SOURCE_CMD_STRICT },
+	/* show-config options */
+	{ 'b', 167, "default-units",	&show_default_units,SOURCE_CMD_STRICT },
 	/* set-backup options */
 	{ 'I', 170, "ttl", &ttl, SOURCE_CMD_STRICT, SOURCE_DEFAULT, 0, OPTION_UNIT_S, option_get_value},
 	{ 's', 171, "expire-time",		&expire_time_string,	SOURCE_CMD_STRICT },
@@ -1049,7 +1052,7 @@ main(int argc, char *argv[])
 			do_merge(instanceState, current.backup_id, no_validate, no_sync);
 			break;
 		case SHOW_CONFIG_CMD:
-			do_show_config();
+			do_show_config(show_default_units);
 			break;
 		case SET_CONFIG_CMD:
 			do_set_config(instanceState, false);

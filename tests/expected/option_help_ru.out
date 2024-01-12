@@ -39,6 +39,7 @@ pg_probackup - утилита для управления резервным к�
 
   pg_probackup show-config -B backup-path --instance=instance_name
                  [--format=format]
+                 [--default-units]
                  [--help]
 
   pg_probackup backup -B backup-path -b backup-mode --instance=instance_name
