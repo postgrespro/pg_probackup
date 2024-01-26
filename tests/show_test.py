@@ -507,3 +507,39 @@ class ShowTest(ProbackupTest, unittest.TestCase):
                 '[0m', e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
                     repr(e.message), self.cmd))
+
+    # @unittest.skip("skip")
+    def test_tablespace_print_issue_431(self):
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
+            initdb_params=['--data-checksums'])
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # Create tablespace
+        tblspc_path = os.path.join(node.base_dir, "tblspc")
+        os.makedirs(tblspc_path)
+        with node.connect("postgres") as con:
+            con.connection.autocommit = True
+            con.execute("CREATE TABLESPACE tblspc LOCATION '%s'" % tblspc_path)
+            con.connection.autocommit = False
+            con.execute("CREATE TABLE test (id int) TABLESPACE tblspc")
+            con.execute("INSERT INTO test VALUES (1)")
+            con.commit()
+
+        full_backup_id =  self.backup_node(backup_dir, 'node', node)
+        self.assertIn("OK", self.show_pb(backup_dir,'node', as_text=True))
+        # Check that tablespace info exists. JSON
+        self.assertIn("tablespace_map", self.show_pb(backup_dir, 'node', as_text=True))
+        self.assertIn("oid", self.show_pb(backup_dir, 'node', as_text=True))
+        self.assertIn("path", self.show_pb(backup_dir, 'node', as_text=True))
+        self.assertIn(tblspc_path, self.show_pb(backup_dir, 'node', as_text=True))
+        # Check that tablespace info exists. PLAIN
+        self.assertIn("tablespace_map", self.show_pb(backup_dir, 'node', backup_id=full_backup_id, as_text=True, as_json=False))
+        self.assertIn(tblspc_path, self.show_pb(backup_dir, 'node', backup_id=full_backup_id, as_text=True, as_json=False))
+        # Check that tablespace info NOT exists if backup id not provided. PLAIN
+        self.assertNotIn("tablespace_map", self.show_pb(backup_dir, 'node', as_text=True, as_json=False))
