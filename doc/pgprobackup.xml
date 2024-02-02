@@ -748,7 +748,9 @@ INFO: Restore of backup S6OBQO completed.
   </para>
   <orderedlist>
     <listitem>
-      Add the <application>pg_probackup</application> repository GPG key
+      <para>
+        Add the <application>pg_probackup</application> repository GPG key
+      </para>
       <programlisting>
 sudo apt install gpg wget
 wget -qO - https://repo.postgrespro.ru/pg_probackup/keys/GPG-KEY-PG-PROBACKUP | \
@@ -756,7 +758,9 @@ sudo tee /etc/apt/trusted.gpg.d/pg_probackup.asc
 </programlisting>
     </listitem>
     <listitem>
-      Setup the binary package repository
+      <para>
+        Setup the binary package repository
+      </para>
       <programlisting>
 . /etc/os-release
 echo "deb [arch=amd64] https://repo.postgrespro.ru/pg_probackup/deb $VERSION_CODENAME main-$VERSION_CODENAME" | \
@@ -764,24 +768,32 @@ sudo tee /etc/apt/sources.list.d/pg_probackup.list
 </programlisting>
     </listitem>
     <listitem>
-      Optionally setup the source package repository for rebuilding the binaries
+      <para>
+        Optionally setup the source package repository for rebuilding the binaries
+      </para>
       <programlisting>
 echo "deb-src [arch=amd64] https://repo.postgrespro.ru/pg_probackup/deb $VERSION_CODENAME main-$VERSION_CODENAME" | \
 sudo tee -a /etc/apt/sources.list.d/pg_probackup.list
 </programlisting>
     </listitem>
     <listitem>
-      List the available <application>pg_probackup</application> packages
+      <para>
+        List the available <application>pg_probackup</application> packages
+      </para>
       <itemizedlist>
         <listitem>
-          Using <application>apt</application>:
+          <para>
+            Using <application>apt</application>:
+          </para>
           <programlisting>
 sudo apt update
 apt search pg_probackup
 </programlisting>
         </listitem>
         <listitem>
-          Using <application>apt-get</application>:
+          <para>
+            Using <application>apt-get</application>:
+          </para>
           <programlisting>
 sudo apt-get update
 apt-cache search pg_probackup
@@ -790,19 +802,25 @@ apt-cache search pg_probackup
       </itemizedlist>
     </listitem>
     <listitem>
-      Install or upgrade a <application>pg_probackup</application> version of your choice
+      <para>
+        Install or upgrade a <application>pg_probackup</application> version of your choice
+      </para>
       <programlisting>
 sudo apt install pg-probackup-15
 </programlisting>
     </listitem>
     <listitem>
-      Optionally install the debug package
+      <para>
+        Optionally install the debug package
+      </para>
       <programlisting>
 sudo apt install pg-probackup-15-dbg
 </programlisting>
     </listitem>
     <listitem>
-      Optionally install the source package (provided you have set up the source package repository as described above)
+      <para>
+        Optionally install the source package (provided you have set up the source package repository as described above)
+      </para>
       <programlisting>
 sudo apt install dpkg-dev
 sudo apt source pg-probackup-15
@@ -817,41 +835,55 @@ sudo apt source pg-probackup-15
   </para>
   <orderedlist>
     <listitem>
-      Install the <application>pg_probackup</application> repository
+      <para>
+        Install the <application>pg_probackup</application> repository
+      </para>
       <programlisting>
 dnf install https://repo.postgrespro.ru/pg_probackup/keys/pg_probackup-repo-centos.noarch.rpm
 </programlisting>
     </listitem>
     <listitem>
-      List the available <application>pg_probackup</application> packages
+      <para>
+        List the available <application>pg_probackup</application> packages
+      </para>
       <programlisting>
 dnf search pg_probackup
 </programlisting>
     </listitem>
     <listitem>
-      Install or upgrade a <application>pg_probackup</application> version of your choice
+      <para>
+        Install or upgrade a <application>pg_probackup</application> version of your choice
+      </para>
       <programlisting>
 dnf install pg_probackup-15
 </programlisting>
     </listitem>
     <listitem>
-      Optionally install the debug package
+      <para>
+        Optionally install the debug package
+      </para>
       <programlisting>
 dnf install pg_probackup-15-debuginfo
 </programlisting>
     </listitem>
     <listitem>
-      Optionally install the source package for rebuilding the binaries
+      <para>
+        Optionally install the source package for rebuilding the binaries
+      </para>
       <itemizedlist>
         <listitem>
-          Using <application>dnf</application>:
+          <para>
+            Using <application>dnf</application>:
+          </para>
           <programlisting>
 dnf install 'dnf-command(download)'
 dnf download --source pg_probackup-15
 </programlisting>
         </listitem>
         <listitem>
-          Using <application>yum</application>:
+          <para>
+            Using <application>yum</application>:
+          </para>
           <programlisting>
 yumdownloader --source pg_probackup-15
 </programlisting>
@@ -864,10 +896,14 @@ yumdownloader --source pg_probackup-15
   <title>Installation on ALT Linux</title>
   <orderedlist>
     <listitem>
-      Setup the repository
+      <para>
+        Setup the repository
+      </para>
       <itemizedlist>
         <listitem>
-          On ALT Linux 10:
+          <para>
+            On ALT Linux 10:
+          </para>
           <programlisting>
 . /etc/os-release
 echo "rpm http://repo.postgrespro.ru/pg_probackup/rpm/latest/altlinux-p$VERSION_ID x86_64 vanilla" | \
@@ -875,7 +911,9 @@ sudo tee /etc/apt/sources.list.d/pg_probackup.list
 </programlisting>
         </listitem>
         <listitem>
-          On ALT Linux 8 and 9:
+          <para>
+            On ALT Linux 8 and 9:
+          </para>
           <programlisting>
 . /etc/os-release
 echo "rpm http://repo.postgrespro.ru/pg_probackup/rpm/latest/altlinux-$VERSION_ID x86_64 vanilla" | \
@@ -885,20 +923,26 @@ sudo tee /etc/apt/sources.list.d/pg_probackup.list
       </itemizedlist>
     </listitem>
     <listitem>
-      List the available <application>pg_probackup</application> packages
+      <para>
+        List the available <application>pg_probackup</application> packages
+      </para>
       <programlisting>
 sudo apt-get update
 apt-cache search pg_probackup
 </programlisting>
     </listitem>
     <listitem>
-      Install or upgrade a <application>pg_probackup</application> version of your choice
+      <para>
+        Install or upgrade a <application>pg_probackup</application> version of your choice
+      </para>
       <programlisting>
 sudo apt-get install pg_probackup-15
 </programlisting>
     </listitem>
     <listitem>
-      Optionally install the debug package
+      <para>
+        Optionally install the debug package
+      </para>
       <programlisting>
 sudo apt-get install pg_probackup-15-debuginfo
 </programlisting>
@@ -909,7 +953,9 @@ sudo apt-get install pg_probackup-15-debuginfo
   <title>Installation on SUSE Linux</title>
   <orderedlist>
     <listitem>
-      Add the pg_probackup repository GPG key
+      <para>
+        Add the pg_probackup repository GPG key
+      </para>
       <programlisting>
 zypper in -y gpg wget
 wget -O GPG-KEY-PG_PROBACKUP https://repo.postgrespro.ru/pg_probackup/keys/GPG-KEY-PG_PROBACKUP
@@ -917,25 +963,33 @@ rpm --import GPG-KEY-PG_PROBACKUP
 </programlisting>
     </listitem>
     <listitem>
-      Setup the repository
+      <para>
+        Setup the repository
+      </para>
       <programlisting>
 zypper in https://repo.postgrespro.ru/pg_probackup/keys/pg_probackup-repo-suse.noarch.rpm
 </programlisting>
     </listitem>
     <listitem>
-      List the available <application>pg_probackup</application> packages
+      <para>
+        List the available <application>pg_probackup</application> packages
+      </para>
       <programlisting>
 zypper se pg_probackup
 </programlisting>
     </listitem>
     <listitem>
-      Install or upgrade a <application>pg_probackup</application> version of your choice
+      <para>
+        Install or upgrade a <application>pg_probackup</application> version of your choice
+      </para>
       <programlisting>
 zypper in pg_probackup-15
 </programlisting>
     </listitem>
     <listitem>
-      Optionally install the source package for rebuilding the binaries
+      <para>
+        Optionally install the source package for rebuilding the binaries
+      </para>
       <programlisting>
 zypper si pg_probackup-15
 </programlisting>
