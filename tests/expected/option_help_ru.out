@@ -5,9 +5,9 @@ pg_probackup - утилита для управления резервным к�
 
   pg_probackup version
 
-  pg_probackup init -B backup-path
+  pg_probackup init -B backup-dir
 
-  pg_probackup set-config -B backup-path --instance=instance_name
+  pg_probackup set-config -B backup-dir --instance=instance-name
                  [-D pgdata-path]
                  [--external-dirs=external-directories-paths]
                  [--log-level-console=log-level-console]
@@ -32,17 +32,17 @@ pg_probackup - утилита для управления резервным к�
                  [--archive-port=port] [--archive-user=username]
                  [--help]
 
-  pg_probackup set-backup -B backup-path --instance=instance_name
+  pg_probackup set-backup -B backup-dir --instance=instance-name
                  -i backup-id [--ttl=interval] [--expire-time=timestamp]
                  [--note=text]
                  [--help]
 
-  pg_probackup show-config -B backup-path --instance=instance_name
+  pg_probackup show-config -B backup-dir --instance=instance-name
                  [--format=format]
                  [--default-units]
                  [--help]
 
-  pg_probackup backup -B backup-path -b backup-mode --instance=instance_name
+  pg_probackup backup -B backup-dir -b backup-mode --instance=instance-name
                  [-D pgdata-path] [-C]
                  [--stream [-S slot-name] [--temp-slot]]
                  [--backup-pg-log] [-j num-threads] [--progress]
@@ -74,7 +74,7 @@ pg_probackup - утилита для управления резервным к�
                  [--ttl=interval] [--expire-time=timestamp] [--note=text]
                  [--help]
 
-  pg_probackup restore -B backup-path --instance=instance_name
+  pg_probackup restore -B backup-dir --instance=instance-name
                  [-D pgdata-path] [-i backup-id] [-j num-threads]
                  [--recovery-target-time=time|--recovery-target-xid=xid
                   |--recovery-target-lsn=lsn [--recovery-target-inclusive=boolean]]
@@ -101,7 +101,7 @@ pg_probackup - утилита для управления резервным к�
                  [--archive-port=port] [--archive-user=username]
                  [--help]
 
-  pg_probackup validate -B backup-path [--instance=instance_name]
+  pg_probackup validate -B backup-dir [--instance=instance-name]
                  [-i backup-id] [--progress] [-j num-threads]
                  [--recovery-target-time=time|--recovery-target-xid=xid
                   |--recovery-target-lsn=lsn [--recovery-target-inclusive=boolean]]
@@ -110,18 +110,18 @@ pg_probackup - утилита для управления резервным к�
                  [--skip-block-validation]
                  [--help]
 
-  pg_probackup checkdb [-B backup-path] [--instance=instance_name]
+  pg_probackup checkdb [-B backup-dir] [--instance=instance-name]
                  [-D pgdata-path] [--progress] [-j num-threads]
                  [--amcheck] [--skip-block-validation]
                  [--heapallindexed] [--checkunique]
                  [--help]
 
-  pg_probackup show -B backup-path
-                 [--instance=instance_name [-i backup-id]]
+  pg_probackup show -B backup-dir
+                 [--instance=instance-name [-i backup-id]]
                  [--format=format] [--archive]
                  [--no-color] [--help]
 
-  pg_probackup delete -B backup-path --instance=instance_name
+  pg_probackup delete -B backup-dir --instance=instance-name
                  [-j num-threads] [--progress]
                  [--retention-redundancy=retention-redundancy]
                  [--retention-window=retention-window]
@@ -131,24 +131,24 @@ pg_probackup - утилита для управления резервным к�
                  [--dry-run] [--no-validate] [--no-sync]
                  [--help]
 
-  pg_probackup merge -B backup-path --instance=instance_name
+  pg_probackup merge -B backup-dir --instance=instance-name
                  -i backup-id [--progress] [-j num-threads]
                  [--no-validate] [--no-sync]
                  [--help]
 
-  pg_probackup add-instance -B backup-path -D pgdata-path
-                 --instance=instance_name
+  pg_probackup add-instance -B backup-dir -D pgdata-path
+                 --instance=instance-name
                  [--external-dirs=external-directories-paths]
                  [--remote-proto] [--remote-host]
                  [--remote-port] [--remote-path] [--remote-user]
                  [--ssh-options]
                  [--help]
 
-  pg_probackup del-instance -B backup-path
-                 --instance=instance_name
+  pg_probackup del-instance -B backup-dir
+                 --instance=instance-name
                  [--help]
 
-  pg_probackup archive-push -B backup-path --instance=instance_name
+  pg_probackup archive-push -B backup-dir --instance=instance-name
                  --wal-file-name=wal-file-name
                  [--wal-file-path=wal-file-path]
                  [-j num-threads] [--batch-size=batch_size]
@@ -162,7 +162,7 @@ pg_probackup - утилита для управления резервным к�
                  [--ssh-options]
                  [--help]
 
-  pg_probackup archive-get -B backup-path --instance=instance_name
+  pg_probackup archive-get -B backup-dir --instance=instance-name
                  --wal-file-path=wal-file-path
                  --wal-file-name=wal-file-name
                  [-j num-threads] [--batch-size=batch_size]
