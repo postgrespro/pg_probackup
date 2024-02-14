@@ -1415,3 +1415,50 @@ class PageTest(ProbackupTest, unittest.TestCase):
 #
 #        pgdata_restored = self.pgdata_content(node_restored.data_dir)
 #        self.compare_pgdata(pgdata, pgdata_restored)
+
+    def test_page_huge_xlog_record(self):
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
+
+
+        node = self.make_simple_node(
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
+            set_replication=True,
+            initdb_params=['--data-checksums'],
+            pg_options={
+                'max_locks_per_transaction': '1000',
+                'work_mem': '100MB',
+                'temp_buffers': '100MB',
+                'wal_buffers': '128MB',
+                'wal_level' : 'logical',
+                })
+
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        node.pgbench_init(scale=3)
+
+        # Do full backup
+        self.backup_node(backup_dir, 'node', node, backup_type='full')
+        show_backup = self.show_pb(backup_dir,'node')[0]
+
+        self.assertEqual(show_backup['status'], "OK")
+        self.assertEqual(show_backup['backup-mode'], "FULL")
+
+        # Originally client had the problem at the transaction that (supposedly)
+        # deletes a lot of temporary tables (probably it was client disconnect).
+        # It generated ~40MB COMMIT WAL record.
+        #
+        # `pg_logical_emit_message` is much simpler and faster way to generate
+        # such huge record.
+        node.safe_psql(
+            "postgres",
+            "select pg_logical_emit_message(False, 'z', repeat('o', 60*1000*1000))")
+
+        # Do page backup
+        self.backup_node(backup_dir, 'node', node, backup_type='page')
+
+        show_backup = self.show_pb(backup_dir,'node')[1]
+        self.assertEqual(show_backup['status'], "OK")
+        self.assertEqual(show_backup['backup-mode'], "PAGE")

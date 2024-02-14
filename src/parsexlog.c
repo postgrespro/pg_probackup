@@ -1588,9 +1588,14 @@ SwitchThreadToNextWal(XLogReaderState *xlogreader, xlog_thread_arg *arg)
 	reader_data = (XLogReaderData *) xlogreader->private_data;
 	reader_data->need_switch = false;
 
+start:
 	/* Critical section */
 	pthread_lock(&wal_segment_mutex);
 	Assert(segno_next);
+
+	if (reader_data->xlogsegno > segno_next)
+		segno_next = reader_data->xlogsegno;
+
 	reader_data->xlogsegno = segno_next;
 	segnum_read++;
 	segno_next++;
@@ -1604,6 +1609,7 @@ SwitchThreadToNextWal(XLogReaderState *xlogreader, xlog_thread_arg *arg)
 	GetXLogRecPtr(reader_data->xlogsegno, 0, wal_seg_size, arg->startpoint);
 	/* We need to close previously opened file if it wasn't closed earlier */
 	CleanupXLogPageRead(xlogreader);
+	xlogreader->currRecPtr = InvalidXLogRecPtr;
 	/* Skip over the page header and contrecord if any */
 	found = XLogFindNextRecord(xlogreader, arg->startpoint);
 
@@ -1613,6 +1619,8 @@ SwitchThreadToNextWal(XLogReaderState *xlogreader, xlog_thread_arg *arg)
 	 */
 	if (XLogRecPtrIsInvalid(found))
 	{
+		if (reader_data->need_switch)
+			goto start;
 		/*
 		 * Check if we need to stop reading. We stop if other thread found a
 		 * target segment.
