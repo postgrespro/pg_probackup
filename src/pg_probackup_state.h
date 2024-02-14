@@ -13,11 +13,11 @@
 
 typedef struct CatalogState
 {
-	/* $BACKUP_PATH */
+	/* $BACKUP_DIR */
 	char		catalog_path[MAXPGPATH]; //previously global var backup_path
-	/* $BACKUP_PATH/backups */
+	/* $BACKUP_DIR/backups */
 	char		backup_subdir_path[MAXPGPATH];
-	/* $BACKUP_PATH/wal */
+	/* $BACKUP_DIR/wal */
 	char		wal_subdir_path[MAXPGPATH]; // previously global var arclog_path
 } CatalogState; 
 

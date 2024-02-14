@@ -1128,7 +1128,7 @@ pg_probackup add-instance -B <replaceable>backup_dir</replaceable> -D <replaceab
       <replaceable>backup_dir</replaceable> directory and at least read-only
       access to <replaceable>data_dir</replaceable> directory. If you
       specify the path to the backup catalog in the
-      <envar>BACKUP_PATH</envar> environment variable, you can
+      <envar>BACKUP_DIR</envar> environment variable, you can
       omit the corresponding option when running <application>pg_probackup</application>
       commands.
     </para>
@@ -5212,14 +5212,14 @@ pg_probackup catchup -b <replaceable>catchup_mode</replaceable>
       <varlistentry>
 <term><option>-B <replaceable>directory</replaceable></option></term>
 <term><option>--backup-path=<replaceable>directory</replaceable></option></term>
-<term><envar>BACKUP_PATH</envar></term>
+<term><envar>BACKUP_DIR</envar></term>
       <listitem>
       <para>
         Specifies the absolute path to the backup catalog. Backup
         catalog is a directory where all backup files and meta
         information are stored. Since this option is required for most
         of the <application>pg_probackup</application> commands, you are recommended to specify
-        it once in the <envar>BACKUP_PATH</envar> environment variable. In this case,
+        it once in the <envar>BACKUP_DIR</envar> environment variable. In this case,
         you do not need to use this option each time on the command
         line.
       </para>
@@ -5679,7 +5679,7 @@ pg_probackup catchup -b <replaceable>catchup_mode</replaceable>
         lazily, when the first log message is written.
       </para>
       <para>
-       Default: <filename>$BACKUP_PATH/log/</filename>
+       Default: <filename>$BACKUP_DIR/log/</filename>
       </para>
       </listitem>
       </varlistentry>
@@ -5762,7 +5762,7 @@ pg_probackup catchup -b <replaceable>catchup_mode</replaceable>
         reached, the log file is rotated once a <application>pg_probackup</application> command
         is launched, except <command>help</command> and <command>version</command> commands. The time of the
         last log file creation is stored in
-        <filename>$BACKUP_PATH/log/log_rotation</filename>. The zero value disables
+        <filename>$BACKUP_DIR/log/log_rotation</filename>. The zero value disables
         time-based rotation. Supported units: ms, s, min, h, d (min by
         default).
       </para>

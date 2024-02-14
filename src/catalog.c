@@ -1437,7 +1437,7 @@ get_multi_timeline_parent(parray *backup_list, parray *tli_list,
 }
 
 /*
- * Create backup directory in $BACKUP_PATH
+ * Create backup directory in $BACKUP_DIR
  * (with proposed backup->backup_id)
  * and initialize this directory.
  * If creation of directory fails, then

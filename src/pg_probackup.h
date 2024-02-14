@@ -837,13 +837,13 @@ typedef struct InstanceState
 	CatalogState *catalog_state;
 
 	char		instance_name[MAXPGPATH]; //previously global var instance_name
-	/* $BACKUP_PATH/backups/instance_name */
+	/* $BACKUP_DIR/backups/instance_name */
 	char		instance_backup_subdir_path[MAXPGPATH];
 
-	/* $BACKUP_PATH/backups/instance_name/BACKUP_CATALOG_CONF_FILE */
+	/* $BACKUP_DIR/backups/instance_name/BACKUP_CATALOG_CONF_FILE */
 	char		instance_config_path[MAXPGPATH];
-	
-	/* $BACKUP_PATH/backups/instance_name */
+
+	/* $BACKUP_DIR/backups/instance_name */
 	char		instance_wal_subdir_path[MAXPGPATH]; // previously global var arclog_path
 
 	/* TODO: Make it more specific */
