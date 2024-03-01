@@ -50,12 +50,6 @@
 #include <pthread.h>
 #endif
 
-#if PG_VERSION_NUM >= 150000
-// _() is explicitly undefined in libpq-int.h
-// https://github.com/postgres/postgres/commit/28ec316787674dd74d00b296724a009b6edc2fb0
-#define _(s) gettext(s)
-#endif
-
 /* Wrap the code that we're going to delete after refactoring in this define*/
 #define REFACTORE_ME
 
