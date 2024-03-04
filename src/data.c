@@ -2490,7 +2490,10 @@ write_page_headers(BackupPageHeader2 *headers, pgFile *file, HeaderMap *hdr_map,
 			file->rel_path, file->hdr_off, z_len, file->hdr_crc);
 
 	if (fwrite(zheaders, 1, z_len, hdr_map->fp) != z_len)
+	{
+		pthread_mutex_unlock(&(hdr_map->mutex));
 		elog(ERROR, "Cannot write to file \"%s\": %s", map_path, strerror(errno));
+	}
 
 	file->hdr_size = z_len;	  /* save the length of compressed headers */
 	hdr_map->offset += z_len; /* update current offset in map */
