@@ -131,6 +131,7 @@ do_restore_or_validate(InstanceState *instanceState, time_t target_backup_id, pg
 	bool        cleanup_pgdata = false;
 	bool        backup_has_tblspc = true; /* backup contain tablespace */
 	XLogRecPtr  shift_lsn = InvalidXLogRecPtr;
+	char		timestamp[100];
 
 	if (instanceState == NULL)
 		elog(ERROR, "Required parameter not specified: --instance");
@@ -687,6 +688,12 @@ do_restore_or_validate(InstanceState *instanceState, time_t target_backup_id, pg
 					 backup_id_of(dest_backup),
 					 dest_backup->server_version);
 
+		time2iso(timestamp, lengthof(timestamp), dest_backup->start_time, false);
+		if (instance_config.remote.host)
+			elog(INFO, "Restoring the database from the backup starting at %s on %s", timestamp, instance_config.remote.host);
+		else
+			elog(INFO, "Restoring the database from the backup starting at %s", timestamp);
+
 		restore_chain(dest_backup, parent_chain, dbOid_exclude_list, params,
 					  instance_config.pgdata, no_sync, cleanup_pgdata, backup_has_tblspc);
 
@@ -720,7 +727,6 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 			  bool backup_has_tblspc)
 {
 	int			i;
-	char		timestamp[100];
 	parray      *pgdata_files = NULL;
 	parray		*dest_files = NULL;
 	parray		*external_dirs = NULL;
@@ -743,9 +749,6 @@ restore_chain(pgBackup *dest_backup, parray *parent_chain,
 	time_t		start_time, end_time;
 
 	/* Preparations for actual restoring */
-	time2iso(timestamp, lengthof(timestamp), dest_backup->start_time, false);
-	elog(INFO, "Restoring the database from backup at %s", timestamp);
-
 	dest_files = get_backup_filelist(dest_backup, true);
 
 	/* Lock backup chain and make sanity checks */
