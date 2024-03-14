@@ -2537,11 +2537,22 @@ fio_send_file_gz(const char *from_fullpath, FILE* out, char **errormsg)
 			exit_code = hdr.arg;
 			goto cleanup;
 		}
-		else if (hdr.cop == FIO_PAGE)
+		else if (hdr.cop == FIO_PAGE || hdr.cop == FIO_PAGE_ZERO)
 		{
 			int rc;
-			Assert(hdr.size <= CHUNK_SIZE);
-			IO_CHECK(fio_read_all(fio_stdin, in_buf, hdr.size), hdr.size);
+			unsigned size;
+			if (hdr.cop == FIO_PAGE)
+			{
+				Assert(hdr.size <= CHUNK_SIZE);
+				size = hdr.size;
+				IO_CHECK(fio_read_all(fio_stdin, in_buf, hdr.size), hdr.size);
+			}
+			else
+			{
+				Assert(hdr.arg <= CHUNK_SIZE);
+				size = hdr.arg;
+				memset(in_buf, 0, hdr.arg);
+			}
 
 			/* We have received a chunk of compressed data, lets decompress it */
 			if (strm == NULL)
@@ -2552,7 +2563,7 @@ fio_send_file_gz(const char *from_fullpath, FILE* out, char **errormsg)
 
 				/* The fields next_in, avail_in initialized before init */
 				strm->next_in = (Bytef *)in_buf;
-				strm->avail_in = hdr.size;
+				strm->avail_in = size;
 
 				rc = inflateInit2(strm, 15 + 16);
 
@@ -2569,7 +2580,7 @@ fio_send_file_gz(const char *from_fullpath, FILE* out, char **errormsg)
 			else
 			{
 				strm->next_in = (Bytef *)in_buf;
-				strm->avail_in = hdr.size;
+				strm->avail_in = size;
 			}
 
 			strm->next_out = (Bytef *)out_buf; /* output buffer */
