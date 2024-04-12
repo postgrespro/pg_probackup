@@ -2768,7 +2768,9 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
             print(self.show_pb(backup_dir, node_name, as_json=False, as_text=True))
 
-            for expected, real in zip(states, self.show_pb(backup_dir, node_name), strict=True):
+            backup_infos = self.show_pb(backup_dir, node_name)
+            self.assertEqual(len(backup_infos), len(states))
+            for expected, real in zip(states, backup_infos):
                 self.assertEqual(expected, real['status'])
 
             with self.assertRaisesRegex(ProbackupException,
