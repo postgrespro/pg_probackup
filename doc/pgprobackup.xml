@@ -529,14 +529,14 @@ doc/src/sgml/pgprobackup.sgml
       </step>
       <step id="pbk-init-the-backup-catalog">
         <para>Initialize the backup catalog:</para>
-        <programlisting>
+        <programlisting id="pbk-init-the-backup-catalog-listing">
 backup_user@backup_host:~$ pg_probackup-16 init -B /mnt/backups
 INFO: Backup catalog '/mnt/backups' successfully initialized
 </programlisting>
       </step>
       <step id="pbk-add-instance-to-backup-catalog">
         <para>Add a backup instance called <literal>mydb</literal> to the backup catalog:</para>
-        <programlisting>
+        <programlisting id="pbk-add-instance-to-backup-catalog-listing">
 backup_user@backup_host:~$ pg_probackup-16 add-instance \
     -B /mnt/backups \
     -D /var/lib/postgresql/16/main \
@@ -548,7 +548,7 @@ INFO: Instance 'mydb' successfully initialized
       </step>
       <step id="pbk-make-full-backup">
         <para>Make a FULL backup:</para>
-        <programlisting>
+        <programlisting id="pbk-make-full-backup-listing">
 backup_user@backup_host:~$ pg_probackup-16 backup \
     -B /mnt/backups \
     -b FULL \
@@ -580,7 +580,7 @@ INFO: Backup S6OBFN completed
       </step>
       <step id="pbk-list-backups">
         <para>List the backups of the instance:</para>
-        <programlisting>
+        <programlisting id="pbk-list-backups-listing">
 backup_user@backup_host:~$ pg_probackup-16 show -B /mnt/backups --instance=mydb
 ================================================================================================================================
  Instance  Version  ID      Recovery Time           Mode  WAL Mode  TLI  Time  Data   WAL  Zratio  Start LSN  Stop LSN   Status 
@@ -590,7 +590,7 @@ backup_user@backup_host:~$ pg_probackup-16 show -B /mnt/backups --instance=mydb
       </step>
       <step id="pbk-make-incremental-backup-in-delta-mode">
         <para>Make an incremental backup in the DELTA mode:</para>
-        <programlisting>
+        <programlisting id="pbk-make-incremental-backup-in-delta-mode-listing">
 backup_user@backup_host:~$ pg_probackup-16 backup \
     -B /mnt/backups \
     -b delta \
@@ -625,7 +625,7 @@ INFO: Backup S6OBLG completed
       <step id="pbk-save-config-parameters">
         <para>Add or modify some parameters in the <application>pg_probackup</application>
         configuration file, so that you do not have to specify them each time on the command line:</para>
-        <programlisting>
+        <programlisting id="pbk-save-config-parameters-listing">
 backup_user@backup_host:~$ pg_probackup-16 set-config \
     -B /mnt/backups \
     --instance=mydb \
@@ -637,7 +637,7 @@ backup_user@backup_host:~$ pg_probackup-16 set-config \
       </step>
       <step id="pbk-print-instance-config">
         <para>Check the configuration of the instance:</para>
-        <programlisting>
+        <programlisting id="pbk-print-instance-config-listing">
 backup_user@backup_host:~$ pg_probackup-16 show-config -B /mnt/backups --instance=mydb
 # Backup instance information
 pgdata = /var/lib/postgresql/16/main
@@ -678,7 +678,7 @@ remote-user = postgres
       <step id="pbk-make-another-incremental-backup-in-delta-mode-using-saved-parameters">
         <para>Make another incremental backup in the DELTA mode, omitting
         the parameters stored in the configuration file earlier:</para>
-        <programlisting>
+        <programlisting id="pbk-make-another-incremental-backup-in-delta-mode-using-saved-parameters-listing">
 backup_user@backup_host:~$ pg_probackup-16 backup -B /mnt/backups --instance=mydb -b delta --stream
 INFO: Backup start, pg_probackup version: 2.5.13, instance: mydb, backup ID: S6OBQO, backup mode: DELTA, wal mode: STREAM, remote: true, compress-algorithm: none, compress-level: 1
 INFO: Database backup start
@@ -704,7 +704,7 @@ INFO: Backup S6OBQO completed
       </step>
       <step id="pbk-list-backups-again">
         <para>List the backups of the instance again:</para>
-        <programlisting>
+        <programlisting id="pbk-list-backups-again-listing">
 backup_user@backup_host:~$ pg_probackup-16 show -B /mnt/backups --instance=mydb
 ==================================================================================================================================
  Instance  Version  ID      Recovery Time           Mode   WAL Mode  TLI  Time   Data   WAL  Zratio  Start LSN  Stop LSN   Status 
@@ -716,7 +716,7 @@ backup_user@backup_host:~$ pg_probackup-16 show -B /mnt/backups --instance=mydb
       </step>
       <step id="pbk-quickstart-restore">
         <para>Restore the data from the latest available backup to an arbitrary location:</para>
-        <programlisting>
+        <programlisting id="pbk-quickstart-restore-listing">
 backup_user@backup_host:~$ pg_probackup-16 restore -B /mnt/backups -D /var/lib/postgresql/16/staging --instance=mydb
 INFO: Validating parents for backup S6OBQO
 INFO: Validating backup S6OBFN
@@ -2110,7 +2110,7 @@ pg_probackup validate -B <replaceable>backup_dir</replaceable> --instance <repla
       from a backup copy with the <literal>PT8XFX</literal> backup ID up to the
       specified timestamp, run this command:
     </para>
-    <programlisting>
+    <programlisting id="pbk-validating-backups-listing">
 pg_probackup validate -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> -i PT8XFX --recovery-target-time="2017-05-18 14:18:11+03"
 </programlisting>
     <para>
@@ -2305,7 +2305,7 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
         Suppose you want to return an old master as replica after switchover
         using incremental restore in LSN mode:
       </para>
-      <programlisting>
+      <programlisting id="pbk-incremental-restore-listing">
 =============================================================================================================================================
  Instance  Version  ID      Recovery Time           Mode   WAL Mode  TLI      Time    Data    WAL  Zratio  Start LSN    Stop LSN     Status
 =============================================================================================================================================
@@ -2788,7 +2788,7 @@ pg_probackup show -B <replaceable>backup_dir</replaceable>
         <application>pg_probackup</application> displays the list of all the available backups.
         For example:
       </para>
-      <programlisting>
+      <programlisting id="pbk-viewing-backup-info-listing-1">
 BACKUP INSTANCE 'node'
 ======================================================================================================================================
  Instance  Version  ID      Recovery time           Mode    WAL Mode  TLI  Time    Data   WAL  Zratio  Start LSN   Stop LSN    Status
@@ -2952,7 +2952,7 @@ pg_probackup show -B <replaceable>backup_dir</replaceable> --instance <replaceab
       <para>
         The sample output is as follows:
       </para>
-      <programlisting>
+      <programlisting id="pbk-viewing-backup-info-listing-2">
 #Configuration
 backup-mode = FULL
 stream = false
@@ -3096,7 +3096,7 @@ pg_probackup show -B <replaceable>backup_dir</replaceable> --instance <replaceab
       <para>
         The sample output is as follows:
       </para>
-      <programlisting>
+      <programlisting id="pbk-viewing-backup-info-listing-3">
 [
   {
       "instance": "node",
@@ -3145,7 +3145,7 @@ pg_probackup show -B <replaceable>backup_dir</replaceable> [--instance <replacea
         <application>pg_probackup</application> displays the list of all the available WAL files
         grouped by timelines. For example:
       </para>
-      <programlisting>
+      <programlisting id="pbk-viewing-wal-archive-information-listing-1">
 ARCHIVE INSTANCE 'node'
 ===================================================================================================================================
  TLI  Parent TLI  Switchpoint  Min Segno                 Max Segno                 N segments  Size    Zratio  N backups  Status
@@ -3243,7 +3243,7 @@ pg_probackup show -B <replaceable>backup_dir</replaceable> [--instance <replacea
       <para>
         The sample output is as follows:
       </para>
-      <programlisting>
+      <programlisting id="pbk-viewing-wal-archive-information-listing-2">
 [
   {
       "instance": "replica",
@@ -3599,7 +3599,7 @@ pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replace
         to <literal>7</literal>, and you have the following backups
         available on April 10, 2019:
       </para>
-      <programlisting>
+      <programlisting id="pbk-retention-policy-listing-1">
 BACKUP INSTANCE 'node'
 ===================================================================================================================================
  Instance  Version  ID      Recovery time           Mode   WAL     TLI  Time    Data   WAL  Zratio  Start LSN   Stop LSN    Status
@@ -3613,17 +3613,17 @@ BACKUP INSTANCE 'node'
  node      10       P7XDFT  2019-03-29 05:26:25+03  FULL   STREAM  1/0   11s   200MB  16MB     1.0  0/D000028   0/D000198   OK
 </programlisting>
       <para>
-        Even though <literal>P7XDHB</literal> and <literal>P7XDHU</literal> backups are outside the
+        Even though <literal id="pbk-retention-policy-backup2-1">P7XDHB</literal> and <literal id="pbk-retention-policy-backup3-1">P7XDHU</literal> backups are outside the
         retention window, they cannot be removed as it invalidates the
-        succeeding incremental backups <literal>P7XDJA</literal> and <literal>P7XDQV</literal> that are
+        succeeding incremental backups <literal id="pbk-retention-policy-backup4-1">P7XDJA</literal> and <literal id="pbk-retention-policy-backup5">P7XDQV</literal> that are
         still required, so, if you run the
         <xref linkend="pbk-delete"/> command with the
-        <option>--delete-expired</option> flag, only the <literal>P7XDFT</literal> full
+        <option>--delete-expired</option> flag, only the <literal id="pbk-retention-policy-backup1">P7XDFT</literal> full
         backup will be removed.
       </para>
       <para>
-        With the <option>--merge-expired</option> option, the <literal>P7XDJA</literal>
-        backup is merged with the underlying <literal>P7XDHU</literal> and <literal>P7XDHB</literal> backups
+        With the <option>--merge-expired</option> option, the <literal id="pbk-retention-policy-backup4-2">P7XDJA</literal>
+        backup is merged with the underlying <literal id="pbk-retention-policy-backup3-2">P7XDHU</literal> and <literal id="pbk-retention-policy-backup2-2">P7XDHB</literal> backups
         and becomes a full one, so there is no need to keep these
         expired backups anymore:
       </para>
@@ -3631,7 +3631,7 @@ BACKUP INSTANCE 'node'
 pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replaceable>node</replaceable> --delete-expired --merge-expired
 pg_probackup show -B <replaceable>backup_dir</replaceable>
 </programlisting>
-      <programlisting>
+      <programlisting id="pbk-retention-policy-listing-2">
 BACKUP INSTANCE 'node'
 ==================================================================================================================================
  Instance  Version  ID      Recovery time           Mode  WAL     TLI  Time    Data   WAL  Zratio  Start LSN   Stop LSN    Status
@@ -3688,7 +3688,7 @@ pg_probackup show -B <replaceable>backup_dir</replaceable> --instance <replaceab
       <para>
         If the backup is pinned, it has the <literal>expire-time</literal>
         attribute that displays its expiration time:
-      <programlisting>
+      <programlisting id="pbk-backup-pinning-listing">
 ...
 recovery-time = '2017-05-16 12:57:31'
 expire-time = '2020-01-01 00:00:00+03'
@@ -3766,7 +3766,7 @@ pg_probackup set-backup -B <replaceable>backup_dir</replaceable> --instance <rep
       <programlisting>
 pg_probackup show -B <replaceable>backup_dir</replaceable> --instance <replaceable>node</replaceable>
 </programlisting>
-      <programlisting>
+      <programlisting id="pbk-wal-archive-retention-policy-listing-1">
 BACKUP INSTANCE 'node'
 ====================================================================================================================================
  Instance  Version  ID      Recovery Time           Mode   WAL Mode  TLI  Time   Data   WAL  Zratio  Start LSN   Stop LSN    Status
@@ -3786,7 +3786,7 @@ BACKUP INSTANCE 'node'
       <programlisting>
 pg_probackup show -B <replaceable>backup_dir</replaceable> --instance node --archive
 </programlisting>
-      <programlisting>
+      <programlisting id="pbk-wal-archive-retention-policy-listing-2">
 ARCHIVE INSTANCE 'node'
 ===============================================================================================================================
  TLI  Parent TLI  Switchpoint  Min Segno                 Max Segno                 N segments  Size  Zratio  N backups  Status
@@ -3800,7 +3800,7 @@ ARCHIVE INSTANCE 'node'
       <programlisting>
 pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance node --delete-wal
 </programlisting>
-      <programlisting>
+      <programlisting id="pbk-wal-archive-retention-policy-listing-3">
 ARCHIVE INSTANCE 'node'
 ===============================================================================================================================
  TLI  Parent TLI  Switchpoint  Min Segno                 Max Segno                 N segments  Size  Zratio  N backups  Status
@@ -3815,7 +3815,7 @@ ARCHIVE INSTANCE 'node'
       <programlisting>
 pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance node --delete-wal --wal-depth=1
 </programlisting>
-      <programlisting>
+      <programlisting id="pbk-wal-archive-retention-policy-listing-4">
 ARCHIVE INSTANCE 'node'
 ================================================================================================================================
  TLI  Parent TLI  Switchpoint  Min Segno                 Max Segno                 N segments  Size   Zratio  N backups  Status
@@ -3829,7 +3829,7 @@ ARCHIVE INSTANCE 'node'
       <programlisting>
 pg_probackup backup -B <replaceable>backup_dir</replaceable> --instance node -b DELTA --wal-depth=1 --delete-wal
 </programlisting>
-      <programlisting>
+      <programlisting id="pbk-wal-archive-retention-policy-listing-5">
 ARCHIVE INSTANCE 'node'
 ===============================================================================================================================
  TLI  Parent TLI  Switchpoint  Min Segno                 Max Segno                 N segments  Size  Zratio  N backups  Status
