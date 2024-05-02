@@ -2,7 +2,6 @@
 doc/src/sgml/pgprobackup.sgml
 &project; documentation
 -->
-
 <refentry id="app-pgprobackup">
  <indexterm zone="app-pgprobackup">
   <primary>pg_probackup</primary>
@@ -530,105 +529,111 @@ doc/src/sgml/pgprobackup.sgml
       <step id="pbk-init-the-backup-catalog">
         <para>Initialize the backup catalog:</para>
         <programlisting id="pbk-init-the-backup-catalog-listing">
-backup_user@backup_host:~$ pg_probackup-16 init -B /mnt/backups
+backup_user@backup_host:~$ pg_probackup init -B /mnt/backups
 INFO: Backup catalog '/mnt/backups' successfully initialized
 </programlisting>
       </step>
       <step id="pbk-add-instance-to-backup-catalog">
         <para>Add a backup instance called <literal>mydb</literal> to the backup catalog:</para>
         <programlisting id="pbk-add-instance-to-backup-catalog-listing">
-backup_user@backup_host:~$ pg_probackup-16 add-instance \
+backup_user@backup_host:~$ pg_probackup add-instance \
     -B /mnt/backups \
-    -D /var/lib/postgresql/16/main \
-    --instance=mydb \
+    -D /var/lib/pgpro/std-16/data \
+    --instance=node \
     --remote-host=postgres_host \
     --remote-user=postgres
-INFO: Instance 'mydb' successfully initialized
+INFO: Instance 'node' successfully initialized
 </programlisting>
       </step>
       <step id="pbk-make-full-backup">
         <para>Make a FULL backup:</para>
         <programlisting id="pbk-make-full-backup-listing">
-backup_user@backup_host:~$ pg_probackup-16 backup \
+backup_user@backup_host:~$ pg_probackup backup \
     -B /mnt/backups \
     -b FULL \
-    --instance=mydb \
+    --instance=node \
     --stream \
+    --compress-algorithm=zlib \
     --remote-host=postgres_host \
     --remote-user=postgres \
     -U backup \
     -d backupdb
-INFO: Backup start, pg_probackup version: 2.5.13, instance: mydb, backup ID: S6OBFN, backup mode: FULL, wal mode: STREAM, remote: true, compress-algorithm: none, compress-level: 1
+INFO: Backup start, pg_probackup version: 2.5.14, instance: node, backup ID: SCUN1Q, backup mode: FULL, wal mode: STREAM, remote: true, compress-algorithm: zlib, compress-level: 1
+INFO: This PostgreSQL instance was initialized with data block checksums. Data block corruption will be detected
 INFO: Database backup start
 INFO: wait for pg_backup_start()
-INFO: Wait for WAL segment /mnt/backups/backups/mydb/S6OBFN/database/pg_wal/000000010000000000000002 to be streamed
-INFO: PGDATA size: 29MB
-INFO: Current Start LSN: 0/2000060, TLI: 1
+INFO: Wait for WAL segment /mnt/backups/backups/node/SCUN1Q/database/pg_wal/000000010000000000000008 to be streamed
+INFO: PGDATA size: 96MB
+INFO: Current Start LSN: 0/8000028, TLI: 1
 INFO: Start transferring data files
-INFO: Data files are transferred, time elapsed: 0
+INFO: Data files are transferred, time elapsed: 1s
 INFO: wait for pg_stop_backup()
 INFO: pg_stop backup() successfully executed
-INFO: stop_lsn: 0/2003CB0
+INFO: stop_lsn: 0/800BBD0
 INFO: Getting the Recovery Time from WAL
 INFO: Syncing backup files to disk
-INFO: Backup files are synced, time elapsed: 0
-INFO: Validating backup S6OBFN
-INFO: Backup S6OBFN data files are valid
-INFO: Backup S6OBFN resident size: 45MB
-INFO: Backup S6OBFN completed
+INFO: Backup files are synced, time elapsed: 1s
+INFO: Validating backup SCUN1Q
+INFO: Backup SCUN1Q data files are valid
+INFO: Backup SCUN1Q resident size: 56MB
+INFO: Backup SCUN1Q completed
 </programlisting>
       </step>
       <step id="pbk-list-backups">
         <para>List the backups of the instance:</para>
         <programlisting id="pbk-list-backups-listing">
-backup_user@backup_host:~$ pg_probackup-16 show -B /mnt/backups --instance=mydb
+backup_user@backup_host:~$ pg_probackup show \
+        -B /mnt/backups \
+        --instance=node
 ================================================================================================================================
  Instance  Version  ID      Recovery Time           Mode  WAL Mode  TLI  Time  Data   WAL  Zratio  Start LSN  Stop LSN   Status 
 ================================================================================================================================
- mydb      16       S6OBFN  2024-01-03 06:59:49+00  FULL  STREAM    1/0   10s  29MB  16MB    1.00  0/2000060  0/2003CB0  OK
+ node      16       SCUN1Q  2024-05-02 11:17:53+03  FULL  STREAM    1/0   12s  40MB  16MB    2.42  0/8000028  0/800BBD0  OK     
 </programlisting>
       </step>
       <step id="pbk-make-incremental-backup-in-delta-mode">
         <para>Make an incremental backup in the DELTA mode:</para>
         <programlisting id="pbk-make-incremental-backup-in-delta-mode-listing">
-backup_user@backup_host:~$ pg_probackup-16 backup \
-    -B /mnt/backups \
-    -b delta \
-    --instance=mydb \
-    --stream \
-    --remote-host=postgres_host \
-    --remote-user=postgres \
-    -U backup \
-    -d backupdb
-INFO: Backup start, pg_probackup version: 2.5.13, instance: mydb, backup ID: S6OBLG, backup mode: DELTA, wal mode: STREAM, remote: true, compress-algorithm: none, compress-level: 1
+backup_user@backup_host:~$ pg_probackup backup \
+            -B /mnt/backups \
+            -b DELTA \
+            --instance=node \
+            --stream \
+            --compress-algorithm=zlib \
+            --remote-host=postgres_host \
+            --remote-user=postgres \
+            -U backup \
+            -d backupdb
+INFO: Backup start, pg_probackup version: 2.5.14, instance: node, backup ID: SCUN22, backup mode: DELTA, wal mode: STREAM, remote: true, compress-algorithm: zlib, compress-level: 1
+INFO: This PostgreSQL instance was initialized with data block checksums. Data block corruption will be detected
 INFO: Database backup start
 INFO: wait for pg_backup_start()
-INFO: Parent backup: S6OBFN
-INFO: Wait for WAL segment /mnt/backups/backups/mydb/S6OBLG/database/pg_wal/000000010000000000000004 to be streamed
-INFO: PGDATA size: 29MB
-INFO: Current Start LSN: 0/4000028, TLI: 1
-INFO: Parent Start LSN: 0/2000060, TLI: 1
+INFO: Parent backup: SCUN1Q
+INFO: Wait for WAL segment /mnt/backups/backups/node/SCUN22/database/pg_wal/000000010000000000000009 to be streamed
+INFO: PGDATA size: 96MB
+INFO: Current Start LSN: 0/9000028, TLI: 1
+INFO: Parent Start LSN: 0/8000028, TLI: 1
 INFO: Start transferring data files
 INFO: Data files are transferred, time elapsed: 1s
 INFO: wait for pg_stop_backup()
 INFO: pg_stop backup() successfully executed
-INFO: stop_lsn: 0/4000168
+INFO: stop_lsn: 0/9000168
 INFO: Getting the Recovery Time from WAL
 INFO: Syncing backup files to disk
-INFO: Backup files are synced, time elapsed: 0
-INFO: Validating backup S6OBLG
-INFO: Backup S6OBLG data files are valid
-INFO: Backup S6OBLG resident size: 32MB
-INFO: Backup S6OBLG completed
+INFO: Backup files are synced, time elapsed: 1s
+INFO: Validating backup SCUN22
+INFO: Backup SCUN22 data files are valid
+INFO: Backup SCUN22 resident size: 34MB
+INFO: Backup SCUN22 completed
 </programlisting>
       </step>
       <step id="pbk-save-config-parameters">
         <para>Add or modify some parameters in the <application>pg_probackup</application>
         configuration file, so that you do not have to specify them each time on the command line:</para>
         <programlisting id="pbk-save-config-parameters-listing">
-backup_user@backup_host:~$ pg_probackup-16 set-config \
+backup_user@backup_host:~$ pg_probackup set-config \
     -B /mnt/backups \
-    --instance=mydb \
+    --instance=node \
     --remote-host=postgres_host \
     --remote-user=postgres \
     -U backup \
@@ -638,10 +643,12 @@ backup_user@backup_host:~$ pg_probackup-16 set-config \
       <step id="pbk-print-instance-config">
         <para>Check the configuration of the instance:</para>
         <programlisting id="pbk-print-instance-config-listing">
-backup_user@backup_host:~$ pg_probackup-16 show-config -B /mnt/backups --instance=mydb
+backup_user@backup_host:~$ pg_probackup show-config \
+    -B /mnt/backups \
+    --instance=node
 # Backup instance information
-pgdata = /var/lib/postgresql/16/main
-system-identifier = 7319761899046784808
+pgdata = /var/lib/pgpro/std-16/data
+system-identifier = 7364313570668255886
 xlog-seg-size = 16777216
 # Connection parameters
 pgdatabase = backupdb
@@ -679,61 +686,72 @@ remote-user = postgres
         <para>Make another incremental backup in the DELTA mode, omitting
         the parameters stored in the configuration file earlier:</para>
         <programlisting id="pbk-make-another-incremental-backup-in-delta-mode-using-saved-parameters-listing">
-backup_user@backup_host:~$ pg_probackup-16 backup -B /mnt/backups --instance=mydb -b delta --stream
-INFO: Backup start, pg_probackup version: 2.5.13, instance: mydb, backup ID: S6OBQO, backup mode: DELTA, wal mode: STREAM, remote: true, compress-algorithm: none, compress-level: 1
+backup_user@backup_host:~$ pg_probackup backup \
+        -B /mnt/backups \
+        -b DELTA \
+        --instance=node \
+        --stream \
+        --compress-algorithm=zlib
+INFO: Backup start, pg_probackup version: 2.5.14, instance: node, backup ID: SCUN2C, backup mode: DELTA, wal mode: STREAM, remote: true, compress-algorithm: zlib, compress-level: 1
+INFO: This PostgreSQL instance was initialized with data block checksums. Data block corruption will be detected
 INFO: Database backup start
 INFO: wait for pg_backup_start()
-INFO: Parent backup: S6OBLG
-INFO: Wait for WAL segment /mnt/backups/backups/mydb/S6OBQO/database/pg_wal/000000010000000000000006 to be streamed
-INFO: PGDATA size: 29MB
-INFO: Current Start LSN: 0/6000028, TLI: 1
-INFO: Parent Start LSN: 0/4000028, TLI: 1
+INFO: Parent backup: SCUN22
+INFO: Wait for WAL segment /mnt/backups/backups/node/SCUN2C/database/pg_wal/00000001000000000000000B to be streamed
+INFO: PGDATA size: 96MB
+INFO: Current Start LSN: 0/B000028, TLI: 1
+INFO: Parent Start LSN: 0/9000028, TLI: 1
 INFO: Start transferring data files
 INFO: Data files are transferred, time elapsed: 0
 INFO: wait for pg_stop_backup()
 INFO: pg_stop backup() successfully executed
-INFO: stop_lsn: 0/6000168
+INFO: stop_lsn: 0/B000168
 INFO: Getting the Recovery Time from WAL
 INFO: Syncing backup files to disk
 INFO: Backup files are synced, time elapsed: 0
-INFO: Validating backup S6OBQO
-INFO: Backup S6OBQO data files are valid
-INFO: Backup S6OBQO resident size: 32MB
-INFO: Backup S6OBQO completed
+INFO: Validating backup SCUN2C
+INFO: Backup SCUN2C data files are valid
+INFO: Backup SCUN2C resident size: 17MB
+INFO: Backup SCUN2C completed
 </programlisting>
       </step>
       <step id="pbk-list-backups-again">
         <para>List the backups of the instance again:</para>
         <programlisting id="pbk-list-backups-again-listing">
-backup_user@backup_host:~$ pg_probackup-16 show -B /mnt/backups --instance=mydb
-==================================================================================================================================
- Instance  Version  ID      Recovery Time           Mode   WAL Mode  TLI  Time   Data   WAL  Zratio  Start LSN  Stop LSN   Status 
-==================================================================================================================================
- mydb      16       S6OBQO  2024-01-03 07:06:26+00  DELTA  STREAM    1/1    6s  111kB  32MB    1.00  0/6000028  0/6000168  OK
- mydb      16       S6OBLG  2024-01-03 07:03:18+00  DELTA  STREAM    1/1   10s  127kB  32MB    1.00  0/4000028  0/4000168  OK
- mydb      16       S6OBFN  2024-01-03 06:59:49+00  FULL   STREAM    1/0   10s   29MB  16MB    1.00  0/2000060  0/2003CB0  OK
+backup_user@backup_host:~$ pg_probackup show \
+    -B /mnt/backups \
+    --instance=node
+===================================================================================================================================
+ Instance  Version  ID      Recovery Time           Mode   WAL Mode  TLI  Time    Data   WAL  Zratio  Start LSN  Stop LSN   Status 
+===================================================================================================================================
+ node      16       SCUN2C  2024-05-02 11:18:13+03  DELTA  STREAM    1/1   10s  1139kB  16MB    1.00  0/B000028  0/B000168  OK     
+ node      16       SCUN22  2024-05-02 11:18:04+03  DELTA  STREAM    1/1   10s  2357kB  32MB    1.02  0/9000028  0/9000168  OK     
+ node      16       SCUN1Q  2024-05-02 11:17:53+03  FULL   STREAM    1/0   12s    40MB  16MB    2.42  0/8000028  0/800BBD0  OK     
 </programlisting>
       </step>
       <step id="pbk-quickstart-restore">
         <para>Restore the data from the latest available backup to an arbitrary location:</para>
         <programlisting id="pbk-quickstart-restore-listing">
-backup_user@backup_host:~$ pg_probackup-16 restore -B /mnt/backups -D /var/lib/postgresql/16/staging --instance=mydb
-INFO: Validating parents for backup S6OBQO
-INFO: Validating backup S6OBFN
-INFO: Backup S6OBFN data files are valid
-INFO: Validating backup S6OBLG
-INFO: Backup S6OBLG data files are valid
-INFO: Validating backup S6OBQO
-INFO: Backup S6OBQO data files are valid
-INFO: Backup S6OBQO WAL segments are valid
-INFO: Backup S6OBQO is valid.
-INFO: Restoring the database from backup at 2024-01-03 07:06:24+00
-INFO: Start restoring backup files. PGDATA size: 61MB
-INFO: Backup files are restored. Transfered bytes: 61MB, time elapsed: 1s
-INFO: Restore incremental ratio (less is better): 100% (61MB/61MB)
+backup_user@backup_host:~$ pg_probackup restore \
+    -B /mnt/backups \
+    -D /var/lib/pgpro/std-16/staging-data \
+    --instance=node
+INFO: Validating parents for backup SCUN2C
+INFO: Validating backup SCUN1Q
+INFO: Backup SCUN1Q data files are valid
+INFO: Validating backup SCUN22
+INFO: Backup SCUN22 data files are valid
+INFO: Validating backup SCUN2C
+INFO: Backup SCUN2C data files are valid
+INFO: Backup SCUN2C WAL segments are valid
+INFO: Backup SCUN2C is valid.
+INFO: Restoring the database from backup SCUN2C on localhost
+INFO: Start restoring backup files. PGDATA size: 112MB
+INFO: Backup files are restored. Transfered bytes: 112MB, time elapsed: 0
+INFO: Restore incremental ratio (less is better): 100% (112MB/112MB)
 INFO: Syncing restored files to disk
-INFO: Restored backup files are synced, time elapsed: 0
-INFO: Restore of backup S6OBQO completed.
+INFO: Restored backup files are synced, time elapsed: 2s
+INFO: Restore of backup SCUN2C completed.
 </programlisting>
       </step>
     </procedure>
@@ -806,7 +824,7 @@ apt-cache search pg_probackup
         Install or upgrade a <application>pg_probackup</application> version of your choice
       </para>
       <programlisting>
-sudo apt install pg-probackup-15
+sudo apt install pg-probackup-16
 </programlisting>
     </listitem>
     <listitem>
@@ -814,7 +832,7 @@ sudo apt install pg-probackup-15
         Optionally install the debug package
       </para>
       <programlisting>
-sudo apt install pg-probackup-15-dbg
+sudo apt install pg-probackup-16-dbg
 </programlisting>
     </listitem>
     <listitem>
@@ -823,7 +841,7 @@ sudo apt install pg-probackup-15-dbg
       </para>
       <programlisting>
 sudo apt install dpkg-dev
-sudo apt source pg-probackup-15
+sudo apt source pg-probackup-16
 </programlisting>
     </listitem>
   </orderedlist>
@@ -855,7 +873,7 @@ dnf search pg_probackup
         Install or upgrade a <application>pg_probackup</application> version of your choice
       </para>
       <programlisting>
-dnf install pg_probackup-15
+dnf install pg_probackup-16
 </programlisting>
     </listitem>
     <listitem>
@@ -863,7 +881,7 @@ dnf install pg_probackup-15
         Optionally install the debug package
       </para>
       <programlisting>
-dnf install pg_probackup-15-debuginfo
+dnf install pg_probackup-16-debuginfo
 </programlisting>
     </listitem>
     <listitem>
@@ -877,7 +895,7 @@ dnf install pg_probackup-15-debuginfo
           </para>
           <programlisting>
 dnf install 'dnf-command(download)'
-dnf download --source pg_probackup-15
+dnf download --source pg_probackup-16
 </programlisting>
         </listitem>
         <listitem>
@@ -885,7 +903,7 @@ dnf download --source pg_probackup-15
             Using <application>yum</application>:
           </para>
           <programlisting>
-yumdownloader --source pg_probackup-15
+yumdownloader --source pg_probackup-16
 </programlisting>
         </listitem>
       </itemizedlist>
@@ -936,7 +954,7 @@ apt-cache search pg_probackup
         Install or upgrade a <application>pg_probackup</application> version of your choice
       </para>
       <programlisting>
-sudo apt-get install pg_probackup-15
+sudo apt-get install pg_probackup-16
 </programlisting>
     </listitem>
     <listitem>
@@ -944,7 +962,7 @@ sudo apt-get install pg_probackup-15
         Optionally install the debug package
       </para>
       <programlisting>
-sudo apt-get install pg_probackup-15-debuginfo
+sudo apt-get install pg_probackup-16-debuginfo
 </programlisting>
     </listitem>
   </orderedlist>
@@ -983,7 +1001,7 @@ zypper se pg_probackup
         Install or upgrade a <application>pg_probackup</application> version of your choice
       </para>
       <programlisting>
-zypper in pg_probackup-15
+zypper in pg_probackup-16
 </programlisting>
     </listitem>
     <listitem>
@@ -991,7 +1009,7 @@ zypper in pg_probackup-15
         Optionally install the source package for rebuilding the binaries
       </para>
       <programlisting>
-zypper si pg_probackup-15
+zypper si pg_probackup-16
 </programlisting>
     </listitem>
   </orderedlist>
@@ -2107,11 +2125,11 @@ pg_probackup validate -B <replaceable>backup_dir</replaceable> --instance=<repla
     </para>
     <para>
       For example, to check that you can restore the database cluster
-      from a backup copy with the <literal>PT8XFX</literal> backup ID up to the
+      from a backup copy with the <literal>SCUN2C</literal> backup ID up to the
       specified timestamp, run this command:
     </para>
     <programlisting id="pbk-validating-backups-listing">
-pg_probackup validate -B <replaceable>backup_dir</replaceable> --instance=<replaceable>instance_name</replaceable> -i PT8XFX --recovery-target-time="2017-05-18 14:18:11+03"
+pg_probackup validate -B <replaceable>backup_dir</replaceable> --instance=<replaceable>instance_name</replaceable> -i SCUN2C --recovery-target-time="2024-05-03 11:18:13+03"
 </programlisting>
     <para>
       If you specify the <replaceable>backup_id</replaceable> of an incremental backup,
@@ -2306,28 +2324,35 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance=<replac
         using incremental restore in LSN mode:
       </para>
       <programlisting id="pbk-incremental-restore-listing">
-=============================================================================================================================================
- Instance  Version  ID      Recovery Time           Mode   WAL Mode  TLI      Time    Data    WAL  Zratio  Start LSN    Stop LSN     Status
-=============================================================================================================================================
- node      12       QBRNBP  2020-06-11 17:40:58+03  DELTA  ARCHIVE   16/15     40s   194MB   16MB    8.26  15/2C000028  15/2D000128  OK
- node      12       QBRIDX  2020-06-11 15:51:42+03  PAGE   ARCHIVE   15/15     11s    18MB   16MB    5.10  14/DC000028  14/DD0000B8  OK
- node      12       QBRIAJ  2020-06-11 15:51:08+03  PAGE   ARCHIVE   15/15     20s   141MB   96MB    6.22  14/D4BABFE0  14/DA9871D0  OK
- node      12       QBRHT8  2020-06-11 15:45:56+03  FULL   ARCHIVE   15/0   2m:11s  1371MB  416MB   10.93  14/9D000028  14/B782E9A0  OK
+======================================================================================================================================
+ Instance  Version  ID      Recovery Time           Mode    WAL Mode  TLI  Time   Data    WAL  Zratio  Start LSN   Stop LSN    Status 
+======================================================================================================================================
+ node      16       SCUN3Y  2024-05-02 11:19:16+03  DELTA   STREAM    1/1    7s   92MB  208MB    2.27  0/3C0043A8  0/46159C70  OK     
+ node      16       SCUN3M  2024-05-02 11:19:01+03  PTRACK  STREAM    1/1   10s   30MB   16MB    2.23  0/32000028  0/32005ED0  OK     
+ node      16       SCUN39  2024-05-02 11:18:50+03  PAGE    STREAM    1/1   12s   46MB   32MB    1.44  0/2A000028  0/2B0000B8  OK     
+ node      16       SCUN2V  2024-05-02 11:18:38+03  FULL    STREAM    1/0   11s  154MB   16MB    2.32  0/23000028  0/23000168  OK     
 
-pg_probackup restore -B /backup --instance=node -R -I lsn
-INFO: Running incremental restore into nonempty directory: "/var/lib/pgsql/12/data"
-INFO: Destination directory redo point 15/2E000028 on tli 16 is within reach of backup QBRIDX with Stop LSN 14/DD0000B8 on tli 15
-INFO: shift LSN: 14/DD0000B8
-INFO: Restoring the database from backup at 2020-06-11 17:40:58+03
-INFO: Extracting the content of destination directory for incremental restore
-INFO: Destination directory content extracted, time elapsed: 1s
-INFO: Removing redundant files in destination directory
-INFO: Redundant files are removed, time elapsed: 1s
-INFO: Start restoring backup files. PGDATA size: 15GB
-INFO: Backup files are restored. Transfered bytes: 1693MB, time elapsed: 43s
-INFO: Restore incremental ratio (less is better): 11% (1693MB/15GB)
-INFO: Restore of backup QBRNBP completed.
-      </programlisting>
+backup_user@backup_host:~$ pg_probackup restore -B /mnt/backups --instance=node -R -I lsn
+INFO: Destination directory and tablespace directories are empty, disable incremental restore
+INFO: Validating parents for backup SCUN3Y
+INFO: Validating backup SCUN2V
+INFO: Backup SCUN2V data files are valid
+INFO: Validating backup SCUN39
+INFO: Backup SCUN39 data files are valid
+INFO: Validating backup SCUN3M
+INFO: Backup SCUN3M data files are valid
+INFO: Validating backup SCUN3Y
+INFO: Backup SCUN3Y data files are valid
+INFO: Backup SCUN3Y WAL segments are valid
+INFO: Backup SCUN3Y is valid.
+INFO: Restoring the database from backup SCUN3Y
+INFO: Start restoring backup files. PGDATA size: 759MB
+INFO: Backup files are restored. Transfered bytes: 759MB, time elapsed: 3s
+INFO: Restore incremental ratio (less is better): 100% (759MB/759MB)
+INFO: Syncing restored files to disk
+INFO: Restored backup files are synced, time elapsed: 1s
+INFO: Restore of backup SCUN3Y completed.
+</programlisting>
       <note>
         <para>
           Incremental restore is possible only for backups with
@@ -2438,7 +2463,7 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance=<replac
           timestamp format. For example:
         </para>
         <programlisting>
-pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance=<replaceable>instance_name</replaceable> --recovery-target-time="2017-05-18 14:18:11+03"
+pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance=<replaceable>instance_name</replaceable> --recovery-target-time="2024-05-03 11:18:13+03"
 </programlisting>
       </listitem>
       <listitem>
@@ -2791,13 +2816,13 @@ pg_probackup show -B <replaceable>backup_dir</replaceable>
       <programlisting id="pbk-viewing-backup-info-listing-1">
 BACKUP INSTANCE 'node'
 ======================================================================================================================================
- Instance  Version  ID      Recovery time           Mode    WAL Mode  TLI  Time    Data   WAL  Zratio  Start LSN   Stop LSN    Status
+ Instance  Version  ID      Recovery Time           Mode    WAL Mode  TLI  Time   Data    WAL  Zratio  Start LSN   Stop LSN    Status 
 ======================================================================================================================================
- node      10       PYSUE8  2019-10-03 15:51:48+03  FULL    ARCHIVE   1/0   16s  9047kB  16MB    4.31  0/12000028  0/12000160  OK
- node      10       P7XDQV  2018-04-29 05:32:59+03  DELTA   STREAM    1/1   11s    19MB  16MB    1.00  0/15000060  0/15000198  OK
- node      10       P7XDJA  2018-04-29 05:28:36+03  PTRACK  STREAM    1/1   21s    32MB  32MB    1.00  0/13000028  0/13000198  OK
- node      10       P7XDHU  2018-04-29 05:27:59+03  PAGE    STREAM    1/1   15s    33MB  16MB    1.00  0/11000028  0/110001D0  OK
- node      10       P7XDHB  2018-04-29 05:27:15+03  FULL    STREAM    1/0   11s    39MB  16MB    1.00  0/F000028   0/F000198   OK
+ node      16       SCUN4E  2024-05-02 11:19:37+03  FULL    ARCHIVE   1/0   13s  239MB   16MB    2.31  0/4C000028  0/4D0000B8  OK     
+ node      16       SCUN3Y  2024-05-02 11:19:16+03  DELTA   STREAM    1/1    7s   92MB  208MB    2.27  0/3C0043A8  0/46159C70  OK     
+ node      16       SCUN3M  2024-05-02 11:19:01+03  PTRACK  STREAM    1/1   10s   30MB   16MB    2.23  0/32000028  0/32005ED0  OK     
+ node      16       SCUN39  2024-05-02 11:18:50+03  PAGE    STREAM    1/1   12s   46MB   32MB    1.44  0/2A000028  0/2B0000B8  OK     
+ node      16       SCUN2V  2024-05-02 11:18:38+03  FULL    STREAM    1/0   11s  154MB   16MB    2.32  0/23000028  0/23000168  OK     
 </programlisting>
       <para>
         For each backup, the following information is provided:
@@ -2962,27 +2987,26 @@ from-replica = false
 
 #Compatibility
 block-size = 8192
-wal-block-size = 8192
+xlog-block-size = 8192
 checksum-version = 1
-program-version = 2.1.3
-server-version = 10
+program-version = 2.5.14
+server-version = 16
 
 #Result backup info
 timelineid = 1
-start-lsn = 0/04000028
-stop-lsn = 0/040000f8
-start-time = '2017-05-16 12:57:29'
-end-time = '2017-05-16 12:57:31'
-recovery-xid = 597
-recovery-time = '2017-05-16 12:57:31'
-expire-time = '2020-05-16 12:57:31'
-data-bytes = 22288792
+start-lsn = 0/4C000028
+stop-lsn = 0/4D0000B8
+start-time = '2024-05-02 11:19:26+03'
+end-time = '2024-05-02 11:19:39+03'
+recovery-xid = 743
+recovery-time = '2024-05-02 11:19:37+03'
+data-bytes = 250827955
 wal-bytes = 16777216
-uncompressed-bytes = 39961833
-pgdata-bytes = 39859393
+uncompressed-bytes = 578216425
+pgdata-bytes = 578216107
 status = OK
-parent-backup-id = 'PT8XFX'
-primary_conninfo = 'user=backup passfile=/var/lib/pgsql/.pgpass port=5432 sslmode=disable sslcompression=1 target_session_attrs=any'
+primary_conninfo = 'user=backup channel_binding=prefer host=localhost port=5432 sslmode=prefer sslcompression=0 sslcertmode=allow sslsni=1 ssl_min_protocol_version=TLSv1.2 gssencmode=prefer krbsrvname=postgres gssdelegation=0 target_session_attrs=any load_balance_hosts=disable'
+content-crc = 802820606
 </programlisting>
       <para>
         Detailed output has additional attributes:
@@ -3098,37 +3122,39 @@ pg_probackup show -B <replaceable>backup_dir</replaceable> --instance=<replaceab
       </para>
       <programlisting id="pbk-viewing-backup-info-listing-3">
 [
-  {
-      "instance": "node",
-      "backups": [
-          {
-              "id": "PT91HZ",
-              "parent-backup-id": "PT8XFX",
-              "backup-mode": "DELTA",
-              "wal": "ARCHIVE",
-              "compress-alg": "zlib",
-              "compress-level": 1,
-              "from-replica": false,
-              "block-size": 8192,
-              "xlog-block-size": 8192,
-              "checksum-version": 1,
-              "program-version": "2.1.3",
-              "server-version": "10",
-              "current-tli": 16,
-              "parent-tli": 2,
-              "start-lsn": "0/8000028",
-              "stop-lsn": "0/8000160",
-              "start-time": "2019-06-17 18:25:11+03",
-              "end-time": "2019-06-17 18:25:16+03",
-              "recovery-xid": 0,
-              "recovery-time": "2019-06-17 18:25:15+03",
-              "data-bytes": 106733,
-              "wal-bytes": 16777216,
-              "primary_conninfo": "user=backup passfile=/var/lib/pgsql/.pgpass port=5432 sslmode=disable sslcompression=1 target_session_attrs=any",
-              "status": "OK"
-          }
-      ]
-  }
+    {
+        "instance": "node",
+        "backups": [
+            {
+                "id": "SCUN4E",
+                "backup-mode": "FULL",
+                "wal": "ARCHIVE",
+                "compress-alg": "zlib",
+                "compress-level": 1,
+                "from-replica": "false",
+                "block-size": 8192,
+                "xlog-block-size": 8192,
+                "checksum-version": 1,
+                "program-version": "2.5.14",
+                "server-version": "16",
+                "current-tli": 1,
+                "parent-tli": 0,
+                "start-lsn": "0/4C000028",
+                "stop-lsn": "0/4D0000B8",
+                "start-time": "2024-05-02 11:19:26+03",
+                "end-time": "2024-05-02 11:19:39+03",
+                "recovery-xid": 743,
+                "recovery-time": "2024-05-02 11:19:37+03",
+                "data-bytes": 250827955,
+                "wal-bytes": 16777216,
+                "uncompressed-bytes": 578216425,
+                "pgdata-bytes": 578216107,
+                "primary_conninfo": "user=backup channel_binding=prefer host=localhost port=5432 sslmode=prefer sslcompression=0 sslcertmode=allow sslsni=1 ssl_min_protocol_version=TLSv1.2 gssencmode=prefer krbsrvname=postgres gssdelegation=0 target_session_attrs=any load_balance_hosts=disable",
+                "status": "OK",
+                "content-crc": 802820606
+            }
+        ]
+    }
 ]
 </programlisting>
     </refsect3>
@@ -3146,15 +3172,12 @@ pg_probackup show -B <replaceable>backup_dir</replaceable> [--instance=<replacea
         grouped by timelines. For example:
       </para>
       <programlisting id="pbk-viewing-wal-archive-information-listing-1">
+
 ARCHIVE INSTANCE 'node'
-===================================================================================================================================
- TLI  Parent TLI  Switchpoint  Min Segno                 Max Segno                 N segments  Size    Zratio  N backups  Status
-===================================================================================================================================
- 5    1           0/B000000    00000005000000000000000B  00000005000000000000000C  2           685kB   48.00   0          OK
- 4    3           0/18000000   000000040000000000000018  00000004000000000000001A  3           648kB   77.00   0          OK
- 3    2           0/15000000   000000030000000000000015  000000030000000000000017  3           648kB   77.00   0          OK
- 2    1           0/B000108    00000002000000000000000B  000000020000000000000015  5           892kB   94.00   1          DEGRADED
- 1    0           0/0          000000010000000000000001  00000001000000000000000A  10          8774kB  19.00   1          OK
+================================================================================================================================
+ TLI  Parent TLI  Switchpoint  Min Segno                 Max Segno                 N segments  Size   Zratio  N backups  Status 
+================================================================================================================================
+ 1    0           0/0          000000010000000000000019  00000001000000000000004D  53          848MB  1.00    5          OK     
 </programlisting>
       <para>
         For each timeline, the following information is provided:
@@ -3245,212 +3268,169 @@ pg_probackup show -B <replaceable>backup_dir</replaceable> [--instance=<replacea
       </para>
       <programlisting id="pbk-viewing-wal-archive-information-listing-2">
 [
-  {
-      "instance": "replica",
-      "timelines": [
-          {
-              "tli": 5,
-              "parent-tli": 1,
-              "switchpoint": "0/B000000",
-              "min-segno": "00000005000000000000000B",
-              "max-segno": "00000005000000000000000C",
-              "n-segments": 2,
-              "size": 685320,
-              "zratio": 48.00,
-              "closest-backup-id": "PXS92O",
-              "status": "OK",
-              "lost-segments": [],
-              "backups": []
-          },
-          {
-              "tli": 4,
-              "parent-tli": 3,
-              "switchpoint": "0/18000000",
-              "min-segno": "000000040000000000000018",
-              "max-segno": "00000004000000000000001A",
-              "n-segments": 3,
-              "size": 648625,
-              "zratio": 77.00,
-              "closest-backup-id": "PXS9CE",
-              "status": "OK",
-              "lost-segments": [],
-              "backups": []
-          },
-          {
-              "tli": 3,
-              "parent-tli": 2,
-              "switchpoint": "0/15000000",
-              "min-segno": "000000030000000000000015",
-              "max-segno": "000000030000000000000017",
-              "n-segments": 3,
-              "size": 648911,
-              "zratio": 77.00,
-              "closest-backup-id": "PXS9CE",
-              "status": "OK",
-              "lost-segments": [],
-              "backups": []
-          },
-          {
-              "tli": 2,
-              "parent-tli": 1,
-              "switchpoint": "0/B000108",
-              "min-segno": "00000002000000000000000B",
-              "max-segno": "000000020000000000000015",
-              "n-segments": 5,
-              "size": 892173,
-              "zratio": 94.00,
-              "closest-backup-id": "PXS92O",
-              "status": "DEGRADED",
-              "lost-segments": [
-                  {
-                      "begin-segno": "00000002000000000000000D",
-                      "end-segno": "00000002000000000000000E"
-                  },
-                  {
-                      "begin-segno": "000000020000000000000010",
-                      "end-segno": "000000020000000000000012"
-                  }
-              ],
-              "backups": [
-                  {
-                      "id": "PXS9CE",
-                      "backup-mode": "FULL",
-                      "wal": "ARCHIVE",
-                      "compress-alg": "none",
-                      "compress-level": 1,
-                      "from-replica": "false",
-                      "block-size": 8192,
-                      "xlog-block-size": 8192,
-                      "checksum-version": 1,
-                      "program-version": "2.1.5",
-                      "server-version": "10",
-                      "current-tli": 2,
-                      "parent-tli": 0,
-                      "start-lsn": "0/C000028",
-                      "stop-lsn": "0/C000160",
-                      "start-time": "2019-09-13 21:43:26+03",
-                      "end-time": "2019-09-13 21:43:30+03",
-                      "recovery-xid": 0,
-                      "recovery-time": "2019-09-13 21:43:29+03",
-                      "data-bytes": 104674852,
-                      "wal-bytes": 16777216,
-                      "primary_conninfo": "user=backup passfile=/var/lib/pgsql/.pgpass port=5432 sslmode=disable sslcompression=1 target_session_attrs=any",
-                      "status": "OK"
-                  }
-              ]
-          },
-          {
-              "tli": 1,
-              "parent-tli": 0,
-              "switchpoint": "0/0",
-              "min-segno": "000000010000000000000001",
-              "max-segno": "00000001000000000000000A",
-              "n-segments": 10,
-              "size": 8774805,
-              "zratio": 19.00,
-              "closest-backup-id": "",
-              "status": "OK",
-              "lost-segments": [],
-              "backups": [
-                  {
-                      "id": "PXS92O",
-                      "backup-mode": "FULL",
-                      "wal": "ARCHIVE",
-                      "compress-alg": "none",
-                      "compress-level": 1,
-                      "from-replica": "true",
-                      "block-size": 8192,
-                      "xlog-block-size": 8192,
-                      "checksum-version": 1,
-                      "program-version": "2.1.5",
-                      "server-version": "10",
-                      "current-tli": 1,
-                      "parent-tli": 0,
-                      "start-lsn": "0/4000028",
-                      "stop-lsn": "0/6000028",
-                      "start-time": "2019-09-13 21:37:36+03",
-                      "end-time": "2019-09-13 21:38:45+03",
-                      "recovery-xid": 0,
-                      "recovery-time": "2019-09-13 21:37:30+03",
-                      "data-bytes": 25987319,
-                      "wal-bytes": 50331648,
-                      "primary_conninfo": "user=backup passfile=/var/lib/pgsql/.pgpass port=5432 sslmode=disable sslcompression=1 target_session_attrs=any",
-                      "status": "OK"
-                  }
-              ]
-          }
-      ]
-  },
-  {
-      "instance": "master",
-      "timelines": [
-          {
-              "tli": 1,
-              "parent-tli": 0,
-              "switchpoint": "0/0",
-              "min-segno": "000000010000000000000001",
-              "max-segno": "00000001000000000000000B",
-              "n-segments": 11,
-              "size": 8860892,
-              "zratio": 20.00,
-              "status": "OK",
-              "lost-segments": [],
-              "backups": [
-                  {
-                      "id": "PXS92H",
-                      "parent-backup-id": "PXS92C",
-                      "backup-mode": "PAGE",
-                      "wal": "ARCHIVE",
-                      "compress-alg": "none",
-                      "compress-level": 1,
-                      "from-replica": "false",
-                      "block-size": 8192,
-                      "xlog-block-size": 8192,
-                      "checksum-version": 1,
-                      "program-version": "2.1.5",
-                      "server-version": "10",
-                      "current-tli": 1,
-                      "parent-tli": 1,
-                      "start-lsn": "0/4000028",
-                      "stop-lsn": "0/50000B8",
-                      "start-time": "2019-09-13 21:37:29+03",
-                      "end-time": "2019-09-13 21:37:31+03",
-                      "recovery-xid": 0,
-                      "recovery-time": "2019-09-13 21:37:30+03",
-                      "data-bytes": 1328461,
-                      "wal-bytes": 33554432,
-                      "primary_conninfo": "user=backup passfile=/var/lib/pgsql/.pgpass port=5432 sslmode=disable sslcompression=1 target_session_attrs=any",
-                      "status": "OK"
-                  },
-                  {
-                      "id": "PXS92C",
-                      "backup-mode": "FULL",
-                      "wal": "ARCHIVE",
-                      "compress-alg": "none",
-                      "compress-level": 1,
-                      "from-replica": "false",
-                      "block-size": 8192,
-                      "xlog-block-size": 8192,
-                      "checksum-version": 1,
-                      "program-version": "2.1.5",
-                      "server-version": "10",
-                      "current-tli": 1,
-                      "parent-tli": 0,
-                      "start-lsn": "0/2000028",
-                      "stop-lsn": "0/2000160",
-                      "start-time": "2019-09-13 21:37:24+03",
-                      "end-time": "2019-09-13 21:37:29+03",
-                      "recovery-xid": 0,
-                      "recovery-time": "2019-09-13 21:37:28+03",
-                      "data-bytes": 24871902,
-                      "wal-bytes": 16777216,
-                      "primary_conninfo": "user=backup passfile=/var/lib/pgsql/.pgpass port=5432 sslmode=disable sslcompression=1 target_session_attrs=any",
-                      "status": "OK"
-                  }
-              ]
-          }
-      ]
-  }
+    {
+        "instance": "node",
+        "timelines": [
+            {
+                "tli": 1,
+                "parent-tli": 0,
+                "switchpoint": "0/0",
+                "min-segno": "000000010000000000000019",
+                "max-segno": "00000001000000000000004D",
+                "n-segments": 53,
+                "size": 889192448,
+                "zratio": 1.00,
+                "closest-backup-id": "",
+                "status": "OK",
+                "lost-segments": [],
+                "backups": [
+                    {
+                        "id": "SCUN4E",
+                        "backup-mode": "FULL",
+                        "wal": "ARCHIVE",
+                        "compress-alg": "zlib",
+                        "compress-level": 1,
+                        "from-replica": "false",
+                        "block-size": 8192,
+                        "xlog-block-size": 8192,
+                        "checksum-version": 1,
+                        "program-version": "2.5.14",
+                        "server-version": "16",
+                        "current-tli": 1,
+                        "parent-tli": 0,
+                        "start-lsn": "0/4C000028",
+                        "stop-lsn": "0/4D0000B8",
+                        "start-time": "2024-05-02 11:19:26+03",
+                        "end-time": "2024-05-02 11:19:39+03",
+                        "recovery-xid": 743,
+                        "recovery-time": "2024-05-02 11:19:37+03",
+                        "data-bytes": 250827955,
+                        "wal-bytes": 16777216,
+                        "uncompressed-bytes": 578216425,
+                        "pgdata-bytes": 578216107,
+                        "primary_conninfo": "user=backup channel_binding=prefer host=localhost port=5432 sslmode=prefer sslcompression=0 sslcertmode=allow sslsni=1 ssl_min_protocol_version=TLSv1.2 gssencmode=prefer krbsrvname=postgres gssdelegation=0 target_session_attrs=any load_balance_hosts=disable",
+                        "status": "OK",
+                        "content-crc": 802820606
+                    },
+                    {
+                        "id": "SCUN3Y",
+                        "parent-backup-id": "SCUN3M",
+                        "backup-mode": "DELTA",
+                        "wal": "STREAM",
+                        "compress-alg": "zlib",
+                        "compress-level": 1,
+                        "from-replica": "false",
+                        "block-size": 8192,
+                        "xlog-block-size": 8192,
+                        "checksum-version": 1,
+                        "program-version": "2.5.14",
+                        "server-version": "16",
+                        "current-tli": 1,
+                        "parent-tli": 1,
+                        "start-lsn": "0/3C0043A8",
+                        "stop-lsn": "0/46159C70",
+                        "start-time": "2024-05-02 11:19:10+03",
+                        "end-time": "2024-05-02 11:19:17+03",
+                        "recovery-xid": 743,
+                        "recovery-time": "2024-05-02 11:19:16+03",
+                        "data-bytes": 96029293,
+                        "wal-bytes": 218103808,
+                        "uncompressed-bytes": 217639806,
+                        "pgdata-bytes": 578216107,
+                        "primary_conninfo": "user=backup channel_binding=prefer host=localhost port=5432 sslmode=prefer sslcompression=0 sslcertmode=allow sslsni=1 ssl_min_protocol_version=TLSv1.2 gssencmode=prefer krbsrvname=postgres gssdelegation=0 target_session_attrs=any load_balance_hosts=disable",
+                        "status": "OK",
+                        "content-crc": 3074300814
+                    },
+                    {
+                        "id": "SCUN3M",
+                        "parent-backup-id": "SCUN39",
+                        "backup-mode": "PTRACK",
+                        "wal": "STREAM",
+                        "compress-alg": "zlib",
+                        "compress-level": 1,
+                        "from-replica": "false",
+                        "block-size": 8192,
+                        "xlog-block-size": 8192,
+                        "checksum-version": 1,
+                        "program-version": "2.5.14",
+                        "server-version": "16",
+                        "current-tli": 1,
+                        "parent-tli": 1,
+                        "start-lsn": "0/32000028",
+                        "stop-lsn": "0/32005ED0",
+                        "start-time": "2024-05-02 11:18:58+03",
+                        "end-time": "2024-05-02 11:19:08+03",
+                        "recovery-xid": 742,
+                        "recovery-time": "2024-05-02 11:19:01+03",
+                        "data-bytes": 31205704,
+                        "wal-bytes": 16777216,
+                        "uncompressed-bytes": 69585790,
+                        "pgdata-bytes": 509927595,
+                        "primary_conninfo": "user=backup channel_binding=prefer host=localhost port=5432 sslmode=prefer sslcompression=0 sslcertmode=allow sslsni=1 ssl_min_protocol_version=TLSv1.2 gssencmode=prefer krbsrvname=postgres gssdelegation=0 target_session_attrs=any load_balance_hosts=disable",
+                        "status": "OK",
+                        "content-crc": 3446949708
+                    },
+                    {
+                        "id": "SCUN39",
+                        "parent-backup-id": "SCUN2V",
+                        "backup-mode": "PAGE",
+                        "wal": "STREAM",
+                        "compress-alg": "pglz",
+                        "compress-level": 1,
+                        "from-replica": "false",
+                        "block-size": 8192,
+                        "xlog-block-size": 8192,
+                        "checksum-version": 1,
+                        "program-version": "2.5.14",
+                        "server-version": "16",
+                        "current-tli": 1,
+                        "parent-tli": 1,
+                        "start-lsn": "0/2A000028",
+                        "stop-lsn": "0/2B0000B8",
+                        "start-time": "2024-05-02 11:18:45+03",
+                        "end-time": "2024-05-02 11:18:57+03",
+                        "recovery-xid": 741,
+                        "recovery-time": "2024-05-02 11:18:50+03",
+                        "data-bytes": 48381612,
+                        "wal-bytes": 33554432,
+                        "uncompressed-bytes": 69569406,
+                        "pgdata-bytes": 441639083,
+                        "primary_conninfo": "user=backup channel_binding=prefer host=localhost port=5432 sslmode=prefer sslcompression=0 sslcertmode=allow sslsni=1 ssl_min_protocol_version=TLSv1.2 gssencmode=prefer krbsrvname=postgres gssdelegation=0 target_session_attrs=any load_balance_hosts=disable",
+                        "status": "OK",
+                        "content-crc": 3492989773
+                    },
+                    {
+                        "id": "SCUN2V",
+                        "backup-mode": "FULL",
+                        "wal": "STREAM",
+                        "compress-alg": "zlib",
+                        "compress-level": 1,
+                        "from-replica": "false",
+                        "block-size": 8192,
+                        "xlog-block-size": 8192,
+                        "checksum-version": 1,
+                        "program-version": "2.5.14",
+                        "server-version": "16",
+                        "current-tli": 1,
+                        "parent-tli": 0,
+                        "start-lsn": "0/23000028",
+                        "stop-lsn": "0/23000168",
+                        "start-time": "2024-05-02 11:18:31+03",
+                        "end-time": "2024-05-02 11:18:42+03",
+                        "recovery-xid": 740,
+                        "recovery-time": "2024-05-02 11:18:38+03",
+                        "data-bytes": 161084290,
+                        "wal-bytes": 16777216,
+                        "uncompressed-bytes": 373359081,
+                        "pgdata-bytes": 373358763,
+                        "primary_conninfo": "user=backup channel_binding=prefer host=localhost port=5432 sslmode=prefer sslcompression=0 sslcertmode=allow sslsni=1 ssl_min_protocol_version=TLSv1.2 gssencmode=prefer krbsrvname=postgres gssdelegation=0 target_session_attrs=any load_balance_hosts=disable",
+                        "status": "OK",
+                        "content-crc": 1621343133
+                    }
+                ]
+            }
+        ]
+    }
 ]
 </programlisting>
       <para>
@@ -3597,33 +3577,33 @@ pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance=<replace
         instance in the <replaceable>backup_dir</replaceable> directory,
         with the <option>--retention-window</option> option set
         to <literal>7</literal>, and you have the following backups
-        available on April 10, 2019:
+        available on May 02, 2024:
       </para>
       <programlisting id="pbk-retention-policy-listing-1">
 BACKUP INSTANCE 'node'
-===================================================================================================================================
- Instance  Version  ID      Recovery time           Mode   WAL     TLI  Time    Data   WAL  Zratio  Start LSN   Stop LSN    Status
-===================================================================================================================================
- node      10       P7XDHR  2019-04-10 05:27:15+03  FULL   STREAM  1/0   11s   200MB  16MB     1.0  0/18000059  0/18000197  OK
- node      10       P7XDQV  2019-04-08 05:32:59+03  PAGE   STREAM  1/0   11s    19MB  16MB     1.0  0/15000060  0/15000198  OK
- node      10       P7XDJA  2019-04-03 05:28:36+03  DELTA  STREAM  1/0   21s    32MB  16MB     1.0  0/13000028  0/13000198  OK
- -------------------------------------------------------retention window--------------------------------------------------------
- node      10       P7XDHU  2019-04-02 05:27:59+03  PAGE   STREAM  1/0   31s    33MB  16MB     1.0  0/11000028  0/110001D0  OK
- node      10       P7XDHB  2019-04-01 05:27:15+03  FULL   STREAM  1/0   11s   200MB  16MB     1.0  0/F000028   0/F000198   OK
- node      10       P7XDFT  2019-03-29 05:26:25+03  FULL   STREAM  1/0   11s   200MB  16MB     1.0  0/D000028   0/D000198   OK
+=====================================================================================================================================
+ Instance  Version  ID      Recovery Time           Mode   WAL Mode  TLI  Time    Data   WAL  Zratio  Start LSN   Stop LSN    Status 
+=====================================================================================================================================
+ node      16       SCUN6L  2024-05-02 11:20:48+03  FULL   ARCHIVE   1/0    5s   296MB  16MB    2.30  0/46000028  0/470000B8  OK     
+ node      16       SCQXUI  2024-04-30 11:20:45+03  PAGE   ARCHIVE   1/1    5s  6280kB  16MB    1.00  0/44000028  0/450000F0  OK     
+ node      16       SCFTUG  2024-04-24 11:20:43+03  DELTA  ARCHIVE   1/1    5s  6280kB  16MB    1.00  0/42000028  0/430000B8  OK     
+----------------------------------------------------------retention window-----------------------------------------------------------
+ node      16       SCDZ6D  2024-04-23 11:20:40+03  PAGE   ARCHIVE   1/1    5s  6280kB  16MB    1.00  0/40000028  0/410000B8  OK     
+ node      16       SCC4HX  2024-04-22 11:20:24+03  FULL   ARCHIVE   1/0    5s   296MB  16MB    2.30  0/3E000028  0/3F0000F0  OK     
+ node      16       SC8F5G  2024-04-20 11:20:07+03  FULL   ARCHIVE   1/0    5s   296MB  16MB    2.30  0/3C0000D8  0/3D00BB58  OK     
 </programlisting>
       <para>
-        Even though <literal id="pbk-retention-policy-backup2-1">P7XDHB</literal> and <literal id="pbk-retention-policy-backup3-1">P7XDHU</literal> backups are outside the
+        Even though <literal id="pbk-retention-policy-backup2-1">SCC4HX</literal> and <literal id="pbk-retention-policy-backup3-1">SCDZ6D</literal> backups are outside the
         retention window, they cannot be removed as it invalidates the
-        succeeding incremental backups <literal id="pbk-retention-policy-backup4-1">P7XDJA</literal> and <literal id="pbk-retention-policy-backup5">P7XDQV</literal> that are
+        succeeding incremental backups <literal id="pbk-retention-policy-backup4-1">SCFTUG</literal> and <literal id="pbk-retention-policy-backup5">SCQXUI</literal> that are
         still required, so, if you run the
         <xref linkend="pbk-delete"/> command with the
-        <option>--delete-expired</option> flag, only the <literal id="pbk-retention-policy-backup1">P7XDFT</literal> full
+        <option>--delete-expired</option> flag, only the <literal id="pbk-retention-policy-backup1">SC8F5G</literal> full
         backup will be removed.
       </para>
       <para>
-        With the <option>--merge-expired</option> option, the <literal id="pbk-retention-policy-backup4-2">P7XDJA</literal>
-        backup is merged with the underlying <literal id="pbk-retention-policy-backup3-2">P7XDHU</literal> and <literal id="pbk-retention-policy-backup2-2">P7XDHB</literal> backups
+        With the <option>--merge-expired</option> option, the <literal id="pbk-retention-policy-backup4-2">SCC4HX</literal>
+        backup is merged with the underlying <literal id="pbk-retention-policy-backup3-2">SCC4HX</literal> and <literal id="pbk-retention-policy-backup2-2">SCC4HX</literal> backups
         and becomes a full one, so there is no need to keep these
         expired backups anymore:
       </para>
@@ -3633,12 +3613,14 @@ pg_probackup show -B <replaceable>backup_dir</replaceable>
 </programlisting>
       <programlisting id="pbk-retention-policy-listing-2">
 BACKUP INSTANCE 'node'
-==================================================================================================================================
- Instance  Version  ID      Recovery time           Mode  WAL     TLI  Time    Data   WAL  Zratio  Start LSN   Stop LSN    Status
-==================================================================================================================================
- node      10       P7XDHR  2019-04-10 05:27:15+03  FULL  STREAM  1/0   11s   200MB  16MB     1.0  0/18000059  0/18000197  OK
- node      10       P7XDQV  2019-04-08 05:32:59+03  PAGE  STREAM  1/0   11s    19MB  16MB     1.0  0/15000060  0/15000198  OK
- node      10       P7XDJA  2019-04-03 05:28:36+03  FULL  STREAM  1/0   21s    32MB  16MB     1.0  0/13000028  0/13000198  OK
+=====================================================================================================================================
+ Instance  Version  ID      Recovery Time           Mode   WAL Mode  TLI  Time    Data   WAL  Zratio  Start LSN   Stop LSN    Status 
+=====================================================================================================================================
+ node      16       SCUN6L  2024-05-02 11:20:48+03  FULL   ARCHIVE   1/0    5s   296MB  16MB    2.30  0/46000028  0/470000B8  OK     
+ node      16       SCQXUI  2024-04-30 11:20:45+03  PAGE   ARCHIVE   1/1    5s  6280kB  16MB    1.00  0/44000028  0/450000F0  OK     
+ node      16       SCFTUG  2024-04-24 11:20:43+03  DELTA  ARCHIVE   1/1    5s  6280kB  16MB    1.00  0/42000028  0/430000B8  OK     
+ node      16       SCDZ6D  2024-04-23 11:20:40+03  PAGE   ARCHIVE   1/1    5s  6280kB  16MB    1.00  0/40000028  0/410000B8  OK     
+ node      16       SCC4HX  2024-04-22 11:20:24+03  FULL   ARCHIVE   1/0    5s   296MB  16MB    2.30  0/3E000028  0/3F0000F0  OK     
 </programlisting>
         <para>
           The <literal>Time</literal> field for the merged backup displays the time
@@ -3666,7 +3648,7 @@ pg_probackup set-backup -B <replaceable>backup_dir</replaceable> --instance=<rep
         using the <option>--expire-time</option> option. For example:
       </para>
       <programlisting>
-pg_probackup set-backup -B <replaceable>backup_dir</replaceable> --instance=<replaceable>instance_name</replaceable> -i <replaceable>backup_id</replaceable> --expire-time="2020-01-01 00:00:00+03"
+pg_probackup set-backup -B <replaceable>backup_dir</replaceable> --instance=<replaceable>instance_name</replaceable> -i <replaceable>backup_id</replaceable> --expire-time="2027-05-02 11:21:00+00"
 </programlisting>
       <para>
         Alternatively, you can use the <option>--ttl</option> and
@@ -3676,7 +3658,7 @@ pg_probackup set-backup -B <replaceable>backup_dir</replaceable> --instance=<rep
       </para>
       <programlisting>
 pg_probackup backup -B <replaceable>backup_dir</replaceable> --instance=<replaceable>instance_name</replaceable> -b FULL --ttl=30d
-pg_probackup backup -B <replaceable>backup_dir</replaceable> --instance=<replaceable>instance_name</replaceable> -b FULL --expire-time="2020-01-01 00:00:00+03"
+pg_probackup backup -B <replaceable>backup_dir</replaceable> --instance=<replaceable>instance_name</replaceable> -b FULL --expire-time="2027-05-02 11:21:00+00"
 </programlisting>
       <para>
         To check if the backup is pinned,
@@ -3690,8 +3672,8 @@ pg_probackup show -B <replaceable>backup_dir</replaceable> --instance=<replaceab
         attribute that displays its expiration time:
       <programlisting id="pbk-backup-pinning-listing">
 ...
-recovery-time = '2017-05-16 12:57:31'
-expire-time = '2020-01-01 00:00:00+03'
+recovery-time = '2024-05-02 11:21:00+00'
+expire-time = '2027-05-02 11:21:00+00'
 data-bytes = 22288792
 ...
 </programlisting>
@@ -3767,16 +3749,15 @@ pg_probackup set-backup -B <replaceable>backup_dir</replaceable> --instance=<rep
 pg_probackup show -B <replaceable>backup_dir</replaceable> --instance=<replaceable>node</replaceable>
 </programlisting>
       <programlisting id="pbk-wal-archive-retention-policy-listing-1">
-BACKUP INSTANCE 'node'
-====================================================================================================================================
- Instance  Version  ID      Recovery Time           Mode   WAL Mode  TLI  Time   Data   WAL  Zratio  Start LSN   Stop LSN    Status
-====================================================================================================================================
- node      11       PZ9442  2019-10-12 10:43:21+03  DELTA  STREAM    1/0   10s  121kB  16MB    1.00  0/46000028  0/46000160  OK
- node      11       PZ943L  2019-10-12 10:43:04+03  FULL   STREAM    1/0   10s  180MB  32MB    1.00  0/44000028  0/44000160  OK
- node      11       PZ7YR5  2019-10-11 19:49:56+03  DELTA  STREAM    1/1   10s  112kB  32MB    1.00  0/41000028  0/41000160  OK
- node      11       PZ7YMP  2019-10-11 19:47:16+03  DELTA  STREAM    1/1   10s  376kB  32MB    1.00  0/3E000028  0/3F0000B8  OK
- node      11       PZ7YK2  2019-10-11 19:45:45+03  FULL   STREAM    1/0   11s  180MB  16MB    1.00  0/3C000028  0/3C000198  OK
- node      11       PZ7YFO  2019-10-11 19:43:04+03  FULL   STREAM    1/0   10s   30MB  16MB    1.00  0/2000028   0/200ADD8   OK
+======================================================================================================================================
+ Instance  Version  ID      Recovery Time           Mode   WAL Mode  TLI  Time    Data    WAL  Zratio  Start LSN   Stop LSN    Status 
+======================================================================================================================================
+ node      16       SCUN92  2024-05-02 11:22:16+03  DELTA  STREAM    1/1    9s  1162kB   32MB    1.08  0/7C000028  0/7C000168  OK     
+ node      16       SCUN8N  2024-05-02 11:22:09+03  FULL   STREAM    1/0   12s   296MB   16MB    2.30  0/7A000028  0/7A009A08  OK     
+ node      16       SCUN8I  2024-05-02 11:21:55+03  DELTA  STREAM    1/1    5s  1148kB   32MB    1.01  0/78000028  0/78000168  OK     
+ node      16       SCUN86  2024-05-02 11:21:47+03  DELTA  STREAM    1/1   11s   120MB   16MB    2.27  0/76000028  0/760001A0  OK     
+ node      16       SCUN7I  2024-05-02 11:21:29+03  FULL   STREAM    1/0   22s   296MB  288MB    2.30  0/63012FE8  0/74E7ADA0  OK     
+ node      16       SCUN71  2024-05-02 11:21:12+03  FULL   STREAM    1/0   13s   296MB  272MB    2.30  0/49000028  0/573683B8  OK     
 </programlisting>
       <para>
         You can check the state of the WAL archive by running the
@@ -3787,11 +3768,12 @@ BACKUP INSTANCE 'node'
 pg_probackup show -B <replaceable>backup_dir</replaceable> --instance=node --archive
 </programlisting>
       <programlisting id="pbk-wal-archive-retention-policy-listing-2">
+
 ARCHIVE INSTANCE 'node'
-===============================================================================================================================
- TLI  Parent TLI  Switchpoint  Min Segno                 Max Segno                 N segments  Size  Zratio  N backups  Status
-===============================================================================================================================
- 1    0           0/0          000000010000000000000001  000000010000000000000047  71          36MB  31.00   6          OK
+================================================================================================================================
+ TLI  Parent TLI  Switchpoint  Min Segno                 Max Segno                 N segments  Size   Zratio  N backups  Status 
+================================================================================================================================
+ 1    0           0/0          000000010000000000000048  00000001000000000000007C  53          848MB  1.00    6          OK     
 </programlisting>
       <para>
         WAL purge without <option>--wal-depth</option> cannot
@@ -3801,11 +3783,12 @@ ARCHIVE INSTANCE 'node'
 pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance=node --delete-wal
 </programlisting>
       <programlisting id="pbk-wal-archive-retention-policy-listing-3">
+
 ARCHIVE INSTANCE 'node'
-===============================================================================================================================
- TLI  Parent TLI  Switchpoint  Min Segno                 Max Segno                 N segments  Size  Zratio  N backups  Status
-===============================================================================================================================
- 1    0           0/0          000000010000000000000002  000000010000000000000047  70          34MB  32.00   6          OK
+================================================================================================================================
+ TLI  Parent TLI  Switchpoint  Min Segno                 Max Segno                 N segments  Size   Zratio  N backups  Status 
+================================================================================================================================
+ 1    0           0/0          000000010000000000000049  00000001000000000000007C  52          832MB  1.00    6          OK     
 </programlisting>
       <para>
         If you would like, for example, to keep only those WAL
@@ -3816,11 +3799,12 @@ ARCHIVE INSTANCE 'node'
 pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance=node --delete-wal --wal-depth=1
 </programlisting>
       <programlisting id="pbk-wal-archive-retention-policy-listing-4">
+
 ARCHIVE INSTANCE 'node'
-================================================================================================================================
- TLI  Parent TLI  Switchpoint  Min Segno                 Max Segno                 N segments  Size   Zratio  N backups  Status
-================================================================================================================================
- 1    0           0/0          000000010000000000000046  000000010000000000000047  2           143kB  228.00  6          OK
+===============================================================================================================================
+ TLI  Parent TLI  Switchpoint  Min Segno                 Max Segno                 N segments  Size  Zratio  N backups  Status 
+===============================================================================================================================
+ 1    0           0/0          00000001000000000000007C  00000001000000000000007C  1           16MB  1.00    6          OK     
 </programlisting>
       <para>
         Alternatively, you can use the <option>--wal-depth</option>
@@ -3830,11 +3814,12 @@ ARCHIVE INSTANCE 'node'
 pg_probackup backup -B <replaceable>backup_dir</replaceable> --instance=node -b DELTA --wal-depth=1 --delete-wal
 </programlisting>
       <programlisting id="pbk-wal-archive-retention-policy-listing-5">
+
 ARCHIVE INSTANCE 'node'
 ===============================================================================================================================
- TLI  Parent TLI  Switchpoint  Min Segno                 Max Segno                 N segments  Size  Zratio  N backups  Status
+ TLI  Parent TLI  Switchpoint  Min Segno                 Max Segno                 N segments  Size  Zratio  N backups  Status 
 ===============================================================================================================================
- 1    0           0/0          000000010000000000000048  000000010000000000000049  1           72kB  228.00  7          OK
+ 1    0           0/0          00000001000000000000007E  00000001000000000000007E  1           16MB  1.00    7          OK     
 </programlisting>
     </refsect3>
   </refsect2>
@@ -3997,10 +3982,7 @@ pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance=<replace
         <listitem>
           <para>
            DDL commands
-           <ulink url="https://postgrespro.com/docs/postgresql/current/sql-createtablespace"
-           ><command>CREATE TABLESPACE</command></ulink
-           >/<ulink url="https://postgrespro.com/docs/postgresql/current/sql-droptablespace"
-           ><command>DROP TABLESPACE</command></ulink>
+           <ulink url="https://postgrespro.com/docs/postgresql/current/sql-createtablespace"><command>CREATE TABLESPACE</command></ulink>/<ulink url="https://postgrespro.com/docs/postgresql/current/sql-droptablespace"><command>DROP TABLESPACE</command></ulink>
            cannot be run simultaneously with <command>catchup</command>.
           </para>
         </listitem>
@@ -5375,7 +5357,7 @@ pg_probackup catchup -b <replaceable>catchup_mode</replaceable>
         If the time zone offset is not specified, the local time zone is used.
       </para>
       <para>
-       Example: <literal>--recovery-target-time="2020-01-01 00:00:00+03"</literal>
+       Example: <literal>--recovery-target-time="2027-05-02 11:21:00+00"</literal>
       </para>
       </listitem>
       </varlistentry>
@@ -5565,7 +5547,7 @@ pg_probackup catchup -b <replaceable>catchup_mode</replaceable>
           If the time zone offset is not specified, the local time zone is used.
       </para>
       <para>
-       Example: <literal>--expire-time="2020-01-01 00:00:00+03"</literal>
+       Example: <literal>--expire-time="2027-05-02 11:21:00+00"</literal>
       </para>
       </listitem>
       </varlistentry>
