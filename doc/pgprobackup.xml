@@ -1080,7 +1080,7 @@ pg_probackup init -B <replaceable>backup_dir</replaceable>
       To add a new backup instance, run the following command:
     </para>
     <programlisting>
-pg_probackup add-instance -B <replaceable>backup_dir</replaceable> -D <replaceable>data_dir</replaceable> --instance <replaceable>instance_name</replaceable> [<replaceable>remote_options</replaceable>]
+pg_probackup add-instance -B <replaceable>backup_dir</replaceable> -D <replaceable>data_dir</replaceable> --instance=<replaceable>instance_name</replaceable> [<replaceable>remote_options</replaceable>]
 </programlisting>
     <para>
       Where:
@@ -1355,7 +1355,7 @@ ALTER ROLE backup WITH REPLICATION;
           parameter, as follows:
         </para>
         <programlisting>
-archive_command = '"<replaceable>install_dir</replaceable>/pg_probackup" archive-push -B "<replaceable>backup_dir</replaceable>" --instance <replaceable>instance_name</replaceable> --wal-file-name=%f [<replaceable>remote_options</replaceable>]'
+archive_command = '"<replaceable>install_dir</replaceable>/pg_probackup" archive-push -B "<replaceable>backup_dir</replaceable>" --instance=<replaceable>instance_name</replaceable> --wal-file-name=%f [<replaceable>remote_options</replaceable>]'
 </programlisting>
       </listitem>
     </itemizedlist>
@@ -1804,7 +1804,7 @@ CREATE EXTENSION ptrack;
       To create a backup, run the following command:
     </para>
     <programlisting>
-pg_probackup backup -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> -b <replaceable>backup_mode</replaceable>
+pg_probackup backup -B <replaceable>backup_dir</replaceable> --instance=<replaceable>instance_name</replaceable> -b <replaceable>backup_mode</replaceable>
 </programlisting>
     <para>
       Where <replaceable>backup_mode</replaceable> can take one of the
@@ -1830,7 +1830,7 @@ pg_probackup backup -B <replaceable>backup_dir</replaceable> --instance <replace
         For example, to make a FULL backup in ARCHIVE mode, run:
       </para>
       <programlisting>
-pg_probackup backup -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> -b FULL
+pg_probackup backup -B <replaceable>backup_dir</replaceable> --instance=<replaceable>instance_name</replaceable> -b FULL
 </programlisting>
       <para>
         ARCHIVE backups rely on
@@ -1860,7 +1860,7 @@ pg_probackup backup -B <replaceable>backup_dir</replaceable> --instance <replace
         previous example:
       </para>
       <programlisting>
-pg_probackup backup -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> -b FULL --stream --temp-slot
+pg_probackup backup -B <replaceable>backup_dir</replaceable> --instance=<replaceable>instance_name</replaceable> -b FULL --stream --temp-slot
 </programlisting>
       <para>
         The optional <option>--temp-slot</option> flag ensures that
@@ -1953,7 +1953,7 @@ pg_probackup backup -B <replaceable>backup_dir</replaceable> --instance <replace
         directory on Linux, run:
       </para>
       <programlisting>
-pg_probackup backup -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> -b FULL --external-dirs=/etc/dir1:/etc/dir2
+pg_probackup backup -B <replaceable>backup_dir</replaceable> --instance=<replaceable>instance_name</replaceable> -b FULL --external-dirs=/etc/dir1:/etc/dir2
 </programlisting>
       <para>
         Similarly, to include <filename>C:\dir1</filename> and
@@ -1961,7 +1961,7 @@ pg_probackup backup -B <replaceable>backup_dir</replaceable> --instance <replace
         on Windows, run:
       </para>
       <programlisting>
-pg_probackup backup -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> -b FULL --external-dirs=C:\dir1;C:\dir2
+pg_probackup backup -B <replaceable>backup_dir</replaceable> --instance=<replaceable>instance_name</replaceable> -b FULL --external-dirs=C:\dir1;C:\dir2
 </programlisting>
       <para>
         <application>pg_probackup</application> recursively copies the contents
@@ -1989,7 +1989,7 @@ pg_probackup backup -B <replaceable>backup_dir</replaceable> --instance <replace
       not corrupt, run the following command:
     </para>
     <programlisting>
-pg_probackup checkdb [-B <replaceable>backup_dir</replaceable> [--instance <replaceable>instance_name</replaceable>]] [-D <replaceable>data_dir</replaceable>] [<replaceable>connection_options</replaceable>]
+pg_probackup checkdb [-B <replaceable>backup_dir</replaceable> [--instance=<replaceable>instance_name</replaceable>]] [-D <replaceable>data_dir</replaceable>] [<replaceable>connection_options</replaceable>]
 </programlisting>
 
     <para>
@@ -2087,7 +2087,7 @@ pg_probackup checkdb --amcheck --skip-block-validation [<replaceable>connection_
       this command:
     </para>
     <programlisting>
-pg_probackup validate -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> --recovery-target-xid=4242
+pg_probackup validate -B <replaceable>backup_dir</replaceable> --instance=<replaceable>instance_name</replaceable> --recovery-target-xid=4242
 </programlisting>
     <para>
       If validation completes successfully, <application>pg_probackup</application> displays the
@@ -2111,7 +2111,7 @@ pg_probackup validate -B <replaceable>backup_dir</replaceable> --instance <repla
       specified timestamp, run this command:
     </para>
     <programlisting id="pbk-validating-backups-listing">
-pg_probackup validate -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> -i PT8XFX --recovery-target-time="2017-05-18 14:18:11+03"
+pg_probackup validate -B <replaceable>backup_dir</replaceable> --instance=<replaceable>instance_name</replaceable> -i PT8XFX --recovery-target-time="2017-05-18 14:18:11+03"
 </programlisting>
     <para>
       If you specify the <replaceable>backup_id</replaceable> of an incremental backup,
@@ -2129,7 +2129,7 @@ pg_probackup validate -B <replaceable>backup_dir</replaceable> --instance <repla
       command with at least the following options:
     </para>
     <programlisting>
-pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> -i <replaceable>backup_id</replaceable>
+pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance=<replaceable>instance_name</replaceable> -i <replaceable>backup_id</replaceable>
 </programlisting>
     <para>
       Where:
@@ -2213,7 +2213,7 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
       specified multiple times for multiple tablespaces. For example:
     </para>
     <programlisting>
-pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> -D <replaceable>data_dir</replaceable> -j 4 -i <replaceable>backup_id</replaceable> -T tablespace1_dir=<replaceable>tablespace1_newdir</replaceable> -T tablespace2_dir=<replaceable>tablespace2_newdir</replaceable>
+pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance=<replaceable>instance_name</replaceable> -D <replaceable>data_dir</replaceable> -j 4 -i <replaceable>backup_id</replaceable> -T tablespace1_dir=<replaceable>tablespace1_newdir</replaceable> -T tablespace2_dir=<replaceable>tablespace2_newdir</replaceable>
 </programlisting>
 
     <para>
@@ -2245,7 +2245,7 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
         run the <xref linkend="pbk-restore"/> command with the following options:
       </para>
       <programlisting>
-pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> -D <replaceable>data_dir</replaceable> -I <replaceable>incremental_mode</replaceable>
+pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance=<replaceable>instance_name</replaceable> -D <replaceable>data_dir</replaceable> -I <replaceable>incremental_mode</replaceable>
       </programlisting>
       <para>
       Where <replaceable>incremental_mode</replaceable> can take one of the
@@ -2314,7 +2314,7 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
  node      12       QBRIAJ  2020-06-11 15:51:08+03  PAGE   ARCHIVE   15/15     20s   141MB   96MB    6.22  14/D4BABFE0  14/DA9871D0  OK
  node      12       QBRHT8  2020-06-11 15:45:56+03  FULL   ARCHIVE   15/0   2m:11s  1371MB  416MB   10.93  14/9D000028  14/B782E9A0  OK
 
-pg_probackup restore -B /backup --instance node -R -I lsn
+pg_probackup restore -B /backup --instance=node -R -I lsn
 INFO: Running incremental restore into nonempty directory: "/var/lib/pgsql/12/data"
 INFO: Destination directory redo point 15/2E000028 on tli 16 is within reach of backup QBRIDX with Stop LSN 14/DD0000B8 on tli 15
 INFO: shift LSN: 14/DD0000B8
@@ -2351,7 +2351,7 @@ INFO: Restore of backup QBRNBP completed.
         with the following options:
       </para>
       <programlisting>
-pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> --db-include=<replaceable>database_name</replaceable>
+pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance=<replaceable>instance_name</replaceable> --db-include=<replaceable>database_name</replaceable>
       </programlisting>
       <para>
         The <option>--db-include</option> option can be specified
@@ -2360,14 +2360,14 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
         following command:
       </para>
       <programlisting>
-pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> --db-include=db1 --db-include=db2
+pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance=<replaceable>instance_name</replaceable> --db-include=db1 --db-include=db2
 </programlisting>
       <para>
         To exclude one or more databases from restore, use
         the <option>--db-exclude</option> option:
       </para>
       <programlisting>
-pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> --db-exclude=<replaceable>database_name</replaceable>
+pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance=<replaceable>instance_name</replaceable> --db-exclude=<replaceable>database_name</replaceable>
 </programlisting>
       <para>
         The <option>--db-exclude</option> option can be specified
@@ -2376,7 +2376,7 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
         restore, run the following command:
       </para>
       <programlisting>
-pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> --db-exclude=db1 --db-exclude=db2
+pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance=<replaceable>instance_name</replaceable> --db-exclude=db1 --db-exclude=db2
 </programlisting>
       <para>
         Partial restore relies on lax behavior of <productname>PostgreSQL</productname> recovery
@@ -2438,7 +2438,7 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
           timestamp format. For example:
         </para>
         <programlisting>
-pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> --recovery-target-time="2017-05-18 14:18:11+03"
+pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance=<replaceable>instance_name</replaceable> --recovery-target-time="2017-05-18 14:18:11+03"
 </programlisting>
       </listitem>
       <listitem>
@@ -2447,7 +2447,7 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
           ID, use the <option>--recovery-target-xid</option> option:
         </para>
         <programlisting>
-pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> --recovery-target-xid=687
+pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance=<replaceable>instance_name</replaceable> --recovery-target-xid=687
 </programlisting>
       </listitem>
       <listitem>
@@ -2456,7 +2456,7 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
           <option>--recovery-target-lsn</option> option:
         </para>
         <programlisting>
-pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> --recovery-target-lsn=16/B374D848
+pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance=<replaceable>instance_name</replaceable> --recovery-target-lsn=16/B374D848
 </programlisting>
       </listitem>
       <listitem>
@@ -2465,7 +2465,7 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
           point, use <option>--recovery-target-name</option> option:
         </para>
         <programlisting>
-pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> --recovery-target-name="before_app_upgrade"
+pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance=<replaceable>instance_name</replaceable> --recovery-target-name="before_app_upgrade"
 </programlisting>
       </listitem>
       <listitem>
@@ -2475,7 +2475,7 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
           with <literal>latest</literal> value:
         </para>
         <programlisting>
-pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> --recovery-target="latest"
+pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance=<replaceable>instance_name</replaceable> --recovery-target="latest"
 </programlisting>
       </listitem>
       <listitem>
@@ -2485,7 +2485,7 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
           <literal>immediate</literal> value:
         </para>
         <programlisting>
-pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> --recovery-target='immediate'
+pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance=<replaceable>instance_name</replaceable> --recovery-target='immediate'
 </programlisting>
       </listitem>
     </itemizedlist>
@@ -2569,7 +2569,7 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
       through port <literal>2302</literal>, run:
     </para>
     <programlisting>
-pg_probackup backup -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> -b FULL --remote-user=postgres --remote-host=192.168.0.2 --remote-port=2302
+pg_probackup backup -B <replaceable>backup_dir</replaceable> --instance=<replaceable>instance_name</replaceable> -b FULL --remote-user=postgres --remote-host=192.168.0.2 --remote-port=2302
 </programlisting>
     <para>
       To restore the latest available backup on a remote system with host address
@@ -2577,7 +2577,7 @@ pg_probackup backup -B <replaceable>backup_dir</replaceable> --instance <replace
       user via SSH connection through port <literal>2302</literal>, run:
     </para>
     <programlisting>
-pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> --remote-user=postgres --remote-host=192.168.0.2 --remote-port=2302
+pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance=<replaceable>instance_name</replaceable> --remote-user=postgres --remote-host=192.168.0.2 --remote-port=2302
 </programlisting>
     <para>
       Restoring an ARCHIVE backup or performing PITR in the remote mode
@@ -2604,20 +2604,20 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
       <literal>2303</literal>, run:
     </para>
     <programlisting>
-pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> --remote-user=postgres --remote-host=192.168.0.2 --remote-port=2302 --archive-host=192.168.0.3 --archive-port=2303 --archive-user=backup
+pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance=<replaceable>instance_name</replaceable> --remote-user=postgres --remote-host=192.168.0.2 --remote-port=2302 --archive-host=192.168.0.3 --archive-port=2303 --archive-user=backup
 </programlisting>
     <para>
       Provided arguments will be used to construct the <command>restore_command</command>:
     </para>
     <programlisting>
-restore_command = '"<replaceable>install_dir</replaceable>/pg_probackup" archive-get -B "<replaceable>backup_dir</replaceable>" --instance <replaceable>instance_name</replaceable> --wal-file-path=%p --wal-file-name=%f --remote-host=192.168.0.3 --remote-port=2303 --remote-user=backup'
+restore_command = '"<replaceable>install_dir</replaceable>/pg_probackup" archive-get -B "<replaceable>backup_dir</replaceable>" --instance=<replaceable>instance_name</replaceable> --wal-file-path=%p --wal-file-name=%f --remote-host=192.168.0.3 --remote-port=2303 --remote-user=backup'
 </programlisting>
     <para>
       Alternatively, you can use the <option>--restore-command</option>
       option to provide the entire <parameter>restore_command</parameter>:
     </para>
     <programlisting>
-pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> --remote-user=postgres --remote-host=192.168.0.2 --remote-port=2302 --restore-command='"<replaceable>install_dir</replaceable>/pg_probackup" archive-get -B "<replaceable>backup_dir</replaceable>" --instance <replaceable>instance_name</replaceable> --wal-file-path=%p --wal-file-name=%f --remote-host=192.168.0.3 --remote-port=2303 --remote-user=backup'
+pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance=<replaceable>instance_name</replaceable> --remote-user=postgres --remote-host=192.168.0.2 --remote-port=2302 --restore-command='"<replaceable>install_dir</replaceable>/pg_probackup" archive-get -B "<replaceable>backup_dir</replaceable>" --instance=<replaceable>instance_name</replaceable> --wal-file-path=%p --wal-file-name=%f --remote-host=192.168.0.3 --remote-port=2303 --remote-user=backup'
 </programlisting>
     <note>
       <para>
@@ -2646,7 +2646,7 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
       example, to create a backup using four parallel threads, run:
     </para>
     <programlisting>
-pg_probackup backup -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> -b FULL -j 4
+pg_probackup backup -B <replaceable>backup_dir</replaceable> --instance=<replaceable>instance_name</replaceable> -b FULL -j 4
 </programlisting>
     <note>
       <para>
@@ -2707,14 +2707,14 @@ pg_probackup backup -B <replaceable>backup_dir</replaceable> --instance <replace
       using the <command>set-config</command> command:
     </para>
     <programlisting>
-pg_probackup set-config -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable>
+pg_probackup set-config -B <replaceable>backup_dir</replaceable> --instance=<replaceable>instance_name</replaceable>
 [--external-dirs=<replaceable>external_directory_path</replaceable>] [<replaceable>remote_options</replaceable>] [<replaceable>connection_options</replaceable>] [<replaceable>retention_options</replaceable>] [<replaceable>logging_options</replaceable>]
 </programlisting>
     <para>
       To view the current settings, run the following command:
     </para>
     <programlisting>
-pg_probackup show-config -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable>
+pg_probackup show-config -B <replaceable>backup_dir</replaceable> --instance=<replaceable>instance_name</replaceable>
 </programlisting>
     <para>
       You can override the settings defined in <filename>pg_probackup.conf</filename> when
@@ -2947,7 +2947,7 @@ BACKUP INSTANCE 'node'
         <command>show</command> command with the backup ID:
       </para>
       <programlisting>
-pg_probackup show -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> -i <replaceable>backup_id</replaceable>
+pg_probackup show -B <replaceable>backup_dir</replaceable> --instance=<replaceable>instance_name</replaceable> -i <replaceable>backup_id</replaceable>
 </programlisting>
       <para>
         The sample output is as follows:
@@ -3091,7 +3091,7 @@ primary_conninfo = 'user=backup passfile=/var/lib/pgsql/.pgpass port=5432 sslmod
         in the <acronym>JSON</acronym> format:
       </para>
       <programlisting>
-pg_probackup show -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> --format=json -i backup_id
+pg_probackup show -B <replaceable>backup_dir</replaceable> --instance=<replaceable>instance_name</replaceable> --format=json -i backup_id
 </programlisting>
       <para>
         The sample output is as follows:
@@ -3139,7 +3139,7 @@ pg_probackup show -B <replaceable>backup_dir</replaceable> --instance <replaceab
         run the command:
       </para>
       <programlisting>
-pg_probackup show -B <replaceable>backup_dir</replaceable> [--instance <replaceable>instance_name</replaceable>] --archive
+pg_probackup show -B <replaceable>backup_dir</replaceable> [--instance=<replaceable>instance_name</replaceable>] --archive
 </programlisting>
       <para>
         <application>pg_probackup</application> displays the list of all the available WAL files
@@ -3238,7 +3238,7 @@ ARCHIVE INSTANCE 'node'
         format, run the command:
       </para>
       <programlisting>
-pg_probackup show -B <replaceable>backup_dir</replaceable> [--instance <replaceable>instance_name</replaceable>] --archive --format=json
+pg_probackup show -B <replaceable>backup_dir</replaceable> [--instance=<replaceable>instance_name</replaceable>] --archive --format=json
 </programlisting>
       <para>
         The sample output is as follows:
@@ -3540,7 +3540,7 @@ pg_probackup show -B <replaceable>backup_dir</replaceable> [--instance <replacea
         for the last seven days:
       </para>
       <programlisting>
-pg_probackup set-config -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> --retention-redundancy=2 --retention-window=7
+pg_probackup set-config -B <replaceable>backup_dir</replaceable> --instance=<replaceable>instance_name</replaceable> --retention-redundancy=2 --retention-window=7
 </programlisting>
 
       <para>
@@ -3558,7 +3558,7 @@ pg_probackup set-config -B <replaceable>backup_dir</replaceable> --instance <rep
         <literal>--delete-expired</literal> flag:
       </para>
       <programlisting>
-pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> --delete-expired
+pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance=<replaceable>instance_name</replaceable> --delete-expired
 </programlisting>
       <para>
         If you would like to also remove the WAL files that are no
@@ -3566,7 +3566,7 @@ pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replace
         <option>--delete-wal</option> flag:
       </para>
       <programlisting>
-pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> --delete-expired --delete-wal
+pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance=<replaceable>instance_name</replaceable> --delete-expired --delete-wal
 </programlisting>
 
       <para>
@@ -3577,7 +3577,7 @@ pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replace
         commands:
       </para>
       <programlisting>
-pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> --delete-expired --retention-window=7 --retention-redundancy=2
+pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance=<replaceable>instance_name</replaceable> --delete-expired --retention-window=7 --retention-redundancy=2
 </programlisting>
       <para>
         Since incremental backups require that their parent full
@@ -3628,7 +3628,7 @@ BACKUP INSTANCE 'node'
         expired backups anymore:
       </para>
       <programlisting>
-pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replaceable>node</replaceable> --delete-expired --merge-expired
+pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance=<replaceable>node</replaceable> --delete-expired --merge-expired
 pg_probackup show -B <replaceable>backup_dir</replaceable>
 </programlisting>
       <programlisting id="pbk-retention-policy-listing-2">
@@ -3654,7 +3654,7 @@ BACKUP INSTANCE 'node'
         for arbitrary time. For example:
       </para>
       <programlisting>
-pg_probackup set-backup -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> -i <replaceable>backup_id</replaceable> --ttl=30d
+pg_probackup set-backup -B <replaceable>backup_dir</replaceable> --instance=<replaceable>instance_name</replaceable> -i <replaceable>backup_id</replaceable> --ttl=30d
 </programlisting>
       <para>
         This command sets the expiration time of the
@@ -3666,7 +3666,7 @@ pg_probackup set-backup -B <replaceable>backup_dir</replaceable> --instance <rep
         using the <option>--expire-time</option> option. For example:
       </para>
       <programlisting>
-pg_probackup set-backup -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> -i <replaceable>backup_id</replaceable> --expire-time="2020-01-01 00:00:00+03"
+pg_probackup set-backup -B <replaceable>backup_dir</replaceable> --instance=<replaceable>instance_name</replaceable> -i <replaceable>backup_id</replaceable> --expire-time="2020-01-01 00:00:00+03"
 </programlisting>
       <para>
         Alternatively, you can use the <option>--ttl</option> and
@@ -3675,14 +3675,14 @@ pg_probackup set-backup -B <replaceable>backup_dir</replaceable> --instance <rep
         created backup:
       </para>
       <programlisting>
-pg_probackup backup -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> -b FULL --ttl=30d
-pg_probackup backup -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> -b FULL --expire-time="2020-01-01 00:00:00+03"
+pg_probackup backup -B <replaceable>backup_dir</replaceable> --instance=<replaceable>instance_name</replaceable> -b FULL --ttl=30d
+pg_probackup backup -B <replaceable>backup_dir</replaceable> --instance=<replaceable>instance_name</replaceable> -b FULL --expire-time="2020-01-01 00:00:00+03"
 </programlisting>
       <para>
         To check if the backup is pinned,
         run the <xref linkend="pbk-show"/> command:
       <programlisting>
-pg_probackup show -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> -i <replaceable>backup_id</replaceable>
+pg_probackup show -B <replaceable>backup_dir</replaceable> --instance=<replaceable>instance_name</replaceable> -i <replaceable>backup_id</replaceable>
 </programlisting>
       </para>
       <para>
@@ -3700,7 +3700,7 @@ data-bytes = 22288792
         You can unpin the backup by setting the <option>--ttl</option> option to zero:
       </para>
       <programlisting>
-pg_probackup set-backup -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> -i <replaceable>backup_id</replaceable> --ttl=0
+pg_probackup set-backup -B <replaceable>backup_dir</replaceable> --instance=<replaceable>instance_name</replaceable> -i <replaceable>backup_id</replaceable> --ttl=0
 </programlisting>
 
       <note>
@@ -3764,7 +3764,7 @@ pg_probackup set-backup -B <replaceable>backup_dir</replaceable> --instance <rep
         archiving</link>:
       </para>
       <programlisting>
-pg_probackup show -B <replaceable>backup_dir</replaceable> --instance <replaceable>node</replaceable>
+pg_probackup show -B <replaceable>backup_dir</replaceable> --instance=<replaceable>node</replaceable>
 </programlisting>
       <programlisting id="pbk-wal-archive-retention-policy-listing-1">
 BACKUP INSTANCE 'node'
@@ -3784,7 +3784,7 @@ BACKUP INSTANCE 'node'
         <option>--archive</option> flag:
       </para>
       <programlisting>
-pg_probackup show -B <replaceable>backup_dir</replaceable> --instance node --archive
+pg_probackup show -B <replaceable>backup_dir</replaceable> --instance=node --archive
 </programlisting>
       <programlisting id="pbk-wal-archive-retention-policy-listing-2">
 ARCHIVE INSTANCE 'node'
@@ -3798,7 +3798,7 @@ ARCHIVE INSTANCE 'node'
         achieve much, only one segment is removed:
       </para>
       <programlisting>
-pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance node --delete-wal
+pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance=node --delete-wal
 </programlisting>
       <programlisting id="pbk-wal-archive-retention-policy-listing-3">
 ARCHIVE INSTANCE 'node'
@@ -3813,7 +3813,7 @@ ARCHIVE INSTANCE 'node'
         <option>--wal-depth</option> option to 1:
       </para>
       <programlisting>
-pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance node --delete-wal --wal-depth=1
+pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance=node --delete-wal --wal-depth=1
 </programlisting>
       <programlisting id="pbk-wal-archive-retention-policy-listing-4">
 ARCHIVE INSTANCE 'node'
@@ -3827,7 +3827,7 @@ ARCHIVE INSTANCE 'node'
         option with the <xref linkend="pbk-backup"/> command:
       </para>
       <programlisting>
-pg_probackup backup -B <replaceable>backup_dir</replaceable> --instance node -b DELTA --wal-depth=1 --delete-wal
+pg_probackup backup -B <replaceable>backup_dir</replaceable> --instance=node -b DELTA --wal-depth=1 --delete-wal
 </programlisting>
       <programlisting id="pbk-wal-archive-retention-policy-listing-5">
 ARCHIVE INSTANCE 'node'
@@ -3848,7 +3848,7 @@ ARCHIVE INSTANCE 'node'
       recent incremental backup you would like to merge:
     </para>
     <programlisting>
-pg_probackup merge -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> -i <replaceable>backup_id</replaceable>
+pg_probackup merge -B <replaceable>backup_dir</replaceable> --instance=<replaceable>instance_name</replaceable> -i <replaceable>backup_id</replaceable>
 </programlisting>
     <para>
       This command merges backups that belong to a common incremental backup
@@ -3870,7 +3870,7 @@ pg_probackup merge -B <replaceable>backup_dir</replaceable> --instance <replacea
       command with the backup ID:
     </para>
     <programlisting>
-pg_probackup show -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> -i <replaceable>backup_id</replaceable>
+pg_probackup show -B <replaceable>backup_dir</replaceable> --instance=<replaceable>instance_name</replaceable> -i <replaceable>backup_id</replaceable>
 </programlisting>
     <para>
       If the merge is still in progress, the backup status is
@@ -3888,7 +3888,7 @@ pg_probackup show -B <replaceable>backup_dir</replaceable> --instance <replaceab
       command:
     </para>
     <programlisting>
-pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> -i <replaceable>backup_id</replaceable>
+pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance=<replaceable>instance_name</replaceable> -i <replaceable>backup_id</replaceable>
 </programlisting>
     <para>
       This command will delete the backup with the specified
@@ -3904,7 +3904,7 @@ pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replace
       <option>--delete-wal</option> flag:
     </para>
     <programlisting>
-pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> --delete-wal
+pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance=<replaceable>instance_name</replaceable> --delete-wal
 </programlisting>
     <para>
       To delete backups that are expired according to the current
@@ -3912,7 +3912,7 @@ pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replace
       flag:
     </para>
     <programlisting>
-pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> --delete-expired
+pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance=<replaceable>instance_name</replaceable> --delete-expired
 </programlisting>
     <para>
       Expired backups cannot be removed while at least one
@@ -3923,7 +3923,7 @@ pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replace
       command:
     </para>
     <programlisting>
-pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> --delete-expired --merge-expired
+pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance=<replaceable>instance_name</replaceable> --delete-expired --merge-expired
 </programlisting>
     <para>
       In this case, <application>pg_probackup</application> searches for the oldest incremental
@@ -3943,7 +3943,7 @@ pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replace
       To delete all backups with specific status, use the <option>--status</option>:
     </para>
     <programlisting>
-pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> --status=ERROR
+pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance=<replaceable>instance_name</replaceable> --status=ERROR
     </programlisting>
 
     <para>
@@ -4181,7 +4181,7 @@ pg_probackup init -B <replaceable>backup_dir</replaceable> [--help]
     <refsect3 id="pbk-add-instance" xreflabel="add-instance">
       <title>add-instance</title>
       <programlisting>
-pg_probackup add-instance -B <replaceable>backup_dir</replaceable> -D <replaceable>data_dir</replaceable> --instance <replaceable>instance_name</replaceable> [--help]
+pg_probackup add-instance -B <replaceable>backup_dir</replaceable> -D <replaceable>data_dir</replaceable> --instance=<replaceable>instance_name</replaceable> [--help]
 </programlisting>
       <para>
         Initializes a new backup instance inside the backup catalog
@@ -4199,7 +4199,7 @@ pg_probackup add-instance -B <replaceable>backup_dir</replaceable> -D <replaceab
     <refsect3 id="pbk-del-instance" xreflabel="del-instance">
       <title>del-instance</title>
       <programlisting>
-pg_probackup del-instance -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> [--help]
+pg_probackup del-instance -B <replaceable>backup_dir</replaceable> --instance=<replaceable>instance_name</replaceable> [--help]
 </programlisting>
       <para>
         Deletes all backups and WAL files associated with the
@@ -4209,7 +4209,7 @@ pg_probackup del-instance -B <replaceable>backup_dir</replaceable> --instance <r
     <refsect3 id="pbk-set-config" xreflabel="set-config">
       <title>set-config</title>
       <programlisting>
-pg_probackup set-config -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable>
+pg_probackup set-config -B <replaceable>backup_dir</replaceable> --instance=<replaceable>instance_name</replaceable>
 [--help] [--pgdata=<replaceable>pgdata-path</replaceable>]
 [--retention-redundancy=<replaceable>redundancy</replaceable>][--retention-window=<replaceable>window</replaceable>][--wal-depth=<replaceable>wal_depth</replaceable>]
 [--compress-algorithm=<replaceable>compression_algorithm</replaceable>] [--compress-level=<replaceable>compression_level</replaceable>]
@@ -4235,7 +4235,7 @@ pg_probackup set-config -B <replaceable>backup_dir</replaceable> --instance <rep
     <refsect3 id="pbk-set-backup" xreflabel="set-backup">
       <title>set-backup</title>
       <programlisting>
-pg_probackup set-backup -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> -i <replaceable>backup_id</replaceable>
+pg_probackup set-backup -B <replaceable>backup_dir</replaceable> --instance=<replaceable>instance_name</replaceable> -i <replaceable>backup_id</replaceable>
 {--ttl=<replaceable>ttl</replaceable> | --expire-time=<replaceable>time</replaceable>}
 [--note=<replaceable>backup_note</replaceable>] [--help]
 </programlisting>
@@ -4266,7 +4266,7 @@ pg_probackup set-backup -B <replaceable>backup_dir</replaceable> --instance <rep
     <refsect3 id="pbk-show-config" xreflabel="show-config">
       <title>show-config</title>
       <programlisting>
-pg_probackup show-config -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> [--format=plain|json]
+pg_probackup show-config -B <replaceable>backup_dir</replaceable> --instance=<replaceable>instance_name</replaceable> [--format=plain|json]
 [--no-scale-units] [<replaceable>logging_options</replaceable>]
 </programlisting>
       <para>
@@ -4299,7 +4299,7 @@ pg_probackup show-config -B <replaceable>backup_dir</replaceable> --instance <re
       <title>show</title>
       <programlisting>
 pg_probackup show -B <replaceable>backup_dir</replaceable>
-[--help] [--instance <replaceable>instance_name</replaceable> [-i <replaceable>backup_id</replaceable> | --archive]] [--format=plain|json] [--no-color]
+[--help] [--instance=<replaceable>instance_name</replaceable> [-i <replaceable>backup_id</replaceable> | --archive]] [--format=plain|json] [--no-color]
 </programlisting>
       <para>
         Shows the contents of the backup catalog. If
@@ -4328,7 +4328,7 @@ pg_probackup show -B <replaceable>backup_dir</replaceable>
     <refsect3 id="pbk-backup" xreflabel="backup">
       <title>backup</title>
       <programlisting>
-pg_probackup backup -B <replaceable>backup_dir</replaceable> -b <replaceable>backup_mode</replaceable> --instance <replaceable>instance_name</replaceable>
+pg_probackup backup -B <replaceable>backup_dir</replaceable> -b <replaceable>backup_mode</replaceable> --instance=<replaceable>instance_name</replaceable>
 [--help] [-j <replaceable>num_threads</replaceable>] [--progress]
 [-C] [--stream [-S slot_name] [--temp-slot]] [--backup-pg-log]
 [--no-validate] [--skip-block-validation]
@@ -4511,7 +4511,7 @@ pg_probackup backup -B <replaceable>backup_dir</replaceable> -b <replaceable>bac
     <refsect3 id="pbk-restore" xreflabel="restore">
       <title>restore</title>
       <programlisting>
-pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable>
+pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance=<replaceable>instance_name</replaceable>
 [--help] [-D <replaceable>data_dir</replaceable>] [-i <replaceable>backup_id</replaceable>]
 [-j <replaceable>num_threads</replaceable>] [--progress]
 [-T <replaceable>OLDDIR</replaceable>=<replaceable>NEWDIR</replaceable>] [--external-mapping=<replaceable>OLDDIR</replaceable>=<replaceable>NEWDIR</replaceable>] [--skip-external-dirs]
@@ -4722,7 +4722,7 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
       <title>checkdb</title>
       <programlisting>
 pg_probackup checkdb
-[-B <replaceable>backup_dir</replaceable>] [--instance <replaceable>instance_name</replaceable>] [-D <replaceable>data_dir</replaceable>]
+[-B <replaceable>backup_dir</replaceable>] [--instance=<replaceable>instance_name</replaceable>] [-D <replaceable>data_dir</replaceable>]
 [--help] [-j <replaceable>num_threads</replaceable>] [--progress]
 [--amcheck [--skip-block-validation] [--checkunique] [--heapallindexed]]
 [<replaceable>connection_options</replaceable>] [<replaceable>logging_options</replaceable>]
@@ -4812,7 +4812,7 @@ pg_probackup checkdb
       <title>validate</title>
       <programlisting>
 pg_probackup validate -B <replaceable>backup_dir</replaceable>
-[--help] [--instance <replaceable>instance_name</replaceable>] [-i <replaceable>backup_id</replaceable>]
+[--help] [--instance=<replaceable>instance_name</replaceable>] [-i <replaceable>backup_id</replaceable>]
 [-j <replaceable>num_threads</replaceable>] [--progress]
 [--skip-block-validation]
 [<replaceable>recovery_target_options</replaceable>] [<replaceable>logging_options</replaceable>]
@@ -4840,7 +4840,7 @@ pg_probackup validate -B <replaceable>backup_dir</replaceable>
     <refsect3 id="pbk-merge" xreflabel="merge">
       <title>merge</title>
       <programlisting>
-pg_probackup merge -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> -i <replaceable>backup_id</replaceable>
+pg_probackup merge -B <replaceable>backup_dir</replaceable> --instance=<replaceable>instance_name</replaceable> -i <replaceable>backup_id</replaceable>
 [--help] [-j <replaceable>num_threads</replaceable>] [--progress] [--no-validate] [--no-sync]
 [<replaceable>logging_options</replaceable>]
 </programlisting>
@@ -4884,7 +4884,7 @@ pg_probackup merge -B <replaceable>backup_dir</replaceable> --instance <replacea
     <refsect3 id="pbk-delete" xreflabel="delete">
       <title>delete</title>
       <programlisting>
-pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable>
+pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance=<replaceable>instance_name</replaceable>
 [--help] [-j <replaceable>num_threads</replaceable>] [--progress]
 [--retention-redundancy=<replaceable>redundancy</replaceable>][--retention-window=<replaceable>window</replaceable>][--wal-depth=<replaceable>wal_depth</replaceable>] [--delete-wal]
 {-i <replaceable>backup_id</replaceable> | --delete-expired [--merge-expired] | --merge-expired | --status=backup_status}
@@ -4931,7 +4931,7 @@ pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replace
     <refsect3 id="pbk-archive-push" xreflabel="archive-push">
       <title>archive-push</title>
       <programlisting>
-pg_probackup archive-push -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable>
+pg_probackup archive-push -B <replaceable>backup_dir</replaceable> --instance=<replaceable>instance_name</replaceable>
 --wal-file-name=<replaceable>wal_file_name</replaceable> [--wal-file-path=<replaceable>wal_file_path</replaceable>]
 [--help] [--no-sync] [--compress] [--no-ready-rename] [--overwrite]
 [-j <replaceable>num_threads</replaceable>] [--batch-size=<replaceable>batch_size</replaceable>]
@@ -4997,7 +4997,7 @@ pg_probackup archive-push -B <replaceable>backup_dir</replaceable> --instance <r
     <refsect3 id="pbk-archive-get" xreflabel="archive-get">
       <title>archive-get</title>
       <programlisting>
-pg_probackup archive-get -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> --wal-file-path=<replaceable>wal_file_path</replaceable> --wal-file-name=<replaceable>wal_file_name</replaceable>
+pg_probackup archive-get -B <replaceable>backup_dir</replaceable> --instance=<replaceable>instance_name</replaceable> --wal-file-path=<replaceable>wal_file_path</replaceable> --wal-file-name=<replaceable>wal_file_name</replaceable>
 [-j <replaceable>num_threads</replaceable>] [--batch-size=<replaceable>batch_size</replaceable>]
 [--prefetch-dir=<replaceable>prefetch_dir_path</replaceable>] [--no-validate-wal]
 [--help] [<replaceable>remote_options</replaceable>] [<replaceable>logging_options</replaceable>]
