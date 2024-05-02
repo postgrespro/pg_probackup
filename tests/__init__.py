@@ -3,9 +3,9 @@ import os
 
 from . import init_test, merge_test, option_test, show_test, compatibility_test, \
     backup_test, delete_test, delta_test, restore_test, validate_test, \
-    retention_test, pgpro560_test, pgpro589_test, pgpro2068_test, false_positive_test, replica_test, \
-    compression_test, page_test, ptrack_test, archive_test, exclude_test, cfs_backup_test, cfs_restore_test, \
-    cfs_validate_backup_test, auth_test, time_stamp_test, logging_test, \
+    retention_test, pgpro560_test, pgpro589_test, false_positive_test, replica_test, \
+    compression_test, page_test, ptrack_test, archive_test, exclude_test, \
+    auth_test, time_stamp_test, logging_test, \
     locking_test, remote_test, external_test, config_test, checkdb_test, set_backup_test, incr_restore_test, \
     catchup_test, CVE_2018_1058_test, time_consuming_test
 
@@ -35,9 +35,6 @@ def load_tests(loader, tests, pattern):
         suite.addTests(loader.loadTestsFromModule(compatibility_test))
     suite.addTests(loader.loadTestsFromModule(checkdb_test))
     suite.addTests(loader.loadTestsFromModule(config_test))
-    suite.addTests(loader.loadTestsFromModule(cfs_backup_test))
-    suite.addTests(loader.loadTestsFromModule(cfs_restore_test))
-    suite.addTests(loader.loadTestsFromModule(cfs_validate_backup_test))
     suite.addTests(loader.loadTestsFromModule(compression_test))
     suite.addTests(loader.loadTestsFromModule(delete_test))
     suite.addTests(loader.loadTestsFromModule(delta_test))
@@ -53,7 +50,6 @@ def load_tests(loader, tests, pattern):
     suite.addTests(loader.loadTestsFromModule(page_test))
     suite.addTests(loader.loadTestsFromModule(pgpro560_test))
     suite.addTests(loader.loadTestsFromModule(pgpro589_test))
-    suite.addTests(loader.loadTestsFromModule(pgpro2068_test))
     suite.addTests(loader.loadTestsFromModule(remote_test))
     suite.addTests(loader.loadTestsFromModule(replica_test))
     suite.addTests(loader.loadTestsFromModule(restore_test))

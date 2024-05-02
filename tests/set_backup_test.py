@@ -1,118 +1,75 @@
 import unittest
 import subprocess
 import os
-from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
+
+from .helpers.data_helpers import tail_file
+from .helpers.ptrack_helpers import ProbackupTest
 from sys import exit
 from datetime import datetime, timedelta
+from .helpers.enums.date_time_enum import DateTimePattern
 
-
-class SetBackupTest(ProbackupTest, unittest.TestCase):
+class SetBackupTest(ProbackupTest):
 
     # @unittest.expectedFailure
     # @unittest.skip("skip")
     def test_set_backup_sanity(self):
         """general sanity for set-backup command"""
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
-            set_replication=True,
-            initdb_params=['--data-checksums'])
+        node = self.pg_node.make_simple('node',
+            set_replication=True)
 
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
+        self.pb.init()
+        self.pb.add_instance('node', node)
         node.slow_start()
 
-        backup_id = self.backup_node(
-            backup_dir, 'node', node, options=['--stream'])
+        backup_id = self.pb.backup_node('node', node, options=['--stream'])
 
-        recovery_time = self.show_pb(
-            backup_dir, 'node', backup_id=backup_id)['recovery-time']
+        recovery_time = self.pb.show('node', backup_id=backup_id)['recovery-time']
+         # Remove microseconds
+        recovery_time = datetime.strptime(recovery_time + '00', DateTimePattern.Y_m_d_H_M_S_f_z_dash.value)
+        recovery_time = recovery_time.strftime(DateTimePattern.Y_m_d_H_M_S_z_dash.value)
 
         expire_time_1 = "{:%Y-%m-%d %H:%M:%S}".format(
             datetime.now() + timedelta(days=5))
 
-        try:
-            self.set_backup(backup_dir, False, options=['--ttl=30d'])
-            # we should die here because exception is what we expect to happen
-            self.assertEqual(
-                1, 0,
-                "Expecting Error because of missing instance. "
-                "\n Output: {0} \n CMD: {1}".format(
-                    repr(self.output), self.cmd))
-        except ProbackupException as e:
-            self.assertIn(
-                'ERROR: Required parameter not specified: --instance',
-                e.message,
-                "\n Unexpected Error Message: {0}\n CMD: {1}".format(
-                    repr(e.message), self.cmd))
+        self.pb.set_backup(False, options=['--ttl=30d'],
+                        expect_error="because of missing instance")
+        self.assertMessage(contains='ERROR: Required parameter not specified: --instance')
 
-        try:
-            self.set_backup(
-                backup_dir, 'node',
-                options=[
-                    "--ttl=30d",
-                    "--expire-time='{0}'".format(expire_time_1)])
-            # we should die here because exception is what we expect to happen
-            self.assertEqual(
-                1, 0,
-                "Expecting Error because options cannot be mixed. "
-                "\n Output: {0} \n CMD: {1}".format(
-                    repr(self.output), self.cmd))
-        except ProbackupException as e:
-            self.assertIn(
-                "ERROR: You cannot specify '--expire-time' "
-                "and '--ttl' options together",
-                e.message,
-                "\n Unexpected Error Message: {0}\n CMD: {1}".format(
-                    repr(e.message), self.cmd))
+        self.pb.set_backup('node',
+                        options=["--ttl=30d", f"--expire-time='{expire_time_1}'"],
+                        expect_error="because options cannot be mixed")
+        self.assertMessage(contains="ERROR: You cannot specify '--expire-time' "
+                                    "and '--ttl' options together")
 
-        try:
-            self.set_backup(backup_dir, 'node', options=["--ttl=30d"])
-            # we should die here because exception is what we expect to happen
-            self.assertEqual(
-                1, 0,
-                "Expecting Error because of missing backup_id. "
-                "\n Output: {0} \n CMD: {1}".format(
-                    repr(self.output), self.cmd))
-        except ProbackupException as e:
-            self.assertIn(
-                "ERROR: You must specify parameter (-i, --backup-id) "
-                "for 'set-backup' command",
-                e.message,
-                "\n Unexpected Error Message: {0}\n CMD: {1}".format(
-                    repr(e.message), self.cmd))
+        self.pb.set_backup('node', options=["--ttl=30d"],
+                        expect_error="because of missing backup_id")
+        self.assertMessage(contains="ERROR: You must specify parameter (-i, "
+                                    "--backup-id) for 'set-backup' command")
 
-        self.set_backup(
-            backup_dir, 'node', backup_id, options=["--ttl=30d"])
+        self.pb.set_backup('node', backup_id, options=["--ttl=30d"])
 
-        actual_expire_time = self.show_pb(
-            backup_dir, 'node', backup_id=backup_id)['expire-time']
+        actual_expire_time = self.pb.show('node', backup_id=backup_id)['expire-time']
 
         self.assertNotEqual(expire_time_1, actual_expire_time)
 
         expire_time_2 = "{:%Y-%m-%d %H:%M:%S}".format(
             datetime.now() + timedelta(days=6))
 
-        self.set_backup(
-            backup_dir, 'node', backup_id,
+        self.pb.set_backup('node', backup_id,
             options=["--expire-time={0}".format(expire_time_2)])
 
-        actual_expire_time = self.show_pb(
-            backup_dir, 'node', backup_id=backup_id)['expire-time']
+        actual_expire_time = self.pb.show('node', backup_id=backup_id)['expire-time']
 
         self.assertIn(expire_time_2, actual_expire_time)
 
         # unpin backup
-        self.set_backup(
-            backup_dir, 'node', backup_id, options=["--ttl=0"])
+        self.pb.set_backup('node', backup_id, options=["--ttl=0"])
 
-        attr_list = self.show_pb(
-            backup_dir, 'node', backup_id=backup_id)
+        attr_list = self.pb.show('node', backup_id=backup_id)
 
         self.assertNotIn('expire-time', attr_list)
 
-        self.set_backup(
-            backup_dir, 'node', backup_id, options=["--expire-time={0}".format(recovery_time)])
+        self.pb.set_backup('node', backup_id, options=["--expire-time={0}".format(recovery_time)])
 
         # parse string to datetime object
         #new_expire_time = datetime.strptime(new_expire_time, '%Y-%m-%d %H:%M:%S%z')
@@ -121,42 +78,31 @@ class SetBackupTest(ProbackupTest, unittest.TestCase):
     # @unittest.expectedFailure
     def test_retention_redundancy_pinning(self):
         """"""
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
-            initdb_params=['--data-checksums'])
+        node = self.pg_node.make_simple('node')
 
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
-        self.set_archiving(backup_dir, 'node', node)
+        self.pb.init()
+        self.pb.add_instance('node', node)
+        self.pb.set_archiving('node', node)
         node.slow_start()
 
-        with open(os.path.join(
-                backup_dir, 'backups', 'node',
-                "pg_probackup.conf"), "a") as conf:
-            conf.write("retention-redundancy = 1\n")
-
-        self.set_config(
-            backup_dir, 'node', options=['--retention-redundancy=1'])
+        self.pb.set_config('node', options=['--retention-redundancy=1'])
 
         # Make backups to be purged
-        full_id = self.backup_node(backup_dir, 'node', node)
-        page_id = self.backup_node(
-            backup_dir, 'node', node, backup_type="page")
+        full_id = self.pb.backup_node('node', node)
+        page_id = self.pb.backup_node('node', node, backup_type="page")
         # Make backups to be keeped
-        self.backup_node(backup_dir, 'node', node)
-        self.backup_node(backup_dir, 'node', node, backup_type="page")
+        self.pb.backup_node('node', node)
+        self.pb.backup_node('node', node, backup_type="page")
 
-        self.assertEqual(len(self.show_pb(backup_dir, 'node')), 4)
+        self.assertEqual(len(self.pb.show('node')), 4)
 
-        self.set_backup(
-            backup_dir, 'node', page_id, options=['--ttl=5d'])
+        self.pb.set_backup('node', page_id, options=['--ttl=5d'])
 
         # Purge backups
-        log = self.delete_expired(
-            backup_dir, 'node',
+        log = self.pb.delete_expired(
+            'node',
             options=['--delete-expired', '--log-level-console=LOG'])
-        self.assertEqual(len(self.show_pb(backup_dir, 'node')), 4)
+        self.assertEqual(len(self.pb.show('node')), 4)
 
         self.assertIn('Time Window: 0d/5d', log)
         self.assertIn(
@@ -170,53 +116,42 @@ class SetBackupTest(ProbackupTest, unittest.TestCase):
     # @unittest.skip("skip")
     def test_retention_window_pinning(self):
         """purge all backups using window-based retention policy"""
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
-            initdb_params=['--data-checksums'])
+        backup_dir = self.backup_dir
+        node = self.pg_node.make_simple('node')
 
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
-        self.set_archiving(backup_dir, 'node', node)
+        self.pb.init()
+        self.pb.add_instance('node', node)
+        self.pb.set_archiving('node', node)
         node.slow_start()
 
         # take FULL BACKUP
-        backup_id_1 = self.backup_node(backup_dir, 'node', node)
-        page1 = self.backup_node(
-            backup_dir, 'node', node, backup_type='page')
+        backup_id_1 = self.pb.backup_node('node', node)
+        page1 = self.pb.backup_node('node', node, backup_type='page')
 
         # Take second FULL BACKUP
-        backup_id_2 = self.backup_node(backup_dir, 'node', node)
-        page2 = self.backup_node(
-            backup_dir, 'node', node, backup_type='page')
+        backup_id_2 = self.pb.backup_node('node', node)
+        page2 = self.pb.backup_node('node', node, backup_type='page')
 
         # Take third FULL BACKUP
-        backup_id_3 = self.backup_node(backup_dir, 'node', node)
-        page2 = self.backup_node(
-            backup_dir, 'node', node, backup_type='page')
+        backup_id_3 = self.pb.backup_node('node', node)
+        page2 = self.pb.backup_node('node', node, backup_type='page')
 
-        backups = os.path.join(backup_dir, 'backups', 'node')
-        for backup in os.listdir(backups):
-            if backup == 'pg_probackup.conf':
-                continue
-            with open(
-                    os.path.join(
-                        backups, backup, "backup.control"), "a") as conf:
-                conf.write("recovery_time='{:%Y-%m-%d %H:%M:%S}'\n".format(
-                    datetime.now() - timedelta(days=3)))
+        for backup in backup_dir.list_instance_backups('node'):
+            with self.modify_backup_control(backup_dir, 'node', backup) as cf:
+                cf.data += "\nrecovery_time='{:%Y-%m-%d %H:%M:%S}'\n".format(
+                    datetime.now() - timedelta(days=3))
 
-        self.set_backup(
-            backup_dir, 'node', page1, options=['--ttl=30d'])
+        self.pb.set_backup('node', page1, options=['--ttl=30d'])
 
         # Purge backups
-        out = self.delete_expired(
-            backup_dir, 'node',
+        out = self.pb.delete_expired(
+            'node',
             options=[
                 '--log-level-console=LOG',
                 '--retention-window=1',
                 '--delete-expired'])
 
-        self.assertEqual(len(self.show_pb(backup_dir, 'node')), 2)
+        self.assertEqual(len(self.pb.show('node')), 2)
 
         self.assertIn(
             'LOG: Backup {0} is pinned until'.format(page1), out)
@@ -237,26 +172,21 @@ class SetBackupTest(ProbackupTest, unittest.TestCase):
         B1   B2---P---B3--->
 
         """
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
-            set_replication=True,
-            initdb_params=['--data-checksums'])
+        node = self.pg_node.make_simple('node',
+            set_replication=True)
 
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
-        self.set_archiving(backup_dir, 'node', node)
+        self.pb.init()
+        self.pb.add_instance('node', node)
+        self.pb.set_archiving('node', node)
         node.slow_start()
 
         # take FULL BACKUP
-        self.backup_node(
-            backup_dir, 'node', node, options=['--stream'])
+        self.pb.backup_node('node', node, options=['--stream'])
 
         node.pgbench_init(scale=1)
 
         # Take PAGE BACKUP
-        self.backup_node(
-            backup_dir, 'node', node,
+        self.pb.backup_node('node', node,
             backup_type='page', options=['--stream'])
         
         node.pgbench_init(scale=1)
@@ -264,8 +194,7 @@ class SetBackupTest(ProbackupTest, unittest.TestCase):
         # Take DELTA BACKUP and pin it
         expire_time = "{:%Y-%m-%d %H:%M:%S}".format(
             datetime.now() + timedelta(days=6))
-        backup_id_pinned = self.backup_node(
-            backup_dir, 'node', node,
+        backup_id_pinned = self.pb.backup_node('node', node,
             backup_type='delta',
             options=[
                 '--stream',
@@ -274,14 +203,16 @@ class SetBackupTest(ProbackupTest, unittest.TestCase):
         node.pgbench_init(scale=1)
 
         # Take second PAGE BACKUP
-        self.backup_node(
-            backup_dir, 'node', node, backup_type='delta', options=['--stream'])
+        self.pb.backup_node('node', node, backup_type='delta', options=['--stream'])
 
         node.pgbench_init(scale=1)
 
+        tailer = tail_file(os.path.join(node.logs_dir, 'postgresql.log'))
+        tailer.wait(contains='LOG: pushing file "000000010000000000000004"')
+
         # Purge backups
-        out = self.delete_expired(
-            backup_dir, 'node',
+        out = self.pb.delete_expired(
+            'node',
             options=[
                 '--log-level-console=LOG',
                 '--delete-wal', '--wal-depth=2'])
@@ -292,15 +223,13 @@ class SetBackupTest(ProbackupTest, unittest.TestCase):
             'purpose of WAL retention'.format(backup_id_pinned),
             out)
 
-        for instance in self.show_archive(backup_dir):
+        for instance in self.pb.show_archive():
             timelines = instance['timelines']
-
-        # sanity
-        for timeline in timelines:
-            self.assertEqual(
-                timeline['min-segno'],
-                '000000010000000000000004')
-            self.assertEqual(timeline['status'], 'OK')
+            for timeline in timelines:
+                self.assertEqual(
+                    timeline['min-segno'],
+                    '000000010000000000000004')
+                self.assertEqual(timeline['status'], 'OK')
 
     # @unittest.skip("skip")
     def test_wal_retention_and_pinning_1(self):
@@ -313,35 +242,37 @@ class SetBackupTest(ProbackupTest, unittest.TestCase):
         P---B1--->
 
         """
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
-            initdb_params=['--data-checksums'])
+        backup_dir = self.backup_dir
+        node = self.pg_node.make_simple('node')
 
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
-        self.set_archiving(backup_dir, 'node', node)
+        self.pb.init()
+        self.pb.add_instance('node', node)
+        self.pb.set_archiving('node', node)
         node.slow_start()
 
         expire_time = "{:%Y-%m-%d %H:%M:%S}".format(
             datetime.now() + timedelta(days=6))
 
         # take FULL BACKUP
-        backup_id_pinned = self.backup_node(
-            backup_dir, 'node', node,
+        backup_id_pinned = self.pb.backup_node('node', node,
             options=['--expire-time={0}'.format(expire_time)])
 
         node.pgbench_init(scale=2)
 
         # Take second PAGE BACKUP
-        self.backup_node(
-            backup_dir, 'node', node, backup_type='delta')
+        self.pb.backup_node('node', node, backup_type='delta')
 
         node.pgbench_init(scale=2)
 
+        self.wait_instance_wal_exists(backup_dir, 'node',
+                                      "000000010000000000000001.gz")
+
+        tailer = tail_file(os.path.join(node.logs_dir, 'postgresql.log'))
+        tailer.wait(contains='LOG: pushing file "000000010000000000000002"')
+
         # Purge backups
-        out = self.delete_expired(
-            backup_dir, 'node',
+        out = self.pb.delete_expired(
+            'node',
             options=[
                 '--log-level-console=verbose',
                 '--delete-wal', '--wal-depth=2'])
@@ -352,60 +283,51 @@ class SetBackupTest(ProbackupTest, unittest.TestCase):
             'purpose of WAL retention'.format(backup_id_pinned),
             out)
 
-        for instance in self.show_archive(backup_dir):
+        for instance in self.pb.show_archive():
             timelines = instance['timelines']
+            for timeline in timelines:
+                self.assertEqual(
+                    timeline['min-segno'],
+                    '000000010000000000000002')
+                self.assertEqual(timeline['status'], 'OK')
 
-        # sanity
-        for timeline in timelines:
-            self.assertEqual(
-                timeline['min-segno'],
-                '000000010000000000000002')
-            self.assertEqual(timeline['status'], 'OK')
-
-        self.validate_pb(backup_dir)
+        self.pb.validate()
 
     # @unittest.skip("skip")
     def test_add_note_newlines(self):
         """"""
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
-            set_replication=True,
-            initdb_params=['--data-checksums'])
+        node = self.pg_node.make_simple('node',
+            set_replication=True)
 
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
+        self.pb.init()
+        self.pb.add_instance('node', node)
         node.slow_start()
 
         # FULL
-        backup_id = self.backup_node(
-            backup_dir, 'node', node,
+        backup_id = self.pb.backup_node('node', node,
             options=['--stream', '--note={0}'.format('hello\nhello')])
 
-        backup_meta = self.show_pb(backup_dir, 'node', backup_id)
+        backup_meta = self.pb.show('node', backup_id)
         self.assertEqual(backup_meta['note'], "hello")
 
-        self.set_backup(backup_dir, 'node', backup_id, options=['--note=hello\nhello'])
+        self.pb.set_backup('node', backup_id, options=['--note=hello\nhello'])
 
-        backup_meta = self.show_pb(backup_dir, 'node', backup_id)
+        backup_meta = self.pb.show('node', backup_id)
         self.assertEqual(backup_meta['note'], "hello")
 
-        self.set_backup(backup_dir, 'node', backup_id, options=['--note=none'])
+        self.pb.set_backup('node', backup_id, options=['--note=none'])
 
-        backup_meta = self.show_pb(backup_dir, 'node', backup_id)
+        backup_meta = self.pb.show('node', backup_id)
         self.assertNotIn('note', backup_meta)
 
     # @unittest.skip("skip")
     def test_add_big_note(self):
         """"""
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
-            set_replication=True,
-            initdb_params=['--data-checksums'])
+        node = self.pg_node.make_simple('node',
+            set_replication=True)
 
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
+        self.pb.init()
+        self.pb.add_instance('node', node)
         node.slow_start()
 
 #        note = node.safe_psql(
@@ -417,46 +339,30 @@ class SetBackupTest(ProbackupTest, unittest.TestCase):
             "SELECT repeat('hello', 210)").rstrip()
 
         # FULL
-        try:
-            self.backup_node(
-                backup_dir, 'node', node,
-                options=['--stream', '--note={0}'.format(note)])
-            # we should die here because exception is what we expect to happen
-            self.assertEqual(
-                1, 0,
-                "Expecting Error because note is too large "
-                "\n Output: {0} \n CMD: {1}".format(
-                    repr(self.output), self.cmd))
-        except ProbackupException as e:
-            self.assertIn(
-                "ERROR: Backup note cannot exceed 1024 bytes",
-                e.message,
-                "\n Unexpected Error Message: {0}\n CMD: {1}".format(
-                    repr(e.message), self.cmd))
+        self.pb.backup_node('node', node,
+                         options=['--stream', '--note', note],
+                         expect_error="because note is too large")
+        self.assertMessage(contains="ERROR: Backup note cannot exceed 1024 bytes")
 
         note = node.safe_psql(
             "postgres",
             "SELECT repeat('hello', 200)").decode('utf-8').rstrip()
 
-        backup_id = self.backup_node(
-            backup_dir, 'node', node,
+        backup_id = self.pb.backup_node('node', node,
             options=['--stream', '--note={0}'.format(note)])
 
-        backup_meta = self.show_pb(backup_dir, 'node', backup_id)
+        backup_meta = self.pb.show('node', backup_id)
         self.assertEqual(backup_meta['note'], note)
 
 
     # @unittest.skip("skip")
     def test_add_big_note_1(self):
         """"""
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
-            set_replication=True,
-            initdb_params=['--data-checksums'])
+        node = self.pg_node.make_simple('node',
+            set_replication=True)
 
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
+        self.pb.init()
+        self.pb.add_instance('node', node)
         node.slow_start()
 
         note = node.safe_psql(
@@ -464,13 +370,56 @@ class SetBackupTest(ProbackupTest, unittest.TestCase):
             "SELECT repeat('q', 1024)").decode('utf-8').rstrip()
 
         # FULL
-        backup_id = self.backup_node(backup_dir, 'node', node, options=['--stream'])
+        backup_id = self.pb.backup_node('node', node, options=['--stream'])
 
-        self.set_backup(
-            backup_dir, 'node', backup_id,
+        self.pb.set_backup('node', backup_id,
             options=['--note={0}'.format(note)])
 
-        backup_meta = self.show_pb(backup_dir, 'node', backup_id)
+        backup_meta = self.pb.show('node', backup_id)
 
         print(backup_meta)
         self.assertEqual(backup_meta['note'], note)
+
+####################################################################
+#                           dry-run
+####################################################################
+
+    def test_basic_dry_run_set_backup(self):
+        """"""
+        node = self.pg_node.make_simple('node',
+                                        set_replication=True)
+
+        self.pb.init()
+        self.pb.add_instance('node', node)
+        node.slow_start()
+
+        note = node.safe_psql(
+            "postgres",
+            "SELECT repeat('q', 1024)").decode('utf-8').rstrip()
+
+        backup_id = self.pb.backup_node('node', node, options=['--stream'])
+
+        expire_time = "{:%Y-%m-%d %H:%M:%S}".format(
+            datetime.now() + timedelta(days=6))
+
+        self.pb.set_backup('node', backup_id,
+                           options=['--expire-time={}'.format(expire_time),
+                                    '--dry-run',
+                                    '--note={0}'.format(note)])
+
+        backup_meta = self.pb.show('node', backup_id)
+
+        print(backup_meta)
+        self.assertFalse(any('expire-time' in d for d in backup_meta))
+        self.assertFalse(any('note' in d for d in backup_meta))
+
+        self.pb.set_backup('node', backup_id,
+                           options=['--ttl=30d',
+                                    '--dry-run',
+                                    '--note={0}'.format(note)])
+
+        backup_meta = self.pb.show('node', backup_id)
+
+        print(backup_meta)
+        self.assertFalse(any('ttl' in d for d in backup_meta))
+        self.assertFalse(any('note' in d for d in backup_meta))

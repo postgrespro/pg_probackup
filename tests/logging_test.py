@@ -1,38 +1,33 @@
-import unittest
 import os
-from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
+from .helpers.ptrack_helpers import ProbackupTest
+from pg_probackup2.gdb import needs_gdb
 import datetime
 
-class LogTest(ProbackupTest, unittest.TestCase):
+class LogTest(ProbackupTest):
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure
     # PGPRO-2154
+    @needs_gdb
     def test_log_rotation(self):
         """
         """
-        self._check_gdb_flag_or_skip_test()
 
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
-            set_replication=True,
-            initdb_params=['--data-checksums'])
+        node = self.pg_node.make_simple('node',
+            set_replication=True)
 
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
+        backup_dir = self.backup_dir
+        self.pb.init()
+        self.pb.add_instance('node', node)
         node.slow_start()
 
-        self.set_config(
-            backup_dir, 'node',
+        self.pb.set_config('node',
             options=['--log-rotation-age=1s', '--log-rotation-size=1MB'])
 
-        self.backup_node(
-            backup_dir, 'node', node,
+        self.pb.backup_node('node', node,
             options=['--stream', '--log-level-file=verbose'])
 
-        gdb = self.backup_node(
-            backup_dir, 'node', node,
+        gdb = self.pb.backup_node('node', node,
             options=['--stream', '--log-level-file=verbose'], gdb=True)
 
         gdb.set_breakpoint('open_logfile')
@@ -40,22 +35,18 @@ class LogTest(ProbackupTest, unittest.TestCase):
         gdb.continue_execution_until_exit()
 
     def test_log_filename_strftime(self):
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
-            set_replication=True,
-            initdb_params=['--data-checksums'])
+        node = self.pg_node.make_simple('node',
+            set_replication=True)
 
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
+        backup_dir = self.backup_dir
+        self.pb.init()
+        self.pb.add_instance('node', node)
         node.slow_start()
 
-        self.set_config(
-            backup_dir, 'node',
+        self.pb.set_config('node',
             options=['--log-rotation-age=1d'])
 
-        self.backup_node(
-            backup_dir, 'node', node,
+        self.pb.backup_node('node', node,
             options=[
                 '--stream',
                 '--log-level-file=VERBOSE',
@@ -63,37 +54,30 @@ class LogTest(ProbackupTest, unittest.TestCase):
 
         day_of_week = datetime.datetime.today().strftime("%a")
 
-        path = os.path.join(
-            backup_dir, 'log', 'pg_probackup-{0}.log'.format(day_of_week))
+        path = os.path.join(self.pb_log_path, 'pg_probackup-{0}.log'.format(day_of_week))
 
         self.assertTrue(os.path.isfile(path))
 
     def test_truncate_rotation_file(self):
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
-            set_replication=True,
-            initdb_params=['--data-checksums'])
+        node = self.pg_node.make_simple('node',
+            set_replication=True)
 
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
+        backup_dir = self.backup_dir
+        self.pb.init()
+        self.pb.add_instance('node', node)
         node.slow_start()
 
-        self.set_config(
-            backup_dir, 'node',
+        self.pb.set_config('node',
             options=['--log-rotation-age=1d'])
 
-        self.backup_node(
-            backup_dir, 'node', node,
+        self.pb.backup_node('node', node,
             options=[
                 '--stream',
                 '--log-level-file=VERBOSE'])
 
-        rotation_file_path = os.path.join(
-            backup_dir, 'log', 'pg_probackup.log.rotation')
+        rotation_file_path = os.path.join(self.pb_log_path, 'pg_probackup.log.rotation')
 
-        log_file_path = os.path.join(
-            backup_dir, 'log', 'pg_probackup.log')
+        log_file_path = os.path.join(self.pb_log_path, 'pg_probackup.log')
 
         log_file_size = os.stat(log_file_path).st_size
 
@@ -105,8 +89,7 @@ class LogTest(ProbackupTest, unittest.TestCase):
             f.flush()
             f.close
 
-        output = self.backup_node(
-            backup_dir, 'node', node,
+        output = self.pb.backup_node('node', node,
             options=[
                 '--stream',
                 '--log-level-file=LOG'],
@@ -121,8 +104,7 @@ class LogTest(ProbackupTest, unittest.TestCase):
             'WARNING: cannot read creation timestamp from rotation file',
             output)
 
-        output = self.backup_node(
-            backup_dir, 'node', node,
+        output = self.pb.backup_node('node', node,
             options=[
                 '--stream',
                 '--log-level-file=LOG'],
@@ -140,31 +122,25 @@ class LogTest(ProbackupTest, unittest.TestCase):
         self.assertTrue(os.path.isfile(rotation_file_path))
 
     def test_unlink_rotation_file(self):
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
-            set_replication=True,
-            initdb_params=['--data-checksums'])
+        node = self.pg_node.make_simple('node',
+            set_replication=True)
 
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
+        backup_dir = self.backup_dir
+        self.pb.init()
+        self.pb.add_instance('node', node)
         node.slow_start()
 
-        self.set_config(
-            backup_dir, 'node',
+        self.pb.set_config('node',
             options=['--log-rotation-age=1d'])
 
-        self.backup_node(
-            backup_dir, 'node', node,
+        self.pb.backup_node('node', node,
             options=[
                 '--stream',
                 '--log-level-file=VERBOSE'])
 
-        rotation_file_path = os.path.join(
-            backup_dir, 'log', 'pg_probackup.log.rotation')
+        rotation_file_path = os.path.join(self.pb_log_path, 'pg_probackup.log.rotation')
 
-        log_file_path = os.path.join(
-            backup_dir, 'log', 'pg_probackup.log')
+        log_file_path = os.path.join(self.pb_log_path, 'pg_probackup.log')
 
         log_file_size = os.stat(log_file_path).st_size
 
@@ -173,8 +149,7 @@ class LogTest(ProbackupTest, unittest.TestCase):
         # unlink .rotation file
         os.unlink(rotation_file_path)
 
-        output = self.backup_node(
-            backup_dir, 'node', node,
+        output = self.pb.backup_node('node', node,
             options=[
                 '--stream',
                 '--log-level-file=LOG'],
@@ -191,8 +166,7 @@ class LogTest(ProbackupTest, unittest.TestCase):
 
         self.assertTrue(os.path.isfile(rotation_file_path))
 
-        output = self.backup_node(
-            backup_dir, 'node', node,
+        output = self.pb.backup_node('node', node,
             options=[
                 '--stream',
                 '--log-level-file=VERBOSE'],
@@ -208,31 +182,24 @@ class LogTest(ProbackupTest, unittest.TestCase):
             log_file_size)
 
     def test_garbage_in_rotation_file(self):
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
-            set_replication=True,
-            initdb_params=['--data-checksums'])
+        node = self.pg_node.make_simple('node',
+            set_replication=True)
 
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
+        self.pb.init()
+        self.pb.add_instance('node', node)
         node.slow_start()
 
-        self.set_config(
-            backup_dir, 'node',
+        self.pb.set_config('node',
             options=['--log-rotation-age=1d'])
 
-        self.backup_node(
-            backup_dir, 'node', node,
+        self.pb.backup_node('node', node,
             options=[
                 '--stream',
                 '--log-level-file=VERBOSE'])
 
-        rotation_file_path = os.path.join(
-            backup_dir, 'log', 'pg_probackup.log.rotation')
+        rotation_file_path = os.path.join(self.pb_log_path, 'pg_probackup.log.rotation')
 
-        log_file_path = os.path.join(
-            backup_dir, 'log', 'pg_probackup.log')
+        log_file_path = os.path.join(self.pb_log_path, 'pg_probackup.log')
 
         log_file_size = os.stat(log_file_path).st_size
 
@@ -241,8 +208,7 @@ class LogTest(ProbackupTest, unittest.TestCase):
         # mangle .rotation file
         with open(rotation_file_path, "w+b", 0) as f:
             f.write(b"blah")
-        output = self.backup_node(
-            backup_dir, 'node', node,
+        output = self.pb.backup_node('node', node,
             options=[
                 '--stream',
                 '--log-level-file=LOG'],
@@ -263,8 +229,7 @@ class LogTest(ProbackupTest, unittest.TestCase):
 
         self.assertTrue(os.path.isfile(rotation_file_path))
 
-        output = self.backup_node(
-            backup_dir, 'node', node,
+        output = self.pb.backup_node('node', node,
             options=[
                 '--stream',
                 '--log-level-file=LOG'],
@@ -280,28 +245,24 @@ class LogTest(ProbackupTest, unittest.TestCase):
             log_file_size)
 
     def test_issue_274(self):
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
-            set_replication=True,
-            initdb_params=['--data-checksums'])
+        node = self.pg_node.make_simple('node',
+            set_replication=True)
 
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
-        self.set_archiving(backup_dir, 'node', node)
+        self.pb.init()
+        self.pb.add_instance('node', node)
+        self.pb.set_archiving('node', node)
         node.slow_start()
 
-        replica = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'replica'))
+        replica = self.pg_node.make_simple('replica')
         replica.cleanup()
 
-        self.backup_node(backup_dir, 'node', node, options=['--stream'])
-        self.restore_node(backup_dir, 'node', replica)
+        self.pb.backup_node('node', node, options=['--stream'])
+        self.pb.restore_node('node', node=replica)
 
         # Settings for Replica
         self.set_replica(node, replica, synchronous=True)
-        self.set_archiving(backup_dir, 'node', replica, replica=True)
-        self.set_auto_conf(replica, {'port': replica.port})
+        self.pb.set_archiving('node', replica, replica=True)
+        replica.set_auto_conf({'port': replica.port})
 
         replica.slow_start(replica=True)
 
@@ -311,28 +272,16 @@ class LogTest(ProbackupTest, unittest.TestCase):
             "md5(repeat(i::text,10))::tsvector as tsvector "
             "from generate_series(0,45600) i")
 
-        log_dir = os.path.join(backup_dir, "somedir")
+        log_dir = os.path.join(self.test_path, "somedir")
 
-        try:
-            self.backup_node(
-                backup_dir, 'node', replica, backup_type='page',
+        self.pb.backup_node('node', replica, backup_type='page',
                 options=[
                     '--log-level-console=verbose', '--log-level-file=verbose',
                     '--log-directory={0}'.format(log_dir), '-j1',
                     '--log-filename=somelog.txt', '--archive-timeout=5s',
-                    '--no-validate', '--log-rotation-size=100KB'])
-            # we should die here because exception is what we expect to happen
-            self.assertEqual(
-                1, 0,
-                "Expecting Error because of archiving timeout"
-                "\n Output: {0} \n CMD: {1}".format(
-                    repr(self.output), self.cmd))
-        except ProbackupException as e:
-            self.assertIn(
-                'ERROR: WAL segment',
-                e.message,
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
-                    repr(e.message), self.cmd))
+                    '--no-validate', '--log-rotation-size=100KB'],
+                expect_error="because of archiving timeout")
+        self.assertMessage(contains='ERROR: WAL segment')
 
         log_file_path = os.path.join(
             log_dir, 'somelog.txt')

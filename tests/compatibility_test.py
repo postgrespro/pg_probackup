@@ -1,7 +1,7 @@
 import unittest
 import subprocess
 import os
-from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
+from .helpers.ptrack_helpers import ProbackupTest, fs_backup_class
 from sys import exit
 import shutil
 
@@ -14,7 +14,9 @@ def check_ssh_agent_path_exists():
     return 'PGPROBACKUP_SSH_AGENT_PATH' in os.environ
 
 
-class CrossCompatibilityTest(ProbackupTest, unittest.TestCase):
+class CrossCompatibilityTest(ProbackupTest):
+    auto_compress_alg = False
+
     @unittest.skipUnless(check_manual_tests_enabled(), 'skip manual test')
     @unittest.skipUnless(check_ssh_agent_path_exists(), 'skip no ssh agent path exist')
     # @unittest.skip("skip")
@@ -44,8 +46,7 @@ class CrossCompatibilityTest(ProbackupTest, unittest.TestCase):
         # pgprobackup_ssh_agent_path = '/home/avaness/postgres/postgres.build.clean/bin/'
         pgprobackup_ssh_agent_path = os.environ['PGPROBACKUP_SSH_AGENT_PATH']
 
-        src_pg = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'src'),
+        src_pg = self.pg_node.make_simple('src',
             set_replication=True,
             )
         src_pg.slow_start()
@@ -54,8 +55,8 @@ class CrossCompatibilityTest(ProbackupTest, unittest.TestCase):
             "CREATE TABLE ultimate_question AS SELECT 42 AS answer")
 
         # do full catchup
-        dst_pg = self.make_empty_node(os.path.join(self.module_name, self.fname, 'dst'))
-        self.catchup_node(
+        dst_pg = self.pg_node.make_empty('dst')
+        self.pb.catchup_node(
             backup_mode='FULL',
             source_pgdata=src_pg.data_dir,
             destination_node=dst_pg,
@@ -63,7 +64,7 @@ class CrossCompatibilityTest(ProbackupTest, unittest.TestCase):
             )
 
         dst_options = {'port': str(dst_pg.port)}
-        self.set_auto_conf(dst_pg, dst_options)
+        dst_pg.set_auto_conf(dst_options)
         dst_pg.slow_start()
         dst_pg.stop()
 
@@ -73,7 +74,7 @@ class CrossCompatibilityTest(ProbackupTest, unittest.TestCase):
 
         # do delta catchup with remote pg_probackup agent with another postgres major version
         # this DELTA backup should fail without PBCKP-236 patch.
-        self.catchup_node(
+        self.pb.catchup_node(
             backup_mode='DELTA',
             source_pgdata=src_pg.data_dir,
             destination_node=dst_pg,
@@ -82,53 +83,48 @@ class CrossCompatibilityTest(ProbackupTest, unittest.TestCase):
             )
 
 
-class CompatibilityTest(ProbackupTest, unittest.TestCase):
+class CompatibilityTest(ProbackupTest):
 
     def setUp(self):
         super().setUp()
         if not self.probackup_old_path:
-            self.skipTest('PGPROBACKUPBIN_OLD is not set')
+            self.skipTest('An old version of pg_probackup is not set up')
 
     # @unittest.expectedFailure
     # @unittest.skip("skip")
     def test_backward_compatibility_page(self):
         """Description in jira issue PGPRO-434"""
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
-            set_replication=True,
-            initdb_params=['--data-checksums'])
+        backup_dir = self.backup_dir
+        node = self.pg_node.make_simple('node',
+            set_replication=True)
 
-        self.init_pb(backup_dir, old_binary=True)
-        self.show_pb(backup_dir)
+        self.pb.init(old_binary=True)
+        self.pb.show()
 
-        self.add_instance(backup_dir, 'node', node, old_binary=True)
-        self.show_pb(backup_dir)
+        self.pb.add_instance('node', node, old_binary=True)
+        self.pb.show()
 
-        self.set_archiving(backup_dir, 'node', node, old_binary=True)
+        self.pb.set_archiving('node', node, old_binary=True)
         node.slow_start()
 
         node.pgbench_init(scale=10)
 
         # FULL backup with old binary
-        self.backup_node(
-            backup_dir, 'node', node, old_binary=True)
+        self.pb.backup_node('node', node, old_binary=True)
 
         if self.paranoia:
             pgdata = self.pgdata_content(node.data_dir)
 
-        self.show_pb(backup_dir)
+        self.pb.show()
 
-        self.validate_pb(backup_dir)
+        self.pb.validate()
 
         # RESTORE old FULL with new binary
-        node_restored = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
+        node_restored = self.pg_node.make_simple('node_restored')
 
         node_restored.cleanup()
 
-        self.restore_node(
-                backup_dir, 'node', node_restored, options=["-j", "4"])
+        self.pb.restore_node('node', node_restored, options=["-j", "4"])
 
         if self.paranoia:
             pgdata_restored = self.pgdata_content(node_restored.data_dir)
@@ -143,16 +139,14 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         pgbench.wait()
         pgbench.stdout.close()
 
-        self.backup_node(
-            backup_dir, 'node', node, backup_type='page',
+        self.pb.backup_node('node', node, backup_type='page',
             old_binary=True)
 
         if self.paranoia:
             pgdata = self.pgdata_content(node.data_dir)
 
         node_restored.cleanup()
-        self.restore_node(
-            backup_dir, 'node', node_restored, options=["-j", "4"])
+        self.pb.restore_node('node', node_restored, options=["-j", "4"])
 
         if self.paranoia:
             pgdata_restored = self.pgdata_content(node_restored.data_dir)
@@ -167,16 +161,14 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         pgbench.wait()
         pgbench.stdout.close()
 
-        self.backup_node(
-            backup_dir, 'node', node, backup_type='page')
+        self.pb.backup_node('node', node, backup_type='page')
 
         if self.paranoia:
             pgdata = self.pgdata_content(node.data_dir)
 
         node_restored.cleanup()
 
-        self.restore_node(
-            backup_dir, 'node', node_restored, options=["-j", "4"])
+        self.pb.restore_node('node', node_restored, options=["-j", "4"])
 
         if self.paranoia:
             pgdata_restored = self.pgdata_content(node_restored.data_dir)
@@ -194,13 +186,12 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
             'postgres',
             'VACUUM')
 
-        self.backup_node(backup_dir, 'node', node, backup_type='page')
+        self.pb.backup_node('node', node, backup_type='page')
 
         pgdata = self.pgdata_content(node.data_dir)
 
         node_restored.cleanup()
-        self.restore_node(
-            backup_dir, 'node', node_restored, options=["-j", "4"])
+        self.pb.restore_node('node', node_restored, options=["-j", "4"])
 
         pgdata_restored = self.pgdata_content(node_restored.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
@@ -209,13 +200,12 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
             'postgres',
             'insert into pgbench_accounts select * from pgbench_accounts')
 
-        self.backup_node(backup_dir, 'node', node, backup_type='page')
+        self.pb.backup_node('node', node, backup_type='page')
 
         pgdata = self.pgdata_content(node.data_dir)
 
         node_restored.cleanup()
-        self.restore_node(
-            backup_dir, 'node', node_restored, options=["-j", "4"])
+        self.pb.restore_node('node', node_restored, options=["-j", "4"])
 
         pgdata_restored = self.pgdata_content(node_restored.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
@@ -224,42 +214,37 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
     # @unittest.skip("skip")
     def test_backward_compatibility_delta(self):
         """Description in jira issue PGPRO-434"""
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
-            set_replication=True,
-            initdb_params=['--data-checksums'])
+        backup_dir = self.backup_dir
+        node = self.pg_node.make_simple('node',
+            set_replication=True)
 
-        self.init_pb(backup_dir, old_binary=True)
-        self.show_pb(backup_dir)
+        self.pb.init(old_binary=True)
+        self.pb.show()
 
-        self.add_instance(backup_dir, 'node', node, old_binary=True)
-        self.show_pb(backup_dir)
+        self.pb.add_instance('node', node, old_binary=True)
+        self.pb.show()
 
-        self.set_archiving(backup_dir, 'node', node, old_binary=True)
+        self.pb.set_archiving('node', node, old_binary=True)
         node.slow_start()
 
         node.pgbench_init(scale=10)
 
         # FULL backup with old binary
-        self.backup_node(
-            backup_dir, 'node', node, old_binary=True)
+        self.pb.backup_node('node', node, old_binary=True)
 
         if self.paranoia:
             pgdata = self.pgdata_content(node.data_dir)
 
-        self.show_pb(backup_dir)
+        self.pb.show()
 
-        self.validate_pb(backup_dir)
+        self.pb.validate()
 
         # RESTORE old FULL with new binary
-        node_restored = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
+        node_restored = self.pg_node.make_simple('node_restored')
 
         node_restored.cleanup()
 
-        self.restore_node(
-            backup_dir, 'node', node_restored, options=["-j", "4"])
+        self.pb.restore_node('node', node_restored, options=["-j", "4"])
 
         if self.paranoia:
             pgdata_restored = self.pgdata_content(node_restored.data_dir)
@@ -274,16 +259,14 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         pgbench.wait()
         pgbench.stdout.close()
 
-        self.backup_node(
-            backup_dir, 'node', node, backup_type='delta',
+        self.pb.backup_node('node', node, backup_type='delta',
             old_binary=True)
 
         if self.paranoia:
             pgdata = self.pgdata_content(node.data_dir)
 
         node_restored.cleanup()
-        self.restore_node(
-            backup_dir, 'node', node_restored, options=["-j", "4"])
+        self.pb.restore_node('node', node_restored, options=["-j", "4"])
 
         if self.paranoia:
             pgdata_restored = self.pgdata_content(node_restored.data_dir)
@@ -298,15 +281,14 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         pgbench.wait()
         pgbench.stdout.close()
 
-        self.backup_node(backup_dir, 'node', node, backup_type='delta')
+        self.pb.backup_node('node', node, backup_type='delta')
 
         if self.paranoia:
             pgdata = self.pgdata_content(node.data_dir)
 
         node_restored.cleanup()
 
-        self.restore_node(
-            backup_dir, 'node', node_restored, options=["-j", "4"])
+        self.pb.restore_node('node', node_restored, options=["-j", "4"])
 
         if self.paranoia:
             pgdata_restored = self.pgdata_content(node_restored.data_dir)
@@ -324,13 +306,12 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
             'postgres',
             'VACUUM')
 
-        self.backup_node(backup_dir, 'node', node, backup_type='delta')
+        self.pb.backup_node('node', node, backup_type='delta')
 
         pgdata = self.pgdata_content(node.data_dir)
 
         node_restored.cleanup()
-        self.restore_node(
-            backup_dir, 'node', node_restored, options=["-j", "4"])
+        self.pb.restore_node('node', node_restored, options=["-j", "4"])
 
         pgdata_restored = self.pgdata_content(node_restored.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
@@ -339,13 +320,12 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
             'postgres',
             'insert into pgbench_accounts select * from pgbench_accounts')
 
-        self.backup_node(backup_dir, 'node', node, backup_type='delta')
+        self.pb.backup_node('node', node, backup_type='delta')
 
         pgdata = self.pgdata_content(node.data_dir)
 
         node_restored.cleanup()
-        self.restore_node(
-            backup_dir, 'node', node_restored, options=["-j", "4"])
+        self.pb.restore_node('node', node_restored, options=["-j", "4"])
 
         pgdata_restored = self.pgdata_content(node_restored.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
@@ -358,20 +338,18 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         if not self.ptrack:
             self.skipTest('Skipped because ptrack support is disabled')
 
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
+        backup_dir = self.backup_dir
+        node = self.pg_node.make_simple('node',
             set_replication=True,
-            ptrack_enable=True,
-            initdb_params=['--data-checksums'])
+            ptrack_enable=True)
 
-        self.init_pb(backup_dir, old_binary=True)
-        self.show_pb(backup_dir)
+        self.pb.init(old_binary=True)
+        self.pb.show()
 
-        self.add_instance(backup_dir, 'node', node, old_binary=True)
-        self.show_pb(backup_dir)
+        self.pb.add_instance('node', node, old_binary=True)
+        self.pb.show()
 
-        self.set_archiving(backup_dir, 'node', node, old_binary=True)
+        self.pb.set_archiving('node', node, old_binary=True)
         node.slow_start()
 
         node.safe_psql(
@@ -381,24 +359,21 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         node.pgbench_init(scale=10)
 
         # FULL backup with old binary
-        self.backup_node(
-            backup_dir, 'node', node, old_binary=True)
+        self.pb.backup_node('node', node, old_binary=True)
 
         if self.paranoia:
             pgdata = self.pgdata_content(node.data_dir)
 
-        self.show_pb(backup_dir)
+        self.pb.show()
 
-        self.validate_pb(backup_dir)
+        self.pb.validate()
 
         # RESTORE old FULL with new binary
-        node_restored = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
+        node_restored = self.pg_node.make_simple('node_restored')
 
         node_restored.cleanup()
 
-        self.restore_node(
-            backup_dir, 'node', node_restored, options=["-j", "4"])
+        self.pb.restore_node('node', node_restored, options=["-j", "4"])
 
         if self.paranoia:
             pgdata_restored = self.pgdata_content(node_restored.data_dir)
@@ -413,16 +388,14 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         pgbench.wait()
         pgbench.stdout.close()
 
-        self.backup_node(
-            backup_dir, 'node', node, backup_type='ptrack',
+        self.pb.backup_node('node', node, backup_type='ptrack',
             old_binary=True)
 
         if self.paranoia:
             pgdata = self.pgdata_content(node.data_dir)
 
         node_restored.cleanup()
-        self.restore_node(
-            backup_dir, 'node', node_restored,
+        self.pb.restore_node('node', node_restored,
             options=[
                 "-j", "4",
                 "--recovery-target=latest",
@@ -441,16 +414,14 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         pgbench.wait()
         pgbench.stdout.close()
 
-        self.backup_node(
-            backup_dir, 'node', node, backup_type='ptrack')
+        self.pb.backup_node('node', node, backup_type='ptrack')
 
         if self.paranoia:
             pgdata = self.pgdata_content(node.data_dir)
 
         node_restored.cleanup()
 
-        self.restore_node(
-            backup_dir, 'node', node_restored,
+        self.pb.restore_node('node', node_restored,
             options=[
                 "-j", "4",
                 "--recovery-target=latest",
@@ -464,23 +435,20 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
     # @unittest.skip("skip")
     def test_backward_compatibility_compression(self):
         """Description in jira issue PGPRO-434"""
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
-            set_replication=True,
-            initdb_params=['--data-checksums'])
+        backup_dir = self.backup_dir
+        node = self.pg_node.make_simple('node',
+            set_replication=True)
 
-        self.init_pb(backup_dir, old_binary=True)
-        self.add_instance(backup_dir, 'node', node, old_binary=True)
+        self.pb.init(old_binary=True)
+        self.pb.add_instance('node', node, old_binary=True)
 
-        self.set_archiving(backup_dir, 'node', node, old_binary=True)
+        self.pb.set_archiving('node', node, old_binary=True)
         node.slow_start()
 
         node.pgbench_init(scale=10)
 
         # FULL backup with OLD binary
-        backup_id = self.backup_node(
-            backup_dir, 'node', node,
+        backup_id = self.pb.backup_node('node', node,
             old_binary=True,
             options=['--compress'])
 
@@ -488,13 +456,11 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
             pgdata = self.pgdata_content(node.data_dir)
 
         # restore OLD FULL with new binary
-        node_restored = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
+        node_restored = self.pg_node.make_simple('node_restored')
 
         node_restored.cleanup()
 
-        self.restore_node(
-                backup_dir, 'node', node_restored,
+        self.pb.restore_node('node', node_restored,
                 options=["-j", "4"])
 
         if self.paranoia:
@@ -509,8 +475,7 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         pgbench.wait()
         pgbench.stdout.close()
 
-        self.backup_node(
-            backup_dir, 'node', node,
+        self.pb.backup_node('node', node,
             backup_type='page',
             old_binary=True,
             options=['--compress'])
@@ -519,8 +484,7 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
             pgdata = self.pgdata_content(node.data_dir)
 
         node_restored.cleanup()
-        self.restore_node(
-            backup_dir, 'node', node_restored,
+        self.pb.restore_node('node', node_restored,
             options=["-j", "4"])
 
         if self.paranoia:
@@ -535,8 +499,7 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         pgbench.wait()
         pgbench.stdout.close()
 
-        self.backup_node(
-            backup_dir, 'node', node,
+        self.pb.backup_node('node', node,
             backup_type='page',
             options=['--compress'])
 
@@ -545,8 +508,7 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
 
         node_restored.cleanup()
 
-        self.restore_node(
-            backup_dir, 'node', node_restored,
+        self.pb.restore_node('node', node_restored,
             options=["-j", "4"])
 
         if self.paranoia:
@@ -554,10 +516,9 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
             self.compare_pgdata(pgdata, pgdata_restored)
 
         # Delta backup with old binary
-        self.delete_pb(backup_dir, 'node', backup_id)
+        self.pb.delete('node', backup_id)
 
-        self.backup_node(
-            backup_dir, 'node', node,
+        self.pb.backup_node('node', node,
             old_binary=True,
             options=['--compress'])
 
@@ -569,8 +530,7 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         pgbench.wait()
         pgbench.stdout.close()
 
-        self.backup_node(
-            backup_dir, 'node', node,
+        self.pb.backup_node('node', node,
             backup_type='delta',
             options=['--compress'],
             old_binary=True)
@@ -580,8 +540,7 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
 
         node_restored.cleanup()
 
-        self.restore_node(
-            backup_dir, 'node', node_restored,
+        self.pb.restore_node('node', node_restored,
             options=["-j", "4"])
 
         if self.paranoia:
@@ -597,8 +556,7 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         pgbench.wait()
         pgbench.stdout.close()
 
-        self.backup_node(
-            backup_dir, 'node', node,
+        self.pb.backup_node('node', node,
             backup_type='delta',
             options=['--compress'])
 
@@ -607,8 +565,7 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
 
         node_restored.cleanup()
 
-        self.restore_node(
-            backup_dir, 'node', node_restored,
+        self.pb.restore_node('node', node_restored,
             options=["-j", "4"])
 
         if self.paranoia:
@@ -616,80 +573,70 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
             self.compare_pgdata(pgdata, pgdata_restored)
 
     # @unittest.expectedFailure
-    # @unittest.skip("skip")
     def test_backward_compatibility_merge(self):
         """
         Create node, take FULL and PAGE backups with old binary,
         merge them with new binary
         """
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
-            set_replication=True,
-            initdb_params=['--data-checksums'])
+        backup_dir = self.backup_dir
+        node = self.pg_node.make_simple('node',
+            set_replication=True)
 
-        self.init_pb(backup_dir, old_binary=True)
-        self.add_instance(backup_dir, 'node', node, old_binary=True)
+        self.pb.init(old_binary=True)
+        self.pb.add_instance('node', node, old_binary=True)
 
-        self.set_archiving(backup_dir, 'node', node, old_binary=True)
+        self.pb.set_archiving('node', node, old_binary=True)
         node.slow_start()
 
         # FULL backup with OLD binary
-        self.backup_node(
-            backup_dir, 'node', node,
+        self.pb.backup_node('node', node,
             old_binary=True)
 
         node.pgbench_init(scale=1)
 
         # PAGE backup with OLD binary
-        backup_id = self.backup_node(
-            backup_dir, 'node', node,
+        backup_id = self.pb.backup_node('node', node,
             backup_type='page', old_binary=True)
 
         if self.paranoia:
             pgdata = self.pgdata_content(node.data_dir)
 
-        self.merge_backup(backup_dir, "node", backup_id)
+        self.pb.merge_backup("node", backup_id)
 
-        self.show_pb(backup_dir, as_text=True, as_json=False)
+        self.pb.show(as_text=True, as_json=False)
 
         # restore OLD FULL with new binary
-        node_restored = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
+        node_restored = self.pg_node.make_simple('node_restored')
 
         node_restored.cleanup()
 
-        self.restore_node(
-            backup_dir, 'node', node_restored, options=["-j", "4"])
+        self.pb.restore_node('node', node_restored, options=["-j", "4"])
 
         if self.paranoia:
             pgdata_restored = self.pgdata_content(node_restored.data_dir)
             self.compare_pgdata(pgdata, pgdata_restored)
 
     # @unittest.expectedFailure
-    # @unittest.skip("skip")
     def test_backward_compatibility_merge_1(self):
         """
         Create node, take FULL and PAGE backups with old binary,
         merge them with new binary.
         old binary version =< 2.2.7
         """
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
-            set_replication=True,
-            initdb_params=['--data-checksums'])
+        backup_dir = self.backup_dir
+        node = self.pg_node.make_simple('node',
+            set_replication=True)
 
-        self.init_pb(backup_dir, old_binary=True)
-        self.add_instance(backup_dir, 'node', node, old_binary=True)
+        self.pb.init(old_binary=True)
+        self.pb.add_instance('node', node, old_binary=True)
 
-        self.set_archiving(backup_dir, 'node', node, old_binary=True)
+        self.pb.set_archiving('node', node, old_binary=True)
         node.slow_start()
 
         node.pgbench_init(scale=20)
 
         # FULL backup with OLD binary
-        self.backup_node(backup_dir, 'node', node, old_binary=True)
+        self.pb.backup_node('node', node, old_binary=True)
 
         pgbench = node.pgbench(
             stdout=subprocess.PIPE,
@@ -699,8 +646,7 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         pgbench.stdout.close()
 
         # PAGE1 backup with OLD binary
-        self.backup_node(
-            backup_dir, 'node', node, backup_type='page', old_binary=True)
+        self.pb.backup_node('node', node, backup_type='page', old_binary=True)
 
         node.safe_psql(
             'postgres',
@@ -711,13 +657,12 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
             'VACUUM pgbench_accounts')
 
         # PAGE2 backup with OLD binary
-        backup_id = self.backup_node(
-            backup_dir, 'node', node, backup_type='page', old_binary=True)
+        backup_id = self.pb.backup_node('node', node, backup_type='page', old_binary=True)
 
         pgdata = self.pgdata_content(node.data_dir)
 
         # merge chain created by old binary with new binary
-        output = self.merge_backup(backup_dir, "node", backup_id)
+        output = self.pb.merge_backup("node", backup_id)
 
         # check that in-place is disabled
         self.assertIn(
@@ -725,33 +670,29 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
             "because of storage format incompatibility", output)
 
         # restore merged backup
-        node_restored = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
+        node_restored = self.pg_node.make_simple('node_restored')
         node_restored.cleanup()
 
-        self.restore_node(backup_dir, 'node', node_restored)
+        self.pb.restore_node('node', node=node_restored)
 
         pgdata_restored = self.pgdata_content(node_restored.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
 
     # @unittest.expectedFailure
-    # @unittest.skip("skip")
     def test_backward_compatibility_merge_2(self):
         """
         Create node, take FULL and PAGE backups with old binary,
         merge them with new binary.
         old binary version =< 2.2.7
         """
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
-            set_replication=True,
-            initdb_params=['--data-checksums'])
+        backup_dir = self.backup_dir
+        node = self.pg_node.make_simple('node',
+            set_replication=True)
 
-        self.init_pb(backup_dir, old_binary=True)
-        self.add_instance(backup_dir, 'node', node, old_binary=True)
+        self.pb.init(old_binary=True)
+        self.pb.add_instance('node', node, old_binary=True)
 
-        self.set_archiving(backup_dir, 'node', node, old_binary=True)
+        self.pb.set_archiving('node', node, old_binary=True)
         node.slow_start()
 
         node.pgbench_init(scale=50)
@@ -760,11 +701,10 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
             'postgres',
             'VACUUM pgbench_accounts')
 
-        node_restored = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
+        node_restored = self.pg_node.make_simple('node_restored')
 
         # FULL backup with OLD binary
-        self.backup_node(backup_dir, 'node', node, old_binary=True)
+        self.pb.backup_node('node', node, old_binary=True)
 
         pgbench = node.pgbench(
             stdout=subprocess.PIPE,
@@ -774,8 +714,7 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         pgbench.stdout.close()
 
         # PAGE1 backup with OLD binary
-        page1 = self.backup_node(
-            backup_dir, 'node', node,
+        page1 = self.pb.backup_node('node', node,
             backup_type='page', old_binary=True)
 
         pgdata1 = self.pgdata_content(node.data_dir)
@@ -785,15 +724,13 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
             "DELETE from pgbench_accounts where ctid > '(10,1)'")
 
         # PAGE2 backup with OLD binary
-        page2 = self.backup_node(
-            backup_dir, 'node', node,
+        page2 = self.pb.backup_node('node', node,
             backup_type='page', old_binary=True)
 
         pgdata2 = self.pgdata_content(node.data_dir)
 
         # PAGE3 backup with OLD binary
-        page3 = self.backup_node(
-            backup_dir, 'node', node,
+        page3 = self.pb.backup_node('node', node,
             backup_type='page', old_binary=True)
 
         pgdata3 = self.pgdata_content(node.data_dir)
@@ -806,70 +743,64 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         pgbench.stdout.close()
 
         # PAGE4 backup with NEW binary
-        page4 = self.backup_node(
-            backup_dir, 'node', node, backup_type='page')
+        page4 = self.pb.backup_node('node', node, backup_type='page')
         pgdata4 = self.pgdata_content(node.data_dir)
 
         # merge backups one by one and check data correctness
         # merge PAGE1
-        self.merge_backup(
-            backup_dir, "node", page1, options=['--log-level-file=VERBOSE'])
+        self.pb.merge_backup("node", page1, options=['--log-level-file=VERBOSE'])
 
         # check data correctness for PAGE1
         node_restored.cleanup()
-        self.restore_node(
-            backup_dir, 'node', node_restored, backup_id=page1,
+        self.pb.restore_node('node', node_restored, backup_id=page1,
             options=['--log-level-file=VERBOSE'])
         pgdata_restored = self.pgdata_content(node_restored.data_dir)
         self.compare_pgdata(pgdata1, pgdata_restored)
 
         # merge PAGE2
-        self.merge_backup(backup_dir, "node", page2)
+        self.pb.merge_backup("node", page2)
 
         # check data correctness for PAGE2
         node_restored.cleanup()
-        self.restore_node(backup_dir, 'node', node_restored, backup_id=page2)
+        self.pb.restore_node('node', node=node_restored, backup_id=page2)
         pgdata_restored = self.pgdata_content(node_restored.data_dir)
         self.compare_pgdata(pgdata2, pgdata_restored)
 
         # merge PAGE3
-        self.show_pb(backup_dir, 'node', page3)
-        self.merge_backup(backup_dir, "node", page3)
-        self.show_pb(backup_dir, 'node', page3)
+        self.pb.show('node', page3)
+        self.pb.merge_backup("node", page3)
+        self.pb.show('node', page3)
 
         # check data correctness for PAGE3
         node_restored.cleanup()
-        self.restore_node(backup_dir, 'node', node_restored, backup_id=page3)
+        self.pb.restore_node('node', node=node_restored, backup_id=page3)
         pgdata_restored = self.pgdata_content(node_restored.data_dir)
         self.compare_pgdata(pgdata3, pgdata_restored)
 
         # merge PAGE4
-        self.merge_backup(backup_dir, "node", page4)
+        self.pb.merge_backup("node", page4)
 
         # check data correctness for PAGE4
         node_restored.cleanup()
-        self.restore_node(backup_dir, 'node', node_restored, backup_id=page4)
+        self.pb.restore_node('node', node_restored, backup_id=page4)
         pgdata_restored = self.pgdata_content(node_restored.data_dir)
         self.compare_pgdata(pgdata4, pgdata_restored)
 
     # @unittest.expectedFailure
-    # @unittest.skip("skip")
     def test_backward_compatibility_merge_3(self):
         """
         Create node, take FULL and PAGE backups with old binary,
         merge them with new binary.
         old binary version =< 2.2.7
         """
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
-            set_replication=True,
-            initdb_params=['--data-checksums'])
+        backup_dir = self.backup_dir
+        node = self.pg_node.make_simple('node',
+            set_replication=True)
 
-        self.init_pb(backup_dir, old_binary=True)
-        self.add_instance(backup_dir, 'node', node, old_binary=True)
+        self.pb.init(old_binary=True)
+        self.pb.add_instance('node', node, old_binary=True)
 
-        self.set_archiving(backup_dir, 'node', node, old_binary=True)
+        self.pb.set_archiving('node', node, old_binary=True)
         node.slow_start()
 
         node.pgbench_init(scale=50)
@@ -878,12 +809,10 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
             'postgres',
             'VACUUM pgbench_accounts')
 
-        node_restored = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
+        node_restored = self.pg_node.make_simple('node_restored')
 
         # FULL backup with OLD binary
-        self.backup_node(
-            backup_dir, 'node', node, old_binary=True, options=['--compress'])
+        self.pb.backup_node('node', node, old_binary=True, options=['--compress'])
 
         pgbench = node.pgbench(
             stdout=subprocess.PIPE,
@@ -893,8 +822,7 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         pgbench.stdout.close()
 
         # PAGE1 backup with OLD binary
-        page1 = self.backup_node(
-            backup_dir, 'node', node,
+        page1 = self.pb.backup_node('node', node,
             backup_type='page', old_binary=True, options=['--compress'])
 
         pgdata1 = self.pgdata_content(node.data_dir)
@@ -904,15 +832,13 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
             "DELETE from pgbench_accounts where ctid > '(10,1)'")
 
         # PAGE2 backup with OLD binary
-        page2 = self.backup_node(
-            backup_dir, 'node', node,
+        page2 = self.pb.backup_node('node', node,
             backup_type='page', old_binary=True, options=['--compress'])
 
         pgdata2 = self.pgdata_content(node.data_dir)
 
         # PAGE3 backup with OLD binary
-        page3 = self.backup_node(
-            backup_dir, 'node', node,
+        page3 = self.pb.backup_node('node', node,
             backup_type='page', old_binary=True, options=['--compress'])
 
         pgdata3 = self.pgdata_content(node.data_dir)
@@ -925,54 +851,50 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         pgbench.stdout.close()
 
         # PAGE4 backup with NEW binary
-        page4 = self.backup_node(
-            backup_dir, 'node', node, backup_type='page', options=['--compress'])
+        page4 = self.pb.backup_node('node', node, backup_type='page', options=['--compress'])
         pgdata4 = self.pgdata_content(node.data_dir)
 
         # merge backups one by one and check data correctness
         # merge PAGE1
-        self.merge_backup(
-            backup_dir, "node", page1, options=['--log-level-file=VERBOSE'])
+        self.pb.merge_backup("node", page1, options=['--log-level-file=VERBOSE'])
 
         # check data correctness for PAGE1
         node_restored.cleanup()
-        self.restore_node(
-            backup_dir, 'node', node_restored, backup_id=page1,
+        self.pb.restore_node('node', node_restored, backup_id=page1,
             options=['--log-level-file=VERBOSE'])
         pgdata_restored = self.pgdata_content(node_restored.data_dir)
         self.compare_pgdata(pgdata1, pgdata_restored)
 
         # merge PAGE2
-        self.merge_backup(backup_dir, "node", page2)
+        self.pb.merge_backup("node", page2)
 
         # check data correctness for PAGE2
         node_restored.cleanup()
-        self.restore_node(backup_dir, 'node', node_restored, backup_id=page2)
+        self.pb.restore_node('node', node_restored, backup_id=page2)
         pgdata_restored = self.pgdata_content(node_restored.data_dir)
         self.compare_pgdata(pgdata2, pgdata_restored)
 
         # merge PAGE3
-        self.show_pb(backup_dir, 'node', page3)
-        self.merge_backup(backup_dir, "node", page3)
-        self.show_pb(backup_dir, 'node', page3)
+        self.pb.show('node', page3)
+        self.pb.merge_backup("node", page3)
+        self.pb.show('node', page3)
 
         # check data correctness for PAGE3
         node_restored.cleanup()
-        self.restore_node(backup_dir, 'node', node_restored, backup_id=page3)
+        self.pb.restore_node('node', node_restored, backup_id=page3)
         pgdata_restored = self.pgdata_content(node_restored.data_dir)
         self.compare_pgdata(pgdata3, pgdata_restored)
 
         # merge PAGE4
-        self.merge_backup(backup_dir, "node", page4)
+        self.pb.merge_backup("node", page4)
 
         # check data correctness for PAGE4
         node_restored.cleanup()
-        self.restore_node(backup_dir, 'node', node_restored, backup_id=page4)
+        self.pb.restore_node('node', node_restored, backup_id=page4)
         pgdata_restored = self.pgdata_content(node_restored.data_dir)
         self.compare_pgdata(pgdata4, pgdata_restored)
 
     # @unittest.expectedFailure
-    # @unittest.skip("skip")
     def test_backward_compatibility_merge_4(self):
         """
         Start merge between minor version, crash and retry it.
@@ -982,16 +904,14 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
             self.assertTrue(
                 False, 'You need pg_probackup old_binary =< 2.4.0 for this test')
 
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
-            set_replication=True,
-            initdb_params=['--data-checksums'])
+        backup_dir = self.backup_dir
+        node = self.pg_node.make_simple('node',
+            set_replication=True)
 
-        self.init_pb(backup_dir, old_binary=True)
-        self.add_instance(backup_dir, 'node', node, old_binary=True)
+        self.pb.init(old_binary=True)
+        self.pb.add_instance('node', node, old_binary=True)
 
-        self.set_archiving(backup_dir, 'node', node, old_binary=True)
+        self.pb.set_archiving('node', node, old_binary=True)
         node.slow_start()
 
         node.pgbench_init(scale=20)
@@ -1000,12 +920,10 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
             'postgres',
             'VACUUM pgbench_accounts')
 
-        node_restored = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
+        node_restored = self.pg_node.make_simple('node_restored')
 
         # FULL backup with OLD binary
-        self.backup_node(
-            backup_dir, 'node', node, old_binary=True, options=['--compress'])
+        self.pb.backup_node('node', node, old_binary=True, options=['--compress'])
 
         pgbench = node.pgbench(
             stdout=subprocess.PIPE,
@@ -1015,37 +933,28 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         pgbench.stdout.close()
 
         # PAGE backup with NEW binary
-        page_id = self.backup_node(
-            backup_dir, 'node', node, backup_type='page', options=['--compress'])
+        page_id = self.pb.backup_node('node', node, backup_type='page', options=['--compress'])
         pgdata = self.pgdata_content(node.data_dir)
 
         # merge PAGE4
-        gdb = self.merge_backup(backup_dir, "node", page_id, gdb=True)
+        gdb = self.pb.merge_backup("node", page_id, gdb=True)
 
         gdb.set_breakpoint('rename')
         gdb.run_until_break()
         gdb.continue_execution_until_break(500)
-        gdb._execute('signal SIGKILL')
+        gdb.signal('SIGKILL')
 
-        try:
-            self.merge_backup(backup_dir, "node", page_id)
-            self.assertEqual(
-                1, 0,
-                "Expecting Error because of format changes.\n "
-                "Output: {0} \n CMD: {1}".format(
-                    repr(self.output), self.cmd))
-        except ProbackupException as e:
-            self.assertIn(
+        self.expire_locks(backup_dir, "node")
+
+        self.pb.merge_backup("node", page_id,
+                          expect_error="because of format changes")
+        self.assertMessage(contains=
                 "ERROR: Retry of failed merge for backups with different "
                 "between minor versions is forbidden to avoid data corruption "
                 "because of storage format changes introduced in 2.4.0 version, "
-                "please take a new full backup",
-                e.message,
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
-                    repr(e.message), self.cmd))
+                "please take a new full backup")
 
     # @unittest.expectedFailure
-    # @unittest.skip("skip")
     def test_backward_compatibility_merge_5(self):
         """
         Create node, take FULL and PAGE backups with old binary,
@@ -1060,22 +969,20 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
             self.version_to_num(self.old_probackup_version),
             self.version_to_num(self.probackup_version))
 
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
-            set_replication=True,
-            initdb_params=['--data-checksums'])
+        backup_dir = self.backup_dir
+        node = self.pg_node.make_simple('node',
+            set_replication=True)
 
-        self.init_pb(backup_dir, old_binary=True)
-        self.add_instance(backup_dir, 'node', node, old_binary=True)
+        self.pb.init(old_binary=True)
+        self.pb.add_instance('node', node, old_binary=True)
 
-        self.set_archiving(backup_dir, 'node', node, old_binary=True)
+        self.pb.set_archiving('node', node, old_binary=True)
         node.slow_start()
 
         node.pgbench_init(scale=20)
 
         # FULL backup with OLD binary
-        self.backup_node(backup_dir, 'node', node, old_binary=True)
+        self.pb.backup_node('node', node, old_binary=True)
 
         pgbench = node.pgbench(
             stdout=subprocess.PIPE,
@@ -1085,8 +992,7 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         pgbench.stdout.close()
 
         # PAGE1 backup with OLD binary
-        self.backup_node(
-            backup_dir, 'node', node, backup_type='page', old_binary=True)
+        self.pb.backup_node('node', node, backup_type='page', old_binary=True)
 
         node.safe_psql(
             'postgres',
@@ -1097,13 +1003,12 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
             'VACUUM pgbench_accounts')
 
         # PAGE2 backup with OLD binary
-        backup_id = self.backup_node(
-            backup_dir, 'node', node, backup_type='page', old_binary=True)
+        backup_id = self.pb.backup_node('node', node, backup_type='page', old_binary=True)
 
         pgdata = self.pgdata_content(node.data_dir)
 
         # merge chain created by old binary with new binary
-        output = self.merge_backup(backup_dir, "node", backup_id)
+        output = self.pb.merge_backup("node", backup_id)
 
         # check that in-place is disabled
         self.assertNotIn(
@@ -1111,11 +1016,10 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
             "because of storage format incompatibility", output)
 
         # restore merged backup
-        node_restored = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
+        node_restored = self.pg_node.make_simple('node_restored')
         node_restored.cleanup()
 
-        self.restore_node(backup_dir, 'node', node_restored)
+        self.pb.restore_node('node', node_restored)
 
         pgdata_restored = self.pgdata_content(node_restored.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
@@ -1131,15 +1035,13 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         and check data correctness
         old binary should be 2.2.x version
         """
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
-            set_replication=True,
-            initdb_params=['--data-checksums'])
+        backup_dir = self.backup_dir
+        node = self.pg_node.make_simple('node',
+            set_replication=True)
 
-        self.init_pb(backup_dir, old_binary=True)
-        self.add_instance(backup_dir, 'node', node, old_binary=True)
-        self.set_archiving(backup_dir, 'node', node, old_binary=True)
+        self.pb.init(old_binary=True)
+        self.pb.add_instance('node', node, old_binary=True)
+        self.pb.set_archiving('node', node, old_binary=True)
         node.slow_start()
 
         node.safe_psql(
@@ -1154,7 +1056,7 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
             "postgres",
             "vacuum t_heap")
 
-        id1 = self.backup_node(backup_dir, 'node', node, old_binary=True)
+        id1 = self.pb.backup_node('node', node, old_binary=True)
         pgdata1 = self.pgdata_content(node.data_dir)
 
         node.safe_psql(
@@ -1165,8 +1067,7 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
             "postgres",
             "vacuum t_heap")
 
-        id2 = self.backup_node(
-            backup_dir, 'node', node, backup_type='page', old_binary=True)
+        id2 = self.pb.backup_node('node', node, backup_type='page', old_binary=True)
         pgdata2 = self.pgdata_content(node.data_dir)
 
         node.safe_psql(
@@ -1176,47 +1077,39 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
             "md5(repeat(i::text,10))::tsvector as tsvector "
             "from generate_series(0,1) i")
 
-        id3 = self.backup_node(
-            backup_dir, 'node', node, backup_type='page', old_binary=True)
+        id3 = self.pb.backup_node('node', node, backup_type='page', old_binary=True)
         pgdata3 = self.pgdata_content(node.data_dir)
 
-        node_restored = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
+        node_restored = self.pg_node.make_simple('node_restored')
         node_restored.cleanup()
 
-        self.restore_node(
-            backup_dir, 'node', node_restored,
-            data_dir=node_restored.data_dir, backup_id=id1)
+        self.pb.restore_node('node', node_restored, backup_id=id1)
 
         # Physical comparison
         pgdata_restored = self.pgdata_content(node_restored.data_dir)
         self.compare_pgdata(pgdata1, pgdata_restored)
 
-        self.set_auto_conf(node_restored, {'port': node_restored.port})
+        node_restored.set_auto_conf({'port': node_restored.port})
         node_restored.slow_start()
         node_restored.cleanup()
 
-        self.restore_node(
-            backup_dir, 'node', node_restored,
-            data_dir=node_restored.data_dir, backup_id=id2)
+        self.pb.restore_node('node', node_restored, backup_id=id2)
 
         # Physical comparison
         pgdata_restored = self.pgdata_content(node_restored.data_dir)
         self.compare_pgdata(pgdata2, pgdata_restored)
 
-        self.set_auto_conf(node_restored, {'port': node_restored.port})
+        node_restored.set_auto_conf({'port': node_restored.port})
         node_restored.slow_start()
         node_restored.cleanup()
 
-        self.restore_node(
-            backup_dir, 'node', node_restored,
-            data_dir=node_restored.data_dir, backup_id=id3)
+        self.pb.restore_node('node', node_restored, backup_id=id3)
 
         # Physical comparison
         pgdata_restored = self.pgdata_content(node_restored.data_dir)
         self.compare_pgdata(pgdata3, pgdata_restored)
 
-        self.set_auto_conf(node_restored, {'port': node_restored.port})
+        node_restored.set_auto_conf({'port': node_restored.port})
         node_restored.slow_start()
         node_restored.cleanup()
 
@@ -1231,15 +1124,13 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         and check data correctness
         old binary should be 2.2.x version
         """
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
-            set_replication=True,
-            initdb_params=['--data-checksums'])
+        backup_dir = self.backup_dir
+        node = self.pg_node.make_simple('node',
+            set_replication=True)
 
-        self.init_pb(backup_dir, old_binary=True)
-        self.add_instance(backup_dir, 'node', node, old_binary=True)
-        self.set_archiving(backup_dir, 'node', node, old_binary=True)
+        self.pb.init(old_binary=True)
+        self.pb.add_instance('node', node, old_binary=True)
+        self.pb.set_archiving('node', node, old_binary=True)
         node.slow_start()
 
         node.safe_psql(
@@ -1254,8 +1145,7 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
             "postgres",
             "vacuum t_heap")
 
-        self.backup_node(
-            backup_dir, 'node',node, old_binary=True, options=['--compress'])
+        self.pb.backup_node('node',node, old_binary=True, options=['--compress'])
 
         node.safe_psql(
             "postgres",
@@ -1265,8 +1155,7 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
             "postgres",
             "vacuum t_heap")
 
-        self.backup_node(
-            backup_dir, 'node', node, backup_type='page',
+        self.pb.backup_node('node', node, backup_type='page',
             old_binary=True, options=['--compress'])
 
         node.safe_psql(
@@ -1276,23 +1165,21 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
             "md5(repeat(i::text,10))::tsvector as tsvector "
             "from generate_series(0,1) i")
 
-        self.backup_node(
-            backup_dir, 'node', node, backup_type='page',
+        self.pb.backup_node('node', node, backup_type='page',
             old_binary=True, options=['--compress'])
 
         pgdata = self.pgdata_content(node.data_dir)
 
-        node_restored = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
+        node_restored = self.pg_node.make_simple('node_restored')
         node_restored.cleanup()
 
-        self.restore_node(backup_dir, 'node', node_restored)
+        self.pb.restore_node('node', node_restored)
 
         # Physical comparison
         pgdata_restored = self.pgdata_content(node_restored.data_dir)
         self.compare_pgdata(pgdata, pgdata_restored)
 
-        self.set_auto_conf(node_restored, {'port': node_restored.port})
+        node_restored.set_auto_conf({'port': node_restored.port})
         node_restored.slow_start()
 
     # @unittest.skip("skip")
@@ -1306,15 +1193,13 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         and check data correctness
         old binary should be 2.2.x version
         """
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
-            set_replication=True,
-            initdb_params=['--data-checksums'])
+        backup_dir = self.backup_dir
+        node = self.pg_node.make_simple('node',
+            set_replication=True)
 
-        self.init_pb(backup_dir, old_binary=True)
-        self.add_instance(backup_dir, 'node', node, old_binary=True)
-        self.set_archiving(backup_dir, 'node', node, old_binary=True)
+        self.pb.init(old_binary=True)
+        self.pb.add_instance('node', node, old_binary=True)
+        self.pb.set_archiving('node', node, old_binary=True)
         node.slow_start()
 
         node.safe_psql(
@@ -1329,8 +1214,7 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
             "postgres",
             "vacuum t_heap")
 
-        id1 = self.backup_node(
-            backup_dir, 'node', node,
+        id1 = self.pb.backup_node('node', node,
             old_binary=True, options=['--compress'])
         pgdata1 = self.pgdata_content(node.data_dir)
 
@@ -1342,8 +1226,7 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
             "postgres",
             "vacuum t_heap")
 
-        id2 = self.backup_node(
-            backup_dir, 'node', node, backup_type='page',
+        id2 = self.pb.backup_node('node', node, backup_type='page',
             old_binary=True, options=['--compress'])
         pgdata2 = self.pgdata_content(node.data_dir)
 
@@ -1354,48 +1237,40 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
             "md5(repeat(i::text,10))::tsvector as tsvector "
             "from generate_series(0,1) i")
 
-        id3 = self.backup_node(
-            backup_dir, 'node', node, backup_type='page',
+        id3 = self.pb.backup_node('node', node, backup_type='page',
             old_binary=True, options=['--compress'])
         pgdata3 = self.pgdata_content(node.data_dir)
 
-        node_restored = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
+        node_restored = self.pg_node.make_simple('node_restored')
         node_restored.cleanup()
 
-        self.restore_node(
-            backup_dir, 'node', node_restored,
-            data_dir=node_restored.data_dir, backup_id=id1)
+        self.pb.restore_node('node', node_restored, backup_id=id1)
 
         # Physical comparison
         pgdata_restored = self.pgdata_content(node_restored.data_dir)
         self.compare_pgdata(pgdata1, pgdata_restored)
 
-        self.set_auto_conf(node_restored, {'port': node_restored.port})
+        node_restored.set_auto_conf({'port': node_restored.port})
         node_restored.slow_start()
         node_restored.cleanup()
 
-        self.restore_node(
-            backup_dir, 'node', node_restored,
-            data_dir=node_restored.data_dir, backup_id=id2)
+        self.pb.restore_node('node', node_restored, backup_id=id2)
 
         # Physical comparison
         pgdata_restored = self.pgdata_content(node_restored.data_dir)
         self.compare_pgdata(pgdata2, pgdata_restored)
 
-        self.set_auto_conf(node_restored, {'port': node_restored.port})
+        node_restored.set_auto_conf({'port': node_restored.port})
         node_restored.slow_start()
         node_restored.cleanup()
 
-        self.restore_node(
-            backup_dir, 'node', node_restored,
-            data_dir=node_restored.data_dir, backup_id=id3)
+        self.pb.restore_node('node', node_restored, backup_id=id3)
 
         # Physical comparison
         pgdata_restored = self.pgdata_content(node_restored.data_dir)
         self.compare_pgdata(pgdata3, pgdata_restored)
 
-        self.set_auto_conf(node_restored, {'port': node_restored.port})
+        node_restored.set_auto_conf({'port': node_restored.port})
         node_restored.slow_start()
         node_restored.cleanup()
 
@@ -1407,41 +1282,35 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         with old binary, then try to delete backup
         with new binary
         """
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
-            set_replication=True,
-            initdb_params=['--data-checksums'])
+        backup_dir = self.backup_dir
+        node = self.pg_node.make_simple('node',
+            set_replication=True)
 
-        self.init_pb(backup_dir, old_binary=True)
-        self.add_instance(backup_dir, 'node', node, old_binary=True)
+        self.pb.init(old_binary=True)
+        self.pb.add_instance('node', node, old_binary=True)
         node.slow_start()
 
         open(os.path.join(node.data_dir, ".hidden_stuff"), 'a').close()
 
-        backup_id = self.backup_node(
-            backup_dir, 'node',node, old_binary=True, options=['--stream'])
+        backup_id = self.pb.backup_node('node',node, old_binary=True, options=['--stream'])
 
-        self.delete_pb(backup_dir, 'node', backup_id)
+        self.pb.delete('node', backup_id)
 
     # @unittest.skip("skip")
     def test_compatibility_tablespace(self):
         """
         https://github.com/postgrespro/pg_probackup/issues/348
         """
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
-            set_replication=True,
-            initdb_params=['--data-checksums'])
+        node = self.pg_node.make_simple('node',
+            set_replication=True)
 
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
+        backup_dir = self.backup_dir
 
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node, old_binary=True)
+        self.pb.init()
+        self.pb.add_instance('node', node, old_binary=True)
         node.slow_start()
 
-        backup_id = self.backup_node(
-            backup_dir, 'node', node, backup_type="full",
+        backup_id = self.pb.backup_node('node', node, backup_type="full",
             options=["-j", "4", "--stream"], old_binary=True)
 
         tblspace_old_path = self.get_tblspace_path(node, 'tblspace_old')
@@ -1459,37 +1328,23 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
 
         tblspace_new_path = self.get_tblspace_path(node, 'tblspace_new')
 
-        node_restored = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
+        node_restored = self.pg_node.make_simple('node_restored')
         node_restored.cleanup()
 
-        try:
-            self.restore_node(
-                backup_dir, 'node', node_restored,
-                options=[
-                    "-j", "4",
-                    "-T", "{0}={1}".format(
-                        tblspace_old_path, tblspace_new_path)])
-            # we should die here because exception is what we expect to happen
-            self.assertEqual(
-                1, 0,
-                "Expecting Error because tablespace mapping is incorrect"
-                "\n Output: {0} \n CMD: {1}".format(
-                    repr(self.output), self.cmd))
-        except ProbackupException as e:
-            self.assertIn(
+        self.pb.restore_node('node', node_restored,
+                          options=[
+                              "-j", "4",
+                              "-T", "{0}={1}".format(
+                                  tblspace_old_path, tblspace_new_path)],
+                          expect_error="because tablespace mapping is incorrect")
+        self.assertMessage(contains=
                 'ERROR: Backup {0} has no tablespaceses, '
-                'nothing to remap'.format(backup_id),
-                e.message,
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
-                    repr(e.message), self.cmd))
+                'nothing to remap'.format(backup_id))
 
-        self.backup_node(
-            backup_dir, 'node', node, backup_type="delta",
+        self.pb.backup_node('node', node, backup_type="delta",
             options=["-j", "4", "--stream"], old_binary=True)
 
-        self.restore_node(
-            backup_dir, 'node', node_restored,
+        self.pb.restore_node('node', node_restored,
             options=[
                 "-j", "4",
                 "-T", "{0}={1}".format(
@@ -1501,3 +1356,44 @@ class CompatibilityTest(ProbackupTest, unittest.TestCase):
         if self.paranoia:
             pgdata_restored = self.pgdata_content(node_restored.data_dir)
             self.compare_pgdata(pgdata, pgdata_restored)
+
+    # @unittest.skip("skip")
+    def test_compatibility_master_options(self):
+        """
+        Test correctness of handling of removed master-db, master-host, master-port,
+        master-user and replica-timeout options
+        """
+        self.assertTrue(
+            self.version_to_num(self.old_probackup_version) <= self.version_to_num('2.6.0'),
+            'You need pg_probackup old_binary =< 2.6.0 for this test')
+
+        node = self.pg_node.make_simple('node')
+        backup_dir = self.backup_dir
+
+        self.pb.init(old_binary=True)
+        self.pb.add_instance('node', node, old_binary=True)
+
+        # add deprecated options (using probackup< 2.6) into pg_probackup.conf
+        # don't care about option values, we can use random values here
+        self.pb.set_config('node',
+            options=[
+                '--master-db=postgres',
+                '--master-host=localhost',
+                '--master-port=5432',
+                '--master-user={0}'.format(self.username),
+                '--replica-timeout=100500'],
+            old_binary=True)
+
+        # and try to show config with new binary (those options must be silently skipped)
+        self.pb.show_config('node', old_binary=False)
+
+        # store config with new version (those options must disappear from config)
+        self.pb.set_config('node',
+            options=[],
+            old_binary=False)
+
+        # and check absence
+        config_options = self.pb.show_config('node', old_binary=False)
+        self.assertFalse(
+            ['master-db', 'master-host', 'master-port', 'master-user', 'replica-timeout'] & config_options.keys(),
+            'Obsolete options found in new config')

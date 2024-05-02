@@ -1,25 +1,23 @@
 import os
 import unittest
-from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
+from .helpers.ptrack_helpers import ProbackupTest
 
 
-class ExcludeTest(ProbackupTest, unittest.TestCase):
+class ExcludeTest(ProbackupTest):
 
     # @unittest.skip("skip")
     def test_exclude_temp_files(self):
         """
         """
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
+        backup_dir = self.backup_dir
+        node = self.pg_node.make_simple('node',
             set_replication=True,
-            initdb_params=['--data-checksums'],
             pg_options={
                 'logging_collector': 'on',
                 'log_filename': 'postgresql.log'})
 
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
+        self.pb.init()
+        self.pb.add_instance('node', node)
         node.slow_start()
 
         oid = node.safe_psql(
@@ -36,16 +34,13 @@ class ExcludeTest(ProbackupTest, unittest.TestCase):
             f.flush()
             f.close
 
-        full_id = self.backup_node(
-            backup_dir, 'node', node, backup_type='full', options=['--stream'])
-
-        file = os.path.join(
-            backup_dir, 'backups', 'node', full_id,
-            'database', 'base', 'pgsql_tmp', 'pgsql_tmp7351.16')
+        full_id = self.pb.backup_node('node', node, backup_type='full', options=['--stream'])
 
         self.assertFalse(
-            os.path.exists(file),
-            "File must be excluded: {0}".format(file))
+            self.backup_file_exists(backup_dir, 'node', full_id,
+                                    'database/base/pgsql_tmp/pgsql_tmp7351.16'),
+            "File must be excluded: database/base/pgsql_tmp/pgsql_tmp7351.16"
+        )
 
         # TODO check temporary tablespaces
 
@@ -56,14 +51,12 @@ class ExcludeTest(ProbackupTest, unittest.TestCase):
         make node without archiving, create temp table, take full backup,
         check that temp table not present in backup catalogue
         """
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
-            set_replication=True,
-            initdb_params=['--data-checksums'])
+        backup_dir = self.backup_dir
+        node = self.pg_node.make_simple('node',
+            set_replication=True)
 
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
+        self.pb.init()
+        self.pb.add_instance('node', node)
         node.slow_start()
 
         with node.connect("postgres") as conn:
@@ -112,8 +105,7 @@ class ExcludeTest(ProbackupTest, unittest.TestCase):
         temp_toast_filename = os.path.basename(toast_path)
         temp_idx_toast_filename = os.path.basename(toast_idx_path)
 
-        self.backup_node(
-            backup_dir, 'node', node, backup_type='full', options=['--stream'])
+        self.pb.backup_node('node', node, backup_type='full', options=['--stream'])
 
         for root, dirs, files in os.walk(backup_dir):
             for file in files:
@@ -138,16 +130,14 @@ class ExcludeTest(ProbackupTest, unittest.TestCase):
         alter table to unlogged, take delta backup, restore delta backup,
         check that PGDATA`s are physically the same
         """
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
+        backup_dir = self.backup_dir
+        node = self.pg_node.make_simple('node',
             set_replication=True,
-            initdb_params=['--data-checksums'],
             pg_options={
                 "shared_buffers": "10MB"})
 
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
+        self.pb.init()
+        self.pb.add_instance('node', node)
         node.slow_start()
 
         conn = node.connect()
@@ -161,25 +151,21 @@ class ExcludeTest(ProbackupTest, unittest.TestCase):
             conn.execute("create index test_idx on test (generate_series)")
             conn.commit()
 
-        self.backup_node(
-            backup_dir, 'node', node,
+        self.pb.backup_node('node', node,
             backup_type='full', options=['--stream'])
 
         node.safe_psql('postgres', "alter table test set logged")
 
-        self.backup_node(
-            backup_dir, 'node', node, backup_type='delta',
+        self.pb.backup_node('node', node, backup_type='delta',
             options=['--stream'])
 
         pgdata = self.pgdata_content(node.data_dir)
 
-        node_restored = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
+        node_restored = self.pg_node.make_simple('node_restored')
 
         node_restored.cleanup()
 
-        self.restore_node(
-            backup_dir, 'node', node_restored, options=["-j", "4"])
+        self.pb.restore_node('node', node_restored, options=["-j", "4"])
 
         # Physical comparison
         pgdata_restored = self.pgdata_content(node_restored.data_dir)
@@ -193,17 +179,15 @@ class ExcludeTest(ProbackupTest, unittest.TestCase):
         2. restore FULL, DELTA, PAGE to empty db,
             ensure unlogged table exist and is epmty
         """
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
+        backup_dir = self.backup_dir
+        node = self.pg_node.make_simple('node',
             set_replication=True,
-            initdb_params=['--data-checksums'],
             pg_options={
                 "shared_buffers": "10MB"})
 
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
-        self.set_archiving(backup_dir, 'node', node)
+        self.pb.init()
+        self.pb.add_instance('node', node)
+        self.pb.set_archiving('node', node)
         node.slow_start()
 
         backup_ids = []
@@ -223,14 +207,12 @@ class ExcludeTest(ProbackupTest, unittest.TestCase):
                 'postgres',
                 "select pg_relation_filepath('test')")[0][0]
 
-            backup_id = self.backup_node(
-                backup_dir, 'node', node,
+            backup_id = self.pb.backup_node('node', node,
                 backup_type=backup_type, options=['--stream'])
 
             backup_ids.append(backup_id)
 
-            filelist = self.get_backup_filelist(
-                backup_dir, 'node', backup_id)
+            filelist = self.get_backup_filelist(backup_dir, 'node', backup_id)
 
             self.assertNotIn(
                 rel_path, filelist,
@@ -253,7 +235,7 @@ class ExcludeTest(ProbackupTest, unittest.TestCase):
             node.stop()
             node.cleanup()
 
-            self.restore_node(backup_dir, 'node', node, backup_id=backup_id)
+            self.pb.restore_node('node', node=node, backup_id=backup_id)
 
             node.slow_start()
 
@@ -268,21 +250,18 @@ class ExcludeTest(ProbackupTest, unittest.TestCase):
         """
         check that by default 'log' and 'pg_log' directories are not backed up
         """
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
+        backup_dir = self.backup_dir
+        node = self.pg_node.make_simple('node',
             set_replication=True,
-            initdb_params=['--data-checksums'],
             pg_options={
                 'logging_collector': 'on',
                 'log_filename': 'postgresql.log'})
 
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
+        self.pb.init()
+        self.pb.add_instance('node', node)
         node.slow_start()
 
-        self.backup_node(
-            backup_dir, 'node', node,
+        self.pb.backup_node('node', node,
             backup_type='full', options=['--stream'])
 
         log_dir = node.safe_psql(
@@ -291,8 +270,7 @@ class ExcludeTest(ProbackupTest, unittest.TestCase):
 
         node.cleanup()
 
-        self.restore_node(
-            backup_dir, 'node', node, options=["-j", "4"])
+        self.pb.restore_node('node', node, options=["-j", "4"])
 
         # check that PGDATA/log or PGDATA/pg_log do not exists
         path = os.path.join(node.data_dir, log_dir)
@@ -305,31 +283,27 @@ class ExcludeTest(ProbackupTest, unittest.TestCase):
         """
         check that "--backup-pg-log" works correctly
         """
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
+        backup_dir = self.backup_dir
+        node = self.pg_node.make_simple('node',
             set_replication=True,
-            initdb_params=['--data-checksums'],
             pg_options={
                 'logging_collector': 'on',
                 'log_filename': 'postgresql.log'})
 
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
+        self.pb.init()
+        self.pb.add_instance('node', node)
         node.slow_start()
 
         log_dir = node.safe_psql(
             'postgres',
             'show log_directory').decode('utf-8').rstrip()
 
-        self.backup_node(
-            backup_dir, 'node', node,
+        self.pb.backup_node('node', node,
             backup_type='full', options=['--stream', '--backup-pg-log'])
 
         node.cleanup()
 
-        self.restore_node(
-            backup_dir, 'node', node, options=["-j", "4"])
+        self.pb.restore_node('node', node, options=["-j", "4"])
 
         # check that PGDATA/log or PGDATA/pg_log do not exists
         path = os.path.join(node.data_dir, log_dir)

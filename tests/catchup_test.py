@@ -1,10 +1,15 @@
 import os
+import subprocess
 from pathlib import Path
-import signal
-import unittest
-from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
+from .helpers.ptrack_helpers import ProbackupTest
+from parameterized import parameterized
 
-class CatchupTest(ProbackupTest, unittest.TestCase):
+module_name = 'catchup'
+
+
+class CatchupTest(ProbackupTest):
+    def setUp(self):
+        self.fname = self.id().split('.')[3]
 
 #########################################
 # Basic tests
@@ -14,8 +19,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         Test 'multithreaded basebackup' mode (aka FULL catchup)
         """
         # preparation
-        src_pg = self.make_simple_node(
-            base_dir = os.path.join(self.module_name, self.fname, 'src'),
+        src_pg = self.pg_node.make_simple('src',
             set_replication = True
             )
         src_pg.slow_start()
@@ -25,8 +29,8 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         src_query_result = src_pg.table_checksum("ultimate_question")
 
         # do full catchup
-        dst_pg = self.make_empty_node(os.path.join(self.module_name, self.fname, 'dst'))
-        self.catchup_node(
+        dst_pg = self.pg_node.make_empty('dst')
+        self.pb.catchup_node(
             backup_mode = 'FULL',
             source_pgdata = src_pg.data_dir,
             destination_node = dst_pg,
@@ -43,7 +47,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         src_pg.stop()
         dst_options = {}
         dst_options['port'] = str(dst_pg.port)
-        self.set_auto_conf(dst_pg, dst_options)
+        dst_pg.set_auto_conf(dst_options)
         dst_pg.slow_start()
 
         # 2nd check: run verification query
@@ -54,13 +58,165 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         dst_pg.stop()
         #self.assertEqual(1, 0, 'Stop test')
 
+
+    @parameterized.expand(("DELTA", "PTRACK"))
+    def test_cascade_catchup(self, test_input):
+        """
+        Test catchup of catchup'ed node
+        """
+        # preparation
+
+        if test_input == "PTRACK" and not self.ptrack:
+            self.skipTest("Ptrack is disabled, test_cascade_catchup")
+        elif test_input == "PTRACK" and self.ptrack:
+            db1 = self.pg_node.make_simple('db1', set_replication = True, ptrack_enable=True)
+        else:
+            db1 = self.pg_node.make_simple('db1', set_replication = True)
+
+        db1.slow_start()
+
+        if test_input == "PTRACK":
+            db1.safe_psql("postgres", "CREATE EXTENSION ptrack")
+
+        db1.safe_psql(
+            "postgres",
+            "CREATE TABLE ultimate_question AS SELECT 42 AS answer")
+        db1_query_result = db1.table_checksum("ultimate_question")
+
+        # full catchup db1 -> db2
+        db2 = self.pg_node.make_empty('db2')
+        self.pb.catchup_node(
+            backup_mode = 'FULL',
+            source_pgdata = db1.data_dir,
+            destination_node = db2,
+            options = ['-d', 'postgres', '-p', str(db1.port), '--stream']
+        )
+
+        # 1st check: compare data directories
+        self.compare_pgdata(
+            self.pgdata_content(db1.data_dir),
+            self.pgdata_content(db2.data_dir)
+        )
+
+        # run&recover catchup'ed instance
+        self.set_replica(db1, db2)
+        db2_options = {}
+        db2_options['port'] = str(db2.port)
+        db2.set_auto_conf(db2_options)
+        db2.slow_start(replica = True)
+
+        # 2nd check: run verification query
+        db2_query_result = db2.table_checksum("ultimate_question")
+        self.assertEqual(db1_query_result, db2_query_result, 'Different answer from copy 2')
+
+        # full catchup db2 -> db3
+        db3 = self.pg_node.make_empty('db3')
+        self.pb.catchup_node(
+            backup_mode = 'FULL',
+            source_pgdata = db2.data_dir,
+            destination_node = db3,
+            options = ['-d', 'postgres', '-p', str(db2.port), '--stream']
+        )
+
+        # 1st check: compare data directories
+        self.compare_pgdata(
+            self.pgdata_content(db2.data_dir),
+            self.pgdata_content(db3.data_dir)
+        )
+
+        # run&recover catchup'ed instance
+        self.set_replica(db2, db3)
+        db3_options = {}
+        db3_options['port'] = str(db3.port)
+        db3.set_auto_conf(db3_options)
+        db3.slow_start(replica = True)
+
+        db3_query_result = db3.table_checksum("ultimate_question")
+        self.assertEqual(db2_query_result, db3_query_result, 'Different answer from copy 3')
+
+        db2.stop()
+        db3.stop()
+
+        # data modifications before incremental catchups
+        db1.safe_psql(
+            "postgres",
+            "UPDATE ultimate_question SET answer = -1")
+        db1.safe_psql("postgres", "CHECKPOINT")
+
+        # do first incremental catchup
+        self.pb.catchup_node(
+            backup_mode = test_input,
+            source_pgdata = db1.data_dir,
+            destination_node = db2,
+            options = ['-d', 'postgres', '-p', str(db1.port), '--stream']
+        )
+
+        self.compare_pgdata(
+            self.pgdata_content(db1.data_dir),
+            self.pgdata_content(db2.data_dir)
+        )
+
+        self.set_replica(db1, db2)
+        db2_options = {}
+        db2_options['port'] = str(db2.port)
+        db2.set_auto_conf(db2_options)
+        db2.slow_start(replica = True)
+
+        # do second incremental catchup
+        self.pb.catchup_node(
+            backup_mode = test_input,
+            source_pgdata = db2.data_dir,
+            destination_node = db3,
+            options = ['-d', 'postgres', '-p', str(db2.port), '--stream']
+        )
+
+        self.compare_pgdata(
+            self.pgdata_content(db2.data_dir),
+            self.pgdata_content(db3.data_dir)
+        )
+
+        self.set_replica(db2, db3)
+        db3_options = {}
+        db3_options['port'] = str(db3.port)
+        db3.set_auto_conf(db3_options)
+        self.pb.set_archiving('db3', db3, replica=True)
+        db3.slow_start(replica = True)
+
+        # data modification for checking continuous archiving
+        db1.safe_psql(
+            "postgres",
+            "DROP TABLE ultimate_question")
+        db1.safe_psql("postgres", "CHECKPOINT")
+
+        self.wait_until_replica_catch_with_master(db1, db2)
+        self.wait_until_replica_catch_with_master(db1, db3)
+
+        db1_query_result = db1.table_checksum("pg_class")
+        db2_query_result = db2.table_checksum("pg_class")
+        db3_query_result = db3.table_checksum("pg_class")
+
+        self.assertEqual(db1_query_result, db2_query_result, 'Different answer from copy 2')
+        self.assertEqual(db2_query_result, db3_query_result, 'Different answer from copy 3')
+
+        db1_query_result = db1.table_checksum("pg_depend")
+        db2_query_result = db2.table_checksum("pg_depend")
+        db3_query_result = db3.table_checksum("pg_depend")
+
+        self.assertEqual(db1_query_result, db2_query_result, 'Different answer from copy 2')
+        self.assertEqual(db2_query_result, db3_query_result, 'Different answer from copy 3')
+        
+        # cleanup
+        db3.stop()
+        db2.stop()
+        db1.stop()
+
+
     def test_full_catchup_with_tablespace(self):
         """
         Test tablespace transfers
         """
         # preparation
-        src_pg = self.make_simple_node(
-            base_dir = os.path.join(self.module_name, self.fname, 'src'),
+        src_pg = self.pg_node.make_simple('src',
             set_replication = True
             )
         src_pg.slow_start()
@@ -72,9 +228,9 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         src_query_result = src_pg.table_checksum("ultimate_question")
 
         # do full catchup with tablespace mapping
-        dst_pg = self.make_empty_node(os.path.join(self.module_name, self.fname, 'dst'))
+        dst_pg = self.pg_node.make_empty('dst')
         tblspace1_new_path = self.get_tblspace_path(dst_pg, 'tblspace1_new')
-        self.catchup_node(
+        self.pb.catchup_node(
             backup_mode = 'FULL',
             source_pgdata = src_pg.data_dir,
             destination_node = dst_pg,
@@ -101,7 +257,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         # run&recover catchup'ed instance
         dst_options = {}
         dst_options['port'] = str(dst_pg.port)
-        self.set_auto_conf(dst_pg, dst_options)
+        dst_pg.set_auto_conf(dst_options)
         dst_pg.slow_start()
 
         # 2nd check: run verification query
@@ -116,8 +272,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         Test delta catchup
         """
         # preparation 1: source
-        src_pg = self.make_simple_node(
-            base_dir = os.path.join(self.module_name, self.fname, 'src'),
+        src_pg = self.pg_node.make_simple('src',
             set_replication = True,
             pg_options = { 'wal_log_hints': 'on' }
             )
@@ -127,8 +282,8 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             "CREATE TABLE ultimate_question(answer int)")
 
         # preparation 2: make clean shutdowned lagging behind replica
-        dst_pg = self.make_empty_node(os.path.join(self.module_name, self.fname, 'dst'))
-        self.catchup_node(
+        dst_pg = self.pg_node.make_empty('dst')
+        self.pb.catchup_node(
             backup_mode = 'FULL',
             source_pgdata = src_pg.data_dir,
             destination_node = dst_pg,
@@ -137,7 +292,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         self.set_replica(src_pg, dst_pg)
         dst_options = {}
         dst_options['port'] = str(dst_pg.port)
-        self.set_auto_conf(dst_pg, dst_options)
+        dst_pg.set_auto_conf(dst_options)
         dst_pg.slow_start(replica = True)
         dst_pg.stop()
 
@@ -149,7 +304,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         src_query_result = src_pg.table_checksum("ultimate_question")
 
         # do delta catchup
-        self.catchup_node(
+        self.pb.catchup_node(
             backup_mode = 'DELTA',
             source_pgdata = src_pg.data_dir,
             destination_node = dst_pg,
@@ -167,7 +322,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         self.set_replica(master = src_pg, replica = dst_pg)
         dst_options = {}
         dst_options['port'] = str(dst_pg.port)
-        self.set_auto_conf(dst_pg, dst_options)
+        dst_pg.set_auto_conf(dst_options)
         dst_pg.slow_start(replica = True)
 
         # 2nd check: run verification query
@@ -186,12 +341,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             self.skipTest('Skipped because ptrack support is disabled')
 
         # preparation 1: source
-        src_pg = self.make_simple_node(
-            base_dir = os.path.join(self.module_name, self.fname, 'src'),
-            set_replication = True,
-            ptrack_enable = True,
-            initdb_params = ['--data-checksums']
-            )
+        src_pg = self.pg_node.make_simple('src', set_replication=True, ptrack_enable=True)
         src_pg.slow_start()
         src_pg.safe_psql("postgres", "CREATE EXTENSION ptrack")
         src_pg.safe_psql(
@@ -199,8 +349,8 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             "CREATE TABLE ultimate_question(answer int)")
 
         # preparation 2: make clean shutdowned lagging behind replica
-        dst_pg = self.make_empty_node(os.path.join(self.module_name, self.fname, 'dst'))
-        self.catchup_node(
+        dst_pg = self.pg_node.make_empty('dst')
+        self.pb.catchup_node(
             backup_mode = 'FULL',
             source_pgdata = src_pg.data_dir,
             destination_node = dst_pg,
@@ -209,7 +359,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         self.set_replica(src_pg, dst_pg)
         dst_options = {}
         dst_options['port'] = str(dst_pg.port)
-        self.set_auto_conf(dst_pg, dst_options)
+        dst_pg.set_auto_conf(dst_options)
         dst_pg.slow_start(replica = True)
         dst_pg.stop()
 
@@ -221,7 +371,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         src_query_result = src_pg.table_checksum("ultimate_question")
 
         # do ptrack catchup
-        self.catchup_node(
+        self.pb.catchup_node(
             backup_mode = 'PTRACK',
             source_pgdata = src_pg.data_dir,
             destination_node = dst_pg,
@@ -239,7 +389,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         self.set_replica(master = src_pg, replica = dst_pg)
         dst_options = {}
         dst_options['port'] = str(dst_pg.port)
-        self.set_auto_conf(dst_pg, dst_options)
+        dst_pg.set_auto_conf(dst_options)
         dst_pg.slow_start(replica = True)
 
         # 2nd check: run verification query
@@ -255,16 +405,15 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         Test that we correctly follow timeline change with delta catchup
         """
         # preparation 1: source
-        src_pg = self.make_simple_node(
-            base_dir = os.path.join(self.module_name, self.fname, 'src'),
+        src_pg = self.pg_node.make_simple('src',
             set_replication = True,
             pg_options = { 'wal_log_hints': 'on' }
             )
         src_pg.slow_start()
 
         # preparation 2: destination
-        dst_pg = self.make_empty_node(os.path.join(self.module_name, self.fname, 'dst'))
-        self.catchup_node(
+        dst_pg = self.pg_node.make_empty('dst')
+        self.pb.catchup_node(
             backup_mode = 'FULL',
             source_pgdata = src_pg.data_dir,
             destination_node = dst_pg,
@@ -272,7 +421,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             )
         dst_options = {}
         dst_options['port'] = str(dst_pg.port)
-        self.set_auto_conf(dst_pg, dst_options)
+        dst_pg.set_auto_conf(dst_options)
         dst_pg.slow_start()
         dst_pg.stop()
 
@@ -285,7 +434,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         src_query_result = src_pg.table_checksum("ultimate_question")
 
         # do catchup (src_tli = 2, dst_tli = 1)
-        self.catchup_node(
+        self.pb.catchup_node(
             backup_mode = 'DELTA',
             source_pgdata = src_pg.data_dir,
             destination_node = dst_pg,
@@ -301,7 +450,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         # run&recover catchup'ed instance
         dst_options = {}
         dst_options['port'] = str(dst_pg.port)
-        self.set_auto_conf(dst_pg, dst_options)
+        dst_pg.set_auto_conf(dst_options)
         self.set_replica(master = src_pg, replica = dst_pg)
         dst_pg.slow_start(replica = True)
 
@@ -312,7 +461,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         dst_pg.stop()
 
         # do catchup (src_tli = 2, dst_tli = 2)
-        self.catchup_node(
+        self.pb.catchup_node(
             backup_mode = 'DELTA',
             source_pgdata = src_pg.data_dir,
             destination_node = dst_pg,
@@ -330,18 +479,13 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             self.skipTest('Skipped because ptrack support is disabled')
 
         # preparation 1: source
-        src_pg = self.make_simple_node(
-            base_dir = os.path.join(self.module_name, self.fname, 'src'),
-            set_replication = True,
-            ptrack_enable = True,
-            initdb_params = ['--data-checksums']
-            )
+        src_pg = self.pg_node.make_simple('src', set_replication=True, ptrack_enable=True)
         src_pg.slow_start()
         src_pg.safe_psql("postgres", "CREATE EXTENSION ptrack")
 
         # preparation 2: destination
-        dst_pg = self.make_empty_node(os.path.join(self.module_name, self.fname, 'dst'))
-        self.catchup_node(
+        dst_pg = self.pg_node.make_empty('dst')
+        self.pb.catchup_node(
             backup_mode = 'FULL',
             source_pgdata = src_pg.data_dir,
             destination_node = dst_pg,
@@ -349,7 +493,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             )
         dst_options = {}
         dst_options['port'] = str(dst_pg.port)
-        self.set_auto_conf(dst_pg, dst_options)
+        dst_pg.set_auto_conf(dst_options)
         dst_pg.slow_start()
         dst_pg.stop()
 
@@ -367,7 +511,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         src_query_result = src_pg.table_checksum("ultimate_question")
 
         # do catchup (src_tli = 2, dst_tli = 1)
-        self.catchup_node(
+        self.pb.catchup_node(
             backup_mode = 'PTRACK',
             source_pgdata = src_pg.data_dir,
             destination_node = dst_pg,
@@ -383,7 +527,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         # run&recover catchup'ed instance
         dst_options = {}
         dst_options['port'] = str(dst_pg.port)
-        self.set_auto_conf(dst_pg, dst_options)
+        dst_pg.set_auto_conf(dst_options)
         self.set_replica(master = src_pg, replica = dst_pg)
         dst_pg.slow_start(replica = True)
 
@@ -394,7 +538,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         dst_pg.stop()
 
         # do catchup (src_tli = 2, dst_tli = 2)
-        self.catchup_node(
+        self.pb.catchup_node(
             backup_mode = 'PTRACK',
             source_pgdata = src_pg.data_dir,
             destination_node = dst_pg,
@@ -412,8 +556,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         Test that dropped table in source will be dropped in delta catchup'ed instance too
         """
         # preparation 1: source
-        src_pg = self.make_simple_node(
-            base_dir = os.path.join(self.module_name, self.fname, 'src'),
+        src_pg = self.pg_node.make_simple('src',
             set_replication = True,
             pg_options = { 'wal_log_hints': 'on' }
             )
@@ -423,8 +566,8 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             "CREATE TABLE ultimate_question AS SELECT 42 AS answer")
 
         # preparation 2: make clean shutdowned lagging behind replica
-        dst_pg = self.make_empty_node(os.path.join(self.module_name, self.fname, 'dst'))
-        self.catchup_node(
+        dst_pg = self.pg_node.make_empty('dst')
+        self.pb.catchup_node(
             backup_mode = 'FULL',
             source_pgdata = src_pg.data_dir,
             destination_node = dst_pg,
@@ -432,7 +575,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             )
         dst_options = {}
         dst_options['port'] = str(dst_pg.port)
-        self.set_auto_conf(dst_pg, dst_options)
+        dst_pg.set_auto_conf(dst_options)
         dst_pg.slow_start()
         dst_pg.stop()
 
@@ -443,7 +586,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         src_pg.safe_psql("postgres", "CHECKPOINT")
 
         # do delta catchup
-        self.catchup_node(
+        self.pb.catchup_node(
             backup_mode = 'DELTA',
             source_pgdata = src_pg.data_dir,
             destination_node = dst_pg,
@@ -467,12 +610,9 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             self.skipTest('Skipped because ptrack support is disabled')
 
         # preparation 1: source
-        src_pg = self.make_simple_node(
-            base_dir = os.path.join(self.module_name, self.fname, 'src'),
+        src_pg = self.pg_node.make_simple('src',
             set_replication = True,
-            ptrack_enable = True,
-            initdb_params = ['--data-checksums']
-            )
+            ptrack_enable = True)
         src_pg.slow_start()
         src_pg.safe_psql("postgres", "CREATE EXTENSION ptrack")
         src_pg.safe_psql(
@@ -480,8 +620,8 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             "CREATE TABLE ultimate_question AS SELECT 42 AS answer")
 
         # preparation 2: make clean shutdowned lagging behind replica
-        dst_pg = self.make_empty_node(os.path.join(self.module_name, self.fname, 'dst'))
-        self.catchup_node(
+        dst_pg = self.pg_node.make_empty('dst')
+        self.pb.catchup_node(
             backup_mode = 'FULL',
             source_pgdata = src_pg.data_dir,
             destination_node = dst_pg,
@@ -489,7 +629,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             )
         dst_options = {}
         dst_options['port'] = str(dst_pg.port)
-        self.set_auto_conf(dst_pg, dst_options)
+        dst_pg.set_auto_conf(dst_options)
         dst_pg.slow_start()
         dst_pg.stop()
 
@@ -500,7 +640,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         src_pg.safe_psql("postgres", "CHECKPOINT")
 
         # do ptrack catchup
-        self.catchup_node(
+        self.pb.catchup_node(
             backup_mode = 'PTRACK',
             source_pgdata = src_pg.data_dir,
             destination_node = dst_pg,
@@ -521,8 +661,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         Test that truncated table in source will be truncated in delta catchup'ed instance too
         """
         # preparation 1: source
-        src_pg = self.make_simple_node(
-            base_dir = os.path.join(self.module_name, self.fname, 'src'),
+        src_pg = self.pg_node.make_simple('src',
             set_replication = True,
             pg_options = { 'wal_log_hints': 'on' }
             )
@@ -537,8 +676,8 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         src_pg.safe_psql("postgres", "VACUUM t_heap")
 
         # preparation 2: make clean shutdowned lagging behind replica
-        dst_pg = self.make_empty_node(os.path.join(self.module_name, self.fname, 'dst'))
-        self.catchup_node(
+        dst_pg = self.pg_node.make_empty('dst')
+        self.pb.catchup_node(
             backup_mode = 'FULL',
             source_pgdata = src_pg.data_dir,
             destination_node = dst_pg,
@@ -547,7 +686,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         dest_options = {}
         dst_options = {}
         dst_options['port'] = str(dst_pg.port)
-        self.set_auto_conf(dst_pg, dst_options)
+        dst_pg.set_auto_conf(dst_options)
         dst_pg.slow_start()
         dst_pg.stop()
 
@@ -556,7 +695,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         src_pg.safe_psql("postgres", "VACUUM t_heap")
 
         # do delta catchup
-        self.catchup_node(
+        self.pb.catchup_node(
             backup_mode = 'DELTA',
             source_pgdata = src_pg.data_dir,
             destination_node = dst_pg,
@@ -580,12 +719,9 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             self.skipTest('Skipped because ptrack support is disabled')
 
         # preparation 1: source
-        src_pg = self.make_simple_node(
-            base_dir = os.path.join(self.module_name, self.fname, 'src'),
+        src_pg = self.pg_node.make_simple('src',
             set_replication = True,
-            ptrack_enable = True,
-            initdb_params = ['--data-checksums']
-            )
+            ptrack_enable = True)
         src_pg.slow_start()
         src_pg.safe_psql("postgres", "CREATE EXTENSION ptrack")
         src_pg.safe_psql(
@@ -598,8 +734,8 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         src_pg.safe_psql("postgres", "VACUUM t_heap")
 
         # preparation 2: make clean shutdowned lagging behind replica
-        dst_pg = self.make_empty_node(os.path.join(self.module_name, self.fname, 'dst'))
-        self.catchup_node(
+        dst_pg = self.pg_node.make_empty('dst')
+        self.pb.catchup_node(
             backup_mode = 'FULL',
             source_pgdata = src_pg.data_dir,
             destination_node = dst_pg,
@@ -608,7 +744,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         dest_options = {}
         dst_options = {}
         dst_options['port'] = str(dst_pg.port)
-        self.set_auto_conf(dst_pg, dst_options)
+        dst_pg.set_auto_conf(dst_options)
         dst_pg.slow_start()
         dst_pg.stop()
 
@@ -617,7 +753,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         src_pg.safe_psql("postgres", "VACUUM t_heap")
 
         # do ptrack catchup
-        self.catchup_node(
+        self.pb.catchup_node(
             backup_mode = 'PTRACK',
             source_pgdata = src_pg.data_dir,
             destination_node = dst_pg,
@@ -643,7 +779,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         if self.remote:
             self.skipTest('Skipped because this test tests local catchup error handling')
 
-        src_pg = self.make_simple_node(base_dir = os.path.join(self.module_name, self.fname, 'src'))
+        src_pg = self.pg_node.make_simple('src')
         src_pg.slow_start()
 
         tblspace_path = self.get_tblspace_path(src_pg, 'tblspace')
@@ -655,9 +791,8 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             "postgres",
             "CREATE TABLE ultimate_question TABLESPACE tblspace AS SELECT 42 AS answer")
 
-        dst_pg = self.make_empty_node(os.path.join(self.module_name, self.fname, 'dst'))
-        try:
-            self.catchup_node(
+        dst_pg = self.pg_node.make_empty('dst')
+        self.pb.catchup_node(
                 backup_mode = 'FULL',
                 source_pgdata = src_pg.data_dir,
                 destination_node = dst_pg,
@@ -665,15 +800,11 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
                     '-d', 'postgres',
                     '-p', str(src_pg.port),
                     '--stream',
-                    ]
+                    ],
+                expect_error="because '-T' parameter is not specified"
                 )
-            self.assertEqual(1, 0, "Expecting Error because '-T' parameter is not specified.\n Output: {0} \n CMD: {1}".format(
-                repr(self.output), self.cmd))
-        except ProbackupException as e:
-            self.assertIn(
-                'ERROR: Local catchup executed, but source database contains tablespace',
-                e.message,
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
+        self.assertMessage(contains='ERROR: Local catchup executed, but source '
+                                    'database contains tablespace')
 
         # Cleanup
         src_pg.stop()
@@ -683,16 +814,15 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         Test that we detect running postmaster in destination
         """
         # preparation 1: source
-        src_pg = self.make_simple_node(
-            base_dir = os.path.join(self.module_name, self.fname, 'src'),
+        src_pg = self.pg_node.make_simple('src',
             set_replication = True,
             pg_options = { 'wal_log_hints': 'on' }
             )
         src_pg.slow_start()
 
         # preparation 2: destination
-        dst_pg = self.make_empty_node(os.path.join(self.module_name, self.fname, 'dst'))
-        self.catchup_node(
+        dst_pg = self.pg_node.make_empty('dst')
+        self.pb.catchup_node(
             backup_mode = 'FULL',
             source_pgdata = src_pg.data_dir,
             destination_node = dst_pg,
@@ -700,26 +830,20 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             )
         dst_options = {}
         dst_options['port'] = str(dst_pg.port)
-        self.set_auto_conf(dst_pg, dst_options)
+        dst_pg.set_auto_conf(dst_options)
         dst_pg.slow_start()
         # leave running destination postmaster
         # so don't call dst_pg.stop()
 
         # try delta catchup
-        try:
-            self.catchup_node(
+        self.pb.catchup_node(
                 backup_mode = 'DELTA',
                 source_pgdata = src_pg.data_dir,
                 destination_node = dst_pg,
-                options = ['-d', 'postgres', '-p', str(src_pg.port), '--stream']
+                options = ['-d', 'postgres', '-p', str(src_pg.port), '--stream'],
+                expect_error="because postmaster in destination is running"
                 )
-            self.assertEqual(1, 0, "Expecting Error because postmaster in destination is running.\n Output: {0} \n CMD: {1}".format(
-                repr(self.output), self.cmd))
-        except ProbackupException as e:
-            self.assertIn(
-                'ERROR: Postmaster with pid ',
-                e.message,
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
+        self.assertMessage(contains='ERROR: Postmaster with pid ')
 
         # Cleanup
         src_pg.stop()
@@ -730,14 +854,13 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         """
         # preparation:
         #   source
-        src_pg = self.make_simple_node(
-            base_dir = os.path.join(self.module_name, self.fname, 'src'),
+        src_pg = self.pg_node.make_simple('src',
             set_replication = True
             )
         src_pg.slow_start()
         #   destination
-        dst_pg = self.make_empty_node(os.path.join(self.module_name, self.fname, 'dst'))
-        self.catchup_node(
+        dst_pg = self.pg_node.make_empty('dst')
+        self.pb.catchup_node(
             backup_mode = 'FULL',
             source_pgdata = src_pg.data_dir,
             destination_node = dst_pg,
@@ -745,45 +868,33 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             )
         dst_options = {}
         dst_options['port'] = str(dst_pg.port)
-        self.set_auto_conf(dst_pg, dst_options)
+        dst_pg.set_auto_conf(dst_options)
         dst_pg.slow_start()
         dst_pg.stop()
         #   fake destination
-        fake_dst_pg = self.make_simple_node(base_dir = os.path.join(self.module_name, self.fname, 'fake_dst'))
+        fake_dst_pg = self.pg_node.make_simple('fake_dst')
         #   fake source
-        fake_src_pg = self.make_simple_node(base_dir = os.path.join(self.module_name, self.fname, 'fake_src'))
+        fake_src_pg = self.pg_node.make_simple('fake_src')
 
         # try delta catchup (src (with correct src conn), fake_dst)
-        try:
-            self.catchup_node(
+        self.pb.catchup_node(
                 backup_mode = 'DELTA',
                 source_pgdata = src_pg.data_dir,
                 destination_node = fake_dst_pg,
-                options = ['-d', 'postgres', '-p', str(src_pg.port), '--stream']
+                options = ['-d', 'postgres', '-p', str(src_pg.port), '--stream'],
+                expect_error="because database identifiers mismatch"
                 )
-            self.assertEqual(1, 0, "Expecting Error because database identifiers mismatch.\n Output: {0} \n CMD: {1}".format(
-                repr(self.output), self.cmd))
-        except ProbackupException as e:
-            self.assertIn(
-                'ERROR: Database identifiers mismatch: ',
-                e.message,
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
+        self.assertMessage(contains='ERROR: Database identifiers mismatch: ')
 
         # try delta catchup (fake_src (with wrong src conn), dst)
-        try:
-            self.catchup_node(
+        self.pb.catchup_node(
                 backup_mode = 'DELTA',
                 source_pgdata = fake_src_pg.data_dir,
                 destination_node = dst_pg,
-                options = ['-d', 'postgres', '-p', str(src_pg.port), '--stream']
+                options = ['-d', 'postgres', '-p', str(src_pg.port), '--stream'],
+                expect_error="because database identifiers mismatch"
                 )
-            self.assertEqual(1, 0, "Expecting Error because database identifiers mismatch.\n Output: {0} \n CMD: {1}".format(
-                repr(self.output), self.cmd))
-        except ProbackupException as e:
-            self.assertIn(
-                'ERROR: Database identifiers mismatch: ',
-                e.message,
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
+        self.assertMessage(contains='ERROR: Database identifiers mismatch: ')
 
         # Cleanup
         src_pg.stop()
@@ -793,16 +904,15 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         Test that we detect TLI mismatch in destination
         """
         # preparation 1: source
-        src_pg = self.make_simple_node(
-            base_dir = os.path.join(self.module_name, self.fname, 'src'),
+        src_pg = self.pg_node.make_simple('src',
             set_replication = True,
             pg_options = { 'wal_log_hints': 'on' }
             )
         src_pg.slow_start()
 
         # preparation 2: destination
-        dst_pg = self.make_empty_node(os.path.join(self.module_name, self.fname, 'dst'))
-        self.catchup_node(
+        dst_pg = self.pg_node.make_empty('dst')
+        self.pb.catchup_node(
             backup_mode = 'FULL',
             source_pgdata = src_pg.data_dir,
             destination_node = dst_pg,
@@ -810,7 +920,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             )
         dst_options = {}
         dst_options['port'] = str(dst_pg.port)
-        self.set_auto_conf(dst_pg, dst_options)
+        dst_pg.set_auto_conf(dst_options)
         self.set_replica(src_pg, dst_pg)
         dst_pg.slow_start(replica = True)
         dst_pg.promote()
@@ -818,28 +928,16 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
 
         # preparation 3: "useful" changes
         src_pg.safe_psql("postgres", "CREATE TABLE ultimate_question AS SELECT 42 AS answer")
-        src_query_result = src_pg.table_checksum("ultimate_question")
 
         # try catchup
-        try:
-            self.catchup_node(
+        self.pb.catchup_node(
                 backup_mode = 'DELTA',
                 source_pgdata = src_pg.data_dir,
                 destination_node = dst_pg,
-                options = ['-d', 'postgres', '-p', str(src_pg.port), '--stream']
+                options = ['-d', 'postgres', '-p', str(src_pg.port), '--stream'],
+                expect_error="because of stale timeline",
                 )
-            dst_options = {}
-            dst_options['port'] = str(dst_pg.port)
-            self.set_auto_conf(dst_pg, dst_options)
-            dst_pg.slow_start()
-            dst_query_result = dst_pg.table_checksum("ultimate_question")
-            dst_pg.stop()
-            self.assertEqual(src_query_result, dst_query_result, 'Different answer from copy')
-        except ProbackupException as e:
-            self.assertIn(
-                'ERROR: Source is behind destination in timeline history',
-                e.message,
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
+        self.assertMessage(contains='ERROR: Source is behind destination in timeline history')
 
         # Cleanup
         src_pg.stop()
@@ -849,16 +947,15 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         Test that we detect TLI mismatch in source history
         """
         # preparation 1: source
-        src_pg = self.make_simple_node(
-            base_dir = os.path.join(self.module_name, self.fname, 'src'),
+        src_pg = self.pg_node.make_simple('src',
             set_replication = True,
             pg_options = { 'wal_log_hints': 'on' }
             )
         src_pg.slow_start()
 
         # preparation 2: fake source (promouted copy)
-        fake_src_pg = self.make_empty_node(os.path.join(self.module_name, self.fname, 'fake_src'))
-        self.catchup_node(
+        fake_src_pg = self.pg_node.make_empty('fake_src')
+        self.pb.catchup_node(
             backup_mode = 'FULL',
             source_pgdata = src_pg.data_dir,
             destination_node = fake_src_pg,
@@ -866,7 +963,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             )
         fake_src_options = {}
         fake_src_options['port'] = str(fake_src_pg.port)
-        self.set_auto_conf(fake_src_pg, fake_src_options)
+        fake_src_pg.set_auto_conf(fake_src_options)
         self.set_replica(src_pg, fake_src_pg)
         fake_src_pg.slow_start(replica = True)
         fake_src_pg.promote()
@@ -881,8 +978,8 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         fake_src_pg.safe_psql("postgres", "CREATE TABLE ultimate_question AS SELECT 'trash' AS garbage")
 
         # preparation 3: destination
-        dst_pg = self.make_empty_node(os.path.join(self.module_name, self.fname, 'dst'))
-        self.catchup_node(
+        dst_pg = self.pg_node.make_empty('dst')
+        self.pb.catchup_node(
             backup_mode = 'FULL',
             source_pgdata = src_pg.data_dir,
             destination_node = dst_pg,
@@ -890,34 +987,22 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             )
         dst_options = {}
         dst_options['port'] = str(dst_pg.port)
-        self.set_auto_conf(dst_pg, dst_options)
+        dst_pg.set_auto_conf(dst_options)
         dst_pg.slow_start()
         dst_pg.stop()
 
         # preparation 4: "useful" changes
         src_pg.safe_psql("postgres", "CREATE TABLE ultimate_question AS SELECT 42 AS answer")
-        src_query_result = src_pg.table_checksum("ultimate_question")
 
         # try catchup
-        try:
-            self.catchup_node(
-                backup_mode = 'DELTA',
-                source_pgdata = fake_src_pg.data_dir,
-                destination_node = dst_pg,
-                options = ['-d', 'postgres', '-p', str(fake_src_pg.port), '--stream']
-                )
-            dst_options = {}
-            dst_options['port'] = str(dst_pg.port)
-            self.set_auto_conf(dst_pg, dst_options)
-            dst_pg.slow_start()
-            dst_query_result = dst_pg.table_checksum("ultimate_question")
-            dst_pg.stop()
-            self.assertEqual(src_query_result, dst_query_result, 'Different answer from copy')
-        except ProbackupException as e:
-            self.assertIn(
-                'ERROR: Destination is not in source timeline history',
-                e.message,
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
+        self.pb.catchup_node(
+            backup_mode = 'DELTA',
+            source_pgdata = fake_src_pg.data_dir,
+            destination_node = dst_pg,
+            options = ['-d', 'postgres', '-p', str(fake_src_pg.port), '--stream'],
+            expect_error="because of future timeline",
+            )
+        self.assertMessage(contains='ERROR: Destination is not in source timeline history')
 
         # Cleanup
         src_pg.stop()
@@ -931,8 +1016,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         Test that we correctly recover uncleanly shutdowned destination
         """
         # preparation 1: source
-        src_pg = self.make_simple_node(
-            base_dir = os.path.join(self.module_name, self.fname, 'src'),
+        src_pg = self.pg_node.make_simple('src',
             set_replication = True,
             pg_options = { 'wal_log_hints': 'on' }
             )
@@ -942,8 +1026,8 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             "CREATE TABLE ultimate_question(answer int)")
 
         # preparation 2: destination
-        dst_pg = self.make_empty_node(os.path.join(self.module_name, self.fname, 'dst'))
-        self.catchup_node(
+        dst_pg = self.pg_node.make_empty('dst')
+        self.pb.catchup_node(
             backup_mode = 'FULL',
             source_pgdata = src_pg.data_dir,
             destination_node = dst_pg,
@@ -951,25 +1035,19 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             )
 
         # try #1
-        try:
-            self.catchup_node(
+        self.pb.catchup_node(
                 backup_mode = 'DELTA',
                 source_pgdata = src_pg.data_dir,
                 destination_node = dst_pg,
-                options = ['-d', 'postgres', '-p', str(src_pg.port), '--stream']
+                options = ['-d', 'postgres', '-p', str(src_pg.port), '--stream'],
+                expect_error="because destination pg is not cleanly shutdowned"
                 )
-            self.assertEqual(1, 0, "Expecting Error because destination pg is not cleanly shutdowned.\n Output: {0} \n CMD: {1}".format(
-                repr(self.output), self.cmd))
-        except ProbackupException as e:
-            self.assertIn(
-                'ERROR: Destination directory contains "backup_label" file',
-                e.message,
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
+        self.assertMessage(contains='ERROR: Destination directory contains "backup_label" file')
 
         # try #2
         dst_options = {}
         dst_options['port'] = str(dst_pg.port)
-        self.set_auto_conf(dst_pg, dst_options)
+        dst_pg.set_auto_conf(dst_options)
         dst_pg.slow_start()
         self.assertNotEqual(dst_pg.pid, 0, "Cannot detect pid of running postgres")
         dst_pg.kill()
@@ -982,7 +1060,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         src_query_result = src_pg.table_checksum("ultimate_question")
 
         # do delta catchup
-        self.catchup_node(
+        self.pb.catchup_node(
             backup_mode = 'DELTA',
             source_pgdata = src_pg.data_dir,
             destination_node = dst_pg,
@@ -1000,7 +1078,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         self.set_replica(master = src_pg, replica = dst_pg)
         dst_options = {}
         dst_options['port'] = str(dst_pg.port)
-        self.set_auto_conf(dst_pg, dst_options)
+        dst_pg.set_auto_conf(dst_options)
         dst_pg.slow_start(replica = True)
 
         # 2nd check: run verification query
@@ -1018,8 +1096,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             self.skipTest('Skipped because ptrack support is disabled')
 
         # preparation 1: source
-        src_pg = self.make_simple_node(
-            base_dir = os.path.join(self.module_name, self.fname, 'src'),
+        src_pg = self.pg_node.make_simple('src',
             set_replication = True,
             ptrack_enable = True,
             pg_options = { 'wal_log_hints': 'on' }
@@ -1031,8 +1108,8 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             "CREATE TABLE ultimate_question(answer int)")
 
         # preparation 2: destination
-        dst_pg = self.make_empty_node(os.path.join(self.module_name, self.fname, 'dst'))
-        self.catchup_node(
+        dst_pg = self.pg_node.make_empty('dst')
+        self.pb.catchup_node(
             backup_mode = 'FULL',
             source_pgdata = src_pg.data_dir,
             destination_node = dst_pg,
@@ -1040,25 +1117,19 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             )
 
         # try #1
-        try:
-            self.catchup_node(
+        self.pb.catchup_node(
                 backup_mode = 'PTRACK',
                 source_pgdata = src_pg.data_dir,
                 destination_node = dst_pg,
-                options = ['-d', 'postgres', '-p', str(src_pg.port), '--stream']
+                options = ['-d', 'postgres', '-p', str(src_pg.port), '--stream'],
+                expect_error="because destination pg is not cleanly shutdowned"
                 )
-            self.assertEqual(1, 0, "Expecting Error because destination pg is not cleanly shutdowned.\n Output: {0} \n CMD: {1}".format(
-                repr(self.output), self.cmd))
-        except ProbackupException as e:
-            self.assertIn(
-                'ERROR: Destination directory contains "backup_label" file',
-                e.message,
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
+        self.assertMessage(contains='ERROR: Destination directory contains "backup_label" file')
 
         # try #2
         dst_options = {}
         dst_options['port'] = str(dst_pg.port)
-        self.set_auto_conf(dst_pg, dst_options)
+        dst_pg.set_auto_conf(dst_options)
         dst_pg.slow_start()
         self.assertNotEqual(dst_pg.pid, 0, "Cannot detect pid of running postgres")
         dst_pg.kill()
@@ -1071,7 +1142,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         src_query_result = src_pg.table_checksum("ultimate_question")
 
         # do delta catchup
-        self.catchup_node(
+        self.pb.catchup_node(
             backup_mode = 'PTRACK',
             source_pgdata = src_pg.data_dir,
             destination_node = dst_pg,
@@ -1089,7 +1160,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         self.set_replica(master = src_pg, replica = dst_pg)
         dst_options = {}
         dst_options['port'] = str(dst_pg.port)
-        self.set_auto_conf(dst_pg, dst_options)
+        dst_pg.set_auto_conf(dst_options)
         dst_pg.slow_start(replica = True)
 
         # 2nd check: run verification query
@@ -1117,48 +1188,41 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         """
         """
         # preparation
-        src_pg = self.make_simple_node(
-            base_dir = os.path.join(self.module_name, self.fname, 'src'),
+        src_pg = self.pg_node.make_simple('src',
             set_replication = True
             )
         src_pg.slow_start()
 
         # 1a. --slot option
-        dst_pg = self.make_empty_node(os.path.join(self.module_name, self.fname, 'dst_1a'))
-        try:
-            self.catchup_node(
+        dst_pg = self.pg_node.make_empty('dst_1a')
+        self.pb.catchup_node(
                 backup_mode = 'FULL',
                 source_pgdata = src_pg.data_dir,
                 destination_node = dst_pg,
                 options = [
                     '-d', 'postgres', '-p', str(src_pg.port), '--stream',
-                    '--slot=nonexistentslot_1a'
-                    ]
+                    '--slot=nonexistentslot_1a', '--temp-slot=false'
+                    ],
+                expect_error="because replication slot does not exist"
                 )
-            self.assertEqual(1, 0, "Expecting Error because replication slot does not exist.\n Output: {0} \n CMD: {1}".format(
-                repr(self.output), self.cmd))
-        except ProbackupException as e:
-            self.assertIn(
-                'ERROR:  replication slot "nonexistentslot_1a" does not exist',
-                e.message,
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
+        self.assertMessage(contains='ERROR:  replication slot "nonexistentslot_1a" does not exist')
 
 	# 1b. --slot option
-        dst_pg = self.make_empty_node(os.path.join(self.module_name, self.fname, 'dst_1b'))
+        dst_pg = self.pg_node.make_empty('dst_1b')
         src_pg.safe_psql("postgres", "SELECT pg_catalog.pg_create_physical_replication_slot('existentslot_1b')")
-        self.catchup_node(
+        self.pb.catchup_node(
             backup_mode = 'FULL',
             source_pgdata = src_pg.data_dir,
             destination_node = dst_pg,
             options = [
                 '-d', 'postgres', '-p', str(src_pg.port), '--stream',
-                '--slot=existentslot_1b'
+                '--slot=existentslot_1b', '--temp-slot=false'
                 ]
             )
 
         # 2a. --slot --perm-slot
-        dst_pg = self.make_empty_node(os.path.join(self.module_name, self.fname, 'dst_2a'))
-        self.catchup_node(
+        dst_pg = self.pg_node.make_empty('dst_2a')
+        self.pb.catchup_node(
             backup_mode = 'FULL',
             source_pgdata = src_pg.data_dir,
             destination_node = dst_pg,
@@ -1170,10 +1234,9 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             )
 
         # 2b. and 4. --slot --perm-slot
-        dst_pg = self.make_empty_node(os.path.join(self.module_name, self.fname, 'dst_2b'))
+        dst_pg = self.pg_node.make_empty('dst_2b')
         src_pg.safe_psql("postgres", "SELECT pg_catalog.pg_create_physical_replication_slot('existentslot_2b')")
-        try:
-            self.catchup_node(
+        self.pb.catchup_node(
                 backup_mode = 'FULL',
                 source_pgdata = src_pg.data_dir,
                 destination_node = dst_pg,
@@ -1181,19 +1244,14 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
                     '-d', 'postgres', '-p', str(src_pg.port), '--stream',
                     '--slot=existentslot_2b',
                     '--perm-slot'
-                    ]
+                    ],
+                expect_error="because replication slot already exist"
                 )
-            self.assertEqual(1, 0, "Expecting Error because replication slot already exist.\n Output: {0} \n CMD: {1}".format(
-                repr(self.output), self.cmd))
-        except ProbackupException as e:
-            self.assertIn(
-                'ERROR:  replication slot "existentslot_2b" already exists',
-                e.message,
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
+        self.assertMessage(contains='ERROR:  replication slot "existentslot_2b" already exists')
 
         # 3. --perm-slot --slot
-        dst_pg = self.make_empty_node(os.path.join(self.module_name, self.fname, 'dst_3'))
-        self.catchup_node(
+        dst_pg = self.pg_node.make_empty('dst_3')
+        self.pb.catchup_node(
             backup_mode = 'FULL',
             source_pgdata = src_pg.data_dir,
             destination_node = dst_pg,
@@ -1210,29 +1268,47 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             ).decode('utf-8').rstrip()
         self.assertEqual(slot_name, 'pg_probackup_perm_slot', 'Slot name mismatch')
 
-        # 5. --perm-slot --temp-slot (PG>=10)
-        if self.get_version(src_pg) >= self.version_to_num('10.0'):
-            dst_pg = self.make_empty_node(os.path.join(self.module_name, self.fname, 'dst_5'))
-            try:
-                self.catchup_node(
-                    backup_mode = 'FULL',
-                    source_pgdata = src_pg.data_dir,
-                    destination_node = dst_pg,
-                    options = [
-                        '-d', 'postgres', '-p', str(src_pg.port), '--stream',
-                        '--perm-slot',
-                        '--temp-slot'
-                        ]
-                    )
-                self.assertEqual(1, 0, "Expecting Error because conflicting options --perm-slot and --temp-slot used together\n Output: {0} \n CMD: {1}".format(
-                    repr(self.output), self.cmd))
-            except ProbackupException as e:
-                self.assertIn(
-                    'ERROR: You cannot specify "--perm-slot" option with the "--temp-slot" option',
-                    e.message,
-                    '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
+        # 5. --perm-slot --temp-slot
+        dst_pg = self.pg_node.make_empty('dst_5a')
+        self.pb.catchup_node(
+                backup_mode = 'FULL',
+                source_pgdata = src_pg.data_dir,
+                destination_node = dst_pg,
+                options = [
+                    '-d', 'postgres', '-p', str(src_pg.port), '--stream',
+                    '--perm-slot',
+                    '--temp-slot'
+                    ],
+                expect_error="because conflicting options --perm-slot and --temp-slot used together"
+                )
+        self.assertMessage(contains='ERROR: You cannot specify "--perm-slot" option with the "--temp-slot" option')
 
-        #self.assertEqual(1, 0, 'Stop test')
+        dst_pg = self.pg_node.make_empty('dst_5b')
+        self.pb.catchup_node(
+                backup_mode = 'FULL',
+                source_pgdata = src_pg.data_dir,
+                destination_node = dst_pg,
+                options = [
+                    '-d', 'postgres', '-p', str(src_pg.port), '--stream',
+                    '--perm-slot',
+                    '--temp-slot=true'
+                    ],
+                expect_error="because conflicting options --perm-slot and --temp-slot used together"
+                )
+        self.assertMessage(contains='ERROR: You cannot specify "--perm-slot" option with the "--temp-slot" option')
+
+        dst_pg = self.pg_node.make_empty('dst_5c')
+        self.pb.catchup_node(
+                backup_mode = 'FULL',
+                source_pgdata = src_pg.data_dir,
+                destination_node = dst_pg,
+                options = [
+                    '-d', 'postgres', '-p', str(src_pg.port), '--stream',
+                    '--perm-slot',
+                    '--temp-slot=false',
+                    '--slot=dst_5c'
+                    ],
+                )
 
 #########################################
 # --exclude-path
@@ -1242,8 +1318,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         various syntetic tests for --exclude-path option
         """
         # preparation
-        src_pg = self.make_simple_node(
-            base_dir = os.path.join(self.module_name, self.fname, 'src'),
+        src_pg = self.pg_node.make_simple('src',
             set_replication = True
             )
         src_pg.slow_start()
@@ -1260,8 +1335,8 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             f.flush()
             f.close
 
-        dst_pg = self.make_empty_node(os.path.join(self.module_name, self.fname, 'dst'))
-        self.catchup_node(
+        dst_pg = self.pg_node.make_empty('dst')
+        self.pb.catchup_node(
             backup_mode = 'FULL',
             source_pgdata = src_pg.data_dir,
             destination_node = dst_pg,
@@ -1279,7 +1354,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         self.set_replica(src_pg, dst_pg)
         dst_options = {}
         dst_options['port'] = str(dst_pg.port)
-        self.set_auto_conf(dst_pg, dst_options)
+        dst_pg.set_auto_conf(dst_options)
         dst_pg.slow_start(replica = True)
         dst_pg.stop()
 
@@ -1291,7 +1366,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             f.flush()
             f.close
 
-        self.catchup_node(
+        self.pb.catchup_node(
             backup_mode = 'DELTA',
             source_pgdata = src_pg.data_dir,
             destination_node = dst_pg,
@@ -1317,8 +1392,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         Test that catchup can preserve dest replication config
         """
         # preparation 1: source
-        src_pg = self.make_simple_node(
-            base_dir = os.path.join(self.module_name, self.fname, 'src'),
+        src_pg = self.pg_node.make_simple('src',
             set_replication = True,
             pg_options = { 'wal_log_hints': 'on' }
             )
@@ -1328,8 +1402,8 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             "CREATE TABLE ultimate_question(answer int)")
 
         # preparation 2: make lagging behind replica
-        dst_pg = self.make_empty_node(os.path.join(self.module_name, self.fname, 'dst'))
-        self.catchup_node(
+        dst_pg = self.pg_node.make_empty('dst')
+        self.pb.catchup_node(
             backup_mode = 'FULL',
             source_pgdata = src_pg.data_dir,
             destination_node = dst_pg,
@@ -1338,7 +1412,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         self.set_replica(src_pg, dst_pg)
         dst_options = {}
         dst_options['port'] = str(dst_pg.port)
-        self.set_auto_conf(dst_pg, dst_options)
+        dst_pg.set_auto_conf(dst_options)
         dst_pg._assign_master(src_pg)
         dst_pg.slow_start(replica = True)
         dst_pg.stop()
@@ -1349,7 +1423,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         pgbench.wait()
 
         # test 1: do delta catchup with relative exclusion paths
-        self.catchup_node(
+        self.pb.catchup_node(
             backup_mode = 'DELTA',
             source_pgdata = src_pg.data_dir,
             destination_node = dst_pg,
@@ -1379,7 +1453,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         pgbench.wait()
 
         # test 2: do delta catchup with absolute source exclusion paths
-        self.catchup_node(
+        self.pb.catchup_node(
             backup_mode = 'DELTA',
             source_pgdata = src_pg.data_dir,
             destination_node = dst_pg,
@@ -1408,7 +1482,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         pgbench.wait()
 
         # test 3: do delta catchup with absolute destination exclusion paths
-        self.catchup_node(
+        self.pb.catchup_node(
             backup_mode = 'DELTA',
             source_pgdata = src_pg.data_dir,
             destination_node = dst_pg,
@@ -1444,14 +1518,13 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         Test dry-run option for full catchup
         """
         # preparation 1: source
-        src_pg = self.make_simple_node(
-            base_dir = os.path.join(self.module_name, self.fname, 'src'),
+        src_pg = self.pg_node.make_simple('src',
             set_replication = True
             )
         src_pg.slow_start()
 
         # preparation 2: make clean shutdowned lagging behind replica
-        dst_pg = self.make_empty_node(os.path.join(self.module_name, self.fname, 'dst'))
+        dst_pg = self.pg_node.make_empty('dst')
 
         src_pg.pgbench_init(scale = 10)
         pgbench = src_pg.pgbench(options=['-T', '10', '--no-vacuum'])
@@ -1461,7 +1534,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         content_before = self.pgdata_content(dst_pg.data_dir)
 
         # do full catchup
-        self.catchup_node(
+        self.pb.catchup_node(
             backup_mode = 'FULL',
             source_pgdata = src_pg.data_dir,
             destination_node = dst_pg,
@@ -1485,12 +1558,9 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             self.skipTest('Skipped because ptrack support is disabled')
 
          # preparation 1: source
-        src_pg = self.make_simple_node(
-            base_dir = os.path.join(self.module_name, self.fname, 'src'),
+        src_pg = self.pg_node.make_simple('src',
             set_replication = True,
-            ptrack_enable = True,
-            initdb_params = ['--data-checksums']
-            )
+            ptrack_enable = True)
         src_pg.slow_start()
         src_pg.safe_psql("postgres", "CREATE EXTENSION ptrack")
 
@@ -1499,8 +1569,8 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         pgbench.wait()
 
         # preparation 2: make clean shutdowned lagging behind replica
-        dst_pg = self.make_empty_node(os.path.join(self.module_name, self.fname, 'dst'))
-        self.catchup_node(
+        dst_pg = self.pg_node.make_empty('dst')
+        self.pb.catchup_node(
             backup_mode = 'FULL',
             source_pgdata = src_pg.data_dir,
             destination_node = dst_pg,
@@ -1509,7 +1579,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         self.set_replica(src_pg, dst_pg)
         dst_options = {}
         dst_options['port'] = str(dst_pg.port)
-        self.set_auto_conf(dst_pg, dst_options)
+        dst_pg.set_auto_conf(dst_options)
         dst_pg.slow_start(replica = True)
         dst_pg.stop()
 
@@ -1517,7 +1587,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         content_before = self.pgdata_content(dst_pg.data_dir)
 
         # do incremental catchup
-        self.catchup_node(
+        self.pb.catchup_node(
             backup_mode = 'PTRACK',
             source_pgdata = src_pg.data_dir,
             destination_node = dst_pg,
@@ -1539,10 +1609,8 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         """
 
         # preparation 1: source
-        src_pg = self.make_simple_node(
-            base_dir = os.path.join(self.module_name, self.fname, 'src'),
+        src_pg = self.pg_node.make_simple('src',
             set_replication = True,
-            initdb_params = ['--data-checksums'],
             pg_options = { 'wal_log_hints': 'on' }
             )
         src_pg.slow_start()
@@ -1552,8 +1620,8 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         pgbench.wait()
 
          # preparation 2: make clean shutdowned lagging behind replica
-        dst_pg = self.make_empty_node(os.path.join(self.module_name, self.fname, 'dst'))
-        self.catchup_node(
+        dst_pg = self.pg_node.make_empty('dst')
+        self.pb.catchup_node(
             backup_mode = 'FULL',
             source_pgdata = src_pg.data_dir,
             destination_node = dst_pg,
@@ -1562,7 +1630,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         self.set_replica(src_pg, dst_pg)
         dst_options = {}
         dst_options['port'] = str(dst_pg.port)
-        self.set_auto_conf(dst_pg, dst_options)
+        dst_pg.set_auto_conf(dst_options)
         dst_pg.slow_start(replica = True)
         dst_pg.stop()
 
@@ -1570,7 +1638,7 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         content_before = self.pgdata_content(dst_pg.data_dir)
 
         # do delta catchup
-        self.catchup_node(
+        self.pb.catchup_node(
             backup_mode = 'DELTA',
             source_pgdata = src_pg.data_dir,
             destination_node = dst_pg,
@@ -1591,14 +1659,14 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
         or from the env var. This test that PGDATA is actually ignored and
         --source-pgadta is used instead
         """
-        node = self.make_simple_node('node',
+        node = self.pg_node.make_simple('node',
             set_replication = True
             )
         node.slow_start()
 
         # do full catchup
-        dest = self.make_empty_node('dst')
-        self.catchup_node(
+        dest = self.pg_node.make_empty('dst')
+        self.pb.catchup_node(
             backup_mode = 'FULL',
             source_pgdata = node.data_dir,
             destination_node = dest,
@@ -1610,10 +1678,10 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             self.pgdata_content(dest.data_dir)
             )
 
-        os.environ['PGDATA']='xxx'
+        self.test_env['PGDATA']='xxx'
 
-        dest2 = self.make_empty_node('dst')
-        self.catchup_node(
+        dest2 = self.pg_node.make_empty('dst')
+        self.pb.catchup_node(
             backup_mode = 'FULL',
             source_pgdata = node.data_dir,
             destination_node = dest2,
@@ -1624,3 +1692,371 @@ class CatchupTest(ProbackupTest, unittest.TestCase):
             self.pgdata_content(node.data_dir),
             self.pgdata_content(dest2.data_dir)
             )
+
+    def test_catchup_from_standby_single_wal(self):
+        """ Make a standby node, with a single WAL file in it and try to catchup """
+        node = self.pg_node.make_simple('node',
+                                        pg_options={'hot_standby': 'on'})
+        node.set_auto_conf({}, 'postgresql.conf', ['max_worker_processes'])
+        standby_signal = os.path.join(node.data_dir, 'standby.signal')
+        with open(standby_signal, 'w') as fout:
+            fout.flush()
+            fout.close()
+        node.start()
+
+        # No inserts to keep WAL size small
+
+        dest = self.pg_node.make_empty('dst')
+
+        self.pb.catchup_node(
+            backup_mode='FULL',
+            source_pgdata=node.data_dir,
+            destination_node=dest,
+            options = ['-d', 'postgres', '-p', str(node.port), '--stream']
+        )
+
+        dst_options = {}
+        dst_options['port'] = str(dest.port)
+        dest.set_auto_conf(dst_options)
+
+        dest.slow_start()
+        res = dest.safe_psql("postgres", "select 1").decode('utf-8').strip()
+        self.assertEqual(res, "1")
+
+    def test_catchup_ptrack_unlogged(self):
+        """ catchup + ptrack when unlogged tables exist """
+        node = self.pg_node.make_simple('node', ptrack_enable = True)
+        node.slow_start()
+        node.safe_psql("postgres", "CREATE EXTENSION ptrack")
+
+        dest = self.pg_node.make_empty('dst')
+
+        self.pb.catchup_node(
+            backup_mode='FULL',
+            source_pgdata=node.data_dir,
+            destination_node=dest,
+            options = ['-d', 'postgres', '-p', str(node.port), '--stream']
+        )
+
+        for i in range(1,7):
+            node.safe_psql('postgres', 'create unlogged table t' + str(i) + ' (id int, name text);')
+
+        dst_options = {}
+        dst_options['port'] = str(dest.port)
+        dest.set_auto_conf(dst_options)
+
+        dest.slow_start()
+        dest.stop()
+
+        self.pb.catchup_node(
+            backup_mode = 'PTRACK',
+            source_pgdata = node.data_dir,
+            destination_node = dest,
+            options = ['-d', 'postgres', '-p', str(node.port), '--stream', '--dry-run']
+            )
+
+        return
+
+    def test_catchup_instance_from_the_past(self):
+        src_pg = self.pg_node.make_simple('src',
+                                          set_replication=True
+                                          )
+        src_pg.slow_start()
+        dst_pg = self.pg_node.make_empty('dst')
+        self.pb.catchup_node(
+            backup_mode='FULL',
+            source_pgdata=src_pg.data_dir,
+            destination_node=dst_pg,
+            options=['-d', 'postgres', '-p', str(src_pg.port), '--stream']
+        )
+        dst_options = {'port': str(dst_pg.port)}
+        dst_pg.set_auto_conf(dst_options)
+        dst_pg.slow_start()
+        dst_pg.pgbench_init(scale=10)
+        pgbench = dst_pg.pgbench(
+            stdout=subprocess.PIPE,
+            options=["-c", "4", "-T", "20"])
+        pgbench.wait()
+        pgbench.stdout.close()
+        dst_pg.stop()
+        self.pb.catchup_node(
+            backup_mode='DELTA',
+            source_pgdata=src_pg.data_dir,
+            destination_node=dst_pg,
+            options=[
+                '-d', 'postgres',
+                '-p', str(src_pg.port),
+                '--stream'
+            ],
+            expect_error="because instance is from the past"
+        )
+
+        self.assertMessage(regex='ERROR: Current START LSN .* is lower than SYNC LSN')
+        self.assertMessage(contains='it may indicate that we are trying to catchup '
+                                    'with PostgreSQL instance from the past')
+
+
+#########################################
+# --waldir
+#########################################
+
+    def test_waldir_option(self):
+        """
+        Test waldir option for full catchup
+        """
+        if not self.ptrack:
+            self.skipTest('Skipped because ptrack support is disabled')
+        # preparation: source
+        src_pg = self.pg_node.make_simple('src',
+                                        set_replication = True,
+                                        ptrack_enable = True
+            )
+        src_pg.slow_start()
+        src_pg.safe_psql("postgres", "CREATE EXTENSION ptrack")
+
+        # do full catchup
+        dst_pg = self.pg_node.make_empty('dst')
+        self.pb.catchup_node(
+            backup_mode = 'FULL',
+            source_pgdata = src_pg.data_dir,
+            destination_node = dst_pg,
+            options = [
+                '-d', 'postgres', '-p', str(src_pg.port), '--stream',
+                '--waldir={0}'.format(os.path.join(self.test_path, 'tmp_new_wal_dir')),
+                ]
+            )
+
+        # 1st check: compare data directories
+        self.compare_pgdata(
+            self.pgdata_content(src_pg.data_dir),
+            self.pgdata_content(dst_pg.data_dir)
+            )
+
+        # 2nd check new waldir exists
+        self.assertTrue(Path(os.path.join(self.test_path, 'tmp_new_wal_dir')).exists())
+
+        #3rd check pg_wal is symlink
+        if src_pg.major_version >= 10:
+            wal_path = os.path.join(dst_pg.data_dir, "pg_wal")
+        else:
+            wal_path = os.path.join(dst_pg.data_dir, "pg_xlog")
+
+        self.assertEqual(os.path.islink(wal_path), True)
+        print("FULL DONE ----------------------------------------------------------")
+
+        """
+        Test waldir otion for delta catchup to different directory from full catchup's wal directory
+        """
+        # preparation 2: make clean shutdowned lagging behind replica
+
+        self.set_replica(src_pg, dst_pg)
+        dst_options = {}
+        dst_options['port'] = str(dst_pg.port)
+        dst_pg.set_auto_conf(dst_options)
+        dst_pg.slow_start(replica=True)
+        dst_pg.stop()
+
+        # do delta catchup
+        self.pb.catchup_node(
+            backup_mode='DELTA',
+            source_pgdata=src_pg.data_dir,
+            destination_node=dst_pg,
+            options=['-d', 'postgres', '-p', str(src_pg.port), '--stream',
+                     '--waldir={0}'.format(os.path.join(self.test_path, 'tmp_another_wal_dir')),
+                     ],
+            expect_error="because we perform DELTA catchup's WAL in a different dir from FULL catchup's WAL dir",
+        )
+        self.assertMessage(contains='ERROR: WAL directory does not egual to symlinked pg_wal path')
+
+        print("ANOTHER DIR DONE ------------------------------------------------")
+
+        """
+        Test waldir otion to delta catchup
+        """
+
+        self.set_replica(src_pg, dst_pg)
+        dst_pg._assign_master(src_pg)
+        dst_pg.slow_start(replica = True)
+        dst_pg.stop()
+
+        # preparation 3: make changes on master (source)
+        src_pg.pgbench_init(scale = 10)
+        pgbench = src_pg.pgbench(options=['-T', '2', '--no-vacuum'])
+        pgbench.wait()
+
+        # do delta catchup
+        self.pb.catchup_node(
+            backup_mode = 'DELTA',
+            source_pgdata = src_pg.data_dir,
+            destination_node = dst_pg,
+            options = ['-d', 'postgres', '-p', str(src_pg.port), '--stream',
+                       '--waldir={0}'.format(os.path.join(self.test_path, 'tmp_new_wal_dir')),
+                       ],
+        )
+
+        # 1st check: compare data directories
+        self.compare_pgdata(
+            self.pgdata_content(src_pg.data_dir),
+            self.pgdata_content(dst_pg.data_dir)
+        )
+
+        # 2nd check new waldir exists
+        self.assertTrue(Path(os.path.join(self.test_path, 'tmp_new_wal_dir')).exists())
+
+        #3rd check pg_wal is symlink
+        if src_pg.major_version >= 10:
+            wal_path = os.path.join(dst_pg.data_dir, "pg_wal")
+        else:
+            wal_path = os.path.join(dst_pg.data_dir, "pg_xlog")
+
+        self.assertEqual(os.path.islink(wal_path), True)
+
+        print ("DELTA DONE---------------------------------------------------------")
+
+        """
+        Test waldir option for catchup in incremental ptrack mode
+        """
+        self.set_replica(src_pg, dst_pg)
+        dst_pg.slow_start(replica = True)
+        dst_pg.stop()
+
+        # preparation 3: make changes on master (source)
+        src_pg.pgbench_init(scale = 10)
+        pgbench = src_pg.pgbench(options=['-T', '2', '--no-vacuum'])
+        pgbench.wait()
+
+        # do incremental catchup
+        self.pb.catchup_node(
+            backup_mode = 'PTRACK',
+            source_pgdata = src_pg.data_dir,
+            destination_node = dst_pg,
+            options = ['-d', 'postgres', '-p', str(src_pg.port), '--stream',
+                       '--waldir={0}'.format(os.path.join(self.test_path, 'tmp_new_wal_dir')),
+                       ]
+        )
+
+        # 1st check: compare data directories
+        self.compare_pgdata(
+            self.pgdata_content(src_pg.data_dir),
+            self.pgdata_content(dst_pg.data_dir)
+        )
+
+        # 2nd check new waldir exists
+        self.assertTrue(Path(os.path.join(self.test_path, 'tmp_new_wal_dir')).exists())
+
+        #3rd check pg_wal is symlink
+        if src_pg.major_version >= 10:
+            wal_path = os.path.join(dst_pg.data_dir, "pg_wal")
+        else:
+            wal_path = os.path.join(dst_pg.data_dir, "pg_xlog")
+
+        self.assertEqual(os.path.islink(wal_path), True)
+
+        print ("PTRACK DONE -----------------------------------------------------------")
+
+        """
+        Test waldir option for full catchup to not empty WAL directory
+        """
+
+        dst_pg = self.pg_node.make_empty('dst2')
+        self.pb.catchup_node(
+            backup_mode='FULL',
+            source_pgdata=src_pg.data_dir,
+            destination_node=dst_pg,
+            options=[
+                '-d', 'postgres', '-p', str(src_pg.port), '--stream',
+                '--waldir={0}'.format(os.path.join(self.test_path, 'tmp_new_wal_dir')),
+            ],
+
+            expect_error="because full catchup's WAL must be perform into empty directory",
+        )
+        self.assertMessage(contains='ERROR: Can\'t perform FULL catchup with non-empty pg_wal directory')
+
+        print ("ANOTHER FULL DONE -----------------------------------------------------")
+        # Cleanup
+        src_pg.stop()
+
+
+    def test_waldir_delta_catchup_without_full(self):
+        """
+        Test waldir otion with delta catchup without using it doing full
+        """
+        # preparation 1: source
+        src_pg = self.pg_node.make_simple('src',
+            set_replication = True,
+            pg_options = { 'wal_log_hints': 'on' }
+            )
+        src_pg.slow_start()
+
+        # preparation 2: make clean shutdowned lagging behind replica
+        dst_pg = self.pg_node.make_empty('dst')
+        self.pb.catchup_node(
+            backup_mode = 'FULL',
+            source_pgdata = src_pg.data_dir,
+            destination_node = dst_pg,
+            options = ['-d', 'postgres', '-p', str(src_pg.port), '--stream',
+                       ],
+            )
+        self.set_replica(src_pg, dst_pg)
+        dst_options = {}
+        dst_options['port'] = str(dst_pg.port)
+        dst_pg.set_auto_conf(dst_options)
+        dst_pg.slow_start(replica = True)
+        dst_pg.stop()
+
+        # do delta catchup
+        self.pb.catchup_node(
+            backup_mode = 'DELTA',
+            source_pgdata = src_pg.data_dir,
+            destination_node = dst_pg,
+            options = ['-d', 'postgres', '-p', str(src_pg.port), '--stream',
+                '--waldir={0}'.format(os.path.join(self.test_path, 'tmp_new_wal_dir')),
+            ],
+            expect_error="because we didn't perform FULL catchup's WAL before DELTA catchup",
+        )
+        self.assertMessage(contains='ERROR: Unable to read pg_wal symbolic link')
+
+        # Cleanup
+        src_pg.stop()
+
+
+    def test_waldir_dry_run_catchup_full(self):
+        """
+        Test waldir with dry-run option for full catchup
+        """
+        # preparation 1: source
+        src_pg = self.pg_node.make_simple('src',
+                                          set_replication = True,
+                                          pg_options = { 'wal_log_hints': 'on' }
+                                          )
+        src_pg.slow_start()
+
+        # preparation 2: make clean shutdowned lagging behind replica
+        dst_pg = self.pg_node.make_empty('dst')
+
+        src_pg.pgbench_init(scale = 10)
+        pgbench = src_pg.pgbench(options=['-T', '10', '--no-vacuum'])
+        pgbench.wait()
+
+        # save the condition before dry-run
+        content_before = self.pgdata_content(dst_pg.data_dir)
+
+        # do full catchup
+        self.pb.catchup_node(
+            backup_mode = 'FULL',
+            source_pgdata = src_pg.data_dir,
+            destination_node = dst_pg,
+            options = ['-d', 'postgres', '-p', str(src_pg.port), '--stream', '--dry-run',
+                       '--waldir={0}'.format(os.path.join(self.test_path, 'tmp_new_wal_dir')),
+                       ]
+        )
+
+        # compare data dirs before and after catchup
+        self.compare_pgdata(
+            content_before,
+            self.pgdata_content(dst_pg.data_dir)
+        )
+        self.assertFalse(Path(os.path.join(self.test_path, 'tmp_new_wal_dir')).exists())
+        # Cleanup
+        src_pg.stop()
+

@@ -1,21 +1,34 @@
 # you need os for unittest to work
+import gzip
+import io
 import os
-import gc
+import threading
 import unittest
-from sys import exit, argv, version_info
-import signal
-import subprocess
 import shutil
-import six
+import sys
+
 import testgres
+from testgres.enums import NodeStatus
 import hashlib
-import re
-import getpass
-import select
-from time import sleep
+import time
 import re
 import json
-import random
+import contextlib
+
+from pg_probackup2.gdb import GDBobj
+from pg_probackup2.init_helpers import init_params
+from pg_probackup2.app import ProbackupApp
+from pg_probackup2.storage.fs_backup import TestBackupDir, FSTestBackupDir
+
+try:
+    import lz4.frame
+except ImportError:
+    pass
+
+try:
+    import zstd
+except ImportError:
+    pass
 
 idx_ptrack = {
     't_heap': {
@@ -63,349 +76,133 @@ idx_ptrack = {
     }
 }
 
-warning = """
-Wrong splint in show_pb
-Original Header:
-{header}
-Original Body:
-{body}
-Splitted Header
-{header_split}
-Splitted Body
-{body_split}
-"""
 
+def load_backup_class(fs_type):
+    fs_type = os.environ.get('PROBACKUP_FS_TYPE')
+    implementation = f"{__package__}.fs_backup.FSTestBackupDir"
+    if fs_type:
+        implementation = fs_type
+
+    print("Using ", implementation)
+    module_name, class_name = implementation.rsplit(sep='.', maxsplit=1)
+
+    module = importlib.import_module(module_name)
+
+    return getattr(module, class_name)
+
+
+fs_backup_class = FSTestBackupDir
+if os.environ.get('PROBACKUP_FS_TYPE'):
+    fs_backup_class = load_backup_class(os.environ.get('PROBACKUP_FS_TYPE'))
+# Run tests on s3 when we have PG_PROBACKUP_S3_TEST (minio, vk...) or PG_PROBACKUP_S3_CONFIG_FILE.
+# If PG_PROBACKUP_S3_CONFIG_FILE is 'True', then using default conf file. Check config_provider.py
+elif (os.environ.get('PG_PROBACKUP_S3_TEST') and os.environ.get('PG_PROBACKUP_S3_HOST') or
+      os.environ.get('PG_PROBACKUP_S3_CONFIG_FILE')):
+    root = os.path.realpath(os.path.join(os.path.dirname(__file__), '../..'))
+    if root not in sys.path:
+        sys.path.append(root)
+    from tests.test_utils.s3_backup import S3TestBackupDir
+    fs_backup_class = S3TestBackupDir
 
 def dir_files(base_dir):
     out_list = []
     for dir_name, subdir_list, file_list in os.walk(base_dir):
-        if dir_name != base_dir:
-            out_list.append(os.path.relpath(dir_name, base_dir))
+        rel_dir = os.path.relpath(dir_name, base_dir)
+        if rel_dir != '.':
+            out_list.append(rel_dir)
         for fname in file_list:
             out_list.append(
                 os.path.relpath(os.path.join(
                     dir_name, fname), base_dir)
-                )
+            )
     out_list.sort()
     return out_list
 
 
-def is_pgpro():
-    # pg_config --help
-    cmd = [os.environ['PG_CONFIG'], '--help']
-
-    result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
-    return b'postgrespro' in result.stdout
-
-
-def is_enterprise():
-    # pg_config --help
-    cmd = [os.environ['PG_CONFIG'], '--help']
-
-    p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
-    # PostgresPro std or ent
-    if b'postgrespro' in p.stdout:
-        cmd = [os.environ['PG_CONFIG'], '--pgpro-edition']
-        p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
-
-        return b'enterprise' in p.stdout
-    else: # PostgreSQL
-        return False
-
-
-def is_nls_enabled():
-    cmd = [os.environ['PG_CONFIG'], '--configure']
-
-    result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
-    return b'enable-nls' in result.stdout
-
-
 def base36enc(number):
     """Converts an integer to a base36 string."""
+    if number < 0:
+        return '-' + base36enc(-number)
+
     alphabet = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'
     base36 = ''
-    sign = ''
-
-    if number < 0:
-        sign = '-'
-        number = -number
-
-    if 0 <= number < len(alphabet):
-        return sign + alphabet[number]
-
-    while number != 0:
+    while number >= len(alphabet):
         number, i = divmod(number, len(alphabet))
-        base36 = alphabet[i] + base36
+        base36 += alphabet[i]
+    base36 += alphabet[number]
+    return base36[::-1]
 
-    return sign + base36
+
+def base36dec(id):
+    return int(id, 36)
 
 
-class ProbackupException(Exception):
-    def __init__(self, message, cmd):
-        self.message = message
-        self.cmd = cmd
-
-    def __str__(self):
-        return '\n ERROR: {0}\n CMD: {1}'.format(repr(self.message), self.cmd)
-
-class PostgresNodeExtended(testgres.PostgresNode):
-
-    def __init__(self, base_dir=None, *args, **kwargs):
-        super(PostgresNodeExtended, self).__init__(name='test', base_dir=base_dir, *args, **kwargs)
-        self.is_started = False
-
-    def slow_start(self, replica=False):
-
-        # wait for https://github.com/postgrespro/testgres/pull/50
-        #    self.start()
-        #    self.poll_query_until(
-        #       "postgres",
-        #       "SELECT not pg_is_in_recovery()",
-        #       suppress={testgres.NodeConnection})
-        if replica:
-            query = 'SELECT pg_is_in_recovery()'
-        else:
-            query = 'SELECT not pg_is_in_recovery()'
-
-        self.start()
-        while True:
-            try:
-                output = self.safe_psql('template1', query).decode("utf-8").rstrip()
-
-                if output == 't':
-                    break
-
-            except testgres.QueryException as e:
-                if 'database system is starting up' in e.message:
-                    pass
-                elif 'FATAL:  the database system is not accepting connections' in e.message:
-                    pass
-                elif replica and 'Hot standby mode is disabled' in e.message:
-                    raise e
-                else:
-                    raise e
-
-            sleep(0.5)
-
-    def start(self, *args, **kwargs):
-        if not self.is_started:
-            super(PostgresNodeExtended, self).start(*args, **kwargs)
-            self.is_started = True
-        return self
-
-    def stop(self, *args, **kwargs):
-        if self.is_started:
-            result = super(PostgresNodeExtended, self).stop(*args, **kwargs)
-            self.is_started = False
-            return result
-
-    def kill(self, someone = None):
-        if self.is_started:
-            sig = signal.SIGKILL if os.name != 'nt' else signal.SIGBREAK
-            if someone == None:
-                os.kill(self.pid, sig)
-            else:
-                os.kill(self.auxiliary_pids[someone][0], sig)
-            self.is_started = False
-
-    def table_checksum(self, table, dbname="postgres"):
-        con = self.connect(dbname=dbname)
-
-        curname = "cur_"+str(random.randint(0,2**48))
-
-        con.execute("""
-            DECLARE %s NO SCROLL CURSOR FOR
-            SELECT t::text FROM %s as t
-        """ % (curname, table))
-
-        sum = hashlib.md5()
-        while True:
-            rows = con.execute("FETCH FORWARD 5000 FROM %s" % curname)
-            if not rows:
-                break
-            for row in rows:
-                # hash uses SipHash since Python3.4, therefore it is good enough
-                sum.update(row[0].encode('utf8'))
-
-        con.execute("CLOSE %s; ROLLBACK;" % curname)
-
-        con.close()
-        return sum.hexdigest()
-
-class ProbackupTest(object):
+class ProbackupTest(unittest.TestCase):
     # Class attributes
-    enterprise = is_enterprise()
-    enable_nls = is_nls_enabled()
-    pgpro = is_pgpro()
+    enterprise = init_params.is_enterprise
+    shardman = init_params.is_shardman
+    enable_nls = init_params.is_nls_enabled
+    enable_lz4 = init_params.is_lz4_enabled
+    pgpro = init_params.is_pgpro
+    verbose = init_params.verbose
+    username = init_params.username
+    remote = init_params.remote
+    ptrack = init_params.ptrack
+    paranoia = init_params.paranoia
+    tests_source_path = os.path.join(init_params.source_path, 'tests')
+    archive_compress = init_params.archive_compress
+    compress_suffix = init_params.compress_suffix
+    pg_config_version = init_params.pg_config_version
+    probackup_path = init_params.probackup_path
+    probackup_old_path = init_params.probackup_old_path
+    probackup_version = init_params.probackup_version
+    old_probackup_version = init_params.old_probackup_version
+    cfs_compress_default = init_params.cfs_compress
+    EXTERNAL_DIRECTORY_DELIMITER = init_params.EXTERNAL_DIRECTORY_DELIMITER
+    s3_type = os.environ.get('PG_PROBACKUP_S3_TEST')
+
+    auto_compress_alg = True
 
     def __init__(self, *args, **kwargs):
-        super(ProbackupTest, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
+        self.output = None
+        self.cmd = None
         self.nodes_to_cleanup = []
 
         if isinstance(self, unittest.TestCase):
-            self.module_name = self.id().split('.')[1]
-            self.fname = self.id().split('.')[3]
-
-        if '-v' in argv or '--verbose' in argv:
-            self.verbose = True
-        else:
-            self.verbose = False
-
-        self.test_env = os.environ.copy()
-        envs_list = [
-            'LANGUAGE',
-            'LC_ALL',
-            'PGCONNECT_TIMEOUT',
-            'PGDATA',
-            'PGDATABASE',
-            'PGHOSTADDR',
-            'PGREQUIRESSL',
-            'PGSERVICE',
-            'PGSSLMODE',
-            'PGUSER',
-            'PGPORT',
-            'PGHOST'
-        ]
-
-        for e in envs_list:
             try:
-                del self.test_env[e]
-            except:
-                pass
+                self.module_name = self.id().split('.')[-2]
+                self.fname = self.id().split('.')[-1]
+            except IndexError:
+                print("Couldn't get module name and function name from self.id(): `{}`".format(self.id()))
+                self.module_name = self.module_name if self.module_name else str(self).split('(')[1].split('.')[1]
+                self.fname = str(self).split('(')[0]
 
-        self.test_env['LC_MESSAGES'] = 'C'
-        self.test_env['LC_TIME'] = 'C'
+        self.test_env = init_params.test_env()
 
-        self.gdb = 'PGPROBACKUP_GDB' in self.test_env and \
-              self.test_env['PGPROBACKUP_GDB'] == 'ON'
+        if self.s3_type != "minio":
+            if 'PG_PROBACKUP_S3_HOST' in self.test_env:
+                del(self.test_env['PG_PROBACKUP_S3_HOST'])
+            if 'PG_PROBACKUP_S3_PORT' in self.test_env:
+                del(self.test_env['PG_PROBACKUP_S3_PORT'])
 
-        self.paranoia = 'PG_PROBACKUP_PARANOIA' in self.test_env and \
-            self.test_env['PG_PROBACKUP_PARANOIA'] == 'ON'
+        self.rel_path = os.path.join(self.module_name, self.fname)
+        self.test_path = os.path.join(init_params.tmp_path, self.rel_path)
 
-        self.archive_compress = 'ARCHIVE_COMPRESSION' in self.test_env and \
-            self.test_env['ARCHIVE_COMPRESSION'] == 'ON'
+        self.pg_node = testgres.NodeApp(self.test_path, self.nodes_to_cleanup)
+        self.pg_node.os_ops.set_env('LANGUAGE','en')
 
-        try:
-            testgres.configure_testgres(
-                cache_initdb=False,
-                cached_initdb_dir=False,
-                cache_pg_config=False,
-                node_cleanup_full=False)
-        except:
-            pass
+        # Cleanup FS dependent part first
+        self.backup_dir = self.build_backup_dir('backup')
+        self.backup_dir.cleanup()
+        # Recreate the rest which should reside on local file system only
+        shutil.rmtree(self.test_path, ignore_errors=True)
+        os.makedirs(self.test_path)
 
-        self.helpers_path = os.path.dirname(os.path.realpath(__file__))
-        self.dir_path = os.path.abspath(
-            os.path.join(self.helpers_path, os.pardir)
-            )
-        self.tmp_path = os.path.abspath(
-            os.path.join(self.dir_path, 'tmp_dirs')
-            )
-        try:
-            os.makedirs(os.path.join(self.dir_path, 'tmp_dirs'))
-        except:
-            pass
-
-        self.user = self.get_username()
-        self.probackup_path = None
-        if 'PGPROBACKUPBIN' in self.test_env:
-            if shutil.which(self.test_env["PGPROBACKUPBIN"]):
-                self.probackup_path = self.test_env["PGPROBACKUPBIN"]
-            else:
-                if self.verbose:
-                    print('PGPROBACKUPBIN is not an executable file')
-
-        if not self.probackup_path:
-            probackup_path_tmp = os.path.join(
-                testgres.get_pg_config()['BINDIR'], 'pg_probackup')
-
-            if os.path.isfile(probackup_path_tmp):
-                if not os.access(probackup_path_tmp, os.X_OK):
-                    print('{0} is not an executable file'.format(
-                        probackup_path_tmp))
-                else:
-                    self.probackup_path = probackup_path_tmp
-
-        if not self.probackup_path:
-            probackup_path_tmp = os.path.abspath(os.path.join(
-                self.dir_path, '../pg_probackup'))
-
-            if os.path.isfile(probackup_path_tmp):
-                if not os.access(probackup_path_tmp, os.X_OK):
-                    print('{0} is not an executable file'.format(
-                        probackup_path_tmp))
-                else:
-                    self.probackup_path = probackup_path_tmp
-
-        if not self.probackup_path:
-            print('pg_probackup binary is not found')
-            exit(1)
-
-        if os.name == 'posix':
-            self.EXTERNAL_DIRECTORY_DELIMITER = ':'
-            os.environ['PATH'] = os.path.dirname(
-                self.probackup_path) + ':' + os.environ['PATH']
-
-        elif os.name == 'nt':
-            self.EXTERNAL_DIRECTORY_DELIMITER = ';'
-            os.environ['PATH'] = os.path.dirname(
-                self.probackup_path) + ';' + os.environ['PATH']
-
-        self.probackup_old_path = None
-
-        if 'PGPROBACKUPBIN_OLD' in self.test_env:
-            if (
-                os.path.isfile(self.test_env['PGPROBACKUPBIN_OLD']) and
-                os.access(self.test_env['PGPROBACKUPBIN_OLD'], os.X_OK)
-            ):
-                self.probackup_old_path = self.test_env['PGPROBACKUPBIN_OLD']
-            else:
-                if self.verbose:
-                    print('PGPROBACKUPBIN_OLD is not an executable file')
-
-        self.probackup_version = None
-        self.old_probackup_version = None
-
-        try:
-            self.probackup_version_output = subprocess.check_output(
-                [self.probackup_path, "--version"],
-                stderr=subprocess.STDOUT,
-                ).decode('utf-8')
-        except subprocess.CalledProcessError as e:
-            raise ProbackupException(e.output.decode('utf-8'))
-
-        if self.probackup_old_path:
-            old_probackup_version_output = subprocess.check_output(
-                [self.probackup_old_path, "--version"],
-                stderr=subprocess.STDOUT,
-                ).decode('utf-8')
-            self.old_probackup_version = re.search(
-                r"\d+\.\d+\.\d+",
-                subprocess.check_output(
-                    [self.probackup_old_path, "--version"],
-                    stderr=subprocess.STDOUT,
-                    ).decode('utf-8')
-                ).group(0)
-
-        self.probackup_version = re.search(r"\d+\.\d+\.\d+", self.probackup_version_output).group(0)
-
-        self.remote = False
-        self.remote_host = None
-        self.remote_port = None
-        self.remote_user = None
-
-        if 'PGPROBACKUP_SSH_REMOTE' in self.test_env:
-            if self.test_env['PGPROBACKUP_SSH_REMOTE'] == 'ON':
-                self.remote = True
-
-        self.ptrack = False
-        if 'PG_PROBACKUP_PTRACK' in self.test_env:
-            if self.test_env['PG_PROBACKUP_PTRACK'] == 'ON':
-                if self.pg_config_version >= self.version_to_num('11.0'):
-                    self.ptrack = True
-
-        os.environ["PGAPPNAME"] = "pg_probackup"
+        self.pb_log_path = os.path.join(self.test_path, "pb_log")
+        self.pb = ProbackupApp(self, self.pg_node, self.pb_log_path, self.test_env,
+                               self.auto_compress_alg, self.backup_dir)
 
     def is_test_result_ok(test_case):
         # sources of solution:
@@ -414,29 +211,39 @@ class ProbackupTest(object):
         #
         # 2. python versions 3.11+ mixin, verified on 3.11, taken from: https://stackoverflow.com/a/39606065
 
-        if not isinstance(test_case, unittest.TestCase):
-            raise AssertionError("test_case is not instance of unittest.TestCase")
-
-        if hasattr(test_case, '_outcome'):  # Python 3.4+
-            if hasattr(test_case._outcome, 'errors'):
-                # Python 3.4 - 3.10  (These two methods have no side effects)
-                result = test_case.defaultTestResult()  # These two methods have no side effects
-                test_case._feedErrorsToResult(result, test_case._outcome.errors)
-            else:
-                # Python 3.11+
-                result = test_case._outcome.result
-        else:  # Python 2.7, 3.0-3.3
-            result = getattr(test_case, '_outcomeForDoCleanups', test_case._resultForDoCleanups)
+        if hasattr(test_case._outcome, 'errors'):
+            # Python 3.4 - 3.10  (These two methods have no side effects)
+            result = test_case.defaultTestResult()  # These two methods have no side effects
+            test_case._feedErrorsToResult(result, test_case._outcome.errors)
+        else:
+            # Python 3.11+ and pytest 5.3.5+
+            result = test_case._outcome.result
+            if not hasattr(result, 'errors'):
+                result.errors = []
+            if not hasattr(result, 'failures'):
+                result.failures = []
 
         ok = all(test != test_case for test, text in result.errors + result.failures)
+        # check subtests as well
+        ok = ok and all(getattr(test, 'test_case', None) != test_case
+                        for test, text in result.errors + result.failures)
+
+        # for pytest 8+
+        if hasattr(result, '_excinfo'):
+            if result._excinfo is not None and len(result._excinfo) > 0:
+                # if test was successful, _excinfo will be None, else it will be non-empty list
+                ok = False
 
         return ok
 
     def tearDown(self):
+        node_crashed = None
         if self.is_test_result_ok():
             for node in self.nodes_to_cleanup:
+                if node.is_started and node.status() != NodeStatus.Running:
+                    node_crashed = node
                 node.cleanup()
-            self.del_test_dir(self.module_name, self.fname)
+            self.del_test_dirs()
 
         else:
             for node in self.nodes_to_cleanup:
@@ -446,143 +253,27 @@ class ProbackupTest(object):
 
         self.nodes_to_cleanup.clear()
 
-    @property
-    def pg_config_version(self):
-        return self.version_to_num(
-            testgres.get_pg_config()['VERSION'].split(" ")[1])
+        if node_crashed:
+            self.fail(f"Node '{os.path.relpath(node.base_dir, self.test_path)}' unexpectingly crashed")
 
-#            if 'PGPROBACKUP_SSH_HOST' in self.test_env:
-#                self.remote_host = self.test_env['PGPROBACKUP_SSH_HOST']
-#            else
-#                print('PGPROBACKUP_SSH_HOST is not set')
-#                exit(1)
-#
-#            if 'PGPROBACKUP_SSH_PORT' in self.test_env:
-#                self.remote_port = self.test_env['PGPROBACKUP_SSH_PORT']
-#            else
-#                print('PGPROBACKUP_SSH_PORT is not set')
-#                exit(1)
-#
-#            if 'PGPROBACKUP_SSH_USER' in self.test_env:
-#                self.remote_user = self.test_env['PGPROBACKUP_SSH_USER']
-#            else
-#                print('PGPROBACKUP_SSH_USER is not set')
-#                exit(1)
+    def build_backup_dir(self, backup='backup'):
+        return fs_backup_class(rel_path=self.rel_path, backup=backup)
 
-    def make_empty_node(
-            self,
-            base_dir=None):
-        real_base_dir = os.path.join(self.tmp_path, base_dir)
-        shutil.rmtree(real_base_dir, ignore_errors=True)
-        os.makedirs(real_base_dir)
+    def read_pb_log(self):
+        with open(os.path.join(self.pb_log_path, 'pg_probackup.log')) as fl:
+            return fl.read()
 
-        node = PostgresNodeExtended(base_dir=real_base_dir)
-        node.should_rm_dirs = True
-        self.nodes_to_cleanup.append(node)
+    def unlink_pg_log(self):
+        os.unlink(os.path.join(self.pb_log_path, 'pg_probackup.log'))
 
-        return node
-
-    def make_simple_node(
-            self,
-            base_dir=None,
-            set_replication=False,
-            ptrack_enable=False,
-            initdb_params=[],
-            pg_options={}):
-
-        node = self.make_empty_node(base_dir)
-        node.init(
-           initdb_params=initdb_params, allow_streaming=set_replication)
-
-        # set major version
-        with open(os.path.join(node.data_dir, 'PG_VERSION')) as f:
-            node.major_version_str = str(f.read().rstrip())
-            node.major_version = float(node.major_version_str)
-
-        # Sane default parameters
-        options = {}
-        options['max_connections'] = 100
-        options['shared_buffers'] = '10MB'
-        options['fsync'] = 'off'
-
-        options['wal_level'] = 'logical'
-        options['hot_standby'] = 'off'
-
-        options['log_line_prefix'] = '%t [%p]: [%l-1] '
-        options['log_statement'] = 'none'
-        options['log_duration'] = 'on'
-        options['log_min_duration_statement'] = 0
-        options['log_connections'] = 'on'
-        options['log_disconnections'] = 'on'
-        options['restart_after_crash'] = 'off'
-        options['autovacuum'] = 'off'
-
-        # Allow replication in pg_hba.conf
-        if set_replication:
-            options['max_wal_senders'] = 10
-
-        if ptrack_enable:
-            options['ptrack.map_size'] = '128'
-            options['shared_preload_libraries'] = 'ptrack'
-
-        if node.major_version >= 13:
-            options['wal_keep_size'] = '200MB'
-        else:
-            options['wal_keep_segments'] = '100'
-
-        # set default values
-        self.set_auto_conf(node, options)
-
-        # Apply given parameters
-        self.set_auto_conf(node, pg_options)
-
-        # kludge for testgres
-        # https://github.com/postgrespro/testgres/issues/54
-        # for PG >= 13 remove 'wal_keep_segments' parameter
-        if node.major_version >= 13:
-            self.set_auto_conf(
-                node, {}, 'postgresql.conf', ['wal_keep_segments'])
-
-        return node
-    
     def simple_bootstrap(self, node, role) -> None:
 
         node.safe_psql(
             'postgres',
             'CREATE ROLE {0} WITH LOGIN REPLICATION'.format(role))
 
-        # PG 9.5
-        if self.get_version(node) < 90600:
-            node.safe_psql(
-                'postgres',
-                'GRANT USAGE ON SCHEMA pg_catalog TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean) TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup() TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_create_restore_point(text) TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_switch_xlog() TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.txid_current() TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO {0};'.format(role))
-        # PG 9.6
-        elif self.get_version(node) > 90600 and self.get_version(node) < 100000:
-            node.safe_psql(
-                'postgres',
-                'GRANT USAGE ON SCHEMA pg_catalog TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean, boolean) TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup(boolean) TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_create_restore_point(text) TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_switch_xlog() TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_last_xlog_replay_location() TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.txid_current() TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO {0}; '
-                'GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_checkpoint() TO {0};'.format(role))
         # >= 10 && < 15
-        elif self.get_version(node) >= 100000 and self.get_version(node) < 150000:
+        if self.pg_config_version < 150000:
             node.safe_psql(
                 'postgres',
                 'GRANT USAGE ON SCHEMA pg_catalog TO {0}; '
@@ -620,12 +311,12 @@ class ProbackupTest(object):
             'select exists'
             " (select 1 from pg_tablespace where spcname = '{0}')".format(
                 tblspc_name)
-            )
+        )
         # Check that tablespace with name 'tblspc_name' do not exists already
         self.assertFalse(
             res[0][0],
             'Tablespace "{0}" already exists'.format(tblspc_name)
-            )
+        )
 
         if not tblspc_path:
             tblspc_path = os.path.join(
@@ -633,7 +324,13 @@ class ProbackupTest(object):
         cmd = "CREATE TABLESPACE {0} LOCATION '{1}'".format(
             tblspc_name, tblspc_path)
         if cfs:
-            cmd += ' with (compression=true)'
+
+            if cfs is True and self.cfs_compress_default:
+                cfs = self.cfs_compress_default
+            if cfs is True or node.major_version < 12:
+                cmd += ' with (compression=true)'
+            else:
+                cmd += ' with (compression=' + cfs + ')'
 
         if not os.path.exists(tblspc_path):
             os.makedirs(tblspc_path)
@@ -649,12 +346,12 @@ class ProbackupTest(object):
             'select exists'
             " (select 1 from pg_tablespace where spcname = '{0}')".format(
                 tblspc_name)
-            )
+        )
         # Check that tablespace with name 'tblspc_name' do not exists already
         self.assertTrue(
             res[0][0],
             'Tablespace "{0}" do not exists'.format(tblspc_name)
-            )
+        )
 
         rels = node.execute(
             "postgres",
@@ -671,7 +368,6 @@ class ProbackupTest(object):
             'postgres',
             'DROP TABLESPACE {0}'.format(tblspc_name))
 
-
     def get_tblspace_path(self, node, tblspc_name):
         return os.path.join(node.base_dir, tblspc_name)
 
@@ -686,13 +382,13 @@ class ProbackupTest(object):
                 'postgres',
                 "select pg_relation_filepath('{0}')".format(
                     fork_name))[0][0]
-            )
+        )
 
     def get_md5_per_page_for_fork(self, file, size_in_pages):
         pages_per_segment = {}
         md5_per_page = {}
         size_in_pages = int(size_in_pages)
-        nsegments = int(size_in_pages/131072)
+        nsegments = int(size_in_pages / 131072)
         if size_in_pages % 131072 != 0:
             nsegments = nsegments + 1
 
@@ -712,9 +408,9 @@ class ProbackupTest(object):
                 end_page = pages_per_segment[segment_number]
             else:
                 file_desc = os.open(
-                    file+'.{0}'.format(segment_number), os.O_RDONLY
-                    )
-                start_page = max(md5_per_page)+1
+                    file + '.{0}'.format(segment_number), os.O_RDONLY
+                )
+                start_page = max(md5_per_page) + 1
                 end_page = end_page + pages_per_segment[segment_number]
 
             for page in range(start_page, end_page):
@@ -726,38 +422,34 @@ class ProbackupTest(object):
 
         return md5_per_page
 
-    def get_ptrack_bits_per_page_for_fork(self, node, file, size=[]):
+    def get_ptrack_bits_per_page_for_fork(self, node, file, size=None):
 
-        if self.get_pgpro_edition(node) == 'enterprise':
-            if self.get_version(node) < self.version_to_num('10.0'):
-                header_size = 48
-            else:
-                header_size = 24
-        else:
-            header_size = 24
+        if size is None:
+            size = []
+        header_size = 24
         ptrack_bits_for_fork = []
 
         # TODO: use macro instead of hard coded 8KB
-        page_body_size = 8192-header_size
+        page_body_size = 8192 - header_size
         # Check that if main fork file size is 0, it`s ok
         # to not having a _ptrack fork
         if os.path.getsize(file) == 0:
             return ptrack_bits_for_fork
         byte_size = os.path.getsize(file + '_ptrack')
-        npages = int(byte_size/8192)
+        npages = int(byte_size / 8192)
         if byte_size % 8192 != 0:
             print('Ptrack page is not 8k aligned')
-            exit(1)
+            sys.exit(1)
 
         file = os.open(file + '_ptrack', os.O_RDONLY)
 
         for page in range(npages):
-            offset = 8192*page+header_size
+            offset = 8192 * page + header_size
             os.lseek(file, offset, 0)
             lots_of_bytes = os.read(file, page_body_size)
             byte_list = [
-                lots_of_bytes[i:i+1] for i in range(len(lots_of_bytes))
-                ]
+                lots_of_bytes[i:i + 1] for i in range(len(lots_of_bytes))
+            ]
             for byte in byte_list:
                 # byte_inverted = bin(int(byte, base=16))[2:][::-1]
                 # bits = (byte >> x) & 1 for x in range(7, -1, -1)
@@ -832,7 +524,7 @@ class ProbackupTest(object):
             # corresponding page in old_pages are been dealt with.
             # We can now safely proceed to comparing old and new pages
             if idx_dict['new_pages'][
-                    PageNum] != idx_dict['old_pages'][PageNum]:
+                PageNum] != idx_dict['old_pages'][PageNum]:
                 # Page has been changed,
                 # meaning that ptrack should be equal to 1
                 if idx_dict['ptrack'][PageNum] != 1:
@@ -878,22 +570,81 @@ class ProbackupTest(object):
             # )
 
     def get_backup_filelist(self, backup_dir, instance, backup_id):
-
-        filelist_path = os.path.join(
-            backup_dir, 'backups',
-            instance, backup_id, 'backup_content.control')
-
-        with open(filelist_path, 'r') as f:
-                filelist_raw = f.read()
-
-        filelist_splitted = filelist_raw.splitlines()
+        path = os.path.join('backups', instance, backup_id, 'backup_content.control')
+        filelist_raw = backup_dir.read_file(path)
 
         filelist = {}
-        for line in filelist_splitted:
+        for line in io.StringIO(filelist_raw):
             line = json.loads(line)
             filelist[line['path']] = line
 
         return filelist
+
+    def get_backup_listdir(self, backup_dir, instance, backup_id, sub_path):
+        subpath = os.path.join('backups', instance, backup_id, sub_path)
+        return backup_dir.list_files(subpath)
+
+    def get_backups_dirs(self, backup_dir, instance):
+        subpath = os.path.join("backups", instance)
+        return backup_dir.list_dirs(subpath)
+
+    def read_backup_file(self, backup_dir, instance, backup_id,
+                         sub_path, *, text=False):
+        subpath = os.path.join('backups', instance, backup_id, sub_path)
+        return backup_dir.read_file(subpath, text=text)
+
+    def write_backup_file(self, backup_dir, instance, backup_id,
+                          sub_path, content, *, text=False):
+        subpath = os.path.join('backups', instance, backup_id, sub_path)
+        return backup_dir.write_file(subpath, content, text=text)
+
+    def corrupt_backup_file(self, backup_dir, instance, backup_id, sub_path, *,
+                            damage: tuple = None,
+                            truncate: int = None,
+                            overwrite=None,
+                            text=False):
+        subpath = os.path.join('backups', instance, backup_id, sub_path)
+        if overwrite:
+            content = overwrite
+        elif truncate == 0:
+            content = '' if text else b''
+        else:
+            content = backup_dir.read_file(subpath, text=text)
+            if damage:
+                pos, replace = damage
+                content = content[:pos] + replace + content[pos + len(replace):]
+            if truncate is not None:
+                content = content[:truncate]
+        backup_dir.write_file(subpath, content, text=text)
+
+    def remove_backup_file(self, backup_dir, instance, backup_id, sub_path):
+        subpath = os.path.join('backups', instance, backup_id, sub_path)
+        backup_dir.remove_file(subpath)
+
+    def backup_file_exists(self, backup_dir, instance, backup_id, sub_path):
+        subpath = os.path.join('backups', instance, backup_id, sub_path)
+        return backup_dir.exists(subpath)
+
+    def remove_backup_config(self, backup_dir, instance):
+        subpath = os.path.join('backups', instance, 'pg_probackup.conf')
+        backup_dir.remove_file(subpath)
+
+    @contextlib.contextmanager
+    def modify_backup_config(self, backup_dir, instance):
+        path = os.path.join('backups', instance, 'pg_probackup.conf')
+        control_file = backup_dir.read_file(path)
+        cf = ProbackupTest.ControlFileContainer(control_file)
+        yield cf
+        if control_file != cf.data:
+            backup_dir.write_file(path, cf.data)
+
+    def remove_one_backup(self, backup_dir, instance, backup_id):
+        subpath = os.path.join('backups', instance, backup_id)
+        backup_dir.remove_dir(subpath)
+
+    def remove_one_backup_instance(self, backup_dir, instance):
+        subpath = os.path.join('backups', instance)
+        backup_dir.remove_dir(subpath)
 
     # return dict of files from filelist A,
     # which are not exists in filelist_B
@@ -905,6 +656,62 @@ class ProbackupTest(object):
                 filelist_diff[file] = filelist_A[file]
 
         return filelist_diff
+
+    def get_instance_wal_list(self, backup_dir, instance):
+        files = map(str, backup_dir.list_files(os.path.join('wal', instance)))
+        files = [f for f in files
+                 if not any(x in f for x in ('.backup', '.history', '~tmp'))]
+        files.sort()
+        return files
+
+    def read_instance_wal(self, backup_dir, instance, file, decompress=False):
+        content = backup_dir.read_file(f'wal/{instance}/{file}', text=False)
+        if decompress:
+            content = _do_decompress(file, content)
+        return content
+
+    def write_instance_wal(self, backup_dir, instance, file, data, compress=False):
+        if compress:
+            data = _do_compress(file, data)
+        return backup_dir.write_file(f'wal/{instance}/{file}', data, text=False)
+
+    def corrupt_instance_wal(self, backup_dir, instance, file, pos, damage, decompressed=False):
+        subpath = f'wal/{instance}/{file}'
+        content = backup_dir.read_file(subpath, text=False)
+        if decompressed:
+            content = _do_decompress(subpath, content)
+        content = content[:pos] + \
+                  bytes(d^c for d, c in zip(content[pos:pos+len(damage)], damage)) + \
+                  content[pos + len(damage):]
+        if decompressed:
+            content = _do_compress(subpath, content)
+        backup_dir.write_file(subpath, content, text=False)
+
+    def remove_instance_wal(self, backup_dir, instance, file):
+        backup_dir.remove_file(f'wal/{instance}/{file}')
+
+    def instance_wal_exists(self, backup_dir, instance, file):
+        fl = f'wal/{instance}/{file}'
+        return backup_dir.exists(fl)
+
+    def wait_instance_wal_exists(self, backup_dir, instance, file, timeout=300):
+        start = time.time()
+        fl = f'wal/{instance}/{file}'
+        while time.time() - start < timeout:
+            if backup_dir.exists(fl):
+                break
+            time.sleep(0.25)
+
+    def wait_server_wal_exists(self, data_dir, wal_dir, file, timeout=300):
+        start = time.time()
+        fl = f'{data_dir}/{wal_dir}/{file}'
+        while time.time() - start < timeout:
+            if os.path.exists(fl):
+                return
+            time.sleep(0.25)
+
+    def remove_instance_waldir(self, backup_dir, instance):
+        backup_dir.remove_dir(f'wal/{instance}')
 
     # used for partial restore
     def truncate_every_file_in_dir(self, path):
@@ -942,487 +749,43 @@ class ProbackupTest(object):
                     )
                 )
 
-    def run_pb(self, command, asynchronous=False, gdb=False, old_binary=False, return_id=True, env=None):
-        if not self.probackup_old_path and old_binary:
-            print('PGPROBACKUPBIN_OLD is not set')
-            exit(1)
+    def read_backup_content_control(self, backup_id, instance_name):
+        """
+        Read the content control file of a backup.
+        Args: backup_id (str): The ID of the backup.
+              instance_name (str): The name of the instance
+        Returns: dict: The parsed JSON content of the backup_content.control file.
+        Raises:
+            FileNotFoundError: If the backup content control file does not exist.
+            json.JSONDecodeError: If the backup content control file is not a valid JSON.
+        """
+        content_control_path = f'{self.backup_dir.path}/backups/{instance_name}/{backup_id}/backup_content.control'
 
-        if old_binary:
-            binary_path = self.probackup_old_path
-        else:
-            binary_path = self.probackup_path
-
-        if not env:
-            env=self.test_env
+        if not os.path.exists(content_control_path):
+            raise FileNotFoundError(f"Backup content control file '{content_control_path}' does not exist.")
 
         try:
-            self.cmd = [' '.join(map(str, [binary_path] + command))]
-            if self.verbose:
-                print(self.cmd)
-            if gdb:
-                return GDBobj([binary_path] + command, self)
-            if asynchronous:
-                return subprocess.Popen(
-                    [binary_path] + command,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    env=env
-                )
-            else:
-                self.output = subprocess.check_output(
-                    [binary_path] + command,
-                    stderr=subprocess.STDOUT,
-                    env=env
-                    ).decode('utf-8')
-                if command[0] == 'backup' and return_id:
-                    # return backup ID
-                    for line in self.output.splitlines():
-                        if 'INFO: Backup' and 'completed' in line:
-                            return line.split()[2]
-                else:
-                    return self.output
-        except subprocess.CalledProcessError as e:
-            raise ProbackupException(e.output.decode('utf-8').replace("\r",""),
-                                     self.cmd)
+            with open(content_control_path) as file:
+                lines = file.readlines()
+                content_control_json = []
+                for line in lines:
+                    content_control_json.append(json.loads(line))
+                return content_control_json
+        except json.JSONDecodeError as e:
+            raise json.JSONDecodeError(f"Failed to parse JSON in backup content control file '{content_control_path}'",
+                                       e.doc, e.pos)
 
-    def run_binary(self, command, asynchronous=False, env=None):
-
-        if not env:
-            env = self.test_env
-
-        if self.verbose:
-                print([' '.join(map(str, command))])
-        try:
-            if asynchronous:
-                return subprocess.Popen(
-                    command,
-                    stdin=subprocess.PIPE,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    env=env
-                )
-            else:
-                self.output = subprocess.check_output(
-                    command,
-                    stderr=subprocess.STDOUT,
-                    env=env
-                    ).decode('utf-8')
-                return self.output
-        except subprocess.CalledProcessError as e:
-            raise ProbackupException(e.output.decode('utf-8'), command)
-
-    def init_pb(self, backup_dir, options=[], old_binary=False):
-
-        shutil.rmtree(backup_dir, ignore_errors=True)
-
-        # don`t forget to kill old_binary after remote ssh release
-        if self.remote and not old_binary:
-            options = options + [
-                '--remote-proto=ssh',
-                '--remote-host=localhost']
-
-        return self.run_pb([
-            'init',
-            '-B', backup_dir
-            ] + options,
-            old_binary=old_binary
-        )
-
-    def add_instance(self, backup_dir, instance, node, old_binary=False, options=[]):
-
-        cmd = [
-            'add-instance',
-            '--instance={0}'.format(instance),
-            '-B', backup_dir,
-            '-D', node.data_dir
-            ]
-
-        # don`t forget to kill old_binary after remote ssh release
-        if self.remote and not old_binary:
-            options = options + [
-                '--remote-proto=ssh',
-                '--remote-host=localhost']
-
-        return self.run_pb(cmd + options, old_binary=old_binary)
-
-    def set_config(self, backup_dir, instance, old_binary=False, options=[]):
-
-        cmd = [
-            'set-config',
-            '--instance={0}'.format(instance),
-            '-B', backup_dir,
-            ]
-
-        return self.run_pb(cmd + options, old_binary=old_binary)
-
-    def set_backup(self, backup_dir, instance, backup_id=False,
-                    old_binary=False, options=[]):
-
-        cmd = [
-            'set-backup',
-            '-B', backup_dir
-            ]
-
-        if instance:
-            cmd = cmd + ['--instance={0}'.format(instance)]
-
-        if backup_id:
-            cmd = cmd + ['-i', backup_id]
-
-        return self.run_pb(cmd + options, old_binary=old_binary)
-
-    def del_instance(self, backup_dir, instance, old_binary=False):
-
-        return self.run_pb([
-            'del-instance',
-            '--instance={0}'.format(instance),
-            '-B', backup_dir
-            ],
-            old_binary=old_binary
-        )
+    def run_pb(self, backup_dir, command, gdb=False, old_binary=False, return_id=True, env=None,
+               skip_log_directory=False, expect_error=False):
+        return self.pb.run(command, gdb, old_binary, return_id, env, skip_log_directory, expect_error, use_backup_dir=backup_dir)
 
     def clean_pb(self, backup_dir):
-        shutil.rmtree(backup_dir, ignore_errors=True)
-
-    def backup_node(
-            self, backup_dir, instance, node, data_dir=False,
-            backup_type='full', datname=False, options=[],
-            asynchronous=False, gdb=False,
-            old_binary=False, return_id=True, no_remote=False,
-            env=None
-            ):
-        if not node and not data_dir:
-            print('You must provide ether node or data_dir for backup')
-            exit(1)
-
-        if not datname:
-            datname = 'postgres'
-
-        cmd_list = [
-            'backup',
-            '-B', backup_dir,
-            '--instance={0}'.format(instance),
-            # "-D", pgdata,
-            '-p', '%i' % node.port,
-            '-d', datname
-        ]
-
-        if data_dir:
-            cmd_list += ['-D', data_dir]
-
-        # don`t forget to kill old_binary after remote ssh release
-        if self.remote and not old_binary and not no_remote:
-            options = options + [
-                '--remote-proto=ssh',
-                '--remote-host=localhost']
-
-        if backup_type:
-            cmd_list += ['-b', backup_type]
-
-        if not old_binary:
-            cmd_list += ['--no-sync']
-
-        return self.run_pb(cmd_list + options, asynchronous, gdb, old_binary, return_id, env=env)
-
-    def checkdb_node(
-            self, backup_dir=False, instance=False, data_dir=False,
-            options=[], asynchronous=False, gdb=False, old_binary=False
-            ):
-
-        cmd_list = ["checkdb"]
-
-        if backup_dir:
-            cmd_list += ["-B", backup_dir]
-
-        if instance:
-            cmd_list += ["--instance={0}".format(instance)]
-
-        if data_dir:
-            cmd_list += ["-D", data_dir]
-
-        return self.run_pb(cmd_list + options, asynchronous, gdb, old_binary)
-
-    def merge_backup(
-            self, backup_dir, instance, backup_id, asynchronous=False,
-            gdb=False, old_binary=False, options=[]):
-        cmd_list = [
-            'merge',
-            '-B', backup_dir,
-            '--instance={0}'.format(instance),
-            '-i', backup_id
-        ]
-
-        return self.run_pb(cmd_list + options, asynchronous, gdb, old_binary)
-
-    def restore_node(
-            self, backup_dir, instance, node=False,
-            data_dir=None, backup_id=None, old_binary=False, options=[],
-            gdb=False
-            ):
-
-        if data_dir is None:
-            data_dir = node.data_dir
-
-        cmd_list = [
-            'restore',
-            '-B', backup_dir,
-            '-D', data_dir,
-            '--instance={0}'.format(instance)
-        ]
-
-        # don`t forget to kill old_binary after remote ssh release
-        if self.remote and not old_binary:
-            options = options + [
-                '--remote-proto=ssh',
-                '--remote-host=localhost']
-
-        if backup_id:
-            cmd_list += ['-i', backup_id]
-
-        if not old_binary:
-            cmd_list += ['--no-sync']
-
-        return self.run_pb(cmd_list + options, gdb=gdb, old_binary=old_binary)
-
-    def catchup_node(
-            self,
-            backup_mode, source_pgdata, destination_node,
-            options = []
-            ):
-
-        cmd_list = [
-            'catchup',
-            '--backup-mode={0}'.format(backup_mode),
-            '--source-pgdata={0}'.format(source_pgdata),
-            '--destination-pgdata={0}'.format(destination_node.data_dir)
-        ]
-        if self.remote:
-            cmd_list += ['--remote-proto=ssh', '--remote-host=localhost']
-        if self.verbose:
-            cmd_list += [
-                '--log-level-file=VERBOSE',
-                '--log-directory={0}'.format(destination_node.logs_dir)
-            ]
-
-        return self.run_pb(cmd_list + options)
-
-    def show_pb(
-            self, backup_dir, instance=None, backup_id=None,
-            options=[], as_text=False, as_json=True, old_binary=False,
-            env=None
-            ):
-
-        backup_list = []
-        specific_record = {}
-        cmd_list = [
-            'show',
-            '-B', backup_dir,
-        ]
-        if instance:
-            cmd_list += ['--instance={0}'.format(instance)]
-
-        if backup_id:
-            cmd_list += ['-i', backup_id]
-
-        # AHTUNG, WARNING will break json parsing
-        if as_json:
-            cmd_list += ['--format=json', '--log-level-console=error']
-
-        if as_text:
-            # You should print it when calling as_text=true
-            return self.run_pb(cmd_list + options, old_binary=old_binary, env=env)
-
-        # get show result as list of lines
-        if as_json:
-            data = json.loads(self.run_pb(cmd_list + options, old_binary=old_binary))
-        #    print(data)
-            for instance_data in data:
-                # find specific instance if requested
-                if instance and instance_data['instance'] != instance:
-                    continue
-
-                for backup in reversed(instance_data['backups']):
-                    # find specific backup if requested
-                    if backup_id:
-                        if backup['id'] == backup_id:
-                            return backup
-                    else:
-                        backup_list.append(backup)
-
-            if backup_id is not None:
-                self.assertTrue(False, "Failed to find backup with ID: {0}".format(backup_id))
-
-            return backup_list
-        else:
-            show_splitted = self.run_pb(
-                cmd_list + options, old_binary=old_binary, env=env).splitlines()
-            if instance is not None and backup_id is None:
-                # cut header(ID, Mode, etc) from show as single string
-                header = show_splitted[1:2][0]
-                # cut backup records from show as single list
-                # with string for every backup record
-                body = show_splitted[3:]
-                # inverse list so oldest record come first
-                body = body[::-1]
-                # split string in list with string for every header element
-                header_split = re.split('  +', header)
-                # Remove empty items
-                for i in header_split:
-                    if i == '':
-                        header_split.remove(i)
-                        continue
-                header_split = [
-                    header_element.rstrip() for header_element in header_split
-                    ]
-                for backup_record in body:
-                    backup_record = backup_record.rstrip()
-                    # split list with str for every backup record element
-                    backup_record_split = re.split('  +', backup_record)
-                    # Remove empty items
-                    for i in backup_record_split:
-                        if i == '':
-                            backup_record_split.remove(i)
-                    if len(header_split) != len(backup_record_split):
-                        print(warning.format(
-                            header=header, body=body,
-                            header_split=header_split,
-                            body_split=backup_record_split)
-                        )
-                        exit(1)
-                    new_dict = dict(zip(header_split, backup_record_split))
-                    backup_list.append(new_dict)
-                return backup_list
-            else:
-                # cut out empty lines and lines started with #
-                # and other garbage then reconstruct it as dictionary
-                # print show_splitted
-                sanitized_show = [item for item in show_splitted if item]
-                sanitized_show = [
-                    item for item in sanitized_show if not item.startswith('#')
-                ]
-                # print sanitized_show
-                for line in sanitized_show:
-                    name, var = line.partition(' = ')[::2]
-                    var = var.strip('"')
-                    var = var.strip("'")
-                    specific_record[name.strip()] = var
-
-                if not specific_record:
-                    self.assertTrue(False, "Failed to find backup with ID: {0}".format(backup_id))
-
-                return specific_record
-
-    def show_archive(
-            self, backup_dir, instance=None, options=[],
-            as_text=False, as_json=True, old_binary=False,
-            tli=0
-            ):
-
-        cmd_list = [
-            'show',
-            '--archive',
-            '-B', backup_dir,
-        ]
-        if instance:
-            cmd_list += ['--instance={0}'.format(instance)]
-
-        # AHTUNG, WARNING will break json parsing
-        if as_json:
-            cmd_list += ['--format=json', '--log-level-console=error']
-
-        if as_text:
-            # You should print it when calling as_text=true
-            return self.run_pb(cmd_list + options, old_binary=old_binary)
-
-        if as_json:
-            if as_text:
-                data = self.run_pb(cmd_list + options, old_binary=old_binary)
-            else:
-                data = json.loads(self.run_pb(cmd_list + options, old_binary=old_binary))
-
-            if instance:
-                instance_timelines = None
-                for instance_name in data:
-                    if instance_name['instance'] == instance:
-                        instance_timelines = instance_name['timelines']
-                        break
-
-                if tli > 0:
-                    timeline_data = None
-                    for timeline in instance_timelines:
-                        if timeline['tli'] == tli:
-                            return timeline
-
-                    return {}
-
-                if instance_timelines:
-                    return instance_timelines
-
-            return data
-        else:
-            show_splitted = self.run_pb(
-                cmd_list + options, old_binary=old_binary).splitlines()
-            print(show_splitted)
-            exit(1)
-
-    def validate_pb(
-            self, backup_dir, instance=None, backup_id=None,
-            options=[], old_binary=False, gdb=False, asynchronous=False
-            ):
-
-        cmd_list = [
-            'validate',
-            '-B', backup_dir
-        ]
-        if instance:
-            cmd_list += ['--instance={0}'.format(instance)]
-        if backup_id:
-            cmd_list += ['-i', backup_id]
-
-        return self.run_pb(cmd_list + options, old_binary=old_binary, gdb=gdb, asynchronous=asynchronous)
-
-    def delete_pb(
-            self, backup_dir, instance, backup_id=None,
-            options=[], old_binary=False, gdb=False, asynchronous=False):
-        cmd_list = [
-            'delete',
-            '-B', backup_dir
-        ]
-
-        cmd_list += ['--instance={0}'.format(instance)]
-        if backup_id:
-            cmd_list += ['-i', backup_id]
-
-        return self.run_pb(cmd_list + options, old_binary=old_binary, gdb=gdb, asynchronous=asynchronous)
-
-    def delete_expired(
-            self, backup_dir, instance, options=[], old_binary=False):
-        cmd_list = [
-            'delete',
-            '-B', backup_dir,
-            '--instance={0}'.format(instance)
-        ]
-        return self.run_pb(cmd_list + options, old_binary=old_binary)
-
-    def show_config(self, backup_dir, instance, old_binary=False):
-        out_dict = {}
-        cmd_list = [
-            'show-config',
-            '-B', backup_dir,
-            '--instance={0}'.format(instance)
-        ]
-
-        res = self.run_pb(cmd_list, old_binary=old_binary).splitlines()
-        for line in res:
-            if not line.startswith('#'):
-                name, var = line.partition(' = ')[::2]
-                out_dict[name] = var
-        return out_dict
+        fs_backup_class(backup_dir).cleanup()
 
     def get_recovery_conf(self, node):
         out_dict = {}
 
-        if self.get_version(node) >= self.version_to_num('12.0'):
+        if self.pg_config_version >= self.version_to_num('12.0'):
             recovery_conf_path = os.path.join(node.data_dir, 'postgresql.auto.conf')
             with open(recovery_conf_path, 'r') as f:
                 print(f.read())
@@ -1430,7 +793,7 @@ class ProbackupTest(object):
             recovery_conf_path = os.path.join(node.data_dir, 'recovery.conf')
 
         with open(
-            recovery_conf_path, 'r'
+                recovery_conf_path, 'r'
         ) as recovery_conf:
             for line in recovery_conf:
                 try:
@@ -1440,157 +803,41 @@ class ProbackupTest(object):
                 out_dict[key.strip()] = value.strip(" '").replace("'\n", "")
         return out_dict
 
-    def set_archiving(
-            self, backup_dir, instance, node, replica=False,
-            overwrite=False, compress=True, old_binary=False,
-            log_level=False, archive_timeout=False,
-            custom_archive_command=None):
+    def get_restore_command(self, backup_dir, instance):
 
         # parse postgresql.auto.conf
-        options = {}
-        if replica:
-            options['archive_mode'] = 'always'
-            options['hot_standby'] = 'on'
-        else:
-            options['archive_mode'] = 'on'
-
-        if custom_archive_command is None:
-            if os.name == 'posix':
-                options['archive_command'] = '"{0}" archive-push -B {1} --instance={2} '.format(
-                    self.probackup_path, backup_dir, instance)
-
-            elif os.name == 'nt':
-                options['archive_command'] = '"{0}" archive-push -B {1} --instance={2} '.format(
-                    self.probackup_path.replace("\\","\\\\"),
-                    backup_dir.replace("\\","\\\\"), instance)
-
-            # don`t forget to kill old_binary after remote ssh release
-            if self.remote and not old_binary:
-                options['archive_command'] += '--remote-proto=ssh '
-                options['archive_command'] += '--remote-host=localhost '
-
-            if self.archive_compress and compress:
-                options['archive_command'] += '--compress '
-
-            if overwrite:
-                options['archive_command'] += '--overwrite '
-
-            options['archive_command'] += '--log-level-console=VERBOSE '
-            options['archive_command'] += '-j 5 '
-            options['archive_command'] += '--batch-size 10 '
-            options['archive_command'] += '--no-sync '
-
-            if archive_timeout:
-                options['archive_command'] += '--archive-timeout={0} '.format(
-                    archive_timeout)
-
-            if os.name == 'posix':
-                options['archive_command'] += '--wal-file-path=%p --wal-file-name=%f'
-
-            elif os.name == 'nt':
-                options['archive_command'] += '--wal-file-path="%p" --wal-file-name="%f"'
-
-            if log_level:
-                options['archive_command'] += ' --log-level-console={0}'.format(log_level)
-                options['archive_command'] += ' --log-level-file={0} '.format(log_level)
-        else: # custom_archive_command is not None
-            options['archive_command'] = custom_archive_command
-
-        self.set_auto_conf(node, options)
-
-    def get_restore_command(self, backup_dir, instance, node):
-
-        # parse postgresql.auto.conf
-        restore_command = ''
-        if os.name == 'posix':
-            restore_command += '{0} archive-get -B {1} --instance={2} '.format(
-                self.probackup_path, backup_dir, instance)
-
-        elif os.name == 'nt':
-            restore_command += '"{0}" archive-get -B {1} --instance={2} '.format(
-                self.probackup_path.replace("\\","\\\\"),
-                backup_dir.replace("\\","\\\\"), instance)
+        restore_command = " ".join([f'"{self.probackup_path}"',
+                                    'archive-get', *backup_dir.pb_args])
+        if os.name == 'nt':
+            restore_command.replace("\\", "\\\\")
+        restore_command += f' --instance={instance}'
 
         # don`t forget to kill old_binary after remote ssh release
         if self.remote:
-            restore_command += '--remote-proto=ssh '
-            restore_command += '--remote-host=localhost '
+            restore_command += ' --remote-proto=ssh'
+            restore_command += ' --remote-host=localhost'
 
         if os.name == 'posix':
-            restore_command += '--wal-file-path=%p --wal-file-name=%f'
+            restore_command += ' --wal-file-path=%p --wal-file-name=%f'
 
         elif os.name == 'nt':
-            restore_command += '--wal-file-path="%p" --wal-file-name="%f"'
+            restore_command += ' --wal-file-path="%p" --wal-file-name="%f"'
 
         return restore_command
-
-    # rm_options - list of parameter name that should be deleted from current config,
-    # example: ['wal_keep_segments', 'max_wal_size']
-    def set_auto_conf(self, node, options, config='postgresql.auto.conf', rm_options={}):
-
-        # parse postgresql.auto.conf
-        path = os.path.join(node.data_dir, config)
-
-        with open(path, 'r') as f:
-            raw_content = f.read()
-
-        current_options = {}
-        current_directives = []
-        for line in raw_content.splitlines():
-
-            # ignore comments
-            if line.startswith('#'):
-                continue
-
-            if line == '':
-                continue
-
-            if line.startswith('include'):
-                current_directives.append(line)
-                continue
-
-            name, var = line.partition('=')[::2]
-            name = name.strip()
-            var = var.strip()
-            var = var.strip('"')
-            var = var.strip("'")
-
-            # remove options specified in rm_options list
-            if name in rm_options:
-                continue
-
-            current_options[name] = var
-
-        for option in options:
-            current_options[option] = options[option]
-
-        auto_conf = ''
-        for option in current_options:
-            auto_conf += "{0} = '{1}'\n".format(
-                option, current_options[option])
-
-        for directive in current_directives:
-            auto_conf += directive + "\n"
-
-        with open(path, 'wt') as f:
-            f.write(auto_conf)
-            f.flush()
-            f.close()
 
     def set_replica(
             self, master, replica,
             replica_name='replica',
             synchronous=False,
             log_shipping=False
-            ):
+    ):
 
-        self.set_auto_conf(
-            replica,
+        replica.set_auto_conf(
             options={
                 'port': replica.port,
                 'hot_standby': 'on'})
 
-        if self.get_version(replica) >= self.version_to_num('12.0'):
+        if self.pg_config_version >= self.version_to_num('12.0'):
             with open(os.path.join(replica.data_dir, "standby.signal"), 'w') as f:
                 f.flush()
                 f.close()
@@ -1598,11 +845,10 @@ class ProbackupTest(object):
             config = 'postgresql.auto.conf'
 
             if not log_shipping:
-                self.set_auto_conf(
-                    replica,
+                replica.set_auto_conf(
                     {'primary_conninfo': 'user={0} port={1} application_name={2} '
-                    ' sslmode=prefer sslcompression=1'.format(
-                        self.user, master.port, replica_name)},
+                                         ' sslmode=prefer sslcompression=1'.format(
+                        self.username, master.port, replica_name)},
                     config)
         else:
             replica.append_conf('recovery.conf', 'standby_mode = on')
@@ -1612,57 +858,61 @@ class ProbackupTest(object):
                     'recovery.conf',
                     "primary_conninfo = 'user={0} port={1} application_name={2}"
                     " sslmode=prefer sslcompression=1'".format(
-                        self.user, master.port, replica_name))
+                        self.username, master.port, replica_name))
 
         if synchronous:
-            self.set_auto_conf(
-                master,
+            master.set_auto_conf(
                 options={
                     'synchronous_standby_names': replica_name,
                     'synchronous_commit': 'remote_apply'})
 
             master.reload()
 
+    class ControlFileContainer(object):
+        __slots__ = ('data',)
+
+        def __init__(self, data):
+            self.data = data
+
+    @contextlib.contextmanager
+    def modify_backup_control(self, backup_dir, instance, backup_id):
+        path = os.path.join('backups', instance, backup_id, 'backup.control')
+        control_file = backup_dir.read_file(path)
+        cf = ProbackupTest.ControlFileContainer(control_file)
+        yield cf
+        if control_file != cf.data:
+            backup_dir.write_file(path, cf.data)
+
     def change_backup_status(self, backup_dir, instance, backup_id, status):
+        with self.modify_backup_control(backup_dir, instance, backup_id) as cf:
+            cf.data = re.sub(r'status = \w+', f'status = {status}', cf.data, 1)
 
-        control_file_path = os.path.join(
-            backup_dir, 'backups', instance, backup_id, 'backup.control')
+    def get_locks(self, backup_dir : TestBackupDir, node : str):
+        path = "backups/" + node + "/locks"
+        return backup_dir.list_files(path)
 
-        with open(control_file_path, 'r') as f:
-            actual_control = f.read()
+    def read_lock(self, backup_dir : TestBackupDir, node : str, lock : str):
+        path = "backups/" + node + "/locks/" + lock
+        return backup_dir.read_file(path, text=False)
 
-        new_control_file = ''
-        for line in actual_control.splitlines():
-            if line.startswith('status'):
-                line = 'status = {0}'.format(status)
-            new_control_file += line
-            new_control_file += '\n'
-
-        with open(control_file_path, 'wt') as f:
-            f.write(new_control_file)
-            f.flush()
-            f.close()
-
-        with open(control_file_path, 'r') as f:
-            actual_control = f.read()
-
-    def wrong_wal_clean(self, node, wal_size):
-        wals_dir = os.path.join(self.backup_dir(node), 'wal')
-        wals = [
-            f for f in os.listdir(wals_dir) if os.path.isfile(
-                os.path.join(wals_dir, f))
-        ]
-        wals.sort()
-        file_path = os.path.join(wals_dir, wals[-1])
-        if os.path.getsize(file_path) != wal_size:
-            os.remove(file_path)
+    def expire_locks(self, backup_dir : TestBackupDir, node : str, seconds=1):
+        path = "backups/" + node + "/locks"
+        now = time.time()
+        expired = base36enc(int(now) - seconds)
+        for lock in backup_dir.list_files(path):
+            base, ts, exclusive = lock.rsplit("_", 2)
+            lock_expired = "_".join([base, expired, exclusive])
+            content = backup_dir.read_file(path+"/"+lock, text = False)
+            backup_dir.remove_file(path+"/"+lock)
+            backup_dir.write_file(path+"/"+lock_expired, content, text = False)
 
     def guc_wal_segment_size(self, node):
         var = node.execute(
             'postgres',
             "select setting from pg_settings where name = 'wal_segment_size'"
         )
-        return int(var[0][0]) * self.guc_wal_block_size(node)
+        print(int(var[0][0]))
+        return int(var[0][0])
 
     def guc_wal_block_size(self, node):
         var = node.execute(
@@ -1673,18 +923,14 @@ class ProbackupTest(object):
 
     def get_pgpro_edition(self, node):
         if node.execute(
-            'postgres',
-            "select exists (select 1 from"
-            " pg_proc where proname = 'pgpro_edition')"
+                'postgres',
+                "select exists (select 1 from"
+                " pg_proc where proname = 'pgpro_edition')"
         )[0][0]:
             var = node.execute('postgres', 'select pgpro_edition()')
             return str(var[0][0])
         else:
             return False
-
-    def get_username(self):
-        """ Returns current user name """
-        return getpass.getuser()
 
     def version_to_num(self, version):
         if not version:
@@ -1697,100 +943,93 @@ class ProbackupTest(object):
             num = num * 100 + int(re.sub(r"[^\d]", "", part))
         return num
 
-    def switch_wal_segment(self, node):
+    def switch_wal_segment(self, node, sleep_seconds=1, and_tx=False):
         """
-        Execute pg_switch_wal/xlog() in given node
+        Execute pg_switch_wal() in given node
 
         Args:
             node: an instance of PostgresNode or NodeConnection class
         """
         if isinstance(node, testgres.PostgresNode):
-            if self.version_to_num(
-                node.safe_psql('postgres', 'show server_version').decode('utf-8')
-                    ) >= self.version_to_num('10.0'):
-                node.safe_psql('postgres', 'select pg_switch_wal()')
-            else:
-                node.safe_psql('postgres', 'select pg_switch_xlog()')
+            with node.connect('postgres') as con:
+                if and_tx:
+                    con.execute('select txid_current()')
+                lsn = con.execute('select pg_switch_wal()')[0][0]
         else:
-            if self.version_to_num(
-                node.execute('show server_version')[0][0]
-                    ) >= self.version_to_num('10.0'):
-                node.execute('select pg_switch_wal()')
-            else:
-                node.execute('select pg_switch_xlog()')
+            lsn = node.execute('select pg_switch_wal()')[0][0]
 
-        sleep(1)
+        if sleep_seconds > 0:
+            time.sleep(sleep_seconds)
+        return lsn
+
+    @contextlib.contextmanager
+    def switch_wal_after(self, node, seconds, and_tx=True):
+        tm = threading.Timer(seconds, self.switch_wal_segment, [node, 0, and_tx])
+        tm.start()
+        try:
+            yield
+        finally:
+            tm.cancel()
+            tm.join()
 
     def wait_until_replica_catch_with_master(self, master, replica):
-
-        version = master.safe_psql(
-            'postgres',
-            'show server_version').decode('utf-8').rstrip()
-
-        if self.version_to_num(version) >= self.version_to_num('10.0'):
-            master_function = 'pg_catalog.pg_current_wal_lsn()'
-            replica_function = 'pg_catalog.pg_last_wal_replay_lsn()'
-        else:
-            master_function = 'pg_catalog.pg_current_xlog_location()'
-            replica_function = 'pg_catalog.pg_last_xlog_replay_location()'
+        master_function = 'pg_catalog.pg_current_wal_insert_lsn()'
 
         lsn = master.safe_psql(
             'postgres',
             'SELECT {0}'.format(master_function)).decode('utf-8').rstrip()
 
         # Wait until replica catch up with master
+        self.wait_until_lsn_replayed(replica, lsn)
+        return lsn
+
+    def wait_until_lsn_replayed(self, replica, lsn):
+        replica_function = 'pg_catalog.pg_last_wal_replay_lsn()'
         replica.poll_query_until(
             'postgres',
             "SELECT '{0}'::pg_lsn <= {1}".format(lsn, replica_function))
-
-    def get_version(self, node):
-        return self.version_to_num(
-            testgres.get_pg_config()['VERSION'].split(" ")[1])
 
     def get_ptrack_version(self, node):
         version = node.safe_psql(
             "postgres",
             "SELECT extversion "
-                        "FROM pg_catalog.pg_extension WHERE extname = 'ptrack'").decode('utf-8').rstrip()
+            "FROM pg_catalog.pg_extension WHERE extname = 'ptrack'").decode('utf-8').rstrip()
         return self.version_to_num(version)
 
     def get_bin_path(self, binary):
         return testgres.get_bin_path(binary)
 
-    def del_test_dir(self, module_name, fname):
+    def del_test_dirs(self):
         """ Del testdir and optimistically try to del module dir"""
-
-        shutil.rmtree(
-            os.path.join(
-                self.tmp_path,
-                module_name,
-                fname
-            ),
-            ignore_errors=True
-        )
+        # Remove FS dependent part first
+        self.backup_dir.cleanup()
+        # Remove all the rest
+        if init_params.delete_logs:
+            shutil.rmtree(self.test_path, ignore_errors=True)
 
     def pgdata_content(self, pgdata, ignore_ptrack=True, exclude_dirs=None):
         """ return dict with directory content. "
         " TAKE IT AFTER CHECKPOINT or BACKUP"""
-        dirs_to_ignore = [
+        dirs_to_ignore = {
             'pg_xlog', 'pg_wal', 'pg_log',
             'pg_stat_tmp', 'pg_subtrans', 'pg_notify'
-        ]
-        files_to_ignore = [
+        }
+        files_to_ignore = {
             'postmaster.pid', 'postmaster.opts',
             'pg_internal.init', 'postgresql.auto.conf',
-            'backup_label', 'tablespace_map', 'recovery.conf',
+            'backup_label', 'backup_label.old',
+            'tablespace_map', 'recovery.conf',
             'ptrack_control', 'ptrack_init', 'pg_control',
             'probackup_recovery.conf', 'recovery.signal',
             'standby.signal', 'ptrack.map', 'ptrack.map.mmap',
-            'ptrack.map.tmp'
-        ]
+            'ptrack.map.tmp', 'recovery.done'
+        }
 
         if exclude_dirs:
-            dirs_to_ignore = dirs_to_ignore + exclude_dirs
-#        suffixes_to_ignore = (
-#            '_ptrack'
-#        )
+            dirs_to_ignore |= set(exclude_dirs)
+        #        suffixes_to_ignore = (
+        #            '_ptrack'
+        #        )
         directory_dict = {}
         directory_dict['pgdata'] = pgdata
         directory_dict['files'] = {}
@@ -1799,10 +1038,10 @@ class ProbackupTest(object):
             dirs[:] = [d for d in dirs if d not in dirs_to_ignore]
             for file in files:
                 if (
-                    file in files_to_ignore or
-                    (ignore_ptrack and file.endswith('_ptrack'))
+                        file in files_to_ignore or
+                        (ignore_ptrack and file.endswith('_ptrack'))
                 ):
-                        continue
+                    continue
 
                 file_fullpath = os.path.join(root, file)
                 file_relpath = os.path.relpath(file_fullpath, pgdata)
@@ -1812,11 +1051,11 @@ class ProbackupTest(object):
                     # truncate cfm's content's zero tail
                     if file_relpath.endswith('.cfm'):
                         content = f.read()
-                        zero64 = b"\x00"*64
+                        zero64 = b"\x00" * 64
                         l = len(content)
                         while l > 64:
                             s = (l - 1) & ~63
-                            if content[s:l] != zero64[:l-s]:
+                            if content[s:l] != zero64[:l - s]:
                                 break
                             l = s
                         content = content[:l]
@@ -1824,17 +1063,17 @@ class ProbackupTest(object):
                     else:
                         digest = hashlib.md5()
                         while True:
-                            b = f.read(64*1024)
+                            b = f.read(64 * 1024)
                             if not b: break
                             digest.update(b)
                     cfile.md5 = digest.hexdigest()
 
                 # crappy algorithm
                 if cfile.is_datafile:
-                    size_in_pages = os.path.getsize(file_fullpath)/8192
+                    size_in_pages = os.path.getsize(file_fullpath) / 8192
                     cfile.md5_per_page = self.get_md5_per_page_for_fork(
-                            file_fullpath, size_in_pages
-                        )
+                        file_fullpath, size_in_pages
+                    )
 
             for directory in dirs:
                 directory_path = os.path.join(root, directory)
@@ -1866,14 +1105,13 @@ class ProbackupTest(object):
             "FROM pg_am, pg_class "
             "WHERE pg_am.amname = 'spgist' "
             "AND pg_class.relam = pg_am.oid"
-            ).decode('utf-8').rstrip().splitlines()
+        ).decode('utf-8').rstrip().splitlines()
         for filename in spgist_filelist:
             comparision_exclusion_dict[filename] = set([0])
 
         return comparision_exclusion_dict
 
-
-    def compare_pgdata(self, original_pgdata, restored_pgdata, exclusion_dict = dict()):
+    def compare_pgdata(self, original_pgdata, restored_pgdata, exclusion_dict=dict()):
         """
         return dict with directory content. DO IT BEFORE RECOVERY
         exclusion_dict is used for exclude files (and it block_no) from comparision
@@ -1969,7 +1207,6 @@ class ProbackupTest(object):
                         os.path.join(restored_pgdata['pgdata'], file)
                     )
 
-
                 for page in sorted(restored_pages - original_pages):
                     error_message += '\n Extra page {0}\n File: {1}\n'.format(
                         page,
@@ -1992,264 +1229,188 @@ class ProbackupTest(object):
                             restored.md5_per_page[page],
                             os.path.join(
                                 restored_pgdata['pgdata'], file)
-                            )
+                        )
 
         self.assertFalse(fail, error_message)
+
+    def compare_instance_dir(self, original_instance, after_backup_instance, exclusion_dict=dict()):
+        """
+        exclusion_dict is used for exclude files (and it block_no) from comparision
+        it is a dict with relative filenames as keys and set of block numbers as values
+        """
+        fail = False
+        error_message = 'Instance directory is not equal to original!\n'
+
+        # Compare directories
+        after_backup = set(after_backup_instance['dirs'])
+        original_dirs = set(original_instance['dirs'])
+
+        for directory in sorted(after_backup - original_dirs):
+            fail = True
+            error_message += '\nDirectory was not present'
+            error_message += ' in original instance: {0}\n'.format(directory)
+
+        for directory in sorted(original_dirs - after_backup):
+            fail = True
+            error_message += '\nDirectory dissappeared'
+            error_message += ' in instance after backup: {0}\n'.format(directory)
+
+        for directory in sorted(original_dirs & after_backup):
+            original = original_instance['dirs'][directory]
+            after_backup = after_backup_instance['dirs'][directory]
+            if original.mode != after_backup.mode:
+                fail = True
+                error_message += '\nDir permissions mismatch:\n'
+                error_message += ' Dir old: {0} Permissions: {1}\n'.format(directory,
+                                                                           original.mode)
+                error_message += ' Dir new: {0} Permissions: {1}\n'.format(directory,
+                                                                           after_backup.mode)
+
+        after_backup_files = set(after_backup_instance['files'])
+        original_files = set(original_instance['files'])
+
+        for file in sorted(after_backup_files - original_files):
+            # File is present in instance after backup
+            # but not present in original instance
+            # only backup_label is allowed
+            fail = True
+            error_message += '\nFile is not present'
+            error_message += ' in original instance: {0}\n'.format(file)
+
+        for file in sorted(original_files - after_backup_files):
+            error_message += (
+                '\nFile disappearance.\n '
+                'File: {0}\n').format(file)
+            fail = True
+
+        for file in sorted(original_files & after_backup_files):
+            original = original_instance['files'][file]
+            after_backup = after_backup_instance['files'][file]
+            if after_backup.mode != original.mode:
+                fail = True
+                error_message += '\nFile permissions mismatch:\n'
+                error_message += ' File_old: {0} Permissions: {1:o}\n'.format(file,
+                                                                              original.mode)
+                error_message += ' File_new: {0} Permissions: {1:o}\n'.format(file,
+                                                                              after_backup.mode)
+
+            if original.md5 != after_backup.md5:
+                if file not in exclusion_dict:
+                    fail = True
+                    error_message += (
+                        '\nFile Checksum mismatch.\n'
+                        'File_old: {0}\nChecksum_old: {1}\n'
+                        'File_new: {2}\nChecksum_new: {3}\n').format(file,
+                                                                     original.md5, file, after_backup.md5
+                                                                     )
+
+                if not original.is_datafile:
+                    continue
+
+                original_pages = set(original.md5_per_page)
+                after_backup_pages = set(after_backup.md5_per_page)
+
+                for page in sorted(original_pages - after_backup_pages):
+                    error_message += '\n Page {0} dissappeared.\n File: {1}\n'.format(
+                        page, file)
+
+
+                for page in sorted(after_backup_pages - original_pages):
+                    error_message += '\n Extra page {0}\n File: {1}\n'.format(
+                        page,  file)
+
+                for page in sorted(original_pages & after_backup_pages):
+                    if file in exclusion_dict and page in exclusion_dict[file]:
+                        continue
+
+                    if original.md5_per_page[page] != after_backup.md5_per_page[page]:
+                        fail = True
+                        error_message += (
+                            '\n Page checksum mismatch: {0}\n '
+                            ' PAGE Checksum_old: {1}\n '
+                            ' PAGE Checksum_new: {2}\n '
+                            ' File: {3}\n'
+                        ).format(
+                            page,
+                            original.md5_per_page[page],
+                            after_backup.md5_per_page[page],
+                            file
+                        )
+
+        self.assertFalse(fail, error_message)
+
 
     def gdb_attach(self, pid):
         return GDBobj([str(pid)], self, attach=True)
 
-    def _check_gdb_flag_or_skip_test(self):
-        if not self.gdb:
-            self.skipTest(
-                "Specify PGPROBACKUP_GDB and build without "
-                "optimizations for run this test"
-            )
-
-
-class GdbException(Exception):
-    def __init__(self, message="False"):
-        self.message = message
-
-    def __str__(self):
-        return '\n ERROR: {0}\n'.format(repr(self.message))
-
-
-class GDBobj:
-    def __init__(self, cmd, env, attach=False):
-        self.verbose = env.verbose
-        self.output = ''
-
-        # Check gdb flag is set up
-        if not env.gdb:
-            raise GdbException("No `PGPROBACKUP_GDB=on` is set, "
-                               "test should call ProbackupTest::check_gdb_flag_or_skip_test() on its start "
-                               "and be skipped")
-        # Check gdb presense
-        try:
-            gdb_version, _ = subprocess.Popen(
-                ['gdb', '--version'],
-                stdout=subprocess.PIPE
-            ).communicate()
-        except OSError:
-            raise GdbException("Couldn't find gdb on the path")
-
-        self.base_cmd = [
-            'gdb',
-            '--interpreter',
-            'mi2',
-            ]
-
-        if attach:
-            self.cmd = self.base_cmd + ['--pid'] + cmd
+    def assertMessage(self, actual=None, *, contains=None, regex=None, has_no=None):
+        if actual is None:
+            actual = self.output
+        if self.output and self.output != actual:  # Don't want to see this twice
+            error_message = '\n Unexpected Error Message: `{0}`\n CMD: `{1}`'.format(repr(self.output),
+                                                                                     self.cmd)
         else:
-            self.cmd = self.base_cmd + ['--args'] + cmd
+            error_message = '\n Unexpected Error Message. CMD: `{0}`'.format(self.cmd)
+        if contains:
+            self.assertIn(contains, actual, error_message)
+        elif regex:
+            self.assertRegex(actual, regex, error_message)
+        elif has_no:
+            self.assertNotIn(has_no, actual, error_message)
 
-        # Get version
-        gdb_version_number = re.search(
-            br"^GNU gdb [^\d]*(\d+)\.(\d)",
-            gdb_version)
-        self.major_version = int(gdb_version_number.group(1))
-        self.minor_version = int(gdb_version_number.group(2))
+def get_relative_path(run_path, data_dir):
+    run_path_parts = run_path.split('/')
+    data_dir_parts = data_dir.split('/')
 
-        if self.verbose:
-            print([' '.join(map(str, self.cmd))])
+    # Find index of the first different element in the lists
+    diff_index = 0
+    for i in range(min(len(run_path_parts), len(data_dir_parts))):
+        if run_path_parts[i] != data_dir_parts[i]:
+            diff_index = i
+            break
 
-        self.proc = subprocess.Popen(
-            self.cmd,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            bufsize=0,
-            text=True,
-            errors='replace',
-        )
-        self.gdb_pid = self.proc.pid
+    # Build relative path
+    relative_path = ['..'] * (len(run_path_parts) - diff_index) + data_dir_parts[diff_index:]
 
-        while True:
-            line = self.get_line()
+    return '/'.join(relative_path)
 
-            if 'No such process' in line:
-                raise GdbException(line)
 
-            if not line.startswith('(gdb)'):
-                pass
-            else:
-                break
-
-    def get_line(self):
-        line = self.proc.stdout.readline()
-        self.output += line
-        return line
-
-    def kill(self):
-        self.proc.kill()
-        self.proc.wait()
-
-    def set_breakpoint(self, location):
-
-        result = self._execute('break ' + location)
-        for line in result:
-            if line.startswith('~"Breakpoint'):
-                return
-
-            elif line.startswith('=breakpoint-created'):
-                return
-
-            elif line.startswith('^error'): #or line.startswith('(gdb)'):
-                break
-
-            elif line.startswith('&"break'):
-                pass
-
-            elif line.startswith('&"Function'):
-                raise GdbException(line)
-
-            elif line.startswith('&"No line'):
-                raise GdbException(line)
-
-            elif line.startswith('~"Make breakpoint pending on future shared'):
-                raise GdbException(line)
-
-        raise GdbException(
-            'Failed to set breakpoint.\n Output:\n {0}'.format(result)
-        )
-
-    def remove_all_breakpoints(self):
-
-        result = self._execute('delete')
-        for line in result:
-
-            if line.startswith('^done'):
-                return
-
-        raise GdbException(
-            'Failed to remove breakpoints.\n Output:\n {0}'.format(result)
-        )
-
-    def run_until_break(self):
-        result = self._execute('run', False)
-        for line in result:
-            if line.startswith('*stopped,reason="breakpoint-hit"'):
-                return
-        raise GdbException(
-            'Failed to run until breakpoint.\n'
-        )
-
-    def continue_execution_until_running(self):
-        result = self._execute('continue')
-
-        for line in result:
-            if line.startswith('*running') or line.startswith('^running'):
-                return
-            if line.startswith('*stopped,reason="breakpoint-hit"'):
-                continue
-            if line.startswith('*stopped,reason="exited-normally"'):
-                continue
-
-        raise GdbException(
-                'Failed to continue execution until running.\n'
-            )
-
-    def continue_execution_until_exit(self):
-        result = self._execute('continue', False)
-
-        for line in result:
-            if line.startswith('*running'):
-                continue
-            if line.startswith('*stopped,reason="breakpoint-hit"'):
-                continue
-            if (
-                line.startswith('*stopped,reason="exited') or
-                line == '*stopped\n'
-            ):
-                return
-
-        raise GdbException(
-            'Failed to continue execution until exit.\n'
-        )
-
-    def continue_execution_until_error(self):
-        result = self._execute('continue', False)
-
-        for line in result:
-            if line.startswith('^error'):
-                return
-            if line.startswith('*stopped,reason="exited'):
-                return
-            if line.startswith(
-                '*stopped,reason="signal-received",signal-name="SIGABRT"'):
-                return
-
-        raise GdbException(
-            'Failed to continue execution until error.\n')
-
-    def continue_execution_until_break(self, ignore_count=0):
-        if ignore_count > 0:
-            result = self._execute(
-                'continue ' + str(ignore_count),
-                False
-            )
-        else:
-            result = self._execute('continue', False)
-
-        for line in result:
-            if line.startswith('*stopped,reason="breakpoint-hit"'):
-                return
-            if line.startswith('*stopped,reason="exited-normally"'):
-                break
-
-        raise GdbException(
-            'Failed to continue execution until break.\n')
-
-    def stopped_in_breakpoint(self):
-        while True:
-            line = self.get_line()
-            if self.verbose:
-                print(line)
-            if line.startswith('*stopped,reason="breakpoint-hit"'):
-                return True
-        return False
-
-    def quit(self):
-        self.proc.terminate()
-
-    # use for breakpoint, run, continue
-    def _execute(self, cmd, running=True):
-        output = []
-        self.proc.stdin.flush()
-        self.proc.stdin.write(cmd + '\n')
-        self.proc.stdin.flush()
-        sleep(1)
-
-        # look for command we just send
-        while True:
-            line = self.get_line()
-            if self.verbose:
-                print(repr(line))
-
-            if cmd not in line:
-                continue
-            else:
-                break
-
-        while True:
-            line = self.get_line()
-            output += [line]
-            if self.verbose:
-                print(repr(line))
-            if line.startswith('^done') or line.startswith('*stopped'):
-                break
-            if line.startswith('^error'):
-                break
-            if running and (line.startswith('*running') or line.startswith('^running')):
-#            if running and line.startswith('*running'):
-                break
-        return output
 class ContentFile(object):
     __slots__ = ('is_datafile', 'mode', 'md5', 'md5_per_page')
+
     def __init__(self, is_datafile: bool):
         self.is_datafile = is_datafile
 
+
 class ContentDir(object):
     __slots__ = ('mode')
+
+def _lz4_decompress(data):
+    with lz4.frame.open(io.BytesIO(data), 'rb') as fl:
+        return fl.read()
+
+def _lz4_compress(data):
+    out = io.BytesIO()
+    with lz4.frame.open(out, 'wb', content_checksum=True) as fl:
+        fl.write(data)
+    return out.getvalue()
+
+def _do_compress(file, data):
+    if file.endswith('.gz'):
+        return gzip.compress(data, compresslevel=1)
+    elif file.endswith('.lz4'):
+        return _lz4_compress(data)
+    elif file.endswith('.zst'):
+        return zstd.compress(data, 1, 1)
+    else:
+        return data
+
+def _do_decompress(file, data):
+    if file.endswith('.gz'):
+        return gzip.decompress(data)
+    elif file.endswith('.lz4'):
+        return _lz4_decompress(data)
+    elif file.endswith('.zst'):
+        return zstd.decompress(data)
+    else:
+        return data

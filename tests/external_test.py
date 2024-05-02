@@ -1,13 +1,12 @@
 import unittest
 import os
 from time import sleep
-from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
-from .helpers.cfs_helpers import find_by_name
+from .helpers.ptrack_helpers import ProbackupTest, fs_backup_class
 import shutil
 
 
 # TODO: add some ptrack tests
-class ExternalTest(ProbackupTest, unittest.TestCase):
+class ExternalTest(ProbackupTest):
 
     # @unittest.skip("skip")
     # @unittest.expectedFailure
@@ -17,60 +16,41 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         with external directory, restore backup, check that
         external directory was successfully copied
         """
-        core_dir = os.path.join(self.tmp_path, self.module_name, self.fname)
-        shutil.rmtree(core_dir, ignore_errors=True)
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
-            initdb_params=['--data-checksums'],
+        node = self.pg_node.make_simple('node',
             set_replication=True)
 
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
+        backup_dir = self.backup_dir
         external_dir = self.get_tblspace_path(node, 'somedirectory')
 
         # create directory in external_directory
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
-        self.set_archiving(backup_dir, 'node', node)
+        self.pb.init()
+        self.pb.add_instance('node', node)
+        self.pb.set_archiving('node', node)
         node.slow_start()
 
         # take FULL backup with external directory pointing to a file
-        file_path = os.path.join(core_dir, 'file')
+        file_path = os.path.join(self.test_path, 'file')
         with open(file_path, "w+") as f:
             pass
 
-        try:
-            self.backup_node(
-                backup_dir, 'node', node, backup_type="full",
-                options=[
-                    '--external-dirs={0}'.format(file_path)])
-            # we should die here because exception is what we expect to happen
-            self.assertEqual(
-                1, 0,
-                "Expecting Error because external dir point to a file"
-                "\n Output: {0} \n CMD: {1}".format(
-                    repr(self.output), self.cmd))
-        except ProbackupException as e:
-            self.assertTrue(
-                'ERROR:  --external-dirs option' in e.message and
-                'directory or symbolic link expected' in e.message,
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
-                    repr(e.message), self.cmd))
+        self.pb.backup_node('node', node, backup_type="full",
+                         options=[
+                             '--external-dirs={0}'.format(file_path)],
+                         expect_error="because external dir point to a file")
+        self.assertMessage(contains='ERROR:  --external-dirs option')
+        self.assertMessage(contains='directory or symbolic link expected')
 
         sleep(1)
 
         # FULL backup
-        self.backup_node(
-            backup_dir, 'node', node, backup_type="full",
+        self.pb.backup_node('node', node, backup_type="full",
             options=["-j", "4", "--stream"])
 
         # Fill external directories
-        self.restore_node(
-            backup_dir, 'node', node,
-            data_dir=external_dir, options=["-j", "4"])
+        self.pb.restore_node('node', restore_dir=external_dir, options=["-j", "4"])
 
         # Full backup with external dir
-        self.backup_node(
-            backup_dir, 'node', node,
+        self.pb.backup_node('node', node,
             options=[
                 '--external-dirs={0}'.format(external_dir)])
 
@@ -80,8 +60,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         node.cleanup()
         shutil.rmtree(node.base_dir, ignore_errors=True)
 
-        self.restore_node(
-            backup_dir, 'node', node, options=["-j", "4"])
+        self.pb.restore_node('node', node=node, options=["-j", "4"])
 
         pgdata_restored = self.pgdata_content(
             node.base_dir, exclude_dirs=['logs'])
@@ -97,39 +76,32 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         restore delta backup, check that
         external directory was not copied
         """
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
-            initdb_params=['--data-checksums'],
+        node = self.pg_node.make_simple('node',
             set_replication=True)
 
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
+        backup_dir = self.backup_dir
         external_dir = self.get_tblspace_path(node, 'somedirectory')
 
         # create directory in external_directory
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
+        self.pb.init()
+        self.pb.add_instance('node', node)
         node.slow_start()
 
         # FULL backup
-        self.backup_node(
-            backup_dir, 'node', node, backup_type="full",
+        self.pb.backup_node('node', node, backup_type="full",
             options=["-j", "4", "--stream"])
 
         # Fill external directories with data
-        self.restore_node(
-            backup_dir, 'node', node,
-            data_dir=external_dir, options=["-j", "4"])
+        self.pb.restore_node('node', restore_dir=external_dir, options=["-j", "4"])
 
         # Full backup with external dir
-        self.backup_node(
-            backup_dir, 'node', node,
+        self.pb.backup_node('node', node,
             options=[
                 '--stream',
                 '--external-dirs={0}'.format(external_dir)])
 
         # Delta backup without external directory
-        self.backup_node(
-            backup_dir, 'node', node, backup_type="delta",
+        self.pb.backup_node('node', node, backup_type="delta",
             options=['--external-dirs=none', '--stream'])
 
         shutil.rmtree(external_dir, ignore_errors=True)
@@ -139,8 +111,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         node.cleanup()
         shutil.rmtree(node.base_dir, ignore_errors=True)
 
-        self.restore_node(
-            backup_dir, 'node', node, options=["-j", "4"])
+        self.pb.restore_node('node', node=node, options=["-j", "4"])
 
         pgdata_restored = self.pgdata_content(
             node.base_dir, exclude_dirs=['logs'])
@@ -154,47 +125,34 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         take backup with two external directories pointing to
         the same directory, backup should fail
         """
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
-            initdb_params=['--data-checksums'],
+        node = self.pg_node.make_simple('node',
             set_replication=True)
 
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
+        backup_dir = self.backup_dir
         external_dir1 = self.get_tblspace_path(node, 'external_dir1')
         external_dir2 = self.get_tblspace_path(node, 'external_dir2')
 
         # create directory in external_directory
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
+        self.pb.init()
+        self.pb.add_instance('node', node)
         node.slow_start()
 
         os.mkdir(external_dir1)
         os.mkdir(external_dir2)
 
         # Full backup with external dirs
-        try:
-            self.backup_node(
-                backup_dir, 'node', node,
-                options=[
-                    "-j", "4", "--stream",
-                    "-E", "{0}{1}{2}{1}{0}".format(
-                        external_dir1,
-                        self.EXTERNAL_DIRECTORY_DELIMITER,
-                        external_dir2,
-                        self.EXTERNAL_DIRECTORY_DELIMITER,
-                        external_dir1)])
-            # we should die here because exception is what we expect to happen
-            self.assertEqual(
-                1, 0,
-                "Expecting Error because tablespace mapping is incorrect"
-                "\n Output: {0} \n CMD: {1}".format(
-                    repr(self.output), self.cmd))
-        except ProbackupException as e:
-            self.assertTrue(
-                'ERROR: External directory path (-E option)' in e.message and
-                'contain another external directory' in e.message,
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
-                    repr(e.message), self.cmd))
+        self.pb.backup_node('node', node,
+                         options=[
+                             "-j", "4", "--stream",
+                             "-E", "{0}{1}{2}{1}{0}".format(
+                                 external_dir1,
+                                 self.EXTERNAL_DIRECTORY_DELIMITER,
+                                 external_dir2,
+                                 self.EXTERNAL_DIRECTORY_DELIMITER,
+                                 external_dir1)],
+                         expect_error="because tablespace mapping is incorrect")
+        self.assertMessage(regex=r'ERROR: External directory path \(-E option\) ".*" '
+                                 r'contain another external directory')
 
     # @unittest.skip("skip")
     def test_external_dir_mapping(self):
@@ -204,64 +162,42 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         check that restore with external-dir mapping will end with
         success
         """
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
-            set_replication=True,
-            initdb_params=['--data-checksums'])
+        node = self.pg_node.make_simple('node',
+            set_replication=True)
 
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
-
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
+        self.pb.init()
+        self.pb.add_instance('node', node)
         node.slow_start()
 
-        self.backup_node(
-            backup_dir, 'node', node, backup_type="full",
+        self.pb.backup_node('node', node, backup_type="full",
             options=["-j", "4", "--stream"])
 
         external_dir1 = self.get_tblspace_path(node, 'external_dir1')
         external_dir2 = self.get_tblspace_path(node, 'external_dir2')
 
         # Fill external directories with data
-        self.restore_node(
-            backup_dir, 'node', node,
-            data_dir=external_dir1, options=["-j", "4"])
+        self.pb.restore_node('node', restore_dir=external_dir1, options=["-j", "4"])
 
-        self.restore_node(
-            backup_dir, 'node', node,
-            data_dir=external_dir2, options=["-j", "4"])
+        self.pb.restore_node('node', restore_dir=external_dir2, options=["-j", "4"])
 
-        node_restored = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
+        node_restored = self.pg_node.make_simple('node_restored')
         node_restored.cleanup()
 
         external_dir1_new = self.get_tblspace_path(node_restored, 'external_dir1')
         external_dir2_new = self.get_tblspace_path(node_restored, 'external_dir2')
 
-        try:
-            self.restore_node(
-                backup_dir, 'node', node_restored,
-                options=[
-                    "-j", "4",
-                    "--external-mapping={0}={1}".format(
-                        external_dir1, external_dir1_new),
-                    "--external-mapping={0}={1}".format(
-                        external_dir2, external_dir2_new)])
-            # we should die here because exception is what we expect to happen
-            self.assertEqual(
-                1, 0,
-                "Expecting Error because tablespace mapping is incorrect"
-                "\n Output: {0} \n CMD: {1}".format(
-                    repr(self.output), self.cmd))
-        except ProbackupException as e:
-            self.assertTrue(
-                'ERROR: --external-mapping option' in e.message and
-                'have an entry in list of external directories' in e.message,
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
-                    repr(e.message), self.cmd))
+        self.pb.restore_node('node', node=node_restored,
+                          options=[
+                              "-j", "4",
+                              "--external-mapping={0}={1}".format(
+                                  external_dir1, external_dir1_new),
+                              "--external-mapping={0}={1}".format(
+                                  external_dir2, external_dir2_new)],
+                          expect_error="because tablespace mapping is incorrect")
+        self.assertMessage(contains=r"ERROR: --external-mapping option's old directory "
+                                    r"doesn't have an entry in list of external directories")
 
-        self.backup_node(
-            backup_dir, 'node', node, backup_type="delta",
+        self.pb.backup_node('node', node, backup_type="delta",
             options=[
                 "-j", "4", "--stream",
                 "-E", "{0}{1}{2}".format(
@@ -272,8 +208,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         pgdata = self.pgdata_content(
             node.base_dir, exclude_dirs=['logs'])
 
-        self.restore_node(
-            backup_dir, 'node', node_restored,
+        self.pb.restore_node('node', node=node_restored,
             options=[
                 "-j", "4",
                 "--external-mapping={0}={1}".format(
@@ -289,40 +224,30 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
     # @unittest.expectedFailure
     def test_backup_multiple_external(self):
         """check that cmdline has priority over config"""
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
-            set_replication=True,
-            initdb_params=['--data-checksums'])
+        node = self.pg_node.make_simple('node',
+            set_replication=True)
 
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
+        self.pb.init()
+        self.pb.add_instance('node', node)
         node.slow_start()
 
         external_dir1 = self.get_tblspace_path(node, 'external_dir1')
         external_dir2 = self.get_tblspace_path(node, 'external_dir2')
 
         # FULL backup
-        self.backup_node(
-            backup_dir, 'node', node, backup_type="full",
+        self.pb.backup_node('node', node, backup_type="full",
             options=["-j", "4", "--stream"])
 
         # fill external directories with data
-        self.restore_node(
-            backup_dir, 'node', node,
-            data_dir=external_dir1, options=["-j", "4"])
+        self.pb.restore_node('node', restore_dir=external_dir1, options=["-j", "4"])
 
-        self.restore_node(
-            backup_dir, 'node', node,
-            data_dir=external_dir2, options=["-j", "4"])
+        self.pb.restore_node('node', restore_dir=external_dir2, options=["-j", "4"])
 
-        self.set_config(
-            backup_dir, 'node',
+        self.pb.set_config('node',
             options=['-E', external_dir1])
 
         # cmdline option MUST override options in config
-        self.backup_node(
-            backup_dir, 'node', node, backup_type="delta",
+        self.pb.backup_node('node', node, backup_type="delta",
             options=[
                 "-j", "4", "--stream",
                 "-E", external_dir2])
@@ -334,8 +259,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         shutil.rmtree(external_dir1, ignore_errors=True)
         shutil.rmtree(external_dir2, ignore_errors=True)
 
-        self.restore_node(
-            backup_dir, 'node', node,
+        self.pb.restore_node('node', node=node,
             options=["-j", "4"])
 
         pgdata_restored = self.pgdata_content(
@@ -354,64 +278,50 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         if not self.probackup_old_path:
             self.skipTest("You must specify PGPROBACKUPBIN_OLD"
                           " for run this test")
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
-            set_replication=True,
-            initdb_params=['--data-checksums'])
+        node = self.pg_node.make_simple('node',
+            set_replication=True)
 
-        self.init_pb(backup_dir, old_binary=True)
-        self.show_pb(backup_dir)
+        self.pb.init(old_binary=True)
+        self.pb.show()
 
-        self.add_instance(backup_dir, 'node', node, old_binary=True)
-        self.show_pb(backup_dir)
+        self.pb.add_instance('node', node, old_binary=True)
+        self.pb.show()
 
         node.slow_start()
 
         node.pgbench_init(scale=3)
 
         # FULL backup with old binary without external dirs support
-        self.backup_node(
-            backup_dir, 'node', node,
+        self.pb.backup_node('node', node,
             old_binary=True, options=["-j", "4", "--stream"])
 
         external_dir1 = self.get_tblspace_path(node, 'external_dir1')
         external_dir2 = self.get_tblspace_path(node, 'external_dir2')
 
         # fill external directories with data
-        self.restore_node(
-            backup_dir, 'node', node,
-            data_dir=external_dir1, options=["-j", "4"])
+        self.pb.restore_node('node', external_dir1, options=["-j", "4"])
 
-        self.restore_node(
-            backup_dir, 'node', node,
-            data_dir=external_dir2, options=["-j", "4"])
+        self.pb.restore_node('node', external_dir2, options=["-j", "4"])
 
         pgbench = node.pgbench(options=['-T', '30', '-c', '1', '--no-vacuum'])
         pgbench.wait()
 
         # FULL backup
-        backup_id = self.backup_node(
-            backup_dir, 'node', node,
+        backup_id = self.pb.backup_node('node', node,
             old_binary=True, options=["-j", "4", "--stream"])
 
         # fill external directories with changed data
         shutil.rmtree(external_dir1, ignore_errors=True)
         shutil.rmtree(external_dir2, ignore_errors=True)
 
-        self.restore_node(
-            backup_dir, 'node', node,
-            data_dir=external_dir1, options=["-j", "4"])
+        self.pb.restore_node('node', external_dir1, options=["-j", "4"])
 
-        self.restore_node(
-            backup_dir, 'node', node,
-            data_dir=external_dir2, options=["-j", "4"])
+        self.pb.restore_node('node', external_dir2, options=["-j", "4"])
 
-        self.delete_pb(backup_dir, 'node', backup_id=backup_id)
+        self.pb.delete('node', backup_id=backup_id)
 
         # delta backup with external directories using new binary
-        self.backup_node(
-            backup_dir, 'node', node, backup_type="delta",
+        self.pb.backup_node('node', node, backup_type="delta",
             options=[
                 "-j", "4", "--stream",
                 "-E", "{0}{1}{2}".format(
@@ -423,16 +333,14 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
             node.base_dir, exclude_dirs=['logs'])
 
         # RESTORE chain with new binary
-        node_restored = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
+        node_restored = self.pg_node.make_simple('node_restored')
 
         node_restored.cleanup()
 
         external_dir1_new = self.get_tblspace_path(node_restored, 'external_dir1')
         external_dir2_new = self.get_tblspace_path(node_restored, 'external_dir2')
 
-        self.restore_node(
-            backup_dir, 'node', node_restored,
+        self.pb.restore_node('node', node_restored,
             options=[
                 "-j", "4",
                 "--external-mapping={0}={1}".format(external_dir1, external_dir1_new),
@@ -444,7 +352,6 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         self.compare_pgdata(pgdata, pgdata_restored)
 
     # @unittest.expectedFailure
-    # @unittest.skip("skip")
     def test_external_backward_compatibility_merge_1(self):
         """
         take backup with old binary without external dirs support
@@ -454,52 +361,42 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         if not self.probackup_old_path:
             self.skipTest("You must specify PGPROBACKUPBIN_OLD"
                           " for run this test")
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
-            set_replication=True,
-            initdb_params=['--data-checksums'])
+        node = self.pg_node.make_simple('node',
+            set_replication=True)
 
-        self.init_pb(backup_dir, old_binary=True)
-        self.show_pb(backup_dir)
+        self.pb.init(old_binary=True)
+        self.pb.show()
 
-        self.add_instance(backup_dir, 'node', node, old_binary=True)
-        self.show_pb(backup_dir)
+        self.pb.add_instance('node', node, old_binary=True)
+        self.pb.show()
 
         node.slow_start()
 
         node.pgbench_init(scale=3)
 
         # tmp FULL backup with old binary
-        tmp_id = self.backup_node(
-            backup_dir, 'node', node,
+        tmp_id = self.pb.backup_node('node', node,
             old_binary=True, options=["-j", "4", "--stream"])
 
         external_dir1 = self.get_tblspace_path(node, 'external_dir1')
         external_dir2 = self.get_tblspace_path(node, 'external_dir2')
 
         # fill external directories with data
-        self.restore_node(
-            backup_dir, 'node', node,
-            data_dir=external_dir1, options=["-j", "4"])
+        self.pb.restore_node('node', external_dir1, options=["-j", "4"])
 
-        self.restore_node(
-            backup_dir, 'node', node,
-            data_dir=external_dir2, options=["-j", "4"])
+        self.pb.restore_node('node', external_dir2, options=["-j", "4"])
 
-        self.delete_pb(backup_dir, 'node', backup_id=tmp_id)
+        self.pb.delete('node', backup_id=tmp_id)
 
         # FULL backup with old binary without external dirs support
-        self.backup_node(
-            backup_dir, 'node', node,
+        self.pb.backup_node('node', node,
             old_binary=True, options=["-j", "4", "--stream"])
 
         pgbench = node.pgbench(options=['-T', '30', '-c', '1'])
         pgbench.wait()
 
         # delta backup with external directories using new binary
-        backup_id = self.backup_node(
-            backup_dir, 'node', node, backup_type="delta",
+        backup_id = self.pb.backup_node('node', node, backup_type="delta",
             options=[
                 "-j", "4", "--stream",
                 "-E", "{0}{1}{2}".format(
@@ -511,19 +408,17 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
             node.base_dir, exclude_dirs=['logs'])
 
         # Merge chain chain with new binary
-        self.merge_backup(backup_dir, 'node', backup_id=backup_id)
+        self.pb.merge_backup('node', backup_id=backup_id)
 
         # Restore merged backup
-        node_restored = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
+        node_restored = self.pg_node.make_simple('node_restored')
 
         node_restored.cleanup()
 
         external_dir1_new = self.get_tblspace_path(node_restored, 'external_dir1')
         external_dir2_new = self.get_tblspace_path(node_restored, 'external_dir2')
 
-        self.restore_node(
-            backup_dir, 'node', node_restored,
+        self.pb.restore_node('node', node_restored,
             options=[
                 "-j", "4",
                 "--external-mapping={0}={1}".format(external_dir1, external_dir1_new),
@@ -535,7 +430,6 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         self.compare_pgdata(pgdata, pgdata_restored)
 
     # @unittest.expectedFailure
-    # @unittest.skip("skip")
     def test_external_backward_compatibility_merge_2(self):
         """
         take backup with old binary without external dirs support
@@ -545,52 +439,42 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         if not self.probackup_old_path:
             self.skipTest("You must specify PGPROBACKUPBIN_OLD"
                           " for run this test")
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
-            set_replication=True,
-            initdb_params=['--data-checksums'])
+        node = self.pg_node.make_simple('node',
+            set_replication=True)
 
-        self.init_pb(backup_dir, old_binary=True)
-        self.show_pb(backup_dir)
+        self.pb.init(old_binary=True)
+        self.pb.show()
 
-        self.add_instance(backup_dir, 'node', node, old_binary=True)
-        self.show_pb(backup_dir)
+        self.pb.add_instance('node', node, old_binary=True)
+        self.pb.show()
 
         node.slow_start()
 
         node.pgbench_init(scale=3)
 
         # tmp FULL backup with old binary
-        tmp_id = self.backup_node(
-            backup_dir, 'node', node,
+        tmp_id = self.pb.backup_node('node', node,
             old_binary=True, options=["-j", "4", "--stream"])
 
         external_dir1 = self.get_tblspace_path(node, 'external_dir1')
         external_dir2 = self.get_tblspace_path(node, 'external_dir2')
 
         # fill external directories with data
-        self.restore_node(
-            backup_dir, 'node', node,
-            data_dir=external_dir1, options=["-j", "4"])
+        self.pb.restore_node('node', external_dir1, options=["-j", "4"])
 
-        self.restore_node(
-            backup_dir, 'node', node,
-            data_dir=external_dir2, options=["-j", "4"])
+        self.pb.restore_node('node', external_dir2, options=["-j", "4"])
 
-        self.delete_pb(backup_dir, 'node', backup_id=tmp_id)
+        self.pb.delete('node', backup_id=tmp_id)
 
         # FULL backup with old binary without external dirs support
-        self.backup_node(
-            backup_dir, 'node', node,
+        self.pb.backup_node('node', node,
             old_binary=True, options=["-j", "4", "--stream"])
 
         pgbench = node.pgbench(options=['-T', '30', '-c', '1'])
         pgbench.wait()
 
         # delta backup with external directories using new binary
-        self.backup_node(
-            backup_dir, 'node', node,
+        self.pb.backup_node('node', node,
             backup_type="delta",
             options=[
                 "-j", "4", "--stream",
@@ -606,19 +490,14 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         shutil.rmtree(external_dir1, ignore_errors=True)
         shutil.rmtree(external_dir2, ignore_errors=True)
 
-        self.restore_node(
-            backup_dir, 'node', node,
-            data_dir=external_dir1,
+        self.pb.restore_node('node', external_dir1,
             options=['-j', '4', '--skip-external-dirs'])
 
-        self.restore_node(
-            backup_dir, 'node', node,
-            data_dir=external_dir2,
+        self.pb.restore_node('node', external_dir2,
             options=['-j', '4', '--skip-external-dirs'])
 
         # delta backup without external directories using old binary
-        backup_id = self.backup_node(
-            backup_dir, 'node', node,
+        backup_id = self.pb.backup_node('node', node,
             backup_type="delta",
             options=[
                 "-j", "4", "--stream",
@@ -631,11 +510,10 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
             node.base_dir, exclude_dirs=['logs'])
 
         # Merge chain using new binary
-        self.merge_backup(backup_dir, 'node', backup_id=backup_id)
+        self.pb.merge_backup('node', backup_id=backup_id)
 
         # Restore merged backup
-        node_restored = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
+        node_restored = self.pg_node.make_simple('node_restored')
 
         node_restored.cleanup()
 
@@ -644,8 +522,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         external_dir2_new = self.get_tblspace_path(
             node_restored, 'external_dir2')
 
-        self.restore_node(
-            backup_dir, 'node', node_restored,
+        self.pb.restore_node('node', node_restored,
             options=[
                 "-j", "4",
                 "--external-mapping={0}={1}".format(
@@ -659,45 +536,45 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         self.compare_pgdata(pgdata, pgdata_restored)
 
     # @unittest.expectedFailure
-    # @unittest.skip("skip")
     def test_external_merge(self):
         """"""
         if not self.probackup_old_path:
             self.skipTest("You must specify PGPROBACKUPBIN_OLD"
                           " for run this test")
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
-            set_replication=True,
-            initdb_params=['--data-checksums'])
+        node = self.pg_node.make_simple('node',
+            set_replication=True)
 
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node, old_binary=True)
+        self.pb.init()
+        self.pb.add_instance('node', node, old_binary=True)
         node.slow_start()
 
         node.pgbench_init(scale=3)
 
         # take temp FULL backup
-        tmp_id = self.backup_node(
-            backup_dir, 'node', node, options=["-j", "4", "--stream"])
+        tmp_id = self.pb.backup_node('node', node, options=["-j", "4", "--stream"])
 
         external_dir1 = self.get_tblspace_path(node, 'external_dir1')
         external_dir2 = self.get_tblspace_path(node, 'external_dir2')
 
+        self.create_tblspace_in_node(node, 'tblsp_1')
+        node.safe_psql(
+            "postgres",
+            "create table t_heap_lame tablespace tblsp_1 "
+            "as select 1 as id, md5(i::text) as text, "
+            "md5(i::text)::tsvector as tsvector "
+            "from generate_series(0,100) i")
+
         # fill external directories with data
-        self.restore_node(
-            backup_dir, 'node', node, backup_id=tmp_id,
-            data_dir=external_dir1, options=["-j", "4"])
+        self.pb.restore_node('node', external_dir1, backup_id=tmp_id,
+            options=["-j", "4"])
 
-        self.restore_node(
-            backup_dir, 'node', node, backup_id=tmp_id,
-            data_dir=external_dir2, options=["-j", "4"])
+        self.pb.restore_node('node', external_dir2, backup_id=tmp_id,
+            options=["-j", "4"])
 
-        self.delete_pb(backup_dir, 'node', backup_id=tmp_id)
+        self.pb.delete('node', backup_id=tmp_id)
 
         # FULL backup with old binary without external dirs support
-        self.backup_node(
-            backup_dir, 'node', node,
+        self.pb.backup_node('node', node,
             old_binary=True, options=["-j", "4", "--stream"])
 
         # change data a bit
@@ -705,8 +582,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         pgbench.wait()
 
         # delta backup with external directories using new binary
-        backup_id = self.backup_node(
-            backup_dir, 'node', node, backup_type="delta",
+        backup_id = self.pb.backup_node('node', node, backup_type="delta",
             options=[
                 "-j", "4", "--stream",
                 "-E", "{0}{1}{2}".format(
@@ -717,10 +593,10 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         pgdata = self.pgdata_content(
             node.base_dir, exclude_dirs=['logs'])
 
-        print(self.show_pb(backup_dir, 'node', as_json=False, as_text=True))
+        print(self.pb.show('node', as_json=False, as_text=True))
 
         # Merge
-        print(self.merge_backup(backup_dir, 'node', backup_id=backup_id,
+        print(self.pb.merge_backup('node', backup_id=backup_id,
             options=['--log-level-file=VERBOSE']))
 
         # RESTORE
@@ -730,8 +606,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         external_dir1_new = self.get_tblspace_path(node, 'external_dir1')
         external_dir2_new = self.get_tblspace_path(node, 'external_dir2')
 
-        self.restore_node(
-            backup_dir, 'node', node,
+        self.pb.restore_node('node', node,
             options=[
                 "-j", "4",
                 "--external-mapping={0}={1}".format(
@@ -748,43 +623,36 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
     # @unittest.skip("skip")
     def test_external_merge_skip_external_dirs(self):
         """"""
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
-            set_replication=True,
-            initdb_params=['--data-checksums'])
+        node = self.pg_node.make_simple('node',
+            set_replication=True)
 
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
+        self.pb.init()
+        self.pb.add_instance('node', node)
         node.slow_start()
 
         node.pgbench_init(scale=3)
 
         # FULL backup with old data
-        tmp_id = self.backup_node(
-            backup_dir, 'node', node, options=["-j", "4", "--stream"])
+        tmp_id = self.pb.backup_node('node', node, options=["-j", "4", "--stream"])
 
         external_dir1 = self.get_tblspace_path(node, 'external_dir1')
         external_dir2 = self.get_tblspace_path(node, 'external_dir2')
 
         # fill external directories with old data
-        self.restore_node(
-            backup_dir, 'node', node, backup_id=tmp_id,
-            data_dir=external_dir1, options=["-j", "4"])
+        self.pb.restore_node('node', restore_dir=external_dir1, backup_id=tmp_id,
+            options=["-j", "4"])
 
-        self.restore_node(
-            backup_dir, 'node', node, backup_id=tmp_id,
-            data_dir=external_dir2, options=["-j", "4"])
+        self.pb.restore_node('node', restore_dir=external_dir2, backup_id=tmp_id,
+            options=["-j", "4"])
 
-        self.delete_pb(backup_dir, 'node', backup_id=tmp_id)
+        self.pb.delete('node', backup_id=tmp_id)
 
         # change data a bit
         pgbench = node.pgbench(options=['-T', '30', '-c', '1', '--no-vacuum'])
         pgbench.wait()
 
         # FULL backup with external directories
-        self.backup_node(
-            backup_dir, 'node', node,
+        self.pb.backup_node('node', node,
             options=[
                 "-j", "4", "--stream",
                 "-E", "{0}{1}{2}".format(
@@ -797,19 +665,14 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         shutil.rmtree(external_dir2, ignore_errors=True)
 
         # fill external directories with new data
-        self.restore_node(
-            backup_dir, 'node', node,
-            data_dir=external_dir1,
+        self.pb.restore_node('node', restore_dir=external_dir1,
             options=["-j", "4", "--skip-external-dirs"])
 
-        self.restore_node(
-            backup_dir, 'node', node,
-            data_dir=external_dir2,
+        self.pb.restore_node('node', restore_dir=external_dir2,
             options=["-j", "4", "--skip-external-dirs"])
 
         # DELTA backup with external directories
-        backup_id = self.backup_node(
-            backup_dir, 'node', node, backup_type="delta",
+        backup_id = self.pb.backup_node('node', node, backup_type="delta",
             options=[
                 "-j", "4", "--stream",
                 "-E", "{0}{1}{2}".format(
@@ -821,16 +684,14 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
             node.base_dir, exclude_dirs=['logs'])
 
         # merge backups without external directories
-        self.merge_backup(
-            backup_dir, 'node',
+        self.pb.merge_backup('node',
             backup_id=backup_id, options=['--skip-external-dirs'])
 
         # RESTORE
         node.cleanup()
         shutil.rmtree(node.base_dir, ignore_errors=True)
 
-        self.restore_node(
-            backup_dir, 'node', node,
+        self.pb.restore_node('node', node=node,
             options=["-j", "4"])
 
         pgdata_restored = self.pgdata_content(
@@ -839,24 +700,20 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         self.compare_pgdata(pgdata, pgdata_restored)
 
     # @unittest.expectedFailure
-    # @unittest.skip("skip")
     def test_external_merge_1(self):
         """"""
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
-            set_replication=True,
-            initdb_params=['--data-checksums'])
+        backup_dir = self.backup_dir
+        node = self.pg_node.make_simple('node',
+            set_replication=True)
 
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
+        self.pb.init()
+        self.pb.add_instance('node', node)
         node.slow_start()
 
         node.pgbench_init(scale=3)
 
         # FULL backup
-        self.backup_node(
-            backup_dir, 'node', node, options=["-j", "4", "--stream"])
+        self.pb.backup_node('node', node, options=["-j", "4", "--stream"])
 
         external_dir1 = self.get_tblspace_path(node, 'external_dir1')
         external_dir2 = self.get_tblspace_path(node, 'external_dir2')
@@ -865,24 +722,18 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         pgbench.wait()
 
         # FULL backup  with changed data
-        backup_id = self.backup_node(
-            backup_dir, 'node', node,
+        backup_id = self.pb.backup_node('node', node,
             options=["-j", "4", "--stream"])
 
         # fill external directories with changed data
-        self.restore_node(
-            backup_dir, 'node', node,
-            data_dir=external_dir1, options=["-j", "4"])
+        self.pb.restore_node('node', restore_dir=external_dir1, options=["-j", "4"])
 
-        self.restore_node(
-            backup_dir, 'node', node,
-            data_dir=external_dir2, options=["-j", "4"])
+        self.pb.restore_node('node', restore_dir=external_dir2, options=["-j", "4"])
 
-        self.delete_pb(backup_dir, 'node', backup_id=backup_id)
+        self.pb.delete('node', backup_id=backup_id)
 
         # delta backup with external directories using new binary
-        backup_id = self.backup_node(
-            backup_dir, 'node', node, backup_type="delta",
+        backup_id = self.pb.backup_node('node', node, backup_type="delta",
             options=[
                 "-j", "4", "--stream",
                 "-E", "{0}{1}{2}".format(
@@ -890,7 +741,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
                     self.EXTERNAL_DIRECTORY_DELIMITER,
                     external_dir2)])
 
-        self.merge_backup(backup_dir, 'node', backup_id=backup_id)
+        self.pb.merge_backup('node', backup_id=backup_id)
 
         pgdata = self.pgdata_content(
             node.base_dir, exclude_dirs=['logs'])
@@ -902,8 +753,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         external_dir1_new = self.get_tblspace_path(node, 'external_dir1')
         external_dir2_new = self.get_tblspace_path(node, 'external_dir2')
 
-        self.restore_node(
-            backup_dir, 'node', node,
+        self.pb.restore_node('node', node=node,
             options=[
                 "-j", "4",
                 "--external-mapping={0}={1}".format(external_dir1, external_dir1_new),
@@ -918,21 +768,19 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
     # @unittest.skip("skip")
     def test_external_merge_3(self):
         """"""
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
-            set_replication=True,
-            initdb_params=['--data-checksums'])
+        backup_dir = self.backup_dir
+        node = self.pg_node.make_simple('node',
+            set_replication=True)
 
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
-        self.set_archiving(backup_dir, 'node', node)
+        self.pb.init()
+        self.pb.add_instance('node', node)
+        self.pb.set_archiving('node', node)
         node.slow_start()
 
         node.pgbench_init(scale=3)
 
         # FULL backup
-        self.backup_node(backup_dir, 'node', node, options=["-j", "4"])
+        self.pb.backup_node('node', node, options=["-j", "4"])
 
         external_dir1 = self.get_tblspace_path(node, 'external_dir1')
         external_dir2 = self.get_tblspace_path(node, 'external_dir2')
@@ -941,23 +789,17 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         pgbench.wait()
 
         # FULL backup
-        backup_id = self.backup_node(
-            backup_dir, 'node', node)
+        backup_id = self.pb.backup_node('node', node)
 
         # fill external directories with changed data
-        self.restore_node(
-            backup_dir, 'node', node,
-            data_dir=external_dir1)
+        self.pb.restore_node('node', restore_dir=external_dir1)
 
-        self.restore_node(
-            backup_dir, 'node', node,
-            data_dir=external_dir2)
+        self.pb.restore_node('node', restore_dir=external_dir2)
 
-        self.delete_pb(backup_dir, 'node', backup_id=backup_id)
+        self.pb.delete('node', backup_id=backup_id)
 
         # page backup with external directories
-        self.backup_node(
-            backup_dir, 'node', node, backup_type="page",
+        self.pb.backup_node('node', node, backup_type="page",
             options=[
                 "-j", "4",
                 "-E", "{0}{1}{2}".format(
@@ -966,8 +808,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
                     external_dir2)])
 
         # page backup with external directories
-        backup_id = self.backup_node(
-            backup_dir, 'node', node, backup_type="page",
+        backup_id = self.pb.backup_node('node', node, backup_type="page",
             options=[
                 "-j", "4",
                 "-E", "{0}{1}{2}".format(
@@ -978,8 +819,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         pgdata = self.pgdata_content(
             node.base_dir, exclude_dirs=['logs'])
 
-        self.merge_backup(
-            backup_dir, 'node', backup_id=backup_id,
+        self.pb.merge_backup('node', backup_id=backup_id,
             options=['--log-level-file=verbose'])
 
         # RESTORE
@@ -989,8 +829,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         external_dir1_new = self.get_tblspace_path(node, 'external_dir1')
         external_dir2_new = self.get_tblspace_path(node, 'external_dir2')
 
-        self.restore_node(
-            backup_dir, 'node', node,
+        self.pb.restore_node('node', node,
             options=[
                 "-j", "4",
                 "--external-mapping={0}={1}".format(
@@ -1004,24 +843,20 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         self.compare_pgdata(pgdata, pgdata_restored)
 
     # @unittest.expectedFailure
-    # @unittest.skip("skip")
     def test_external_merge_2(self):
         """"""
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
-            set_replication=True,
-            initdb_params=['--data-checksums'])
+        backup_dir = self.backup_dir
+        node = self.pg_node.make_simple('node',
+            set_replication=True)
 
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
+        self.pb.init()
+        self.pb.add_instance('node', node)
         node.slow_start()
 
         node.pgbench_init(scale=3)
 
         # FULL backup
-        self.backup_node(
-            backup_dir, 'node', node, options=["-j", "4", "--stream"])
+        self.pb.backup_node('node', node, options=["-j", "4", "--stream"])
 
         external_dir1 = self.get_tblspace_path(node, 'external_dir1')
         external_dir2 = self.get_tblspace_path(node, 'external_dir2')
@@ -1030,24 +865,18 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         pgbench.wait()
 
         # FULL backup
-        backup_id = self.backup_node(
-            backup_dir, 'node', node,
+        backup_id = self.pb.backup_node('node', node,
             options=["-j", "4", "--stream"])
 
         # fill external directories with changed data
-        self.restore_node(
-            backup_dir, 'node', node,
-            data_dir=external_dir1, options=["-j", "4"])
+        self.pb.restore_node('node', restore_dir=external_dir1, options=["-j", "4"])
 
-        self.restore_node(
-            backup_dir, 'node', node,
-            data_dir=external_dir2, options=["-j", "4"])
+        self.pb.restore_node('node', restore_dir=external_dir2, options=["-j", "4"])
 
-        self.delete_pb(backup_dir, 'node', backup_id=backup_id)
+        self.pb.delete('node', backup_id=backup_id)
 
         # delta backup with external directories
-        self.backup_node(
-            backup_dir, 'node', node, backup_type="delta",
+        self.pb.backup_node('node', node, backup_type="delta",
             options=[
                 "-j", "4", "--stream",
                 "-E", "{0}{1}{2}".format(
@@ -1056,8 +885,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
                     external_dir2)])
 
         # delta backup with external directories
-        backup_id = self.backup_node(
-            backup_dir, 'node', node, backup_type="delta",
+        backup_id = self.pb.backup_node('node', node, backup_type="delta",
             options=[
                 "-j", "4", "--stream",
                 "-E", "{0}{1}{2}".format(
@@ -1072,7 +900,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         shutil.rmtree(external_dir2, ignore_errors=True)
 
         # delta backup without external directories
-        self.merge_backup(backup_dir, 'node', backup_id=backup_id)
+        self.pb.merge_backup('node', backup_id=backup_id)
 
         # RESTORE
         node.cleanup()
@@ -1081,8 +909,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         external_dir1_new = self.get_tblspace_path(node, 'external_dir1')
         external_dir2_new = self.get_tblspace_path(node, 'external_dir2')
 
-        self.restore_node(
-            backup_dir, 'node', node,
+        self.pb.restore_node('node', node=node,
             options=[
                 "-j", "4",
                 "--external-mapping={0}={1}".format(external_dir1, external_dir1_new),
@@ -1097,14 +924,12 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
     # @unittest.skip("skip")
     def test_restore_external_changed_data(self):
         """"""
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
-            set_replication=True,
-            initdb_params=['--data-checksums'])
+        backup_dir = self.backup_dir
+        node = self.pg_node.make_simple('node',
+            set_replication=True)
 
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
+        self.pb.init()
+        self.pb.add_instance('node', node)
         node.slow_start()
 
         node.pgbench_init(scale=2)
@@ -1114,28 +939,22 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         external_dir2 = self.get_tblspace_path(node, 'external_dir2')
 
         # FULL backup
-        tmp_id = self.backup_node(
-            backup_dir, 'node',
+        tmp_id = self.pb.backup_node('node',
             node, options=["-j", "4", "--stream"])
 
         # fill external directories with data
-        self.restore_node(
-            backup_dir, 'node', node,
-            data_dir=external_dir1, options=["-j", "4"])
+        self.pb.restore_node('node', restore_dir=external_dir1, options=["-j", "4"])
 
-        self.restore_node(
-            backup_dir, 'node', node,
-            data_dir=external_dir2, options=["-j", "4"])
+        self.pb.restore_node('node', restore_dir=external_dir2, options=["-j", "4"])
 
-        self.delete_pb(backup_dir, 'node', backup_id=tmp_id)
+        self.pb.delete('node', backup_id=tmp_id)
 
         # change data a bit
         pgbench = node.pgbench(options=['-T', '30', '-c', '1', '--no-vacuum'])
         pgbench.wait()
 
         # FULL backup
-        backup_id = self.backup_node(
-            backup_dir, 'node', node,
+        backup_id = self.pb.backup_node('node', node,
             options=[
                 "-j", "4", "--stream",
                 "-E", "{0}{1}{2}".format(
@@ -1147,14 +966,10 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         shutil.rmtree(external_dir1, ignore_errors=True)
         shutil.rmtree(external_dir2, ignore_errors=True)
 
-        self.restore_node(
-            backup_dir, 'node', node,
-            data_dir=external_dir1, backup_id=backup_id,
+        self.pb.restore_node('node', restore_dir=external_dir1, backup_id=backup_id,
             options=["-j", "4", "--skip-external-dirs"])
 
-        self.restore_node(
-            backup_dir, 'node', node,
-            data_dir=external_dir2, backup_id=backup_id,
+        self.pb.restore_node('node', restore_dir=external_dir2, backup_id=backup_id,
             options=["-j", "4", "--skip-external-dirs"])
 
         # change data a bit more
@@ -1162,8 +977,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         pgbench.wait()
 
         # Delta backup with external directories
-        self.backup_node(
-            backup_dir, 'node', node, backup_type="delta",
+        self.pb.backup_node('node', node, backup_type="delta",
             options=[
                 "-j", "4", "--stream",
                 "-E", "{0}{1}{2}".format(
@@ -1178,8 +992,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         node.cleanup()
         shutil.rmtree(node.base_dir, ignore_errors=True)
 
-        self.restore_node(
-            backup_dir, 'node', node,
+        self.pb.restore_node('node', node,
             options=["-j", "4"])
 
         pgdata_restored = self.pgdata_content(
@@ -1191,16 +1004,14 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
     # @unittest.skip("skip")
     def test_restore_external_changed_data_1(self):
         """"""
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
+        backup_dir = self.backup_dir
+        node = self.pg_node.make_simple('node',
             set_replication=True,
-            initdb_params=['--data-checksums'],
             pg_options={
                 'max_wal_size': '32MB'})
 
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
+        self.pb.init()
+        self.pb.add_instance('node', node)
         node.slow_start()
 
         node.pgbench_init(scale=1)
@@ -1210,28 +1021,22 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         external_dir2 = self.get_tblspace_path(node, 'external_dir2')
 
         # FULL backup
-        tmp_id = self.backup_node(
-            backup_dir, 'node',
+        tmp_id = self.pb.backup_node('node',
             node, options=["-j", "4", "--stream"])
 
         # fill external directories with data
-        self.restore_node(
-            backup_dir, 'node', node,
-            data_dir=external_dir1, options=["-j", "4"])
+        self.pb.restore_node('node', restore_dir=external_dir1, options=["-j", "4"])
 
-        self.restore_node(
-            backup_dir, 'node', node,
-            data_dir=external_dir2, options=["-j", "4"])
+        self.pb.restore_node('node', restore_dir=external_dir2, options=["-j", "4"])
 
-        self.delete_pb(backup_dir, 'node', backup_id=tmp_id)
+        self.pb.delete('node', backup_id=tmp_id)
 
         # change data a bit
         pgbench = node.pgbench(options=['-T', '5', '-c', '1', '--no-vacuum'])
         pgbench.wait()
 
         # FULL backup
-        backup_id = self.backup_node(
-            backup_dir, 'node', node,
+        backup_id = self.pb.backup_node('node', node,
             options=[
                 "-j", "4", "--stream",
                 "-E", "{0}{1}{2}".format(
@@ -1243,14 +1048,10 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         shutil.rmtree(external_dir1, ignore_errors=True)
         shutil.rmtree(external_dir2, ignore_errors=True)
 
-        self.restore_node(
-            backup_dir, 'node', node,
-            data_dir=external_dir1, backup_id=backup_id,
+        self.pb.restore_node('node', restore_dir=external_dir1, backup_id=backup_id,
             options=["-j", "4", "--skip-external-dirs"])
 
-        self.restore_node(
-            backup_dir, 'node', node,
-            data_dir=external_dir2, backup_id=backup_id,
+        self.pb.restore_node('node', restore_dir=external_dir2, backup_id=backup_id,
             options=["-j", "4", "--skip-external-dirs"])
 
         # change data a bit more
@@ -1258,8 +1059,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         pgbench.wait()
 
         # Delta backup with only one external directory
-        self.backup_node(
-            backup_dir, 'node', node, backup_type="delta",
+        self.pb.backup_node('node', node, backup_type="delta",
             options=[
                 "-j", "4", "--stream",
                 "-E", external_dir1])
@@ -1268,17 +1068,15 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
             node.base_dir, exclude_dirs=['logs', 'external_dir2'])
 
         # Restore
-        node.cleanup()
-        shutil.rmtree(node._base_dir)
+        node.stop()
+        shutil.rmtree(node.base_dir)
 
         # create empty file in external_dir2
-        os.mkdir(node._base_dir)
-        os.mkdir(external_dir2)
+        os.makedirs(external_dir2)
         with open(os.path.join(external_dir2, 'file'), 'w+') as f:
             f.close()
 
-        output = self.restore_node(
-            backup_dir, 'node', node,
+        output = self.pb.restore_node('node', node=node,
             options=["-j", "4"])
 
         self.assertNotIn(
@@ -1291,19 +1089,16 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         self.compare_pgdata(pgdata, pgdata_restored)
 
     # @unittest.expectedFailure
-    # @unittest.skip("skip")
     def test_merge_external_changed_data(self):
         """"""
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
+        backup_dir = self.backup_dir
+        node = self.pg_node.make_simple('node',
             set_replication=True,
-            initdb_params=['--data-checksums'],
             pg_options={
                 'max_wal_size': '32MB'})
 
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
+        self.pb.init()
+        self.pb.add_instance('node', node)
         node.slow_start()
 
         node.pgbench_init(scale=2)
@@ -1313,28 +1108,22 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         external_dir2 = self.get_tblspace_path(node, 'external_dir2')
 
         # FULL backup
-        tmp_id = self.backup_node(
-            backup_dir, 'node',
+        tmp_id = self.pb.backup_node('node',
             node, options=["-j", "4", "--stream"])
 
         # fill external directories with data
-        self.restore_node(
-            backup_dir, 'node', node,
-            data_dir=external_dir1, options=["-j", "4"])
+        self.pb.restore_node('node', restore_dir=external_dir1, options=["-j", "4"])
 
-        self.restore_node(
-            backup_dir, 'node', node,
-            data_dir=external_dir2, options=["-j", "4"])
+        self.pb.restore_node('node', restore_dir=external_dir2, options=["-j", "4"])
 
-        self.delete_pb(backup_dir, 'node', backup_id=tmp_id)
+        self.pb.delete('node', backup_id=tmp_id)
 
         # change data a bit
         pgbench = node.pgbench(options=['-T', '30', '-c', '1', '--no-vacuum'])
         pgbench.wait()
 
         # FULL backup
-        backup_id = self.backup_node(
-            backup_dir, 'node', node,
+        backup_id = self.pb.backup_node('node', node,
             options=[
                 "-j", "4", "--stream",
                 "-E", "{0}{1}{2}".format(
@@ -1346,14 +1135,10 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         shutil.rmtree(external_dir1, ignore_errors=True)
         shutil.rmtree(external_dir2, ignore_errors=True)
 
-        self.restore_node(
-            backup_dir, 'node', node,
-            data_dir=external_dir1, backup_id=backup_id,
+        self.pb.restore_node('node', restore_dir=external_dir1, backup_id=backup_id,
             options=["-j", "4", "--skip-external-dirs"])
 
-        self.restore_node(
-            backup_dir, 'node', node,
-            data_dir=external_dir2, backup_id=backup_id,
+        self.pb.restore_node('node', restore_dir=external_dir2, backup_id=backup_id,
             options=["-j", "4", "--skip-external-dirs"])
 
         # change data a bit more
@@ -1361,8 +1146,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         pgbench.wait()
 
         # Delta backup with external directories
-        backup_id = self.backup_node(
-            backup_dir, 'node', node, backup_type="delta",
+        backup_id = self.pb.backup_node('node', node, backup_type="delta",
             options=[
                 "-j", "4", "--stream",
                 "-E", "{0}{1}{2}".format(
@@ -1374,14 +1158,13 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
             node.base_dir, exclude_dirs=['logs'])
 
         # Merge
-        self.merge_backup(backup_dir, 'node', backup_id)
+        self.pb.merge_backup('node', backup_id)
 
         # Restore
         node.cleanup()
         shutil.rmtree(node.base_dir, ignore_errors=True)
 
-        self.restore_node(
-            backup_dir, 'node', node,
+        self.pb.restore_node('node', node=node,
             options=["-j", "4"])
 
         pgdata_restored = self.pgdata_content(
@@ -1395,37 +1178,29 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         """
         Check that --skip-external-dirs works correctly
         """
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
-            set_replication=True,
-            initdb_params=['--data-checksums'])
+        backup_dir = self.backup_dir
+        node = self.pg_node.make_simple('node',
+            set_replication=True)
 
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
+        self.pb.init()
+        self.pb.add_instance('node', node)
         node.slow_start()
 
         external_dir1 = self.get_tblspace_path(node, 'external_dir1')
         external_dir2 = self.get_tblspace_path(node, 'external_dir2')
 
         # temp FULL backup
-        backup_id = self.backup_node(
-            backup_dir, 'node', node, options=["-j", "4", "--stream"])
+        backup_id = self.pb.backup_node('node', node, options=["-j", "4", "--stream"])
 
         # fill external directories with data
-        self.restore_node(
-            backup_dir, 'node', node,
-            data_dir=external_dir1, options=["-j", "4"])
+        self.pb.restore_node('node', restore_dir=external_dir1, options=["-j", "4"])
 
-        self.restore_node(
-            backup_dir, 'node', node,
-            data_dir=external_dir2, options=["-j", "4"])
+        self.pb.restore_node('node', restore_dir=external_dir2, options=["-j", "4"])
 
-        self.delete_pb(backup_dir, 'node', backup_id=backup_id)
+        self.pb.delete('node', backup_id=backup_id)
 
         # FULL backup with external directories
-        self.backup_node(
-            backup_dir, 'node', node,
+        self.pb.backup_node('node', node,
             options=[
                 "-j", "4", "--stream",
                 "-E", "{0}{1}{2}".format(
@@ -1446,8 +1221,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         node.cleanup()
         shutil.rmtree(node.base_dir, ignore_errors=True)
 
-        self.restore_node(
-            backup_dir, 'node', node,
+        self.pb.restore_node('node', node=node,
             options=[
                 "-j", "4", "--skip-external-dirs"])
 
@@ -1467,41 +1241,32 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         if os.name == 'nt':
             self.skipTest('Skipped for Windows')
 
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
-        core_dir = os.path.join(self.tmp_path, self.module_name, self.fname)
-        shutil.rmtree(core_dir, ignore_errors=True)
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
-            set_replication=True,
-            initdb_params=['--data-checksums'])
+        backup_dir = self.backup_dir
+        node = self.pg_node.make_simple('node',
+            set_replication=True)
 
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
+        self.pb.init()
+        self.pb.add_instance('node', node)
         node.slow_start()
 
         external_dir = self.get_tblspace_path(node, 'external_dir')
 
         # temp FULL backup
-        backup_id = self.backup_node(
-            backup_dir, 'node', node, options=["-j", "4", "--stream"])
+        backup_id = self.pb.backup_node('node', node, options=["-j", "4", "--stream"])
 
         # fill some directory with data
-        core_dir = os.path.join(self.tmp_path, self.module_name, self.fname)
-        symlinked_dir = os.path.join(core_dir, 'symlinked')
+        symlinked_dir = os.path.join(self.test_path, 'symlinked')
 
-        self.restore_node(
-            backup_dir, 'node', node,
-            data_dir=symlinked_dir, options=["-j", "4"])
+        self.pb.restore_node('node', restore_dir=symlinked_dir, options=["-j", "4"])
 
         # drop temp FULL backup
-        self.delete_pb(backup_dir, 'node', backup_id=backup_id)
+        self.pb.delete('node', backup_id=backup_id)
 
         # create symlink to directory in external directory
         os.symlink(symlinked_dir, external_dir)
 
         # FULL backup with external directories
-        backup_id = self.backup_node(
-            backup_dir, 'node', node,
+        backup_id = self.pb.backup_node('node', node,
             options=[
                 "-j", "4", "--stream",
                 "-E", external_dir])
@@ -1509,8 +1274,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         pgdata = self.pgdata_content(
             node.base_dir, exclude_dirs=['logs'])
 
-        node_restored = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
+        node_restored = self.pg_node.make_simple('node_restored')
 
         # RESTORE
         node_restored.cleanup()
@@ -1518,8 +1282,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         external_dir_new = self.get_tblspace_path(
             node_restored, 'external_dir')
 
-        self.restore_node(
-            backup_dir, 'node', node_restored,
+        self.pb.restore_node('node', node=node_restored,
             options=[
                 "-j", "4", "--external-mapping={0}={1}".format(
                     external_dir, external_dir_new)])
@@ -1531,8 +1294,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
 
         self.assertEqual(
             external_dir,
-            self.show_pb(
-                backup_dir, 'node',
+            self.pb.show('node',
                 backup_id=backup_id)['external-dirs'])
 
     # @unittest.expectedFailure
@@ -1546,43 +1308,34 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         if os.name == 'nt':
             self.skipTest('Skipped for Windows')
 
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
-        core_dir = os.path.join(self.tmp_path, self.module_name, self.fname)
-        shutil.rmtree(core_dir, ignore_errors=True)
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
-            set_replication=True,
-            initdb_params=['--data-checksums'])
+        backup_dir = self.backup_dir
+        node = self.pg_node.make_simple('node',
+            set_replication=True)
 
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
+        self.pb.init()
+        self.pb.add_instance('node', node)
         node.slow_start()
 
         external_dir = self.get_tblspace_path(node, 'external_dir')
         dir_in_external_dir = os.path.join(external_dir, 'dir')
 
         # temp FULL backup
-        backup_id = self.backup_node(
-            backup_dir, 'node', node, options=["-j", "4", "--stream"])
+        backup_id = self.pb.backup_node('node', node, options=["-j", "4", "--stream"])
 
         # fill some directory with data
-        core_dir = os.path.join(self.tmp_path, self.module_name, self.fname)
-        symlinked_dir = os.path.join(core_dir, 'symlinked')
+        symlinked_dir = os.path.join(self.test_path, 'symlinked')
 
-        self.restore_node(
-            backup_dir, 'node', node,
-            data_dir=symlinked_dir, options=["-j", "4"])
+        self.pb.restore_node('node', restore_dir=symlinked_dir, options=["-j", "4"])
 
         # drop temp FULL backup
-        self.delete_pb(backup_dir, 'node', backup_id=backup_id)
+        self.pb.delete('node', backup_id=backup_id)
 
         # create symlink to directory in external directory
         os.mkdir(external_dir)
         os.symlink(symlinked_dir, dir_in_external_dir)
 
         # FULL backup with external directories
-        backup_id = self.backup_node(
-            backup_dir, 'node', node,
+        backup_id = self.pb.backup_node('node', node=node,
             options=[
                 "-j", "4", "--stream",
                 "-E", external_dir])
@@ -1590,8 +1343,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         pgdata = self.pgdata_content(
             node.base_dir, exclude_dirs=['logs'])
 
-        node_restored = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
+        node_restored = self.pg_node.make_simple('node_restored')
 
         # RESTORE
         node_restored.cleanup()
@@ -1599,8 +1351,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         external_dir_new = self.get_tblspace_path(
             node_restored, 'external_dir')
 
-        self.restore_node(
-            backup_dir, 'node', node_restored,
+        self.pb.restore_node('node', node=node_restored,
             options=[
                 "-j", "4", "--external-mapping={0}={1}".format(
                     external_dir, external_dir_new)])
@@ -1612,8 +1363,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
 
         self.assertEqual(
             external_dir,
-            self.show_pb(
-                backup_dir, 'node',
+            self.pb.show('node',
                 backup_id=backup_id)['external-dirs'])
 
     # @unittest.expectedFailure
@@ -1627,35 +1377,27 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         if os.name == 'nt':
             self.skipTest('Skipped for Windows')
 
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
-        core_dir = os.path.join(self.tmp_path, self.module_name, self.fname)
-        shutil.rmtree(core_dir, ignore_errors=True)
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
-            set_replication=True,
-            initdb_params=['--data-checksums'])
+        backup_dir = self.backup_dir
+        node = self.pg_node.make_simple('node',
+            set_replication=True)
 
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
+        self.pb.init()
+        self.pb.add_instance('node', node)
         node.slow_start()
 
         external_dir = self.get_tblspace_path(node, 'external_dir')
         file_in_external_dir = os.path.join(external_dir, 'file')
 
         # temp FULL backup
-        backup_id = self.backup_node(
-            backup_dir, 'node', node, options=["-j", "4", "--stream"])
+        backup_id = self.pb.backup_node('node', node, options=["-j", "4", "--stream"])
 
         # fill some directory with data
-        core_dir = os.path.join(self.tmp_path, self.module_name, self.fname)
-        symlinked_dir = os.path.join(core_dir, 'symlinked')
+        symlinked_dir = os.path.join(self.test_path, 'symlinked')
 
-        self.restore_node(
-            backup_dir, 'node', node,
-            data_dir=symlinked_dir, options=["-j", "4"])
+        self.pb.restore_node('node', restore_dir=symlinked_dir, options=["-j", "4"])
 
         # drop temp FULL backup
-        self.delete_pb(backup_dir, 'node', backup_id=backup_id)
+        self.pb.delete('node', backup_id=backup_id)
 
         # create symlink to directory in external directory
         src_file = os.path.join(symlinked_dir, 'postgresql.conf')
@@ -1664,8 +1406,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         os.symlink(src_file, file_in_external_dir)
 
         # FULL backup with external directories
-        backup_id = self.backup_node(
-            backup_dir, 'node', node,
+        backup_id = self.pb.backup_node('node', node,
             options=[
                 "-j", "4", "--stream",
                 "-E", external_dir])
@@ -1673,8 +1414,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         pgdata = self.pgdata_content(
             node.base_dir, exclude_dirs=['logs'])
 
-        node_restored = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
+        node_restored = self.pg_node.make_simple('node_restored')
 
         # RESTORE
         node_restored.cleanup()
@@ -1682,8 +1422,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         external_dir_new = self.get_tblspace_path(
             node_restored, 'external_dir')
 
-        self.restore_node(
-            backup_dir, 'node', node_restored,
+        self.pb.restore_node('node', node=node_restored,
             options=[
                 "-j", "4", "--external-mapping={0}={1}".format(
                     external_dir, external_dir_new)])
@@ -1695,8 +1434,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
 
         self.assertEqual(
             external_dir,
-            self.show_pb(
-                backup_dir, 'node',
+            self.pb.show('node',
                 backup_id=backup_id)['external-dirs'])
 
     # @unittest.expectedFailure
@@ -1706,16 +1444,12 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         Check that backup fails with error
         if external directory points to tablespace
         """
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
-        core_dir = os.path.join(self.tmp_path, self.module_name, self.fname)
-        shutil.rmtree(core_dir, ignore_errors=True)
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
-            set_replication=True,
-            initdb_params=['--data-checksums'])
+        backup_dir = self.backup_dir
+        node = self.pg_node.make_simple('node',
+            set_replication=True)
 
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
+        self.pb.init()
+        self.pb.add_instance('node', node)
         node.slow_start()
 
         external_dir = self.get_tblspace_path(node, 'external_dir')
@@ -1726,24 +1460,10 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         node.pgbench_init(scale=1, tablespace='tblspace1')
 
         # FULL backup with external directories
-        try:
-            backup_id = self.backup_node(
-                backup_dir, 'node', node,
-                options=[
-                    "-j", "4", "--stream",
-                    "-E", external_dir])
-            # we should die here because exception is what we expect to happen
-            self.assertEqual(
-                1, 0,
-                "Expecting Error because external dir points to the tablespace"
-                "\n Output: {0} \n CMD: {1}".format(
-                    repr(self.output), self.cmd))
-        except ProbackupException as e:
-            self.assertIn(
-                'External directory path (-E option)',
-                e.message,
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
-                    repr(e.message), self.cmd))
+        self.pb.backup_node('node', node,
+                         options=["-j", "4", "--stream", "-E", external_dir],
+                         expect_error="because external dir points to the tablespace")
+        self.assertMessage(contains='External directory path (-E option)')
 
     def test_restore_external_dir_not_empty(self):
         """
@@ -1751,16 +1471,12 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         if external directory point to not empty tablespace and
         if remapped directory also isn`t empty
         """
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
-        core_dir = os.path.join(self.tmp_path, self.module_name, self.fname)
-        shutil.rmtree(core_dir, ignore_errors=True)
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
-            set_replication=True,
-            initdb_params=['--data-checksums'])
+        backup_dir = self.backup_dir
+        node = self.pg_node.make_simple('node',
+            set_replication=True)
 
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
+        self.pb.init()
+        self.pb.add_instance('node', node)
         node.slow_start()
 
         external_dir = self.get_tblspace_path(node, 'external_dir')
@@ -1772,28 +1488,17 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
             f.close()
 
         # FULL backup with external directory
-        self.backup_node(
-            backup_dir, 'node', node,
+        self.pb.backup_node('node', node,
             options=[
                 "-j", "4", "--stream",
                 "-E", external_dir])
 
-        node.cleanup()
+        node.stop()
+        shutil.rmtree(node.data_dir)
 
-        try:
-            self.restore_node(backup_dir, 'node', node)
-            # we should die here because exception is what we expect to happen
-            self.assertEqual(
-                1, 0,
-                "Expecting Error because external dir is not empty"
-                "\n Output: {0} \n CMD: {1}".format(
-                    repr(self.output), self.cmd))
-        except ProbackupException as e:
-            self.assertIn(
-                'External directory is not empty',
-                e.message,
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
-                    repr(e.message), self.cmd))
+        self.pb.restore_node('node', node=node,
+                          expect_error="because external dir is not empty")
+        self.assertMessage(contains='External directory is not empty')
 
         external_dir_new = self.get_tblspace_path(node, 'external_dir_new')
 
@@ -1803,23 +1508,11 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         with open(os.path.join(external_dir_new, 'file1'), 'w+') as f:
             f.close()
 
-        try:
-            self.restore_node(
-                backup_dir, 'node', node,
-                options=['--external-mapping={0}={1}'.format(
-                        external_dir, external_dir_new)])
-            # we should die here because exception is what we expect to happen
-            self.assertEqual(
-                1, 0,
-                "Expecting Error because remapped external dir is not empty"
-                "\n Output: {0} \n CMD: {1}".format(
-                    repr(self.output), self.cmd))
-        except ProbackupException as e:
-            self.assertIn(
-                'External directory is not empty',
-                e.message,
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
-                    repr(e.message), self.cmd))
+        self.pb.restore_node('node', node=node,
+                          options=[f'--external-mapping',
+                                   f'{external_dir}={external_dir_new}'],
+                          expect_error="because remapped external dir is not empty")
+        self.assertMessage(contains='External directory is not empty')
 
     def test_restore_external_dir_is_missing(self):
         """
@@ -1828,16 +1521,12 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         take DELTA backup with external directory, which
         should fail
         """
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
-        core_dir = os.path.join(self.tmp_path, self.module_name, self.fname)
-        shutil.rmtree(core_dir, ignore_errors=True)
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
-            set_replication=True,
-            initdb_params=['--data-checksums'])
+        backup_dir = self.backup_dir
+        node = self.pg_node.make_simple('node',
+            set_replication=True)
 
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
+        self.pb.init()
+        self.pb.add_instance('node', node)
         node.slow_start()
 
         external_dir = self.get_tblspace_path(node, 'external_dir')
@@ -1849,8 +1538,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
             f.close()
 
         # FULL backup with external directory
-        self.backup_node(
-            backup_dir, 'node', node,
+        self.pb.backup_node('node', node,
             options=[
                 "-j", "4", "--stream",
                 "-E", external_dir])
@@ -1858,31 +1546,15 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         # drop external directory
         shutil.rmtree(external_dir, ignore_errors=True)
 
-        try:
-            self.backup_node(
-                backup_dir, 'node', node,
-                backup_type='delta',
-                options=[
-                    "-j", "4", "--stream",
-                    "-E", external_dir])
-            # we should die here because exception is what we expect to happen
-            self.assertEqual(
-                1, 0,
-                "Expecting Error because external dir is missing"
-                "\n Output: {0} \n CMD: {1}".format(
-                    repr(self.output), self.cmd))
-        except ProbackupException as e:
-            self.assertIn(
-                'ERROR: External directory is not found:',
-                e.message,
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
-                    repr(e.message), self.cmd))
+        self.pb.backup_node('node', node, backup_type='delta',
+                         options=["-j", "4", "--stream", "-E", external_dir],
+                         expect_error="because external dir is missing")
+        self.assertMessage(contains='ERROR: External directory is not found:')
 
         sleep(1)
 
         # take DELTA without external directories
-        self.backup_node(
-            backup_dir, 'node', node,
+        self.pb.backup_node('node', node,
             backup_type='delta',
             options=["-j", "4", "--stream"])
 
@@ -1893,7 +1565,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         node.cleanup()
         shutil.rmtree(node.base_dir, ignore_errors=True)
 
-        self.restore_node(backup_dir, 'node', node)
+        self.pb.restore_node('node', node=node)
 
         pgdata_restored = self.pgdata_content(
             node.base_dir, exclude_dirs=['logs'])
@@ -1909,16 +1581,12 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         merge it into FULL, restore and check
         data correctness
         """
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
-        core_dir = os.path.join(self.tmp_path, self.module_name, self.fname)
-        shutil.rmtree(core_dir, ignore_errors=True)
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
-            set_replication=True,
-            initdb_params=['--data-checksums'])
+        backup_dir = self.backup_dir
+        node = self.pg_node.make_simple('node',
+            set_replication=True)
 
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
+        self.pb.init()
+        self.pb.add_instance('node', node)
         node.slow_start()
 
         external_dir = self.get_tblspace_path(node, 'external_dir')
@@ -1930,8 +1598,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
             f.close()
 
         # FULL backup with external directory
-        self.backup_node(
-            backup_dir, 'node', node,
+        self.pb.backup_node('node', node,
             options=[
                 "-j", "4", "--stream",
                 "-E", external_dir])
@@ -1939,31 +1606,15 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         # drop external directory
         shutil.rmtree(external_dir, ignore_errors=True)
 
-        try:
-            self.backup_node(
-                backup_dir, 'node', node,
-                backup_type='delta',
-                options=[
-                    "-j", "4", "--stream",
-                    "-E", external_dir])
-            # we should die here because exception is what we expect to happen
-            self.assertEqual(
-                1, 0,
-                "Expecting Error because external dir is missing"
-                "\n Output: {0} \n CMD: {1}".format(
-                    repr(self.output), self.cmd))
-        except ProbackupException as e:
-            self.assertIn(
-                'ERROR: External directory is not found:',
-                e.message,
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
-                    repr(e.message), self.cmd))
+        self.pb.backup_node('node', node, backup_type='delta',
+                         options=["-j", "4", "--stream", "-E", external_dir],
+                         expect_error="because external dir is missing")
+        self.assertMessage(contains='ERROR: External directory is not found:')
 
         sleep(1)
 
         # take DELTA without external directories
-        backup_id = self.backup_node(
-            backup_dir, 'node', node,
+        backup_id = self.pb.backup_node('node', node,
             backup_type='delta',
             options=["-j", "4", "--stream"])
 
@@ -1971,13 +1622,13 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
             node.base_dir, exclude_dirs=['logs'])
 
         # Merge
-        self.merge_backup(backup_dir, 'node', backup_id=backup_id)
+        self.pb.merge_backup('node', backup_id=backup_id)
 
         # Restore
         node.cleanup()
         shutil.rmtree(node.base_dir, ignore_errors=True)
 
-        self.restore_node(backup_dir, 'node', node)
+        self.pb.restore_node('node', node=node)
 
         pgdata_restored = self.pgdata_content(
             node.base_dir, exclude_dirs=['logs'])
@@ -1991,16 +1642,12 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         restore DELRA backup, check that restored
         external directory is empty
         """
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
-        core_dir = os.path.join(self.tmp_path, self.module_name, self.fname)
-        shutil.rmtree(core_dir, ignore_errors=True)
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
-            set_replication=True,
-            initdb_params=['--data-checksums'])
+        backup_dir = self.backup_dir
+        node = self.pg_node.make_simple('node',
+            set_replication=True)
 
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
+        self.pb.init()
+        self.pb.add_instance('node', node)
         node.slow_start()
 
         external_dir = self.get_tblspace_path(node, 'external_dir')
@@ -2013,8 +1660,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
             f.close()
 
         # FULL backup with external directory
-        self.backup_node(
-            backup_dir, 'node', node,
+        self.pb.backup_node('node', node,
             options=[
                 "-j", "4", "--stream",
                 "-E", external_dir])
@@ -2023,8 +1669,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         os.remove(os.path.join(external_dir, 'file'))
 
         # take DELTA backup with empty external directory
-        self.backup_node(
-            backup_dir, 'node', node,
+        self.pb.backup_node('node', node,
             backup_type='delta',
             options=[
                 "-j", "4", "--stream",
@@ -2037,7 +1682,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         node.cleanup()
         shutil.rmtree(node.base_dir, ignore_errors=True)
 
-        self.restore_node(backup_dir, 'node', node)
+        self.pb.restore_node('node', node=node)
 
         pgdata_restored = self.pgdata_content(
             node.base_dir, exclude_dirs=['logs'])
@@ -2051,16 +1696,12 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         merge backups and restore FULL, check that restored
         external directory is empty
         """
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
-        core_dir = os.path.join(self.tmp_path, self.module_name, self.fname)
-        shutil.rmtree(core_dir, ignore_errors=True)
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
-            set_replication=True,
-            initdb_params=['--data-checksums'])
+        backup_dir = self.backup_dir
+        node = self.pg_node.make_simple('node',
+            set_replication=True)
 
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
+        self.pb.init()
+        self.pb.add_instance('node', node)
         node.slow_start()
 
         external_dir = self.get_tblspace_path(node, 'external_dir')
@@ -2073,8 +1714,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
             f.close()
 
         # FULL backup with external directory
-        self.backup_node(
-            backup_dir, 'node', node,
+        self.pb.backup_node('node', node,
             options=[
                 "-j", "4", "--stream",
                 "-E", external_dir])
@@ -2083,8 +1723,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         os.remove(os.path.join(external_dir, 'file'))
 
         # take DELTA backup with empty external directory
-        backup_id = self.backup_node(
-            backup_dir, 'node', node,
+        backup_id = self.pb.backup_node('node', node,
             backup_type='delta',
             options=[
                 "-j", "4", "--stream",
@@ -2094,13 +1733,13 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
             node.base_dir, exclude_dirs=['logs'])
 
         # Merge
-        self.merge_backup(backup_dir, 'node', backup_id=backup_id)
+        self.pb.merge_backup('node', backup_id=backup_id)
 
         # Restore
         node.cleanup()
         shutil.rmtree(node.base_dir, ignore_errors=True)
 
-        self.restore_node(backup_dir, 'node', node)
+        self.pb.restore_node('node', node=node)
 
         pgdata_restored = self.pgdata_content(
             node.base_dir, exclude_dirs=['logs'])
@@ -2114,16 +1753,12 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         restore DELRA backup, check that restored
         external directory is empty
         """
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
-        core_dir = os.path.join(self.tmp_path, self.module_name, self.fname)
-        shutil.rmtree(core_dir, ignore_errors=True)
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
-            set_replication=True,
-            initdb_params=['--data-checksums'])
+        backup_dir = self.backup_dir
+        node = self.pg_node.make_simple('node',
+            set_replication=True)
 
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
+        self.pb.init()
+        self.pb.add_instance('node', node)
         node.slow_start()
 
         external_dir_1 = self.get_tblspace_path(node, 'external_dir_1')
@@ -2141,8 +1776,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
             f.close()
 
         # FULL backup with external directory
-        self.backup_node(
-            backup_dir, 'node', node,
+        self.pb.backup_node('node', node,
             options=[
                 "-j", "4", "--stream",
                 "-E", "{0}{1}{2}".format(
@@ -2158,8 +1792,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
 
         # take DELTA backup and swap external_dir_2 and external_dir_1
         # in external_dir_str
-        self.backup_node(
-            backup_dir, 'node', node,
+        self.pb.backup_node('node', node,
             backup_type='delta',
             options=[
                 "-j", "4", "--stream",
@@ -2175,7 +1808,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         node.cleanup()
         shutil.rmtree(node.base_dir, ignore_errors=True)
 
-        self.restore_node(backup_dir, 'node', node)
+        self.pb.restore_node('node', node=node)
 
         pgdata_restored = self.pgdata_content(
             node.base_dir, exclude_dirs=['logs'])
@@ -2190,16 +1823,12 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         restore DELRA backup, check that restored
         external directory is empty
         """
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
-        core_dir = os.path.join(self.tmp_path, self.module_name, self.fname)
-        shutil.rmtree(core_dir, ignore_errors=True)
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
-            set_replication=True,
-            initdb_params=['--data-checksums'])
+        backup_dir = self.backup_dir
+        node = self.pg_node.make_simple('node',
+            set_replication=True)
 
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
+        self.pb.init()
+        self.pb.add_instance('node', node)
         node.slow_start()
 
         external_dir_1 = self.get_tblspace_path(node, 'external_dir_1')
@@ -2217,8 +1846,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
             f.close()
 
         # FULL backup with external directory
-        self.backup_node(
-            backup_dir, 'node', node,
+        self.pb.backup_node('node', node,
             options=[
                 "-j", "4", "--stream",
                 "-E", "{0}{1}{2}".format(
@@ -2234,8 +1862,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
 
         # take DELTA backup and swap external_dir_2 and external_dir_1
         # in external_dir_str
-        backup_id = self.backup_node(
-            backup_dir, 'node', node,
+        backup_id = self.pb.backup_node('node', node,
             backup_type='delta',
             options=[
                 "-j", "4", "--stream",
@@ -2248,13 +1875,13 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
             node.base_dir, exclude_dirs=['logs'])
 
         # Merge backups
-        self.merge_backup(backup_dir, 'node', backup_id=backup_id)
+        self.pb.merge_backup('node', backup_id=backup_id)
 
         # Restore
         node.cleanup()
         shutil.rmtree(node.base_dir, ignore_errors=True)
 
-        self.restore_node(backup_dir, 'node', node)
+        self.pb.restore_node('node', node=node)
 
         pgdata_restored = self.pgdata_content(
             node.base_dir, exclude_dirs=['logs'])
@@ -2269,32 +1896,28 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         make sure that files from externals are not copied during restore
         https://github.com/postgrespro/pg_probackup/issues/63
         """
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
-            set_replication=True,
-            initdb_params=['--data-checksums'])
+        node = self.pg_node.make_simple('node',
+            set_replication=True)
 
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
-        self.set_archiving(backup_dir, 'node', node)
+        backup_dir = self.backup_dir
+        self.pb.init()
+        self.pb.add_instance('node', node)
+        self.pb.set_archiving('node', node)
         node.slow_start()
 
         # fill external directories with data
-        tmp_id = self.backup_node(backup_dir, 'node', node)
+        tmp_id = self.pb.backup_node('node', node)
 
         external_dir_1 = self.get_tblspace_path(node, 'external_dir_1')
         external_dir_2 = self.get_tblspace_path(node, 'external_dir_2')
 
-        self.restore_node(
-            backup_dir, 'node', node, backup_id=tmp_id,
-            data_dir=external_dir_1, options=["-j", "4"])
+        self.pb.restore_node('node', restore_dir=external_dir_1, backup_id=tmp_id,
+            options=["-j", "4"])
 
-        self.restore_node(
-            backup_dir, 'node', node, backup_id=tmp_id,
-            data_dir=external_dir_2, options=["-j", "4"])
+        self.pb.restore_node('node', restore_dir=external_dir_2, backup_id=tmp_id,
+            options=["-j", "4"])
 
-        self.delete_pb(backup_dir, 'node', backup_id=tmp_id)
+        self.pb.delete('node', backup_id=tmp_id)
 
         # create database
         node.safe_psql(
@@ -2302,7 +1925,7 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
             "CREATE DATABASE testdb")
 
         # take FULL backup
-        full_id = self.backup_node(backup_dir, 'node', node)
+        full_id = self.pb.backup_node('node', node)
 
         # drop database
         node.safe_psql(
@@ -2310,29 +1933,24 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
             "DROP DATABASE testdb")
 
         # take PAGE backup
-        page_id = self.backup_node(
-            backup_dir, 'node', node, backup_type='page')
+        page_id = self.pb.backup_node('node', node=node, backup_type='page')
 
         # restore PAGE backup
         node.cleanup()
-        self.restore_node(
-            backup_dir, 'node', node, backup_id=page_id,
+        self.pb.restore_node('node', node=node, backup_id=page_id,
             options=['--no-validate', '--log-level-file=VERBOSE'])
 
-        logfile = os.path.join(backup_dir, 'log', 'pg_probackup.log')
-        with open(logfile, 'r') as f:
-            logfile_content = f.read()
+        logfile_content = self.read_pb_log()
 
         # get delta between FULL and PAGE filelists
-        filelist_full = self.get_backup_filelist(
-            backup_dir, 'node', full_id)
+        filelist_full = self.get_backup_filelist(backup_dir, 'node', full_id)
 
-        filelist_page = self.get_backup_filelist(
-            backup_dir, 'node', page_id)
+        filelist_page = self.get_backup_filelist(backup_dir, 'node', page_id)
 
         filelist_diff = self.get_backup_filelist_diff(
             filelist_full, filelist_page)
 
+        self.assertTrue(filelist_diff, 'There should be deleted files')
         for file in filelist_diff:
             self.assertNotIn(file, logfile_content)
 
@@ -2344,32 +1962,27 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
         corrupt external file in backup,
         run validate which should fail
         """
-        node = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node'),
-            set_replication=True,
-            initdb_params=['--data-checksums'])
+        node = self.pg_node.make_simple('node',
+            set_replication=True)
 
-        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
-        self.init_pb(backup_dir)
-        self.add_instance(backup_dir, 'node', node)
+        backup_dir = self.backup_dir
+        self.pb.init()
+        self.pb.add_instance('node', node)
         node.slow_start()
 
         # take temp FULL backup
-        tmp_id = self.backup_node(
-            backup_dir, 'node', node, options=['--stream'])
+        tmp_id = self.pb.backup_node('node', node, options=['--stream'])
 
         external_dir = self.get_tblspace_path(node, 'external_dir')
 
         # fill external directories with data
-        self.restore_node(
-            backup_dir, 'node', node, backup_id=tmp_id,
-            data_dir=external_dir, options=["-j", "4"])
+        self.pb.restore_node('node', restore_dir=external_dir, backup_id=tmp_id,
+            options=["-j", "4"])
 
-        self.delete_pb(backup_dir, 'node', backup_id=tmp_id)
+        self.pb.delete('node', backup_id=tmp_id)
 
         # take FULL backup
-        full_id = self.backup_node(
-            backup_dir, 'node', node,
+        full_id = self.pb.backup_node('node', node,
             options=[
                 '--stream', '-E', "{0}".format(external_dir)])
 
@@ -2378,28 +1991,15 @@ class ExternalTest(ProbackupTest, unittest.TestCase):
             backup_dir, 'backups', 'node', full_id,
             'external_directories', 'externaldir1', 'postgresql.auto.conf')
 
-        with open(file, "r+b", 0) as f:
-            f.seek(42)
-            f.write(b"blah")
-            f.flush()
-            f.close
+        to_corrupt = 'external_directories/externaldir1/postgresql.auto.conf'
+        self.corrupt_backup_file(backup_dir, 'node', full_id, to_corrupt,
+                                 damage=(42, b"blah"))
 
-        try:
-            self.validate_pb(backup_dir)
-            # we should die here because exception is what we expect to happen
-            self.assertEqual(
-                1, 0,
-                "Expecting Error because file in external dir is corrupted"
-                "\n Output: {0} \n CMD: {1}".format(
-                    repr(self.output), self.cmd))
-        except ProbackupException as e:
-            self.assertIn(
-                'WARNING: Invalid CRC of backup file',
-                e.message,
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
-                    repr(e.message), self.cmd))
+        self.pb.validate(
+                         expect_error="because file in external dir is corrupted")
+        self.assertMessage(contains='WARNING: Invalid CRC of backup file')
 
         self.assertEqual(
             'CORRUPT',
-            self.show_pb(backup_dir, 'node', full_id)['status'],
+            self.pb.show('node', full_id)['status'],
             'Backup STATUS should be "CORRUPT"')

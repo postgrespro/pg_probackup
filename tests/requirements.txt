@@ -1,0 +1,16 @@
+# Testgres can be installed in the following ways:
+# 1. From a pip package (recommended)
+#    testgres==1.8.5
+# 2. From a specific Git branch, tag or commit
+#    git+https://github.com/postgrespro/testgres.git@<git-ref>
+# 3. From a local directory
+#    /path/to/local/directory/testgres
+testgres==1.10.0
+testgres-pg-probackup2==0.0.2
+allure-pytest
+deprecation
+minio==7.2.5
+pexpect
+pytest==7.4.3
+pytest-xdist
+parameterized

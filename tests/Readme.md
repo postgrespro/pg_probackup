@@ -45,12 +45,22 @@ Run long (time consuming) tests:
  export PG_PROBACKUP_LONG=ON
 
 Usage:
- sudo echo 0 > /proc/sys/kernel/yama/ptrace_scope
+
+ sudo sysctl kernel.yama.ptrace_scope=0                                           # only active until the next reboot
+or
+ sudo sed -i 's/ptrace_scope = 1/ptrace_scope = 0/' /etc/sysctl.d/10-ptrace.conf  # set permanently, needs a reboot to take effect
+                                                                                  # see https://www.kernel.org/doc/Documentation/security/Yama.txt for possible implications of setting this parameter permanently
  pip install testgres
  export PG_CONFIG=/path/to/pg_config
  python -m unittest [-v] tests[.specific_module][.class.test]
 ```
-
+# Environment variables
+| Variable | Possible values                    | Required | Default value | Description                                                                                                                                                                              |
+| - |------------------------------------| - | - |------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| KEEP_LOGS | Any                                | No | Not set | If this variable is set to '1', 'y' or 'Y' then test logs are kept after the successful execution of a test, otherwise test logs are deleted upon the successful execution of a test     |
+| PG_PROBACKUP_S3_TEST | Not set, minio, VK                 | No | Not set | If set, specifies the type of the S3 storage for the tests, otherwise signifies to the tests that the storage is not an S3 one                                                           |
+| PG_PROBACKUP_S3_CONFIG_FILE | Not set, path to config file, True | No | Not set | Specifies the path to an S3 configuration file. If set, all commands will include --s3-config-file='path'. If 'True', the default configuration file at ./s3/tests/s3.conf will be used  |
+| PGPROBACKUP_TMP_DIR | File path                          | No | tmp_dirs | The root of the temporary directory hierarchy where tests store data and logs. Relative paths start from the `tests` directory.                                                          |
 # Troubleshooting FAQ
 
 ## Python tests failure
