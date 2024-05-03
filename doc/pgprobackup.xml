@@ -2327,10 +2327,10 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance=<replac
 ======================================================================================================================================
  Instance  Version  ID      Recovery Time           Mode    WAL Mode  TLI  Time   Data    WAL  Zratio  Start LSN   Stop LSN    Status 
 ======================================================================================================================================
- node      16       SCUN3Y  2024-05-02 11:19:16+03  DELTA   STREAM    1/1    7s   92MB  208MB    2.27  0/3C0043A8  0/46159C70  OK     
- node      16       SCUN3M  2024-05-02 11:19:01+03  PTRACK  STREAM    1/1   10s   30MB   16MB    2.23  0/32000028  0/32005ED0  OK     
- node      16       SCUN39  2024-05-02 11:18:50+03  PAGE    STREAM    1/1   12s   46MB   32MB    1.44  0/2A000028  0/2B0000B8  OK     
- node      16       SCUN2V  2024-05-02 11:18:38+03  FULL    STREAM    1/0   11s  154MB   16MB    2.32  0/23000028  0/23000168  OK     
+ node      16       SCUN3Y  2024-05-02 11:19:16+03  DELTA   STREAM    16/15   7s   92MB  208MB    2.27  0/3C0043A8  0/46159C70  OK     
+ node      16       SCUN3M  2024-05-02 11:19:01+03  PTRACK  STREAM    15/15  10s   30MB   16MB    2.23  0/32000028  0/32005ED0  OK     
+ node      16       SCUN39  2024-05-02 11:18:50+03  PAGE    STREAM    15/15  12s   46MB   32MB    1.44  0/2A000028  0/2B0000B8  OK     
+ node      16       SCUN2V  2024-05-02 11:18:38+03  FULL    STREAM    15/0   11s  154MB   16MB    2.32  0/23000028  0/23000168  OK     
 
 backup_user@backup_host:~$ pg_probackup restore -B /mnt/backups --instance=node -R -I lsn
 INFO: Destination directory and tablespace directories are empty, disable incremental restore
@@ -3137,8 +3137,8 @@ pg_probackup show -B <replaceable>backup_dir</replaceable> --instance=<replaceab
                 "checksum-version": 1,
                 "program-version": "2.5.14",
                 "server-version": "16",
-                "current-tli": 1,
-                "parent-tli": 0,
+                "current-tli": 16,
+                "parent-tli": 2,
                 "start-lsn": "0/4C000028",
                 "stop-lsn": "0/4D0000B8",
                 "start-time": "2024-05-02 11:19:26+03",
@@ -3602,8 +3602,8 @@ BACKUP INSTANCE 'node'
         backup will be removed.
       </para>
       <para>
-        With the <option>--merge-expired</option> option, the <literal id="pbk-retention-policy-backup4-2">SCC4HX</literal>
-        backup is merged with the underlying <literal id="pbk-retention-policy-backup3-2">SCC4HX</literal> and <literal id="pbk-retention-policy-backup2-2">SCC4HX</literal> backups
+        With the <option>--merge-expired</option> option, the <literal id="pbk-retention-policy-backup4-2">SCFTUG</literal>
+        backup is merged with the underlying <literal id="pbk-retention-policy-backup3-2">SCDZ6D</literal> and <literal id="pbk-retention-policy-backup2-2">SCC4HX</literal> backups
         and becomes a full one, so there is no need to keep these
         expired backups anymore:
       </para>
@@ -3618,9 +3618,7 @@ BACKUP INSTANCE 'node'
 =====================================================================================================================================
  node      16       SCUN6L  2024-05-02 11:20:48+03  FULL   ARCHIVE   1/0    5s   296MB  16MB    2.30  0/46000028  0/470000B8  OK     
  node      16       SCQXUI  2024-04-30 11:20:45+03  PAGE   ARCHIVE   1/1    5s  6280kB  16MB    1.00  0/44000028  0/450000F0  OK     
- node      16       SCFTUG  2024-04-24 11:20:43+03  DELTA  ARCHIVE   1/1    5s  6280kB  16MB    1.00  0/42000028  0/430000B8  OK     
- node      16       SCDZ6D  2024-04-23 11:20:40+03  PAGE   ARCHIVE   1/1    5s  6280kB  16MB    1.00  0/40000028  0/410000B8  OK     
- node      16       SCC4HX  2024-04-22 11:20:24+03  FULL   ARCHIVE   1/0    5s   296MB  16MB    2.30  0/3E000028  0/3F0000F0  OK     
+ node      16       SCFTUG  2024-04-24 11:20:43+03  FULL   ARCHIVE   1/1    5s   296MB  16MB    1.00  0/42000028  0/430000B8  OK     
 </programlisting>
         <para>
           The <literal>Time</literal> field for the merged backup displays the time
