@@ -39,7 +39,7 @@ pg_probackup - utility to manage backup/recovery of PostgreSQL database.
 
   pg_probackup show-config -B backup-dir --instance=instance-name
                  [--format=format]
-                 [--default-units]
+                 [--no-scale-units]
                  [--help]
 
   pg_probackup backup -B backup-dir -b backup-mode --instance=instance-name

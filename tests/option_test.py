@@ -222,21 +222,21 @@ class OptionTest(ProbackupTest, unittest.TestCase):
                 'You need configure PostgreSQL with --enabled-nls option for this test')
 
     # @unittest.skip("skip")
-    def test_options_default_units(self):
-        """check --default-units option"""
+    def test_options_no_scale_units(self):
+        """check --no-scale-units option"""
         backup_dir =  os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
             base_dir=os.path.join(self.module_name, self.fname, 'node'))
         self.init_pb(backup_dir)
         self.add_instance(backup_dir, 'node', node)
-        # check that --default-units option works correctly
+        # check that --no-scale-units option works correctly
         output = self.run_pb(["show-config", "--backup-path", backup_dir, "--instance=node"])
         self.assertIn(container=output, member="archive-timeout = 5min")
-        output = self.run_pb(["show-config", "--backup-path", backup_dir, "--instance=node", "--default-units"])
+        output = self.run_pb(["show-config", "--backup-path", backup_dir, "--instance=node", "--no-scale-units"])
         self.assertIn(container=output, member="archive-timeout = 300")
         self.assertNotIn(container=output, member="archive-timeout = 300s")
         # check that we have now quotes ("") in json output
-        output = self.run_pb(["show-config", "--backup-path", backup_dir, "--instance=node", "--default-units", "--format=json"])
+        output = self.run_pb(["show-config", "--backup-path", backup_dir, "--instance=node", "--no-scale-units", "--format=json"])
         self.assertIn(container=output, member='"archive-timeout": 300,')
         self.assertIn(container=output, member='"retention-redundancy": 0,')
         self.assertNotIn(container=output, member='"archive-timeout": "300",')

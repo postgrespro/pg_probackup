@@ -121,7 +121,7 @@ help_pg_probackup(void)
 
 	printf(_("\n  %s show-config -B backup-dir --instance=instance-name\n"), PROGRAM_NAME);
 	printf(_("                 [--format=format]\n"));
-	printf(_("                 [--default-units]\n"));
+	printf(_("                 [--no-scale-units]\n"));
 	printf(_("                 [--help]\n"));
 
 	printf(_("\n  %s backup -B backup-dir -b backup-mode --instance=instance-name\n"), PROGRAM_NAME);
@@ -955,7 +955,7 @@ help_show_config(void)
 	printf(_("  -B, --backup-path=backup-dir     location of the backup storage area\n"));
 	printf(_("      --instance=instance-name     name of the instance\n"));
 	printf(_("      --format=format              show format=PLAIN|JSON\n"));
-	printf(_("      --default-units              show memory and time values in default units\n\n"));
+	printf(_("      --no-scale-units              show memory and time values in default units\n\n"));
 }
 
 static void

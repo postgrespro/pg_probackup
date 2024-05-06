@@ -678,7 +678,7 @@ config_set_opt(ConfigOption options[], void *var, OptionSource source)
 /*
  * Return value of the function in the string representation. Result is
  * allocated string.
- * We can set  GET_VAL_IN_DEFAULT_UNITS flag in opt->flags
+ * We can set  GET_VAL_IN_BASE_UNITS flag in opt->flags
  * before call option_get_value() to get option value in default units
  */
 char *
@@ -694,7 +694,7 @@ option_get_value(ConfigOption *opt)
 	 */
 	if (opt->flags & OPTION_UNIT)
 	{
-		if (opt->flags & GET_VAL_IN_DEFAULT_UNITS){
+		if (opt->flags & GET_VAL_IN_BASE_UNITS){
 			if (opt->type == 'i')
 				value = *((int32 *) opt->var);
 			else if (opt->type == 'I')

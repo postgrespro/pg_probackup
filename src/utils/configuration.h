@@ -100,7 +100,7 @@ struct ConfigOption
 #define OPTION_UNIT_TIME			0xF0000	/* mask for time-related units */
 
 #define OPTION_UNIT					(OPTION_UNIT_MEMORY | OPTION_UNIT_TIME)
-#define GET_VAL_IN_DEFAULT_UNITS 	0x80000000	/* bitflag to get memory and time values in default units*/
+#define GET_VAL_IN_BASE_UNITS 	0x80000000	/* bitflag to get memory and time values in default units*/
 
 extern ProbackupSubcmd parse_subcmd(char const * const subcmd_str);
 extern char const *get_subcmd_name(ProbackupSubcmd const subcmd);

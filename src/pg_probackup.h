@@ -939,7 +939,7 @@ extern void do_archive_get(InstanceState *instanceState, InstanceConfig *instanc
 						   char *wal_file_name, int batch_size, bool validate_wal);
 
 /* in configure.c */
-extern void do_show_config(bool show_default_units);
+extern void do_show_config(bool show_base_units);
 extern void do_set_config(InstanceState *instanceState, bool missing_ok);
 extern void init_config(InstanceConfig *config, const char *instance_name);
 extern InstanceConfig *readInstanceConfigFile(InstanceState *instanceState);

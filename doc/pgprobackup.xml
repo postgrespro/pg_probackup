@@ -4267,6 +4267,7 @@ pg_probackup set-backup -B <replaceable>backup_dir</replaceable> --instance <rep
       <title>show-config</title>
       <programlisting>
 pg_probackup show-config -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> [--format=plain|json]
+[--no-scale-units] [<replaceable>logging_options</replaceable>]
 </programlisting>
       <para>
         Displays the contents of the <filename>pg_probackup.conf</filename> configuration
@@ -4276,6 +4277,18 @@ pg_probackup show-config -B <replaceable>backup_dir</replaceable> --instance <re
         <literal>--format=json</literal> option to get the result
         in the <acronym>JSON</acronym> format. By default, configuration settings are
         shown as plain text.
+      </para>
+      <para>
+        You can also specify the <option>--no-scale-units</option>
+        option to display time and memory configuration settings in their base (unscaled) units.
+        Otherwise, the values are scaled to larger units for optimal display.
+        For example, if <literal>archive-timeout</literal> is 300, then
+        <literal>5min</literal> is displayed, but if <literal>archive-timeout</literal>
+        is 301, then <literal>301s</literal> is displayed.
+        Also, if the <option>--no-scale-units</option> option is specified, configuration
+        settings are displayed without units and for the JSON format,
+        numeric and boolean values are not enclosed in quotes. This facilitates parsing
+        the output.
       </para>
       <para>
         To edit <filename>pg_probackup.conf</filename>, use the
