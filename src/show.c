@@ -67,6 +67,7 @@ static void show_archive_plain(const char *instance_name, uint32 xlog_seg_size,
 							   parray *timelines_list, bool show_name);
 static void show_archive_json(const char *instance_name, uint32 xlog_seg_size,
 							  parray *tli_list);
+static bool backup_has_tablespace_map(pgBackup *backup);
 
 static PQExpBufferData show_buf;
 static bool first_instance = true;
@@ -479,6 +480,32 @@ print_backup_json_object(PQExpBuffer buf, pgBackup *backup)
 		appendPQExpBuffer(buf, "%u", backup->content_crc);
 	}
 
+	/* print tablespaces list */
+	if (backup_has_tablespace_map(backup))
+	{
+		parray	   *links = parray_new();
+
+		json_add_key(buf, "tablespace_map", json_level);
+		json_add(buf, JT_BEGIN_ARRAY, &json_level);
+
+		read_tablespace_map(links, backup->root_dir);
+		parray_qsort(links, pgFileCompareLinked);
+
+		for (size_t i = 0; i < parray_num(links); i++){
+			pgFile	   *link = (pgFile *) parray_get(links, i);
+			if (i)
+				appendPQExpBufferChar(buf, ',');
+			json_add(buf, JT_BEGIN_OBJECT, &json_level);
+			json_add_value(buf, "oid", link->name, json_level, true);
+			json_add_value(buf, "path", link->linked, json_level, true);
+			json_add(buf, JT_END_OBJECT, &json_level);
+		}
+		/* End of tablespaces */
+		json_add(buf, JT_END_ARRAY, &json_level);
+		parray_walk(links, pgFileFree);
+		parray_free(links);
+	}
+
 	json_add(buf, JT_END_OBJECT, &json_level);
 }
 
@@ -521,7 +548,27 @@ show_backup(InstanceState *instanceState, time_t requested_backup_id)
 	}
 
 	if (show_format == SHOW_PLAIN)
+	{
 		pgBackupWriteControl(stdout, backup, false);
+
+		/* print tablespaces list */
+		if (backup_has_tablespace_map(backup))
+		{
+			parray	   *links = parray_new();
+
+			fio_fprintf(stdout, "\ntablespace_map = '");
+
+			read_tablespace_map(links, backup->root_dir);
+			parray_qsort(links, pgFileCompareLinked);
+
+			for (size_t i = 0; i < parray_num(links); i++){
+				pgFile	   *link = (pgFile *) parray_get(links, i);
+				fio_fprintf(stdout, "%s %s%s", link->name, link->linked, (i < parray_num(links) - 1) ? "; " : "'\n");
+			}
+			parray_walk(links, pgFileFree);
+			parray_free(links);
+		}
+	}
 	else
 		elog(ERROR, "Invalid show format %d", (int) show_format);
 
@@ -1173,4 +1220,11 @@ show_archive_json(const char *instance_name, uint32 xlog_seg_size,
 	json_add(buf, JT_END_OBJECT, &json_level);
 
 	first_instance = false;
+}
+
+static bool backup_has_tablespace_map(pgBackup *backup)
+{
+		char        map_path[MAXPGPATH];
+		join_path_components(map_path, backup->database_dir, PG_TABLESPACE_MAP_FILE);
+		return fileExists(map_path, FIO_BACKUP_HOST);
 }

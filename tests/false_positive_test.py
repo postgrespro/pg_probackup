@@ -203,13 +203,16 @@ class FalsePositive(ProbackupTest, unittest.TestCase):
             backup_dir, 'node',
             options=['--recovery-target-time={0}'.format(target_time)])
 
-    @unittest.expectedFailure
+    # @unittest.expectedFailure
     # @unittest.skip("skip")
     def test_recovery_target_lsn_backup_victim(self):
         """
         Check that for validation to recovery target
         probackup chooses valid backup
         https://github.com/postgrespro/pg_probackup/issues/104
+
+        @y.sokolov: looks like this test should pass.
+        So I commented 'expectedFailure'
         """
         backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(

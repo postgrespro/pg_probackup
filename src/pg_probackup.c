@@ -98,7 +98,7 @@ static char		   *target_time = NULL;
 static char		   *target_xid = NULL;
 static char		   *target_lsn = NULL;
 static char		   *target_inclusive = NULL;
-static TimeLineID	target_tli;
+static char	*target_tli_string; /* timeline number, "current"  or "latest"*/
 static char		   *target_stop;
 static bool			target_immediate;
 static char		   *target_name = NULL;
@@ -164,6 +164,7 @@ bool no_validate_wal = false;
 /* show options */
 ShowFormat show_format = SHOW_PLAIN;
 bool show_archive = false;
+static bool show_base_units = false;
 
 /* set-backup options */
 int64 ttl = -1;
@@ -227,7 +228,7 @@ static ConfigOption cmd_options[] =
 	{ 's', 137, "recovery-target-xid",	&target_xid,	SOURCE_CMD_STRICT },
 	{ 's', 144, "recovery-target-lsn",	&target_lsn,	SOURCE_CMD_STRICT },
 	{ 's', 138, "recovery-target-inclusive",	&target_inclusive,	SOURCE_CMD_STRICT },
-	{ 'u', 139, "recovery-target-timeline",		&target_tli,		SOURCE_CMD_STRICT },
+	{ 's', 139, "recovery-target-timeline",	&target_tli_string,		      SOURCE_CMD_STRICT },
 	{ 's', 157, "recovery-target",	&target_stop,		SOURCE_CMD_STRICT },
 	{ 'f', 'T', "tablespace-mapping", opt_tablespace_map,	SOURCE_CMD_STRICT },
 	{ 'f', 155, "external-mapping",	opt_externaldir_map,	SOURCE_CMD_STRICT },
@@ -275,6 +276,8 @@ static ConfigOption cmd_options[] =
 	/* show options */
 	{ 'f', 165, "format",			opt_show_format,	SOURCE_CMD_STRICT },
 	{ 'b', 166, "archive",			&show_archive,		SOURCE_CMD_STRICT },
+	/* show-config options */
+	{ 'b', 167, "no-scale-units",	&show_base_units,SOURCE_CMD_STRICT },
 	/* set-backup options */
 	{ 'I', 170, "ttl", &ttl, SOURCE_CMD_STRICT, SOURCE_DEFAULT, 0, OPTION_UNIT_S, option_get_value},
 	{ 's', 171, "expire-time",		&expire_time_string,	SOURCE_CMD_STRICT },
@@ -285,7 +288,7 @@ static ConfigOption cmd_options[] =
 	{ 's', 136, "time",				&target_time,		SOURCE_CMD_STRICT },
 	{ 's', 137, "xid",				&target_xid,		SOURCE_CMD_STRICT },
 	{ 's', 138, "inclusive",		&target_inclusive,	SOURCE_CMD_STRICT },
-	{ 'u', 139, "timeline",			&target_tli,		SOURCE_CMD_STRICT },
+	{ 's', 139, "timeline",			&target_tli_string,		SOURCE_CMD_STRICT },
 	{ 's', 144, "lsn",				&target_lsn,		SOURCE_CMD_STRICT },
 	{ 'b', 140, "immediate",		&target_immediate,	SOURCE_CMD_STRICT },
 
@@ -465,10 +468,10 @@ main(int argc, char *argv[])
 	if (backup_path == NULL)
 	{
 		/*
-		 * If command line argument is not set, try to read BACKUP_PATH
+		 * If command line argument is not set, try to read BACKUP_DIR
 		 * from environment variable
 		 */
-		backup_path = getenv("BACKUP_PATH");
+		backup_path = getenv("BACKUP_DIR");
 	}
 
 	if (backup_path != NULL)
@@ -495,7 +498,7 @@ main(int argc, char *argv[])
 		backup_subcmd != CATCHUP_CMD)
 		elog(ERROR,
 			 "No backup catalog path specified.\n"
-			 "Please specify it either using environment variable BACKUP_PATH or\n"
+			 "Please specify it either using environment variable BACKUP_DIR or\n"
 			 "command line option --backup-path (-B)");
 
 	/* ===== catalogState (END) ======*/
@@ -739,7 +742,7 @@ main(int argc, char *argv[])
 		 */
 		recovery_target_options =
 			parseRecoveryTargetOptions(target_time, target_xid,
-				target_inclusive, target_tli, target_lsn,
+				target_inclusive, target_tli_string, target_lsn,
 				(target_stop != NULL) ? target_stop :
 					(target_immediate) ? "immediate" : NULL,
 				target_name, target_action);
@@ -1049,7 +1052,7 @@ main(int argc, char *argv[])
 			do_merge(instanceState, current.backup_id, no_validate, no_sync);
 			break;
 		case SHOW_CONFIG_CMD:
-			do_show_config();
+			do_show_config(show_base_units);
 			break;
 		case SET_CONFIG_CMD:
 			do_set_config(instanceState, false);

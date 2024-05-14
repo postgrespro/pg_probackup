@@ -269,7 +269,7 @@ static const char *current_group = NULL;
  * Show configure options including default values.
  */
 void
-do_show_config(void)
+do_show_config(bool show_base_units)
 {
 	int			i;
 
@@ -277,10 +277,13 @@ do_show_config(void)
 
 	for (i = 0; instance_options[i].type; i++)
 	{
+		if (show_base_units && strchr("bBiIuU", instance_options[i].type) && instance_options[i].get_value == *option_get_value)
+			instance_options[i].flags |= GET_VAL_IN_BASE_UNITS;	/* Set flag */
 		if (show_format == SHOW_PLAIN)
 			show_configure_plain(&instance_options[i]);
 		else
 			show_configure_json(&instance_options[i]);
+		instance_options[i].flags &= ~(GET_VAL_IN_BASE_UNITS); /* Reset flag. It was resetted in option_get_value(). Probably this reset isn't needed */
 	}
 
 	show_configure_end();
@@ -801,6 +804,6 @@ show_configure_json(ConfigOption *opt)
 		return;
 
 	json_add_value(&show_buf, opt->lname, value, json_level,
-				   true);
+				   !(opt->flags & GET_VAL_IN_BASE_UNITS));
 	pfree(value);
 }

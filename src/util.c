@@ -190,6 +190,26 @@ get_current_timeline_from_control(const char *pgdata_path, fio_location location
 	return ControlFile.checkPointCopy.ThisTimeLineID;
 }
 
+void
+get_control_file_or_back_file(const char *pgdata_path, fio_location location, ControlFileData *control)
+{
+	char		*buffer;
+	size_t		size;
+
+	/* First fetch file... */
+	buffer = slurpFile(pgdata_path, XLOG_CONTROL_FILE, &size, true, location);
+
+	if (!buffer || size == 0){
+		/* Error read XLOG_CONTROL_FILE or file is truncated, trying read backup */
+		buffer = slurpFile(pgdata_path, XLOG_CONTROL_BAK_FILE, &size, true, location);
+		if (!buffer)
+			elog(ERROR, "Could not read %s and %s files\n", XLOG_CONTROL_FILE, XLOG_CONTROL_BAK_FILE); /* Maybe it should be PANIC? */
+	}
+	digestControlFile(control, buffer, size);
+	pg_free(buffer);
+}
+
+
 /*
  * Get last check point record ptr from pg_tonrol.
  */

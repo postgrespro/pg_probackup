@@ -678,6 +678,8 @@ config_set_opt(ConfigOption options[], void *var, OptionSource source)
 /*
  * Return value of the function in the string representation. Result is
  * allocated string.
+ * We can set  GET_VAL_IN_BASE_UNITS flag in opt->flags
+ * before call option_get_value() to get option value in default units
  */
 char *
 option_get_value(ConfigOption *opt)
@@ -692,20 +694,33 @@ option_get_value(ConfigOption *opt)
 	 */
 	if (opt->flags & OPTION_UNIT)
 	{
-		if (opt->type == 'i')
-			convert_from_base_unit(*((int32 *) opt->var),
-								   opt->flags & OPTION_UNIT, &value, &unit);
-		else if (opt->type == 'I')
-			convert_from_base_unit(*((int64 *) opt->var),
-								   opt->flags & OPTION_UNIT, &value, &unit);
-		else if (opt->type == 'u')
-			convert_from_base_unit_u(*((uint32 *) opt->var),
-									 opt->flags & OPTION_UNIT, &value_u, &unit);
-		else if (opt->type == 'U')
-			convert_from_base_unit_u(*((uint64 *) opt->var),
-									 opt->flags & OPTION_UNIT, &value_u, &unit);
+		if (opt->flags & GET_VAL_IN_BASE_UNITS){
+			if (opt->type == 'i')
+				value = *((int32 *) opt->var);
+			else if (opt->type == 'I')
+				value = *((int64 *) opt->var);
+			else if (opt->type == 'u')
+				value_u = *((uint32 *) opt->var);
+			else if (opt->type == 'U')
+				value_u = *((uint64 *) opt->var);
+			unit = "";
+		}
+		else
+		{
+			if (opt->type == 'i')
+				convert_from_base_unit(*((int32 *) opt->var),
+									opt->flags & OPTION_UNIT, &value, &unit);
+			else if (opt->type == 'I')
+				convert_from_base_unit(*((int64 *) opt->var),
+									opt->flags & OPTION_UNIT, &value, &unit);
+			else if (opt->type == 'u')
+				convert_from_base_unit_u(*((uint32 *) opt->var),
+										opt->flags & OPTION_UNIT, &value_u, &unit);
+			else if (opt->type == 'U')
+				convert_from_base_unit_u(*((uint64 *) opt->var),
+										opt->flags & OPTION_UNIT, &value_u, &unit);
+		}
 	}
-
 	/* Get string representation itself */
 	switch (opt->type)
 	{

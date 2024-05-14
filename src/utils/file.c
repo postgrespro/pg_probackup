@@ -1159,24 +1159,35 @@ fio_stat(char const* path, struct stat* st, bool follow_symlink, fio_location lo
 bool
 fio_is_same_file(char const* filename1, char const* filename2, bool follow_symlink, fio_location location)
 {
-#ifndef WIN32
-	struct stat	stat1, stat2;
-
-	if (fio_stat(filename1, &stat1, follow_symlink, location) < 0)
-		elog(ERROR, "Can't stat file \"%s\": %s", filename1, strerror(errno));
-
-	if (fio_stat(filename2, &stat2, follow_symlink, location) < 0)
-		elog(ERROR, "Can't stat file \"%s\": %s", filename2, strerror(errno));
-
-	return stat1.st_ino == stat2.st_ino && stat1.st_dev == stat2.st_dev;
-#else
 	char	*abs_name1 = make_absolute_path(filename1);
 	char	*abs_name2 = make_absolute_path(filename2);
 	bool	result = strcmp(abs_name1, abs_name2) == 0;
+
+#ifndef WIN32
+    if (!result)
+	{
+		struct stat	stat1, stat2;
+
+		if (fio_stat(filename1, &stat1, follow_symlink, location) < 0)
+		{
+            if (errno == ENOENT)
+                return false;
+			elog(ERROR, "Can't stat file \"%s\": %s", filename1, strerror(errno));
+		}
+
+		if (fio_stat(filename2, &stat2, follow_symlink, location) < 0)
+		{
+            if (errno == ENOENT)
+                return false;
+			elog(ERROR, "Can't stat file \"%s\": %s", filename2, strerror(errno));
+		}
+
+		result = (stat1.st_ino == stat2.st_ino && stat1.st_dev == stat2.st_dev);
+	}
+#endif
 	free(abs_name2);
 	free(abs_name1);
 	return result;
-#endif
 }
 
 /*
@@ -2526,11 +2537,22 @@ fio_send_file_gz(const char *from_fullpath, FILE* out, char **errormsg)
 			exit_code = hdr.arg;
 			goto cleanup;
 		}
-		else if (hdr.cop == FIO_PAGE)
+		else if (hdr.cop == FIO_PAGE || hdr.cop == FIO_PAGE_ZERO)
 		{
 			int rc;
-			Assert(hdr.size <= CHUNK_SIZE);
-			IO_CHECK(fio_read_all(fio_stdin, in_buf, hdr.size), hdr.size);
+			unsigned size;
+			if (hdr.cop == FIO_PAGE)
+			{
+				Assert(hdr.size <= CHUNK_SIZE);
+				size = hdr.size;
+				IO_CHECK(fio_read_all(fio_stdin, in_buf, hdr.size), hdr.size);
+			}
+			else
+			{
+				Assert(hdr.arg <= CHUNK_SIZE);
+				size = hdr.arg;
+				memset(in_buf, 0, hdr.arg);
+			}
 
 			/* We have received a chunk of compressed data, lets decompress it */
 			if (strm == NULL)
@@ -2541,7 +2563,7 @@ fio_send_file_gz(const char *from_fullpath, FILE* out, char **errormsg)
 
 				/* The fields next_in, avail_in initialized before init */
 				strm->next_in = (Bytef *)in_buf;
-				strm->avail_in = hdr.size;
+				strm->avail_in = size;
 
 				rc = inflateInit2(strm, 15 + 16);
 
@@ -2558,7 +2580,7 @@ fio_send_file_gz(const char *from_fullpath, FILE* out, char **errormsg)
 			else
 			{
 				strm->next_in = (Bytef *)in_buf;
-				strm->avail_in = hdr.size;
+				strm->avail_in = size;
 			}
 
 			strm->next_out = (Bytef *)out_buf; /* output buffer */

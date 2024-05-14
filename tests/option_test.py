@@ -16,15 +16,6 @@ class OptionTest(ProbackupTest, unittest.TestCase):
             )
 
     # @unittest.skip("skip")
-    def test_version_2(self):
-        """help options"""
-        with open(os.path.join(self.dir_path, "expected/option_version.out"), "rb") as version_out:
-            self.assertIn(
-                version_out.read().decode("utf-8").strip(),
-                self.run_pb(["--version"])
-            )
-
-    # @unittest.skip("skip")
     def test_without_backup_path_3(self):
         """backup command failure without backup mode option"""
         try:
@@ -34,7 +25,7 @@ class OptionTest(ProbackupTest, unittest.TestCase):
         except ProbackupException as e:
             self.assertIn(
                 'ERROR: No backup catalog path specified.\n' + \
-                'Please specify it either using environment variable BACKUP_PATH or\n' + \
+                'Please specify it either using environment variable BACKUP_DIR or\n' + \
                 'command line option --backup-path (-B)',
                 e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))
@@ -230,6 +221,25 @@ class OptionTest(ProbackupTest, unittest.TestCase):
             self.skipTest(
                 'You need configure PostgreSQL with --enabled-nls option for this test')
 
+    # @unittest.skip("skip")
+    def test_options_no_scale_units(self):
+        """check --no-scale-units option"""
+        backup_dir =  os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
+        node = self.make_simple_node(
+            base_dir=os.path.join(self.module_name, self.fname, 'node'))
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        # check that --no-scale-units option works correctly
+        output = self.run_pb(["show-config", "--backup-path", backup_dir, "--instance=node"])
+        self.assertIn(container=output, member="archive-timeout = 5min")
+        output = self.run_pb(["show-config", "--backup-path", backup_dir, "--instance=node", "--no-scale-units"])
+        self.assertIn(container=output, member="archive-timeout = 300")
+        self.assertNotIn(container=output, member="archive-timeout = 300s")
+        # check that we have now quotes ("") in json output
+        output = self.run_pb(["show-config", "--backup-path", backup_dir, "--instance=node", "--no-scale-units", "--format=json"])
+        self.assertIn(container=output, member='"archive-timeout": 300,')
+        self.assertIn(container=output, member='"retention-redundancy": 0,')
+        self.assertNotIn(container=output, member='"archive-timeout": "300",')
 
 def check_locale(locale_name):
    ret=True

@@ -122,6 +122,8 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 	char		pretty_time[20];
 	char		pretty_bytes[20];
 
+	pgFile	*src_pg_control_file = NULL;
+
 	elog(INFO, "Database backup start");
 	if(current.external_dir_str)
 	{
@@ -424,6 +426,24 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 
 	}
 
+	/*
+	 * find pg_control file
+	 * We'll copy it last
+	 */
+	{
+		int control_file_elem_index;
+		pgFile search_key;
+		MemSet(&search_key, 0, sizeof(pgFile));
+		/* pgFileCompareRelPathWithExternal uses only .rel_path and .external_dir_num for comparision */
+		search_key.rel_path = XLOG_CONTROL_FILE;
+		search_key.external_dir_num = 0;
+		control_file_elem_index = parray_bsearch_index(backup_files_list, &search_key, pgFileCompareRelPathWithExternal);
+
+		if (control_file_elem_index < 0)
+			elog(ERROR, "File \"%s\" not found in PGDATA %s", XLOG_CONTROL_FILE, current.database_dir);
+		src_pg_control_file = (pgFile *)parray_get(backup_files_list, control_file_elem_index);
+	}
+
 	/* setup thread locks */
 	pfilearray_clear_locks(backup_files_list);
 
@@ -483,6 +503,26 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 			backup_isok = false;
 	}
 
+	/* copy pg_control at very end */
+	if (backup_isok)
+	{
+
+		elog(progress ? INFO : LOG, "Progress: Backup file \"%s\"",
+			 src_pg_control_file->rel_path);
+
+		char	from_fullpath[MAXPGPATH];
+		char	to_fullpath[MAXPGPATH];
+		join_path_components(from_fullpath, instance_config.pgdata, src_pg_control_file->rel_path);
+		join_path_components(to_fullpath, current.database_dir, src_pg_control_file->rel_path);
+
+		backup_non_data_file(src_pg_control_file, NULL,
+					 from_fullpath, to_fullpath,
+					 current.backup_mode, current.parent_backup,
+					 true);
+	}
+
+
+
 	time(&end_time);
 	pretty_time_interval(difftime(end_time, start_time),
 						 pretty_time, lengthof(pretty_time));
@@ -510,17 +550,8 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 	{
 		pgFile	   *pg_control = NULL;
 
-		for (i = 0; i < parray_num(backup_files_list); i++)
-		{
-			pgFile	   *tmp_file = (pgFile *) parray_get(backup_files_list, i);
+		pg_control = src_pg_control_file;
 
-			if (tmp_file->external_dir_num == 0 &&
-				(strcmp(tmp_file->rel_path, XLOG_CONTROL_FILE) == 0))
-			{
-				pg_control = tmp_file;
-				break;
-			}
-		}
 
 		if (!pg_control)
 			elog(ERROR, "Failed to find file \"%s\" in backup filelist.",
@@ -2076,6 +2107,13 @@ backup_files(void *arg)
 		/* We have already copied all directories */
 		if (S_ISDIR(file->mode))
 			continue;
+		/*
+		 * Don't copy the pg_control file now, we'll copy it last
+		 */
+		if(file->external_dir_num == 0 && pg_strcasecmp(file->rel_path, XLOG_CONTROL_FILE) == 0)
+		{
+			continue;
+		}
 
 		if (arguments->thread_num == 1)
 		{

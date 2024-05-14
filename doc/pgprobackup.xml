@@ -172,6 +172,9 @@ doc/src/sgml/pgprobackup.sgml
   <para><link linkend="pbk-overview">Overview</link></para>
  </listitem>
  <listitem>
+  <para><link linkend="pbk-quickstart">Quick Start</link></para>
+ </listitem> 
+ <listitem>
   <para><link linkend="pbk-install">Installation</link></para>
  </listitem>
  <listitem>
@@ -453,7 +456,289 @@ doc/src/sgml/pgprobackup.sgml
   </para>
  </refsect2>
 </refsect1>
-
+  <refsect1 id="pbk-quickstart">
+    <title>Quick Start</title>
+      <para>
+        To quickly get started with <application>pg_probackup</application>, complete the steps below. This will set up FULL and DELTA backups in the remote mode and demonstrate some
+        basic <application>pg_probackup</application> operations. In the following, these terms are used:
+      </para>
+    <itemizedlist spacing="compact">
+      <listitem>
+        <para>
+          <literal>backup</literal> — <productname>PostgreSQL</productname>
+          role used to connect to the <productname>PostgreSQL</productname>
+          cluster.
+        </para>
+      </listitem>
+      <listitem>
+        <para>
+          <literal>backupdb</literal> — database used to connect to the
+          <productname>PostgreSQL</productname> cluster.
+        </para>
+      </listitem>
+      <listitem>
+        <para>
+          <literal>backup_host</literal> — host with the backup catalog.
+        </para>
+      </listitem>
+      <listitem>
+        <para>
+          <literal>backup_user</literal> — user on
+          <literal>backup_host</literal> running all <application>pg_probackup</application>
+          operations.
+        </para>
+      </listitem>
+      <listitem>
+        <para>
+          <filename>/mnt/backups</filename> — directory on
+          <literal>backup_host</literal> where the backup catalog is stored.
+        </para>
+      </listitem>
+      <listitem>
+        <para>
+          <literal>postgres_host</literal> — host with the
+          <productname>PostgreSQL</productname> cluster.
+        </para>
+      </listitem>
+      <listitem>
+        <para>
+          <literal>postgres</literal> — user on
+          <literal>postgres_host</literal> under which
+          <productname>PostgreSQL</productname> cluster processes are running.
+        </para>
+      </listitem>
+      <listitem>
+        <para>
+          <filename>/var/lib/postgresql/16/main</filename> —
+          <productname>PostgreSQL</productname> data directory on
+          <literal>postgres_host</literal>.
+        </para>
+      </listitem>
+    </itemizedlist>
+    <refsect2 id="pbk-minimal-setup">
+      <title>Steps to perform:</title>
+      <procedure>
+      <step>
+        <para><link linkend="pbk-install">Install</link> <application>pg_probackup</application> on both <literal>backup_host</literal> and <literal>postgres_host</literal>.</para>
+      </step>
+      <step id="pbk-quickstart-setup-ssh">
+        <para><link linkend="pbk-setup-ssh">Set up an SSH connection</link> from <literal>backup_host</literal> to <literal>postgres_host</literal>.</para>
+      </step>
+      <step id="pbk-setup-postgresql-cluster">
+        <para><link linkend="pbk-configuring-the-database-cluster">Configure</link> your database cluster for <link linkend="pbk-setting-up-stream-backups">STREAM backups</link>.</para>
+      </step>
+      <step id="pbk-init-the-backup-catalog">
+        <para>Initialize the backup catalog:</para>
+        <programlisting>
+backup_user@backup_host:~$ pg_probackup-16 init -B /mnt/backups
+INFO: Backup catalog '/mnt/backups' successfully initialized
+</programlisting>
+      </step>
+      <step id="pbk-add-instance-to-backup-catalog">
+        <para>Add a backup instance called <literal>mydb</literal> to the backup catalog:</para>
+        <programlisting>
+backup_user@backup_host:~$ pg_probackup-16 add-instance \
+    -B /mnt/backups \
+    -D /var/lib/postgresql/16/main \
+    --instance=mydb \
+    --remote-host=postgres_host \
+    --remote-user=postgres
+INFO: Instance 'mydb' successfully initialized
+</programlisting>
+      </step>
+      <step id="pbk-make-full-backup">
+        <para>Make a FULL backup:</para>
+        <programlisting>
+backup_user@backup_host:~$ pg_probackup-16 backup \
+    -B /mnt/backups \
+    -b FULL \
+    --instance=mydb \
+    --stream \
+    --remote-host=postgres_host \
+    --remote-user=postgres \
+    -U backup \
+    -d backupdb
+INFO: Backup start, pg_probackup version: 2.5.13, instance: mydb, backup ID: S6OBFN, backup mode: FULL, wal mode: STREAM, remote: true, compress-algorithm: none, compress-level: 1
+INFO: Database backup start
+INFO: wait for pg_backup_start()
+INFO: Wait for WAL segment /mnt/backups/backups/mydb/S6OBFN/database/pg_wal/000000010000000000000002 to be streamed
+INFO: PGDATA size: 29MB
+INFO: Current Start LSN: 0/2000060, TLI: 1
+INFO: Start transferring data files
+INFO: Data files are transferred, time elapsed: 0
+INFO: wait for pg_stop_backup()
+INFO: pg_stop backup() successfully executed
+INFO: stop_lsn: 0/2003CB0
+INFO: Getting the Recovery Time from WAL
+INFO: Syncing backup files to disk
+INFO: Backup files are synced, time elapsed: 0
+INFO: Validating backup S6OBFN
+INFO: Backup S6OBFN data files are valid
+INFO: Backup S6OBFN resident size: 45MB
+INFO: Backup S6OBFN completed
+</programlisting>
+      </step>
+      <step id="pbk-list-backups">
+        <para>List the backups of the instance:</para>
+        <programlisting>
+backup_user@backup_host:~$ pg_probackup-16 show -B /mnt/backups --instance=mydb
+================================================================================================================================
+ Instance  Version  ID      Recovery Time           Mode  WAL Mode  TLI  Time  Data   WAL  Zratio  Start LSN  Stop LSN   Status 
+================================================================================================================================
+ mydb      16       S6OBFN  2024-01-03 06:59:49+00  FULL  STREAM    1/0   10s  29MB  16MB    1.00  0/2000060  0/2003CB0  OK
+</programlisting>
+      </step>
+      <step id="pbk-make-incremental-backup-in-delta-mode">
+        <para>Make an incremental backup in the DELTA mode:</para>
+        <programlisting>
+backup_user@backup_host:~$ pg_probackup-16 backup \
+    -B /mnt/backups \
+    -b delta \
+    --instance=mydb \
+    --stream \
+    --remote-host=postgres_host \
+    --remote-user=postgres \
+    -U backup \
+    -d backupdb
+INFO: Backup start, pg_probackup version: 2.5.13, instance: mydb, backup ID: S6OBLG, backup mode: DELTA, wal mode: STREAM, remote: true, compress-algorithm: none, compress-level: 1
+INFO: Database backup start
+INFO: wait for pg_backup_start()
+INFO: Parent backup: S6OBFN
+INFO: Wait for WAL segment /mnt/backups/backups/mydb/S6OBLG/database/pg_wal/000000010000000000000004 to be streamed
+INFO: PGDATA size: 29MB
+INFO: Current Start LSN: 0/4000028, TLI: 1
+INFO: Parent Start LSN: 0/2000060, TLI: 1
+INFO: Start transferring data files
+INFO: Data files are transferred, time elapsed: 1s
+INFO: wait for pg_stop_backup()
+INFO: pg_stop backup() successfully executed
+INFO: stop_lsn: 0/4000168
+INFO: Getting the Recovery Time from WAL
+INFO: Syncing backup files to disk
+INFO: Backup files are synced, time elapsed: 0
+INFO: Validating backup S6OBLG
+INFO: Backup S6OBLG data files are valid
+INFO: Backup S6OBLG resident size: 32MB
+INFO: Backup S6OBLG completed
+</programlisting>
+      </step>
+      <step id="pbk-save-config-parameters">
+        <para>Add or modify some parameters in the <application>pg_probackup</application>
+        configuration file, so that you do not have to specify them each time on the command line:</para>
+        <programlisting>
+backup_user@backup_host:~$ pg_probackup-16 set-config \
+    -B /mnt/backups \
+    --instance=mydb \
+    --remote-host=postgres_host \
+    --remote-user=postgres \
+    -U backup \
+    -d backupdb
+</programlisting>
+      </step>
+      <step id="pbk-print-instance-config">
+        <para>Check the configuration of the instance:</para>
+        <programlisting>
+backup_user@backup_host:~$ pg_probackup-16 show-config -B /mnt/backups --instance=mydb
+# Backup instance information
+pgdata = /var/lib/postgresql/16/main
+system-identifier = 7319761899046784808
+xlog-seg-size = 16777216
+# Connection parameters
+pgdatabase = backupdb
+pghost = postgres_host
+pguser = backup
+# Replica parameters
+replica-timeout = 5min
+# Archive parameters
+archive-timeout = 5min
+# Logging parameters
+log-level-console = INFO
+log-level-file = OFF
+log-format-console = PLAIN
+log-format-file = PLAIN
+log-filename = pg_probackup.log
+log-rotation-size = 0TB
+log-rotation-age = 0d
+# Retention parameters
+retention-redundancy = 0
+retention-window = 0
+wal-depth = 0
+# Compression parameters
+compress-algorithm = none
+compress-level = 1
+# Remote access parameters
+remote-proto = ssh
+remote-host = postgres_host
+remote-user = postgres
+</programlisting>
+        <para>
+          Note that the parameters not modified via <command>set-config</command> retain their default values.
+        </para>
+      </step>
+      <step id="pbk-make-another-incremental-backup-in-delta-mode-using-saved-parameters">
+        <para>Make another incremental backup in the DELTA mode, omitting
+        the parameters stored in the configuration file earlier:</para>
+        <programlisting>
+backup_user@backup_host:~$ pg_probackup-16 backup -B /mnt/backups --instance=mydb -b delta --stream
+INFO: Backup start, pg_probackup version: 2.5.13, instance: mydb, backup ID: S6OBQO, backup mode: DELTA, wal mode: STREAM, remote: true, compress-algorithm: none, compress-level: 1
+INFO: Database backup start
+INFO: wait for pg_backup_start()
+INFO: Parent backup: S6OBLG
+INFO: Wait for WAL segment /mnt/backups/backups/mydb/S6OBQO/database/pg_wal/000000010000000000000006 to be streamed
+INFO: PGDATA size: 29MB
+INFO: Current Start LSN: 0/6000028, TLI: 1
+INFO: Parent Start LSN: 0/4000028, TLI: 1
+INFO: Start transferring data files
+INFO: Data files are transferred, time elapsed: 0
+INFO: wait for pg_stop_backup()
+INFO: pg_stop backup() successfully executed
+INFO: stop_lsn: 0/6000168
+INFO: Getting the Recovery Time from WAL
+INFO: Syncing backup files to disk
+INFO: Backup files are synced, time elapsed: 0
+INFO: Validating backup S6OBQO
+INFO: Backup S6OBQO data files are valid
+INFO: Backup S6OBQO resident size: 32MB
+INFO: Backup S6OBQO completed
+</programlisting>
+      </step>
+      <step id="pbk-list-backups-again">
+        <para>List the backups of the instance again:</para>
+        <programlisting>
+backup_user@backup_host:~$ pg_probackup-16 show -B /mnt/backups --instance=mydb
+==================================================================================================================================
+ Instance  Version  ID      Recovery Time           Mode   WAL Mode  TLI  Time   Data   WAL  Zratio  Start LSN  Stop LSN   Status 
+==================================================================================================================================
+ mydb      16       S6OBQO  2024-01-03 07:06:26+00  DELTA  STREAM    1/1    6s  111kB  32MB    1.00  0/6000028  0/6000168  OK
+ mydb      16       S6OBLG  2024-01-03 07:03:18+00  DELTA  STREAM    1/1   10s  127kB  32MB    1.00  0/4000028  0/4000168  OK
+ mydb      16       S6OBFN  2024-01-03 06:59:49+00  FULL   STREAM    1/0   10s   29MB  16MB    1.00  0/2000060  0/2003CB0  OK
+</programlisting>
+      </step>
+      <step id="pbk-quickstart-restore">
+        <para>Restore the data from the latest available backup to an arbitrary location:</para>
+        <programlisting>
+backup_user@backup_host:~$ pg_probackup-16 restore -B /mnt/backups -D /var/lib/postgresql/16/staging --instance=mydb
+INFO: Validating parents for backup S6OBQO
+INFO: Validating backup S6OBFN
+INFO: Backup S6OBFN data files are valid
+INFO: Validating backup S6OBLG
+INFO: Backup S6OBLG data files are valid
+INFO: Validating backup S6OBQO
+INFO: Backup S6OBQO data files are valid
+INFO: Backup S6OBQO WAL segments are valid
+INFO: Backup S6OBQO is valid.
+INFO: Restoring the database from backup at 2024-01-03 07:06:24+00
+INFO: Start restoring backup files. PGDATA size: 61MB
+INFO: Backup files are restored. Transfered bytes: 61MB, time elapsed: 1s
+INFO: Restore incremental ratio (less is better): 100% (61MB/61MB)
+INFO: Syncing restored files to disk
+INFO: Restored backup files are synced, time elapsed: 0
+INFO: Restore of backup S6OBQO completed.
+</programlisting>
+      </step>
+    </procedure>
+    </refsect2>
+  </refsect1>
 <refsect1 id="pbk-install">
   <title>Installation</title>
   <refsect2 id="pbk-install-deb">
@@ -463,7 +748,9 @@ doc/src/sgml/pgprobackup.sgml
   </para>
   <orderedlist>
     <listitem>
-      Add the <application>pg_probackup</application> repository GPG key
+      <para>
+        Add the <application>pg_probackup</application> repository GPG key
+      </para>
       <programlisting>
 sudo apt install gpg wget
 wget -qO - https://repo.postgrespro.ru/pg_probackup/keys/GPG-KEY-PG-PROBACKUP | \
@@ -471,7 +758,9 @@ sudo tee /etc/apt/trusted.gpg.d/pg_probackup.asc
 </programlisting>
     </listitem>
     <listitem>
-      Setup the binary package repository
+      <para>
+        Setup the binary package repository
+      </para>
       <programlisting>
 . /etc/os-release
 echo "deb [arch=amd64] https://repo.postgrespro.ru/pg_probackup/deb $VERSION_CODENAME main-$VERSION_CODENAME" | \
@@ -479,24 +768,32 @@ sudo tee /etc/apt/sources.list.d/pg_probackup.list
 </programlisting>
     </listitem>
     <listitem>
-      Optionally setup the source package repository for rebuilding the binaries
+      <para>
+        Optionally setup the source package repository for rebuilding the binaries
+      </para>
       <programlisting>
 echo "deb-src [arch=amd64] https://repo.postgrespro.ru/pg_probackup/deb $VERSION_CODENAME main-$VERSION_CODENAME" | \
 sudo tee -a /etc/apt/sources.list.d/pg_probackup.list
 </programlisting>
     </listitem>
     <listitem>
-      List the available <application>pg_probackup</application> packages
+      <para>
+        List the available <application>pg_probackup</application> packages
+      </para>
       <itemizedlist>
         <listitem>
-          Using <application>apt</application>:
+          <para>
+            Using <application>apt</application>:
+          </para>
           <programlisting>
 sudo apt update
 apt search pg_probackup
 </programlisting>
         </listitem>
         <listitem>
-          Using <application>apt-get</application>:
+          <para>
+            Using <application>apt-get</application>:
+          </para>
           <programlisting>
 sudo apt-get update
 apt-cache search pg_probackup
@@ -505,19 +802,25 @@ apt-cache search pg_probackup
       </itemizedlist>
     </listitem>
     <listitem>
-      Install or upgrade a <application>pg_probackup</application> version of your choice
+      <para>
+        Install or upgrade a <application>pg_probackup</application> version of your choice
+      </para>
       <programlisting>
 sudo apt install pg-probackup-15
 </programlisting>
     </listitem>
     <listitem>
-      Optionally install the debug package
+      <para>
+        Optionally install the debug package
+      </para>
       <programlisting>
 sudo apt install pg-probackup-15-dbg
 </programlisting>
     </listitem>
     <listitem>
-      Optionally install the source package (provided you have set up the source package repository as described above)
+      <para>
+        Optionally install the source package (provided you have set up the source package repository as described above)
+      </para>
       <programlisting>
 sudo apt install dpkg-dev
 sudo apt source pg-probackup-15
@@ -532,41 +835,55 @@ sudo apt source pg-probackup-15
   </para>
   <orderedlist>
     <listitem>
-      Install the <application>pg_probackup</application> repository
+      <para>
+        Install the <application>pg_probackup</application> repository
+      </para>
       <programlisting>
 dnf install https://repo.postgrespro.ru/pg_probackup/keys/pg_probackup-repo-centos.noarch.rpm
 </programlisting>
     </listitem>
     <listitem>
-      List the available <application>pg_probackup</application> packages
+      <para>
+        List the available <application>pg_probackup</application> packages
+      </para>
       <programlisting>
 dnf search pg_probackup
 </programlisting>
     </listitem>
     <listitem>
-      Install or upgrade a <application>pg_probackup</application> version of your choice
+      <para>
+        Install or upgrade a <application>pg_probackup</application> version of your choice
+      </para>
       <programlisting>
 dnf install pg_probackup-15
 </programlisting>
     </listitem>
     <listitem>
-      Optionally install the debug package
+      <para>
+        Optionally install the debug package
+      </para>
       <programlisting>
 dnf install pg_probackup-15-debuginfo
 </programlisting>
     </listitem>
     <listitem>
-      Optionally install the source package for rebuilding the binaries
+      <para>
+        Optionally install the source package for rebuilding the binaries
+      </para>
       <itemizedlist>
         <listitem>
-          Using <application>dnf</application>:
+          <para>
+            Using <application>dnf</application>:
+          </para>
           <programlisting>
 dnf install 'dnf-command(download)'
 dnf download --source pg_probackup-15
 </programlisting>
         </listitem>
         <listitem>
-          Using <application>yum</application>:
+          <para>
+            Using <application>yum</application>:
+          </para>
           <programlisting>
 yumdownloader --source pg_probackup-15
 </programlisting>
@@ -579,10 +896,14 @@ yumdownloader --source pg_probackup-15
   <title>Installation on ALT Linux</title>
   <orderedlist>
     <listitem>
-      Setup the repository
+      <para>
+        Setup the repository
+      </para>
       <itemizedlist>
         <listitem>
-          On ALT Linux 10:
+          <para>
+            On ALT Linux 10:
+          </para>
           <programlisting>
 . /etc/os-release
 echo "rpm http://repo.postgrespro.ru/pg_probackup/rpm/latest/altlinux-p$VERSION_ID x86_64 vanilla" | \
@@ -590,7 +911,9 @@ sudo tee /etc/apt/sources.list.d/pg_probackup.list
 </programlisting>
         </listitem>
         <listitem>
-          On ALT Linux 8 and 9:
+          <para>
+            On ALT Linux 8 and 9:
+          </para>
           <programlisting>
 . /etc/os-release
 echo "rpm http://repo.postgrespro.ru/pg_probackup/rpm/latest/altlinux-$VERSION_ID x86_64 vanilla" | \
@@ -600,20 +923,26 @@ sudo tee /etc/apt/sources.list.d/pg_probackup.list
       </itemizedlist>
     </listitem>
     <listitem>
-      List the available <application>pg_probackup</application> packages
+      <para>
+        List the available <application>pg_probackup</application> packages
+      </para>
       <programlisting>
 sudo apt-get update
 apt-cache search pg_probackup
 </programlisting>
     </listitem>
     <listitem>
-      Install or upgrade a <application>pg_probackup</application> version of your choice
+      <para>
+        Install or upgrade a <application>pg_probackup</application> version of your choice
+      </para>
       <programlisting>
 sudo apt-get install pg_probackup-15
 </programlisting>
     </listitem>
     <listitem>
-      Optionally install the debug package
+      <para>
+        Optionally install the debug package
+      </para>
       <programlisting>
 sudo apt-get install pg_probackup-15-debuginfo
 </programlisting>
@@ -624,7 +953,9 @@ sudo apt-get install pg_probackup-15-debuginfo
   <title>Installation on SUSE Linux</title>
   <orderedlist>
     <listitem>
-      Add the pg_probackup repository GPG key
+      <para>
+        Add the pg_probackup repository GPG key
+      </para>
       <programlisting>
 zypper in -y gpg wget
 wget -O GPG-KEY-PG_PROBACKUP https://repo.postgrespro.ru/pg_probackup/keys/GPG-KEY-PG_PROBACKUP
@@ -632,25 +963,33 @@ rpm --import GPG-KEY-PG_PROBACKUP
 </programlisting>
     </listitem>
     <listitem>
-      Setup the repository
+      <para>
+        Setup the repository
+      </para>
       <programlisting>
 zypper in https://repo.postgrespro.ru/pg_probackup/keys/pg_probackup-repo-suse.noarch.rpm
 </programlisting>
     </listitem>
     <listitem>
-      List the available <application>pg_probackup</application> packages
+      <para>
+        List the available <application>pg_probackup</application> packages
+      </para>
       <programlisting>
 zypper se pg_probackup
 </programlisting>
     </listitem>
     <listitem>
-      Install or upgrade a <application>pg_probackup</application> version of your choice
+      <para>
+        Install or upgrade a <application>pg_probackup</application> version of your choice
+      </para>
       <programlisting>
 zypper in pg_probackup-15
 </programlisting>
     </listitem>
     <listitem>
-      Optionally install the source package for rebuilding the binaries
+      <para>
+        Optionally install the source package for rebuilding the binaries
+      </para>
       <programlisting>
 zypper si pg_probackup-15
 </programlisting>
@@ -744,7 +1083,7 @@ pg_probackup init -B <replaceable>backup_dir</replaceable>
 pg_probackup add-instance -B <replaceable>backup_dir</replaceable> -D <replaceable>data_dir</replaceable> --instance <replaceable>instance_name</replaceable> [<replaceable>remote_options</replaceable>]
 </programlisting>
     <para>
-      where:
+      Where:
     </para>
     <itemizedlist spacing="compact">
       <listitem>
@@ -789,7 +1128,7 @@ pg_probackup add-instance -B <replaceable>backup_dir</replaceable> -D <replaceab
       <replaceable>backup_dir</replaceable> directory and at least read-only
       access to <replaceable>data_dir</replaceable> directory. If you
       specify the path to the backup catalog in the
-      <envar>BACKUP_PATH</envar> environment variable, you can
+      <envar>BACKUP_DIR</envar> environment variable, you can
       omit the corresponding option when running <application>pg_probackup</application>
       commands.
     </para>
@@ -813,10 +1152,18 @@ pg_probackup add-instance -B <replaceable>backup_dir</replaceable> -D <replaceab
       is used as an example.
     </para>
     <para>
+      For security reasons, it is recommended to run the configuration SQL queries below
+      in a separate database.
+    </para>
+    <programlisting>
+postgres=# CREATE DATABASE backupdb;
+postgres=# \c backupdb
+</programlisting>
+    <para>
       To perform a <xref linkend="pbk-backup"/>, the following
       permissions for role <literal>backup</literal> are required
       only in the database <emphasis role="strong">used for
-      connection</emphasis> to the <productname>PostgreSQL</productname> server:
+      connection</emphasis> to the <productname>PostgreSQL</productname> server.
     </para>
     <para>
       For <productname>PostgreSQL</productname> versions 11 &mdash; 14:
@@ -908,7 +1255,18 @@ COMMIT;
     <itemizedlist>
       <listitem>
         <para>
-          Grant the <literal>REPLICATION</literal> privilege to the <literal>backup</literal> role:
+          If the <literal>backup</literal> role does not exist, create it with
+          the <literal>REPLICATION</literal> privilege when
+          <link linkend="pbk-configuring-the-database-cluster">Configuring the
+          Database Cluster</link>:
+        </para>
+        <programlisting>
+CREATE ROLE backup WITH LOGIN REPLICATION;
+</programlisting>
+      </listitem>
+      <listitem>
+        <para>
+          If the <literal>backup</literal> role already exists, grant it with the <literal>REPLICATION</literal> privilege:
         </para>
         <programlisting>
 ALTER ROLE backup WITH REPLICATION;
@@ -1190,12 +1548,12 @@ GRANT SELECT ON TABLE pg_catalog.pg_database TO backup;
   <refsect2 id="pbk-configuring-the-remote-mode">
     <title>Configuring the Remote Mode</title>
     <para>
-      <application>pg_probackup</application> supports the remote mode that allows to perform
-      backup, restore and WAL archiving operations remotely. In this
-      mode, the backup catalog is stored on a local system, while
-      <productname>PostgreSQL</productname> instance to backup and/or to restore is located on a
-      remote system. Currently the only supported remote protocol is
-      SSH.
+      <application>pg_probackup</application> supports the remote mode that
+      allows you to perform backup, restore and WAL archiving operations remotely.
+      In this mode, the backup catalog is stored on a local system, while
+      <productname>PostgreSQL</productname> instance to backup and/or to restore
+      is located on a remote system. Currently the only supported remote
+      protocol is SSH.
     </para>
     <refsect3 id="pbk-setup-ssh">
       <title>Set up SSH</title>
@@ -1203,73 +1561,84 @@ GRANT SELECT ON TABLE pg_catalog.pg_database TO backup;
         If you are going to use <application>pg_probackup</application> in remote mode via SSH,
         complete the following steps:
       </para>
-      <itemizedlist>
+      <orderedlist>
         <listitem>
           <para>
             Install <application>pg_probackup</application> on both systems:
             <literal>backup_host</literal> and
-            <literal>db_host</literal>.
+            <literal>postgres_host</literal>.
           </para>
         </listitem>
         <listitem>
           <para>
-            For communication between the hosts set up the passwordless
-            SSH connection between <literal>backup</literal> user on
-            <literal>backup_host</literal> and
+            For communication between the hosts set up a passwordless
+            SSH connection between the <literal>backup_user</literal> user on
+            <literal>backup_host</literal> and the
             <literal>postgres</literal> user on
-            <literal>db_host</literal>:
+            <literal>postgres_host</literal>:
           </para>
           <programlisting>
-[backup@backup_host] ssh-copy-id postgres@db_host
+[backup_user@backup_host] ssh-copy-id postgres@postgres_host
 </programlisting>
+          <para>
+            Where:
+          </para>
+          <itemizedlist spacing="compact">
+            <listitem>
+              <para>
+                <literal>backup_host</literal> is the system with
+                <emphasis>backup catalog</emphasis>.
+              </para>
+            </listitem>
+            <listitem>
+              <para>
+                <literal>postgres_host</literal> is the system with the <productname>PostgreSQL</productname>
+                cluster.
+              </para>
+            </listitem>
+            <listitem>
+              <para>
+                <literal>backup_user</literal> is the OS user on
+                <literal>backup_host</literal> used to run <application>pg_probackup</application>.
+              </para>
+            </listitem>
+            <listitem>
+              <para>
+                <literal>postgres</literal> is the user on
+                <literal>postgres_host</literal> under which
+                <productname>PostgreSQL</productname> cluster processes are running.
+                For <productname>PostgreSQL</productname> 11 or higher a
+                more secure approach can be used thanks to
+                <ulink url="https://postgrespro.com/docs/postgresql/current/app-initdb.html#APP-INITDB-ALLOW-GROUP-ACCESS">allow-group-access</ulink> feature.
+              </para>
+            </listitem>
+          </itemizedlist>
         </listitem>
         <listitem>
           <para>
             If you are going to rely on
             <link linkend="pbk-setting-up-continuous-wal-archiving">continuous
-            WAL archiving</link>, set up passwordless SSH
-            connection between <literal>postgres</literal> user on
-            <literal>db_host</literal> and <literal>backup</literal>
+            WAL archiving</link>, set up a passwordless SSH
+            connection between the <literal>postgres</literal> user on
+            <literal>postgres_host</literal> and the <literal>backup</literal>
             user on <literal>backup_host</literal>:
           </para>
           <programlisting>
-[postgres@db_host] ssh-copy-id backup@backup_host
+[postgres@postgres_host] ssh-copy-id backup_user@backup_host
 </programlisting>
         </listitem>
-      </itemizedlist>
-      <para>
-        where:
-      </para>
-      <itemizedlist spacing="compact">
         <listitem>
           <para>
-            <literal>backup_host</literal> is the system with
-            <emphasis>backup catalog</emphasis>.
+            Make sure <application>pg_probackup</application> on <literal>postgres_host</literal>
+            can be located when a connection via SSH is made. For example, for <application>Bash</application>, you can
+            modify <literal>PATH</literal> in <filename>~/.bashrc</filename> of the <literal>postgres</literal> user
+            (above the line in <filename>bashrc</filename> that exits the script for non-interactive shells).
+            Alternatively, for <application>pg_probackup</application> commands, specify the path to the directory
+            containing the <application>pg_probackup</application> binary on <literal>postgres_host</literal> via
+            the <link linkend="pbk-remote-server-opts">--remote-path</link> option.
           </para>
         </listitem>
-        <listitem>
-          <para>
-            <literal>db_host</literal> is the system with <productname>PostgreSQL</productname>
-            cluster.
-          </para>
-        </listitem>
-        <listitem>
-          <para>
-            <literal>backup</literal> is the OS user on
-            <literal>backup_host</literal> used to run <application>pg_probackup</application>.
-          </para>
-        </listitem>
-        <listitem>
-          <para>
-            <literal>postgres</literal> is the OS user on
-            <literal>db_host</literal> used to start the <productname>PostgreSQL</productname>
-            cluster. For <productname>PostgreSQL</productname> 11 or higher a
-            more secure approach can be used thanks to
-            <ulink url="https://postgrespro.com/docs/postgresql/current/app-initdb.html#APP-INITDB-ALLOW-GROUP-ACCESS">allow-group-access</ulink>
-            feature.
-          </para>
-        </listitem>
-      </itemizedlist>
+      </orderedlist>
       <para>
         <application>pg_probackup</application> in the remote mode via SSH works
         as follows:
@@ -1319,10 +1688,10 @@ GRANT SELECT ON TABLE pg_catalog.pg_database TO backup;
           <para>
             The main process is usually started on
             <replaceable>backup_host</replaceable> and connects to
-            <replaceable>db_host</replaceable>, but in case of
+            <replaceable>postgres_host</replaceable>, but in case of
             <command>archive-push</command> and
             <command>archive-get</command> commands the main process
-            is started on <replaceable>db_host</replaceable> and connects to
+            is started on <replaceable>postgres_host</replaceable> and connects to
             <replaceable>backup_host</replaceable>.
           </para>
         </listitem>
@@ -1343,7 +1712,7 @@ GRANT SELECT ON TABLE pg_catalog.pg_database TO backup;
         <listitem>
           <para>
             Compression is always done on
-            <replaceable>db_host</replaceable>, while decompression is always done on
+            <replaceable>postgres_host</replaceable>, while decompression is always done on
             <replaceable>backup_host</replaceable>.
           </para>
         </listitem>
@@ -1763,7 +2132,7 @@ pg_probackup validate -B <replaceable>backup_dir</replaceable> --instance <repla
 pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> -i <replaceable>backup_id</replaceable>
 </programlisting>
     <para>
-      where:
+      Where:
     </para>
     <itemizedlist spacing="compact">
       <listitem>
@@ -1895,7 +2264,7 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
       <listitem>
         <para>
           LSN — read the <replaceable>pg_control</replaceable> in the
-          data directory to obtain redo LSN and redo TLI, which allows
+          data directory to obtain redo LSN and redo TLI, which allows you
           to determine a point in history(shiftpoint), where data directory
           state shifted from target backup chain history. If shiftpoint is not within
           reach of backup chain history, then restore is aborted.
@@ -2124,7 +2493,7 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
   <refsect2 id="pbk-remote-backup">
     <title>Using <application>pg_probackup</application> in the Remote Mode</title>
     <para>
-      <application>pg_probackup</application> supports the remote mode that allows to perform
+      <application>pg_probackup</application> supports the remote mode that allows you to perform
       <literal>backup</literal> and <literal>restore</literal>
       operations remotely via SSH. In this mode, the backup catalog is
       stored on a local system, while <productname>PostgreSQL</productname> instance to be backed
@@ -2141,7 +2510,8 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance <replac
       <para>
        In addition to SSH connection, <application>pg_probackup</application> uses
        a regular connection to the database to manage the remote operation.
-       See <xref linkend="pbk-configuring-the-database-cluster"/> for details of how to set up
+       See the section <link linkend="pbk-configuring-the-database-cluster">Configuring
+       the Database Cluster</link> for details of how to set up
        a database connection.
       </para>
      </note>
@@ -3488,7 +3858,7 @@ pg_probackup merge -B <replaceable>backup_dir</replaceable> --instance <replacea
       between them. Once the merge is complete, the full backup takes in all
       the merged data, and the incremental backups are removed as redundant.
       Thus, the merge operation is virtually equivalent to retaking a full
-      backup and removing all the outdated backups, but it allows to save much
+      backup and removing all the outdated backups, but it allows you to save much
       time, especially for large data volumes, as well as I/O and network
       traffic if you are using <application>pg_probackup</application> in the
       <link linkend="pbk-remote-backup">remote</link> mode.
@@ -3648,7 +4018,7 @@ pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replace
 
     <para>
      To prepare for cloning/synchronizing a <productname>PostgreSQL</productname> instance,
-     set up the source instance server as follows:
+     set up the source server as follows:
       <itemizedlist>
         <listitem>
           <para>
@@ -3671,7 +4041,7 @@ pg_probackup delete -B <replaceable>backup_dir</replaceable> --instance <replace
 
     <para>
       Before cloning/synchronizing a <productname>PostgreSQL</productname> instance, ensure that the source
-      instance server is running and accepting connections. To clone/sync a <productname>PostgreSQL</productname> instance,
+      server is running and accepting connections. To clone/sync a <productname>PostgreSQL</productname> instance,
       on the server with the destination instance, you can run
       the <xref linkend="pbk-catchup"/> command as follows:
     </para>
@@ -3714,7 +4084,7 @@ pg_probackup catchup -b <replaceable>catchup_mode</replaceable> --source-pgdata=
       By specifying the <option>--stream</option> option, you can set
       <link linkend="pbk-stream-mode">STREAM</link> WAL delivery mode
       of copying, which will include all the necessary WAL files by streaming them from
-      the instance server via replication protocol.
+      the server via replication protocol.
     </para>
     <para>
       You can use <link linkend="pbk-connection-opts">connection_options</link> to specify
@@ -3897,6 +4267,7 @@ pg_probackup set-backup -B <replaceable>backup_dir</replaceable> --instance <rep
       <title>show-config</title>
       <programlisting>
 pg_probackup show-config -B <replaceable>backup_dir</replaceable> --instance <replaceable>instance_name</replaceable> [--format=plain|json]
+[--no-scale-units] [<replaceable>logging_options</replaceable>]
 </programlisting>
       <para>
         Displays the contents of the <filename>pg_probackup.conf</filename> configuration
@@ -3906,6 +4277,18 @@ pg_probackup show-config -B <replaceable>backup_dir</replaceable> --instance <re
         <literal>--format=json</literal> option to get the result
         in the <acronym>JSON</acronym> format. By default, configuration settings are
         shown as plain text.
+      </para>
+      <para>
+        You can also specify the <option>--no-scale-units</option>
+        option to display time and memory configuration settings in their base (unscaled) units.
+        Otherwise, the values are scaled to larger units for optimal display.
+        For example, if <literal>archive-timeout</literal> is 300, then
+        <literal>5min</literal> is displayed, but if <literal>archive-timeout</literal>
+        is 301, then <literal>301s</literal> is displayed.
+        Also, if the <option>--no-scale-units</option> option is specified, configuration
+        settings are displayed without units and for the JSON format,
+        numeric and boolean values are not enclosed in quotes. This facilitates parsing
+        the output.
       </para>
       <para>
         To edit <filename>pg_probackup.conf</filename>, use the
@@ -4705,7 +5088,7 @@ pg_probackup catchup -b <replaceable>catchup_mode</replaceable>
       <para>
         Copies the instance in <link linkend="pbk-stream-mode">STREAM</link> WAL delivery mode,
         including all the necessary WAL files by streaming them from
-        the instance server via replication protocol.
+        the server via replication protocol.
       </para>
       </listitem>
       </varlistentry>
@@ -4842,14 +5225,14 @@ pg_probackup catchup -b <replaceable>catchup_mode</replaceable>
       <varlistentry>
 <term><option>-B <replaceable>directory</replaceable></option></term>
 <term><option>--backup-path=<replaceable>directory</replaceable></option></term>
-<term><envar>BACKUP_PATH</envar></term>
+<term><envar>BACKUP_DIR</envar></term>
       <listitem>
       <para>
         Specifies the absolute path to the backup catalog. Backup
         catalog is a directory where all backup files and meta
         information are stored. Since this option is required for most
         of the <application>pg_probackup</application> commands, you are recommended to specify
-        it once in the <envar>BACKUP_PATH</envar> environment variable. In this case,
+        it once in the <envar>BACKUP_DIR</envar> environment variable. In this case,
         you do not need to use this option each time on the command
         line.
       </para>
@@ -5309,7 +5692,7 @@ pg_probackup catchup -b <replaceable>catchup_mode</replaceable>
         lazily, when the first log message is written.
       </para>
       <para>
-       Default: <filename>$BACKUP_PATH/log/</filename>
+       Default: <filename>$BACKUP_DIR/log/</filename>
       </para>
       </listitem>
       </varlistentry>
@@ -5392,7 +5775,7 @@ pg_probackup catchup -b <replaceable>catchup_mode</replaceable>
         reached, the log file is rotated once a <application>pg_probackup</application> command
         is launched, except <command>help</command> and <command>version</command> commands. The time of the
         last log file creation is stored in
-        <filename>$BACKUP_PATH/log/log_rotation</filename>. The zero value disables
+        <filename>$BACKUP_DIR/log/log_rotation</filename>. The zero value disables
         time-based rotation. Supported units: ms, s, min, h, d (min by
         default).
       </para>
@@ -5933,257 +6316,6 @@ pg_probackup catchup -b <replaceable>catchup_mode</replaceable>
       </para>
     </refsect3>
  </refsect2>
- </refsect1>
-
-  <refsect1 id="pbk-howto">
-    <title>How-To</title>
-    <para>
-      All examples below assume the remote mode of operations via
-      SSH. If you are planning to run backup and
-      restore operation locally, skip the
-      <quote>Setup passwordless SSH connection</quote> step
-      and omit all <option>--remote-*</option> options.
-    </para>
-    <para>
-      Examples are based on <productname>Ubuntu</productname> 18.04,
-      <productname>PostgreSQL</productname> 11, and <application>pg_probackup</application>
-      2.2.0.
-    </para>
-    <itemizedlist spacing="compact">
-      <listitem>
-        <para>
-          <literal>backup</literal> — <productname>PostgreSQL</productname>
-          role used for connection to <productname>PostgreSQL</productname>
-          cluster.
-        </para>
-      </listitem>
-      <listitem>
-        <para>
-          <literal>backupdb</literal> — database used for connection
-          to <productname>PostgreSQL</productname> cluster.
-        </para>
-      </listitem>
-      <listitem>
-        <para>
-          <literal>backup_host</literal> — host with backup catalog.
-        </para>
-      </listitem>
-      <listitem>
-        <para>
-          <literal>backupman</literal> — user on
-          <literal>backup_host</literal> running all <application>pg_probackup</application>
-          operations.
-        </para>
-      </listitem>
-      <listitem>
-        <para>
-          <filename>/mnt/backups</filename> — directory on
-          <literal>backup_host</literal> where backup catalog is stored.
-        </para>
-      </listitem>
-      <listitem>
-        <para>
-          <literal>postgres_host</literal> — host with <productname>PostgreSQL</productname>
-          cluster.
-        </para>
-      </listitem>
-      <listitem>
-        <para>
-          <literal>postgres</literal> — user on
-          <literal>postgres_host</literal> that has started the <productname>PostgreSQL</productname> cluster.
-        </para>
-      </listitem>
-      <listitem>
-        <para>
-          <filename>/var/lib/postgresql/11/main</filename> — <productname>PostgreSQL</productname>
-          data directory on <literal>postgres_host</literal>.
-        </para>
-      </listitem>
-    </itemizedlist>
-    <refsect2 id="pbk-minimal-setup">
-      <title>Minimal Setup</title>
-      <para>
-        This scenario illustrates setting up standalone FULL and DELTA backups.
-      </para>
-      <procedure>
-      <step id="pbk-setup-passwordless-ssh-connection-from-backup-host-to-postgres-host">
-        <title>Set up passwordless SSH connection from
-        <literal>backup_host</literal> to
-        <literal>postgres_host</literal>:</title>
-        <programlisting>
-[backupman@backup_host] ssh-copy-id postgres@postgres_host
-</programlisting>
-      </step>
-      <step id="pbk-setup-postgresql-cluster">
-        <title>Configure your <productname>PostgreSQL</productname> cluster.</title>
-        <para>
-          For security purposes, it is recommended to use a separate
-          database for backup operations.
-        </para>
-        <programlisting>
-postgres=#
-CREATE DATABASE backupdb;
-</programlisting>
-        <para>
-          Connect to the <literal>backupdb</literal> database, create the
-          <literal>probackup</literal> role, and grant the following
-          permissions to this role:
-        </para>
-        <programlisting>
-backupdb=#
-BEGIN;
-CREATE ROLE backup WITH LOGIN REPLICATION;
-GRANT USAGE ON SCHEMA pg_catalog TO backup;
-GRANT EXECUTE ON FUNCTION pg_catalog.current_setting(text) TO backup;
-GRANT EXECUTE ON FUNCTION pg_catalog.set_config(text, text, boolean) TO backup;
-GRANT EXECUTE ON FUNCTION pg_catalog.pg_is_in_recovery() TO backup;
-GRANT EXECUTE ON FUNCTION pg_catalog.pg_start_backup(text, boolean, boolean) TO backup;
-GRANT EXECUTE ON FUNCTION pg_catalog.pg_stop_backup(boolean, boolean) TO backup;
-GRANT EXECUTE ON FUNCTION pg_catalog.pg_create_restore_point(text) TO backup;
-GRANT EXECUTE ON FUNCTION pg_catalog.pg_switch_wal() TO backup;
-GRANT EXECUTE ON FUNCTION pg_catalog.pg_last_wal_replay_lsn() TO backup;
-GRANT EXECUTE ON FUNCTION pg_catalog.txid_current() TO backup;
-GRANT EXECUTE ON FUNCTION pg_catalog.txid_current_snapshot() TO backup;
-GRANT EXECUTE ON FUNCTION pg_catalog.txid_snapshot_xmax(txid_snapshot) TO backup;
-GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_checkpoint() TO backup;
-COMMIT;
-</programlisting>
-      </step>
-      <step id="pbk-init-the-backup-catalog">
-        <title>Initialize the backup catalog:</title>
-        <programlisting>
-[backupman@backup_host]$ pg_probackup-11 init -B /mnt/backups
-INFO: Backup catalog '/mnt/backups' successfully inited
-</programlisting>
-      </step>
-      <step id="pbk-add-instance-pg-11-to-backup-catalog">
-        <title>Add instance <literal>pg-11</literal> to the backup catalog:</title>
-        <programlisting>
-[backupman@backup_host]$ pg_probackup-11 add-instance -B /mnt/backups --instance pg-11 --remote-host=postgres_host --remote-user=postgres -D /var/lib/postgresql/11/main
-INFO: Instance 'node' successfully inited
-</programlisting>
-      </step>
-      <step id="pbk-take-full-backup">
-        <title>Take a FULL backup:</title>
-        <programlisting>
-[backupman@backup_host] pg_probackup-11 backup -B /mnt/backups --instance pg-11 -b FULL --stream --remote-host=postgres_host --remote-user=postgres -U backup -d backupdb
-INFO: Backup start, pg_probackup version: 2.2.0, instance: node, backup ID: PZ7YK2, backup mode: FULL, wal mode: STREAM, remote: true, compress-algorithm: none, compress-level: 1
-INFO: Start transferring data files
-INFO: Data files are transferred
-INFO: wait for pg_stop_backup()
-INFO: pg_stop backup() successfully executed
-INFO: Validating backup PZ7YK2
-INFO: Backup PZ7YK2 data files are valid
-INFO: Backup PZ7YK2 resident size: 196MB
-INFO: Backup PZ7YK2 completed
-</programlisting>
-      </step>
-      <step id="pbk-lets-take-a-look-at-the-backup-catalog">
-        <title>Let's take a look at the backup catalog:</title>
-        <programlisting>
-[backupman@backup_host] pg_probackup-11 show -B /mnt/backups --instance pg-11
-
-BACKUP INSTANCE 'pg-11'
-==================================================================================================================================
- Instance  Version  ID      Recovery Time           Mode   WAL Mode  TLI  Time   Data   WAL  Zratio  Start LSN  Stop LSN   Status
-==================================================================================================================================
- node      11       PZ7YK2  2019-10-11 19:45:45+03  FULL  STREAM    1/0   11s  180MB  16MB    1.00  0/3C000028  0/3C000198  OK
-</programlisting>
-      </step>
-      <step id="pbk-take-incremental-backup-in-delta-mode">
-        <title>Take an incremental backup in the DELTA mode:</title>
-        <programlisting>
-[backupman@backup_host] pg_probackup-11 backup -B /mnt/backups --instance pg-11 -b delta --stream --remote-host=postgres_host --remote-user=postgres -U backup -d backupdb
-INFO: Backup start, pg_probackup version: 2.2.0, instance: node, backup ID: PZ7YMP, backup mode: DELTA, wal mode: STREAM, remote: true, compress-algorithm: none, compress-level: 1
-INFO: Parent backup: PZ7YK2
-INFO: Start transferring data files
-INFO: Data files are transferred
-INFO: wait for pg_stop_backup()
-INFO: pg_stop backup() successfully executed
-INFO: Validating backup PZ7YMP
-INFO: Backup PZ7YMP data files are valid
-INFO: Backup PZ7YMP resident size: 32MB
-INFO: Backup PZ7YMP completed
-</programlisting>
-      </step>
-      <step id="pbk-lets-hide-some-parameters-into-config-so-cmdline-can-be-less-crowdy">
-        <title>Let's add some parameters to <application>pg_probackup</application>
-        configuration file, so that you can omit them from the command line:</title>
-        <programlisting>
-[backupman@backup_host] pg_probackup-11 set-config -B /mnt/backups --instance pg-11 --remote-host=postgres_host --remote-user=postgres -U backup -d backupdb
-</programlisting>
-      </step>
-      <step id="pbk-take-another-incremental-backup-in-delta-mode-omitting-some-of-the-previous-parameters">
-        <title>Take another incremental backup in the DELTA mode, omitting
-        some of the previous parameters:</title>
-        <programlisting>
-[backupman@backup_host] pg_probackup-11 backup -B /mnt/backups --instance pg-11 -b delta --stream
-INFO: Backup start, pg_probackup version: 2.2.0, instance: node, backup ID: PZ7YR5, backup mode: DELTA, wal mode: STREAM, remote: true, compress-algorithm: none, compress-level: 1
-INFO: Parent backup: PZ7YMP
-INFO: Start transferring data files
-INFO: Data files are transferred
-INFO: wait for pg_stop_backup()
-INFO: pg_stop backup() successfully executed
-INFO: Validating backup PZ7YR5
-INFO: Backup PZ7YR5 data files are valid
-INFO: Backup PZ7YR5 resident size: 32MB
-INFO: Backup PZ7YR5 completed
-</programlisting>
-      </step>
-      <step id="pbk-lets-take-a-look-at-instance-config">
-        <title>Let's take a look at the instance configuration:</title>
-        <programlisting>
-[backupman@backup_host] pg_probackup-11 show-config -B /mnt/backups --instance pg-11
-
-# Backup instance information
-pgdata = /var/lib/postgresql/11/main
-system-identifier = 6746586934060931492
-xlog-seg-size = 16777216
-# Connection parameters
-pgdatabase = backupdb
-pghost = postgres_host
-pguser = backup
-# Archive parameters
-archive-timeout = 5min
-# Logging parameters
-log-level-console = INFO
-log-level-file = OFF
-log-format-console = PLAIN
-log-format-file = PLAIN
-log-filename = pg_probackup.log
-log-rotation-size = 0
-log-rotation-age = 0
-# Retention parameters
-retention-redundancy = 0
-retention-window = 0
-wal-depth = 0
-# Compression parameters
-compress-algorithm = none
-compress-level = 1
-# Remote access parameters
-remote-proto = ssh
-remote-host = postgres_host
-</programlisting>
-        <para>
-          Note that we are getting the default values for other options
-          that were not overwritten by the <command>set-config</command> command.
-        </para>
-      </step>
-      <step id="pbk-lets-take-a-look-at-the-backup-catalog-1">
-        <title>Let's take a look at the backup catalog:</title>
-        <programlisting>
-[backupman@backup_host] pg_probackup-11 show -B /mnt/backups --instance pg-11
-
-====================================================================================================================================
- Instance  Version  ID      Recovery Time           Mode   WAL Mode  TLI  Time   Data   WAL  Zratio  Start LSN   Stop LSN    Status
-====================================================================================================================================
- node      11       PZ7YR5  2019-10-11 19:49:56+03  DELTA  STREAM    1/1   10s  112kB  32MB    1.00  0/41000028  0/41000160  OK
- node      11       PZ7YMP  2019-10-11 19:47:16+03  DELTA  STREAM    1/1   10s  376kB  32MB    1.00  0/3E000028  0/3F0000B8  OK
- node      11       PZ7YK2  2019-10-11 19:45:45+03  FULL   STREAM    1/0   11s  180MB  16MB    1.00  0/3C000028  0/3C000198  OK
-</programlisting>
-      </step>
-    </procedure>
-    </refsect2>
  </refsect1>
 
  <refsect1 id="pbk-versioning">

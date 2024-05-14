@@ -171,10 +171,13 @@ catchup_preflight_checks(PGNodeInfo *source_node_info, PGconn *source_conn,
 
 		if (current.backup_mode != BACKUP_MODE_FULL)
 		{
-			dest_id = get_system_identifier(dest_pgdata, FIO_LOCAL_HOST, false);
+			ControlFileData dst_control;
+			get_control_file_or_back_file(dest_pgdata, FIO_LOCAL_HOST, &dst_control);
+			dest_id = dst_control.system_identifier;
+
 			if (source_conn_id != dest_id)
-			elog(ERROR, "Database identifiers mismatch: we connected to DB id %lu, but in \"%s\" we found id %lu",
-				source_conn_id, dest_pgdata, dest_id);
+			elog(ERROR, "Database identifiers mismatch: we connected to DB id %llu, but in \"%s\" we found id %llu",
+				(long long)source_conn_id, dest_pgdata, (long long)dest_id);
 		}
 	}
 
@@ -640,6 +643,9 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 	ssize_t		transfered_walfiles_bytes = 0;
 	char		pretty_source_bytes[20];
 
+	char	dest_pg_control_fullpath[MAXPGPATH];
+	char	dest_pg_control_bak_fullpath[MAXPGPATH];
+
 	source_conn = catchup_init_state(&source_node_info, source_pgdata, dest_pgdata);
 	catchup_preflight_checks(&source_node_info, source_conn, source_pgdata, dest_pgdata);
 
@@ -935,6 +941,9 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 			Assert(file->external_dir_num == 0);
 			if (pg_strcasecmp(file->name, RELMAPPER_FILENAME) == 0)
 				redundant = true;
+			/* global/pg_control.pbk.bak is always keeped, because it's needed for restart failed incremental restore */
+			if (pg_strcasecmp(file->rel_path, XLOG_CONTROL_BAK_FILE) == 0)
+				redundant = false;
 
 			/* if file does not exists in destination list, then we can safely unlink it */
 			if (redundant)
@@ -966,6 +975,28 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 	if (dest_filelist)
 		parray_qsort(dest_filelist, pgFileCompareRelPathWithExternal);
 
+	join_path_components(dest_pg_control_fullpath, dest_pgdata, XLOG_CONTROL_FILE);
+	join_path_components(dest_pg_control_bak_fullpath, dest_pgdata, XLOG_CONTROL_BAK_FILE);
+	/*
+	 * rename (if it exist) dest control file before restoring
+	 * if it doesn't exist, that mean, that we already restoring in a previously failed
+	 * pgdata, where XLOG_CONTROL_BAK_FILE exist
+	 */
+	if (current.backup_mode != BACKUP_MODE_FULL && !dry_run)
+	{
+		if (!fio_access(dest_pg_control_fullpath, F_OK, FIO_LOCAL_HOST))
+		{
+			pgFile *dst_control;
+			dst_control = pgFileNew(dest_pg_control_bak_fullpath, XLOG_CONTROL_BAK_FILE,
+			true,0, FIO_BACKUP_HOST);
+
+			if(!fio_access(dest_pg_control_bak_fullpath, F_OK, FIO_LOCAL_HOST))
+				fio_delete(dst_control->mode, dest_pg_control_bak_fullpath, FIO_LOCAL_HOST);
+			fio_rename(dest_pg_control_fullpath, dest_pg_control_bak_fullpath, FIO_LOCAL_HOST);
+			pgFileFree(dst_control);
+		}
+	}
+
 	/* run copy threads */
 	elog(INFO, "Start transferring data files");
 	time(&start_time);
@@ -985,6 +1016,15 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 		copy_pgcontrol_file(from_fullpath, FIO_DB_HOST,
 				to_fullpath, FIO_LOCAL_HOST, source_pg_control_file);
 		transfered_datafiles_bytes += source_pg_control_file->size;
+
+		/* Now backup control file can be deled */
+		if (current.backup_mode != BACKUP_MODE_FULL && !fio_access(dest_pg_control_bak_fullpath, F_OK, FIO_LOCAL_HOST)){
+			pgFile *dst_control;
+			dst_control = pgFileNew(dest_pg_control_bak_fullpath, XLOG_CONTROL_BAK_FILE,
+			true,0, FIO_BACKUP_HOST);
+			fio_delete(dst_control->mode, dest_pg_control_bak_fullpath, FIO_LOCAL_HOST);
+			pgFileFree(dst_control);
+		}
 	}
 
 	if (!catchup_isok && !dry_run)

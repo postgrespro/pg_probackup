@@ -9,8 +9,9 @@ from datetime import datetime, timedelta
 import hashlib
 import shutil
 import json
-from testgres import QueryException
-
+from testgres import QueryException, StartNodeException
+import stat
+from stat import S_ISDIR
 
 class IncrRestoreTest(ProbackupTest, unittest.TestCase):
 
@@ -2426,3 +2427,206 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
             'select 1')
 
 # check that MinRecPoint and BackupStartLsn are correctly used in case of --incrementa-lsn
+
+    # @unittest.skip("skip")
+    def test_incr_restore_issue_313(self):
+        """
+        Check that failed incremental restore can be restarted
+        """
+        self._check_gdb_flag_or_skip_test
+        node = self.make_simple_node('node',
+            set_replication=True,
+            initdb_params=['--data-checksums'])
+
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        node.pgbench_init(scale = 50)
+
+        full_backup_id = self.backup_node(backup_dir, 'node', node, backup_type='full')
+
+        pgbench = node.pgbench(
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            options=['-T', '10', '-c', '1', '--no-vacuum'])
+        pgbench.wait()
+        pgbench.stdout.close()
+
+        last_backup_id = self.backup_node(backup_dir, 'node', node, backup_type='delta')
+
+        pgdata = self.pgdata_content(node.data_dir)
+        node.cleanup()
+
+        self.restore_node(backup_dir, 'node', node, backup_id=full_backup_id)
+
+        count = 0
+        filelist = self.get_backup_filelist(backup_dir, 'node', last_backup_id)
+        for file in filelist:
+            # count only nondata files
+            if int(filelist[file]['is_datafile']) == 0 and \
+                    not stat.S_ISDIR(int(filelist[file]['mode'])) and \
+                    not filelist[file]['size'] == '0' and \
+                    file != 'database_map':
+                count += 1
+
+        gdb = self.restore_node(backup_dir, 'node', node, gdb=True,
+            backup_id=last_backup_id, options=['--progress', '--incremental-mode=checksum'])
+        gdb.verbose = False
+        gdb.set_breakpoint('restore_non_data_file')
+        gdb.run_until_break()
+        gdb.continue_execution_until_break(count - 1)
+        gdb.quit()
+
+        bak_file = os.path.join(node.data_dir, 'global', 'pg_control.pbk.bak')
+        self.assertTrue(
+            os.path.exists(bak_file),
+            "pg_control bak File should not exist: {0}".format(bak_file))
+
+        try:
+            node.slow_start()
+            # we should die here because exception is what we expect to happen
+            self.assertEqual(
+                1, 0,
+                "Expecting Error because backup is not fully restored")
+        except StartNodeException as e:
+            self.assertIn(
+                'Cannot start node',
+                e.message,
+                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
+                    repr(e.message), self.cmd))
+
+        with open(os.path.join(node.logs_dir, 'postgresql.log'), 'r') as f:
+            if self.pg_config_version >= 120000:
+                self.assertIn(
+                    "PANIC:  could not read file \"global/pg_control\"",
+                    f.read())
+            else:
+                self.assertIn(
+                    "PANIC:  could not read from control file",
+                    f.read())
+        self.restore_node(backup_dir, 'node', node,
+            backup_id=last_backup_id, options=['--progress', '--incremental-mode=checksum'])
+        node.slow_start()
+        self.compare_pgdata(pgdata, self.pgdata_content(node.data_dir))
+
+    # @unittest.skip("skip")
+    def test_skip_pages_at_non_zero_segment_checksum(self):
+        if self.remote:
+            self.skipTest("Skipped because this test doesn't work properly in remote mode yet")
+
+        node = self.make_simple_node(
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
+            initdb_params=['--data-checksums'],
+            pg_options={'wal_log_hints': 'on'})
+
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # create table of size > 1 GB, so it will have several segments
+        node.safe_psql(
+            'postgres',
+            "create table t as select i as a, i*2 as b, i*3 as c, i*4 as d, i*5 as e "
+            "from generate_series(1,20600000) i; "
+            "CHECKPOINT ")
+
+        filepath = node.safe_psql(
+            'postgres',
+            "SELECT pg_relation_filepath('t')"
+        ).decode('utf-8').rstrip()
+
+        # segment .1 must exist in order to proceed this test
+        self.assertTrue(os.path.exists(f'{os.path.join(node.data_dir, filepath)}.1'))
+
+        # do full backup
+        self.backup_node(backup_dir, 'node', node)
+
+        node.safe_psql(
+            'postgres',
+            "DELETE FROM t WHERE a < 101; "
+            "CHECKPOINT")
+
+        # do incremental backup
+        self.backup_node(backup_dir, 'node', node, backup_type='page')
+
+        pgdata = self.pgdata_content(node.data_dir)
+
+        node.safe_psql(
+            'postgres',
+            "DELETE FROM t WHERE a < 201; "
+            "CHECKPOINT")
+
+        node.stop()
+
+        self.restore_node(
+            backup_dir, 'node', node, options=["-j", "4", "--incremental-mode=checksum", "--log-level-console=INFO"])
+
+        self.assertNotIn('WARNING: Corruption detected in file', self.output,
+                         'Incremental restore copied pages from .1 datafile segment that were not changed')
+
+        pgdata_restored = self.pgdata_content(node.data_dir)
+        self.compare_pgdata(pgdata, pgdata_restored)
+
+    # @unittest.skip("skip")
+    def test_skip_pages_at_non_zero_segment_lsn(self):
+        if self.remote:
+            self.skipTest("Skipped because this test doesn't work properly in remote mode yet")
+
+        node = self.make_simple_node(
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
+            initdb_params=['--data-checksums'],
+            pg_options={'wal_log_hints': 'on'})
+
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
+        self.init_pb(backup_dir)
+        self.add_instance(backup_dir, 'node', node)
+        self.set_archiving(backup_dir, 'node', node)
+        node.slow_start()
+
+        # create table of size > 1 GB, so it will have several segments
+        node.safe_psql(
+            'postgres',
+            "create table t as select i as a, i*2 as b, i*3 as c, i*4 as d, i*5 as e "
+            "from generate_series(1,20600000) i; "
+            "CHECKPOINT ")
+
+        filepath = node.safe_psql(
+            'postgres',
+            "SELECT pg_relation_filepath('t')"
+        ).decode('utf-8').rstrip()
+
+        # segment .1 must exist in order to proceed this test
+        self.assertTrue(os.path.exists(f'{os.path.join(node.data_dir, filepath)}.1'))
+
+        # do full backup
+        self.backup_node(backup_dir, 'node', node)
+
+        node.safe_psql(
+            'postgres',
+            "DELETE FROM t WHERE a < 101; "
+            "CHECKPOINT")
+
+        # do incremental backup
+        self.backup_node(backup_dir, 'node', node, backup_type='page')
+
+        pgdata = self.pgdata_content(node.data_dir)
+
+        node.safe_psql(
+            'postgres',
+            "DELETE FROM t WHERE a < 201; "
+            "CHECKPOINT")
+
+        node.stop()
+
+        self.restore_node(
+            backup_dir, 'node', node, options=["-j", "4", "--incremental-mode=lsn", "--log-level-console=INFO"])
+
+        self.assertNotIn('WARNING: Corruption detected in file', self.output,
+                         'Incremental restore copied pages from .1 datafile segment that were not changed')
+
+        pgdata_restored = self.pgdata_content(node.data_dir)
+        self.compare_pgdata(pgdata, pgdata_restored)

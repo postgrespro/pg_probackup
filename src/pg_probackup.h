@@ -91,6 +91,7 @@ extern const char  *PROGRAM_EMAIL;
 #define DATABASE_MAP			"database_map"
 #define HEADER_MAP  			"page_header_map"
 #define HEADER_MAP_TMP  		"page_header_map_tmp"
+#define XLOG_CONTROL_BAK_FILE	XLOG_CONTROL_FILE".pbk.bak"
 
 /* default replication slot names */
 #define DEFAULT_TEMP_SLOT_NAME	 "pg_probackup_slot";
@@ -355,7 +356,7 @@ typedef enum ShowFormat
 #define BYTES_INVALID		(-1) /* file didn`t changed since previous backup, DELTA backup do not rely on it */
 #define FILE_NOT_FOUND		(-2) /* file disappeared during backup */
 #define BLOCKNUM_INVALID	(-1)
-#define PROGRAM_VERSION	"2.5.13"
+#define PROGRAM_VERSION	"2.5.14"
 
 /* update when remote agent API or behaviour changes */
 #define AGENT_PROTOCOL_VERSION 20509
@@ -564,6 +565,7 @@ typedef struct pgRecoveryTarget
 	const char	   *target_stop;
 	const char	   *target_name;
 	const char	   *target_action;
+	const char	   *target_tli_string; /* timeline number, "current"  or "latest" from recovery_target_timeline option*/
 } pgRecoveryTarget;
 
 /* Options needed for restore and validate commands */
@@ -835,13 +837,13 @@ typedef struct InstanceState
 	CatalogState *catalog_state;
 
 	char		instance_name[MAXPGPATH]; //previously global var instance_name
-	/* $BACKUP_PATH/backups/instance_name */
+	/* $BACKUP_DIR/backups/instance_name */
 	char		instance_backup_subdir_path[MAXPGPATH];
 
-	/* $BACKUP_PATH/backups/instance_name/BACKUP_CATALOG_CONF_FILE */
+	/* $BACKUP_DIR/backups/instance_name/BACKUP_CATALOG_CONF_FILE */
 	char		instance_config_path[MAXPGPATH];
-	
-	/* $BACKUP_PATH/backups/instance_name */
+
+	/* $BACKUP_DIR/backups/instance_name */
 	char		instance_wal_subdir_path[MAXPGPATH]; // previously global var arclog_path
 
 	/* TODO: Make it more specific */
@@ -893,7 +895,7 @@ extern bool satisfy_recovery_target(const pgBackup *backup,
 									const pgRecoveryTarget *rt);
 extern pgRecoveryTarget *parseRecoveryTargetOptions(
 	const char *target_time, const char *target_xid,
-	const char *target_inclusive, TimeLineID target_tli, const char* target_lsn,
+	const char *target_inclusive, const char *target_tli_string, const char* target_lsn,
 	const char *target_stop, const char *target_name,
 	const char *target_action);
 
@@ -937,7 +939,7 @@ extern void do_archive_get(InstanceState *instanceState, InstanceConfig *instanc
 						   char *wal_file_name, int batch_size, bool validate_wal);
 
 /* in configure.c */
-extern void do_show_config(void);
+extern void do_show_config(bool show_base_units);
 extern void do_set_config(InstanceState *instanceState, bool missing_ok);
 extern void init_config(InstanceConfig *config, const char *instance_name);
 extern InstanceConfig *readInstanceConfigFile(InstanceState *instanceState);
@@ -1208,6 +1210,8 @@ extern uint32 get_xlog_seg_size(const char *pgdata_path);
 extern void get_redo(const char *pgdata_path, fio_location pgdata_location, RedoParams *redo);
 extern void set_min_recovery_point(pgFile *file, const char *backup_path,
 								   XLogRecPtr stop_backup_lsn);
+extern void get_control_file_or_back_file(const char *pgdata_path, fio_location location,
+										  ControlFileData *control);
 extern void copy_pgcontrol_file(const char *from_fullpath, fio_location from_location,
 					const char *to_fullpath, fio_location to_location, pgFile *file);
 
