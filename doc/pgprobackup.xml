@@ -529,14 +529,14 @@ doc/src/sgml/pgprobackup.sgml
       <step id="pbk-init-the-backup-catalog">
         <para>Initialize the backup catalog:</para>
         <programlisting id="pbk-init-the-backup-catalog-listing">
-backup_user@backup_host:~$ pg_probackup init -B /mnt/backups
+backup_user@backup_host:~$ pg_probackup-16 init -B /mnt/backups
 INFO: Backup catalog '/mnt/backups' successfully initialized
 </programlisting>
       </step>
       <step id="pbk-add-instance-to-backup-catalog">
         <para>Add a backup instance called <literal>mydb</literal> to the backup catalog:</para>
         <programlisting id="pbk-add-instance-to-backup-catalog-listing">
-backup_user@backup_host:~$ pg_probackup add-instance \
+backup_user@backup_host:~$ pg_probackup-16 add-instance \
     -B /mnt/backups \
     -D /var/lib/pgpro/std-16/data \
     --instance=node \
@@ -548,7 +548,7 @@ INFO: Instance 'node' successfully initialized
       <step id="pbk-make-full-backup">
         <para>Make a FULL backup:</para>
         <programlisting id="pbk-make-full-backup-listing">
-backup_user@backup_host:~$ pg_probackup backup \
+backup_user@backup_host:~$ pg_probackup-16 backup \
     -B /mnt/backups \
     -b FULL \
     --instance=node \
@@ -582,7 +582,7 @@ INFO: Backup SCUN1Q completed
       <step id="pbk-list-backups">
         <para>List the backups of the instance:</para>
         <programlisting id="pbk-list-backups-listing">
-backup_user@backup_host:~$ pg_probackup show \
+backup_user@backup_host:~$ pg_probackup-16 show \
         -B /mnt/backups \
         --instance=node
 ================================================================================================================================
@@ -594,7 +594,7 @@ backup_user@backup_host:~$ pg_probackup show \
       <step id="pbk-make-incremental-backup-in-delta-mode">
         <para>Make an incremental backup in the DELTA mode:</para>
         <programlisting id="pbk-make-incremental-backup-in-delta-mode-listing">
-backup_user@backup_host:~$ pg_probackup backup \
+backup_user@backup_host:~$ pg_probackup-16 backup \
             -B /mnt/backups \
             -b DELTA \
             --instance=node \
@@ -631,7 +631,7 @@ INFO: Backup SCUN22 completed
         <para>Add or modify some parameters in the <application>pg_probackup</application>
         configuration file, so that you do not have to specify them each time on the command line:</para>
         <programlisting id="pbk-save-config-parameters-listing">
-backup_user@backup_host:~$ pg_probackup set-config \
+backup_user@backup_host:~$ pg_probackup-16 set-config \
     -B /mnt/backups \
     --instance=node \
     --remote-host=postgres_host \
@@ -643,7 +643,7 @@ backup_user@backup_host:~$ pg_probackup set-config \
       <step id="pbk-print-instance-config">
         <para>Check the configuration of the instance:</para>
         <programlisting id="pbk-print-instance-config-listing">
-backup_user@backup_host:~$ pg_probackup show-config \
+backup_user@backup_host:~$ pg_probackup-16 show-config \
     -B /mnt/backups \
     --instance=node
 # Backup instance information
@@ -686,7 +686,7 @@ remote-user = postgres
         <para>Make another incremental backup in the DELTA mode, omitting
         the parameters stored in the configuration file earlier:</para>
         <programlisting id="pbk-make-another-incremental-backup-in-delta-mode-using-saved-parameters-listing">
-backup_user@backup_host:~$ pg_probackup backup \
+backup_user@backup_host:~$ pg_probackup-16 backup \
         -B /mnt/backups \
         -b DELTA \
         --instance=node \
@@ -718,7 +718,7 @@ INFO: Backup SCUN2C completed
       <step id="pbk-list-backups-again">
         <para>List the backups of the instance again:</para>
         <programlisting id="pbk-list-backups-again-listing">
-backup_user@backup_host:~$ pg_probackup show \
+backup_user@backup_host:~$ pg_probackup-16 show \
     -B /mnt/backups \
     --instance=node
 ===================================================================================================================================
@@ -732,7 +732,7 @@ backup_user@backup_host:~$ pg_probackup show \
       <step id="pbk-quickstart-restore">
         <para>Restore the data from the latest available backup to an arbitrary location:</para>
         <programlisting id="pbk-quickstart-restore-listing">
-backup_user@backup_host:~$ pg_probackup restore \
+backup_user@backup_host:~$ pg_probackup-16 restore \
     -B /mnt/backups \
     -D /var/lib/pgpro/std-16/staging-data \
     --instance=node
@@ -2332,7 +2332,7 @@ pg_probackup restore -B <replaceable>backup_dir</replaceable> --instance=<replac
  node      16       SCUN39  2024-05-02 11:18:50+03  PAGE    STREAM    15/15  12s   46MB   32MB    1.44  0/2A000028  0/2B0000B8  OK     
  node      16       SCUN2V  2024-05-02 11:18:38+03  FULL    STREAM    15/0   11s  154MB   16MB    2.32  0/23000028  0/23000168  OK     
 
-backup_user@backup_host:~$ pg_probackup restore -B /mnt/backups --instance=node -R -I lsn
+backup_user@backup_host:~$ pg_probackup-16 restore -B /mnt/backups --instance=node -R -I lsn
 INFO: Destination directory and tablespace directories are empty, disable incremental restore
 INFO: Validating parents for backup SCUN3Y
 INFO: Validating backup SCUN2V
