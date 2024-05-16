@@ -25,7 +25,7 @@ class OptionTest(ProbackupTest, unittest.TestCase):
         except ProbackupException as e:
             self.assertIn(
                 'ERROR: No backup catalog path specified.\n' + \
-                'Please specify it either using environment variable BACKUP_DIR or\n' + \
+                'Please specify it either using environment variable BACKUP_PATH or\n' + \
                 'command line option --backup-path (-B)',
                 e.message,
                 '\n Unexpected Error Message: {0}\n CMD: {1}'.format(repr(e.message), self.cmd))

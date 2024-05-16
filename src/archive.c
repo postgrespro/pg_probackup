@@ -113,7 +113,7 @@ static parray *setup_push_filelist(const char *archive_status_dir,
  * set archive_command to
  * 'pg_probackup archive-push -B /home/anastasia/backup --wal-file-name %f',
  * to move backups into arclog_path.
- * Where archlog_path is $BACKUP_DIR/wal/instance_name
+ * Where archlog_path is $BACKUP_PATH/wal/instance_name
  */
 void
 do_archive_push(InstanceState *instanceState, InstanceConfig *instance, char *pg_xlog_dir,
@@ -1126,7 +1126,7 @@ do_archive_get(InstanceState *instanceState, InstanceConfig *instance, const cha
 	join_path_components(absolute_wal_file_path, current_dir, wal_file_path);
 
 	/* full filepath to WAL file in archive directory.
-	 * $BACKUP_DIR/wal/instance_name/000000010000000000000001 */
+	 * $BACKUP_PATH/wal/instance_name/000000010000000000000001 */
 	join_path_components(backup_wal_file_path, instanceState->instance_wal_subdir_path, wal_file_name);
 
 	INSTR_TIME_SET_CURRENT(start_time);
