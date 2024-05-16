@@ -468,10 +468,10 @@ main(int argc, char *argv[])
 	if (backup_path == NULL)
 	{
 		/*
-		 * If command line argument is not set, try to read BACKUP_DIR
+		 * If command line argument is not set, try to read BACKUP_PATH
 		 * from environment variable
 		 */
-		backup_path = getenv("BACKUP_DIR");
+		backup_path = getenv("BACKUP_PATH");
 	}
 
 	if (backup_path != NULL)
@@ -498,7 +498,7 @@ main(int argc, char *argv[])
 		backup_subcmd != CATCHUP_CMD)
 		elog(ERROR,
 			 "No backup catalog path specified.\n"
-			 "Please specify it either using environment variable BACKUP_DIR or\n"
+			 "Please specify it either using environment variable BACKUP_PATH or\n"
 			 "command line option --backup-path (-B)");
 
 	/* ===== catalogState (END) ======*/

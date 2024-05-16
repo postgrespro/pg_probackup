@@ -811,7 +811,7 @@ msgstr ""
 #: src/help.c:360 src/help.c:521 src/help.c:588 src/help.c:635 src/help.c:715
 #: src/help.c:761 src/help.c:833
 #, c-format
-msgid "                                   directory for file logging (default: BACKUP_DIR/log)\n"
+msgid "                                   directory for file logging (default: BACKUP_PATH/log)\n"
 msgstr ""
 
 #: src/help.c:361 src/help.c:522 src/help.c:589 src/help.c:636 src/help.c:716

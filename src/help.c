@@ -372,7 +372,7 @@ help_backup(void)
 	printf(_("      --error-log-filename=error-log-filename\n"));
 	printf(_("                                   filename for error logging (default: none)\n"));
 	printf(_("      --log-directory=log-directory\n"));
-	printf(_("                                   directory for file logging (default: BACKUP_DIR/log)\n"));
+	printf(_("                                   directory for file logging (default: BACKUP_PATH/log)\n"));
 	printf(_("      --log-rotation-size=log-rotation-size\n"));
 	printf(_("                                   rotate logfile if its size exceeds this value; 0 disables; (default: 0)\n"));
 	printf(_("                                   available units: 'kB', 'MB', 'GB', 'TB' (default: kB)\n"));
@@ -548,7 +548,7 @@ help_restore(void)
 	printf(_("      --error-log-filename=error-log-filename\n"));
 	printf(_("                                   filename for error logging (default: none)\n"));
 	printf(_("      --log-directory=log-directory\n"));
-	printf(_("                                   directory for file logging (default: BACKUP_DIR/log)\n"));
+	printf(_("                                   directory for file logging (default: BACKUP_PATH/log)\n"));
 	printf(_("      --log-rotation-size=log-rotation-size\n"));
 	printf(_("                                   rotate logfile if its size exceeds this value; 0 disables; (default: 0)\n"));
 	printf(_("                                   available units: 'kB', 'MB', 'GB', 'TB' (default: kB)\n"));
@@ -621,7 +621,7 @@ help_validate(void)
 	printf(_("      --error-log-filename=error-log-filename\n"));
 	printf(_("                                   filename for error logging (default: none)\n"));
 	printf(_("      --log-directory=log-directory\n"));
-	printf(_("                                   directory for file logging (default: BACKUP_DIR/log)\n"));
+	printf(_("                                   directory for file logging (default: BACKUP_PATH/log)\n"));
 	printf(_("      --log-rotation-size=log-rotation-size\n"));
 	printf(_("                                   rotate logfile if its size exceeds this value; 0 disables; (default: 0)\n"));
 	printf(_("                                   available units: 'kB', 'MB', 'GB', 'TB' (default: kB)\n"));
@@ -674,7 +674,7 @@ help_checkdb(void)
 	printf(_("      --error-log-filename=error-log-filename\n"));
 	printf(_("                                   filename for error logging (default: none)\n"));
 	printf(_("      --log-directory=log-directory\n"));
-	printf(_("                                   directory for file logging (default: BACKUP_DIR/log)\n"));
+	printf(_("                                   directory for file logging (default: BACKUP_PATH/log)\n"));
 	printf(_("      --log-rotation-size=log-rotation-size\n"));
 	printf(_("                                   rotate logfile if its size exceeds this value; 0 disables; (default: 0)\n"));
 	printf(_("                                   available units: 'kB', 'MB', 'GB', 'TB' (default: kB)\n"));
@@ -760,7 +760,7 @@ help_delete(void)
 	printf(_("      --error-log-filename=error-log-filename\n"));
 	printf(_("                                   filename for error logging (default: none)\n"));
 	printf(_("      --log-directory=log-directory\n"));
-	printf(_("                                   directory for file logging (default: BACKUP_DIR/log)\n"));
+	printf(_("                                   directory for file logging (default: BACKUP_PATH/log)\n"));
 	printf(_("      --log-rotation-size=log-rotation-size\n"));
 	printf(_("                                   rotate logfile if its size exceeds this value; 0 disables; (default: 0)\n"));
 	printf(_("                                   available units: 'kB', 'MB', 'GB', 'TB' (default: kB)\n"));
@@ -814,7 +814,7 @@ help_merge(void)
 	printf(_("      --error-log-filename=error-log-filename\n"));
 	printf(_("                                   filename for error logging (default: none)\n"));
 	printf(_("      --log-directory=log-directory\n"));
-	printf(_("                                   directory for file logging (default: BACKUP_DIR/log)\n"));
+	printf(_("                                   directory for file logging (default: BACKUP_PATH/log)\n"));
 	printf(_("      --log-rotation-size=log-rotation-size\n"));
 	printf(_("                                   rotate logfile if its size exceeds this value; 0 disables; (default: 0)\n"));
 	printf(_("                                   available units: 'kB', 'MB', 'GB', 'TB' (default: kB)\n"));
@@ -890,7 +890,7 @@ help_set_config(void)
 	printf(_("      --error-log-filename=error-log-filename\n"));
 	printf(_("                                   filename for error logging (default: none)\n"));
 	printf(_("      --log-directory=log-directory\n"));
-	printf(_("                                   directory for file logging (default: BACKUP_DIR/log)\n"));
+	printf(_("                                   directory for file logging (default: BACKUP_PATH/log)\n"));
 	printf(_("      --log-rotation-size=log-rotation-size\n"));
 	printf(_("                                   rotate logfile if its size exceeds this value; 0 disables; (default: 0)\n"));
 	printf(_("                                   available units: 'kB', 'MB', 'GB', 'TB' (default: kB)\n"));
@@ -1002,7 +1002,7 @@ help_add_instance(void)
 	printf(_("      --error-log-filename=error-log-filename\n"));
 	printf(_("                                   filename for error logging (default: none)\n"));
 	printf(_("      --log-directory=log-directory\n"));
-	printf(_("                                   directory for file logging (default: BACKUP_DIR/log)\n"));
+	printf(_("                                   directory for file logging (default: BACKUP_PATH/log)\n"));
 	printf(_("      --log-rotation-size=log-rotation-size\n"));
 	printf(_("                                   rotate logfile if its size exceeds this value; 0 disables; (default: 0)\n"));
 	printf(_("                                   available units: 'kB', 'MB', 'GB', 'TB' (default: kB)\n"));
@@ -1072,7 +1072,7 @@ help_archive_push(void)
 	printf(_("      --error-log-filename=error-log-filename\n"));
 	printf(_("                                   filename for error logging (default: none)\n"));
 	printf(_("      --log-directory=log-directory\n"));
-	printf(_("                                   directory for file logging (default: BACKUP_DIR/log)\n"));
+	printf(_("                                   directory for file logging (default: BACKUP_PATH/log)\n"));
 	printf(_("      --log-rotation-size=log-rotation-size\n"));
 	printf(_("                                   rotate logfile if its size exceeds this value; 0 disables; (default: 0)\n"));
 	printf(_("                                   available units: 'kB', 'MB', 'GB', 'TB' (default: kB)\n"));
@@ -1131,7 +1131,7 @@ help_archive_get(void)
 	printf(_("      --error-log-filename=error-log-filename\n"));
 	printf(_("                                   filename for error logging (default: none)\n"));
 	printf(_("      --log-directory=log-directory\n"));
-	printf(_("                                   directory for file logging (default: BACKUP_DIR/log)\n"));
+	printf(_("                                   directory for file logging (default: BACKUP_PATH/log)\n"));
 	printf(_("      --log-rotation-size=log-rotation-size\n"));
 	printf(_("                                   rotate logfile if its size exceeds this value; 0 disables; (default: 0)\n"));
 	printf(_("                                   available units: 'kB', 'MB', 'GB', 'TB' (default: kB)\n"));
@@ -1221,7 +1221,7 @@ help_catchup(void)
 	printf(_("      --error-log-filename=error-log-filename\n"));
 	printf(_("                                   filename for error logging (default: none)\n"));
 	printf(_("      --log-directory=log-directory\n"));
-	printf(_("                                   directory for file logging (default: BACKUP_DIR/log)\n"));
+	printf(_("                                   directory for file logging (default: BACKUP_PATH/log)\n"));
 	printf(_("      --log-rotation-size=log-rotation-size\n"));
 	printf(_("                                   rotate logfile if its size exceeds this value; 0 disables; (default: 0)\n"));
 	printf(_("                                   available units: 'kB', 'MB', 'GB', 'TB' (default: kB)\n"));
