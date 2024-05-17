@@ -4,6 +4,7 @@
 #include "pg_probackup.h"
 /* sys/stat.h must be included after pg_probackup.h (see problems with compilation for windows described in PGPRO-5750) */
 #include <sys/stat.h>
+#include <signal.h>
 
 #include "file.h"
 #include "storage/checksum.h"

@@ -241,6 +241,7 @@ catchup_check_tablespaces_existance_in_tbsmapping(PGconn *conn)
 {
 	PGresult	*res;
 	int		i;
+	int 	ntups;
 	char		*tablespace_path = NULL;
 	const char	*linked_path = NULL;
 	char		*query = "SELECT pg_catalog.pg_tablespace_location(oid) "
@@ -252,7 +253,8 @@ catchup_check_tablespaces_existance_in_tbsmapping(PGconn *conn)
 	if (!res)
 		elog(ERROR, "Failed to get list of tablespaces");
 
-	for (i = 0; i < res->ntups; i++)
+	ntups = PQntuples(res);
+	for (i = 0; i < ntups; i++)
 	{
 		tablespace_path = PQgetvalue(res, i, 0);
 		Assert (strlen(tablespace_path) > 0);

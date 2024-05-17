@@ -2564,6 +2564,7 @@ check_external_for_tablespaces(parray *external_list, PGconn *backup_conn)
 	PGresult   *res;
 	int			i = 0;
 	int			j = 0;
+	int 		ntups;
 	char	   *tablespace_path = NULL;
 	char	   *query = "SELECT pg_catalog.pg_tablespace_location(oid) "
 						"FROM pg_catalog.pg_tablespace "
@@ -2575,7 +2576,8 @@ check_external_for_tablespaces(parray *external_list, PGconn *backup_conn)
 	if (!res)
 		elog(ERROR, "Failed to get list of tablespaces");
 
-	for (i = 0; i < res->ntups; i++)
+	ntups = PQntuples(res);
+	for (i = 0; i < ntups; i++)
 	{
 		tablespace_path = PQgetvalue(res, i, 0);
 		Assert (strlen(tablespace_path) > 0);
