@@ -3,7 +3,6 @@ import unittest
 from datetime import datetime, timedelta
 from .helpers.ptrack_helpers import ProbackupTest, ProbackupException
 from time import sleep
-from distutils.dir_util import copy_tree
 
 
 class RetentionTest(ProbackupTest, unittest.TestCase):

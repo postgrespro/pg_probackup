@@ -4,7 +4,6 @@ import re
 from time import sleep, time
 from .helpers.ptrack_helpers import base36enc, ProbackupTest, ProbackupException
 import shutil
-from distutils.dir_util import copy_tree
 from testgres import ProcessType, QueryException
 import subprocess
 
@@ -2330,14 +2329,13 @@ class BackupTest(ProbackupTest, unittest.TestCase):
         # bgwriter_pid = node.auxiliary_pids[ProcessType.BackgroundWriter][0]
         # gdb_checkpointer = self.gdb_attach(bgwriter_pid)
 
-        copy_tree(
-            os.path.join(backup_dir, 'wal', 'node'),
-            os.path.join(backup_dir, 'wal', 'replica'))
-
         replica.slow_start(replica=True)
 
-        # self.switch_wal_segment(node)
-        # self.switch_wal_segment(node)
+        # make sure replica will archive wal segment with backup start point
+        lsn = self.switch_wal_segment(node, and_tx=True)
+        replica.poll_query_until(f"select pg_last_wal_replay_lsn() >= '{lsn}'")
+        replica.execute('CHECKPOINT')
+        replica.poll_query_until(f"select redo_lsn >= '{lsn}' from pg_control_checkpoint()")
 
         self.backup_node(
             backup_dir, 'replica', replica,

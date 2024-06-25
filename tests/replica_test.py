@@ -4,7 +4,6 @@ from .helpers.ptrack_helpers import ProbackupTest, ProbackupException, idx_ptrac
 from datetime import datetime, timedelta
 import subprocess
 import time
-from distutils.dir_util import copy_tree
 from testgres import ProcessType
 from time import sleep
 
@@ -718,10 +717,6 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         self.set_replica(master, replica, synchronous=True)
         self.set_archiving(backup_dir, 'replica', replica, replica=True)
 
-        copy_tree(
-            os.path.join(backup_dir, 'wal', 'master'),
-            os.path.join(backup_dir, 'wal', 'replica'))
-
         replica.slow_start(replica=True)
 
         self.switch_wal_segment(master)
@@ -979,10 +974,6 @@ class ReplicaTest(ProbackupTest, unittest.TestCase):
         self.add_instance(backup_dir, 'replica', replica)
         self.set_replica(master, replica, synchronous=True)
         self.set_archiving(backup_dir, 'replica', replica, replica=True)
-
-        copy_tree(
-            os.path.join(backup_dir, 'wal', 'master'),
-            os.path.join(backup_dir, 'wal', 'replica'))
 
         replica.slow_start(replica=True)
 
