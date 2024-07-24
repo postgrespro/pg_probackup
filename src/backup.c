@@ -66,7 +66,6 @@ static bool pgpro_support(PGconn *conn);
 static bool pg_is_checksum_enabled(PGconn *conn);
 static bool pg_is_in_recovery(PGconn *conn);
 static bool pg_is_superuser(PGconn *conn);
-static void check_server_version(PGconn *conn, PGNodeInfo *nodeInfo);
 static void confirm_block_size(PGconn *conn, const char *name, int blcksz);
 static void rewind_and_mark_cfs_datafiles(parray *files, const char *root, char *relative, size_t i);
 static bool remove_excluded_files_criterion(void *value, void *exclude_args);
@@ -947,7 +946,7 @@ do_backup(InstanceState *instanceState, pgSetBackupParams *set_backup_params,
 /*
  * Confirm that this server version is supported
  */
-static void
+void
 check_server_version(PGconn *conn, PGNodeInfo *nodeInfo)
 {
 	PGresult   *res = NULL;

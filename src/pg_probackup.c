@@ -980,7 +980,13 @@ main(int argc, char *argv[])
 						   wal_file_path, wal_file_name, batch_size, !no_validate_wal);
 			break;
 		case ADD_INSTANCE_CMD:
-			return do_add_instance(instanceState, &instance_config);
+			{
+				PGNodeInfo nodeInfo;
+				pgNodeInit(&nodeInfo);
+				instanceState->conn = pgut_connect(dbhost, dbport, dbname, dbuser);
+				check_server_version(instanceState->conn, &nodeInfo);
+				return do_add_instance(instanceState, &instance_config);
+			}
 		case DELETE_INSTANCE_CMD:
 			return do_delete_instance(instanceState);
 		case INIT_CMD:
