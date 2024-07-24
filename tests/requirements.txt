@@ -9,5 +9,6 @@ git+https://github.com/postgrespro/testgres.git@archive-command-exec#egg=testgre
 allure-pytest
 deprecation
 pexpect
+setuptools
 pytest==7.4.3
 pytest-xdist
