@@ -71,15 +71,15 @@ class ConfigTest(ProbackupTest, unittest.TestCase):
             'postgres',
             'create table t1()')
 
-        fulle2_id = self.backup_node(backup_dir, 'node', node)
+        full2_id = self.backup_node(backup_dir, 'node', node)
 
-        fulle1_conf_file = os.path.join(
+        full1_conf_file = os.path.join(
             backup_dir, 'backups','node', full1_id, 'backup_content.control')
 
-        fulle2_conf_file = os.path.join(
-            backup_dir, 'backups','node', fulle2_id, 'backup_content.control')
+        full2_conf_file = os.path.join(
+            backup_dir, 'backups','node', full2_id, 'backup_content.control')
 
-        copyfile(fulle2_conf_file, fulle1_conf_file)
+        copyfile(full2_conf_file, full1_conf_file)
 
         try:
             self.validate_pb(backup_dir, 'node')
@@ -90,7 +90,7 @@ class ConfigTest(ProbackupTest, unittest.TestCase):
                         repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertIn(
-                "WARNING: Invalid CRC of backup control file '{0}':".format(fulle1_conf_file),
+                "WARNING: Invalid CRC of backup control file '{0}':".format(full1_conf_file),
                 e.message,
                 "\n Unexpected Error Message: {0}\n CMD: {1}".format(
                     repr(e.message), self.cmd))
@@ -107,7 +107,8 @@ class ConfigTest(ProbackupTest, unittest.TestCase):
                 "\n Unexpected Error Message: {0}\n CMD: {1}".format(
                     repr(e.message), self.cmd))
 
-        self.show_pb(backup_dir, 'node', full1_id)['status']
+        self.assertEqual(self.show_pb(backup_dir, 'node', full1_id)['status'], 'CORRUPT')
+        self.assertEqual(self.show_pb(backup_dir, 'node', full2_id)['status'], 'OK')
 
         self.assertEqual(self.show_pb(backup_dir, 'node')[0]['status'], 'CORRUPT')
         self.assertEqual(self.show_pb(backup_dir, 'node')[1]['status'], 'OK')
