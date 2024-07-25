@@ -39,8 +39,8 @@ class ConfigTest(ProbackupTest, unittest.TestCase):
                 backup_dir, 'node', node, backup_type='page')
             self.assertEqual(
                     1, 0,
-                    "Expecting Error because pg_probackup.conf is missing. "
-                    ".\n Output: {0} \n CMD: {1}".format(
+                    "Expecting Error because pg_probackup.conf is missing"
+                    "\n Output: {0} \n CMD: {1}".format(
                         repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertIn(
@@ -85,8 +85,8 @@ class ConfigTest(ProbackupTest, unittest.TestCase):
             self.validate_pb(backup_dir, 'node')
             self.assertEqual(
                     1, 0,
-                    "Expecting Error because pg_probackup.conf is missing. "
-                    ".\n Output: {0} \n CMD: {1}".format(
+                    "Expecting Error because backup_content.control of the first backup was corrupted intentionally"
+                    "\n Output: {0} \n CMD: {1}".format(
                         repr(self.output), self.cmd))
         except ProbackupException as e:
             self.assertIn(
