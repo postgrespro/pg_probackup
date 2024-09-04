@@ -2305,6 +2305,9 @@ class ValidateTest(ProbackupTest):
         os.mkdir(
             os.path.join(
                 self.backup_dir, 'backups', 'node', backup_id, 'database', wal_dir, 'archive_status'))
+        os.mkdir(
+            os.path.join(
+                self.backup_dir, 'backups', 'node', backup_id, 'database', wal_dir, 'summaries'))
 
         pg_control_path = os.path.join(
             self.backup_dir, 'backups', 'node',

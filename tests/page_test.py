@@ -731,22 +731,32 @@ class PageTest(ProbackupTest):
             "md5(repeat(i::text,10))::tsvector as tsvector "
             "from generate_series(0,10000) i;")
 
-        alien_node.safe_psql(
+        alien_node.execute(
             "postgres",
             "create database alien")
 
-        alien_node.safe_psql(
+        wal_file = alien_node.execute(
+            "alien",
+            "SELECT pg_walfile_name(pg_current_wal_lsn());"
+        )
+        filename = wal_file[0][0] + self.compress_suffix
+
+        alien_node.execute(
             "alien",
             "create sequence t_seq; "
             "create table t_heap_alien as select i as id, "
             "md5(i::text) as text, "
             "md5(repeat(i::text,10))::tsvector as tsvector "
             "from generate_series(0,10000) i;")
+        alien_node.execute(
+            "alien",
+            "select pg_switch_wal()")
+        node.execute(
+            "postgres",
+            "select pg_switch_wal()")
 
-        # copy latest wal segment
-        wals = self.get_instance_wal_list(backup_dir, 'alien_node')
-        filename = max(wals)
-        # wait `node` did archived same file
+        # wait nodes archived same file
+        self.wait_instance_wal_exists(backup_dir, 'alien_node', filename)
         self.wait_instance_wal_exists(backup_dir, 'node', filename)
         file_content = self.read_instance_wal(backup_dir, 'alien_node', filename)
         self.write_instance_wal(backup_dir, 'node', filename, file_content)

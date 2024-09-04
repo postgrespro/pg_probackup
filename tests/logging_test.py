@@ -92,7 +92,7 @@ class LogTest(ProbackupTest):
         output = self.pb.backup_node('node', node,
             options=[
                 '--stream',
-                '--log-level-file=LOG'],
+                '--log-level-file=INFO'],
             return_id=False)
 
         # check that log file wasn`t rotated
@@ -152,7 +152,7 @@ class LogTest(ProbackupTest):
         output = self.pb.backup_node('node', node,
             options=[
                 '--stream',
-                '--log-level-file=LOG'],
+                '--log-level-file=INFO'],
             return_id=False)
 
         # check that log file wasn`t rotated
@@ -211,7 +211,7 @@ class LogTest(ProbackupTest):
         output = self.pb.backup_node('node', node,
             options=[
                 '--stream',
-                '--log-level-file=LOG'],
+                '--log-level-file=INFO'],
             return_id=False)
 
         # check that log file wasn`t rotated

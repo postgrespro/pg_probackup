@@ -989,7 +989,9 @@ class ReplicaTest(ProbackupTest):
         master.safe_psql(
             'postgres',
             'CREATE TABLE t1 AS '
-            'SELECT i, repeat(md5(i::text),5006056) AS fat_attr '
+            'SELECT i,'
+            '   (select string_agg(md5((i^j)::text), \',\')'
+            '    from generate_series(1,5006056) j) AS fat_attr '
             'FROM generate_series(0,1) i')
 
         self.wait_until_replica_catch_with_master(master, replica)

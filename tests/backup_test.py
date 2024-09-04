@@ -933,19 +933,19 @@ class BackupTest(ProbackupTest):
             "postgres",
             "SELECT pg_create_physical_replication_slot('slot_1')")
 
-        # FULL backup. By default, --temp-slot=true.
+        # FULL backup
         self.pb.backup_node('node', node,
-            options=['--stream', '--slot=slot_1'],
-            expect_error="because replication slot already exist")
+            options=['--stream', '--slot=slot_1', '--temp-slot'],
+            expect_error="because a replication slot with this name already exists")
         self.assertMessage(contains='ERROR:  replication slot "slot_1" already exists')
 
         # FULL backup
         self.pb.backup_node('node', node,
-            options=['--stream', '--slot=slot_1', '--temp-slot=false'])
+            options=['--stream', '--slot=slot_1'])
 
         # FULL backup
         self.pb.backup_node('node', node,
-            options=['--stream', '--slot=slot_1', '--temp-slot=false'])
+            options=['--stream', '--slot=slot_1'])
 
     # @unittest.skip("skip")
     def test_basic_temp_slot_for_stream_backup(self):
@@ -964,9 +964,9 @@ class BackupTest(ProbackupTest):
         self.pb.backup_node('node', node,
             options=['--stream', '--temp-slot'])
 
-        # FULL backup. By default, --temp-slot=true.
+        # FULL backup
         self.pb.backup_node('node', node,
-            options=['--stream', '--slot=slot_1'])
+            options=['--stream', '--slot=slot_1', '--temp-slot=on'])
 
         # FULL backup
         self.pb.backup_node('node', node,

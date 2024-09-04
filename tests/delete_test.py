@@ -778,15 +778,10 @@ class DeleteTest(ProbackupTest):
 
         self.pb.init()
         self.pb.add_instance('node', node)
-        self.pb.set_archiving('node', node)
         node.slow_start()
 
         # full backup
-        self.pb.backup_node('node', node)
-        # restore
-        node.cleanup()
-        self.pb.restore_node('node', node=node)
-        node.slow_start()
+        self.pb.backup_node('node', node, options=['--stream'])
 
         content_before = self.pgdata_content(self.backup_dir)
         # Delete instance

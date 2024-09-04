@@ -6,10 +6,10 @@
 # 3. From a local directory
 #    /path/to/local/directory/testgres
 testgres==1.10.0
-git+https://github.com/postgrespro/testgres.git@fix-json-parse-in-show#egg=testgres_pg_probackup2&subdirectory=testgres/plugins/pg_probackup2
+testgres-pg-probackup2==0.0.2
 allure-pytest
 deprecation
-minio==7.2.5
+minio
 pexpect
 pytest==7.4.3
 pytest-xdist

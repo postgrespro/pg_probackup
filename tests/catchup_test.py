@@ -1201,7 +1201,7 @@ class CatchupTest(ProbackupTest):
                 destination_node = dst_pg,
                 options = [
                     '-d', 'postgres', '-p', str(src_pg.port), '--stream',
-                    '--slot=nonexistentslot_1a', '--temp-slot=false'
+                    '--slot=nonexistentslot_1a'
                     ],
                 expect_error="because replication slot does not exist"
                 )
@@ -1216,7 +1216,7 @@ class CatchupTest(ProbackupTest):
             destination_node = dst_pg,
             options = [
                 '-d', 'postgres', '-p', str(src_pg.port), '--stream',
-                '--slot=existentslot_1b', '--temp-slot=false'
+                '--slot=existentslot_1b'
                 ]
             )
 
@@ -2060,3 +2060,42 @@ class CatchupTest(ProbackupTest):
         # Cleanup
         src_pg.stop()
 
+    def test_custom_replication_slot(self):
+        # preparation
+        my_slot = "my_slot"
+
+        src_pg = self.pg_node.make_simple('src',
+                                          set_replication=True
+                                          )
+        src_pg.slow_start()
+        src_pg.safe_psql(
+            "postgres",
+            "CREATE TABLE ultimate_question AS SELECT 42 AS answer")
+        src_pg.safe_psql("postgres", f"SELECT * FROM pg_create_physical_replication_slot('{my_slot}');")
+
+        src_query_result = src_pg.table_checksum("ultimate_question")
+
+        # do full catchup
+        dst_pg = self.pg_node.make_empty('dst')
+        self.pb.catchup_node(
+            backup_mode='FULL',
+            source_pgdata=src_pg.data_dir,
+            destination_node=dst_pg,
+            options=['-d', 'postgres', '-p', str(src_pg.port), '--stream', '-S', my_slot]
+        )
+
+        # 1st check: compare data directories
+        self.compare_pgdata(
+            self.pgdata_content(src_pg.data_dir, exclude_dirs=['pg_replslot']),
+            self.pgdata_content(dst_pg.data_dir, exclude_dirs=['pg_replslot']),
+        )
+
+        # run&recover catchup'ed instance
+        src_pg.stop()
+        dst_options = {'port': str(dst_pg.port)}
+        dst_pg.set_auto_conf(dst_options)
+        dst_pg.slow_start()
+
+        # 2nd check: run verification query
+        dst_query_result = dst_pg.table_checksum("ultimate_question")
+        self.assertEqual(src_query_result, dst_query_result, 'Different answer from copy')

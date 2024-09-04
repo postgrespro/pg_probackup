@@ -68,6 +68,8 @@ class TimeConsumingTests(ProbackupTest):
         pgbenchval.kill()
         pgbench.wait()
         pgbenchval.wait()
+        pgbench.stdout.close()
+        pgbenchval.stdout.close()
 
         backups = self.pb.show('node')
         for b in backups:

@@ -7,6 +7,7 @@ from .helpers.data_helpers import tail_file
 import subprocess
 from sys import exit
 from time import sleep
+from pathlib import PurePath
 from testgres import ProcessType
 
 

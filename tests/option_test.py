@@ -21,7 +21,7 @@ class OptionTest(ProbackupTest):
         self.pb.run(["backup", "-b", "full"],
                     expect_error="because '-B' parameter is not specified", use_backup_dir=None)
         self.assertMessage(contains="No backup catalog path specified.\n"
-			   "Please specify it either using environment variable BACKUP_DIR or\n"
+			   "Please specify it either using environment variable BACKUP_PATH or\n"
 			   "command line option --backup-path (-B)")
 
     def test_options_4(self):

@@ -875,8 +875,11 @@ class ProbackupTest(unittest.TestCase):
             self.data = data
 
     @contextlib.contextmanager
-    def modify_backup_control(self, backup_dir, instance, backup_id):
-        path = os.path.join('backups', instance, backup_id, 'backup.control')
+    def modify_backup_control(self, backup_dir, instance, backup_id, content=False):
+        file = 'backup.control'
+        if content:
+            file = 'backup_content.control'
+        path = os.path.join('backups', instance, backup_id, file)
         control_file = backup_dir.read_file(path)
         cf = ProbackupTest.ControlFileContainer(control_file)
         yield cf
