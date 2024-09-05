@@ -21,8 +21,8 @@ class ShowJsonResultValidator(TestCase):
     and do not worry about the readability of the error result.
     """
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.backup_id = None
         self.parent_backup_id = None
         self.backup_mode = None
