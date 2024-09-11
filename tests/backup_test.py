@@ -950,10 +950,10 @@ class BackupTest(ProbackupTest):
     # @unittest.skip("skip")
     def test_basic_temp_slot_for_stream_backup(self):
         """"""
-        backup_dir = self.backup_dir
         node = self.pg_node.make_simple('node',
-            set_replication=True,
-            pg_options={'max_wal_size': '40MB'})
+                                        set_replication=True,
+                                        pg_options={'max_wal_size': '40MB',
+                                                    'log_min_messages': 'debug5'})
 
         self.pb.init()
         self.pb.add_instance('node', node)
@@ -962,15 +962,17 @@ class BackupTest(ProbackupTest):
 
         # FULL backup
         self.pb.backup_node('node', node,
-            options=['--stream', '--temp-slot'])
+                            options=['--stream', '--temp-slot', '--log-level-file=INFO'])
 
         # FULL backup
         self.pb.backup_node('node', node,
-            options=['--stream', '--slot=slot_1', '--temp-slot=on'])
+                            options=['--stream', '--slot=slot_1', '--temp-slot=on', '--log-level-file=INFO'])
+        assert '--temp-slot=on' in self.cmd
 
         # FULL backup
         self.pb.backup_node('node', node,
-            options=['--stream', '--slot=slot_1', '--temp-slot=true'])
+                            options=['--stream', '--slot=slot_1', '--temp-slot=true', '--log-level-file=INFO'])
+        assert '--temp-slot=true' in self.cmd
 
     # @unittest.skip("skip")
     @needs_gdb
