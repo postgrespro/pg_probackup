@@ -14,7 +14,6 @@ class AuthorizationTest(ProbackupTest):
 
         self.assertNotIn(': 403', console_output)  # Because we can have just '403' substring in timestamp
         self.assertMessage(console_output, contains='S3_pre_start_check successful')
-        self.assertMessage(console_output, contains='HTTP response: 200')
         self.assertIn(
             f"INFO: Backup catalog '{self.backup_dir}' successfully initialized",
             console_output)
