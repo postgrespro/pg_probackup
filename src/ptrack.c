@@ -2,7 +2,7 @@
  *
  * ptrack.c: support functions for ptrack backups
  *
- * Copyright (c) 2021 Postgres Professional
+ * Copyright (c) 2021-2025 Postgres Professional
  *
  *-------------------------------------------------------------------------
  */

@@ -3,7 +3,7 @@
  * catalog.c: backup catalog operation
  *
  * Portions Copyright (c) 2009-2011, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
- * Portions Copyright (c) 2015-2019, Postgres Professional
+ * Portions Copyright (c) 2015-2025, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */

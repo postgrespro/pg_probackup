@@ -9,7 +9,7 @@
  * instance can be logically verified using extensions
  * amcheck or amcheck_next.
  *
- * Portions Copyright (c) 2019-2019, Postgres Professional
+ * Portions Copyright (c) 2019-2025, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */

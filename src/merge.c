@@ -2,7 +2,7 @@
  *
  * merge.c: merge FULL and incremental backups
  *
- * Copyright (c) 2018-2022, Postgres Professional
+ * Copyright (c) 2018-2025, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */

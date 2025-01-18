@@ -2,7 +2,7 @@
  *
  * remote.h: - prototypes of remote functions.
  *
- * Copyright (c) 2017-2019, Postgres Professional
+ * Copyright (c) 2017-2025, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */

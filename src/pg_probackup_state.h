@@ -2,7 +2,7 @@
  *
  * pg_probackup_state.h: Definitions of internal pg_probackup states 
  *
- * Portions Copyright (c) 2021, Postgres Professional
+ * Portions Copyright (c) 2021-2025, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */

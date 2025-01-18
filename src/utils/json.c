@@ -2,7 +2,7 @@
  *
  * json.c: - make json document.
  *
- * Copyright (c) 2018-2019, Postgres Professional
+ * Copyright (c) 2018-2025, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */

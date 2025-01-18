@@ -3,7 +3,7 @@
  * archive.c: -  pg_probackup specific archive commands for archive backups.
  *
  *
- * Portions Copyright (c) 2018-2022, Postgres Professional
+ * Portions Copyright (c) 2018-2025, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */
