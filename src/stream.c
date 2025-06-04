@@ -592,7 +592,7 @@ parse_tli_history_buffer(char *history, TimeLineID tli)
 		if (curLineLen > 0)
 		{
 			char	   *ptr;
-			TimeLineID	tli;
+			TimeLineID	currTLI;
 			uint32		switchpoint_hi;
 			uint32		switchpoint_lo;
 			int			nfields;
@@ -605,7 +605,7 @@ parse_tli_history_buffer(char *history, TimeLineID tli)
 			if (*ptr == '\0' || *ptr == '#')
 				continue;
 
-			nfields = sscanf(tempStr, "%u\t%X/%X", &tli, &switchpoint_hi, &switchpoint_lo);
+			nfields = sscanf(tempStr, "%u\t%X/%X", &currTLI, &switchpoint_hi, &switchpoint_lo);
 
 			if (nfields < 1)
 			{
@@ -615,11 +615,11 @@ parse_tli_history_buffer(char *history, TimeLineID tli)
 			if (nfields != 3)
 				elog(ERROR, "Syntax error in timeline history: \"%s\". Expected a transaction log switchpoint location.", tempStr);
 
-			if (last_timeline && tli <= last_timeline->tli)
+			if (last_timeline && currTLI <= last_timeline->tli)
 				elog(ERROR, "Timeline IDs must be in increasing sequence: \"%s\"", tempStr);
 
 			entry = pgut_new(TimeLineHistoryEntry);
-			entry->tli = tli;
+			entry->tli = currTLI;
 			entry->end = ((uint64) switchpoint_hi << 32) | switchpoint_lo;
 
 			last_timeline = entry;
@@ -628,7 +628,7 @@ parse_tli_history_buffer(char *history, TimeLineID tli)
 				result = parray_new();
 			parray_append(result, entry);
 			elog(VERBOSE, "parse_tli_history_buffer() found entry: tli = %X, end = %X/%X",
-				tli, switchpoint_hi, switchpoint_lo);
+				currTLI, switchpoint_hi, switchpoint_lo);
 
 			/* we ignore the remainder of each line */
 		}
