@@ -506,12 +506,12 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 	/* copy pg_control at very end */
 	if (backup_isok)
 	{
+		char	from_fullpath[MAXPGPATH];
+		char	to_fullpath[MAXPGPATH];
 
 		elog(progress ? INFO : LOG, "Progress: Backup file \"%s\"",
 			 src_pg_control_file->rel_path);
 
-		char	from_fullpath[MAXPGPATH];
-		char	to_fullpath[MAXPGPATH];
 		join_path_components(from_fullpath, instance_config.pgdata, src_pg_control_file->rel_path);
 		join_path_components(to_fullpath, current.database_dir, src_pg_control_file->rel_path);
 
