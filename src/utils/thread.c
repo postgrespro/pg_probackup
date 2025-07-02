@@ -17,7 +17,7 @@
  */
 bool thread_interrupted = false;
 
-#if defined(ENABLE_THREAD_SAFETY) && defined(_WIN32)
+#ifdef _WIN32
 DWORD main_tid = 0;
 #else
 pthread_t main_tid = 0;
