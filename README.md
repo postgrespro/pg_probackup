@@ -77,23 +77,34 @@ Once you have `pg_probackup` installed, complete [the setup](https://postgrespro
 For users of Postgres Pro products, commercial editions of pg_probackup are available for installation from the corresponding Postgres Pro product repository.
 
 ## Building from source
+
 ### Linux
 
-To compile `pg_probackup`, you must have a PostgreSQL installation and raw source tree. Execute this in the module's directory:
+To compile `pg_probackup`, you must have a PostgreSQL source tree.
+You need place `pg_probackup` source directory into `src/bin` directory, modify `src/bin/Makefile` to include 'pg_probackup` subdirectory and build PostgreSQL.
 
 ```shell
-make USE_PGXS=1 PG_CONFIG=<path_to_pg_config> top_srcdir=<path_to_PostgreSQL_source_tree>
+cd <path_to_PostgreSQL_source_tree>/src/bin && git clone https://github.com/postgrespro/pg_probackup
 ```
 
-The alternative way, without using the PGXS infrastructure, is to place `pg_probackup` source directory into `contrib` directory and build it there. Example:
-
-```shell
-cd <path_to_PostgreSQL_source_tree> && git clone https://github.com/postgrespro/pg_probackup contrib/pg_probackup && cd contrib/pg_probackup && make
+Patch for PostgreSQL make system:
+```
+--- postgresql-16.9/src/bin/Makefile.orig	2025-07-02 14:16:44.042224100 +0300
++++ postgresql-16.9/src/bin/Makefile	2025-07-02 14:16:58.992937600 +0300
+@@ -18,6 +18,7 @@
+ 	pg_amcheck \
+ 	pg_archivecleanup \
+ 	pg_basebackup \
++	pg_probackup \
+ 	pg_checksums \
+ 	pg_config \
+ 	pg_controldata \
 ```
 
 ### Windows
 
-Currently pg_probackup can be build using only MSVC 2013.
+#### MSVC 2013
+
 Build PostgreSQL using [pgwininstall](https://github.com/postgrespro/pgwininstall) or [PostgreSQL instruction](https://www.postgresql.org/docs/current/install-windows-full.html) with MSVC 2013.
 If zlib support is needed, src/tools/msvc/config.pl must contain path to directory with compiled zlib. [Example](https://gist.githubusercontent.com/gsmol/80989f976ce9584824ae3b1bfb00bd87/raw/240032950d4ac4801a79625dd00c8f5d4ed1180c/gistfile1.txt)
 
@@ -103,6 +114,10 @@ SET PATH=%PATH%;C:\Perl64\bin
 SET PATH=%PATH%;C:\msys64\usr\bin
 gen_probackup_project.pl C:\path_to_postgresql_source_tree
 ```
+
+#### Mingw-w64 && MSYS2
+
+PostgreSQL can be build using MSYS2 platform with its [Mingw-packages] (https://github.com/msys2/MINGW-packages) repository.
 
 ## License
 
