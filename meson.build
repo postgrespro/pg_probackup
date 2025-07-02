@@ -1,4 +1,4 @@
-common_sources = files(
+pg_probackup_sources = files(
   'src/utils/configuration.c',
   'src/utils/json.c',
   'src/utils/logger.c',
@@ -21,6 +21,7 @@ common_sources = files(
   'src/merge.c',
   'src/parsexlog.c',
   'src/ptrack.c',
+  'src/pg_probackup.c',
   'src/restore.c',
   'src/show.c',
   'src/stream.c',
@@ -30,23 +31,13 @@ common_sources = files(
   'src/catchup.c',
 )
 
-common_sources += files('../../backend/access/transam/xlogreader.c')
-common_sources += files('../../backend/utils/hash/pg_crc.c')
-common_sources += files('../pg_basebackup/receivelog.c')
-common_sources += files('../pg_basebackup/streamutil.c')
-common_sources += files('../pg_basebackup/walmethods.c')
+pg_probackup_sources += files('../../backend/access/transam/xlogreader.c')
+pg_probackup_sources += files('../../backend/utils/hash/pg_crc.c')
+pg_probackup_sources += files('../pg_basebackup/receivelog.c')
+pg_probackup_sources += files('../pg_basebackup/streamutil.c')
+pg_probackup_sources += files('../pg_basebackup/walmethods.c')
 
 pg_probackup_deps = [frontend_code, backend_code, libpq, lz4, zlib, zstd]
-pg_probackup_common = static_library('libpg_probackup_common',
-  common_sources,
-  dependencies: pg_probackup_deps,
-  include_directories: include_directories('./src', '../../include/portability', '../../port', '../pg_basebackup'),
-  kwargs: internal_lib_args,
-)
-
-pg_probackup_sources = files(
-  'src/pg_probackup.c',
-)
 
 if host_system == 'windows'
   pg_probackup_sources += rc_bin_gen.process(win32ver_rc, extra_args: [
@@ -56,7 +47,6 @@ endif
 
 pg_probackup = executable('pg_probackup',
   pg_probackup_sources,
-  link_with: [pg_probackup_common],
   dependencies: pg_probackup_deps,
   include_directories: include_directories('./src', '../../include/portability', '../../port', '../pg_basebackup'),
   c_args: ['-DFRONTEND'], # needed for xlogreader et al
