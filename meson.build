@@ -33,7 +33,7 @@ common_sources += files('../pg_basebackup/receivelog.c')
 common_sources += files('../pg_basebackup/streamutil.c')
 common_sources += files('../pg_basebackup/walmethods.c')
 
-pg_probackup_deps = [frontend_code, libpq, lz4, zlib, zstd]
+pg_probackup_deps = [frontend_code, backend_code, libpq, lz4, zlib, zstd]
 pg_probackup_common = static_library('libpg_probackup_common',
   common_sources,
   dependencies: pg_probackup_deps,
