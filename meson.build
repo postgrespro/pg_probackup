@@ -29,18 +29,15 @@ common_sources = files(
 common_sources += files('../../include/portability/instr_time.h')
 common_sources += files('../../backend/access/transam/xlogreader.c')
 common_sources += files('../../backend/utils/hash/pg_crc.c')
-common_sources += files('../pg_basebackup/receivelog.h')
 common_sources += files('../pg_basebackup/receivelog.c')
-common_sources += files('../pg_basebackup/streamutil.h')
 common_sources += files('../pg_basebackup/streamutil.c')
-common_sources += files('../pg_basebackup/walmethods.h')
 common_sources += files('../pg_basebackup/walmethods.c')
 
 pg_probackup_deps = [frontend_code, libpq, lz4, zlib, zstd]
 pg_probackup_common = static_library('libpg_probackup_common',
   common_sources,
   dependencies: pg_probackup_deps,
-  include_directories: include_directories('./src', '../../port'),
+  include_directories: include_directories('./src', '../../include/portability', '../../port', '../pg_basebackup'),
   kwargs: internal_lib_args,
 )
 
@@ -58,7 +55,7 @@ pg_probackup = executable('pg_probackup',
   pg_probackup_sources,
   link_with: [pg_probackup_common],
   dependencies: pg_probackup_deps,
-  include_directories: include_directories('./src', '../../port'),
+  include_directories: include_directories('./src', '../../include/portability', '../../port', '../pg_basebackup'),
   c_args: ['-DFRONTEND'], # needed for xlogreader et al
   kwargs: default_bin_args,
 )
