@@ -1,11 +1,14 @@
 common_sources = files(
   'src/utils/configuration.c',
   'src/utils/json.c',
+  'src/utils/logger.c',
   'src/utils/parray.c',
   'src/utils/pgut.c',
   'src/utils/thread.c',
   'src/utils/remote.c',
   'src/utils/file.c',
+  'src/archive.c',
+  'src/backup.c',
   'src/catalog.c',
   'src/checkdb.c',
   'src/configure.c',
@@ -14,6 +17,7 @@ common_sources = files(
   'src/dir.c',
   'src/fetch.c',
   'src/help.c',
+  'src/init.c',
   'src/merge.c',
   'src/parsexlog.c',
   'src/ptrack.c',
@@ -26,7 +30,6 @@ common_sources = files(
   'src/catchup.c',
 )
 
-common_sources += files('../../include/portability/instr_time.h')
 common_sources += files('../../backend/access/transam/xlogreader.c')
 common_sources += files('../../backend/utils/hash/pg_crc.c')
 common_sources += files('../pg_basebackup/receivelog.c')
