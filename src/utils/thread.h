@@ -10,15 +10,14 @@
 #ifndef PROBACKUP_THREAD_H
 #define PROBACKUP_THREAD_H
 
-#ifdef WIN32
+#if defined(ENABLE_THREAD_SAFETY) && defined(_WIN32)
 #include "postgres_fe.h"
-#include "port/pthread-win32.h"
+#include "pthread-win32.h"
 
 /* Use native win32 threads on Windows */
 typedef struct win32_pthread *pthread_t;
 typedef int pthread_attr_t;
 
-#define PTHREAD_MUTEX_INITIALIZER NULL //{ NULL, 0 }
 #define PTHREAD_ONCE_INIT false
 
 extern int pthread_create(pthread_t *thread, pthread_attr_t *attr, void *(*start_routine) (void *), void *arg);
@@ -28,7 +27,7 @@ extern int pthread_join(pthread_t th, void **thread_return);
 #include <pthread.h>
 #endif
 
-#ifdef WIN32
+#if defined(ENABLE_THREAD_SAFETY) && defined(_WIN32)
 extern DWORD main_tid;
 #else
 extern pthread_t main_tid;

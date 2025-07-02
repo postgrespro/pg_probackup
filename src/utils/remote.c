@@ -198,7 +198,7 @@ bool launch_agent(void)
 	ssh_argv[2] = psprintf("%d", outfd[0]);
 	ssh_argv[3] = psprintf("%d", infd[1]);
 	{
-	    intptr_t pid = _spawnvp(_P_NOWAIT, ssh_argv[0], ssh_argv);
+		intptr_t pid = _spawnvp(_P_NOWAIT, ssh_argv[0], (const char *const *)ssh_argv);
 		if (pid < 0)
 			return false;
 		child_pid = GetProcessId((HANDLE)pid);

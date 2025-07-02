@@ -17,12 +17,12 @@
  */
 bool thread_interrupted = false;
 
-#ifdef WIN32
+#if defined(ENABLE_THREAD_SAFETY) && defined(_WIN32)
 DWORD main_tid = 0;
 #else
 pthread_t main_tid = 0;
 #endif
-#ifdef WIN32
+#ifdef _WIN32
 #include <errno.h>
 
 typedef struct win32_pthread
@@ -91,17 +91,17 @@ pthread_join(pthread_t th, void **thread_return)
 	return 0;
 }
 
-#endif   /* WIN32 */
+#endif   /* _WIN32 */
 
 int
 pthread_lock(pthread_mutex_t *mp)
 {
-#ifdef WIN32
-	if (*mp == NULL)
+#ifdef _WIN32
+	if (mp == NULL)
 	{
 		while (InterlockedExchange(&mutex_initlock, 1) == 1)
 			/* loop, another thread own the lock */ ;
-		if (*mp == NULL)
+		if (mp == NULL)
 		{
 			if (pthread_mutex_init(mp, NULL))
 				return -1;

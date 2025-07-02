@@ -1098,6 +1098,7 @@ init_cancel_handler(void)
 	SetConsoleCtrlHandler(consoleHandler, TRUE);
 }
 
+#ifdef _MSC_VER
 int
 sleep(unsigned int seconds)
 {
@@ -1111,6 +1112,7 @@ usleep(unsigned int usec)
 	Sleep((usec + 999) / 1000);	/* rounded up */
 	return 0;
 }
+#endif
 
 #undef select
 static int

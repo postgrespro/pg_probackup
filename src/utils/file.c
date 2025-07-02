@@ -147,8 +147,6 @@ fio_is_remote_fd(int fd)
 
 #ifdef WIN32
 
-#undef stat
-
 /*
  * The stat() function in win32 is not guaranteed to update the st_size
  * field when run. So we define our own version that uses the Win32 API
@@ -179,6 +177,7 @@ fio_safestat(const char *path, struct stat *buf)
     return 0;
 }
 
+#undef stat
 #define stat(x, y) fio_safestat(x, y)
 
 /* TODO: use real pread on Linux */

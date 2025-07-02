@@ -47,8 +47,8 @@ define test_deb
 		--rm pgpro/$1:$2 /app/in/scripts/deb$(SCRIPT_SUFFIX).sh
 endef
 
-include packaging/test/Makefile.debian
-include packaging/test/Makefile.ubuntu
+include $(srcdir)/packaging/test/Makefile.debian
+include $(srcdir)/packaging/test/Makefile.ubuntu
 
 # CENTOS
 build/test_centos: build/test_centos_7 build/test_centos_8
@@ -94,9 +94,9 @@ define test_rpm
 		--rm pgpro/$1:$2 /app/in/scripts/rpm$(SCRIPT_SUFFIX).sh
 endef
 
-include packaging/test/Makefile.centos
-include packaging/test/Makefile.rhel
-include packaging/test/Makefile.oraclelinux
+include $(srcdir)/packaging/test/Makefile.centos
+include $(srcdir)/packaging/test/Makefile.rhel
+include $(srcdir)/packaging/test/Makefile.oraclelinux
 
 # Alt Linux
 build/test_alt: build/test_alt_8 build/test_alt_9
@@ -123,7 +123,7 @@ define test_alt
 		--rm pgpro/$1:$2 /app/in/scripts/alt$(SCRIPT_SUFFIX).sh
 endef
 
-include packaging/test/Makefile.alt
+include $(srcdir)/packaging/test/Makefile.alt
 
 # SUSE Linux
 build/test_suse: build/test_suse_15.1 build/test_suse_15.2
@@ -147,4 +147,4 @@ define test_suse
 		--rm pgpro/$1:$2 /app/in/scripts/suse$(SCRIPT_SUFFIX).sh
 endef
 
-include packaging/test/Makefile.suse
+include $(srcdir)/packaging/test/Makefile.suse
