@@ -10,7 +10,7 @@
 #ifndef PROBACKUP_THREAD_H
 #define PROBACKUP_THREAD_H
 
-#if defined(ENABLE_THREAD_SAFETY) && defined(_WIN32)
+#ifdef _WIN32
 #include "postgres_fe.h"
 #include "pthread-win32.h"
 
@@ -27,7 +27,7 @@ extern int pthread_join(pthread_t th, void **thread_return);
 #include <pthread.h>
 #endif
 
-#if defined(ENABLE_THREAD_SAFETY) && defined(_WIN32)
+#ifdef _WIN32
 extern DWORD main_tid;
 #else
 extern pthread_t main_tid;
