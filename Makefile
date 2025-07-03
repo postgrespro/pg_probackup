@@ -15,51 +15,28 @@ OBJS += src/archive.o src/backup.o src/catalog.o src/checkdb.o src/configure.o s
 
 # borrowed files
 OBJS += src/pg_crc.o src/receivelog.o src/streamutil.o \
-	src/xlogreader.o
+	src/xlogreader.o src/walmethods.o
 
 EXTRA_CLEAN = src/pg_crc.c \
-	src/receivelog.c src/receivelog.h src/streamutil.c src/streamutil.h \
-	src/xlogreader.c src/instr_time.h
+	src/receivelog.c src/streamutil.c src/xlogreader.c src/walmethods.c
 
-# OBJS variable must be finally defined before invoking the include directive
-ifneq (,$(wildcard $(top_srcdir)/src/bin/pg_basebackup/walmethods.c))
-OBJS += src/walmethods.o
-EXTRA_CLEAN += src/walmethods.c src/walmethods.h
-endif
-
-PG_CPPFLAGS = -I$(libpq_srcdir) -I$(top_srcdir)/src/port -Isrc -I$(srcdir)/src
+PG_CPPFLAGS = -I$(libpq_srcdir) -I$(top_srcdir)/src/port -I$(top_srcdir)/src/include/portability -I$(top_srcdir)/src/bin/pg_basebackup -Isrc -I$(srcdir)/src
 ifneq ($(PORTNAME), win32)
 PG_CPPFLAGS += $(PTHREAD_CFLAGS)
 endif
 override CPPFLAGS := -DFRONTEND $(CPPFLAGS) $(PG_CPPFLAGS)
 LDFLAGS_INTERNAL += -L$(top_builddir)/src/fe_utils -lpgfeutils $(libpq_pgport)
 
-src/utils/configuration.o: src/datapagemap.h
-src/archive.o: src/instr_time.h
-src/backup.o: src/receivelog.h src/streamutil.h
-
-src/instr_time.h: $(top_srcdir)/src/include/portability/instr_time.h
-	rm -f $@ && $(LN_S) $(top_srcdir)/src/include/portability/instr_time.h $@
 src/pg_crc.c: $(top_srcdir)/src/backend/utils/hash/pg_crc.c
 	rm -f $@ && $(LN_S) $(top_srcdir)/src/backend/utils/hash/pg_crc.c $@
 src/receivelog.c: $(top_srcdir)/src/bin/pg_basebackup/receivelog.c
 	rm -f $@ && $(LN_S) $(top_srcdir)/src/bin/pg_basebackup/receivelog.c $@
-ifneq (,$(wildcard $(top_srcdir)/src/bin/pg_basebackup/walmethods.c))
-src/receivelog.h: src/walmethods.h $(top_srcdir)/src/bin/pg_basebackup/receivelog.h
-else
-src/receivelog.h: $(top_srcdir)/src/bin/pg_basebackup/receivelog.h
-endif
-	rm -f $@ && $(LN_S) $(top_srcdir)/src/bin/pg_basebackup/receivelog.h $@
 src/streamutil.c: $(top_srcdir)/src/bin/pg_basebackup/streamutil.c
 	rm -f $@ && $(LN_S) $(top_srcdir)/src/bin/pg_basebackup/streamutil.c $@
-src/streamutil.h: $(top_srcdir)/src/bin/pg_basebackup/streamutil.h
-	rm -f $@ && $(LN_S) $(top_srcdir)/src/bin/pg_basebackup/streamutil.h $@
 src/xlogreader.c: $(top_srcdir)/src/backend/access/transam/xlogreader.c
 	rm -f $@ && $(LN_S) $(top_srcdir)/src/backend/access/transam/xlogreader.c $@
 src/walmethods.c: $(top_srcdir)/src/bin/pg_basebackup/walmethods.c
 	rm -f $@ && $(LN_S) $(top_srcdir)/src/bin/pg_basebackup/walmethods.c $@
-src/walmethods.h: $(top_srcdir)/src/bin/pg_basebackup/walmethods.h
-	rm -f $@ && $(LN_S) $(top_srcdir)/src/bin/pg_basebackup/walmethods.h $@
 
 all: pg_probackup
 
