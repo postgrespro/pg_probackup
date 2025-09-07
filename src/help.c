@@ -2,7 +2,7 @@
  *
  * help.c
  *
- * Copyright (c) 2017-2021, Postgres Professional
+ * Copyright (c) 2017-2025, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */

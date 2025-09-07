@@ -3,7 +3,7 @@
  * pg_probackup.h: Backup/Recovery manager for PostgreSQL.
  *
  * Portions Copyright (c) 2009-2013, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
- * Portions Copyright (c) 2015-2022, Postgres Professional
+ * Portions Copyright (c) 2015-2025, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */
@@ -1225,6 +1225,7 @@ extern const char *base36enc_to(long unsigned int value, char buf[ARG_SIZE_HINT 
 extern long unsigned int base36dec(const char *text);
 extern uint32 parse_server_version(const char *server_version_str);
 extern uint32 parse_program_version(const char *program_version);
+void check_server_version(PGconn *conn, PGNodeInfo *nodeInfo);
 extern bool   parse_page(Page page, XLogRecPtr *lsn);
 extern int32  do_compress(void* dst, size_t dst_size, void const* src, size_t src_size,
 						  CompressAlg alg, int level, const char **errormsg);

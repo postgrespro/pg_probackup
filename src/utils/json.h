@@ -2,7 +2,7 @@
  *
  * json.h: - prototypes of json output functions.
  *
- * Copyright (c) 2018-2019, Postgres Professional
+ * Copyright (c) 2018-2025, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */

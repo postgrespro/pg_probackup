@@ -2,7 +2,7 @@
  *
  * stream.c: pg_probackup specific code for WAL streaming
  *
- * Portions Copyright (c) 2015-2020, Postgres Professional
+ * Portions Copyright (c) 2015-2025, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */

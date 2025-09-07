@@ -8,7 +8,6 @@ from datetime import datetime, timedelta
 import subprocess
 from sys import exit
 from time import sleep
-from distutils.dir_util import copy_tree
 
 
 class ArchiveTest(ProbackupTest, unittest.TestCase):
@@ -1242,10 +1241,6 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
         self.add_instance(backup_dir, 'replica', replica)
         self.set_archiving(backup_dir, 'replica', replica, replica=True)
-
-        copy_tree(
-            os.path.join(backup_dir, 'wal', 'master'),
-            os.path.join(backup_dir, 'wal', 'replica'))
 
         replica.slow_start(replica=True)
 

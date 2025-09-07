@@ -1701,29 +1701,26 @@ class ProbackupTest(object):
             num = num * 100 + int(re.sub(r"[^\d]", "", part))
         return num
 
-    def switch_wal_segment(self, node):
+    def switch_wal_segment(self, node, sleep_seconds=1, and_tx=False):
         """
-        Execute pg_switch_wal/xlog() in given node
+        Execute pg_switch_wal() in given node
 
         Args:
             node: an instance of PostgresNode or NodeConnection class
         """
         if isinstance(node, testgres.PostgresNode):
-            if self.version_to_num(
-                node.safe_psql('postgres', 'show server_version').decode('utf-8')
-                    ) >= self.version_to_num('10.0'):
-                node.safe_psql('postgres', 'select pg_switch_wal()')
-            else:
-                node.safe_psql('postgres', 'select pg_switch_xlog()')
+            with node.connect('postgres') as con:
+                if and_tx:
+                    con.execute('select txid_current()')
+                con.execute('select pg_switch_wal()')
+                lsn = con.execute('select pg_switch_wal()')[0][0]
         else:
-            if self.version_to_num(
-                node.execute('show server_version')[0][0]
-                    ) >= self.version_to_num('10.0'):
-                node.execute('select pg_switch_wal()')
-            else:
-                node.execute('select pg_switch_xlog()')
+            node.execute('select pg_switch_wal()')
+            lsn = node.execute('select pg_switch_wal()')[0][0]
 
-        sleep(1)
+        if sleep_seconds > 0:
+            sleep(sleep_seconds)
+        return lsn
 
     def wait_until_replica_catch_with_master(self, master, replica):
 

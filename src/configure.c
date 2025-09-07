@@ -2,7 +2,7 @@
  *
  * configure.c: - manage backup catalog.
  *
- * Copyright (c) 2017-2019, Postgres Professional
+ * Copyright (c) 2017-2025, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */

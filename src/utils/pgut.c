@@ -3,7 +3,7 @@
  * pgut.c
  *
  * Portions Copyright (c) 2009-2013, NIPPON TELEGRAPH AND TELEPHONE CORPORATION
- * Portions Copyright (c) 2017-2021, Postgres Professional
+ * Portions Copyright (c) 2017-2025, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */

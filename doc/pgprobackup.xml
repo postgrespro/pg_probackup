@@ -924,7 +924,7 @@ yumdownloader --source pg_probackup-16
           </para>
           <programlisting>
 . /etc/os-release
-echo "rpm http://repo.postgrespro.ru/pg_probackup/rpm/latest/altlinux-p$VERSION_ID x86_64 vanilla" | \
+echo "rpm http://repo.postgrespro.ru/pg_probackup/rpm/latest/altlinux-p${VERSION_ID%%.*} x86_64 vanilla" | \
 sudo tee /etc/apt/sources.list.d/pg_probackup.list
 </programlisting>
         </listitem>
@@ -934,7 +934,7 @@ sudo tee /etc/apt/sources.list.d/pg_probackup.list
           </para>
           <programlisting>
 . /etc/os-release
-echo "rpm http://repo.postgrespro.ru/pg_probackup/rpm/latest/altlinux-$VERSION_ID x86_64 vanilla" | \
+echo "rpm http://repo.postgrespro.ru/pg_probackup/rpm/latest/altlinux-${VERSION_ID%%.*} x86_64 vanilla" | \
 sudo tee /etc/apt/sources.list.d/pg_probackup.list
 </programlisting>
         </listitem>

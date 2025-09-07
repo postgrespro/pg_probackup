@@ -2,7 +2,7 @@
  *
  * thread.c: - multi-platform pthread implementations.
  *
- * Copyright (c) 2018-2019, Postgres Professional
+ * Copyright (c) 2018-2025, Postgres Professional
  *
  *-------------------------------------------------------------------------
  */
