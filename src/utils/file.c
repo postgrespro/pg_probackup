@@ -1684,7 +1684,7 @@ fio_gzread(gzFile f, void *buf, unsigned size)
 			{
 				gz->strm.next_in = gz->buf;
 			}
-			rc = fio_read(gz->fd, gz->strm.next_in + gz->strm.avail_in,
+			rc = fio_read(gz->fd, (void *) (gz->strm.next_in + gz->strm.avail_in),
 						  gz->buf + ZLIB_BUFFER_SIZE - gz->strm.next_in - gz->strm.avail_in);
 			if (rc > 0)
 			{
@@ -2499,7 +2499,7 @@ cleanup:
 int
 fio_send_file_gz(const char *from_fullpath, FILE* out, char **errormsg)
 {
-	fio_header hdr;
+	fio_header header;
 	int exit_code = SEND_OK;
 	char *in_buf = pgut_malloc(CHUNK_SIZE);    /* buffer for compressed data */
 	char *out_buf = pgut_malloc(OUT_BUF_SIZE); /* 1MB buffer for decompressed data */
@@ -2507,13 +2507,13 @@ fio_send_file_gz(const char *from_fullpath, FILE* out, char **errormsg)
 	/* decompressor */
 	z_stream *strm = NULL;
 
-	hdr.cop = FIO_SEND_FILE;
-	hdr.size = path_len;
+	header.cop = FIO_SEND_FILE;
+	header.size = path_len;
 
 //	elog(VERBOSE, "Thread [%d]: Attempting to open remote compressed WAL file '%s'",
 //			thread_num, from_fullpath);
 
-	IO_CHECK(fio_write_all(fio_stdout, &hdr, sizeof(hdr)), sizeof(hdr));
+	IO_CHECK(fio_write_all(fio_stdout, &header, sizeof(header)), sizeof(header));
 	IO_CHECK(fio_write_all(fio_stdout, from_fullpath, path_len), path_len);
 
 	for (;;)

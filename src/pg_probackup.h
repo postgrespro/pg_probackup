@@ -431,6 +431,8 @@ typedef struct InstanceConfig
 extern ConfigOption instance_options[];
 extern InstanceConfig instance_config;
 extern time_t current_time;
+extern bool no_validate;
+extern IncrRestoreMode incremental_mode;
 
 typedef struct PGNodeInfo
 {
@@ -805,9 +807,12 @@ extern pid_t    my_pid;
 extern __thread int my_thread_num;
 extern int		num_threads;
 extern bool		stream_wal;
+extern bool		no_color;
 extern bool		show_color;
 extern bool		progress;
+extern bool		no_sync;
 extern bool     is_archive_cmd; /* true for archive-{get,push} */
+extern time_t	start_time;
 /* In pre-10 'replication_slot' is defined in receivelog.h */
 extern char	   *replication_slot;
 #if PG_VERSION_NUM >= 100000
@@ -816,6 +821,7 @@ extern bool 	temp_slot;
 extern bool perm_slot;
 
 /* backup options */
+extern bool		backup_logs;
 extern bool		smooth_checkpoint;
 
 /* remote probackup options */
@@ -827,7 +833,14 @@ extern bool exclusive_backup;
 extern bool		delete_wal;
 extern bool		delete_expired;
 extern bool		merge_expired;
+extern bool		force;
 extern bool		dry_run;
+
+/* archive push options */
+extern int		batch_size;
+
+/* archive get options */
+extern bool		no_validate_wal;
 
 /* ===== instanceState ===== */
 
@@ -858,11 +871,18 @@ typedef struct InstanceState
 
 /* show options */
 extern ShowFormat show_format;
+extern bool show_archive;
+
+/* set backup options */
+extern int64 ttl;
 
 /* checkdb options */
+extern bool need_amcheck;
 extern bool heapallindexed;
 extern bool checkunique;
+extern bool amcheck_parent;
 extern bool skip_block_validation;
+extern bool skip_external_dirs;
 
 /* current settings */
 extern pgBackup current;
