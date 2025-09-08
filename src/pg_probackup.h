@@ -704,8 +704,8 @@ typedef struct BackupPageHeader
 typedef struct BackupPageHeader2
 {
 	XLogRecPtr  lsn;
-	int32	    block;			 /* block number */
-	int32       pos;             /* position in backup file */
+	BlockNumber	block;			 /* block number */
+	off_t       pos;             /* position in backup file */
 	uint16      checksum;
 } BackupPageHeader2;
 
