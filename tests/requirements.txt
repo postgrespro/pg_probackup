@@ -5,7 +5,7 @@
 #    git+https://github.com/postgrespro/testgres.git@<git-ref>
 # 3. From a local directory
 #    /path/to/local/directory/testgres
-git+https://github.com/postgrespro/testgres.git@archive-command-exec#egg=testgres-pg_probackup2&subdirectory=testgres/plugins/pg_probackup2
+testgres==1.8.5
 allure-pytest
 deprecation
 pexpect
