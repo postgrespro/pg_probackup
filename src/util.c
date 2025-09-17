@@ -455,6 +455,90 @@ copy_pgcontrol_file(const char *from_fullpath, fio_location from_location,
 }
 
 /*
+ * Write page_map_entry to ptrackMap
+ */
+void
+writePtrackMap(const char *ptrackMap, const size_t ptrackmap_size, 
+				const char *path, fio_location location)
+{
+	int			fd;
+	char       *buffer = NULL;
+
+	// checks?
+
+	/* copy ptrackMap */
+	buffer = pg_malloc0(ptrackmap_size);
+	memcpy(buffer, ptrackMap, ptrackmap_size);
+
+	/* Write ptrackMap */
+	fd = fio_open(path,
+				  O_RDWR | O_CREAT | O_TRUNC | PG_BINARY, location);
+
+	if (fd < 0) {
+		elog(ERROR, "Failed to open file: %s", path);
+	}
+
+	if (fio_write(fd, buffer, ptrackmap_size) != ptrackmap_size) {
+		elog(ERROR, "Failed to overwrite file: %s", path);
+	}
+
+	if (fio_flush(fd) != 0) {
+		elog(ERROR, "Failed to sync file: %s", path);
+	}
+
+	fio_close(fd);
+	pg_free(buffer);
+}
+
+/*
+* Copy ptrack.map file to backup. We do apply compression to this file.
+*/
+void copy_ptrackmap_file(const char *from_fullpath, fio_location from_location,
+                         const char *to_fullpath, fio_location to_location,
+                         pgFile *file) {
+  char *buffer;
+  size_t size;
+
+  bool missing_ok = true;
+  bool use_crc32c = true;
+
+  const char *errormsg = NULL;
+
+  buffer = slurpFile(from_fullpath, "", &size, false, from_location);
+
+  size_t compressed_size = size;
+  void *compressed = pg_malloc(compressed_size);
+
+  int rc = do_compress(compressed, compressed_size, buffer, size,
+                       current.compress_alg, current.compress_level, &errormsg);
+
+  /* Something went wrong and errormsg was assigned, throw a warning */
+  if (rc < 0 && errormsg != NULL)
+    elog(WARNING, "An error occured during compressing ptrack.map: %s",
+         errormsg);
+
+  /* compression didn`t worked */
+  if (rc <= 0 || rc >= size) {
+    /* Do not compress ptrack.map */
+    memcpy(compressed, buffer, size);
+  } else {
+    compressed_size = rc;
+  }
+
+  writePtrackMap(compressed, compressed_size, to_fullpath, to_location);
+
+  file->crc = pgFileGetCRCgz(to_fullpath, use_crc32c, missing_ok);;
+  file->size = compressed_size;
+  file->read_size = size;
+  file->write_size = compressed_size;
+  file->uncompressed_size = size;
+  file->compress_alg = current.compress_alg;
+
+  pg_free(compressed);
+  pg_free(buffer);
+}
+
+/*
  * Parse string representation of the server version.
  */
 uint32

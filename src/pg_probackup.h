@@ -1214,6 +1214,8 @@ extern void get_control_file_or_back_file(const char *pgdata_path, fio_location 
 										  ControlFileData *control);
 extern void copy_pgcontrol_file(const char *from_fullpath, fio_location from_location,
 					const char *to_fullpath, fio_location to_location, pgFile *file);
+extern void copy_ptrackmap_file(const char *from_fullpath, fio_location from_location,
+					const char *to_fullpath, fio_location to_location, pgFile *file);
 
 extern void time2iso(char *buf, size_t len, time_t time, bool utc);
 extern const char *status2str(BackupStatus status);
@@ -1238,6 +1240,9 @@ extern void pretty_time_interval(double time, char *buf, size_t len);
 extern PGconn *pgdata_basic_setup(ConnectionOptions conn_opt, PGNodeInfo *nodeInfo);
 extern void check_system_identifiers(PGconn *conn, const char *pgdata);
 extern void parse_filelist_filenames(parray *files, const char *root);
+
+extern void writePtrackMap(const char *ptrackMap, const size_t ptrackmap_size, 
+				const char *path, fio_location location);
 
 /* in ptrack.c */
 extern void make_pagemap_from_ptrack_2(parray* files, PGconn* backup_conn,
