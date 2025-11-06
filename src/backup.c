@@ -2518,11 +2518,16 @@ process_block_change(ForkNumber forknum, RelFileNode rnode, BlockNumber blkno)
 	int			segno;
 	pgFile	  **file_item;
 	pgFile		f;
+#if PG_VERSION_NUM >= 180000
+		RelPathStr rel_path_str = relpathperm(rnode, forknum);
+		rel_path = rel_path_str.str;
+#else
+		rel_path = relpathperm(rnode, forknum);
+#endif
 
 	segno = blkno / RELSEG_SIZE;
 	blkno_inseg = blkno % RELSEG_SIZE;
 
-	rel_path = relpathperm(rnode, forknum);
 	if (segno > 0)
 		f.rel_path = psprintf("%s.%u", rel_path, segno);
 	else
@@ -2554,7 +2559,9 @@ process_block_change(ForkNumber forknum, RelFileNode rnode, BlockNumber blkno)
 
 	if (segno > 0)
 		pg_free(f.rel_path);
+#if PG_VERSION_NUM < 180000
 	pg_free(rel_path);
+#endif
 
 }
 
