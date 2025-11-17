@@ -1,0 +1,29 @@
+From 5809673569d3d95c7bce75ea0aa6f9723e303c7d Mon Sep 17 00:00:00 2001
+From: Daria <d.lepikhova@postgrespro.ru>
+Date: Mon, 17 Nov 2025 02:57:38 +0100
+Subject: [PATCH] REL_18_STABLE_pg_probackup
+
+---
+ src/backend/utils/hash/pg_crc.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/src/backend/utils/hash/pg_crc.c b/src/backend/utils/hash/pg_crc.c
+index e67a74ef852..6a474e804b5 100644
+--- a/src/backend/utils/hash/pg_crc.c
++++ b/src/backend/utils/hash/pg_crc.c
+@@ -99,6 +99,7 @@ const uint32 pg_crc32_table[256] = {
+ 	0xB40BBE37, 0xC30C8EA1, 0x5A05DF1B, 0x2D02EF8D
+ };
+ 
++#ifndef FRONTEND
+ /*
+  * SQL-callable functions
+  */
+@@ -128,3 +129,4 @@ crc32c_bytea(PG_FUNCTION_ARGS)
+ 
+ 	PG_RETURN_INT64(crc);
+ }
++#endif
+-- 
+2.39.5 (Apple Git-154)
+
