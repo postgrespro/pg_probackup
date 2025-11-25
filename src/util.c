@@ -93,8 +93,13 @@ digestControlFile(ControlFileData *ControlFile, char *src, size_t size)
 #endif
 
 	if (size != ControlFileSize)
+	{
+		if (size == 16384)
+			elog(ERROR, "Unexpected control file size %d, expected %d. Probably you trying to connect Postgres Pro using %s built with PostgreSQL. ",
+				(int) size, ControlFileSize, PROGRAM_NAME);
 		elog(ERROR, "Unexpected control file size %d, expected %d",
 			 (int) size, ControlFileSize);
+	}
 
 	memcpy(ControlFile, src, sizeof(ControlFileData));
 
