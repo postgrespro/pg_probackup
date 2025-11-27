@@ -1950,7 +1950,7 @@ class MergeTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     def test_merge_multiple_descendants(self):
-        """
+        r"""
         PAGEb3
           |                 PAGEa3
         PAGEb2               /

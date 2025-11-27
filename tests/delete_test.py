@@ -486,7 +486,7 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     def test_delete_multiple_descendants(self):
-        """
+        r"""
         PAGEb3
           |                 PAGEa3
         PAGEb2               /
@@ -654,7 +654,7 @@ class DeleteTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     def test_delete_multiple_descendants_dry_run(self):
-        """
+        r"""
                  PAGEa3
         PAGEa2    /
            \     /

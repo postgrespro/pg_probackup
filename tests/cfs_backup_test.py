@@ -1104,7 +1104,7 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
 
         list_data_files = find_by_pattern(
             [self.get_tblspace_path(self.node, tblspace_name)],
-            '^.*/\d+$')
+            r'^.*/\d+$')
         self.assertTrue(
             list_data_files,
             "ERROR: Files of data not found into tablespace dir"
@@ -1166,7 +1166,7 @@ class CfsBackupNoEncTest(ProbackupTest, unittest.TestCase):
 
         list_data_files = find_by_pattern(
             [self.get_tblspace_path(self.node, tblspace_name)],
-            '^.*/\d+$')
+            r'^.*/\d+$')
         self.assertTrue(
             list_data_files,
             "ERROR: Files of data not found into tablespace dir"

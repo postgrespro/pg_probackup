@@ -39,6 +39,11 @@ cd postgres # Go to postgres dir
 if [ "$PG_PROBACKUP_PTRACK" = "ON" ]; then
     git apply -3 contrib/ptrack/patches/${PTRACK_PATCH_PG_BRANCH}-ptrack-core.diff
 fi
+
+if [ "$PG_BRANCH" = "REL_18_STABLE" ]; then
+    git apply -3 ../patches/${PG_BRANCH}_pg_probackup.patch
+fi
+
 CC='ccache gcc' CFLAGS="-Og" ./configure --prefix=$PGHOME \
     --cache-file=~/.ccache/configure-cache \
     --enable-debug --enable-cassert --enable-depend \
@@ -63,4 +68,4 @@ if [ ! -d "contrib/amcheck" ]; then
     make -C contrib/amcheck install
 fi
 
-pip3 install testgres
+pip3 install -r ../tests/requirements.txt

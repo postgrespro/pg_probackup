@@ -714,7 +714,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     def test_basic_window_merge_multiple_descendants(self):
-        """
+        r"""
         PAGEb3
           |                 PAGEa3
         -----------------------------retention window
@@ -970,7 +970,7 @@ class RetentionTest(ProbackupTest, unittest.TestCase):
 
     # @unittest.skip("skip")
     def test_basic_window_merge_multiple_descendants_1(self):
-        """
+        r"""
         PAGEb3
           |                 PAGEa3
         -----------------------------retention window
