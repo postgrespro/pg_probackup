@@ -1062,7 +1062,23 @@ handle_interrupt(SIGNAL_ARGS)
 static void
 init_cancel_handler(void)
 {
+#if PG_VERSION_NUM < 180000
 	oldhandler = pqsignal(SIGINT, handle_interrupt);
+#else
+	{
+		struct sigaction act, oldact;
+
+		act.sa_handler = handle_interrupt;
+		sigemptyset(&act.sa_mask);
+		act.sa_flags = SA_RESTART;
+
+		/* Get the previous handler and set the new one */
+		if (sigaction(SIGINT, &act, &oldact) < 0)
+		elog(ERROR, "sigaction(SIGINT) failed: %m");
+
+		oldhandler = oldact.sa_handler;
+	}
+#endif
 	pqsignal(SIGQUIT, handle_interrupt);
 	pqsignal(SIGTERM, handle_interrupt);
 	pqsignal(SIGPIPE, handle_interrupt);

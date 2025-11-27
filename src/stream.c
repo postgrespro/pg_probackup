@@ -188,7 +188,11 @@ CreateReplicationSlot_compat(PGconn *conn, const char *slot_name, const char *pl
                                           bool is_temporary, bool is_physical,
                                           bool slot_exists_ok)
 {
-#if PG_VERSION_NUM >= 150000
+#if PG_VERSION_NUM >= 180000
+       return CreateReplicationSlot(conn, slot_name, plugin, is_temporary, is_physical,
+               /* reserve_wal = */ true, slot_exists_ok, /* two_phase = */ false, /* failover = */ false);
+#elif PG_VERSION_NUM >= 150000
+
 	return CreateReplicationSlot(conn, slot_name, plugin, is_temporary, is_physical,
 		/* reserve_wal = */ true, slot_exists_ok, /* two_phase = */ false);
 #elif PG_VERSION_NUM >= 110000

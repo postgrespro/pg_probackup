@@ -66,6 +66,7 @@ static bool pgpro_support(PGconn *conn);
 static bool pg_is_checksum_enabled(PGconn *conn);
 static bool pg_is_in_recovery(PGconn *conn);
 static bool pg_is_superuser(PGconn *conn);
+static void check_server_version(PGconn *conn, PGNodeInfo *nodeInfo);
 static void confirm_block_size(PGconn *conn, const char *name, int blcksz);
 static void rewind_and_mark_cfs_datafiles(parray *files, const char *root, char *relative, size_t i);
 static bool remove_excluded_files_criterion(void *value, void *exclude_args);
@@ -946,7 +947,7 @@ do_backup(InstanceState *instanceState, pgSetBackupParams *set_backup_params,
 /*
  * Confirm that this server version is supported
  */
-void
+static void
 check_server_version(PGconn *conn, PGNodeInfo *nodeInfo)
 {
 	PGresult   *res = NULL;
@@ -2517,11 +2518,16 @@ process_block_change(ForkNumber forknum, RelFileNode rnode, BlockNumber blkno)
 	int			segno;
 	pgFile	  **file_item;
 	pgFile		f;
+#if PG_VERSION_NUM >= 180000
+		RelPathStr rel_path_str = relpathperm(rnode, forknum);
+		rel_path = rel_path_str.str;
+#else
+		rel_path = relpathperm(rnode, forknum);
+#endif
 
 	segno = blkno / RELSEG_SIZE;
 	blkno_inseg = blkno % RELSEG_SIZE;
 
-	rel_path = relpathperm(rnode, forknum);
 	if (segno > 0)
 		f.rel_path = psprintf("%s.%u", rel_path, segno);
 	else
@@ -2553,7 +2559,9 @@ process_block_change(ForkNumber forknum, RelFileNode rnode, BlockNumber blkno)
 
 	if (segno > 0)
 		pg_free(f.rel_path);
+#if PG_VERSION_NUM < 180000
 	pg_free(rel_path);
+#endif
 
 }
 

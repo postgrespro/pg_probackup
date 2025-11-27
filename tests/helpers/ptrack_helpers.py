@@ -6,13 +6,14 @@ from sys import exit, argv, version_info
 import signal
 import subprocess
 import shutil
+from time import sleep
 import six
 import testgres
 import hashlib
 import re
 import getpass
 import select
-from time import sleep
+import time
 import re
 import json
 import random
@@ -150,8 +151,9 @@ class ProbackupException(Exception):
 
 class PostgresNodeExtended(testgres.PostgresNode):
 
-    def __init__(self, base_dir=None, *args, **kwargs):
-        super(PostgresNodeExtended, self).__init__(name='test', base_dir=base_dir, *args, **kwargs)
+    def __init__(self, base_dir=None, port = None, bin_dir=None, *args, **kwargs):
+        assert port is None or type(port) == int
+        super(PostgresNodeExtended, self).__init__(name='test', base_dir=base_dir, port = port, bin_dir=bin_dir, *args, **kwargs)
         self.is_started = False
 
     def slow_start(self, replica=False):
@@ -414,25 +416,28 @@ class ProbackupTest(object):
         #
         # 2. python versions 3.11+ mixin, verified on 3.11, taken from: https://stackoverflow.com/a/39606065
 
-        if not isinstance(test_case, unittest.TestCase):
-            raise AssertionError("test_case is not instance of unittest.TestCase")
-
-        if hasattr(test_case, '_outcome'):  # Python 3.4+
-            if hasattr(test_case._outcome, 'errors'):
-                # Python 3.4 - 3.10  (These two methods have no side effects)
-                result = test_case.defaultTestResult()  # These two methods have no side effects
-                test_case._feedErrorsToResult(result, test_case._outcome.errors)
-            else:
-                # Python 3.11+ and pytest 5.3.5+
-                result = test_case._outcome.result
-                if not hasattr(result, 'errors'):
-                    result.errors = []
-                if not hasattr(result, 'failures'):
-                    result.failures = []
-        else:  # Python 2.7, 3.0-3.3
-            result = getattr(test_case, '_outcomeForDoCleanups', test_case._resultForDoCleanups)
+        if hasattr(test_case._outcome, 'errors'):
+            # Python 3.4 - 3.10  (These two methods have no side effects)
+            result = test_case.defaultTestResult()  # These two methods have no side effects
+            test_case._feedErrorsToResult(result, test_case._outcome.errors)
+        else:
+            # Python 3.11+ and pytest 5.3.5+
+            result = test_case._outcome.result
+            if not hasattr(result, 'errors'):
+                result.errors = []
+            if not hasattr(result, 'failures'):
+                result.failures = []
 
         ok = all(test != test_case for test, text in result.errors + result.failures)
+        # check subtests as well
+        ok = ok and all(getattr(test, 'test_case', None) != test_case
+                        for test, text in result.errors + result.failures)
+
+        # for pytest 8+
+        if hasattr(result, '_excinfo'):
+            if result._excinfo is not None and len(result._excinfo) > 0:
+                # if test was successful, _excinfo will be None, else it will be non-empty list
+                ok = False
 
         return ok
 
@@ -475,12 +480,14 @@ class ProbackupTest(object):
 
     def make_empty_node(
             self,
-            base_dir=None):
+            base_dir=None,
+            port=None,
+            bin_dir=None):
         real_base_dir = os.path.join(self.tmp_path, base_dir)
         shutil.rmtree(real_base_dir, ignore_errors=True)
         os.makedirs(real_base_dir)
 
-        node = PostgresNodeExtended(base_dir=real_base_dir)
+        node = PostgresNodeExtended(base_dir=real_base_dir, port=port, bin_dir=bin_dir)
         node.should_rm_dirs = True
         self.nodes_to_cleanup.append(node)
 
@@ -489,12 +496,14 @@ class ProbackupTest(object):
     def make_simple_node(
             self,
             base_dir=None,
+            port=None,
+            bin_dir=None,
             set_replication=False,
             ptrack_enable=False,
             initdb_params=[],
             pg_options={}):
 
-        node = self.make_empty_node(base_dir)
+        node = self.make_empty_node(base_dir, port=port, bin_dir=bin_dir)
         node.init(
            initdb_params=initdb_params, allow_streaming=set_replication)
 
@@ -909,6 +918,24 @@ class ProbackupTest(object):
                 filelist_diff[file] = filelist_A[file]
 
         return filelist_diff
+
+    def wait_instance_wal_exists(self, backup_dir, instance, file, timeout=300):
+        """Wait for WAL segment appeared in the WAL archive"""
+        start = time.time()
+        fl = f'wal/{instance}/{file}'
+        while time.time() - start < timeout:
+            if  os.path.exists(fl):
+                break
+            time.sleep(0.25)
+
+    def wait_server_wal_exists(self, data_dir, wal_dir, file, timeout=300):
+        """Wait for WAL segment appeared in the server WAL dir"""
+        start = time.time()
+        fl = f'{data_dir}/{wal_dir}/{file}'
+        while time.time() - start < timeout:
+            if os.path.exists(fl):
+                return
+            time.sleep(0.25)
 
     # used for partial restore
     def truncate_every_file_in_dir(self, path):
