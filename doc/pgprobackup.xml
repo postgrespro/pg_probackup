@@ -558,7 +558,7 @@ backup_user@backup_host:~$ pg_probackup-16 backup \
     --remote-user=postgres \
     -U backup \
     -d backupdb
-INFO: Backup start, pg_probackup version: 2.5.15, instance: node, backup ID: SCUN1Q, backup mode: FULL, wal mode: STREAM, remote: true, compress-algorithm: zlib, compress-level: 1
+INFO: Backup start, pg_probackup version: 2.5.16, instance: node, backup ID: SCUN1Q, backup mode: FULL, wal mode: STREAM, remote: true, compress-algorithm: zlib, compress-level: 1
 INFO: This PostgreSQL instance was initialized with data block checksums. Data block corruption will be detected
 INFO: Database backup start
 INFO: wait for pg_backup_start()
@@ -604,7 +604,7 @@ backup_user@backup_host:~$ pg_probackup-16 backup \
             --remote-user=postgres \
             -U backup \
             -d backupdb
-INFO: Backup start, pg_probackup version: 2.5.15, instance: node, backup ID: SCUN22, backup mode: DELTA, wal mode: STREAM, remote: true, compress-algorithm: zlib, compress-level: 1
+INFO: Backup start, pg_probackup version: 2.5.16, instance: node, backup ID: SCUN22, backup mode: DELTA, wal mode: STREAM, remote: true, compress-algorithm: zlib, compress-level: 1
 INFO: This PostgreSQL instance was initialized with data block checksums. Data block corruption will be detected
 INFO: Database backup start
 INFO: wait for pg_backup_start()
@@ -692,7 +692,7 @@ backup_user@backup_host:~$ pg_probackup-16 backup \
         --instance=node \
         --stream \
         --compress-algorithm=zlib
-INFO: Backup start, pg_probackup version: 2.5.15, instance: node, backup ID: SCUN2C, backup mode: DELTA, wal mode: STREAM, remote: true, compress-algorithm: zlib, compress-level: 1
+INFO: Backup start, pg_probackup version: 2.5.16, instance: node, backup ID: SCUN2C, backup mode: DELTA, wal mode: STREAM, remote: true, compress-algorithm: zlib, compress-level: 1
 INFO: This PostgreSQL instance was initialized with data block checksums. Data block corruption will be detected
 INFO: Database backup start
 INFO: wait for pg_backup_start()
@@ -2989,7 +2989,7 @@ from-replica = false
 block-size = 8192
 xlog-block-size = 8192
 checksum-version = 1
-program-version = 2.5.15
+program-version = 2.5.16
 server-version = 16
 
 #Result backup info
@@ -3135,7 +3135,7 @@ pg_probackup show -B <replaceable>backup_dir</replaceable> --instance=<replaceab
                 "block-size": 8192,
                 "xlog-block-size": 8192,
                 "checksum-version": 1,
-                "program-version": "2.5.15",
+                "program-version": "2.5.16",
                 "server-version": "16",
                 "current-tli": 16,
                 "parent-tli": 2,
@@ -3294,7 +3294,7 @@ pg_probackup show -B <replaceable>backup_dir</replaceable> [--instance=<replacea
                         "block-size": 8192,
                         "xlog-block-size": 8192,
                         "checksum-version": 1,
-                        "program-version": "2.5.15",
+                        "program-version": "2.5.16",
                         "server-version": "16",
                         "current-tli": 1,
                         "parent-tli": 0,
@@ -3323,7 +3323,7 @@ pg_probackup show -B <replaceable>backup_dir</replaceable> [--instance=<replacea
                         "block-size": 8192,
                         "xlog-block-size": 8192,
                         "checksum-version": 1,
-                        "program-version": "2.5.15",
+                        "program-version": "2.5.16",
                         "server-version": "16",
                         "current-tli": 1,
                         "parent-tli": 1,
@@ -3352,7 +3352,7 @@ pg_probackup show -B <replaceable>backup_dir</replaceable> [--instance=<replacea
                         "block-size": 8192,
                         "xlog-block-size": 8192,
                         "checksum-version": 1,
-                        "program-version": "2.5.15",
+                        "program-version": "2.5.16",
                         "server-version": "16",
                         "current-tli": 1,
                         "parent-tli": 1,
@@ -3381,7 +3381,7 @@ pg_probackup show -B <replaceable>backup_dir</replaceable> [--instance=<replacea
                         "block-size": 8192,
                         "xlog-block-size": 8192,
                         "checksum-version": 1,
-                        "program-version": "2.5.15",
+                        "program-version": "2.5.16",
                         "server-version": "16",
                         "current-tli": 1,
                         "parent-tli": 1,
@@ -3409,7 +3409,7 @@ pg_probackup show -B <replaceable>backup_dir</replaceable> [--instance=<replacea
                         "block-size": 8192,
                         "xlog-block-size": 8192,
                         "checksum-version": 1,
-                        "program-version": "2.5.15",
+                        "program-version": "2.5.16",
                         "server-version": "16",
                         "current-tli": 1,
                         "parent-tli": 0,
