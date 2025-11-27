@@ -1781,7 +1781,9 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         # RESTORE
         node_restored = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'))
+            base_dir=os.path.join(self.module_name, self.fname, 'node_restored'),
+            port = node.port)
+        assert node_restored.port == node.port
         node_restored.cleanup()
         self.restore_node(
             backup_dir, 'node',
@@ -1799,7 +1801,6 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
             self.compare_pgdata(pgdata, pgdata_restored)
 
         # START RESTORED NODE
-        node_restored.port = node.port
         node_restored.slow_start()
 
     # @unittest.skip("skip")

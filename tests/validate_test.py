@@ -1711,7 +1711,7 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         wals_dir = os.path.join(backup_dir, 'wal', 'node')
         with open(os.path.join(wals_dir, walfile), "rb+", 0) as f:
             f.seek(9000)
-            f.write(b"b")
+            f.write(b"Because the answer is 42")
             f.flush()
             f.close
 
@@ -1722,20 +1722,17 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
                 'node',
                 backup_id,
                 options=[
-                    "--xid={0}".format(target_xid), "-j", "4"])
+                    f"--xid={target_xid}", "-j", "4"])
             self.assertEqual(
                 1, 0,
                 "Expecting Error because of wal segments corruption.\n"
-                " Output: {0} \n CMD: {1}".format(
-                    repr(self.output), self.cmd))
+                f" Output: {repr(self.output)} \n CMD: {self.cmd}")
         except ProbackupException as e:
             self.assertTrue(
                 'ERROR: Not enough WAL records to xid' in e.message and
                 'WARNING: Recovery can be done up to time' in e.message and
-                "ERROR: Not enough WAL records to xid {0}\n".format(
-                    target_xid),
-                '\n Unexpected Error Message: {0}\n CMD: {1}'.format(
-                    repr(e.message), self.cmd))
+                f"ERROR: Not enough WAL records to xid {target_xid}\n",
+                f'\n Unexpected Error Message: {repr(e.message)}\n CMD: {self.cmd}')
 
         self.assertEqual(
             'OK',
@@ -3396,6 +3393,10 @@ class ValidateTest(ProbackupTest, unittest.TestCase):
         os.mkdir(
             os.path.join(
                 backup_dir, 'backups', 'node', backup_id, 'database', wal_dir, 'archive_status'))
+
+        os.mkdir(
+            os.path.join(
+                backup_dir, 'backups', 'node', backup_id, 'database', wal_dir, 'summaries'))
 
         pg_control_path = os.path.join(
             backup_dir, 'backups', 'node',

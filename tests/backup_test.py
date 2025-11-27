@@ -3218,6 +3218,10 @@ class BackupTest(ProbackupTest, unittest.TestCase):
 
         replica.promote()
 
+        # Wait for replica to catch up with master before promoting
+        # to ensure 'backup' role is replicated
+        self.wait_until_replica_catch_with_master(node, replica)
+
         # PAGE
         output = self.backup_node(
             backup_dir, 'node', replica, backup_type='page',
