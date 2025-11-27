@@ -6,7 +6,7 @@
 `pg_probackup` is a utility to manage backup and recovery of PostgreSQL database clusters. It is designed to perform periodic backups of the PostgreSQL instance that enable you to restore the server in case of a failure.
 
 The utility is compatible with:
-* PostgreSQL 13, 14, 15, 16, 17
+* PostgreSQL 13, 14, 15, 16, 17, 18
 
 As compared to other backup solutions, `pg_probackup` offers the following benefits that can help you implement different backup strategies and deal with large amounts of data:
 * Incremental backup: page-level incremental backup allows you to save disk space, speed up backup and restore. With three different incremental modes, you can plan the backup strategy in accordance with your data flow.
@@ -79,7 +79,7 @@ For users of Postgres Pro products, commercial editions of pg_probackup are avai
 ## Building from source
 ### Linux
 
-To compile `pg_probackup`, you must have a PostgreSQL installation and raw source tree. Execute this in the module's directory:
+To compile `pg_probackup`, you must have a PostgreSQL installation and raw source tree. For versions under 18 execute this in the module's directory:
 
 ```shell
 make USE_PGXS=1 PG_CONFIG=<path_to_pg_config> top_srcdir=<path_to_PostgreSQL_source_tree>
@@ -90,6 +90,8 @@ The alternative way, without using the PGXS infrastructure, is to place `pg_prob
 ```shell
 cd <path_to_PostgreSQL_source_tree> && git clone https://github.com/postgrespro/pg_probackup contrib/pg_probackup && cd contrib/pg_probackup && make
 ```
+
+For version 18 you have to apply PostgreSQL core patch (patches/REL_18_STABLE_pg_probackup.patch) first and recompile and reinstall PostgreSQL
 
 ### Windows
 

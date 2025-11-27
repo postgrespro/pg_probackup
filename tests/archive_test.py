@@ -2437,6 +2437,9 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
 
         prefetch_line = 'Prefetched WAL segment {0} is invalid, cannot use it'.format(filename)
         restored_line = 'LOG:  restored log file "{0}" from archive'.format(filename)
+
+        self.wait_server_wal_exists(replica.data_dir, wal_dir, filename)
+
         tailer = tail_file(os.path.join(replica.logs_dir, 'postgresql.log'))
         tailer.wait(contains=prefetch_line)
         tailer.wait(contains=restored_line)
@@ -2482,6 +2485,9 @@ class ArchiveTest(ProbackupTest, unittest.TestCase):
         filename = filename.decode('utf-8')
 
         self.switch_wal_segment(node)
+
+        self.wait_instance_wal_exists(backup_dir, 'node',
+                                f"{filename}.gz")
 
         os.rename(
             os.path.join(wals_dir, filename),

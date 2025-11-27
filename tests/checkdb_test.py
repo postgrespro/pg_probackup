@@ -18,7 +18,7 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
 
         backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(self.module_name, self.fname),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 
@@ -227,7 +227,7 @@ class CheckdbTest(ProbackupTest, unittest.TestCase):
         """"""
         backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
-            base_dir="{0}/{1}/node".format(self.module_name, self.fname),
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
             set_replication=True,
             initdb_params=['--data-checksums'])
 

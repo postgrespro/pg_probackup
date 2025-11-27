@@ -1531,7 +1531,7 @@ validate_one_page(Page page, BlockNumber absolute_blkno,
 	/* Verify checksum */
 	page_st->checksum = pg_checksum_page(page, absolute_blkno);
 
-	if (checksum_version)
+	if (checksum_version && !skip_block_validation)
 	{
 		/* Checksums are enabled, so check them. */
 		if (page_st->checksum != ((PageHeader) page)->pd_checksum)

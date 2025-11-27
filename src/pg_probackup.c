@@ -687,7 +687,7 @@ main(int argc, char *argv[])
 	if (instance_config.pgdata != NULL &&
 	    (backup_subcmd != ARCHIVE_GET_CMD && backup_subcmd != CATCHUP_CMD) &&
 		!is_absolute_path(instance_config.pgdata))
-		elog(ERROR, "-D, --pgdata must be an absolute path");
+		elog(ERROR, "-D, --pgdata must be an absolute path: %s", instance_config.pgdata);
 
 #if PG_VERSION_NUM >= 110000
 	/* Check xlog-seg-size option */
@@ -980,13 +980,7 @@ main(int argc, char *argv[])
 						   wal_file_path, wal_file_name, batch_size, !no_validate_wal);
 			break;
 		case ADD_INSTANCE_CMD:
-			{
-				PGNodeInfo nodeInfo;
-				pgNodeInit(&nodeInfo);
-				instanceState->conn = pgut_connect(dbhost, dbport, dbname, dbuser);
-				check_server_version(instanceState->conn, &nodeInfo);
-				return do_add_instance(instanceState, &instance_config);
-			}
+			return do_add_instance(instanceState, &instance_config);
 		case DELETE_INSTANCE_CMD:
 			return do_delete_instance(instanceState);
 		case INIT_CMD:

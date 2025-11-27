@@ -1592,17 +1592,12 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
                 'select count(*) from t1').decode('utf-8').rstrip(),
             '1')
 
-    # @unittest.skip("skip")
-    # @unittest.expectedFailure
-    # This test will pass with Enterprise
-    # because it has checksums enabled by default
-    @unittest.skipIf(ProbackupTest.enterprise, 'skip')
     def test_incr_lsn_long_xact_1(self):
         """
         """
         node = self.make_simple_node(
             base_dir=os.path.join(self.module_name, self.fname, 'node'),
-            set_replication=True)
+            set_replication=True, initdb_params=['--no-data-checksums'])
 
         backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         self.init_pb(backup_dir)
@@ -2046,8 +2041,9 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
             base_dir=os.path.join(self.module_name, self.fname, 'node1'))
         node1.cleanup()
 
-        node2 = self.make_simple_node(
-            base_dir=os.path.join(self.module_name, self.fname, 'node2'))
+        node2 = self.make_empty_node(
+            base_dir=os.path.join(self.module_name, self.fname, 'node2'), port=node.port)
+        assert node2.port == node.port
         node2.cleanup()
 
         # restore some data into node2
@@ -2063,7 +2059,7 @@ class IncrRestoreTest(ProbackupTest, unittest.TestCase):
         pgdata1 = self.pgdata_content(node1.data_dir)
 
         # partial incremental restore backup into node2
-        node2.port = node.port
+        # node2.port = node.port
         node2.slow_start()
         node2.stop()
         self.restore_node(

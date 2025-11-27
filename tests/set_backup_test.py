@@ -339,6 +339,9 @@ class SetBackupTest(ProbackupTest, unittest.TestCase):
 
         node.pgbench_init(scale=2)
 
+        self.wait_instance_wal_exists(backup_dir, 'node',
+                                "000000010000000000000004")
+
         # Purge backups
         out = self.delete_expired(
             backup_dir, 'node',
