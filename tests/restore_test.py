@@ -3866,7 +3866,7 @@ class RestoreTest(ProbackupTest, unittest.TestCase):
         """
         Check that partially restored PostgreSQL instance cannot be started
         """
-        self._check_gdb_flag_or_skip_test
+        self._check_gdb_flag_or_skip_test()
         node = self.make_simple_node('node',
             set_replication=True,
             initdb_params=['--data-checksums'])

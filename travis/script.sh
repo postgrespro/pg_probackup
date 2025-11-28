@@ -21,6 +21,10 @@ if [ -z ${PGPROBACKUP_GDB+x} ]; then
 	PGPROBACKUP_GDB=ON
 fi
 
+if [ -z ${PG_PROBACKUP_PTRACK+x} ]; then
+	PG_PROBACKUP_PTRACK=ON
+fi
+
 echo "############### Testing:"
 echo PG_PROBACKUP_PARANOIA=${PG_PROBACKUP_PARANOIA}
 echo ARCHIVE_COMPRESSION=${ARCHIVE_COMPRESSION}
@@ -30,12 +34,20 @@ echo PGPROBACKUP_SSH_REMOTE=${PGPROBACKUP_SSH_REMOTE}
 echo PGPROBACKUP_GDB=${PGPROBACKUP_GDB}
 echo PG_PROBACKUP_PTRACK=${PG_PROBACKUP_PTRACK}
 
+#Run Full tests only if FULL_TESTS=ON e.g. for master branch
+if [ "$MODE" = "full" ] && [ -z ${FULL_TESTS} ]; then
+    exit
+fi
+
 if [ "$MODE" = "basic" ]; then
     export PG_PROBACKUP_TEST_BASIC=ON
     echo PG_PROBACKUP_TEST_BASIC=${PG_PROBACKUP_TEST_BASIC}
-    python3 -m unittest -v tests
-    python3 -m unittest -v tests.init_test
+    python3 -m pytest -v -n4 -k "test_basic"
+    python3 -m pytest -v -n4 -k "init_test.py"
+elif [ "$MODE" = "full" ]; then
+    echo PG_PROBACKUP_TEST_BASIC=${PG_PROBACKUP_TEST_BASIC}
+    python3 -m pytest -v -n4
 else
     echo PG_PROBACKUP_TEST_BASIC=${PG_PROBACKUP_TEST_BASIC}
-    python3 -m unittest -v tests.$MODE
+    python3 -m pytest -v -n4 -k "$MODE"
 fi
