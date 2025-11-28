@@ -214,6 +214,7 @@ class FalsePositive(ProbackupTest, unittest.TestCase):
         @y.sokolov: looks like this test should pass.
         So I commented 'expectedFailure'
         """
+        self._check_gdb_flag_or_skip_test()
         backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
         node = self.make_simple_node(
             base_dir=os.path.join(self.module_name, self.fname, 'node'),
