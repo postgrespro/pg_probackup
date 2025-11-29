@@ -33,13 +33,31 @@ do_init(CatalogState *catalogState)
 	}
 
 	/* create backup catalog root directory */
-	dir_create_dir(catalogState->catalog_path, DIR_PERMISSION, false);
+	results = dir_create_dir(catalogState->catalog_path, DIR_PERMISSION, false);
+	if(results != 0)
+	{
+		int errno_tmp = errno;
+		elog(ERROR, "cannot create backup catalog root directory \"%s\": %s",
+			catalogState->catalog_path, strerror(errno_tmp));
+	}
 
 	/* create backup catalog data directory */
-	dir_create_dir(catalogState->backup_subdir_path, DIR_PERMISSION, false);
+	results = dir_create_dir(catalogState->backup_subdir_path, DIR_PERMISSION, false);
+	if(results != 0)
+	{
+		int errno_tmp = errno;
+		elog(ERROR, "cannot create backup catalog data directory \"%s\": %s",
+			catalogState->backup_subdir_path, strerror(errno_tmp));
+	}
 
 	/* create backup catalog wal directory */
-	dir_create_dir(catalogState->wal_subdir_path, DIR_PERMISSION, false);
+	results = dir_create_dir(catalogState->wal_subdir_path, DIR_PERMISSION, false);
+	if(results != 0)
+	{
+		int errno_tmp = errno;
+		elog(ERROR, "cannot create backup catalog wal directory \"%s\": %s",
+			catalogState->wal_subdir_path, strerror(errno_tmp));
+	}
 
 	elog(INFO, "Backup catalog '%s' successfully initialized", catalogState->catalog_path);
 	return 0;
