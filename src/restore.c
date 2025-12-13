@@ -625,7 +625,8 @@ do_restore_or_validate(InstanceState *instanceState, time_t target_backup_id, pg
 			 */
 			validate_wal(dest_backup, instanceState->instance_wal_subdir_path, rt->target_time,
 						 rt->target_xid, rt->target_lsn,
-						 dest_backup->tli, instance_config.xlog_seg_size);
+						 rt->target_tli ? rt->target_tli : dest_backup->tli,
+						 instance_config.xlog_seg_size);
 		}
 		/* Orphanize every OK descendant of corrupted backup */
 		else

@@ -13,6 +13,7 @@
 #include "pg_probackup.h"
 
 #include "access/transam.h"
+#include "access/timeline.h"
 #include "catalog/pg_control.h"
 #include "commands/dbcommands_xlog.h"
 #include "catalog/storage_xlog.h"
@@ -437,11 +438,11 @@ validate_wal(pgBackup *backup, const char *archivedir,
 		join_path_components(backup_database_dir, backup->root_dir, DATABASE_DIR);
 		join_path_components(backup_xlog_path, backup_database_dir, PG_XLOG_DIR);
 
-		validate_backup_wal_from_start_to_stop(backup, backup_xlog_path, tli,
+		validate_backup_wal_from_start_to_stop(backup, backup_xlog_path, backup->tli,
 											   wal_seg_size);
 	}
 	else
-		validate_backup_wal_from_start_to_stop(backup, (char *) archivedir, tli,
+		validate_backup_wal_from_start_to_stop(backup, (char *) archivedir, backup->tli,
 											   wal_seg_size);
 
 	if (backup->status == BACKUP_STATUS_CORRUPT)
@@ -486,10 +487,66 @@ validate_wal(pgBackup *backup, const char *archivedir,
 		|| (XRecOffIsValid(target_lsn) && last_rec.rec_lsn >= target_lsn))
 		all_wal = true;
 
-	all_wal = all_wal ||
-		RunXLogThreads(archivedir, target_time, target_xid, target_lsn,
-					   tli, wal_seg_size, backup->stop_lsn,
-					   InvalidXLogRecPtr, true, validateXLogRecord, &last_rec, true);
+	/*
+	 * If target timeline differs from backup timeline, we need to validate
+	 * WAL across multiple timelines. Read WAL on backup's timeline up to
+	 * the switchpoint, then continue on target timeline.
+	 */
+	if (backup->tli != tli)
+	{
+		parray *timelines;
+		XLogRecPtr switchpoint = InvalidXLogRecPtr;
+		int i;
+
+		/* Read timeline history to find switchpoint */
+		timelines = read_timeline_history(archivedir, tli, false);
+		if (timelines)
+		{
+			for (i = 0; i < parray_num(timelines); i++)
+			{
+				TimeLineHistoryEntry *entry = parray_get(timelines, i);
+				if (entry->tli == backup->tli)
+				{
+					switchpoint = entry->end;
+					break;
+				}
+			}
+			/* Cleanup timeline history */
+			parray_walk(timelines, pg_free);
+			parray_free(timelines);
+		}
+
+		if (switchpoint != InvalidXLogRecPtr && backup->stop_lsn < switchpoint)
+		{
+			/* First, validate WAL from stop_lsn to switchpoint on backup's timeline */
+			all_wal = RunXLogThreads(archivedir, 0, InvalidTransactionId,
+									 InvalidXLogRecPtr, backup->tli, wal_seg_size,
+									 backup->stop_lsn, switchpoint,
+									 true, validateXLogRecord, &last_rec, false);
+			if (all_wal)
+			{
+				/* Then validate from switchpoint to target on target timeline */
+				all_wal = RunXLogThreads(archivedir, target_time, target_xid, target_lsn,
+										 tli, wal_seg_size, switchpoint,
+										 InvalidXLogRecPtr, true, validateXLogRecord, &last_rec, true);
+			}
+		}
+		else
+		{
+			/* switchpoint not found or stop_lsn >= switchpoint, use single timeline */
+			all_wal = RunXLogThreads(archivedir, target_time, target_xid, target_lsn,
+									 tli, wal_seg_size, backup->stop_lsn,
+									 InvalidXLogRecPtr, true, validateXLogRecord, &last_rec, true);
+		}
+	}
+	else
+	{
+		/* Same timeline - simple case */
+		all_wal = all_wal ||
+			RunXLogThreads(archivedir, target_time, target_xid, target_lsn,
+						   tli, wal_seg_size, backup->stop_lsn,
+						   InvalidXLogRecPtr, true, validateXLogRecord, &last_rec, true);
+	}
 	if (last_rec.rec_time > 0)
 		time2iso(last_timestamp, lengthof(last_timestamp),
 				 timestamptz_to_time_t(last_rec.rec_time), false);
