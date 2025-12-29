@@ -153,7 +153,8 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 	 */
 	if (current.backup_mode == BACKUP_MODE_DIFF_PAGE ||
 		current.backup_mode == BACKUP_MODE_DIFF_PTRACK ||
-		current.backup_mode == BACKUP_MODE_DIFF_DELTA)
+		current.backup_mode == BACKUP_MODE_DIFF_DELTA ||
+		current.backup_mode == BACKUP_MODE_DIFF_SUMMARIZE)
 	{
 		/* get list of backups already taken */
 		backup_list = catalog_get_backup_list(instanceState, INVALID_BACKUP_ID);
@@ -229,6 +230,34 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 						(uint32) (prev_backup->start_lsn >> 32),
 						(uint32) (prev_backup->start_lsn));
 		}
+	}
+
+	/*
+	 * For SUMMARIZE backup mode, verify that WAL summarize is enabled
+	 * and wait for the summarizer to catch up to the required LSN.
+	 *
+	 * We need to wait for WAL summary up to prev_backup->start_lsn to be
+	 * available before starting the incremental backup. If the summarizer
+	 * hasn't caught up within the timeout period, the backup will fail.
+	 */
+	if (current.backup_mode == BACKUP_MODE_DIFF_SUMMARIZE)
+	{
+		if (!pg_is_walsummary_enabled(backup_conn))
+			elog(ERROR, "WAL summarize backup mode requires summarize_wal to be enabled");
+
+		/*
+		 * Wait for WAL summarizer to catch up to the previous backup start LSN.
+		 * This ensures that all WAL summary files needed for this incremental
+		 * backup are available before we start.
+		 *
+		 * If the summarizer hasn't caught up within 60 seconds, the backup
+		 * will fail with an error, preventing a backup that would miss data.
+		 */
+		if (!wait_wal_summarization(backup_conn, prev_backup->start_lsn))
+			elog(ERROR, "WAL summarizer did not catch up to %X/%X within timeout period. "
+					"Incremental backup cannot proceed without complete WAL summaries.",
+					(uint32) (prev_backup->start_lsn >> 32),
+					(uint32) (prev_backup->start_lsn));
 	}
 
 	/* For incremental backup check that start_lsn is not from the past
@@ -357,7 +386,8 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 	 */
 
 	if (current.backup_mode == BACKUP_MODE_DIFF_PAGE ||
-		current.backup_mode == BACKUP_MODE_DIFF_PTRACK)
+		current.backup_mode == BACKUP_MODE_DIFF_PTRACK ||
+		current.backup_mode == BACKUP_MODE_DIFF_SUMMARIZE)
 	{
 		bool pagemap_isok = true;
 
@@ -385,6 +415,16 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 									   nodeInfo->ptrack_schema,
 									   nodeInfo->ptrack_version_num,
 									   prev_backup_start_lsn);
+		}
+		else if (current.backup_mode == BACKUP_MODE_DIFF_SUMMARIZE)
+		{
+			/*
+			 * Build the page map from WAL summary information.
+			 */
+			make_pagemap_from_walsummary(backup_files_list, backup_conn,
+										  prev_backup->start_lsn,
+										  current.start_lsn,
+										  current.tli);
 		}
 
 		time(&end_time);

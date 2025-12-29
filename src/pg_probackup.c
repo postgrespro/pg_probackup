@@ -843,8 +843,9 @@ main(int argc, char *argv[])
 			elog(ERROR, "No backup mode specified.\n"
 				 "Please specify it either using environment variable BACKUP_MODE or\n"
 				 "command line option --backup-mode (-b)");
-		if (current.backup_mode != BACKUP_MODE_FULL && current.backup_mode != BACKUP_MODE_DIFF_PTRACK && current.backup_mode != BACKUP_MODE_DIFF_DELTA)
-			elog(ERROR, "Only \"FULL\", \"PTRACK\" and \"DELTA\" modes are supported with the \"%s\" command", get_subcmd_name(backup_subcmd));
+		if (current.backup_mode != BACKUP_MODE_FULL && current.backup_mode != BACKUP_MODE_DIFF_PTRACK &&
+			current.backup_mode != BACKUP_MODE_DIFF_DELTA && current.backup_mode != BACKUP_MODE_DIFF_SUMMARIZE)
+			elog(ERROR, "Only \"FULL\", \"PTRACK\", \"DELTA\" and \"SUMMARIZE\" modes are supported with the \"%s\" command", get_subcmd_name(backup_subcmd));
 		if (!stream_wal)
 			elog(INFO, "--stream is required, forcing stream mode");
 		current.stream = stream_wal = true;

@@ -111,7 +111,8 @@ pgBackupValidate(pgBackup *backup, pgRestoreParams *params)
 	if (backup->backup_mode != BACKUP_MODE_FULL &&
 		backup->backup_mode != BACKUP_MODE_DIFF_PAGE &&
 		backup->backup_mode != BACKUP_MODE_DIFF_PTRACK &&
-		backup->backup_mode != BACKUP_MODE_DIFF_DELTA)
+		backup->backup_mode != BACKUP_MODE_DIFF_DELTA &&
+		backup->backup_mode != BACKUP_MODE_DIFF_SUMMARIZE)
 		elog(WARNING, "Invalid backup_mode of backup %s", backup_id_of(backup));
 
 	join_path_components(external_prefix, backup->root_dir, EXTERNAL_DIR);

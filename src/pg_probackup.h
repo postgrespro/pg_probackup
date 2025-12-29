@@ -341,6 +341,7 @@ typedef enum BackupMode
 	BACKUP_MODE_DIFF_PAGE,		/* incremental page backup */
 	BACKUP_MODE_DIFF_PTRACK,	/* incremental page backup with ptrack system */
 	BACKUP_MODE_DIFF_DELTA,		/* incremental page backup with lsn comparison */
+	BACKUP_MODE_DIFF_SUMMARIZE,	/* incremental page backup using PostgreSQL native WAL summarize */
 	BACKUP_MODE_FULL			/* full backup */
 } BackupMode;
 
@@ -1269,6 +1270,14 @@ extern bool pg_is_ptrack_enabled(PGconn *backup_conn, int ptrack_version_num);
 extern XLogRecPtr get_last_ptrack_lsn(PGconn *backup_conn, PGNodeInfo *nodeInfo);
 extern parray * pg_ptrack_get_pagemapset(PGconn *backup_conn, const char *ptrack_schema,
 										 int ptrack_version_num, XLogRecPtr lsn);
+
+/* in walsummary.c */
+extern void make_pagemap_from_walsummary(parray* files, PGconn* backup_conn,
+										  XLogRecPtr start_lsn, XLogRecPtr end_lsn,
+										  TimeLineID tli);
+extern bool pg_is_walsummary_enabled(PGconn *backup_conn);
+extern XLogRecPtr get_walsummary_summarized_lsn(PGconn *backup_conn);
+extern bool wait_wal_summarization(PGconn *backup_conn, XLogRecPtr target_lsn);
 
 /* open local file to writing */
 extern FILE* open_local_file_rw(const char *to_fullpath, char **out_buf, uint32 buf_size);

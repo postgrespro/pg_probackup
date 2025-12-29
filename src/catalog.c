@@ -21,7 +21,7 @@
 
 static pgBackup* get_closest_backup(timelineInfo *tlinfo);
 static pgBackup* get_oldest_backup(timelineInfo *tlinfo);
-static const char *backupModes[] = {"", "PAGE", "PTRACK", "DELTA", "FULL"};
+static const char *backupModes[] = {"", "PAGE", "PTRACK", "DELTA", "SUMMARIZE", "FULL"};
 static pgBackup *readBackupControlFile(const char *path);
 static int create_backup_dir(pgBackup *backup, const char *backup_instance_path);
 
@@ -2839,6 +2839,8 @@ parse_backup_mode(const char *value)
 		return BACKUP_MODE_DIFF_PTRACK;
 	else if (len > 0 && pg_strncasecmp("delta", v, len) == 0)
 		return BACKUP_MODE_DIFF_DELTA;
+	else if (len > 0 && pg_strncasecmp("summarize", v, len) == 0)
+		return BACKUP_MODE_DIFF_SUMMARIZE;
 
 	/* Backup mode is invalid, so leave with an error */
 	elog(ERROR, "Invalid backup-mode \"%s\"", value);
@@ -2858,6 +2860,8 @@ deparse_backup_mode(BackupMode mode)
 			return "ptrack";
 		case BACKUP_MODE_DIFF_DELTA:
 			return "delta";
+		case BACKUP_MODE_DIFF_SUMMARIZE:
+			return "summarize";
 		case BACKUP_MODE_INVALID:
 			return "invalid";
 	}

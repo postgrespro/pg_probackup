@@ -118,7 +118,8 @@ catchup_preflight_checks(PGNodeInfo *source_node_info, PGconn *source_conn,
 	if (dir_is_empty(dest_pgdata, FIO_LOCAL_HOST))
 	{
 		if (current.backup_mode == BACKUP_MODE_DIFF_PTRACK ||
-			 current.backup_mode == BACKUP_MODE_DIFF_DELTA)
+			 current.backup_mode == BACKUP_MODE_DIFF_DELTA ||
+			 current.backup_mode == BACKUP_MODE_DIFF_SUMMARIZE)
 			elog(ERROR, "\"%s\" is empty, but incremental catchup mode requested.",
 				dest_pgdata);
 	}
@@ -191,6 +192,14 @@ catchup_preflight_checks(PGNodeInfo *source_node_info, PGconn *source_conn,
 					"Upgrade ptrack to version >= 2");
 		else if (!source_node_info->is_ptrack_enabled)
 			elog(ERROR, "Ptrack is disabled");
+	}
+
+	/* check WAL summarize support */
+	if (current.backup_mode == BACKUP_MODE_DIFF_SUMMARIZE)
+	{
+		PGconn *conn = pgdata_basic_setup(instance_config.conn_opt, source_node_info);
+		if (!pg_is_walsummary_enabled(conn))
+			elog(ERROR, "WAL summarize backup mode requires summarize_wal to be enabled in PostgreSQL 17+");
 	}
 
 	if (current.from_replica && exclusive_backup)
@@ -693,6 +702,22 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 						(uint32) (dest_redo.lsn));
 	}
 
+	/*
+	 * Make sure that sync point is within WAL summarize tracking range
+	 */
+	if (current.backup_mode == BACKUP_MODE_DIFF_SUMMARIZE)
+	{
+		XLogRecPtr	summarized_lsn = get_walsummary_summarized_lsn(source_conn);
+
+		if (summarized_lsn == InvalidXLogRecPtr)
+			elog(ERROR, "WAL summarizer state is not available");
+		if (summarized_lsn < dest_redo.lsn)
+			elog(WARNING, "WAL summarizer has only reached %X/%X, which is before destination checkpoint LSN %X/%X. "
+						"Some changes may be missed.",
+						(uint32) (summarized_lsn >> 32), (uint32) (summarized_lsn),
+						(uint32) (dest_redo.lsn >> 32), (uint32) (dest_redo.lsn));
+	}
+
 	{
 		char		label[1024];
 		/* notify start of backup to PostgreSQL server */
@@ -796,6 +821,22 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 									source_node_info.ptrack_schema,
 									source_node_info.ptrack_version_num,
 									dest_redo.lsn);
+		time(&end_time);
+		elog(INFO, "Pagemap successfully extracted, time elapsed: %.0f sec",
+			 difftime(end_time, start_time));
+	}
+
+	/* Build page mapping in SUMMARIZE mode */
+	if (current.backup_mode == BACKUP_MODE_DIFF_SUMMARIZE)
+	{
+		time(&start_time);
+		elog(INFO, "Extracting pagemap of changed blocks from WAL summary");
+
+		/* Build the page map from WAL summary information */
+		make_pagemap_from_walsummary(source_filelist, source_conn,
+									  dest_redo.lsn,
+									  current.start_lsn,
+									  current.tli);
 		time(&end_time);
 		elog(INFO, "Pagemap successfully extracted, time elapsed: %.0f sec",
 			 difftime(end_time, start_time));
