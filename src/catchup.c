@@ -1123,7 +1123,7 @@ do_catchup(const char *source_pgdata, const char *dest_pgdata, int num_threads, 
 	 */
 	if (current.from_replica && !exclusive_backup)
 	{
-		set_min_recovery_point(source_pg_control_file, dest_pgdata, current.stop_lsn);
+		set_min_recovery_point(source_pg_control_file, source_pgdata, dest_pgdata, current.stop_lsn);
 	}
 
 	/* close ssh session in main thread */
