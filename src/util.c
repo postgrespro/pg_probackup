@@ -396,7 +396,7 @@ get_redo(const char *pgdata_path, fio_location pgdata_location, RedoParams *redo
  * 'as-is' is not to be trusted.
  */
 void
-set_min_recovery_point(pgFile *file, const char *backup_path,
+set_min_recovery_point(pgFile *file, const char *source_pgdata, const char *backup_path,
 					   XLogRecPtr stop_backup_lsn)
 {
 	ControlFileData ControlFile;
@@ -405,7 +405,7 @@ set_min_recovery_point(pgFile *file, const char *backup_path,
 	char		fullpath[MAXPGPATH];
 
 	/* First fetch file content */
-	buffer = slurpFile(instance_config.pgdata, XLOG_CONTROL_FILE, &size, false, FIO_DB_HOST);
+	buffer = slurpFile(source_pgdata, XLOG_CONTROL_FILE, &size, false, FIO_DB_HOST);
 	digestControlFile(&ControlFile, buffer, size);
 
 	elog(LOG, "Current minRecPoint %X/%X",

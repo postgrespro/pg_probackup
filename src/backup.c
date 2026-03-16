@@ -557,7 +557,7 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 			elog(ERROR, "Failed to find file \"%s\" in backup filelist.",
 							XLOG_CONTROL_FILE);
 
-		set_min_recovery_point(pg_control, current.database_dir, current.stop_lsn);
+		set_min_recovery_point(pg_control, instance_config.pgdata, current.database_dir, current.stop_lsn);
 	}
 
 	/* close and sync page header map */
