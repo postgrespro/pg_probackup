@@ -4396,3 +4396,116 @@ class PtrackTest(ProbackupTest, unittest.TestCase):
 
         # make sure that backup size is exactly the same
         self.assertEqual(delta_bytes, ptrack_bytes)
+
+    # @unittest.skip("skip")
+    def test_compress_ptrack_map(self):
+        """
+        make node, make full backup, get ptrack.map size"
+        "make full backup with compression, check that size of ptrack.map is smaller
+        """
+
+        node = self.make_simple_node(
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
+            set_replication=True,
+            ptrack_enable=True,
+            initdb_params=['--data-checksums'])
+
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
+        self.init_pb(backup_dir)
+
+        self.add_instance(backup_dir, 'node', node)
+        node.slow_start()
+        node.safe_psql(
+            "postgres",
+            "CREATE EXTENSION ptrack")
+
+        node.safe_psql(
+            "postgres",
+            "create extension bloom; create sequence t_seq; "
+            "create table t_heap "
+            "as select nextval('t_seq')::int as id, md5(i::text) as text, "
+            "md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(0,2500) i")
+
+        self.backup_node(backup_dir, 'node', node, options=['--stream'])
+
+        node.safe_psql(
+            'postgres',
+            "update t_heap set id = nextval('t_seq'), text = md5(text), "
+            "tsvector = md5(repeat(tsvector::text, 100))::tsvector")
+
+        node.safe_psql("postgres", "checkpoint")
+
+        ptrack_map_uncompressed = os.path.join(node.data_dir, 'global', 'ptrack.map')
+
+        full_compressed_backup_id = self.backup_node(
+            backup_dir, 'node', node, options=['--stream', '--compress-algorithm=zlib', '--compress-level=1'])
+
+        full_compressed_backup_dir = os.path.join(backup_dir, "backups", "node", full_compressed_backup_id)
+        ptrack_map_compressed = os.path.join(full_compressed_backup_dir, "database","global", "ptrack.map")
+
+        ptrack_map_uncompressed_size = os.path.getsize(ptrack_map_uncompressed)
+        ptrack_map_compressed_size = os.path.getsize(ptrack_map_compressed)
+
+        self.assertGreater(ptrack_map_uncompressed_size, ptrack_map_compressed_size)
+
+    # @unittest.skip("skip")
+    def test_decompress_ptrack_map(self):
+        """
+        "make node, make full backup, make changes, get ptrack.map size"
+        "make full backup with compression, restore, validate backup and make sure that ptrack.map size is the same"
+        """
+        
+        node = self.make_simple_node(
+            base_dir=os.path.join(self.module_name, self.fname, 'node'),
+            set_replication=True,
+            ptrack_enable=True,
+            initdb_params=['--data-checksums'])
+
+        backup_dir = os.path.join(self.tmp_path, self.module_name, self.fname, 'backup')
+        self.init_pb(backup_dir)
+
+        self.add_instance(backup_dir, 'node', node)
+        node.slow_start()
+        node.safe_psql(
+            "postgres",
+            "CREATE EXTENSION ptrack")
+
+        node.safe_psql(
+            "postgres",
+            "create extension bloom; create sequence t_seq; "
+            "create table t_heap "
+            "as select nextval('t_seq')::int as id, md5(i::text) as text, "
+            "md5(repeat(i::text,10))::tsvector as tsvector "
+            "from generate_series(0,2500) i")
+        
+        self.backup_node(backup_dir, 'node', node, options=['--stream'])
+
+        node.safe_psql(
+            'postgres',
+            "update t_heap set id = nextval('t_seq'), text = md5(text), "
+            "tsvector = md5(repeat(tsvector::text, 100))::tsvector")
+
+        node.safe_psql("postgres", "checkpoint")
+
+        ptrack_map_uncompressed_dir = os.path.join(node.data_dir, 'global', 'ptrack.map')
+
+        full_compressed_backup_id = self.backup_node(
+            backup_dir, 'node', node, options=['--stream', '--compress-algorithm=zlib', '--compress-level=1'])
+
+        self.validate_pb(backup_dir, 'node', backup_id=full_compressed_backup_id)
+
+        restored_node = self.make_simple_node(
+            base_dir=os.path.join(self.module_name, self.fname, 'restored_node')
+        )
+
+        restored_node.cleanup()
+        self.restore_node(backup_dir, 'node', restored_node, backup_id=full_compressed_backup_id)
+        ptrack_map_restored = os.path.join(restored_node.data_dir, 'global', 'ptrack.map')
+
+        ptrack_map_uncompressed_size = os.path.getsize(ptrack_map_uncompressed_dir)
+        ptrack_map_restored_size = os.path.getsize(ptrack_map_restored)
+
+        self.assertEqual(ptrack_map_uncompressed_size, ptrack_map_restored_size)
+
+

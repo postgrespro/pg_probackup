@@ -794,6 +794,14 @@ backup_non_data_file(pgFile *file, pgFile *prev_file,
 		return;
 	}
 
+	/* special treatment for global/ptrack.map */
+	if (strcmp(file->name, "ptrack.map") == 0)
+	{
+		copy_ptrackmap_file(from_fullpath, FIO_DB_HOST,
+							to_fullpath, FIO_BACKUP_HOST, file);
+		return;
+	}
+
 	/*
 	 * If non-data file exists in previous backup
 	 * and its mtime is less than parent backup start time ... */
@@ -1382,6 +1390,49 @@ restore_non_data_file(parray *parent_chain, pgBackup *dest_backup,
 	if (fclose(in) != 0)
 		elog(ERROR, "Cannot close file \"%s\": %s", from_fullpath,
 			strerror(errno));
+
+
+	/* We have to decompress ptrack.map */
+	if (tmp_backup->compress_alg > NONE_COMPRESS && strcmp(tmp_file->name, "ptrack.map") == 0)
+	{	
+		/* do decompression  */
+		char *buffer;
+		size_t size;
+		
+		const char *errormsg = NULL;
+		buffer = slurpFile(to_fullpath, "", &size, false, FIO_DB_HOST);
+
+		if (buffer == NULL)
+			elog(ERROR, "Failed to allocate buffer during ptrack.map decompression");
+
+		size_t decompressed_size = tmp_file->size * 2;
+  		void* decompressed = pg_malloc(decompressed_size);
+
+		if (decompressed == NULL)
+  		{
+			pg_free(buffer);
+			elog(ERROR, "Failed to allocate decompressed buffer during ptrack.map decompression");
+  		}
+
+		int rc = do_decompress(decompressed, decompressed_size, buffer, size, tmp_backup->compress_alg, &errormsg);
+
+		/* decompression didn't worked */
+		if (rc <= 0 || errormsg != NULL)
+			elog(WARNING, "An error occurred during decompression of ptrack.map: %s", errormsg);
+		else
+			decompressed_size = rc;
+
+  		writePtrackMap(decompressed, decompressed_size, to_fullpath, FIO_DB_HOST);
+
+		/* Check CRC for decompressed data */
+		pg_crc32 file_crc = pgFileGetCRC(to_fullpath, true, true);
+
+		if (file_crc != tmp_file->crc)
+			elog(WARNING, "CRC mismatch for uncompressed ptrack.map during decompression");
+
+  		pg_free(decompressed);
+  		pg_free(buffer);
+	}
 
 	return tmp_file->write_size;
 }

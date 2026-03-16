@@ -345,7 +345,7 @@ pgBackupValidateFiles(void *arg)
 								   arguments->backup_version <= 20021 ||
 								   arguments->backup_version >= 20025,
 								   false);
-			if (crc != file->crc)
+			if (strcmp(file->name, "ptrack.map") != 0 && crc != file->crc)
 			{
 				elog(WARNING, "Invalid CRC of backup file \"%s\" : %X. Expected %X",
 						file_fullpath, crc, file->crc);

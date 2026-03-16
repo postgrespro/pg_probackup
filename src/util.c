@@ -460,6 +460,137 @@ copy_pgcontrol_file(const char *from_fullpath, fio_location from_location,
 }
 
 /*
+ * Write page_map_entry to ptrackMap
+ */
+void
+writePtrackMap(const char *ptrackMap, const size_t ptrackmap_size, 
+				const char *path, fio_location location)
+{
+	int			fd;
+	char       *buffer = NULL;
+	char       *tmp_path = NULL;
+	
+	tmp_path = psprintf("%s.tmp",path);
+
+	/* copy ptrackMap */
+	buffer = pg_malloc0(ptrackmap_size);
+
+	if (buffer == NULL)
+	{
+		pfree(tmp_path);
+		elog(ERROR, "Failed to allocate buffer during ptrack.map write");
+	}
+
+	memcpy(buffer, ptrackMap, ptrackmap_size);
+
+	/* Write ptrackMap */
+	fd = fio_open(tmp_path,
+				  O_RDWR | O_CREAT | O_TRUNC | PG_BINARY, location);
+
+	if (fd < 0) {
+		pfree(tmp_path);
+		pg_free(buffer);
+		elog(ERROR, "Failed to open temp file: %s", tmp_path);
+	}
+
+	if (fio_write(fd, buffer, ptrackmap_size) != ptrackmap_size) {
+		fio_close(fd);
+		fio_unlink(tmp_path, location);
+		pfree(tmp_path);
+		pg_free(buffer);
+		elog(ERROR, "Failed to write temp file: %s", tmp_path);
+	}
+
+	if (fio_flush(fd) != 0) {
+		fio_close(fd);
+		fio_unlink(tmp_path, location);
+		pg_free(buffer);
+		pfree(tmp_path);
+		elog(ERROR, "Failed to sync temp file: %s", path);
+	}
+
+	fio_close(fd);
+
+	if (fio_rename(tmp_path, path, location) != 0){
+		fio_unlink(tmp_path, location);
+		pg_free(buffer);
+		pfree(tmp_path);
+		elog(ERROR, "Failed to rename temp file to: %s", path);
+	}
+
+	pg_free(buffer);
+	pfree(tmp_path);
+}
+
+/*
+* Copy ptrack.map file to backup. We do apply compression to this file.
+*/
+void copy_ptrackmap_file(const char *from_fullpath, fio_location from_location,
+                         const char *to_fullpath, fio_location to_location,
+                         pgFile *file) {
+  char *buffer;
+  size_t size;
+
+  bool missing_ok = true;
+  bool use_crc32c = true;
+
+  const char *errormsg = NULL;
+
+  buffer = slurpFile(from_fullpath, "", &size, false, from_location);
+
+  if (buffer == NULL)
+	elog(ERROR, "Failed to allocate buffer during ptrack.map copy");
+
+  /* Calculate CRC of uncompressed map first */
+  file->crc = pgFileGetCRC(from_fullpath, use_crc32c, missing_ok);
+
+  size_t compressed_size = (current.compress_alg == ZLIB_COMPRESS)? compressBound(size) : size;
+  void *compressed = pg_malloc(compressed_size);
+
+  if (compressed == NULL)
+  {
+	pg_free(buffer);
+	elog(ERROR, "Failed to allocate compressed buffer during ptrack.map copy");
+  }
+
+  int rc = do_compress(compressed, compressed_size, buffer, size,
+                       current.compress_alg, current.compress_level, &errormsg);
+
+  /* Something went wrong and errormsg was assigned, throw a warning */
+  if (rc < 0 && errormsg != NULL)
+    elog(WARNING, "An error occurred during compression of ptrack.map: %s",
+         errormsg);
+
+  bool is_compressed = false;
+
+  /* compression didn`t worked */
+  if (rc <= 0 || rc >= size) {
+    /* Do not compress ptrack.map */
+    memcpy(compressed, buffer, size);
+  } else {
+	is_compressed = true;
+    compressed_size = rc;
+  }
+
+  writePtrackMap(compressed, compressed_size, to_fullpath, to_location);
+
+  file->size = compressed_size;
+  file->read_size = size;
+  file->write_size = compressed_size;
+  file->uncompressed_size = size;
+
+  if (is_compressed){
+    file->compress_alg = current.compress_alg;
+  }
+  else {
+	file->compress_alg = NONE_COMPRESS;
+  }
+
+  pg_free(compressed);
+  pg_free(buffer);
+}
+
+/*
  * Parse string representation of the server version.
  */
 uint32
