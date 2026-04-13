@@ -9,5 +9,5 @@ testgres==1.12.0
 allure-pytest
 deprecation
 pexpect
-pytest==7.4.3
+pytest==9.0.3
 pytest-xdist
