@@ -236,9 +236,9 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 	 * For SUMMARIZE backup mode, verify that WAL summarize is enabled
 	 * and wait for the summarizer to catch up to the required LSN.
 	 *
-	 * We need to wait for WAL summary up to prev_backup->start_lsn to be
-	 * available before starting the incremental backup. If the summarizer
-	 * hasn't caught up within the timeout period, the backup will fail.
+	 * We must wait for WAL summaries up to current.start_lsn (the end of the
+	 * incremental range) to be available before building the pagemap. If the
+	 * summarizer hasn't caught up within the timeout period, the backup fails.
 	 */
 	if (current.backup_mode == BACKUP_MODE_DIFF_SUMMARIZE)
 	{
@@ -246,18 +246,22 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 			elog(ERROR, "WAL summarize backup mode requires summarize_wal to be enabled");
 
 		/*
-		 * Wait for WAL summarizer to catch up to the previous backup start LSN.
-		 * This ensures that all WAL summary files needed for this incremental
-		 * backup are available before we start.
+		 * Wait for the WAL summarizer to catch up to the START LSN of THIS
+		 * backup (current.start_lsn) -- the end of the incremental range
+		 * [prev_backup->start_lsn, current.start_lsn] the pagemap is built from.
+		 * Waiting for the parent's start_lsn would be a no-op (it is in the
+		 * past) and would not guarantee that the recent WAL is summarized.
+		 * Mirrors PostgreSQL's WaitForWalSummarization(backup start LSN).
 		 *
-		 * If the summarizer hasn't caught up within 60 seconds, the backup
-		 * will fail with an error, preventing a backup that would miss data.
+		 * If the summarizer hasn't caught up within the timeout, fail rather
+		 * than produce a backup that silently misses recent changes.
 		 */
-		if (!wait_wal_summarization(backup_conn, prev_backup->start_lsn))
-			elog(ERROR, "WAL summarizer did not catch up to %X/%X within timeout period. "
-					"Incremental backup cannot proceed without complete WAL summaries.",
-					(uint32) (prev_backup->start_lsn >> 32),
-					(uint32) (prev_backup->start_lsn));
+		if (!wait_wal_summarization(backup_conn, current.start_lsn))
+			elog(ERROR, "WAL summarizer did not catch up to backup start LSN %X/%X "
+					"within timeout period. Incremental backup cannot proceed "
+					"without complete WAL summaries.",
+					(uint32) (current.start_lsn >> 32),
+					(uint32) (current.start_lsn));
 	}
 
 	/* For incremental backup check that start_lsn is not from the past
