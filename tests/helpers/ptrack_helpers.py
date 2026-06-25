@@ -1802,7 +1802,8 @@ class ProbackupTest(object):
         " TAKE IT AFTER CHECKPOINT or BACKUP"""
         dirs_to_ignore = [
             'pg_xlog', 'pg_wal', 'pg_log',
-            'pg_stat_tmp', 'pg_subtrans', 'pg_notify'
+            'pg_stat_tmp', 'pg_subtrans', 'pg_notify',
+            'ptrack'  # global/ptrack delta files differ across nodes by design
         ]
         files_to_ignore = [
             'postmaster.pid', 'postmaster.opts',
