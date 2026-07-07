@@ -334,7 +334,7 @@ help_backup(void)
 	printf(_("                 [--ttl=interval] [--expire-time=timestamp] [--note=text]\n\n"));
 
 	printf(_("  -B, --backup-path=backup-dir     location of the backup storage area\n"));
-	printf(_("  -b, --backup-mode=backup-mode    backup mode=FULL|PAGE|DELTA|PTRACK\n"));
+	printf(_("  -b, --backup-mode=backup-mode    backup mode=FULL|PAGE|DELTA|PTRACK|SUMMARIZE\n"));
 	printf(_("      --instance=instance-name     name of the instance\n"));
 	printf(_("  -D, --pgdata=pgdata-path         location of the database storage area\n"));
 	printf(_("  -C, --smooth-checkpoint          do smooth checkpoint before backup\n"));
@@ -1183,7 +1183,7 @@ help_catchup(void)
 	printf(_("                 [--dry-run]\n"));
 	printf(_("                 [--help]\n\n"));
 
-	printf(_("  -b, --backup-mode=catchup-mode   catchup mode=FULL|DELTA|PTRACK\n"));
+	printf(_("  -b, --backup-mode=catchup-mode   catchup mode=FULL|DELTA|PTRACK|SUMMARIZE\n"));
 	printf(_("      --stream                     stream the transaction log (only supported mode)\n"));
 	printf(_("  -S, --slot=SLOTNAME              replication slot to use\n"));
 	printf(_("      --temp-slot                  use temporary replication slot\n"));

@@ -329,8 +329,10 @@ prepare_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 					return PageIsOk;
 
 				case PAGE_IS_VALID:
-					/* in DELTA or PTRACK modes we must compare lsn */
-					if (backup_mode == BACKUP_MODE_DIFF_DELTA || backup_mode == BACKUP_MODE_DIFF_PTRACK)
+					/* in DELTA, PTRACK or SUMMARIZE modes we must compare lsn */
+					if (backup_mode == BACKUP_MODE_DIFF_DELTA ||
+						backup_mode == BACKUP_MODE_DIFF_PTRACK ||
+						backup_mode == BACKUP_MODE_DIFF_SUMMARIZE)
 						page_is_valid = true;
 					else
 						return PageIsOk;
@@ -394,7 +396,9 @@ prepare_page(pgFile *file, XLogRecPtr prev_backup_start_lsn,
 	 * Skip page if page lsn is less than START_LSN of parent backup.
 	 * Nullified pages must be copied by DELTA backup, just to be safe.
 	 */
-	if ((backup_mode == BACKUP_MODE_DIFF_DELTA || backup_mode == BACKUP_MODE_DIFF_PTRACK) &&
+	if ((backup_mode == BACKUP_MODE_DIFF_DELTA ||
+		 backup_mode == BACKUP_MODE_DIFF_PTRACK ||
+		 backup_mode == BACKUP_MODE_DIFF_SUMMARIZE) &&
 		file->exists_in_prev &&
 		page_st->lsn > 0 &&
 		page_st->lsn < prev_backup_start_lsn)
@@ -513,7 +517,8 @@ backup_data_file(pgFile *file, const char *from_fullpath, const char *to_fullpat
 	 * not tracked by pagemap and thus always marked as unchanged.
 	 */
 	if ((backup_mode == BACKUP_MODE_DIFF_PAGE ||
-		backup_mode == BACKUP_MODE_DIFF_PTRACK) &&
+		backup_mode == BACKUP_MODE_DIFF_PTRACK ||
+		backup_mode == BACKUP_MODE_DIFF_SUMMARIZE) &&
 		file->pagemap.bitmapsize == PageBitmapIsEmpty &&
 		file->exists_in_prev && !file->pagemap_isabsent)
 	{
@@ -553,7 +558,9 @@ backup_data_file(pgFile *file, const char *from_fullpath, const char *to_fullpat
 	{
 		rc = fio_send_pages(to_fullpath, from_fullpath, file,
 							/* send prev backup START_LSN */
-							(backup_mode == BACKUP_MODE_DIFF_DELTA || backup_mode == BACKUP_MODE_DIFF_PTRACK) &&
+							(backup_mode == BACKUP_MODE_DIFF_DELTA ||
+							 backup_mode == BACKUP_MODE_DIFF_PTRACK ||
+							 backup_mode == BACKUP_MODE_DIFF_SUMMARIZE) &&
 							file->exists_in_prev ? prev_backup_start_lsn : InvalidXLogRecPtr,
 							calg, clevel, checksum_version,
 							/* send pagemap if any */
@@ -566,7 +573,9 @@ backup_data_file(pgFile *file, const char *from_fullpath, const char *to_fullpat
 		/* TODO: stop handling errors internally */
 		rc = send_pages(to_fullpath, from_fullpath, file,
 						/* send prev backup START_LSN */
-						(backup_mode == BACKUP_MODE_DIFF_DELTA || backup_mode == BACKUP_MODE_DIFF_PTRACK) &&
+						(backup_mode == BACKUP_MODE_DIFF_DELTA ||
+						 backup_mode == BACKUP_MODE_DIFF_PTRACK ||
+						 backup_mode == BACKUP_MODE_DIFF_SUMMARIZE) &&
 						file->exists_in_prev ? prev_backup_start_lsn : InvalidXLogRecPtr,
 						calg, clevel, checksum_version, use_pagemap,
 						&headers, backup_mode);
@@ -667,7 +676,8 @@ catchup_data_file(pgFile *file, const char *from_fullpath, const char *to_fullpa
 	 * This way we can correctly handle null-sized files which are
 	 * not tracked by pagemap and thus always marked as unchanged.
 	 */
-	if (backup_mode == BACKUP_MODE_DIFF_PTRACK &&
+	if ((backup_mode == BACKUP_MODE_DIFF_PTRACK ||
+		 backup_mode == BACKUP_MODE_DIFF_SUMMARIZE) &&
 		file->pagemap.bitmapsize == PageBitmapIsEmpty &&
 		file->exists_in_prev && file->size == prev_size && !file->pagemap_isabsent)
 	{
@@ -703,7 +713,9 @@ catchup_data_file(pgFile *file, const char *from_fullpath, const char *to_fullpa
 	{
 		rc = fio_copy_pages(to_fullpath, from_fullpath, file,
 							/* send prev backup START_LSN */
-							((backup_mode == BACKUP_MODE_DIFF_DELTA || backup_mode == BACKUP_MODE_DIFF_PTRACK) &&
+							((backup_mode == BACKUP_MODE_DIFF_DELTA ||
+							  backup_mode == BACKUP_MODE_DIFF_PTRACK ||
+							  backup_mode == BACKUP_MODE_DIFF_SUMMARIZE) &&
 							  file->exists_in_prev) ? sync_lsn : InvalidXLogRecPtr,
 							NONE_COMPRESS, 1, checksum_version,
 							/* send pagemap if any */
@@ -716,7 +728,9 @@ catchup_data_file(pgFile *file, const char *from_fullpath, const char *to_fullpa
 		/* TODO: stop handling errors internally */
 		rc = copy_pages(to_fullpath, from_fullpath, file,
 						/* send prev backup START_LSN */
-						((backup_mode == BACKUP_MODE_DIFF_DELTA || backup_mode == BACKUP_MODE_DIFF_PTRACK) &&
+						((backup_mode == BACKUP_MODE_DIFF_DELTA ||
+						  backup_mode == BACKUP_MODE_DIFF_PTRACK ||
+						  backup_mode == BACKUP_MODE_DIFF_SUMMARIZE) &&
 						  file->exists_in_prev) ? sync_lsn : InvalidXLogRecPtr,
 						checksum_version, use_pagemap, backup_mode);
 	}

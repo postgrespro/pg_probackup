@@ -153,7 +153,8 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 	 */
 	if (current.backup_mode == BACKUP_MODE_DIFF_PAGE ||
 		current.backup_mode == BACKUP_MODE_DIFF_PTRACK ||
-		current.backup_mode == BACKUP_MODE_DIFF_DELTA)
+		current.backup_mode == BACKUP_MODE_DIFF_DELTA ||
+		current.backup_mode == BACKUP_MODE_DIFF_SUMMARIZE)
 	{
 		/* get list of backups already taken */
 		backup_list = catalog_get_backup_list(instanceState, INVALID_BACKUP_ID);
@@ -229,6 +230,50 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 						(uint32) (prev_backup->start_lsn >> 32),
 						(uint32) (prev_backup->start_lsn));
 		}
+	}
+
+	/*
+	 * For SUMMARIZE backup mode, verify that WAL summarize is enabled
+	 * and wait for the summarizer to catch up to current.start_lsn.
+	 *
+	 * We need WAL summary files covering [prev_backup->start_lsn, current.start_lsn]
+	 * to be available. Since summaries up to prev_backup->start_lsn should already
+	 * exist from the previous backup, we wait for the summarizer to catch up to
+	 * current.start_lsn to ensure the most recent summary files are present.
+	 *
+	 * NOTE: SUMMARIZE mode does not currently support multi-timeline incremental
+	 * backups. WAL summaries are queried with current.tli only, so a parent
+	 * backup on a different timeline would miss the parent-timeline summaries
+	 * and produce a suboptimal (larger than necessary) pagemap. We fail fast
+	 * here rather than silently produce a wrong-sized backup.
+	 */
+	if (current.backup_mode == BACKUP_MODE_DIFF_SUMMARIZE)
+	{
+		if (prev_backup->tli != current.tli)
+			elog(ERROR, "SUMMARIZE backup mode does not support multi-timeline incremental chains "
+					"(parent backup %s is on timeline %u, current is on timeline %u). "
+					"Use DELTA or PAGE mode for this scenario.",
+					backup_id_of(prev_backup), prev_backup->tli, current.tli);
+
+		if (!pg_is_walsummary_enabled(backup_conn))
+			elog(ERROR, "WAL summarize backup mode requires PostgreSQL 17+ with summarize_wal enabled");
+
+		/*
+		 * Wait for WAL summarizer to catch up to the current backup start LSN.
+		 * This ensures that all WAL summary files covering the range from the
+		 * previous backup to now are available before we start building the pagemap.
+		 *
+		 * The wait timeout reuses --archive-timeout (default 60s) so users have
+		 * a single familiar knob to tune.
+		 */
+		if (!wait_wal_summarization(backup_conn, current.start_lsn,
+									instance_config.archive_timeout))
+			elog(ERROR, "WAL summarizer did not catch up to %X/%X within %u seconds. "
+					"Incremental backup cannot proceed without complete WAL summaries. "
+					"Consider increasing --archive-timeout.",
+					(uint32) (current.start_lsn >> 32),
+					(uint32) (current.start_lsn),
+					instance_config.archive_timeout);
 	}
 
 	/* For incremental backup check that start_lsn is not from the past
@@ -357,7 +402,8 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 	 */
 
 	if (current.backup_mode == BACKUP_MODE_DIFF_PAGE ||
-		current.backup_mode == BACKUP_MODE_DIFF_PTRACK)
+		current.backup_mode == BACKUP_MODE_DIFF_PTRACK ||
+		current.backup_mode == BACKUP_MODE_DIFF_SUMMARIZE)
 	{
 		bool pagemap_isok = true;
 
@@ -385,6 +431,16 @@ do_backup_pg(InstanceState *instanceState, PGconn *backup_conn,
 									   nodeInfo->ptrack_schema,
 									   nodeInfo->ptrack_version_num,
 									   prev_backup_start_lsn);
+		}
+		else if (current.backup_mode == BACKUP_MODE_DIFF_SUMMARIZE)
+		{
+			/*
+			 * Build the page map from WAL summary information.
+			 */
+			make_pagemap_from_walsummary(backup_files_list, backup_conn,
+										  prev_backup->start_lsn,
+										  current.start_lsn,
+										  current.tli);
 		}
 
 		time(&end_time);
